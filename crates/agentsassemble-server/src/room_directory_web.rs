@@ -118,7 +118,7 @@ async fn change_session_lifecycle(
     let credential = crate::http_api::bearer_credential(request.headers())
         .ok_or_else(DirectoryHttpError::unauthorized)?;
     if credential.starts_with(agentsassemble_persistence::OWNER_SESSION_PREFIX) {
-        let owner = crate::central_owner_web::owner_from_session_headers(
+        let owner = crate::central::owner_web::owner_from_session_headers(
             &state,
             request.headers(),
             request.extensions().get(),

@@ -9,7 +9,7 @@ use serde_json::json;
 
 use crate::{
     AppState,
-    central_host_identity::HostIdentityError,
+    central::host_identity::HostIdentityError,
     http_api::{BodyDecodeError, consume_central_registration, decode_json_body, exact_tauri_cors},
 };
 

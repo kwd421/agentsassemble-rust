@@ -45,7 +45,7 @@ async fn authorize(
     remote: bool,
 ) -> Result<ServerOwnerAuthority, Failure> {
     if remote {
-        return crate::central_owner_web::owner_from_session_headers(state, headers, origin)
+        return crate::central::owner_web::owner_from_session_headers(state, headers, origin)
             .await
             .map_err(|error| failure(error.status, error.code, error.message));
     }
@@ -86,7 +86,7 @@ async fn list(
         .map_err(storage_error)?;
     let mut sessions = Vec::new();
     if matches!(owner, ServerOwnerAuthority::LocalOperator) {
-        let host = crate::central_host_identity::host_device_info(None).map_err(|_| {
+        let host = crate::central::host_identity::host_device_info(None).map_err(|_| {
             failure(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "host_device_unavailable",

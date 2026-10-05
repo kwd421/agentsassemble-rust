@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    central_directory::CentralDirectoryError,
+    central::directory::CentralDirectoryError,
     http_api::{
         BodyDecodeError, DEVICE_CREDENTIAL_HEADER, PRIVATE_NO_STORE, decode_json_body,
         exact_tauri_cors,

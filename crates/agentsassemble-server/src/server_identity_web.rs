@@ -10,7 +10,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     AppState,
-    central_host_identity::{ServerChallengeEnvelope, ServerChallengeError, ServerInfoEnvelope},
+    central::host_identity::{ServerChallengeEnvelope, ServerChallengeError, ServerInfoEnvelope},
     http_api::{BodyDecodeError, decode_json_body},
     ingress_trust::TrustedIngressOrigin,
 };

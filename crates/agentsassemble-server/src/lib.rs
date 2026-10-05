@@ -58,10 +58,7 @@ macro_rules! registered_routes {
 mod agent_create_runtime;
 mod app_state;
 mod attendee;
-mod central_directory;
-mod central_host_identity;
-mod central_login;
-mod central_owner_web;
+mod central;
 mod frontend_assets;
 mod frontend_document;
 pub mod frontend_release;
@@ -77,7 +74,7 @@ pub mod runtime_restart;
 pub mod runtime_restart_ipc;
 mod runtime_restart_web;
 pub mod runtime_version;
-pub use central_login::{CentralLoginService, central_login_control};
+pub use central::login::{CentralLoginService, central_login_control};
 pub use google_accounts::{GoogleAccountError, GoogleAccountService};
 mod account_web;
 mod local_attendee;
@@ -86,7 +83,6 @@ pub use attendee::client_shutdown::shutdown_attendee;
 pub use attendee::client_tools::AttendeeToolCall;
 pub use attendee::tool_wire::AttendeeToolReadResponse;
 pub use local_attendee::{LocalAttendeeError, LocalAttendeeService};
-mod central_registration_web;
 mod connection_admission;
 pub mod connector_client;
 mod connector_invite_document;
@@ -181,8 +177,8 @@ mod ticket_tests;
 mod web;
 
 pub use app_state::{AppState, AppStateBuildError};
-pub use central_directory::CentralDirectoryError;
-pub use central_host_identity::{CentralHostIdentity, HostIdentityError, host_device_info};
+pub use central::directory::CentralDirectoryError;
+pub use central::host_identity::{CentralHostIdentity, HostIdentityError, host_device_info};
 pub use human_invite_credentials::{
     HumanInviteCredentialAuthority, HumanInviteCredentialDraft, HumanInviteCredentialError,
     IssuedHumanInviteCredentials, VerifiedHumanInviteClaims, VerifiedHumanInviteCredential,

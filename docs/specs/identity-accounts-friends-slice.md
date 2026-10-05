@@ -9,6 +9,16 @@ concurrency guard and retry behavior; no protocol/storage changes. Verify the
 missing-server race, later refresh and next-open clearing with a frontend regression;
 one pre-push make verify, no packaged/manual verification or deployment.
 
+## Path-only folder grouping (2026-10-05)
+
+Move the six server `central_*` source files into `central/`, then the 17
+frontend `lib/central*` sources/tests into `lib/central/`, dropping file prefixes.
+Preserve central login, registration, directory, owner HTTP/stream, CLI and
+app/web identity entry points, authority, state and retry/failure semantics.
+Only paths/imports change; no compatibility module aliases or behavior changes.
+Acceptance uses server build/tests, frontend typecheck/tests and one final
+`make verify`; deployment, signing and manual verification are excluded.
+
 ## Discord-style rail, step 1 — central outage continuity (2026-10-05)
 
 User-required entry points: `StartupIdentityGate`, explicit this-device selection,
@@ -84,7 +94,7 @@ Status: Phase 5 locally verified and approved by Daybreak through `1e24adf`, C0/
 - `crates/agentsassemble-persistence/src/member_admission_results.rs` (예정), `membership_outbox.rs` (같은 디렉터리, 예정): durable intent/결과/예약 및 단조 동기화.
 - `crates/agentsassemble-persistence/src/human_admission_identity.rs`, `account_identity.rs`, `google_accounts.rs`, `account_guest_retirement.rs`, `guest_identity_recovery.rs`: 기존 profile 생성·credential·retirement·recovery 권위 확장.
 - `crates/agentsassemble-persistence/src/host_owner_session.rs`, `crates/agentsassemble-server/src/owner_session_lifetime.rs`: member가 따를 기존 owner 연결 수명 계약.
-- `crates/agentsassemble-server/src/central_directory.rs`, `server_identity_web.rs`, `central_registration_web.rs`: 중앙 통신·등록·server-info 검증 경계.
+- `crates/agentsassemble-server/src/central/directory.rs`, `server_identity_web.rs`, `central/registration_web.rs`: 중앙 통신·등록·server-info 검증 경계.
 - `crates/agentsassemble-protocol/src/central_member.rs` (예정), `crates/agentsassemble-server/src/central_member_web.rs` (예정): member 전용 타입/issue·redeem·connect·결과 경계.
 - `frontend/src/lib/centralIdentity.ts`, `frontend/src/views/components/CentralServerList.tsx`, `frontend/src/lib/centralMemberConnect.ts` (예정): 앱/웹 공통 목록·재입장·불확실성 UI, 플랫폼은 transport/capability만 분리.
 - 중앙 외부 소유 계약: `/Users/seinel/Projects/AgentsAssemble-owner-session/infra/identity-directory/README.md`의 `Security model`, `Server icons (backend contract, 2026-10-04)`, `Abuse and expiry contract (C2)` 및 그 `Grant retry decision`, `Bounded scheduled cleanup and capacity`, `Compatibility and verification` 절을 **C3에서 갱신**한다. 이번 C1은 그 저장소를 수정하지 않는다. member enrollment/projection·삭제/floor 하위 절도 해당 README에 추가할 예정이며 별도 병렬 계약을 만들지 않는다.
@@ -394,8 +404,8 @@ isolated package while preserving the active Windows room.
 - `crates/agentsassemble-persistence/src/schema_version.rs`: additive upgrades and retirement of historical owner authority.
 - `crates/agentsassemble-persistence/src/host_owner_session.rs`: durable admission, live custody and transactional revalidation.
 - `crates/agentsassemble-persistence/src/owner_devices.rs`: account-scoped device listing and atomic dependent revocation.
-- `crates/agentsassemble-server/src/central_directory.rs`: signed central admission and endpoint publication generations.
-- `crates/agentsassemble-server/src/central_owner_web.rs`: browser admission, owner directory/room HTTP and event stream entry.
+- `crates/agentsassemble-server/src/central/directory.rs`: signed central admission and endpoint publication generations.
+- `crates/agentsassemble-server/src/central/owner_web.rs`: browser admission, owner directory/room HTTP and event stream entry.
 - `crates/agentsassemble-server/src/owner_session_lifetime.rs`: transport retention, last-disconnect, ingress/runtime end and closure.
 - `crates/agentsassemble-server/src/room_socket.rs` and `room_socket_session.rs`: pre-frame retention through socket-loop exit.
 - `crates/agentsassemble-server/src/owner_devices_web.rs`: native/remote device HTTP routes and committed revocation publication.

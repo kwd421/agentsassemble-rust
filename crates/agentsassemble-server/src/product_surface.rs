@@ -47,7 +47,7 @@ fn registered_routes(
 ) -> impl Iterator<Item = &'static RegisteredHttpRoute> {
     [
         crate::web::HTTP_ROUTES,
-        crate::central_login::HTTP_ROUTES,
+        crate::central::login::HTTP_ROUTES,
         crate::room_directory_web::HTTP_ROUTES,
         crate::friends_web::HTTP_ROUTES,
         crate::room_preferences_web::HTTP_ROUTES,
@@ -77,14 +77,14 @@ fn registered_routes(
         crate::attendee::web::ENTRY_HTTP_ROUTES,
         crate::human_session_exchange_web::HTTP_ROUTES,
         crate::server_identity_web::HTTP_ROUTES,
-        crate::central_owner_web::HTTP_ROUTES,
+        crate::central::owner_web::HTTP_ROUTES,
         crate::owner_devices_web::HTTP_ROUTES,
     ]
     .into_iter()
     .flatten()
     .chain(
         central_registration_enabled
-            .then_some(crate::central_registration_web::HTTP_ROUTES)
+            .then_some(crate::central::registration_web::HTTP_ROUTES)
             .into_iter()
             .flatten(),
     )

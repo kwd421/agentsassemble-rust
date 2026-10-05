@@ -25,6 +25,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 mod agent_avatar_control;
 mod appearance_control;
+#[path = "central/login_only.rs"]
 mod central_login_only;
 mod chat_read_control;
 #[cfg(unix)]

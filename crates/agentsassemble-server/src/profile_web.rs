@@ -553,7 +553,7 @@ async fn resolve_attachment_upload_authority(
 ) -> Result<AttachmentUploadAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
     if credential.starts_with(agentsassemble_persistence::OWNER_SESSION_PREFIX) {
-        let owner = crate::central_owner_web::owner_from_session_headers(state, headers, origin)
+        let owner = crate::central::owner_web::owner_from_session_headers(state, headers, origin)
             .await
             .map_err(|error| ProfileHttpError::new(error.status, error.code, error.message))?;
         return Ok(AttachmentUploadAuthority::Profile(
@@ -599,7 +599,7 @@ async fn resolve_profile_authority(
 ) -> Result<ProfileAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
     if credential.starts_with(agentsassemble_persistence::OWNER_SESSION_PREFIX) {
-        let owner = crate::central_owner_web::owner_from_session_headers(state, headers, origin)
+        let owner = crate::central::owner_web::owner_from_session_headers(state, headers, origin)
             .await
             .map_err(|error| ProfileHttpError::new(error.status, error.code, error.message))?;
         return Ok(ProfileAuthority::CentralOwner(owner));

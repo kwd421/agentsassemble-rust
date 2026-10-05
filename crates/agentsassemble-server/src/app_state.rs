@@ -44,10 +44,10 @@ pub struct AppState {
     pub(crate) provider_credentials: ProviderCredentialStore,
     pub human_invite_credentials: HumanInviteCredentialAuthority,
     pub(crate) central_host_identity: CentralHostIdentity,
-    pub(crate) central_directory: crate::central_directory::CentralDirectory,
+    pub(crate) central_directory: crate::central::directory::CentralDirectory,
     pub(crate) owner_sessions: crate::owner_session_lifetime::OwnerSessionLifetimes,
     pub(crate) started_at: i64,
-    pub(crate) central_login: crate::central_login::CentralLoginBroker,
+    pub(crate) central_login: crate::central::login::CentralLoginBroker,
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
     pub(crate) connection_admission: ConnectionAdmission,
@@ -177,10 +177,10 @@ impl AppState {
             provider_credentials,
             human_invite_credentials,
             central_host_identity,
-            central_directory: crate::central_directory::CentralDirectory::disabled(),
+            central_directory: crate::central::directory::CentralDirectory::disabled(),
             owner_sessions: crate::owner_session_lifetime::OwnerSessionLifetimes::default(),
             started_at: chrono::Utc::now().timestamp(),
-            central_login: crate::central_login::CentralLoginBroker::default(),
+            central_login: crate::central::login::CentralLoginBroker::default(),
             shutdown,
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
@@ -220,8 +220,8 @@ impl AppState {
     pub fn with_central_directory(
         mut self,
         url: &str,
-    ) -> Result<Self, crate::central_directory::CentralDirectoryError> {
-        self.central_directory = crate::central_directory::CentralDirectory::configured(url)?;
+    ) -> Result<Self, crate::central::directory::CentralDirectoryError> {
+        self.central_directory = crate::central::directory::CentralDirectory::configured(url)?;
         Ok(self)
     }
 

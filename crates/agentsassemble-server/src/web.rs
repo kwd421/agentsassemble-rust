@@ -146,7 +146,7 @@ pub enum ServeError {
     #[error("central directory publication task failed: {0}")]
     CentralDirectoryTask(tokio::task::JoinError),
     #[error("central directory shutdown publication failed: {0}")]
-    CentralDirectoryShutdown(crate::central_directory::CentralDirectoryError),
+    CentralDirectoryShutdown(crate::central::directory::CentralDirectoryError),
 }
 
 #[derive(Debug, Deserialize)]
@@ -157,7 +157,7 @@ struct TicketQuery {
 pub fn router(state: AppState) -> Router {
     let frontend_release = state.frontend.clone();
     let mut app = core_routes()
-        .merge(crate::central_login::routes().with_state(crate::CentralLoginService::from(&state)))
+        .merge(crate::central::login::routes().with_state(crate::CentralLoginService::from(&state)))
         .merge(crate::room_directory_web::routes())
         .merge(crate::friends_web::routes())
         .merge(crate::room_preferences_web::routes())
@@ -176,7 +176,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::runtime_restart_web::routes())
         .merge(crate::frontend_assets::routes())
         .merge(crate::server_identity_web::routes())
-        .merge(crate::central_owner_web::routes())
+        .merge(crate::central::owner_web::routes())
         .merge(crate::owner_devices_web::routes())
         .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())
@@ -189,7 +189,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::connector_mcp_web::routes(&state))
         .merge(crate::attendee::web::routes());
     if state.central_registration_enabled {
-        app = app.merge(crate::central_registration_web::routes());
+        app = app.merge(crate::central::registration_web::routes());
     }
     app = app.route_layer(middleware::from_fn(require_trusted_ingress));
     if let Some(frontend_release) = frontend_release {
@@ -379,7 +379,7 @@ async fn reconcile_before_network_admission(
 
 struct CentralDirectoryTask {
     cancellation: CancellationToken,
-    owner: JoinHandle<Result<(), crate::central_directory::CentralDirectoryError>>,
+    owner: JoinHandle<Result<(), crate::central::directory::CentralDirectoryError>>,
 }
 
 impl CentralDirectoryTask {

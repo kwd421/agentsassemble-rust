@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::{central_directory::CentralDirectoryStatus, ingress_trust::is_loopback_http_host};
+use crate::{central::directory::CentralDirectoryStatus, ingress_trust::is_loopback_http_host};
 
 const REGISTRATION_CONTEXT: &str = "AA-HOST-REGISTER-1";
 const REGISTRATION_NONCE_BYTES: usize = 18;
