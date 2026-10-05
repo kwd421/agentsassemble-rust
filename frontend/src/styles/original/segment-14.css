@@ -356,5 +356,6 @@
 .dc-guest-join-card .dc-member-session-button { justify-content: center; background: transparent; }
 .dc-join-cancel { min-height: 44px; color: var(--color-text-secondary); font-size: 13px; }
 .dc-join-cancel:hover { text-decoration: underline; }
+.dc-guest-join-card h1 { word-break: keep-all; text-wrap: balance; }
 .dc-guest-join-card h1:has(strong) { font-weight: 500; }
 .dc-guest-join-card h1 strong { font-weight: 900; }
