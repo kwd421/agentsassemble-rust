@@ -6,6 +6,7 @@ import {
   currentRoomDirectoryAuthority,
   currentServerProductSurface,
   parseStrictRoomCreateResponse,
+  parseRoomSessionSurface,
   parseStrictRoomDirectory,
   retainRoomDirectoryAuthority,
   verifyAndBindRoomSessionSurface,
@@ -70,10 +71,10 @@ function directory(rooms: ReturnType<typeof directoryRoom>[]) {
 
 describe("room directory contracts", () => {
   it("rejects a loose or lineage-free follow-up directory", () => {
-    expect(() => parseStrictRoomDirectory({})).toThrow(/계약/);
+    expect(() => parseStrictRoomDirectory({})).toThrow();
     expect(() =>
       parseStrictRoomDirectory({ server_id: serverId, rooms: [] })
-    ).toThrow(/계약/);
+    ).toThrow();
   });
 
   it("accepts DELETE and rejects methods outside the registered HTTP schema", () => {
@@ -101,7 +102,7 @@ describe("room directory contracts", () => {
     ).toThrow(/HTTP route/);
   });
 
-  it("accepts only an exact authority-bound room creation response", () => {
+  it("accepts expanded authority-bound room creation responses", () => {
     const payload = {
       status: "ready",
       server_id: serverId,
@@ -110,9 +111,58 @@ describe("room directory contracts", () => {
       deduplicated: false,
     };
     expect(parseStrictRoomCreateResponse(payload)).toEqual(payload);
-    expect(() =>
-      parseStrictRoomCreateResponse({ ...payload, ignored: true })
-    ).toThrow(/계약/);
+    expect(parseStrictRoomCreateResponse({ ...payload, ignored: true })).toEqual(payload);
+  });
+
+  it("accepts unknown fields at every directory and session response level", () => {
+    const entry = directoryRoom("general");
+    const expandedSurface = {
+      ...surface, extra: null,
+      http_routes: [{ method: "GET", path: "/api/rooms", extra: false }],
+    };
+    const payload = {
+      ...directory([]), extra: [], server_product_surface: expandedSurface,
+      rooms: [{ ...entry, extra: 1, room_settings: {
+        ...entry.room_settings, extra: {},
+        appearance: { ...entry.room_settings.appearance, extra: 42 },
+        channels: [{ id: "chat", name: "Chat", type: "chat", position: 0,
+          created_at: "2026-10-05T00:00:00Z", extra: null }],
+      } }],
+    };
+    expect(parseStrictRoomDirectory(payload).rooms).toEqual(payload.rooms);
+    expect(parseRoomSessionSurface(payload).server_product_surface).toEqual(expandedSurface);
+    expect(parseStrictRoomCreateResponse({ status: "ready", server_id: serverId,
+      authority_lineage_id: lineageId, room: { ...room(), extra: [] },
+      deduplicated: false, extra: {} }).room.room_id).toBe("general");
+  });
+
+  it("retains required fields and types throughout nested directory responses", () => {
+    const payload = directory([directoryRoom("general")]);
+    const entry = payload.rooms[0];
+    const channel = { id: "chat", name: "Chat", type: "chat", position: 0,
+      created_at: "2026-10-05T00:00:00Z" };
+    Object.assign(entry.room_settings, { channels: [channel] });
+    const route = { method: "GET" as const, path: "/api/rooms" };
+    payload.server_product_surface = { ...surface, http_routes: [route] };
+    for (const target of [payload, entry, entry.room_settings,
+      entry.room_settings.appearance, channel, payload.server_product_surface, route]) {
+      const fields = target as Record<string, unknown>;
+      for (const key of Object.keys(fields)) {
+        const original = fields[key];
+        delete fields[key];
+        expect(() => parseStrictRoomDirectory(payload), `missing ${key}`).toThrow();
+        fields[key] = null;
+        expect(() => parseStrictRoomDirectory(payload), `null ${key}`).toThrow();
+        fields[key] = original;
+      }
+    }
+  });
+
+  it("does not recompute a server-only surface digest", async () => {
+    const payload = directory([]);
+    payload.server_product_surface = { ...surface, digest: "d".repeat(64) };
+    await expect(bindRoomDirectoryAuthority(parseStrictRoomDirectory(payload), null,
+      "https://server-only-surface.example")).resolves.toBe(true);
   });
 
   it("rejects duplicate canonical room IDs or room UIDs", () => {

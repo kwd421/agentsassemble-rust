@@ -35,6 +35,26 @@ command/event path. It remains active rather than completion evidence until the
 candidate is pushed, packaged real-client/provider verification is cleaned up,
 and both post-implementation reviews approve the exact public diff.
 
+## Response validation cleanup (2026-10-05)
+
+User-required behavior: directory, room creation, room-session admission and socket
+subscription accept unknown response fields while retaining required fields, runtime
+types, authority/room/participant identity, revision and cursor checks. Remote-host
+JSON remains untrusted; generated TypeScript types do not validate it at runtime.
+Remove server-only surface hash self-checks and receipt digest equality. Keep the
+native bootstrap comparison and its transcript hash: the private native grant is
+an independent source for the HTTP surface. Keep the lifetime surface pin and
+admission cache key until their owning contracts change. No auth/ticket changes.
+The old frontend requires digest in directory/session surfaces and subscriptions;
+removing server fields now would break cached clients. This is expand only: retain
+Rust producers, protocol/generated fields and compatibility tests. Later contract
+work must account for native bootstrap and admission cache consumers before removal.
+The ten directory exact-key calls and subscription exact-key function/call are
+replaced with existing known-field checks; other validators are outside this change.
+No new abstraction, fallback, storage change or deployment. Preserve stale-result
+cancellation and existing failure/retry paths. Verify affected frontend tests and
+one pre-push make verify; no packaged/manual verification or signed build.
+
 ## Definition
 
 This slice replaces the fixture-shaped bootstrap with a restartable local

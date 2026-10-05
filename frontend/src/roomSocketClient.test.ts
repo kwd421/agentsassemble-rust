@@ -181,7 +181,7 @@ describe("bounded canonical room socket", () => {
     handle.close();
   });
 
-  it("rejects a receipt for a different product surface", async () => {
+  it("rejects a receipt for a different product surface revision", async () => {
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets } = openHarness({
       onError: (error) => {
@@ -191,7 +191,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0, (receipt) => {
-      receipt.server_surface_digest = "d".repeat(64);
+      receipt.server_surface_revision += 1;
     });
     sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     await vi.waitFor(() =>

@@ -5,7 +5,6 @@ import { ROOM_ACTIONS } from "../types/generated/ROOM_ACTIONS";
 import { ROOM_STREAMS } from "../types/generated/ROOM_STREAMS";
 import { lengthDelimitedTranscript, sha256Hex } from "./lengthDelimitedCrypto";
 import {
-  assertExactKeys as exactKeys,
   requiredString,
   strictRecord as record,
 } from "./strictJsonContract";
@@ -48,18 +47,7 @@ const ROOM_ACTION_SET: ReadonlySet<string> = new Set(ROOM_ACTIONS);
 
 function validateAppearance(value: unknown, label: string) {
   const appearance = record(value, label);
-  exactKeys(
-    appearance,
-    [
-      "banner_preset",
-      "banner_image_url",
-      "icon_image_url",
-      "icon_label",
-      "invite_scope",
-    ],
-    label
-  );
-  for (const key of Object.keys(appearance)) {
+  for (const key of ["banner_preset", "banner_image_url", "icon_image_url", "icon_label", "invite_scope"]) {
     if (typeof appearance[key] !== "string") {
       throw new Error(`${label}.${key}가 올바르지 않습니다.`);
     }
@@ -70,7 +58,6 @@ function validateChannels(value: unknown, label: string) {
   if (!Array.isArray(value)) throw new Error(`${label}가 배열이 아닙니다.`);
   value.forEach((entry, index) => {
     const channel = record(entry, `${label}[${index}]`);
-    exactKeys(channel, ["id", "name", "type", "position", "created_at"], label);
     requiredString(channel, "id", label);
     requiredString(channel, "name", label);
     requiredString(channel, "type", label);
@@ -83,21 +70,6 @@ function validateChannels(value: unknown, label: string) {
 
 function validateSettings(value: unknown, roomId: string, label: string) {
   const settings = record(value, label);
-  exactKeys(
-    settings,
-    [
-      "room_id",
-      "settings_revision",
-      "label",
-      "topic",
-      "appearance",
-      "conversation_mode",
-      "tool_mode",
-      "ordered_exclude_previous_speaker",
-      "channels",
-    ],
-    label
-  );
   if (requiredString(settings, "room_id", label) !== roomId) {
     throw new Error(`${label}.room_id가 방 권위와 일치하지 않습니다.`);
   }
@@ -122,22 +94,6 @@ function validateSettings(value: unknown, roomId: string, label: string) {
 function validateRoom(value: unknown, index: number): ServerRoomDockSource {
   const label = `rooms[${index}]`;
   const room = record(value, label);
-  exactKeys(
-    room,
-    [
-      "room_id",
-      "room_uid",
-      "label",
-      "last_active_at",
-      "archived",
-      "status",
-      "origin",
-      "room_settings",
-      "cleanup_pending",
-      "deletion_pending",
-    ],
-    label
-  );
   const roomId = canonicalRoomId(requiredString(room, "room_id", label));
   if (!UUID_PATTERN.test(requiredString(room, "room_uid", label))) {
     throw new Error(`${label}.room_uid가 UUID가 아닙니다.`);
@@ -159,19 +115,6 @@ function validateRoom(value: unknown, index: number): ServerRoomDockSource {
 
 function validateCreatedRoom(value: unknown): ServerRoomDockSource {
   const room = record(value, "생성된 방");
-  exactKeys(
-    room,
-    [
-      "room_id",
-      "room_uid",
-      "label",
-      "last_active_at",
-      "archived",
-      "status",
-      "origin",
-    ],
-    "생성된 방"
-  );
   canonicalRoomId(requiredString(room, "room_id", "생성된 방"));
   if (!UUID_PATTERN.test(requiredString(room, "room_uid", "생성된 방"))) {
     throw new Error("생성된 방.room_uid가 UUID가 아닙니다.");
@@ -199,11 +142,6 @@ function validateAuthority(payload: Record<string, unknown>, label: string) {
 
 function validateServerProductSurface(value: unknown): ServerProductSurface {
   const surface = record(value, "서버 제품 표면");
-  exactKeys(
-    surface,
-    ["revision", "digest", "http_routes", "websocket_streams", "websocket_actions"],
-    "서버 제품 표면"
-  );
   if (
     surface.revision !== PRODUCT_SURFACE_REVISION ||
     !/^[0-9a-f]{64}$/.test(String(surface.digest))
@@ -215,7 +153,6 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
   }
   const routes = surface.http_routes.map((value, index) => {
     const route = record(value, `서버 제품 표면 HTTP route[${index}]`);
-    exactKeys(route, ["method", "path"], `서버 제품 표면 HTTP route[${index}]`);
     if (
       !new Set(["GET", "POST", "DELETE"]).has(String(route.method)) ||
       typeof route.path !== "string" ||
@@ -251,48 +188,8 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
   return surface as unknown as ServerProductSurface;
 }
 
-async function canonicalServerSurfaceDigest(
-  surface: ServerProductSurface
-): Promise<string> {
-  const fields = [
-    String(surface.revision),
-    ...surface.http_routes.map((route) => `${route.method} ${route.path}`),
-    "streams",
-    ...surface.websocket_streams,
-    "actions",
-    ...surface.websocket_actions,
-  ];
-  return sha256Hex(
-    lengthDelimitedTranscript(
-      "agentsassemble.server-product-surface.v1",
-      fields
-    )
-  );
-}
-
-async function assertServerProductSurfaceIntegrity(
-  surface: ServerProductSurface,
-  trusted: TrustedServerProductSurface | null
-) {
-  const computed = await canonicalServerSurfaceDigest(surface);
-  if (computed !== surface.digest) {
-    throw new Error("서버 제품 표면 digest가 등록부 내용과 일치하지 않습니다.");
-  }
-  if (
-    trusted &&
-    (trusted.revision !== surface.revision || trusted.digest !== surface.digest)
-  ) {
-    throw new Error("서버 제품 표면이 네이티브 bootstrap 권위와 일치하지 않습니다.");
-  }
-}
-
 export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
   const payload = record(value, "방 목록");
-  exactKeys(
-    payload,
-    ["server_id", "authority_lineage_id", "server_product_surface", "rooms", "profile_revision"],
-    "방 목록"
-  );
   const authority = validateAuthority(payload, "방 목록");
   if (!Array.isArray(payload.rooms)) {
     throw new Error("방 목록 rooms가 배열이 아닙니다.");
@@ -320,11 +217,6 @@ export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
 
 export function parseRoomSessionSurface(value: unknown): RoomSessionSurface {
   const payload = record(value, "방 세션 서버 표면");
-  exactKeys(
-    payload,
-    ["server_id", "authority_lineage_id", "server_product_surface"],
-    "방 세션 서버 표면"
-  );
   return {
     ...validateAuthority(payload, "방 세션 서버 표면"),
     server_product_surface: validateServerProductSurface(payload.server_product_surface),
@@ -333,11 +225,6 @@ export function parseRoomSessionSurface(value: unknown): RoomSessionSurface {
 
 export function parseStrictRoomCreateResponse(value: unknown): StrictRoomCreateResponse {
   const payload = record(value, "방 생성");
-  exactKeys(
-    payload,
-    ["status", "server_id", "authority_lineage_id", "room", "deduplicated"],
-    "방 생성"
-  );
   if (payload.status !== "ready" || typeof payload.deduplicated !== "boolean") {
     throw new Error("방 생성 결과가 올바르지 않습니다.");
   }
@@ -377,10 +264,24 @@ export async function bindRoomDirectoryAuthority(
   origin = window.location.origin,
   isCurrent: () => boolean = () => true
 ): Promise<boolean> {
-  await assertServerProductSurfaceIntegrity(
-    authority.server_product_surface,
-    trustedSurface
-  );
+  if (trustedSurface) {
+    // Only the independent native bootstrap provides a trusted digest.
+    const surface = authority.server_product_surface;
+    const computed = await sha256Hex(
+      lengthDelimitedTranscript("agentsassemble.server-product-surface.v1", [
+        String(surface.revision),
+        ...surface.http_routes.map((route) => `${route.method} ${route.path}`),
+        "streams", ...surface.websocket_streams,
+        "actions", ...surface.websocket_actions,
+      ])
+    );
+    if (
+      trustedSurface.revision !== surface.revision ||
+      trustedSurface.digest !== surface.digest || computed !== trustedSurface.digest
+    ) {
+      throw new Error("서버 제품 표면 digest가 네이티브 bootstrap 권위와 일치하지 않습니다.");
+    }
+  }
   if (!isCurrent()) return false;
   bindVerifiedRoomDirectoryAuthority(authority, origin);
   return true;

@@ -3,19 +3,6 @@ import type { Subscribed } from "../types/generated/Subscribed";
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
-const RECEIPT_KEYS = [
-  "op",
-  "streams",
-  "protocol_version",
-  "room_id",
-  "principal_id",
-  "participant_id",
-  "server_surface_revision",
-  "server_surface_digest",
-  "snapshot_cursor",
-  "catchup_high_water",
-] as const;
-
 export type SubscriptionReceipt = Subscribed & { op: "subscribed" };
 
 export class SubscriptionContractError extends Error {
@@ -43,12 +30,6 @@ function isSequence(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
-function exactKeys(value: Record<string, unknown>): boolean {
-  const actual = Object.keys(value).sort();
-  const expected = [...RECEIPT_KEYS].sort();
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
-}
-
 export function isSha256Hex(value: unknown): value is string {
   return typeof value === "string" && SHA256_HEX.test(value);
 }
@@ -57,7 +38,7 @@ export function verifySubscriptionReceipt(
   value: unknown,
   expected: ExpectedSubscription
 ): SubscriptionReceipt {
-  if (!isRecord(value) || !exactKeys(value)) {
+  if (!isRecord(value)) {
     throw new SubscriptionContractError(
       "subscription_receipt_schema_invalid",
       "The runtime returned an invalid subscription receipt."
@@ -69,6 +50,7 @@ export function verifySubscriptionReceipt(
   const schemaValid =
     receipt.op === "subscribed" &&
     receipt.protocol_version === 1 &&
+    Array.isArray(receipt.streams) &&
     receivedStreams.length === expectedStreams.length &&
     receivedStreams.every((stream, index) => stream === expectedStreams[index]) &&
     typeof receipt.room_id === "string" &&
@@ -77,8 +59,6 @@ export function verifySubscriptionReceipt(
     Boolean(receipt.principal_id) &&
     receipt.participant_id === expected.participantId &&
     receipt.server_surface_revision === expected.serverSurface.revision &&
-    receipt.server_surface_digest === expected.serverSurface.digest &&
-    isSha256Hex(receipt.server_surface_digest) &&
     isSequence(receipt.snapshot_cursor) &&
     isSequence(receipt.catchup_high_water) &&
     receipt.catchup_high_water >= receipt.snapshot_cursor;
