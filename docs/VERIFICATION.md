@@ -3,6 +3,7 @@
 ## C4a Daybreak corrections (2026-10-05)
 
 - H1 confirmed: bound browser one-use admission failed before correction; admission-boundary guard now rejects fresh/repeated and pre-binding exact replay without writes (4 attempts). Persistence: 411 passed.
+- M1 confirmed: non-STRICT v81 was accepted before correction; read-only schema/PRAGMA validation now rejects 13 malformed structures. Valid v80/v81 schema/data and native pairing retention passed in the same 411-test run.
 
 ## Server integration harness and artifact footprint (2026-10-05)
 

@@ -37,8 +37,7 @@ pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), Per
     if found == crate::central_identity_bindings::MEMBER_SCHEMA_VERSION {
         // Validate the contracted additive boundary before reading product state.
         // This release neither creates nor migrates member tables.
-        sqlx::query("SELECT binding_id, issuer, person_id, user_id, created_at FROM central_identity_bindings LIMIT 0")
-            .fetch_all(pool).await?;
+        validate_member_schema(pool).await?;
     }
     let server_id = sqlx::query_scalar::<_, String>(
         "SELECT value FROM runtime_metadata WHERE key = 'server_id'",
@@ -49,6 +48,65 @@ pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), Per
     uuid::Uuid::parse_str(&server_id)
         .map(|_| ())
         .map_err(|_| PersistenceError::InvalidServerId)
+}
+
+async fn validate_member_schema(pool: &SqlitePool) -> Result<(), PersistenceError> {
+    let invalid = || {
+        PersistenceError::InvalidSchemaVersion(
+            "81: central_identity_bindings does not match the member storage contract".to_owned(),
+        )
+    };
+    let table: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema AS s JOIN pragma_table_list AS t ON t.name = s.name
+         WHERE s.name = 'central_identity_bindings' AND s.type = 'table' AND s.sql IS NOT NULL
+         AND t.schema = 'main' AND t.type = 'table' AND t.strict = 1 AND t.wr = 0 AND t.ncol = 5)",
+    ).fetch_one(pool).await?;
+    let columns = sqlx::query_as::<_, (String, String, i64, i64, Option<String>, i64)>(
+        "SELECT name, type, \"notnull\", pk, dflt_value, hidden
+         FROM pragma_table_xinfo('central_identity_bindings') ORDER BY cid",
+    )
+    .fetch_all(pool)
+    .await?;
+    let expected = [
+        ("binding_id", "TEXT", 1),
+        ("issuer", "TEXT", 0),
+        ("person_id", "TEXT", 0),
+        ("user_id", "TEXT", 0),
+        ("created_at", "INTEGER", 0),
+    ]
+    .map(|(name, kind, pk)| (name.to_owned(), kind.to_owned(), 1, pk, None, 0));
+    if !table || columns != expected {
+        return Err(invalid());
+    }
+    let foreign_key: bool = sqlx::query_scalar(
+        "SELECT count(*) = 1 AND coalesce(sum(seq = 0 AND \"table\" = 'user_profiles'
+         AND \"from\" = 'user_id' AND \"to\" = 'user_id' AND on_delete = 'RESTRICT'
+         AND on_update = 'NO ACTION' AND match = 'NONE'), 0) = 1
+         FROM pragma_foreign_key_list('central_identity_bindings')",
+    )
+    .fetch_one(pool)
+    .await?;
+    // PRAGMA reports the actual index keys, including collation/order and partial indexes.
+    let indexes = sqlx::query_as::<_, (String, i64, i64, String)>(
+        "SELECT CASE WHEN origin = 'c' THEN name ELSE origin END, \"unique\", partial,
+         (SELECT group_concat(column_key, ',') FROM
+             (SELECT coalesce(name, '<expression>') || ':' || coll || ':' || \"desc\" AS column_key
+              FROM pragma_index_xinfo(i.name) WHERE key = 1 ORDER BY seqno))
+         FROM pragma_index_list('central_identity_bindings') AS i ORDER BY 1, 4",
+    )
+    .fetch_all(pool)
+    .await?;
+    let expected = [
+        ("central_identity_bindings_user", 0, 0, "user_id:BINARY:0"),
+        ("pk", 1, 0, "binding_id:BINARY:0"),
+        ("u", 1, 0, "issuer:BINARY:0,person_id:BINARY:0"),
+        ("u", 1, 0, "issuer:BINARY:0,user_id:BINARY:0"),
+    ]
+    .map(|(name, unique, partial, columns)| (name.to_owned(), unique, partial, columns.to_owned()));
+    if !foreign_key || indexes != expected {
+        return Err(invalid());
+    }
+    Ok(())
 }
 
 // Called only after the existing host key and database authority have been verified.

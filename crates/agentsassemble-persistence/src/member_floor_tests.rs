@@ -218,13 +218,79 @@ async fn floor_rejects_newer_versions_and_incomplete_81() -> TestResult {
         store.close().await?;
         let result = SqliteStore::open_path(&path).await;
         if version == 81 {
-            assert!(matches!(result, Err(PersistenceError::Database(_))));
+            assert!(matches!(
+                result,
+                Err(PersistenceError::InvalidSchemaVersion(_))
+            ));
         } else {
             assert!(
                 matches!(result, Err(PersistenceError::SchemaVersionMismatch { found, required: 80 })
                 if found == version)
             );
         }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn floor_rejects_malformed_81_structure() -> TestResult {
+    let contract = include_str!("../../../docs/specs/identity-accounts-friends-slice.md");
+    let ddl = contract
+        .split("```sql\n")
+        .nth(1)
+        .unwrap_or_else(|| panic!("contract DDL"))
+        .split("```")
+        .next()
+        .unwrap_or_else(|| panic!("DDL fence"));
+    for (original, replacement) in [
+        (") STRICT", ")"),
+        ("created_at INTEGER", "created_at TEXT"),
+        ("person_id TEXT NOT NULL", "person_id TEXT"),
+        (
+            "binding_id TEXT PRIMARY KEY NOT NULL",
+            "binding_id TEXT NOT NULL",
+        ),
+        ("UNIQUE(issuer, person_id),", ""),
+        (",\n    UNIQUE(issuer, user_id)", ""),
+        ("REFERENCES user_profiles(user_id) ON DELETE RESTRICT", ""),
+        ("ON DELETE RESTRICT", "ON DELETE CASCADE"),
+        (
+            "REFERENCES user_profiles(user_id)",
+            "REFERENCES user_profiles(participant_id)",
+        ),
+        (
+            "CREATE INDEX central_identity_bindings_user ON central_identity_bindings(user_id);",
+            "",
+        ),
+        (
+            "ON central_identity_bindings(user_id)",
+            "ON central_identity_bindings(person_id)",
+        ),
+        (
+            "ON central_identity_bindings(user_id);",
+            "ON central_identity_bindings(user_id) WHERE created_at > 0;",
+        ),
+        (
+            "ON central_identity_bindings(user_id)",
+            "ON central_identity_bindings(user_id, (created_at + 1))",
+        ),
+    ] {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("runtime.db");
+        let store = SqliteStore::open_path(&path).await?;
+        let malformed = ddl.replace(original, replacement);
+        assert_ne!(malformed, ddl);
+        sqlx::raw_sql(sqlx::AssertSqlSafe(malformed))
+            .execute(&store.pool)
+            .await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '81' WHERE key = 'schema_version'")
+            .execute(&store.pool)
+            .await?;
+        store.close().await?;
+        assert!(
+            SqliteStore::open_path(&path).await.is_err(),
+            "accepted mutation: {original}"
+        );
     }
     Ok(())
 }

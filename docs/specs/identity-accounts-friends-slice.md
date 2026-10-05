@@ -188,7 +188,9 @@ CREATE INDEX central_identity_bindings_user ON central_identity_bindings(user_id
 `created_at`은 UTC Unix microseconds다. binding은 membership 종료/중앙 삭제에도
 존재 표식으로 보존하며 이동/익명 전환하지 않는다. floor는 membership 상태와
 무관하게 **어느 issuer든 해당 user_id 행 존재**만으로 미지원 member를 판정한다.
-81인데 이 테이블/필수 열이 없으면 DB 열기를 실패시키며 익명으로 간주하지 않는다.
+81 DB open은 sqlite_schema/PRAGMA를 읽기 전용으로 조회하여 위 STRICT, 열 타입·NOT NULL·PK,
+두 UNIQUE, user_profiles(user_id) ON DELETE RESTRICT FK와 user 인덱스를 확인한다.
+구조가 다르면 열기를 실패시키며 익명으로 간주하지 않는다.
 
 C4b는 기존 80 테이블/열/credential 의미를 바꾸지 않는 additive migration이어야
 한다. 81은 DB 스키마 번호이며 bootstrap 권위 계약의 새 revision이 아니다.
