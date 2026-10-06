@@ -24,9 +24,9 @@ use crate::{
     opencode_protocol::{
         assistant_message, clean_session_id, config_error, executable_error, http_driver_error,
         model_id, model_mismatch, profile_error, protocol_error, provider_id,
-        provider_request_error, runtime_exited, session_mismatch, session_missing, session_path,
-        session_unconfirmed, startup_error, turn_empty, turn_in_progress, turn_mismatch,
-        turn_transport_error, validate_profile,
+        provider_request_error, provider_response_error, runtime_exited, session_mismatch,
+        session_missing, session_path, session_unconfirmed, startup_error, turn_empty,
+        turn_in_progress, turn_mismatch, turn_transport_error, validate_profile,
     },
     opencode_sse::OpenCodeTurnEvents,
     opencode_startup::{reserve_loopback_port, server_password},
@@ -468,8 +468,13 @@ impl OpenCodeDriver {
         prompt: &JsonResponse,
         events: &OpenCodeTurnEvents,
     ) -> Result<ProviderTurnCompleted, DriverError> {
-        if !prompt.status.is_success() {
-            return Err(provider_request_error());
+        if !prompt.status.is_success()
+            || prompt
+                .value
+                .pointer("/info/error")
+                .is_some_and(Value::is_object)
+        {
+            return Err(provider_response_error(&prompt.value));
         }
         let message = assistant_message(&prompt.value)?;
         if message.parent_id != events.request_message {

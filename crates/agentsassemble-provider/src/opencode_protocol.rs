@@ -153,9 +153,8 @@ pub(crate) fn session_path(session_id: &str) -> Result<String, DriverError> {
 
 pub(crate) fn turn_transport_error(error: impl Into<TurnTransportError>) -> DriverError {
     match error.into() {
-        TurnTransportError::Http | TurnTransportError::Events(OpenCodeEventError::Provider) => {
-            provider_request_error()
-        }
+        TurnTransportError::Http => provider_request_error(),
+        TurnTransportError::Events(OpenCodeEventError::Provider(error)) => error,
         TurnTransportError::Events(
             OpenCodeEventError::Transport
             | OpenCodeEventError::TooLarge
@@ -270,8 +269,45 @@ pub(crate) const fn session_mismatch() -> DriverError {
 pub(crate) const fn provider_request_error() -> DriverError {
     DriverError::new(
         "provider_request_failed",
-        "The OpenCode provider request failed.",
+        "OpenCode 요청을 처리하지 못했어요.",
     )
+}
+
+// Only the structured error message is public diagnostic input. Never inspect or
+// publish responseBody, responseHeaders, request payloads or the full provider envelope.
+pub(crate) fn provider_response_error(value: &Value) -> DriverError {
+    let error = value
+        .pointer("/info/error")
+        .or_else(|| value.get("error"))
+        .unwrap_or(value);
+    let message = error
+        .pointer("/data/message")
+        .or_else(|| error.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let guidance = if message.contains("OpenCode 1.18.0 or newer is required") {
+        Some("OpenCode를 1.18 이상으로 업데이트해 주세요.")
+    } else if message.contains("free tier can only be used") {
+        Some(
+            "OpenCode가 이 실행 방식의 무료 모델 사용을 허용하지 않았어요. OpenCode의 무료 티어 제한을 확인해 주세요.",
+        )
+    } else if message.to_ascii_lowercase().contains("rate limit") {
+        Some("OpenCode 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.")
+    } else {
+        None
+    };
+    if let Some(message) = guidance {
+        return DriverError::new("provider_request_failed", message);
+    }
+    let safe = agentsassemble_domain::redact_persisted_diagnostic_text(message, 240);
+    let safe = safe.split_whitespace().collect::<Vec<_>>().join(" ");
+    if safe.is_empty() {
+        return provider_request_error();
+    }
+    DriverError {
+        code: "provider_request_failed".into(),
+        message: format!("OpenCode 요청을 처리하지 못했어요. · {safe}").into(),
+    }
 }
 
 pub(crate) const fn turn_timeout() -> DriverError {
@@ -311,6 +347,50 @@ mod tests {
     use serde_json::json;
 
     use super::{assistant_message, clean_session_id, split_model};
+
+    #[test]
+    fn provider_messages_are_korean_bounded_and_redacted() {
+        for (message, expected) in [
+            (
+                "Error from provider (Console): OpenCode 1.18.0 or newer is required to use the free tier",
+                "OpenCode를 1.18 이상으로 업데이트해 주세요.",
+            ),
+            (
+                "Error from provider (Console): OpenCode's free tier can only be used from within OpenCode",
+                "OpenCode가 이 실행 방식의 무료 모델 사용을 허용하지 않았어요. OpenCode의 무료 티어 제한을 확인해 주세요.",
+            ),
+        ] {
+            for envelope in [
+                json!({"error": {"data": {"message": message}}}),
+                json!({"info": {"error": {"data": {"message": message}}}}),
+            ] {
+                assert_eq!(super::provider_response_error(&envelope).message, expected);
+            }
+        }
+        let error = super::provider_response_error(&json!({"data": {
+            "message": "Capacity unavailable. api_key=sk-test-private-value /Users/alice/private",
+            "responseBody": "private response body", "responseHeaders": {"Authorization": "private header"}
+        }}));
+        assert!(
+            error
+                .message
+                .starts_with("OpenCode 요청을 처리하지 못했어요. · Capacity unavailable.")
+        );
+        for secret in [
+            "sk-test-private-value",
+            "alice",
+            "private response body",
+            "private header",
+        ] {
+            assert!(!error.message.contains(secret));
+        }
+        assert_eq!(
+            super::provider_response_error(&json!({})),
+            super::provider_request_error()
+        );
+        let long = super::provider_response_error(&json!({"message": "x".repeat(1000)}));
+        assert!(long.message.chars().count() < 280);
+    }
 
     #[test]
     fn model_and_session_ids_are_strict_path_components() {

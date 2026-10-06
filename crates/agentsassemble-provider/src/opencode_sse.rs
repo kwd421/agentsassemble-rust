@@ -3,7 +3,11 @@ use std::time::Duration;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::{loopback_http::LoopbackStream, opencode_protocol::observed_model};
+use crate::{
+    loopback_http::LoopbackStream,
+    opencode_protocol::{observed_model, provider_response_error},
+    runtime::DriverError,
+};
 
 const MAX_EVENT_STREAM_BYTES: usize = 8 * 1024 * 1024;
 const MAX_EVENT_LINE_BYTES: usize = crate::room_attachment::MAX_HARNESS_LINE_BYTES;
@@ -18,7 +22,7 @@ pub(crate) enum OpenCodeEventError {
     #[error("the OpenCode event stream protocol was invalid")]
     Protocol,
     #[error("OpenCode reported a provider error")]
-    Provider,
+    Provider(DriverError),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -33,7 +37,7 @@ struct EventState {
     session_id: String,
     mode: WaitMode,
     turn: OpenCodeTurnEvents,
-    provider_error: bool,
+    provider_error: Option<DriverError>,
     request: Option<Value>,
 }
 
@@ -74,7 +78,10 @@ impl EventState {
                 self.request = Some(event.clone());
                 return Ok(false);
             }
-            "session.error" => self.provider_error = true,
+            "session.error" => {
+                self.provider_error =
+                    Some(provider_response_error(&Value::Object(properties.clone())));
+            }
             "message.updated" => {
                 let Some(info) = properties.get("info").and_then(Value::as_object) else {
                     return Ok(false);
@@ -100,7 +107,8 @@ impl EventState {
                         self.turn.observed_model = model;
                     }
                     if info.get("error").is_some_and(Value::is_object) {
-                        self.provider_error = true;
+                        self.provider_error =
+                            Some(provider_response_error(&Value::Object(info.clone())));
                     }
                 }
             }
@@ -109,8 +117,10 @@ impl EventState {
                     && (self.mode == WaitMode::Quiescence
                         || !self.turn.request_message.is_empty()) =>
             {
-                if self.mode == WaitMode::Turn && self.provider_error {
-                    return Err(OpenCodeEventError::Provider);
+                if self.mode == WaitMode::Turn
+                    && let Some(error) = &self.provider_error
+                {
+                    return Err(OpenCodeEventError::Provider(error.clone()));
                 }
                 return Ok(true);
             }
@@ -159,11 +169,11 @@ impl TurnEventStream {
                 .await
                 .map_err(|_| OpenCodeEventError::Transport)?
             else {
-                return Err(if self.state.provider_error {
-                    OpenCodeEventError::Provider
-                } else {
-                    OpenCodeEventError::Transport
-                });
+                return Err(self
+                    .state
+                    .provider_error
+                    .clone()
+                    .map_or(OpenCodeEventError::Transport, OpenCodeEventError::Provider));
             };
             self.total = self.total.saturating_add(chunk.len());
             if self.total > MAX_EVENT_STREAM_BYTES {
@@ -255,6 +265,23 @@ mod tests {
     use serde_json::json;
 
     use super::{EventState, OpenCodeEventError, WaitMode, accept_complete_lines};
+
+    #[test]
+    fn provider_detail_survives_both_error_events_until_idle() {
+        for event in [
+            json!({"type":"session.error", "properties":{"sessionID":"session-1", "error":{"data":{"message":"OpenCode 1.18.0 or newer is required"}}}}),
+            json!({"type":"message.updated", "properties":{"sessionID":"session-1", "info":{"id":"assistant-1", "parentID":"user-1", "role":"assistant", "error":{"data":{"message":"OpenCode 1.18.0 or newer is required"}}}}}),
+        ] {
+            let mut state = EventState::new("session-1", WaitMode::Turn);
+            state.turn.request_message = "user-1".into();
+            assert_eq!(state.accept(&event), Ok(false));
+            let result = state.accept(&json!({"type":"session.status", "properties":{"sessionID":"session-1", "status":{"type":"idle"}}}));
+            assert!(
+                matches!(result, Err(super::OpenCodeEventError::Provider(error))
+                if error.message == "OpenCode를 1.18 이상으로 업데이트해 주세요.")
+            );
+        }
+    }
 
     #[test]
     fn split_data_is_buffered_but_malformed_data_fails_immediately() {

@@ -5,7 +5,7 @@ use tokio::time::Instant;
 use super::{OpenCodeDriver, TURN_TIMEOUT, requests};
 use crate::{
     loopback_http::{JsonResponse, LoopbackStream, VerifiedLoopbackConnection},
-    opencode_protocol::{turn_timeout, turn_transport_error},
+    opencode_protocol::{provider_response_error, turn_timeout, turn_transport_error},
     opencode_sse::{OpenCodeTurnEvents, TurnEvent, TurnEventStream},
     runtime::{DriverError, ProviderTurnRequest},
 };
@@ -31,7 +31,11 @@ impl OpenCodeDriver {
                 biased;
                 () = tokio::time::sleep_until(deadline) => return Err(turn_timeout()),
                 result = &mut prompt, if response.is_none() => {
-                    response = Some(result.map_err(turn_transport_error)?);
+                    let result = result.map_err(turn_transport_error)?;
+                    if !result.status.is_success() || result.value.pointer("/info/error").is_some_and(Value::is_object) {
+                        return Err(provider_response_error(&result.value));
+                    }
+                    response = Some(result);
                 }
                 event = events.next(), if completed_events.is_none() => match event.map_err(turn_transport_error)? {
                     TurnEvent::Completed(events) => completed_events = Some(events),

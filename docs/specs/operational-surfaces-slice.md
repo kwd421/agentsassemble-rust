@@ -134,6 +134,21 @@ success; retained custody cannot disappear on a repeated shutdown. A completed
 update refreshes only the affected local provider's catalog. The creation draft stays
 in place and cannot submit through an update it is currently awaiting.
 
+2026-10-07 correction acceptance: the shared provider-update view must retain
+`업데이트했어요 · <confirmed version>` after completion, including catalog refresh,
+rather than silently removing the result. A later check retains the owner's
+completion receipt only while a fresh read confirms the same installed version
+and no newer offer. Managed room errors must preserve safe,
+bounded provider error detail with Korean guidance (version requirement, free-tier
+rejection, otherwise Korean generic plus redacted short message). Public provider
+labels use OpenCode, never the internal `opencode_server` transport name.
+Investigate existing runtime reuse after updates without interrupting active turns;
+only change its owner if evidence establishes the reported failure there. The
+reported UI Check MiMo session's native version is already 1.18.34: its HTTP 403 is
+free-tier client rejection, not the earlier minimum-version rejection. Preserve
+persistent room instructions and native provider access checks; no fallback or
+client-identity spoofing is authorized.
+
 Native update commands retain each CLI's installation owner. Codex's npm installation
 is update-capable only when the globally configured npm prefix contains the exact
 resolved Codex launcher; the command pins that prefix and the offered package version.
