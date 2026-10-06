@@ -30,7 +30,7 @@ export default function ProviderModelRefresh({ title, compact = false, providerI
         return;
       }
       if (!provider || provider.discovery_status !== "ready") {
-        throw new Error(provider?.discovery_error || "이 제공자의 모델 목록을 확인하지 못했어요.");
+        throw new Error(provider?.discovery_error || "이 AI의 모델 목록을 확인하지 못했어요.");
       }
       setStatus(force ? "모델 목록을 새로고침했어요." : "");
     } catch (error) {
@@ -56,8 +56,8 @@ export default function ProviderModelRefresh({ title, compact = false, providerI
       {desktop && <button
         type="button"
         className={compact ? undefined : "ops-button"}
-        aria-label={compact ? "제공자 다시 확인" : "모델 목록 새로고침"}
-        title={compact ? "제공자 다시 확인" : "모델 목록 새로고침"}
+        aria-label={compact ? "AI 다시 확인" : "모델 목록 새로고침"}
+        title={compact ? "AI 다시 확인" : "모델 목록 새로고침"}
         aria-busy={busy}
         style={compact ? undefined : { width: 44, height: 44, flex: "0 0 auto", display: "grid", placeItems: "center" }}
         disabled={busy || !providerId || !automaticAllowed}

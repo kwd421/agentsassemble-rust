@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Play, Plus, X } from "lucide-react";
 import {
   deleteProviderCredential,
@@ -43,6 +43,7 @@ import {
 } from "./agentCreateModel";
 
 type AgentCreateModalProps = {
+  locationChoice?: ReactNode;
   open: boolean;
   meetingId: string;
   roomLabel: string;
@@ -60,6 +61,7 @@ type AgentCreateModalProps = {
 
 export default function AgentCreateModal({
   open,
+  locationChoice,
   meetingId,
   roomLabel,
   providers,
@@ -112,7 +114,8 @@ export default function AgentCreateModal({
       settings.permission_mode === "workspace_write"
     )
   );
-  const selectedProviderMissing = Boolean(providerId && providers.length && !selectedProvider);
+  const selectedProviderMissing = Boolean((providerId || initialSelection?.providerId) &&
+    !providers.some((provider) => provider.id === (providerId || initialSelection?.providerId)));
   const invalidControl = existingSessionId || !selectedProvider
     ? undefined
     : selectedProvider.controls.find((control) =>
@@ -261,7 +264,7 @@ export default function AgentCreateModal({
           : selectedProvider &&
             ["command_missing", "bridge_runtime_missing"].includes(selectedProvider.discovery_error_code || "")
             ? providerUnavailableText(selectedProvider)
-          : selectedProvider?.discovery_error || "실행 가능한 provider와 폴더를 확인하세요"
+          : selectedProvider?.discovery_error || "실행할 AI와 작업 폴더를 확인해 주세요."
       );
       return;
     }
@@ -359,7 +362,7 @@ export default function AgentCreateModal({
   async function readUpdatedCatalog() {
     if (!onCatalogChange) return;
     try { onCatalogChange(await fetchLocalProviderCatalog()); }
-    catch (error) { setStatus(error instanceof Error ? error.message : "제공자 상태를 확인하지 못했어요."); }
+    catch (error) { setStatus(error instanceof Error ? error.message : "AI 상태를 확인하지 못했어요."); }
   }
 
   function renderProviderChoice(provider: NativeCliProviderAvailability) {
@@ -413,7 +416,7 @@ export default function AgentCreateModal({
             <ProviderModelRefresh
               onCatalogChange={onCatalogChange}
               localAvailable={localProviderActions}
-              title="제공자"
+              title="AI"
               compact
               providerId={existingSessionId ? "" : selectedProvider?.id || ""}
               automaticAllowed={Boolean(selectedProvider &&
@@ -427,11 +430,12 @@ export default function AgentCreateModal({
         </header>
 
         <div className="dc-agent-create-body">
+          {locationChoice}
           {!selectedProvider && statusMessage && <p className="dc-agent-create-note">{statusMessage}</p>}
           {PROVIDER_GROUPS.map(({ id, label }) => (
             <section className="dc-agent-section dc-agent-provider-category" key={id}>
               <h3 className="dc-agent-section-title">{label}</h3>
-              <div className="dc-agent-provider-grid" role="list" aria-label={`${label} 제공자`}>
+              <div className="dc-agent-provider-grid" role="list" aria-label={`${label} AI`}>
                 {groupedProviders[id].map(renderProviderChoice)}
               </div>
             </section>
@@ -515,7 +519,7 @@ export default function AgentCreateModal({
                   <span>모델 ID</span>
                   <input
                     value={customModel}
-                    placeholder="provider가 요구하는 정확한 모델 ID"
+                    placeholder="사용할 AI의 정확한 모델 ID"
                     onChange={(event) => {
                       const value = event.currentTarget.value;
                       setCustomModel(value);

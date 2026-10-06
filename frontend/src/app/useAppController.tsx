@@ -426,6 +426,12 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   });
   const canManageActiveRoom = !activeRoomDisconnected && Boolean(activeRoomCapabilities["room.manage"]);
   const canControlActiveAgents = !activeRoomDisconnected && Boolean(activeRoomCapabilities["agent.control"]);
+  const canAddCompanion = !activeRoomDisconnected && !guestExpired && Boolean(guestSession) &&
+    guestSession?.meetingId === activeRoom.meetingId && canonicalRoom.connectionState === "connected" &&
+    lobbyPostingState.canPost && Boolean(activeRoomCapabilities["message.send"]) &&
+    canonicalRoom.participants.some((participant) => participant.participant_id === guestSession?.agentId &&
+      participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
+  const canAddActiveAI = canControlActiveAgents || canAddCompanion;
   const pairedRoomLifecycle = usePairedRoomLifecycle({
     enabled: !ownerLifecycleTransport && guestLocked && canManageActiveRoom && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === "/api/room-session/lifecycle")),
     session: guestSession, deviceToken, expired: guestExpired,
@@ -433,9 +439,9 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     refreshProjection: () => canonicalRoom.socket?.resync?.(),
   });
   useEffect(() => {
-    if (!canControlActiveAgents) setAgentCreateOpen(false);
+    if (!canAddActiveAI) setAgentCreateOpen(false);
     if (guestLocked && !canManageActiveRoom) setSettingsModal(null);
-  }, [canControlActiveAgents, canManageActiveRoom, guestLocked]);
+  }, [canAddActiveAI, canManageActiveRoom, guestLocked]);
   const saveAgentAvatar = useCallback(async (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => {
     if ((!managerAuthorityCurrent && !(guestLocked && canControlActiveAgents)) || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
       throw new Error("현재 방의 에이전트 프로필 업로드 권위를 사용할 수 없습니다.");
@@ -570,7 +576,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   }
 
   function openAgentCreate() {
-    if (!canControlActiveAgents) return;
+    if (!canAddActiveAI) return;
     setAgentCreateOpen(true);
     closeMobileOverlays();
     setRoomMenu(null);
@@ -711,7 +717,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     roomLifecycle, pairedRoomLifecycle, roomChannels, activeCustomChannel, channelTranscript,
     acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings,
-    canManageActiveRoom, canControlActiveAgents,
+    canManageActiveRoom, canControlActiveAgents, canAddCompanion, canAddActiveAI,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
     activeRoomDisconnected, activeRoomHistory, activeRoomMembers,
     addFreshRoom, adjustSidebarWidthWithKeyboard,

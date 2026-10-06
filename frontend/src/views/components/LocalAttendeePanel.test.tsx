@@ -49,8 +49,8 @@ it("preserves the local draft after rejection, then adds and starts through the 
   await screen.findByText("모델을 다시 선택해 주세요.", { selector: ".dc-agent-create-status" });
   expect((screen.getByLabelText("선택한 작업 폴더") as HTMLInputElement).value).toBe("/local/workspace");
   fireEvent.click(screen.getByRole("button", { name: "추가" }));
-  fireEvent.click(await screen.findByRole("button", { name: "이 PC에서 실행" }));
-  await screen.findByText("이 PC에서 실행 중이에요.");
+  fireEvent.click(await screen.findByRole("button", { name: "이 컴퓨터에서 실행" }));
+  await screen.findByText("이 컴퓨터에서 실행 중이에요.");
   fireEvent.click(screen.getByRole("button", { name: "에이전트 종료하고 나가기" }));
   await screen.findByText("에이전트 종료와 방 나가기를 확인했어요.");
   expect(createLocalAttendee).toHaveBeenLastCalledWith(packet, expect.objectContaining({ creation: expect.objectContaining({
@@ -72,14 +72,14 @@ it("keeps uncertain submitted input exact and never treats a missing read as per
   await act(async () => {});
   expect(screen.queryByRole("dialog")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "같은 요청 다시 시도" }));
-  await screen.findByRole("button", { name: "이 PC에서 실행" });
+  await screen.findByRole("button", { name: "이 컴퓨터에서 실행" });
   expect(vi.mocked(createLocalAttendee).mock.calls[0][1]).toBe(vi.mocked(createLocalAttendee).mock.calls[1][1]);
 });
 
 it("restores an existing operation without mounting setup or submitting again", async () => {
   vi.mocked(fetchLocalAttendee).mockResolvedValue({ ...admitted, phase: "running" });
   render(<LocalAttendeePanel />);
-  await screen.findByText("이 PC에서 실행 중이에요.");
+  await screen.findByText("이 컴퓨터에서 실행 중이에요.");
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(refreshLocalProviderCatalog).not.toHaveBeenCalled();
   expect(createLocalAttendee).not.toHaveBeenCalled();
@@ -97,7 +97,7 @@ it.each([false, true])("cancels while %s create-and-start is held and ignores it
   else {
     fireEvent.click(screen.getByRole("switch", { name: "추가하자마자 실행" }));
     fireEvent.click(screen.getByRole("button", { name: "추가" }));
-    fireEvent.click(await screen.findByRole("button", { name: "이 PC에서 실행" }));
+    fireEvent.click(await screen.findByRole("button", { name: "이 컴퓨터에서 실행" }));
   }
   const cancel = await screen.findByRole("button", { name: "에이전트 종료하고 나가기" });
   expect((cancel as HTMLButtonElement).disabled).toBe(false);
@@ -105,7 +105,7 @@ it.each([false, true])("cancels while %s create-and-start is held and ignores it
   await screen.findByText("에이전트 종료와 방 나가기를 확인했어요.");
   expect(commandLocalAttendee).toHaveBeenLastCalledWith(packet, "cancel");
   await act(async () => finish({ ...admitted, phase: "running" }));
-  expect(screen.queryByText("이 PC에서 실행 중이에요.")).toBeNull();
+  expect(screen.queryByText("이 컴퓨터에서 실행 중이에요.")).toBeNull();
   expect(screen.getByText("에이전트 종료와 방 나가기를 확인했어요.")).toBeTruthy();
   expect(createLocalAttendee).toHaveBeenCalledTimes(1);
 });
@@ -124,9 +124,20 @@ it("retains a failed cancel and exact status access instead of allowing a replac
   expect(screen.queryByText("에이전트 종료와 방 나가기를 확인했어요.")).toBeNull();
   vi.mocked(fetchLocalAttendee).mockResolvedValue({ ...admitted, phase: "running" });
   fireEvent.click(screen.getByRole("button", { name: "상태 다시 확인" }));
-  await screen.findByText("이 PC에서 실행 중이에요.");
+  await screen.findByText("이 컴퓨터에서 실행 중이에요.");
   fireEvent.click(screen.getByRole("button", { name: "에이전트 종료하고 나가기" }));
   await screen.findByText("에이전트 종료와 방 나가기를 확인했어요.");
   expect(commandLocalAttendee).toHaveBeenCalledTimes(2);
   expect(createLocalAttendee).toHaveBeenCalledTimes(1);
+});
+
+
+it("shows the canonical origin with its port and rejects a provider absent from this computer", async () => {
+  const link = new URL(localAttendeeLink({ ...packet, join_url: "https://room.example.test:8443/join?token=fixture" }));
+  window.history.replaceState(null, "", `/?attendee-create=${packet.request_id}${link.hash}`);
+  vi.mocked(fetchLocalProviderCatalog).mockResolvedValue({ status: "ready", catalog_revision: "local", providers: [] });
+  render(<LocalAttendeePanel />);
+  expect(await screen.findByText("선택한 AI가 현재 목록에 없어요.")).toBeTruthy();
+  expect(screen.getAllByText("https://room.example.test:8443 · remote-room").length).toBeGreaterThan(0);
+  expect(createLocalAttendee).not.toHaveBeenCalled();
 });

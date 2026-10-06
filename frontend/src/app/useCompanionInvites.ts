@@ -28,7 +28,7 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
     return active.current && current.current?.sessionToken === owner.sessionToken &&
       current.current?.roomUid === owner.roomUid && current.current?.meetingId === owner.meetingId && !roomGuestSessionExpired(owner);
   }
-  async function create() {
+  async function create(onIssued?: (link: string) => void) {
     const owner = current.current;
     if (!owner || !isCurrent(owner) || busy.current || !provider.trim() || !displayName.trim()) return;
     busy.current = true; setCreating(true); setStatus("");
@@ -41,7 +41,8 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
       pending.current.delete(key);
       if (!isCurrent(owner)) return;
       setRecords((prior) => [...prior, { ...packet, sessionToken: owner.sessionToken }]);
-      setStatus("동반 AI 초대를 만들었어요. 참가 안내를 복사해 AI를 실행할 컴퓨터에 전달해 주세요.");
+      onIssued?.(localAttendeeLink(packet.result));
+      setStatus("설정 준비가 됐어요. 이 컴퓨터에서 설정하기를 눌러 앱을 열어 주세요.");
     } catch (error) {
       if (isCurrent(owner)) setStatus(error instanceof Error ? error.message : "초대 결과를 확인하지 못했어요. 다시 시도해 주세요.");
     } finally {

@@ -293,7 +293,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    expect(screen.getByText("선택한 provider가 현재 catalog에 없어요.")).toBeTruthy();
+    expect(screen.getByText("선택한 AI가 현재 목록에 없어요.")).toBeTruthy();
     expect(screen.getByRole("listitem", { name: "Codex" }).getAttribute("data-active")).toBe("false");
     expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
   });
@@ -576,7 +576,7 @@ describe("AgentCreateModal", () => {
     );
 
     expect(screen.getByRole("listitem", { name: "DeepSeek" })).toBeTruthy();
-    expect(screen.getByRole("list", { name: "API 키 제공자" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "API 키 AI" })).toBeTruthy();
     expect(screen.queryByLabelText("API 키")).toBeNull();
 
     await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));

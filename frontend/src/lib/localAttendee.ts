@@ -6,9 +6,9 @@ import type { LocalAttendeePhase } from "../types/generated/LocalAttendeePhase";
 export const LOCAL_ATTENDEE_PHASE_LABELS: Record<LocalAttendeePhase, string> = {
   admitting: "방에 참가하고 있어요.",
   admission_unresolved: "참가 결과를 확인하지 못했어요. 같은 요청으로 다시 확인해 주세요.",
-  admitted: "방에 추가했어요. 이 PC에서 실행할 준비가 됐어요.",
-  starting: "이 PC에서 에이전트를 시작하고 있어요.",
-  running: "이 PC에서 실행 중이에요.",
+  admitted: "방에 추가했어요. 이 컴퓨터에서 실행할 준비가 됐어요.",
+  starting: "이 컴퓨터에서 에이전트를 시작하고 있어요.",
+  running: "이 컴퓨터에서 실행 중이에요.",
   stopping: "에이전트를 종료하고 방에서 나가는 중이에요.",
   stopped: "에이전트 종료와 방 나가기를 확인했어요.",
   failed: "에이전트를 시작하지 못했어요. 브라우저에서 새 초대를 만들어 다시 시도해 주세요.",

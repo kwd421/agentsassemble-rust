@@ -13855,3 +13855,15 @@ contract and evidence below replace that implementation; no migration 0009 is ne
 - 2026-10-06 Rail (c) 공용 프론트/앱 연결: 멤버 allowlist·hide/unhide·connect 동의·방 선택·서버별 앱 credential 전달 검증; frontend 전체 181파일·desktop 48테스트 통과. `make verify` 1회 중 신규 HTTP 대역 응답 불일치를 수정하고 해당 회귀 재실행 및 잔여 doc-test/clippy/format/diff/artifact, 구조·성장 게이트 통과; 서명·수동·배포 미실행.
 
 - 2026-10-06 Rail (c) Daybreak Medium 3: 완료된 connect 같은 방 재시도는 canonical 재선택 전에 저장 응답을 반환; 최초 선택의 강퇴 거절·강퇴 후 동일 응답·폐기 bearer의 소켓 ticket 401을 서버 HTTP 회귀로 확인(`cargo test -p agentsassemble-server --test integration member_invite_boundary --quiet`), 푸시 전 `make verify` 1회 전체 통과.
+
+## Companion entry consolidation (2026-10-06)
+
+D1–D3: 81 affected frontend tests pass (13 files), including desktop remote
+owner/member/local gates, host discovery isolation, invitation custody and local
+explicit-create recovery. Frontend typecheck/build, desktop all-target/all-feature
+Clippy, architecture/source-growth gates and 19 policy tests pass. Desktop cargo
+test: 42 pass; six existing socket/supervisor/updater cases fail with sandbox
+`Operation not permitted` (including bind). The bounded attendee decoder passes.
+No new process, timer or polling is introduced; setup windows are bounded to one.
+Real packaged deep-link navigation/focus, Mac-to-Windows execution and mobile visual
+acceptance remain unverified; jsdom handoff checks do not establish OS navigation.

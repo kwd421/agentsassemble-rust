@@ -4,8 +4,8 @@ import { isDesktopWebview } from "../../lib/desktopBridge";
 import { ApiError } from "../../lib/apiErrors";
 
 const LOGIN_ERRORS: Record<string, string> = {
-  provider_login_unsupported: "이 제공자는 앱에서 로그인을 지원하지 않아요.",
-  provider_login_missing: "제공자 CLI를 설치한 뒤 로그인해 주세요.",
+  provider_login_unsupported: "이 AI는 앱에서 로그인을 지원하지 않아요.",
+  provider_login_missing: "AI CLI를 설치한 뒤 로그인해 주세요.",
   provider_login_timeout: "로그인 시간이 초과됐어요. 다시 시도해 주세요.",
   provider_login_cancelled: "로그인을 취소했어요.",
   provider_login_failed: "로그인하지 못했어요. 로그인 창을 확인한 뒤 다시 시도해 주세요.",

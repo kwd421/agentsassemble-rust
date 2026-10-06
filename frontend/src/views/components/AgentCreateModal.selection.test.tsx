@@ -22,8 +22,8 @@ describe("AgentCreateModal provider selection", () => {
 
     expect(screen.queryByLabelText("표시 이름")).toBeNull();
     expect(screen.getByRole("dialog").getAttribute("data-provider-selected")).toBe("false");
-    const hint = screen.getByText("사용할 제공자를 골라 주세요.");
-    expect(hint.compareDocumentPosition(screen.getByRole("list", { name: "구독 에이전트 제공자" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const hint = screen.getByText("사용할 AI를 골라 주세요.");
+    expect(hint.compareDocumentPosition(screen.getByRole("list", { name: "구독 에이전트 AI" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
     expect(screen.getByLabelText("표시 이름")).toBeTruthy();
     expect(screen.getByRole("dialog").getAttribute("data-provider-selected")).toBe("true");
@@ -39,7 +39,7 @@ it("keeps an unavailable provider selectable for local setup without permitting 
   expect(screen.queryByRole("list", { name: "에이전트 종류" })).toBeNull();
   expect(screen.getAllByRole("heading", { level: 3 }).map((item) => item.textContent))
     .toEqual(["구독 에이전트", "API 키", "내 컴퓨터"]);
-  expect(within(screen.getByRole("list", { name: "구독 에이전트 제공자" })).getAllByRole("listitem")
+  expect(within(screen.getByRole("list", { name: "구독 에이전트 AI" })).getAllByRole("listitem")
     .map((item) => item.getAttribute("aria-label"))).toEqual(["OpenCode", "Codex"]);
   expect(screen.getByRole("listitem", { name: "Codex" }).getAttribute("data-unavailable")).toBe("true");
   await userEvent.click(screen.getByRole("listitem", { name: /Codex/ }));
@@ -56,7 +56,7 @@ it("keeps initial loading providers undimmed in catalog order", () => {
   }));
   const { rerender } = render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
     providers={providers} onClose={() => undefined} onCreate={vi.fn()} />);
-  const choices = () => within(screen.getByRole("list", { name: "구독 에이전트 제공자" })).getAllByRole("listitem");
+  const choices = () => within(screen.getByRole("list", { name: "구독 에이전트 AI" })).getAllByRole("listitem");
   expect(choices().map((item) => item.getAttribute("aria-label"))).toEqual(["Codex", "Claude Code", "OpenCode"]);
   expect(choices().map((item) => item.getAttribute("data-unavailable"))).toEqual(["false", "false", "false"]);
 

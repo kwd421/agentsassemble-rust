@@ -87,10 +87,7 @@ export default function AppView({ controller }: { controller: AppController }) {
   const canPostHumanMessage = lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) &&
     canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
       participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
-  const companionInvites = useCompanionInvites(canPostHumanMessage && canonicalRoom.connectionState === "connected" &&
-    guestSession && guestSession.meetingId === activeRoom.meetingId &&
-    canonicalRoom.room?.room_id === guestSession.meetingId
-    // Ordinary admission has no room UID; the accepted authenticated snapshot owns it.
+  const companionInvites = useCompanionInvites(controller.canAddCompanion && guestSession && canonicalRoom.room
     ? { ...guestSession, roomUid: canonicalRoom.room.room_uid } : null, canonicalRoom.events, deviceToken);
   useLayoutEffect(() => { setCreateChannelScope(""); setSideChatScope(""); }, [channelScope]);
   // Recovery owns the entrance until its current session surface is accepted.
@@ -477,7 +474,7 @@ export default function AppView({ controller }: { controller: AppController }) {
 
       {hasRoom && mobileRoomInfoOpen && !friendsVisible && (
         <MobileRoomInfoPanel
-          companionInvites={companionInvites.available && !guestSession?.operator ? companionInvites : undefined}
+
           room={activeRoom}
           appearance={activeAppearance}
           channelLabel={activeChannelDisplay.label}
@@ -487,7 +484,8 @@ export default function AppView({ controller }: { controller: AppController }) {
           displayResourceBase={canonicalRoom.displayResourceBase}
           guestLocked={guestLocked}
           onClose={closeMobileRoomInfo}
-          onStartAddAgent={openAgentCreate}
+          canAddCompanion={controller.canAddCompanion}
+          onStartAddAgent={controller.canAddActiveAI ? openAgentCreate : undefined}
           onOpenSideChat={canOpenSideChat ? () => { closeMobileRoomInfo(); setSideChatOpen(true); } : undefined}
           onInvite={canInviteRooms ? () => void inviteRoom(activeRoom.id) : undefined}
           onOpenSettings={!guestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined}
@@ -529,7 +527,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             data-testid="room-info-panel"
           >
             <RoomConnectionPanel
-              companionInvites={companionInvites.available && !guestSession?.operator ? companionInvites : undefined}
+
               room={activeRoom}
               agents={scopedAgents}
               members={activeRoomMembers}
@@ -537,7 +535,8 @@ export default function AppView({ controller }: { controller: AppController }) {
               displayResourceBase={canonicalRoom.displayResourceBase}
               onRoleChange={updateMemberRole}
               channelNotifications={activeChannelSettings}
-              onStartAddAgent={openAgentCreate}
+              canAddCompanion={controller.canAddCompanion}
+          onStartAddAgent={controller.canAddActiveAI ? openAgentCreate : undefined}
               agentSessions={activeRoomAgentSessions}
               capabilities={activeRoomCapabilities}
               onParticipantRemove={serverProductSurface?.websocket_actions.includes("participant.kick") && serverProductSurface.websocket_actions.includes("participant.export") ? sendParticipantRemove : undefined}

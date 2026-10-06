@@ -9,6 +9,37 @@ own the current review state. Configured real-provider proof
 and Pro review remain final-closeout work. The dated implementation notes below retain their original
 intermediate verification status; this current status and the closure record govern.
 
+## Companion AI entry consolidation (2026-10-06)
+
+`에이전트 추가` is the sole creation entry (desktop/mobile member panels and
+AppOverlays/AgentCreateModal). Local server connections retain server creation.
+Remote owners may choose the named server computer or this computer; writable
+members of another server only see this computer. Browser own-computer creation
+uses the same dialog. Server `agent.control` and writable, joined, unmuted human
+companion eligibility are separate gates; the existing endpoint rechecks authority.
+This-computer selection uses supported catalog registration IDs/names only, never
+server discovery availability/models. `useCompanionInvites` retains invitation,
+retry, expiry and parent-session ownership, then hands off the existing
+`agentsassemble://attend#packet=...` link. Bundled LocalAttendeePanel owns actual
+local discovery, model/workspace selection and explicit create/run consent.
+
+Main-webview navigation cancels every agentsassemble URL; only attend is fed to
+attendee_handoff's existing bounded exact decoder. One local-attendee window is
+open at a time; repeated packets focus it without replacing its draft. Its visible
+server origin includes scheme and port. No prepare/result broker, parser, command,
+capability change, admission-on-navigation, new retry or polling is added.
+Remove member-panel CompanionInviteCard; preserve both room-invite pairing and AI
+tabs. Acceptance covers owner/member/read-only/disconnected gates, unsupported or
+unavailable local AI, packet rejection, repeated handoff and explicit consent,
+browser handoff and existing server creation. Windows/macOS packaged evidence is
+reported separately from unit/build evidence.
+
+D4 is a separate commit: an optional closed OS enum (macos/windows/linux/other)
+on the authenticated attendee's current connection, display-only, no hostname or
+authority use. Connected member rows show Mac/Windows/Linux running hints; missing,
+other or disconnected values show nothing. Replacement/disconnect must not retain
+an earlier connection's hint. Existing socket/projection owners carry the value.
+
 ## Connector and persistence path-only grouping (2026-10-05)
 
 Move server `connector_*` (13 files) into `connector/` and persistence

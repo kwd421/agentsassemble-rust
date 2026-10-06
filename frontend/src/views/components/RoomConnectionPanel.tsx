@@ -1,5 +1,3 @@
-import CompanionInviteCard from "./CompanionInviteCard";
-import type { CompanionInviteControls } from "../../app/useCompanionInvites";
 import { Plus } from "lucide-react";
 import {
   type ChannelNotificationSetting,
@@ -20,7 +18,6 @@ type RoomSummary = {
 
 type RoomConnectionPanelProps = {
   room: RoomSummary;
-  companionInvites?: CompanionInviteControls;
   agents: LiveAgent[];
   members: RoomMember[];
   viewerParticipantId?: string;
@@ -29,6 +26,7 @@ type RoomConnectionPanelProps = {
   channelNotifications?: Record<string, { notifications: ChannelNotificationSetting; lastReadAt?: string }>;
   onSessionActionComplete?: () => void;
   onStartAddAgent?: () => void;
+  canAddCompanion?: boolean;
   agentSessions?: RoomAgentSession[];
   capabilities?: Record<string, boolean>;
   onAgentControl?: (
@@ -56,7 +54,6 @@ function mutedChannelCount(
 }
 
 export default function RoomConnectionPanel({
-  companionInvites,
   room,
   agents,
   members,
@@ -66,6 +63,7 @@ export default function RoomConnectionPanel({
   channelNotifications,
   onSessionActionComplete,
   onStartAddAgent,
+  canAddCompanion = false,
   agentSessions = [],
   capabilities = {},
   onAgentControl,
@@ -82,7 +80,7 @@ export default function RoomConnectionPanel({
 
   return (
     <div className="dc-room-connection-panel">
-      {capabilities["agent.control"] && onStartAddAgent && (
+      {(capabilities["agent.control"] || canAddCompanion) && onStartAddAgent && (
         <div className="dc-room-agent-add-row">
           <button type="button" className="dc-agent-add-entry" onClick={onStartAddAgent}>
             <Plus size={16} />
@@ -91,7 +89,6 @@ export default function RoomConnectionPanel({
           {mutedCount > 0 && <span className="dc-room-muted-count">{mutedCount} muted</span>}
         </div>
       )}
-      {companionInvites && <CompanionInviteCard controls={companionInvites} />}
       <MemberList
         agents={agents}
         members={members}

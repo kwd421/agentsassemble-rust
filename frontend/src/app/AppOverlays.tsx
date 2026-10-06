@@ -17,7 +17,7 @@ import RoomSettingsModal from "../views/components/RoomSettingsModal";
 export default function AppOverlays({ controller, companionInvites }: { controller: AppController; companionInvites: CompanionInviteControls }) {
   const [hostCreation, setHostCreation] = useState(false);
   const [memberSelected, setMemberSelected] = useState(false);
-  const ownComputer = !isDesktopWebview() && companionInvites.available && !hostCreation;
+  const ownComputer = companionInvites.available && (!hostCreation || !controller.canControlActiveAgents || !(controller.guestSession?.operator || controller.guestSession?.centralOwner));
   const closeCreation = () => { setHostCreation(false); controller.setAgentCreateOpen(false); };
   const {
     activeRoom, agentCreateOpen,
@@ -36,6 +36,13 @@ export default function AppOverlays({ controller, companionInvites }: { controll
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
     stopInviteTunnel, updateRoom,
   } = controller;
+  const serverName = controller.centralDirectory?.servers.find((server) =>
+    server.server_id === guestSession?.serverSurface.server_id)?.alias || window.location.host;
+  const locationChoice = companionInvites.available && canControlActiveAgents && (guestSession?.operator || guestSession?.centralOwner)
+    ? <fieldset style={{ padding: 16 }}><legend>어디서 실행할까요?</legend>
+        <label><input type="radio" name="ai-location" checked={!ownComputer} onChange={() => setHostCreation(true)} /> 서버 컴퓨터({serverName})</label>{" "}
+        <label><input type="radio" name="ai-location" checked={ownComputer} onChange={() => setHostCreation(false)} /> 이 컴퓨터</label>
+      </fieldset> : undefined;
   // Archived and closed rooms never reach the rail, so room settings carries the list.
   const lifecycleController = roomLifecycle.enabled ? roomLifecycle : pairedRoomLifecycle.enabled ? pairedRoomLifecycle : null;
 
@@ -148,11 +155,12 @@ export default function AppOverlays({ controller, companionInvites }: { controll
           />
         )}
 
-        {agentCreateOpen && canControlActiveAgents && ownComputer && <OwnComputerCreateModal
+        {agentCreateOpen && ownComputer && <OwnComputerCreateModal
           roomLabel={activeRoom.label} providers={canonicalRoom.availableProviders} controls={companionInvites}
-          onClose={closeCreation} onHost={() => setHostCreation(true)} />}
+          onClose={closeCreation} locationChoice={locationChoice} />}
         <AgentCreateModal
           open={agentCreateOpen && canControlActiveAgents && !ownComputer}
+          locationChoice={locationChoice}
           meetingId={activeRoom.meetingId}
           roomLabel={activeRoom.label}
           providers={canonicalRoom.availableProviders}

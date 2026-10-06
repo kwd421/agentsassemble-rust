@@ -565,6 +565,34 @@ pub fn run() {
                 }
             },
         ))
+        .plugin(
+            tauri::plugin::Builder::<_, ()>::new("attendee-navigation")
+                .on_navigation(|webview, url| {
+                    if webview.label() != "main"
+                        || url.scheme() != agentsassemble_domain::PROVIDER_SETUP_SCHEME
+                    {
+                        return true;
+                    }
+                    if url.host_str() == Some("attend") {
+                        let app = webview.app_handle().clone();
+                        let target = url.clone();
+                        // Serialize window creation on the main thread; navigation carries no consent.
+                        let receiver = app.clone();
+                        if app
+                            .run_on_main_thread(move || {
+                                if attendee_handoff::open(&receiver, &target).is_err() {
+                                    eprintln!("local_attendee_handoff_rejected");
+                                }
+                            })
+                            .is_err()
+                        {
+                            eprintln!("local_attendee_handoff_unavailable");
+                        }
+                    }
+                    false
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(LocalRuntime::default())

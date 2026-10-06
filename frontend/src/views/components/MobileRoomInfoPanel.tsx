@@ -1,5 +1,3 @@
-import CompanionInviteCard from "./CompanionInviteCard";
-import type { CompanionInviteControls } from "../../app/useCompanionInvites";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import { useMemo, useState } from "react";
 import {
@@ -311,7 +309,6 @@ function MobileMemberList({
 }
 
 export default function MobileRoomInfoPanel({
-  companionInvites,
   room,
   appearance,
   channelLabel,
@@ -323,6 +320,7 @@ export default function MobileRoomInfoPanel({
   onClose,
   onInvite,
   onOpenSettings, onStartAddAgent, onOpenSideChat,
+  canAddCompanion = false,
   agentSessions = [],
   availableProviders = [],
   capabilities = {},
@@ -334,7 +332,6 @@ export default function MobileRoomInfoPanel({
   onAgentActivityVisibilityChange,
 }: {
   room: MobileRoomSummary;
-  companionInvites?: CompanionInviteControls;
   appearance: RoomAppearance;
   channelLabel: string;
   agents: LiveAgent[];
@@ -347,6 +344,7 @@ export default function MobileRoomInfoPanel({
   onInvite?: () => void;
   onOpenSettings?: () => void;
   onStartAddAgent?: () => void;
+  canAddCompanion?: boolean;
   agentSessions?: RoomAgentSession[];
   availableProviders?: NativeCliProviderAvailability[];
   capabilities?: Record<string, boolean>;
@@ -472,7 +470,7 @@ export default function MobileRoomInfoPanel({
           </section>
         ) : (
           <>
-          {capabilities["agent.control"] && onStartAddAgent && (
+          {(capabilities["agent.control"] || canAddCompanion) && onStartAddAgent && (
             <button type="button" className="dc-mobile-info-invite" onClick={onStartAddAgent}>
               <Bot size={24} />
               <span>에이전트 추가</span>
@@ -486,7 +484,6 @@ export default function MobileRoomInfoPanel({
               <span aria-hidden>›</span>
             </button>
           )}
-      {companionInvites && <CompanionInviteCard controls={companionInvites} />}
           <MobileMemberList
             onParticipantRemove={capabilities["room.manage"] ? onParticipantRemove : undefined}
             groups={memberGroups}

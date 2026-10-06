@@ -32,10 +32,10 @@ export function deriveAgentCreateStatus({
     return selectedProvider.discovery_error || "모델 목록을 불러오지 못했어요";
   }
   if (selectedProviderMissing) {
-    return "선택한 provider가 현재 catalog에 없어요.";
+    return "선택한 AI가 현재 목록에 없어요.";
   }
   if (!selectedProvider && !selectedProviderMissing && hasProviders) {
-    return "사용할 제공자를 골라 주세요.";
+    return "사용할 AI를 골라 주세요.";
   }
   if (invalidControl) {
     return `${invalidControl.label}의 유효한 기본값이 없어 직접 선택해야 해요.`;
