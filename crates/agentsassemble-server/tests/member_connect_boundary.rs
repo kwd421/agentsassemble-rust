@@ -74,8 +74,13 @@ pub(super) async fn verify(
         fresh_denied.json::<Value>().await?["code"],
         "member_membership_ended"
     );
-    let denied=client.post(format!("{base}/api/member-connect/select")).header("x-device-token",&device).json(&json!({"challenge_id":challenge["challenge_id"],"room_id":"general","client_id":"connect-client"})).send().await?;
-    assert!(!denied.status().is_success());
+    let replay=client.post(format!("{base}/api/member-connect/select")).header("x-device-token",&device).json(&json!({"challenge_id":challenge["challenge_id"],"room_id":"general","client_id":"connect-client"})).send().await?;
+    assert_eq!(replay.status(), StatusCode::OK);
+    assert!(
+        replay.json::<Value>().await? == first,
+        "completed retry must return the original response after kick"
+    );
+    assert_revoked_bearer(client, base, &first).await?;
     // A fresh list after removal is empty.
     let challenge: Value = client
         .post(format!("{base}/api/member-connect/challenge"))
@@ -148,5 +153,19 @@ async fn kick(store: &agentsassemble_persistence::SqliteStore, participant: &str
             &json!({"participant_id":participant}),
         )
         .await?;
+    Ok(())
+}
+
+async fn assert_revoked_bearer(
+    client: &reqwest::Client,
+    base: &str,
+    response: &Value,
+) -> TestResult {
+    let denied = client
+        .post(format!("{base}/api/session-tickets/socket"))
+        .bearer_auth(response["session_token"].as_str().ok_or("session token")?)
+        .send()
+        .await?;
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
     Ok(())
 }

@@ -185,6 +185,9 @@ pub(crate) async fn select(
     if room != &body.room {
         return Err(invalid_challenge());
     }
+    if let Some(response) = completed {
+        return Ok(Json(response.clone()));
+    }
     let decision = state
         .store
         .select_member_connect_room(member, &body.room, &browser, request_id, client, Utc::now())
@@ -195,9 +198,6 @@ pub(crate) async fn select(
         }
         return Err(invalid_challenge());
     };
-    if let Some(response) = completed {
-        return Ok(Json(response.clone()));
-    }
     let sessions = commit
         .replaced_session_fingerprints()
         .iter()

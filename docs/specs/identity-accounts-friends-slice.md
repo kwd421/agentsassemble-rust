@@ -1754,7 +1754,9 @@ README 변경 시 wire 필드의 정본이다. 중앙은 테스트 대역만 사
 저장 scope를 재확인하며 방 목록은 50개 이하, 세션은 선택한 방에만 기존 8/32/40 한도로 발급한다.
 기존 1024개/300초 challenge에 connect_redeemed/completed 상태를 둔다. 최종 요청은
 challenge id/browser credential/room id를 결합하고 같은 방 동시 재시도는 같은 세션,
-다른 방은 거절한다. 재시작/만료 시 새 challenge가 필요하다.
+다른 방은 거절한다. 완료된 같은 방 재시도는 challenge/browser/만료/선택 방 검증 후
+canonical 재선택 없이 저장된 응답을 반환한다. 첫 선택의 canonical 검증은 유지하고,
+이후 강퇴로 폐기된 bearer는 응답 재전달로 복구되지 않는다. 재시작/만료 시 새 challenge가 필요하다.
 
 Outbox는 (binding, immutable epoch)당 하나다. admission/leave/kick/export/close/delete
 트랜잭션에서 하나라도 Joined+active이면 active, 아니면 removed로 계산하고 revision을
