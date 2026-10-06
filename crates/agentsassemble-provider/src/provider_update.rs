@@ -217,6 +217,7 @@ impl ProviderUpdateService {
             if self.0.cancellation.is_cancelled() {
                 return Err(ProviderUpdateError::Cancelled);
             }
+            let mut completed_version = None;
             if let Some(run) = runs.get(registration.id) {
                 if !run.task.is_finished() {
                     if expected.is_some() && run.expected != expected {
@@ -226,8 +227,14 @@ impl ProviderUpdateService {
                     drop(runs);
                     return result.await;
                 }
-                if run.result.clone().await == Err(ProviderUpdateError::CleanupUnconfirmed) {
-                    return Err(ProviderUpdateError::CleanupUnconfirmed);
+                match run.result.clone().await {
+                    Err(ProviderUpdateError::CleanupUnconfirmed) => {
+                        return Err(ProviderUpdateError::CleanupUnconfirmed);
+                    }
+                    Ok(result) if result.completed => {
+                        completed_version = Some(result.current_version);
+                    }
+                    _ => {}
                 }
             }
             let cancellation = self.0.cancellation.child_token();
@@ -243,7 +250,7 @@ impl ProviderUpdateService {
                     provider_executable(registration.probe_executable, &cancellation).await
                 }
                 .map_err(ProviderUpdateError::from)?;
-                let observation = spec
+                let mut observation = spec
                     .read(registration.id, &executable, &cancellation)
                     .await?;
                 if let Some(expected) = requested {
@@ -266,6 +273,10 @@ impl ProviderUpdateService {
                     }
                     return Ok(installed);
                 }
+                // A lost response or reopened view can still observe this owner's receipt.
+                // Recheck the installation: a changed version or a new offer is not completion.
+                observation.completed = !observation.update_available
+                    && completed_version.as_deref() == Some(&observation.current_version);
                 Ok(observation)
             });
             let completion = task.abort_handle();
@@ -497,6 +508,10 @@ else:
             std::fs::read_to_string(root.path().join("calls"))?,
             "update --check --json\nupdate --version 2.0.0\nupdate --check --json\n"
         );
+        // Rejoining after the owned task has finished retains confirmed completion.
+        let rechecked = service.perform_registered(registration, None).await?;
+        assert!(rechecked.completed);
+        assert_eq!(rechecked.current_version, "2.0.0");
         for mode in ["failure", "unchanged"] {
             std::fs::write(root.path().join("mode"), mode)?;
             std::fs::write(root.path().join("version"), "1.0.0")?;

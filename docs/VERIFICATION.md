@@ -1,5 +1,14 @@
 # Verification Contract
 
+- 2026-10-07 OpenCode post-update correction: UI Check's failed MiMo session
+  already used 1.18.34; native HTTP 403 is free-tier client rejection, not stale
+  1.17 runtime reuse. Two additional ignored-test attempts stop on their first
+  turn (5/6 historical test turns); compaction remains blocked. The corrected
+  host preserves Korean error guidance. Update completion stays visible and
+  survives a fresh same-version check. Source validation and sanitized evidence:
+  [post-update diagnosis](verification/2026-10-07-instruction-persistence.md#post-update-diagnosis-and-correction-2026-10-07).
+  Packaged visual verification of these changes remains unverified; no push.
+
 - 2026-10-07 authorized instruction persistence verification: Codex managed agent
   passed two room turns across seven native compactions; Claude SDK Sonnet 5 at
   low effort passed two room turns across a native manual `/compact` boundary

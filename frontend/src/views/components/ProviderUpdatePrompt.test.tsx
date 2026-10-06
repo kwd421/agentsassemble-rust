@@ -44,7 +44,7 @@ it("sends the displayed version once and reports only the confirmed installed ve
   expect(updating).toHaveBeenCalledExactlyOnceWith(true);
   expect(screen.queryByText(/업데이트했어요/)).toBeNull();
   await act(async () => finish({ ...offer, current_version: offer.latest_version, update_available: false, completed: true }));
-  expect(screen.getByText("1.0.24 버전으로 업데이트했어요.")).toBeTruthy();
+  expect(screen.getByText("업데이트했어요 · 1.0.24")).toBeTruthy();
   expect(updating).toHaveBeenLastCalledWith(false);
   expect(openProviderSetupHelp).not.toHaveBeenCalled();
 });
@@ -58,7 +58,7 @@ it("rechecks a lost response without repeating the installation", async () => {
   expect((await screen.findByRole("alert")).textContent).toContain("업데이트 결과를 다시 확인");
   expect(screen.queryByRole("button", { name: "업데이트" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "버전 다시 확인" }));
-  await screen.findByText("1.0.24 버전으로 업데이트했어요.");
+  await screen.findByText("업데이트했어요 · 1.0.24");
   expect(providerUpdateOperation).toHaveBeenLastCalledWith("grok", undefined);
 });
 
@@ -77,15 +77,17 @@ it.each([
   expect(updating).toHaveBeenLastCalledWith(guarded);
 });
 
-it("shows a completed update briefly, then leaves without an updating badge", async () => {
+it("retains the confirmed completion instead of silently disappearing", async () => {
   vi.mocked(providerUpdateOperation).mockResolvedValueOnce(offer)
     .mockResolvedValueOnce({ ...offer, current_version: offer.latest_version, update_available: false, completed: true });
   render(<ProviderUpdatePrompt providerId="grok" />);
   fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
-  await screen.findByText("1.0.24 버전으로 업데이트했어요.");
+  await screen.findByText("업데이트했어요 · 1.0.24");
   expect(screen.queryByText("업데이트 중")).toBeNull();
 
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 3200)); });
-
-  expect(screen.queryByRole("region")).toBeNull();
-}, 10_000);
+  vi.useFakeTimers();
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(35_000); });
+    expect(screen.getByText("업데이트했어요 · 1.0.24")).toBeTruthy();
+  } finally { vi.useRealTimers(); }
+});

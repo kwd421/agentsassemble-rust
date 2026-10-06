@@ -79,6 +79,9 @@ function sessionErrorMessage(session: RoomAgentSession) {
   if (session.last_error_code === "runtime_profile_unsupported") {
     return "저장된 실행 프로필은 현재 runtime에서 지원하지 않아요. 현재 provider 설정으로 다시 구성하세요.";
   }
+  if (session.provider_kind === "opencode_server" && session.last_error && !/[가-힣]/.test(session.last_error)) {
+    return `OpenCode 요청을 처리하지 못했어요. · ${session.last_error}`;
+  }
   return session.last_error || "";
 }
 

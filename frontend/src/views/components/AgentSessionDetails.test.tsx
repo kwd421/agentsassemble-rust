@@ -41,6 +41,14 @@ beforeEach(() => {
 });
 
 describe("AgentSessionDetails diagnostics", () => {
+  it("adds Korean context to retained OpenCode errors", () => {
+    render(<AgentSessionDetails session={agentSessionFixture({
+      provider_kind: "opencode_server", last_error_code: "provider_turn_failed",
+      last_error: "The OpenCode provider request failed.", recovery_required: true,
+    })} />);
+    expect(screen.getByText(/OpenCode 요청을 처리하지 못했어요/)).toBeTruthy();
+  });
+
   it.each([
     { runtime_status: "disconnected", turn_count: 0, external_owned: true, process_ownership: "external" },
     { runtime_status: "stopped", turn_count: 2, external_owned: true, process_ownership: "external" },

@@ -231,5 +231,113 @@
       "muse_retried": false,
       "stop_reason": "same APIError HTTP 403 isRetryable=false as previous Muse run"
     }
+  },
+  "post_update_opencode": {
+    "model": "opencode/mimo-v2.6-flash-free",
+    "current_task_test_turns": 2,
+    "historical_test_turns": 3,
+    "cumulative_test_turns": 5,
+    "turn_limit": 6,
+    "baseline_admitted": false,
+    "summarize_attempted": false,
+    "global_config_changed": false,
+    "stale_binary_hypothesis": "refuted for reported session: native version already 1.18.34",
+    "custom_primary_agent_upstream_issue": "https://github.com/anomalyco/opencode/issues/53347",
+    "runs": [
+      {
+        "cli_version": "1.18.34",
+        "errors": [
+          {
+            "name": "APIError",
+            "status_code": 403,
+            "retryable": false,
+            "classification": "free_tier_client_rejected",
+            "native_message_sha256": "2d229e7bf250a86ceb7b5e354be15d5fa828fce3656f633e85fd8da27e72a8f5",
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            }
+          }
+        ],
+        "message_count": 2,
+        "part_types": [
+          "text"
+        ],
+        "tool_calls": 0,
+        "compactions": 0,
+        "run": "reported_packaged_session",
+        "room_turns_attempted": 1,
+        "room_turns_completed": 0,
+        "test_seconds": null
+      },
+      {
+        "cli_version": "1.18.34",
+        "errors": [
+          {
+            "name": "APIError",
+            "status_code": 403,
+            "retryable": false,
+            "classification": "free_tier_client_rejected",
+            "native_message_sha256": "a74733a87d39d785db23b419e1f5622bdcc381db3cc4a8ebe894dd37ef255635",
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            }
+          }
+        ],
+        "message_count": 2,
+        "part_types": [
+          "text"
+        ],
+        "tool_calls": 0,
+        "compactions": 0,
+        "run": "before_error_fix",
+        "room_turns_attempted": 1,
+        "room_turns_completed": 0,
+        "test_seconds": 8.97
+      },
+      {
+        "cli_version": "1.18.34",
+        "errors": [
+          {
+            "name": "APIError",
+            "status_code": 403,
+            "retryable": false,
+            "classification": "free_tier_client_rejected",
+            "native_message_sha256": "1a67b755b89335dbc129771e8afa235da79508b45d0f467d942b146c8b4b21c2",
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            }
+          }
+        ],
+        "message_count": 2,
+        "part_types": [
+          "text"
+        ],
+        "tool_calls": 0,
+        "compactions": 0,
+        "run": "after_error_fix",
+        "room_turns_attempted": 1,
+        "room_turns_completed": 0,
+        "test_seconds": 13.45,
+        "host_error_has_korean_guidance": true
+      }
+    ]
   }
 }

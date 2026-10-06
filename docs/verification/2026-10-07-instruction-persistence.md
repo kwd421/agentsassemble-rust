@@ -3,13 +3,14 @@
 Base: `21f344b9`, including `0bd36155`, `299f2edd` and `abbda15e`.
 User explicitly authorized Codex/OpenCode compaction and Claude SDK Sonnet at
 minimum effort, with strict turn/run budgets. This is managed-host room execution,
-not a companion compaction claim. No production behavior changed.
+not a companion compaction claim. The post-update correction below changes only
+error presentation and update completion reporting.
 
 | Provider | Actual compaction / resume | Room rule evidence | Result |
 | --- | --- | --- | --- |
 | Codex 0.154.0, `gpt-5.6-luna`, low | Seven native `context_compacted` events across two room turns | Each turn's first actual MCP call is `read_discussion`, followed by successful `publish_message`; two canonical `room_portal` publications, no runtime error | Pass after actual compaction |
 | Claude Agent SDK, `claude-sonnet-5`, low | Continuation: SDK `/compact`, manual `compact_boundary`, 13,398 → 1,007 tokens in the same native session | Read/publish at native lines 12/15 before and 39/42 after compaction; two canonical publications | Pass after actual compaction |
-| OpenCode, Muse Spark 1.3 contributor, Big Pickle, and continuation MiMo 2.6 Flash free | All first model requests rejected; no compaction | Native `APIError`, HTTP **403**, `isRetryable=false`; host `provider_turn_failed`. No tool calls/publications | Blocked; same error means no further Muse retry |
+| OpenCode 1.18.34, MiMo 2.6 Flash free (latest retry) | First requests rejected; no compaction | HTTP **403**, `APIError`, `isRetryable=false`, free-tier client rejection; Korean host guidance verified after fix | Blocked: 2 additional attempted turns, 5/6 historical total; zero publications |
 
 ## Initial run (d062326b): entry point and evidence
 
@@ -177,3 +178,60 @@ checks pass; a whole-workspace diff check reports whitespace in concurrently
 modified frontend files outside this task, which are left untouched. Existing
 source-size and ts-rs advisories remain.
 No product runtime changes, new security scan, push, or phase-closeout claim.
+
+## Post-update diagnosis and correction (2026-10-07)
+
+Installed CLI is **1.18.34**. Read-only correlation of UI Check's `OpenCode MiMo`
+record to its native OpenCode session confirms that the failed app session was
+also created by **1.18.34**. Its error is free-tier client rejection, not the
+minimum-version error seen in the direct older CLI. No existing app/provider
+process was terminated and no global provider configuration was edited.
+
+The resident lifecycle is per managed session: `OpenCodeDriver::spawn_inner`
+launches a byte-bound `serve --pure` child; `reuse_owned_runtime` attaches to that
+owned child. `ProviderUpdateService` refreshes the catalog after confirmed install
+and does not restart existing runtimes. That is a lifecycle limitation, but it is
+**not the cause of this failed session**. No speculative restart/invalidation or
+mid-turn process interruption was introduced for this disproved hypothesis.
+
+The failed execution uses a dedicated `agentsassemble_room` primary agent in
+`opencode.rs` to retain privileged room instructions. Native rejection of this
+managed request is established; the narrower custom-agent trigger is corroborated
+by [upstream issue 53347](https://github.com/anomalyco/opencode/issues/53347), which
+reports the same 1.18.34 behavior with custom primary agents. This remains an
+upstream diagnosis, not an independently controlled A/B proof in this task.
+We did not remove persistent instructions, switch agents/models, spoof headers or
+bypass the free-tier check. A successful managed free-model turn remains blocked.
+
+| OpenCode 1.18.34 / `opencode/mimo-v2.6-flash-free` | Turns attempted / completed | Compaction evidence | Result |
+| --- | --- | --- | --- |
+| Ignored test before correction, 8.97 s | 1 / 0 | 0 native compaction or tool parts | HTTP 403 free-tier client rejection |
+| Same ignored test after correction, 13.45 s | 1 / 0 | 0 native compaction or tool parts | Same rejection; persisted host error has Korean guidance |
+
+The two invocations stopped at their first turn, **2 turns in this task and 5/6
+cumulative test turns** including the earlier three. The pre-existing packaged
+failure is separate historical user activity. Native summarize is available as
+previously documented, but no baseline request was admitted; spending another
+model request on compaction would not establish persistence. Compaction is
+blocked/unverified, not unsupported or passed. Both test processes awaited the
+managed server's shutdown. No Muse retry or paid model was run.
+
+Corrections: HTTP assistant-error envelopes and SSE session/message errors now
+preserve only a bounded, redacted structured message. Version and free-tier
+rejections have explicit Korean guidance; other messages follow Korean context.
+Raw bodies/headers are never included. Old persisted English-only OpenCode errors
+also receive Korean UI context. The internal transport label renders as OpenCode.
+The update view retains `업데이트했어요 · <version>` instead of hiding it after
+2.6 seconds; a fresh version check retains a prior confirmed completion receipt
+only for the same installation with no newer offer. No polling or new processes.
+
+Validation: provider library **293/293** (including OpenCode and owned updater
+cases); affected frontend **32/32**, including retained completion beyond 35 s;
+frontend TypeScript/Vite build; provider/server all-target/all-feature Clippy with
+warnings denied; architecture/source-growth gates and **19/19** policy/artifact
+unit tests; workspace formatting, diff check and read-only artifact maintenance.
+Existing ts-rs, source-size and frontend chunk-size advisories remain.
+The two ignored real tests failed at provider admission as recorded above; they
+are not counted as passing tests. Packaged visual acceptance of these source
+changes has not been performed; no rebuilt app,
+real updater rerun, deployment, external review or push is claimed.

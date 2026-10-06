@@ -54,6 +54,12 @@ async fn real_managed_instruction_persistence() -> Result<(), Box<dyn std::error
                     .ok_or("agent disappeared")?;
                 if !agent.last_error_code.is_empty() {
                     eprintln!("PERSIST turn={turn} error_code={}", agent.last_error_code);
+                    if provider == "opencode" {
+                        let korean = agent.last_error.contains("OpenCode")
+                            && agent.last_error.chars().any(|c| ('가'..='힣').contains(&c));
+                        eprintln!("PERSIST provider_error_has_korean_guidance={korean}");
+                        assert!(korean, "OpenCode failures must expose Korean guidance");
+                    }
                     return Err("provider turn failed".into());
                 }
                 let finished = snapshot.events.iter().filter(|event| event.event_type == "turn_finished").count();

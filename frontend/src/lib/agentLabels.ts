@@ -162,6 +162,7 @@ export function providerExecutionLabel(
   }
 
   const provider = String(agent.provider_kind || "").trim();
+  if (provider === "opencode_server" || provider === "opencode") return "OpenCode";
   const pair = `${provider}/${connection}`;
   if (PROVIDER_EXECUTION_LABELS[pair]) return PROVIDER_EXECUTION_LABELS[pair];
   if (agent.engagement_mode === "self_service" && provider) return "Self-service";

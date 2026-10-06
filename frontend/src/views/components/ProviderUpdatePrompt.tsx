@@ -5,7 +5,7 @@ import { providerUpdateOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
 import type { ProviderAvailability } from "../../types/generated/ProviderAvailability";
 import type { ProviderUpdate } from "../../types/generated/ProviderUpdate";
-import ProviderSetupCard, { useTransientResult, VersionShift } from "./ProviderSetupCard";
+import ProviderSetupCard, { VersionShift } from "./ProviderSetupCard";
 
 export default function ProviderUpdatePrompt({ providerId, provider, onUpdating, onUpdated }: {
   providerId: string;
@@ -76,17 +76,15 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
     await run(observation.latest_version);
   }
   const completed = Boolean(observation?.completed) && !busy && !error;
-  const result = useTransientResult(completed);
   const offered = !busy && !error && observation?.update_available && !observation.completed;
   // A check blocks agent creation while it may be joining an update another view started,
   // so it stays visible; an idle provider with nothing newer shows nothing.
-  if (deferred || result === "gone" || (!offered && !completed && !error && !busy)) return null;
+  if (deferred || (!offered && !completed && !error && !busy)) return null;
   const label = `${provider?.display_name || "제공자"} 업데이트`;
 
   if (completed && observation) {
-    return <ProviderSetupCard label={label} tone="done" glyph={<Check size={15} strokeWidth={3} />}
-      leaving={result === "leaving"}>
-      <p className="dc-setup-text" role="status">{observation.current_version} 버전으로 업데이트했어요.</p>
+    return <ProviderSetupCard label={label} tone="done" glyph={<Check size={15} strokeWidth={3} />}>
+      <p className="dc-setup-text" role="status">업데이트했어요 · {observation.current_version}</p>
     </ProviderSetupCard>;
   }
 

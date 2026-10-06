@@ -1,3 +1,4 @@
+import { providerExecutionLabel } from "../../lib/agentLabels";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -63,4 +64,8 @@ describe("ProviderLogo", () => {
       }).defaultAgentName
     ).toBe("Claude Sonnet 4.6");
   });
+});
+
+it("uses the product name for the OpenCode transport label", () => {
+  expect(providerExecutionLabel({ provider_kind: "opencode_server" })).toBe("OpenCode");
 });

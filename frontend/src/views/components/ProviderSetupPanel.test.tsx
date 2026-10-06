@@ -42,7 +42,7 @@ it("rereads readiness after confirmed update success", async () => {
   render(<ProviderSetupPanel providerId="codex" />);
   fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
   await waitFor(() => expect(refreshLocalProviderCatalog).toHaveBeenCalledTimes(2));
-  await screen.findByText("2.0.0 버전으로 업데이트했어요.");
+  await screen.findByText("업데이트했어요 · 2.0.0");
   await screen.findByText("이 PC에서 사용할 준비가 됐어요.");
 });
 

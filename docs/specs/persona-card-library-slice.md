@@ -671,3 +671,9 @@ bundle override. Require native compact_boundary plus a subsequent first
 read_discussion and canonical room publication. No product command or global
 configuration changes. Keep the three-run total ceiling (including the prior
 resume run), report failed compaction honestly, and do not push.
+
+2026-10-07 post-update retry: rerun the ignored managed OpenCode test with
+`opencode/mimo-v2.6-flash-free` on installed 1.18.34, at most six room turns.
+Try native cheap summarization only after a baseline room turn succeeds; record
+native error classification if admission blocks it. Preserve global configuration,
+room instructions and existing provider-owned histories. Update the dated evidence.
