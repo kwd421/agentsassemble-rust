@@ -150,13 +150,21 @@ it("shows the server host with its port and rejects a provider absent from this 
 });
 
 
-it("initializes empty local authority from the live account before catalog access, without admission", async () => {
+it("requires explicit preparation and reads the live account only after activation", async () => {
   vi.mocked(requestDesktopBootstrapStatus).mockResolvedValue({ phase: "empty" } as Awaited<ReturnType<typeof requestDesktopBootstrapStatus>>);
   const person = { display_name: "Local owner", identity_kind: "guest" };
   vi.mocked(bootstrapCentral).mockResolvedValue({ person } as Awaited<ReturnType<typeof bootstrapCentral>>);
   let finish!: () => void;
   vi.mocked(saveLocalProfile).mockReturnValue(new Promise(resolve => { finish = () => resolve({ phase: "complete" } as Awaited<ReturnType<typeof saveLocalProfile>>); }));
   render(<LocalAttendeePanel />);
+  const prepare = await screen.findByRole("button", { name: "이 컴퓨터에서 AI를 쓸 준비하기" });
+  expect(bootstrapCentral).not.toHaveBeenCalled();
+  expect(saveLocalProfile).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "상태 다시 확인" }));
+  await waitFor(() => expect((prepare as HTMLButtonElement).disabled).toBe(false));
+  expect(saveLocalProfile).not.toHaveBeenCalled();
+  expect(fetchLocalProviderCatalog).not.toHaveBeenCalled();
+  fireEvent.click(prepare);
   await waitFor(() => expect(saveLocalProfile).toHaveBeenCalledWith("Local owner", expect.any(String), person));
   expect(fetchLocalProviderCatalog).not.toHaveBeenCalled();
   await act(async () => finish());
@@ -209,4 +217,16 @@ it("keeps a creation-time bootstrap error Korean in both the panel and modal", a
   await screen.findByRole("button", { name: "같은 요청 다시 시도" });
   expect(screen.getAllByText("이 컴퓨터의 사용자 설정이 완료되지 않았어요. 앱에서 로그인한 뒤 상태를 다시 확인해 주세요.").length).toBeGreaterThan(0);
   expect(screen.queryByText("Local identity bootstrap is not complete.")).toBeNull();
+});
+
+it.each([false, true])("does not bootstrap when the live session is missing or rejected (%s)", async rejected => {
+  vi.mocked(requestDesktopBootstrapStatus).mockResolvedValue({ phase: "empty" } as Awaited<ReturnType<typeof requestDesktopBootstrapStatus>>);
+  if (rejected) vi.mocked(bootstrapCentral).mockRejectedValue(new Error("로그인 상태가 바뀌었어요."));
+  else vi.mocked(bootstrapCentral).mockResolvedValue(null);
+  render(<LocalAttendeePanel />);
+  fireEvent.click(await screen.findByRole("button", { name: "이 컴퓨터에서 AI를 쓸 준비하기" }));
+  await screen.findByRole("alert");
+  expect(saveLocalProfile).not.toHaveBeenCalled();
+  expect(fetchLocalProviderCatalog).not.toHaveBeenCalled();
+  expect(createLocalAttendee).not.toHaveBeenCalled();
 });

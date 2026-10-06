@@ -1,12 +1,41 @@
 # Verification Contract
 
-- 2026-10-07 packaged E2E6 first-turn correction (HEAD `0bd78f0c`, working tree;
-  no commit/push/package/deployment): real Codex 0.154.0, `gpt-5.6-luna`, effort
+- 2026-10-07 Daybreak companion review correction (this commit, not pushed;
+  reviewed base `299f2edd`; preceding `667f05d7`, `4f118670`, `0bd78f0c`,
+  `299f2edd` are pushed): external companion privileged instructions now come
+  only from the local fixed v1 room policy. Host session text is preserved in
+  lower-trust user input with the local persona; managed server agents are unchanged.
+  Empty local bootstrap requires the explicit “이 컴퓨터에서 AI를 쓸 준비하기” action.
+  Mount and status refresh only read; activation reuses live central session
+  validation before saving local authority and continuing setup.
+
+  Checks: `cargo test -p agentsassemble-server --all-features` passes 330 tests
+  (136 library, 5 binary, 189 integration; one real-provider test ignored), plus
+  doc tests. Final prompt-boundary/reconnect integration rerun passes 1/1.
+  TypeScript `tsc --noEmit` and affected Vitest pass 22/22 (panel 16, central
+  bootstrap 6), including mount/refresh without mutation and rejected live sessions.
+  Server all-target/all-feature Clippy, architecture/source growth/policy,
+  formatting, diff and artifact checks pass. The artifact owner removed only the
+  obsolete desktop target (2.9 GiB) after Cargo/Tauri work ended; the shared target
+  and untracked `.agents/` / `scripts/__pycache__/` were preserved.
+  Existing ts-rs/source-size warnings remain.
+
+  Authorized real Codex regression ran exactly once:
+  `cargo test -p agentsassemble-server --test integration local_attendee_turn:: -- --ignored`
+  passes 1/1 in 61.11s. This repository has one integration harness, not a standalone
+  `local_attendee_turn` test target. The unchanged real harness verifies two room-tool
+  publications, retained parent authorization, Running state and explicit stop/cleanup.
+  No secrets or provider output were printed. No new package, two-device visual
+  verification, deployment or push; previous packaging/public-ingress limits remain.
+
+- 2026-10-07 packaged E2E6 first-turn correction (pushed commits `667f05d7`,
+  `4f118670`, `0bd78f0c`, `299f2edd`; no new package/deployment): real Codex 0.154.0, `gpt-5.6-luna`, effort
   `low` reproduced admission → Running → first-turn shutdown with
   `room_observation_unconfirmed`. The external execution adapter discarded the
   canonical assignment's `session_instructions`; the persistent room rules also
-  omitted the mandatory first `read_discussion` action. Forward the exact frozen
-  instructions and restore that entry requirement in the existing room-rules owner.
+  omitted the mandatory first `read_discussion` action. `299f2edd` forwarded the exact frozen
+  instructions and restored that entry requirement in the existing room-rules owner.
+  The Daybreak correction above supersedes that external prompt priority.
   MCP inventory was healthy (13 tools including `read_discussion`); parent authority,
   executable custody and startup were not the reproduced failure. Temporary native
   diagnostics and unsuccessful broader instruction/API experiments were removed.
@@ -67,7 +96,7 @@
   Other providers were not executed. Existing untracked `.agents/` and
   `scripts/__pycache__/` were preserved.
 
-- 2026-10-06 packaged 0.1.20 local AI blocker (working tree): bypass entry now
+- 2026-10-06 packaged 0.1.20 local AI blocker (pushed `4f118670`, `0bd78f0c`): bypass entry now
   inspects local bootstrap and reuses the startup profile initializer with a live
   central account only when empty. Operator ticket issuance already ensures the
   runtime; its bootstrap-complete requirement explained the missing prerequisite.
@@ -77,8 +106,8 @@
   affected Vitest 97/97 (9 files), architecture/source-growth and diff checks pass
   (existing source-size warnings remain). No Rust crate changed, so cargo tests
   were not applicable. jsdom cannot execute native navigation; packaged B,
-  actual handoff success and post-change pixels remain unverified. No commit,
-  push, release, provider execution or user-data cleanup was performed.
+  actual handoff success and post-change pixels remain unverified. No release,
+  provider execution or user-data cleanup was performed in that verification.
 
 - 2026-10-06 채널 소개·내 컴퓨터 공용 app/web 문구 수정: 빈/기존 채널 기록, 도구 이름·MB/GB·PID 숨김·CPU 확인 중·앱 점검 표시의 영향 화면 테스트 36개 통과; 푸시 전 make verify 1회 통과(프론트 1,164개 포함), 패키지 재실행·재촬영은 이번 요청 범위에서 미실시.
 

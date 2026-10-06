@@ -28,6 +28,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
   const [bootstrapRequestId] = useState(createSecureRequestId);
   const [catalog, setCatalog] = useState<ProviderCatalog | null>(null);
   const [operation, setOperation] = useState<LocalAttendeeStatus | null>(null);
+  const [needsPreparation, setNeedsPreparation] = useState(false);
   const [editable, setEditable] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -39,7 +40,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
   // Cancel supersedes the displayed result of an older HTTP waiter, not its task.
   const generation = useRef(0);
   const cancelIntent = useRef(false);
-  const read = useCallback(async (signal?: AbortSignal) => {
+  const read = useCallback(async (signal?: AbortSignal, prepare = false) => {
     const observation = ++generation.current;
     const current = () => !signal?.aborted && observation === generation.current;
     setBusy(true);
@@ -49,6 +50,8 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
       const bootstrap = await requestDesktopBootstrapStatus();
       if (!current()) return;
       if (bootstrap.phase === "empty") {
+        setNeedsPreparation(true);
+        if (!prepare) return;
         const identity = await bootstrapCentral(signal);
         if (!current()) return;
         if (!identity?.person) throw new Error("앱에서 로그인한 뒤 상태를 다시 확인해 주세요.");
@@ -57,6 +60,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
         throw new Error("로컬 신원 권위에 명시적 복구가 필요합니다.");
       }
       if (!current()) return;
+      setNeedsPreparation(false);
       const localCatalog = await fetchLocalProviderCatalog(signal);
       if (!current()) return;
       setCatalog(localCatalog);
@@ -131,9 +135,12 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     <p role="status">{cancelling ? "에이전트 종료와 방 나가기를 확인하고 있어요." : busy ? "참가 상태를 확인하고 있어요." : operation
       ? LOCAL_ATTENDEE_PHASE_LABELS[operation.phase] : editable ? "이 컴퓨터에서 사용할 AI를 설정해 주세요."
       : submitted.current ? "응답을 받지 못했어요. 상태를 확인하거나 같은 요청으로 다시 시도해 주세요." : "참가 상태를 먼저 확인해 주세요."}</p>
+    {needsPreparation && <p className="text-sm text-text-muted">AI를 실행하려면 이 컴퓨터에 사용자 설정을 저장해야 해요.</p>}
     {error && <p role="alert">{error}</p>}
     {operation?.error_code && <p role="alert" className="dc-agent-hint preserve-words">{localAttendeeFailureReason(operation.error_code)}</p>}
     <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+      {needsPreparation && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling}
+        onClick={() => void read(undefined, true)}>이 컴퓨터에서 AI를 쓸 준비하기</button>}
       <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void read()}>상태 다시 확인</button>
       {editable && dismissed && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} onClick={() => setDismissed(false)}>설정 계속하기</button>}
       {!operation && submitted.current && !cancelIntent.current && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling}

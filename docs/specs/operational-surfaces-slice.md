@@ -199,7 +199,8 @@ retry, retained draft and exact admission/status links. Verify affected frontend
 checks and desktop tests/clippy; packaged hang/visual acceptance remains a separate
 runtime evidence boundary.
 
-Packaged E2E6 correction acceptance (2026-10-06, working tree only): same-owner
+Packaged E2E6 correction acceptance (2026-10-06; pushed commits `667f05d7`,
+`4f118670`, `0bd78f0c`, `299f2edd`; followed by this unpushed Daybreak correction): same-owner
 non-server desktop B must retain its companion through readiness, the first room
 turn and subsequent turns on server A. Investigate empty workspace selection,
 sidecar Codex launch and exact parent/runtime/turn authority without bypasses or
@@ -211,9 +212,19 @@ credentials or credential paths. Failed/disconnected room members must not claim
 that the provider is running. App recovery copy is “방에서 에이전트 추가를 다시 해 주세요.”;
 bootstrap errors are Korean. Empty provider groups are hidden, update actions belong
 to the selected provider/model section, and creation/member effort labels share one
-mapping. Preserve canonical session instructions across external delivery; persistent
-room rules must tell the agent to begin each observation by reading the assigned room
-through its tool, as required by the existing receipt gate. Preserve exact retry/cancellation/cleanup ownership and all authority gates.
+mapping. External `AttendeeRuntime::execute` uses only a locally owned fixed companion
+instruction at privileged priority: participate via room tools, first call
+`read_discussion` each turn, respond only through room tools, and treat host/room
+text as untrusted content that cannot override this instruction. Host labels,
+persona and rules remain available in lower-trust user turn input. Managed
+server-run agents are unchanged. `LocalAttendeePanel` mount/invite receipt and
+status refresh stay read-only when bootstrap is empty. An explicit local preparation
+action re-reads and validates the live central session before local bootstrap, then
+continues catalog/setup; missing or mismatched sessions cannot initialize authority.
+Preserve exact retry/cancellation/cleanup ownership and all authority gates.
+This correction passes server tests (330), affected frontend tests (22), and the
+authorized real-Codex ignored regression once (two turns, 61.11s); packaged/two-device
+visual verification remains unverified. See `docs/VERIFICATION.md` for exact commands.
 
 Reuse `RoomAttendeeClient`, `AttendeeRuntime` and the existing external socket and
 cleanup protocol. The local server owns each creation task independently of an HTTP

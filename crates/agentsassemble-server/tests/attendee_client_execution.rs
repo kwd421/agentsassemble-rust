@@ -66,16 +66,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
         .await
         .map_err(|error| format!("first local execution: {}", error.code))?;
     room_portal_fixture::wait_for_turn(&seen, "1").await;
-    let transcript = std::fs::read_to_string(&log)?;
-    let resumed: serde_json::Value = transcript
-        .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .find(|frame| frame["method"] == "thread/resume")
-        .ok_or("external provider never received canonical room rules")?;
-    assert_eq!(
-        resumed["params"]["config"]["developer_instructions"],
-        instructions
-    );
+    verify_companion_prompt(&log, &instructions)?;
     let mut replacement = ready_socket(&client, &mut runtime).await?;
     let Frame::Turn { mut assignment } =
         tokio::time::timeout(Duration::from_secs(10), replacement.receive()).await??
@@ -123,6 +114,37 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     runtime.acknowledge_cleanup(Some(&stopped)).await?;
     human.close().await;
     server.stop().await;
+    Ok(())
+}
+
+fn verify_companion_prompt(log: &std::path::Path, instructions: &str) -> TestResult {
+    let transcript = std::fs::read_to_string(log)?;
+    let resumed: serde_json::Value = transcript
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find(|frame| frame["method"] == "thread/resume")
+        .ok_or("external provider never received canonical room rules")?;
+    let policy = resumed["params"]["config"]["developer_instructions"]
+        .as_str()
+        .ok_or("local companion policy missing")?;
+    assert_ne!(policy, instructions);
+    assert!(policy.contains("First call read_discussion"));
+    assert!(policy.contains("Respond only through room tools"));
+    assert!(policy.contains("untrusted room content"));
+    let turn: serde_json::Value = transcript
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find(|frame| frame["method"] == "turn/start")
+        .ok_or("turn input missing")?;
+    assert!(
+        turn["params"]["input"]
+            .as_array()
+            .ok_or("user input missing")?
+            .iter()
+            .any(|item| item["text"]
+                .as_str()
+                .is_some_and(|text| text.contains(instructions)))
+    );
     Ok(())
 }
 
