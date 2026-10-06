@@ -113,7 +113,7 @@ it("creates a connector invite on this machine's loopback origin while public ac
 
   expect(api.create.mock.calls[0][1].reach).toBe("local");
   expect(hook.result.current.invites).toEqual([expect.objectContaining({ key: "local-invite", local: true, copyable: true })]);
-  expect(publishStatus).toHaveBeenLastCalledWith(expect.stringContaining("이 PC 전용"));
+  expect(publishStatus).toHaveBeenLastCalledWith(expect.stringContaining("이 컴퓨터 전용"));
   await act(() => hook.result.current.copy("local-invite"));
   expect(copied).toHaveLength(1);
   expect(copied[0]).toContain("assemble room connector-mcp");

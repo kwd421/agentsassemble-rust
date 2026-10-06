@@ -90,10 +90,10 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
       publishStatus(friendId
         ? "AI 친구 초대를 만들었어요. 참가 안내를 복사해 전달해 주세요."
         : reach === "local"
-          ? "이 PC 전용 외부 AI 초대를 만들었어요. MCP 참가 안내를 복사해 같은 PC의 AI 대화에 전달해 주세요."
-          : "외부 AI 초대를 만들었어요. MCP 참가 안내를 복사해 현재 AI 대화에 전달해 주세요.");
+          ? "이 컴퓨터 전용 AI 초대를 만들었어요. 참가 안내를 복사해 이 컴퓨터의 AI 앱 대화에 붙여넣어 주세요."
+          : "AI 초대를 만들었어요. 참가 안내를 복사해 AI 앱 대화에 붙여넣어 주세요.");
     } catch (error) {
-      if (active.current && (!proof || proof.isCurrent())) publishStatus(error instanceof Error ? error.message : "외부 AI 초대를 만들지 못했어요. 다시 시도해 주세요.");
+      if (active.current && (!proof || proof.isCurrent())) publishStatus(error instanceof Error ? error.message : "AI 초대를 만들지 못했어요. 다시 시도해 주세요.");
     } finally {
       busy.current = false;
       if (active.current) setCreating(false);
