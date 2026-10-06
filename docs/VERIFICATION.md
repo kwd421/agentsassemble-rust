@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 durable_session_deadline 테스트: 가상시간 전진→SQLx acquire timeout→단일 메모리 연결 교체/테이블 유실로 중간 pong 읽기 실패를 재현(병렬 100회 중 2회); 이 테스트만 임시 파일 DB로 교체하고 만료·keepalive assertion 유지, lifecycle 3/3 및 동일 8-way 병렬 반복 100/100 통과.
+
 - 2026-10-06 Daybreak H(강등 영속): 대기 이유 보존·100ms/최대 3회 쓰기·restricted 빠른 경로 선행 재시도·최종 실패 시 소켓/리스너 종료; 첫 SQL 쓰기 실패→성공→재오픈 제한 유지와 실제 리스너 종료 포함 호스트 5/5·관련 저장소 10/10 통과.
 
 - 2026-10-06 Daybreak M(server_exists): 409는 현재 계정 UI 상태만 제한하고 전역 영속 쓰기를 제거; B 호스트→A claim 409→B 재등록·409 후 기기 연결 화면 회귀 통과(관련 프론트 65/65), 서명·수동·배포 없음.

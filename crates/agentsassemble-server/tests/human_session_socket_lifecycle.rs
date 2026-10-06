@@ -19,7 +19,34 @@ use support::human_invite::{
 
 #[tokio::test]
 async fn durable_session_deadline_closes_an_active_socket() {
-    let (store, invite) = fixture(InviteScope::ReadWrite).await;
+    // Advancing Tokio time also expires background pool acquisitions. SQLx may
+    // replace that connection, which destroys a last-connection memory database.
+    // Use the host's file-backed lifetime while preserving every expiry assertion.
+    let root = tempfile::tempdir().unwrap_or_else(|error| panic!("fixture: {error}"));
+    let store =
+        agentsassemble_persistence::SqliteStore::open_path(&root.path().join("deadline.sqlite"))
+            .await
+            .unwrap_or_else(|error| panic!("deadline store: {error}"));
+    store
+        .bootstrap_local_authority("325bb3a2-4964-42a2-8490-afcf6f99b164", "Owner")
+        .await
+        .unwrap_or_else(|error| panic!("bootstrap: {error}"));
+    store
+        .create_room_for_local_operator(
+            "78ba8995-4ef7-4584-9d73-22caee9b3ac5",
+            "general",
+            "General",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("room: {error}"));
+    let invite = persist_invite(
+        &store,
+        InviteScope::ReadWrite,
+        1,
+        "deadline-guest",
+        "Deadline Guest",
+    )
+    .await;
     let server = start(store).await;
     let client = Client::new();
     let browser_credential = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0xE7; 32]));
