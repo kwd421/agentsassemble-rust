@@ -5,7 +5,7 @@ export type ProviderCatalogGroup = "harness" | "api" | "local";
 export const PROVIDER_GROUPS = [
   { id: "harness", label: "구독 에이전트" },
   { id: "api", label: "API 키" },
-  { id: "local", label: "내 컴퓨터" },
+  { id: "local", label: "로컬 모델" },
 ] as const;
 
 export function providerCatalogGroup(

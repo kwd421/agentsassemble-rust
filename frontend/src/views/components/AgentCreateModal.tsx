@@ -17,13 +17,10 @@ import {
   reconcileProviderSettings,
 } from "../../lib/providerControlSettings";
 import {
-  PROVIDER_GROUPS,
-  isProviderUnavailable,
-  projectProvidersByCatalogGroup,
   providerCatalogGroup,
   providerGroupLabel,
 } from "../../lib/providerCatalogGroups";
-import ProviderLogo from "./ProviderLogo";
+import ProviderTileGrid from "./ProviderTileGrid";
 import ProviderModelRefresh from "./ProviderModelRefresh";
 import type { ProviderCatalog } from "../../types/generated/ProviderCatalog";
 import { fetchLocalProviderCatalog, refreshLocalProviderCatalog } from "../../api/providerOperations";
@@ -35,7 +32,6 @@ import ProviderControlToggle from "./ProviderControlToggle";
 import AgentPersonaPicker from "./AgentPersonaPicker";
 import ProviderCredentialField from "./ProviderCredentialField";
 import WorkspacePickerField from "./WorkspacePickerField";
-import { resolveProviderPresentation } from "./providerBranding";
 import {
   defaultAgentDisplayName,
   deriveAgentCreateStatus,
@@ -94,7 +90,6 @@ export default function AgentCreateModal({
   const createRetry = useRef<{ key: string; retry: NonNullable<RoomSocketSayError["retry"]> } | null>(null);
   const wasOpen = useRef(false);
   const pendingInitialSettings = useRef("");
-  const groupedProviders = projectProvidersByCatalogGroup(providers);
   const selectedProvider = providers.find((provider) => provider.id === providerId);
   const providerGroup = selectedProvider ? providerCatalogGroup(selectedProvider, settings.model) : "";
   const eligibleStoredSessions = existingSessions.filter((session) =>
@@ -365,36 +360,6 @@ export default function AgentCreateModal({
     catch (error) { setStatus(error instanceof Error ? error.message : "AI 상태를 확인하지 못했어요."); }
   }
 
-  function renderProviderChoice(provider: NativeCliProviderAvailability) {
-    const presentation = resolveProviderPresentation({
-      providerId: provider.id,
-      providerKind: provider.provider_kind,
-      providerDisplayName: provider.display_name,
-    });
-    return (
-      <button
-        key={provider.id}
-        type="button"
-        role="listitem"
-        aria-label={presentation.providerName}
-        title={presentation.providerName}
-        data-active={provider.id === selectedProvider?.id}
-        data-unavailable={isProviderUnavailable(provider)}
-        onClick={() => {
-          applyProvider(provider);
-          setStatus("");
-        }}
-      >
-        <ProviderLogo
-          providerId={provider.id}
-          providerKind={provider.provider_kind}
-          size={22}
-        />
-        <span className="min-w-0 preserve-words">{presentation.providerName}</span>
-      </button>
-    );
-  }
-
   if (!open) return null;
 
   return (
@@ -432,14 +397,8 @@ export default function AgentCreateModal({
         <div className="dc-agent-create-body">
           {locationChoice}
           {!selectedProvider && statusMessage && <p className="dc-agent-create-note">{statusMessage}</p>}
-          {PROVIDER_GROUPS.map(({ id, label }) => (
-            <section className="dc-agent-section dc-agent-provider-category" key={id}>
-              <h3 className="dc-agent-section-title">{label}</h3>
-              <div className="dc-agent-provider-grid" role="list" aria-label={`${label} AI`}>
-                {groupedProviders[id].map(renderProviderChoice)}
-              </div>
-            </section>
-          ))}
+          <ProviderTileGrid providers={providers} selectedId={providerId}
+            onSelect={(provider) => { applyProvider(provider); setStatus(""); }} />
 
           {localProviderActions && !existingSessionId && selectedProvider?.login_supported &&
             selectedProvider.discovery_error_code === "authentication_required" &&

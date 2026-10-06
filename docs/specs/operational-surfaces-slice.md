@@ -182,6 +182,23 @@ the normal authentication/update flow, and requires explicit creation with the
 local workspace. The browser retains its draft until canonical room admission is
 observed or the user dismisses it. A link-opening receipt is never creation success.
 
+Packaged E2E correction (2026-10-06): the remote main webview's
+`agentsassemble://attend` navigation must return before local setup window creation.
+Keep the existing decoder, cancelled custom-scheme navigation and single
+`local-attendee-setup` label; add no parser, command or capability. The creation
+modal uses a full-width, equal-half location radiogroup under its header for server
+owners, with server alias (unknown: 방을 연 컴퓨터), never a hostname/URL, and
+이 컴퓨터 / 이 앱이 실행 중인 컴퓨터. Members with only own-computer authority
+see no location control. Both destinations share provider tiles and footer layout;
+own-computer tiles do not infer local availability from remote discovery and omit
+the list-only toggle. Show 모델과 작업 폴더는 이 컴퓨터에 뜨는 창에서 골라요.
+내가 방을 나가면 이 AI도 함께 나가요. above those tiles, default the optional
+same-position name field to provider display name, and use 이 컴퓨터에서 계속
+(여는 중…) for handoff. The local catalog group is 로컬 모델. Preserve invitation
+retry, retained draft and exact admission/status links. Verify affected frontend
+checks and desktop tests/clippy; packaged hang/visual acceptance remains a separate
+runtime evidence boundary.
+
 Reuse `RoomAttendeeClient`, `AttendeeRuntime` and the existing external socket and
 cleanup protocol. The local server owns each creation task independently of an HTTP
 waiter or window. One invitation retains one admission identity, chosen draft and

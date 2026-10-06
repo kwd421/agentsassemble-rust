@@ -576,18 +576,21 @@ pub fn run() {
                     if url.host_str() == Some("attend") {
                         let app = webview.app_handle().clone();
                         let target = url.clone();
-                        // Serialize window creation on the main thread; navigation carries no consent.
-                        let receiver = app.clone();
-                        if app
-                            .run_on_main_thread(move || {
-                                if attendee_handoff::open(&receiver, &target).is_err() {
-                                    eprintln!("local_attendee_handoff_rejected");
-                                }
-                            })
-                            .is_err()
-                        {
-                            eprintln!("local_attendee_handoff_unavailable");
-                        }
+                        // Tauri holds the plugin lock here; building a webview needs it again.
+                        // Wry runs main-thread tasks inline, so enqueue from a worker instead.
+                        tauri::async_runtime::spawn(async move {
+                            let receiver = app.clone();
+                            if app
+                                .run_on_main_thread(move || {
+                                    if attendee_handoff::open(&receiver, &target).is_err() {
+                                        eprintln!("local_attendee_handoff_rejected");
+                                    }
+                                })
+                                .is_err()
+                            {
+                                eprintln!("local_attendee_handoff_unavailable");
+                            }
+                        });
                     }
                     false
                 })

@@ -37,12 +37,18 @@ export default function AppOverlays({ controller, companionInvites }: { controll
     stopInviteTunnel, updateRoom,
   } = controller;
   const serverName = controller.centralDirectory?.servers.find((server) =>
-    server.server_id === guestSession?.serverSurface.server_id)?.alias || window.location.host;
+    server.server_id === guestSession?.serverSurface.server_id)?.alias || "방을 연 컴퓨터";
   const locationChoice = companionInvites.available && canControlActiveAgents && (guestSession?.operator || guestSession?.centralOwner)
-    ? <fieldset style={{ padding: 16 }}><legend>어디서 실행할까요?</legend>
-        <label><input type="radio" name="ai-location" checked={!ownComputer} onChange={() => setHostCreation(true)} /> 서버 컴퓨터({serverName})</label>{" "}
-        <label><input type="radio" name="ai-location" checked={ownComputer} onChange={() => setHostCreation(false)} /> 이 컴퓨터</label>
-      </fieldset> : undefined;
+    ? <div className="dc-agent-location-choice" role="radiogroup" aria-label="어디서 실행할까요?">
+        <label data-active={!ownComputer}>
+          <input type="radio" name="ai-location" aria-label="서버 컴퓨터" checked={!ownComputer} onChange={() => setHostCreation(true)} />
+          <strong>서버 컴퓨터</strong><span>{serverName}</span>
+        </label>
+        <label data-active={ownComputer}>
+          <input type="radio" name="ai-location" aria-label="이 컴퓨터" checked={ownComputer} onChange={() => setHostCreation(false)} />
+          <strong>이 컴퓨터</strong><span>이 앱이 실행 중인 컴퓨터</span>
+        </label>
+      </div> : undefined;
   // Archived and closed rooms never reach the rail, so room settings carries the list.
   const lifecycleController = roomLifecycle.enabled ? roomLifecycle : pairedRoomLifecycle.enabled ? pairedRoomLifecycle : null;
 

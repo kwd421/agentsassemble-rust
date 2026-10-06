@@ -38,7 +38,7 @@ it("keeps an unavailable provider selectable for local setup without permitting 
     onClose={() => undefined} onCreate={onCreate} />);
   expect(screen.queryByRole("list", { name: "에이전트 종류" })).toBeNull();
   expect(screen.getAllByRole("heading", { level: 3 }).map((item) => item.textContent))
-    .toEqual(["구독 에이전트", "API 키", "내 컴퓨터"]);
+    .toEqual(["구독 에이전트", "API 키", "로컬 모델"]);
   expect(within(screen.getByRole("list", { name: "구독 에이전트 AI" })).getAllByRole("listitem")
     .map((item) => item.getAttribute("aria-label"))).toEqual(["OpenCode", "Codex"]);
   expect(screen.getByRole("listitem", { name: "Codex" }).getAttribute("data-unavailable")).toBe("true");

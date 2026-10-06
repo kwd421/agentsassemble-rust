@@ -13882,3 +13882,34 @@ OS projection adds one indexed connection lookup per external-session projection
 no worker/timer/poll; metadata has four enum values and no host name. Packaged
 Mac/Windows handoff, repeated-window focus and physical mobile UI remain unverified.
 Committed as a2a147ad (D1–D3) and 6bd1daf5 (D4).
+
+### Companion packaged-E2E corrections (2026-10-06, working tree)
+
+Entry: remote main webview -> 에이전트 추가 -> 이 컴퓨터 -> provider ->
+이 컴퓨터에서 계속. Navigation now dispatches from Tauri's async worker into
+the main event queue. Locked-source cause: Tauri 2.12.1
+`src/manager/webview.rs:621-625` holds the plugin mutex during navigation;
+`tauri-runtime-wry-2.12.1/src/lib.rs:263-279,2626-2627,3182` executes main-thread
+Tasks inline. Reentrant window creation requests that same plugin mutex at
+`tauri-2.12.1/src/manager/webview.rs:133-137`. Wry 0.57.0
+`src/wkwebview/navigation.rs:76-79` delivers cancellation only after the callback.
+The existing main-webview/scheme/attend boundary, decoder and fixed window label
+are unchanged; no command or capability was added.
+
+Shared provider tiles replace the own-computer nested card/select; both modes use
+the normal footer and same-position name field. The location radiogroup uses equal
+columns, alias/unknown caption instead of page hostname, and is absent for members.
+Own-computer tiles ignore remote availability dimming. Invitation retry, admission
+confirmation, retained draft and status/copy links remain owned by the existing hook.
+
+Verification: frontend `tsc --noEmit` passed; ten affected Vitest files passed
+53 tests (all AgentCreateModal suites, AppOverlays.companion,
+OwnComputerCreateModal and useCompanionInvites). Desktop `cargo test --locked`
+compiled and passed 42/48 library tests, including the attendee decoder test;
+six existing control-exchange, supervisor shutdown and updater tests failed with
+sandbox `Operation not permitted` (socket bind/process restrictions), so the full
+Cargo test command did not pass. Desktop `cargo clippy --locked --all-targets --
+-D warnings`, desktop rustfmt, architecture/source-growth gates with 19 policy tests,
+and `git diff --check` passed. Existing ts-rs attribute warnings remain.
+No packaged GUI rerun was performed; native hang resolution and visual acceptance
+remain unverified at runtime. No commit or push was made.

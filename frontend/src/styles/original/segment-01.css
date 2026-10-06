@@ -677,3 +677,30 @@ button:disabled,
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+.dc-agent-location-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  border: 1px solid var(--color-panel-separator);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dc-agent-location-choice label {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 44px;
+  padding: 12px;
+  gap: 4px;
+  background: var(--color-panel-soft);
+  cursor: pointer;
+}
+
+.dc-agent-location-choice label + label { border-left: 1px solid var(--color-panel-separator); }
+.dc-agent-location-choice label[data-active="true"] { background: var(--color-panel); box-shadow: inset 0 0 0 2px var(--color-accent); }
+.dc-agent-location-choice label:focus-within { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.dc-agent-location-choice input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.dc-agent-location-choice span { color: var(--color-text-muted); font-size: 12px; overflow-wrap: anywhere; }

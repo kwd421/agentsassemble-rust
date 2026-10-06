@@ -624,9 +624,9 @@ describe("AgentCreateModal", () => {
     expect(model.disabled).toBe(false);
     expectProviderControlValue("모델", "구독 에이전트");
     expect(primaryActionButton().hasAttribute("disabled")).toBe(false);
-    await chooseProviderControl("모델", "Gemma 4 12B · 내 컴퓨터 Local");
+    await chooseProviderControl("모델", "Gemma 4 12B · 로컬 모델 Local");
     expect(model.disabled).toBe(false);
-    expectProviderControlValue("모델", "내 컴퓨터");
+    expectProviderControlValue("모델", "로컬 모델");
     expect(screen.getByRole("button", { name: /적용 안 함/ })).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "추론 강도" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "응답 속도" })).toBeNull();
