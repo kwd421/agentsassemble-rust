@@ -199,6 +199,7 @@ impl SqliteStore {
             .bind(&room.room_id)
             .execute(&mut *transaction)
             .await?;
+        crate::member_projection::room_changed(&mut transaction, &room.room_id).await?;
         let event = lifecycle_event(&mut transaction, &principal, &room).await?;
         insert_event(&mut transaction, &event).await?;
         let result = json!({"room": room, "deleted": true, "event": event, "event_seq": event.seq, "events": [event]});
@@ -283,6 +284,7 @@ impl SqliteStore {
             .bind(room_id)
             .execute(&mut *transaction)
             .await?;
+        crate::member_projection::room_changed(&mut transaction, room_id).await?;
         sqlx::query("UPDATE room_delete_results SET state = 'complete' WHERE room_id = ? AND state = 'pending'")
             .bind(room_id).execute(&mut *transaction).await?;
         transaction.commit().await?;

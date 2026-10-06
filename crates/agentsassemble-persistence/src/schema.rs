@@ -8,6 +8,16 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 pub(crate) const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "member_projection_outbox",
+        ddl: crate::member_projection::DDL,
+        infrastructure: true,
+    },
+    TableDefinition {
+        name: "member_projection_sender",
+        ddl: crate::member_projection::SENDER_DDL,
+        infrastructure: true,
+    },
+    TableDefinition {
         name: "central_identity_bindings",
         ddl: crate::central_identity_bindings::TABLE_DDL,
         infrastructure: false,

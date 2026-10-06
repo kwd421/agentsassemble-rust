@@ -1,5 +1,5 @@
 //! Member device lifetime and bounded retry history, owned by the admission transaction.
-use crate::{PersistenceError, PreparedHumanAdmission};
+use crate::PersistenceError;
 use chrono::{DateTime, Utc};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
@@ -9,11 +9,11 @@ pub(crate) const MAX_TOMBSTONES: i64 = 32;
 pub(crate) async fn retained_devices(
     tx: &mut Transaction<'_, Sqlite>,
     admission: &str,
-    request: &PreparedHumanAdmission,
+    browser: &[u8; 32],
     now: DateTime<Utc>,
 ) -> Result<i64, PersistenceError> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM human_room_sessions WHERE member_admission_id = ? AND state = 'active' AND expires_at > ? AND browser_credential_fingerprint != ?")
-        .bind(admission).bind(now.timestamp_micros()).bind(request.browser_credential_fingerprint().as_slice())
+        .bind(admission).bind(now.timestamp_micros()).bind(browser.as_slice())
         .fetch_one(&mut **tx).await?;
     Ok(count.min(MAX_DEVICES - 1))
 }
@@ -21,12 +21,12 @@ pub(crate) async fn retained_devices(
 pub(crate) async fn replace_devices(
     tx: &mut Transaction<'_, Sqlite>,
     admission: &str,
-    request: &PreparedHumanAdmission,
+    browser: &[u8; 32],
     now: DateTime<Utc>,
 ) -> Result<Vec<[u8; 32]>, PersistenceError> {
     let replaced = sqlx::query("UPDATE human_room_sessions SET state = 'ended' WHERE member_admission_id = ? AND state = 'active' AND (expires_at <= ? OR browser_credential_fingerprint = ? OR admission_key IN (SELECT admission_key FROM human_room_sessions WHERE member_admission_id = ? AND state = 'active' AND expires_at > ? AND browser_credential_fingerprint != ? ORDER BY member_last_used_at DESC, admitted_at DESC, admission_key DESC LIMIT -1 OFFSET ?)) RETURNING session_fingerprint")
-        .bind(admission).bind(now.timestamp_micros()).bind(request.browser_credential_fingerprint().as_slice())
-        .bind(admission).bind(now.timestamp_micros()).bind(request.browser_credential_fingerprint().as_slice()).bind(MAX_DEVICES - 1)
+        .bind(admission).bind(now.timestamp_micros()).bind(browser.as_slice())
+        .bind(admission).bind(now.timestamp_micros()).bind(browser.as_slice()).bind(MAX_DEVICES - 1)
         .fetch_all(&mut **tx).await?;
     replaced
         .into_iter()

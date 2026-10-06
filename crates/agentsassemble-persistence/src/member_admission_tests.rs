@@ -14,6 +14,7 @@ fn member(join: u8, browser: u8, name: &str) -> PreparedHumanAdmission {
         "ignored",
     )
     .with_member(MemberAdmission {
+        projection_id: "projection-test".into(),
         issuer: "https://central.example".into(),
         person_id: "person-1".into(),
         display_name: name.into(),

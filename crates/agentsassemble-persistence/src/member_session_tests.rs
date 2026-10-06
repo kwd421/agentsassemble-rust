@@ -165,6 +165,12 @@ async fn v82_upgrade_preserves_legacy_live_authority_and_bounds_ended_history() 
     store.set_registration_epoch(Some("epoch")).await?;
     insert_invite(&store, [1; 32], [2; 32], "guest", 1, now).await;
     let original = admitted(store.admit_human(&member(2, 3, "Member"), now).await?);
+    sqlx::query("DROP TABLE member_projection_outbox")
+        .execute(&store.pool)
+        .await?;
+    sqlx::query("DROP TABLE member_projection_sender")
+        .execute(&store.pool)
+        .await?;
     // Construct actual v82 columns/indexes with a legacy seed-backed live session.
     for sql in [
         "DROP INDEX human_room_sessions_member_device_idx",

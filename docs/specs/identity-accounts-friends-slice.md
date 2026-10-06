@@ -1743,3 +1743,36 @@ Daybreak REVISE 보완 (2026-10-06): 기존 directory `/name` PUT의 변경 판�
 expected_name_is_default는 nonempty registration_epoch를 필수로 하며 frontend도 누락 시
 요청 전에 실패한다. 이름 쓰기는 NFC·Cc/Cf 거절·공백 축소 후 길이를 검사하고, 과거
 행을 반환하는 bootstrap/member preview에도 같은 정리와 길이 제한을 적용한다.
+
+### Rail (c): 호스트와 공용 프론트 (2026-10-06, 확정 v4.1)
+
+원본 설계에 v2/v3/v4/v4.1을 순서대로 적용한다. Worker는 별도 작업 소유이며
+README 변경 시 wire 필드의 정본이다. 중앙은 테스트 대역만 사용한다.
+진입점은 기존 member-challenge/join, 새 초대 없는 connect challenge/redeem/방 선택,
+공용 서버 레일/중앙 동의/hide/unhide다. 초대 없는 연결은 participant/admission/invite를
+생성하거나 소비하지 않는다. SQLite가 binding→admission→canonical Joined→active room과
+저장 scope를 재확인하며 방 목록은 50개 이하, 세션은 선택한 방에만 기존 8/32/40 한도로 발급한다.
+기존 1024개/300초 challenge에 connect_redeemed/completed 상태를 둔다. 최종 요청은
+challenge id/browser credential/room id를 결합하고 같은 방 동시 재시도는 같은 세션,
+다른 방은 거절한다. 재시작/만료 시 새 challenge가 필요하다.
+
+Outbox는 (binding, immutable epoch)당 하나다. admission/leave/kick/export/close/delete
+트랜잭션에서 하나라도 Joined+active이면 active, 아니면 removed로 계산하고 revision을
+1 올린다(1..2^53-1). redeem의 projection_id 교체는 revision을 유지하고 ACK를 지워
+현재 상태를 dirty로 만든다. 옛 id/revision ACK는 거절한다. 옛 epoch는 영구 보류한다.
+호스트당 한 sender가 16개 배치, 영속 next_attempt_at, 60초×2/최대6시간/±20% jitter,
+UTC 하루 48회 상한으로 전송한다. 429는 일시 실패, 영구 4xx는 revision 변경까지 보류한다.
+중앙 v4.1 예산은 anchor 6, report 3+6×items, 합계1800/day이며 예산 거절은
+grant/anchor 소비 없이 일시 용량 오류를 반환한다. 호스트 테스트는 중앙 대역으로 검증한다.
+
+레일 member는 owner와 같은 모양이며 승인 allowlist(서버 id/관계/정리한 label/icon/epoch/
+키 fingerprint/endpoint 상태·origin·generation)만 사용한다. 웹은 purpose connect 중앙
+hand-off와 “‘{서버 이름}’에 다시 연결할까요?” 동의, 앱은 직접 연결한다. 방 하나면
+바로, 여러 개면 선택한다. “목록에서 숨기기”는 중앙 hide이며 leave가 아니다. 숨긴 서버
+재참가는 동의 시 unhide 후 새 grant를 발급한다. 내부 용어 없이 해요체를 쓴다.
+
+회귀는 각 설계 규칙, 같은 방 동시 선택, 교체 projection의 늦은 ACK, 강퇴 직후 거절,
+여러 방 중 하나 나가도 active 유지, epoch 회전 보류, 예산429를 포함한다. 변경 범위
+테스트와 푸시 직전 make verify 1회, 각1000줄 미만 기능 커밋/푸시, VERIFICATION 건별
+한 줄을 남긴다. 서명 빌드/수동 검증/배포와 Worker 변경은 제외한다. leave receipt,
+capacity reservation, anonymous merge, 새 owner member 관리 UI는 범위 밖이다.

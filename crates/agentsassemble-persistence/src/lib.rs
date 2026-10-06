@@ -135,7 +135,11 @@ mod room_random;
 pub use provider_requests::{OpenProviderRequest, ProviderRequestCommit};
 mod central_identity_bindings;
 mod member_admission;
+mod member_connect;
+pub use member_connect::MemberConnectRoom;
+mod member_projection;
 mod member_schema;
+pub use member_projection::MemberProjection;
 mod member_sessions;
 pub use member_admission::MemberAdmission;
 #[cfg(test)]

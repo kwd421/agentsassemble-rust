@@ -153,6 +153,7 @@ impl SqliteStore {
             .bind(&room.room_id)
             .execute(&mut *transaction)
             .await?;
+        crate::member_projection::room_changed(&mut transaction, &room.room_id).await?;
         let event = lifecycle_event(&mut transaction, &principal, &room).await?;
         insert_event(&mut transaction, &event).await?;
         events.push(event.clone());

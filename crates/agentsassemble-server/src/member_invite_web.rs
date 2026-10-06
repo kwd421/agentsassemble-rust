@@ -270,6 +270,7 @@ async fn redeem_member(
         )
     })?;
     Ok(MemberAdmission {
+        projection_id: identity.projection_id,
         issuer: identity.issuer,
         person_id: identity.person_id,
         display_name: identity.display_name,

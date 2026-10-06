@@ -186,7 +186,7 @@ fn worker_router(
                 };
                 (
                     StatusCode::OK,
-                    Json(json!({"issuer":issuer,"person_id":"person-1","display_name":name})),
+                    Json(json!({"projection_id":"projection-test","issuer":issuer,"person_id":"person-1","display_name":name})),
                 )
             }
         }),
@@ -393,6 +393,7 @@ async fn assert_durable_replay(
         },
     )?
     .with_member(MemberAdmission {
+        projection_id: "projection-test".into(),
         issuer: issuer.into(),
         person_id: "person-1".into(),
         display_name: "Ignored".into(),

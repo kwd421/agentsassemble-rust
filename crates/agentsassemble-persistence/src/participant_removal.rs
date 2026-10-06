@@ -101,6 +101,12 @@ impl SqliteStore {
             &participant,
         )
         .await?;
+        crate::member_projection::participant_changed(
+            &mut transaction,
+            &principal.room_id,
+            &target_id,
+        )
+        .await?;
         let event = removal_event(&mut transaction, principal, &participant, event_type).await?;
         insert_event(&mut transaction, &event).await?;
         events.push(event.clone());

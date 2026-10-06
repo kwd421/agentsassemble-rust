@@ -146,6 +146,12 @@ async fn execute_leave_in(
         &participant,
     )
     .await?;
+    crate::member_projection::participant_changed(
+        transaction,
+        &principal.room_id,
+        &principal.participant_id,
+    )
+    .await?;
     let event = participant_left_event(transaction, &participant).await?;
     insert_event(transaction, &event).await?;
     Box::pin(crate::provider_request_lifecycle::cancel_participant_in(

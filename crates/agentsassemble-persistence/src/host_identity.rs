@@ -112,14 +112,18 @@ impl SqliteStore {
         &self,
         epoch: Option<&str>,
     ) -> Result<(), PersistenceError> {
+        let mut tx = self.pool.begin().await?;
         if let Some(epoch) = epoch {
             sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('central_registration_epoch', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-                .bind(epoch).execute(&self.pool).await?;
+                .bind(epoch).execute(&mut *tx).await?;
         } else {
             sqlx::query("DELETE FROM runtime_metadata WHERE key = 'central_registration_epoch'")
-                .execute(&self.pool)
+                .execute(&mut *tx)
                 .await?;
         }
+        sqlx::query("UPDATE member_projection_outbox SET parked=2 WHERE registration_epoch != COALESCE(?, '')")
+            .bind(epoch).execute(&mut *tx).await?;
+        tx.commit().await?;
         self.notify_room_directory_changed();
         Ok(())
     }

@@ -42,6 +42,7 @@ pub(crate) struct OwnerAdmissionResponse {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct MemberAdmissionResponse {
+    pub(crate) projection_id: String,
     pub(crate) person_id: String,
     pub(crate) issuer: String,
     pub(crate) display_name: String,
