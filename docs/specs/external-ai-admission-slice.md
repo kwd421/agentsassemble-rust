@@ -11,6 +11,20 @@ intermediate verification status; this current status and the closure record gov
 
 ## Companion AI entry consolidation (2026-10-06)
 
+Packaged 0.1.19 follow-up: the bundled `index.html?attendee-create=<id>`
+entry renders LocalAttendeePanel before StartupIdentityBoundary, only on the
+desktop bundled origin. Other routes retain their identity/server gates. B uses
+its existing local operator authority even when A is the account's only server;
+navigation never admits or runs an AI. Local catalog, attendee HTTP operations and
+native provider discovery must remain available after device demotion or without
+central registration, while room hosting, public ingress and registration remain
+restricted. Keep the explicit create/run action and all invitation validation.
+The window title is `이 컴퓨터에서 AI 추가`; visible setup omits raw room IDs and
+duplicate provider IDs, keeps the server origin, and shows expiry only below two
+minutes or after expiry. Verify the actual bootstrap entry, existing consent and
+retry tests, non-server local API/discovery, and report packaged B separately from
+unit results. No new authority, fallback, protocol or persistence is introduced.
+
 `에이전트 추가` is the sole creation entry (desktop/mobile member panels and
 AppOverlays/AgentCreateModal). Local server connections retain server creation.
 Remote owners may choose the named server computer or this computer; writable

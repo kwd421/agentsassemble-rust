@@ -35,7 +35,7 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
         </section>}
         {controls.status && <p role="status" className="dc-agent-hint">{controls.status}</p>}
         {controls.invites.map((invite) => <div key={invite.key} className="dc-invite-friend-row" style={{ flexWrap: "wrap" }}>
-          <div className="dc-invite-card-copy"><strong>{invite.displayName} · {invite.provider}</strong><p>{invite.joined ? "방 참가가 확인됐어요. 실행 상태는 AI 목록에서 확인해 주세요." : invite.copyable ? `만료 ${new Date(invite.expiresAt).toLocaleTimeString()}` : "만료됐거나 주소가 변경된 초대예요."}</p></div>
+          <div className="dc-invite-card-copy"><strong>{invite.displayName}</strong><p>{invite.joined ? "방 참가가 확인됐어요. 실행 상태는 AI 목록에서 확인해 주세요." : !invite.copyable ? "만료됐거나 주소가 변경된 초대예요." : Date.parse(invite.expiresAt) - Date.now() < 120_000 ? "초대가 곧 만료돼요. 이 컴퓨터에서 설정을 마쳐 주세요." : null}</p></div>
           {(invite.copyable || invite.joined) && <a className="dc-invite-copy-button" style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }} href={invite.nativeLink}>{invite.joined ? "실행 상태 열기" : "이 컴퓨터에서 설정하기"}</a>}
           <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }} disabled={!invite.copyable || invite.joined} onClick={() => void controls.copy(invite.key)}>참가 안내 복사</button>
         </div>)}

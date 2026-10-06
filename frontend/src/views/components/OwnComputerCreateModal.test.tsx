@@ -9,11 +9,12 @@ import OwnComputerCreateModal from "./OwnComputerCreateModal";
 vi.mock("../../api/attendeeInvite", async (original) => ({ ...await original<typeof import("../../api/attendeeInvite")>(), createCompanionAttendeeInvite: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
-it("preserves browser inputs across cold/ready host catalogs and waits for exact admission while retaining local status access", async () => {
+it.each([60_000, 600_000])("preserves the draft and admission with %i ms left, showing only urgent expiry", async (remaining) => {
   const owner = { roomUid: "uid", meetingId: "general", sessionToken: "human-private", expiresAt: "2099-01-01T00:00:00Z" } as RoomGuestSession;
-  const issued = { origin: window.location.origin, expiresAtMs: Date.now() + 60_000, result: {
+  const expiry = Date.now() + remaining;
+  const issued = { origin: window.location.origin, expiresAtMs: expiry, result: {
     request_id: "request", room_id: "general", room_uid: "uid", invite_id: "invite", display_name: "My own AI", provider: "codex",
-    attend_command: "assemble room attend --provider codex", join_url: `${window.location.origin}/join?token=fixture`, expires_at: "2099-01-01T00:00:00Z",
+    attend_command: "assemble room attend --provider codex", join_url: `${window.location.origin}/join?token=fixture`, expires_at: new Date(expiry).toISOString(),
   } };
   vi.mocked(createCompanionAttendeeInvite).mockResolvedValue(issued);
   const onHost = vi.fn();
@@ -30,6 +31,8 @@ it("preserves browser inputs across cold/ready host catalogs and waits for exact
   expect(screen.queryByText("HOST_ONLY_MODEL")).toBeNull();
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "이 컴퓨터에서 계속" })));
   expect(screen.getByRole("link", { name: "이 컴퓨터에서 설정하기" }).getAttribute("href")).toMatch(/^agentsassemble:\/\/attend#packet=/);
+  expect(screen.queryByText(/ · codex/)).toBeNull();
+  expect(Boolean(screen.queryByText(/초대가 곧 만료돼요/))).toBe(remaining < 120_000);
   view.rerender(<Surface ready />);
   expect((screen.getByLabelText("표시 이름") as HTMLInputElement).value).toBe("My own AI");
   expect(screen.queryByText(/방 참가가 확인/)).toBeNull();

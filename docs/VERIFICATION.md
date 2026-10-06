@@ -13885,6 +13885,39 @@ Committed as a2a147ad (D1–D3) and 6bd1daf5 (D4).
 
 ### Companion packaged-E2E corrections (2026-10-06, working tree)
 
+Follow-up at base `667f05d7` / packaged 0.1.19: the bundled attendee-create
+entry now renders LocalAttendeePanel outside StartupIdentityBoundary. The origin
+predicate restricts this to the bundled desktop; browser/remote webviews, ordinary
+desktop and provider setup still enter their existing identity boundary. Native
+title and visible server label omit room IDs; the handoff dialog removes duplicate
+provider IDs and only mentions expiry when urgent or unusable. Local attendee
+operation errors use Korean guidance instead of raw codes. Explicit create/start,
+packet validation and local operator tickets are retained.
+
+Non-server finding: desktop `local_runtime.rs:270` ensures the owned sidecar
+on demand without checking central registration; `local_runtime/provider_discovery.rs:25`
+uses that owner. Server `ticket_issuer.rs:97` and `main.rs:167` require completed
+local bootstrap, not account-server registration. Catalog and local-attendee routes
+use `consume_local_operator` (`provider_operations_web.rs:47`,
+`local_attendee_web.rs:100`). Demotion cuts public admission (`public_ingress.rs:364`)
+and parks central registration (`central/directory.rs:179`); a successfully persisted
+demotion does not stop the local listener (`web.rs:467`). No runtime authority or
+hosting policy changed. The current local `app.agentsassemble.rust` DB was read-only
+checked: bootstrap complete, no central registration epoch or hosting restriction.
+This snapshot is not proof of the reported B instance. Computer Use inventory had
+no running AgentsAssemble app; no app was launched or stopped, and Computer Use was
+reset. Actual B packaged HTTP/GUI acceptance remains unverified.
+
+Verification: frontend typecheck passes; six affected Vitest files initially pass
+72 tests, then the two changed UI suites pass 9 tests including long/urgent expiry.
+All 5 server binary tests pass. The non-server control test completes static provider discovery and issues local
+operator tickets with no registration, then device and retired restrictions; it
+does not execute Codex. The affected server HTTP/attendee suite compiles but all
+7 socket cases fail with sandbox `Operation not permitted`, including the demoted
+local catalog/create/status/cancel case. Desktop `cargo test --locked` passes 42/48;
+the 6 socket/process-restricted failures match the preceding record. Architecture,
+source growth, 19 policy tests, formatting and diff checks pass. No commit or push.
+
 Entry: remote main webview -> 에이전트 추가 -> 이 컴퓨터 -> provider ->
 이 컴퓨터에서 계속. Navigation now dispatches from Tauri's async worker into
 the main event queue. Locked-source cause: Tauri 2.12.1

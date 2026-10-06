@@ -108,7 +108,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     catch (failure) { if (current()) setError(failure instanceof Error ? failure.message : "참가 상태를 확인하지 못했어요."); }
     finally { if (current()) { setBusy(false); setCancelling(false); } }
   }
-  const roomLabel = `${new URL(packet.join_url).origin} · ${packet.room_id}`;
+  const roomLabel = new URL(packet.join_url).origin;
   return <main style={{ padding: 24, maxWidth: 680, margin: "0 auto", display: "grid", gap: 20 }}>
     <header><h1 className="text-2xl font-black text-text-primary">이 컴퓨터에서 AI 추가</h1>
       <p className="dc-agent-hint preserve-words">{roomLabel}</p></header>
@@ -117,7 +117,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
       : submitted.current ? "응답을 받지 못했어요. 상태를 확인하거나 같은 요청으로 다시 시도해 주세요." : "참가 상태를 먼저 확인해 주세요."}</p>
     {error && <p role="alert">{error}</p>}
     {operation?.error_code && <p className="dc-agent-hint preserve-words">{operation.error_code === "local_attendee_process_restarted"
-      ? "앱을 다시 시작해 이전 실행 결과를 확인할 수 없어요. 방에서 이전 참가자를 정리한 뒤 새 초대를 만들어 주세요." : operation.error_code}</p>}
+      ? "앱을 다시 시작해 이전 실행 결과를 확인할 수 없어요. 방에서 이전 참가자를 정리한 뒤 새 초대를 만들어 주세요." : "AI 실행 중 문제가 생겼어요. 상태를 다시 확인해 주세요."}</p>}
     <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
       <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void read()}>상태 다시 확인</button>
       {editable && dismissed && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} onClick={() => setDismissed(false)}>설정 계속하기</button>}

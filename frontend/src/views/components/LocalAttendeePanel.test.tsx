@@ -138,6 +138,7 @@ it("shows the canonical origin with its port and rejects a provider absent from 
   vi.mocked(fetchLocalProviderCatalog).mockResolvedValue({ status: "ready", catalog_revision: "local", providers: [] });
   render(<LocalAttendeePanel />);
   expect(await screen.findByText("선택한 AI가 현재 목록에 없어요.")).toBeTruthy();
-  expect(screen.getAllByText("https://room.example.test:8443 · remote-room").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("https://room.example.test:8443").length).toBeGreaterThan(0);
+  expect(screen.queryByText(/remote-room/)).toBeNull();
   expect(createLocalAttendee).not.toHaveBeenCalled();
 });

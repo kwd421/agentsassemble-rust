@@ -747,6 +747,51 @@ fn unicode_environment(name: &str) -> anyhow::Result<Option<String>> {
 #[cfg(test)]
 mod control_frame_tests {
     use super::*;
+    use agentsassemble_persistence::SqliteStore;
+    use agentsassemble_provider::ProviderCatalogService;
+    use agentsassemble_server::TicketStore;
+
+    #[tokio::test]
+    async fn non_server_local_operator_retains_tickets_and_provider_discovery() -> anyhow::Result<()>
+    {
+        let store = SqliteStore::open("sqlite::memory:").await?;
+        store
+            .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Computer B")
+            .await?;
+        let catalog = ProviderCatalogService::discovering_selected(
+            "custom_api",
+            &agentsassemble_provider::ProviderCredentialStore::production(),
+        )?;
+        let state = AppState::local(
+            store.clone(),
+            TicketStore::new(Duration::from_secs(30), 16),
+            catalog,
+        )
+        .await?;
+        // Static metadata discovery runs no provider process or account request.
+        for restriction in [None, Some(false), Some(true)] {
+            if let Some(retired) = restriction {
+                store.restrict_hosting(retired).await?;
+            }
+            assert!(store.registration_epoch().await?.is_none());
+            issue_local_operator_http_ticket(&state).await?;
+            let response = provider_discovery_control_response(
+                &state,
+                "non-server-discovery".into(),
+                "custom_api".into(),
+                true,
+            )
+            .await;
+            let LocalControlResponse::ProviderDiscoveryOk { generation, .. } = response else {
+                anyhow::bail!("non-server local discovery was rejected");
+            };
+            state
+                .provider_catalog
+                .wait_for_provider("custom_api", generation)
+                .await?;
+        }
+        Ok(())
+    }
 
     #[tokio::test(start_paused = true)]
     async fn cancellation_finishes_started_frame_and_preserves_the_next_frame() -> anyhow::Result<()>

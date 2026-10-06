@@ -23,6 +23,8 @@ async fn local_http_creation_uses_only_its_local_operator_and_preserves_remote_m
     local_store
         .bootstrap_local_authority(&Uuid::new_v4().to_string(), "Local operator")
         .await?;
+    // Computer B remains a local operator after the account's server is A.
+    local_store.restrict_hosting(false).await?;
     let directory = tempfile::tempdir()?;
     let catalog =
         ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
@@ -35,6 +37,17 @@ async fn local_http_creation_uses_only_its_local_operator_and_preserves_remote_m
         Ok(())
     }));
     let client = Client::new();
+    let catalog_response = client
+        .get(format!("{base}/api/provider-catalog"))
+        .bearer_auth(operator_ticket(&tickets).await?)
+        .send()
+        .await?;
+    assert_eq!(catalog_response.status(), StatusCode::OK);
+    assert_eq!(
+        local_store.hosting_restriction().await?.as_deref(),
+        Some("device")
+    );
+    assert!(local_store.registration_epoch().await?.is_none());
     let id = Uuid::new_v4();
     let route = format!("{base}/api/local-attendees");
     let input = json!({"request_id":id,"room_id":"general","room_uid":invite.room_uid,

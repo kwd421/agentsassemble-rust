@@ -21,7 +21,7 @@ pub(crate) fn open(app: &AppHandle, url: &Url) -> Result<(), ()> {
         label,
         WebviewUrl::App(format!("index.html?attendee-create={id}#{fragment}").into()),
     )
-    .title(format!("{} — 이 컴퓨터에서 AI 추가", packet.room_id))
+    .title("이 컴퓨터에서 AI 추가")
     .inner_size(720.0, 800.0)
     .min_inner_size(360.0, 480.0)
     .build()
