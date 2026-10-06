@@ -42,6 +42,9 @@ async fn member_devices_retry_canonical_result_without_profile_overwrite_or_devi
         assert_eq!(auth.principal().display_name, "First snapshot");
         let replay = admitted(store.admit_human(&member(2, 4, "New name"), now).await?);
         assert!(!replay.deduplicated());
+        assert!(exact.events().is_empty());
+        assert_eq!(replay.events().len(), 1);
+        assert_eq!(replay.events()[0].event_type, "participant_joined");
         assert_eq!(first.result().agent_id, replay.result().agent_id);
         let expected_bearer = first.session_bearer() != replay.session_bearer();
         assert!(expected_bearer);
@@ -451,3 +454,69 @@ async fn member_failed_reentry_rolls_back_session_replacement() -> TestResult {
 
 #[path = "member_session_tests.rs"]
 mod bounded;
+
+#[tokio::test]
+async fn join_and_connect_restore_expired_live_roster_with_canonical_event() -> TestResult {
+    use agentsassemble_domain::{AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope};
+    let host = AuthenticatedPrincipal {
+        principal_id: "operator-local-user".into(),
+        participant_id: "operator-local".into(),
+        display_name: "Host".into(),
+        room_id: "general".into(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    for connect in [false, true] {
+        let (store, now) = fixture().await;
+        store.set_registration_epoch(Some("epoch")).await?;
+        insert_invite(&store, [1; 32], [2; 32], "guest", 1, now).await;
+        let first = admitted(store.admit_human(&member(2, 3, "Hihi"), now).await?);
+        sqlx::query("UPDATE human_room_sessions SET admitted_at = ?, expires_at = ?")
+            .bind((now - Duration::seconds(2)).timestamp_micros())
+            .bind((now - Duration::seconds(1)).timestamp_micros())
+            .execute(&store.pool)
+            .await?;
+        let authority = crate::RoomMutationAuthority::TrustedPrincipal(&host);
+        let before = store.snapshot_for(authority, 0, 200).await?;
+        assert!(
+            before
+                .participants
+                .iter()
+                .all(|p| p.participant_id != first.result().agent_id)
+        );
+        let request = member(2, 4, "Ignored changed name");
+        let decision = if connect {
+            store
+                .select_member_connect_room(
+                    request.member.as_ref().ok_or("member")?,
+                    "general",
+                    &[4; 32],
+                    &request.request_id().to_string(),
+                    "client",
+                    now,
+                )
+                .await?
+        } else {
+            store.admit_human(&request, now).await?
+        };
+        let admitted = admitted(decision);
+        let after = store.snapshot_for(authority, 0, 200).await?;
+        let participant = after
+            .participants
+            .iter()
+            .find(|p| p.participant_id == first.result().agent_id)
+            .ok_or("restored roster")?;
+        assert_eq!(admitted.events().len(), 1);
+        let event = &admitted.events()[0];
+        assert_eq!(event.event_type, "participant_joined");
+        assert_eq!(
+            event.extra["participant"],
+            serde_json::to_value(participant)?
+        );
+        assert!(event.seq > before.last_seq);
+        assert!(after.events.iter().any(|stored| stored == event));
+    }
+    Ok(())
+}

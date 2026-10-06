@@ -51,11 +51,25 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
     )
     .await?
     .with_central_directory(&central)?;
+    let mut roster = state.rooms.subscribe("general").await;
+    let rooms = state.rooms.clone();
     let host_shutdown = cancellation.clone();
     let host_task =
         tokio::spawn(async move { serve(host, state, host_shutdown, async { Ok(()) }).await });
     let client = reqwest::Client::new();
     let first = assert_admission(&client, &base, invite.join_code(), &mut received).await?;
+    let created = tokio::time::timeout(Duration::from_secs(2), roster.recv()).await??;
+    assert_eq!(created.event_type, "room_created");
+    // Both first admission and fresh-device member-join publish to the open host room.
+    for _ in 0..2 {
+        let event = tokio::time::timeout(Duration::from_secs(2), roster.recv()).await??;
+        assert_eq!(event.event_type, "participant_joined");
+        assert_eq!(event.participant_id.as_deref(), first["agent_id"].as_str());
+        assert_eq!(
+            event.extra["participant"]["display_name"],
+            "Member snapshot"
+        );
+    }
     // Real room WebSocket uses the member session through the ordinary session owner.
     let token = first["session_token"].as_str().ok_or("token")?;
     assert_member_socket(&client, &base, token).await;
@@ -69,7 +83,20 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
     )
     .await?;
     assert_durable_replay(&store, &invite, &central, &first).await?;
+    let before_connect = store.snapshot("general", 0, 200).await?.last_seq;
+    let mut reconnect_roster = rooms.subscribe("general").await;
     connect::verify(&store, &client, &base, invite.join_code(), &mut received).await?;
+    let event = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let event = reconnect_roster.recv().await?;
+            if event.seq > before_connect {
+                return Ok::<_, tokio::sync::broadcast::error::RecvError>(event);
+            }
+        }
+    })
+    .await??;
+    assert_eq!(event.event_type, "participant_joined");
+    assert_eq!(event.participant_id.as_deref(), first["agent_id"].as_str());
     cancellation.cancel();
     host_task.await??;
     worker_task.await??;

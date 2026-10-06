@@ -34,12 +34,19 @@ async fn connect_rechecks_membership_scope_and_never_consumes_invites() -> TestR
         panic!("selected")
     };
     assert_eq!(first.result().invite_scope, "room");
+    assert_eq!(first.events().len(), 1);
+    assert_eq!(first.events()[0].event_type, "participant_joined");
+    assert_eq!(
+        first.events()[0].extra["participant"]["participant_id"],
+        first.result().agent_id
+    );
     let HumanAdmissionDecision::Admitted(retry) = store
         .select_member_connect_room(&member, "general", &[5; 32], &id, "client", now)
         .await?
     else {
         panic!("retry")
     };
+    assert!(retry.events().is_empty());
     let same_session = first.session_bearer() == retry.session_bearer();
     assert!(same_session);
     let fingerprint = Sha256::digest(first.session_bearer().as_bytes()).into();

@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 E2E 1 멤버 목록: member-join/member-connect의 새 세션 발급과 canonical participant_joined 원자 기록·기존 publication owner 통지로 만료 snapshot 누락 복구; 멤버 저장소 30/30 + 양 경로 snapshot 회귀 1/1, HTTP/방 이벤트 통합 1/1, 공용 프론트 재연결 없는 목록 회귀 통과; 서명 빌드·수동 검증·배포 없음.
+
 - 2026-10-06 좁은 채팅 도구: 900px 이하 + 메뉴에 첨부/앱/멘션/이모지, 기존 ComposerCommandMenu·토큰·동작/권한 재사용, 넓은 폭 보존; composer 24/24·Chromium 2/2 및 v2 after 17장 확인, 이번 세 건 공통 푸시 직전 make verify 1회 exit 0(frontend 1,124 및 Rust/desktop·필수 게이트); 기존 패널 겹침/작은 회색 안내/모의 side-chat 503은 남음, 서명·배포 없음.
 
 - 2026-10-06 서버 행 편집: 이름만 제목/이 기기 · OS, 편집 시 외부 버튼 숨김·편집 전 미리보기 숨김·연필 재사용·저장/취소와 작은 조건부 복원; 저장/취소/실패/복원 포함 9/9 통과, ui-report/v2-after-servers·first-server·first-server-edit 두 폭 캡처 확인; 서명·배포 없음.

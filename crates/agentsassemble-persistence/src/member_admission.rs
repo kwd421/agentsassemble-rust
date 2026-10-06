@@ -288,11 +288,18 @@ pub(crate) async fn mint_session(
         .bind(member.challenge_fingerprint.as_slice()).bind(member.challenge_expires_at.timestamp_micros()).bind(now.timestamp_micros())
         .bind(admission).execute(&mut **tx).await?;
     crate::member_sessions::prune(tx, admission).await?;
+    // A Joined membership can be absent from live snapshots after all sessions expire.
+    // Publish its canonical row again when a new session makes it visible.
+    let participant =
+        crate::participant_rows::load_participant_by_key(tx, &result.meeting_id, participant)
+            .await?
+            .ok_or(PersistenceError::RoomMissing)?;
+    let joined = append_participant_joined(tx, &participant, now).await?;
     Ok(HumanAdmissionDecision::Admitted(Box::new(
         HumanAdmissionCommit {
             result,
             session_bearer: issued.bearer,
-            events: vec![],
+            events: vec![joined],
             replaced_session_fingerprints,
             deduplicated: false,
         },

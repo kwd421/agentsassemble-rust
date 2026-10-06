@@ -1795,3 +1795,15 @@ credential을 사용한다. 도착 origin 검증·fragment 즉시 제거 후 탭
 최종 결과는 기존 JoinResponse이며 host 생성 request_id와 첫 선택 client_id를 유지한다.
 중앙 예산429는 `member_temporarily_unavailable`/503으로 표시하고 sender는 ACK 없이
 기존 영속 backoff를 유지한다.
+
+### Rail (c) E2E 결함 수정 (2026-10-06)
+
+공용 app/web: 세션 만료로 snapshot에서 빠진 Joined 중앙 멤버가 member-join 또는
+member-connect/select로 재입장하면 호스트가 방을 다시 열지 않아도 기존
+participant_joined 이벤트 경로로 즉시 목록을 복구한다. SQLite 세션 발급과 이벤트를
+원자 기록하고 기존 방 publication owner가 전달한다. 정확 재시도는 중복 이벤트를
+만들지 않으며 강퇴/만료 권위·실패 의미는 보존한다. 프론트 polling/강제 재입장 우회는 금지한다.
+방 설정은 seq 읽음 커서를 표시하지 않는다. 중앙 멤버 접속 종료는 게스트 만료로
+표시하지 않고 해요체를 사용한다. 멤버는 일반 사람과 같은 배지, 게스트만 게스트,
+HOST/YOU는 방장/나로 표시한다. 서버·프론트 회귀, 변경 범위 테스트와 푸시 직전
+make verify 1회로 검증하고 서명 빌드·수동 검증·배포는 하지 않는다.

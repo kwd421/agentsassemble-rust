@@ -1,3 +1,4 @@
+import { participantFixture } from "./test/participant";
 import { roomFixture } from "./test/room";
 import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 import { act, renderHook, waitFor } from "@testing-library/react";
@@ -99,6 +100,26 @@ function socketHarness(
 }
 
 describe("useCanonicalRoom synchronization", () => {
+  it("restores an absent member from the shared join/connect publication without reopening the host room", async () => {
+    const harness = socketHarness();
+    const { result } = renderHook(() => useCanonicalRoom({
+      serverSurface: TEST_SERVER_PRODUCT_SURFACE, roomId: "general",
+      auth: { kind: "host", meetingId: "general" }, openSocket: harness.openSocket,
+    }));
+    await waitFor(() => expect(harness.openSocket).toHaveBeenCalledOnce());
+    act(() => harness.handlers()?.onRoomSnapshot?.(snapshot([]), "http://127.0.0.1:43123"));
+    expect(result.current.participants).toEqual([]);
+    const participant = participantFixture({ participant_id: "member-1", display_name: "Hihi" });
+    const joined = { ...event(1, "participant_joined"), participant_id: participant.participant_id,
+      participant_type: "human", participant };
+    act(() => harness.handlers()?.onRoomEvents?.([joined]));
+    expect(result.current.participants).toEqual([participant]);
+    act(() => harness.handlers()?.onRoomEvents?.([joined]));
+    expect(result.current.participants).toEqual([participant]);
+    expect(harness.openSocket).toHaveBeenCalledOnce();
+    expect(harness.resync).not.toHaveBeenCalled();
+  });
+
   it("does not return an older settings ACK after a newer event was applied", async () => {
     const staleAckEvent = {
       ...event(6, "room_settings_updated"),

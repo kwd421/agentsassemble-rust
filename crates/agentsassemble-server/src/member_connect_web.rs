@@ -204,6 +204,7 @@ pub(crate) async fn select(
         .map(|f| (body.room.clone(), *f))
         .collect::<Vec<_>>();
     state.rooms.publish_session_revocations(&sessions).await;
+    state.rooms.notify_committed_events(commit.events()).await;
     let (result, session_token) = commit.into_result_and_bearer();
     let bootstrap = state.store.local_bootstrap_status().await?;
     let response = serde_json::to_value(JoinResponse {
