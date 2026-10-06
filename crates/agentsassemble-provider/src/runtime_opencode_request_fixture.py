@@ -66,6 +66,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/mcp":
             return self.reply({"agentsassemble_room": {"status": "connected"}})
         if path == "/session":
+            pathlib.Path("session-request.json").write_text(json.dumps(payload))
             return self.reply({"id": "session-1"})
         if path == "/permission/permission-1/reply":
             pathlib.Path("native-reply.json").write_text(json.dumps(payload))

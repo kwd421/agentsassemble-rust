@@ -20,16 +20,42 @@ pub(super) async fn handle(
 ) -> Result<(), DriverError> {
     let mapped = NativeRequest::parse(event)?;
     let ingress = turn.request_ingress.as_ref().ok_or_else(unavailable)?;
-    let mut exchange = ingress
-        .open(
-            session_id,
-            turn.turn_generation,
-            &turn.execution_id,
-            mapped.request.clone(),
-        )
-        .await
-        .map_err(|_| unavailable())?;
-    let resolution = exchange.receive().await.map_err(|_| unavailable())?;
+    let opened = if event.get("type").and_then(Value::as_str) == Some("permission.asked")
+        && event
+            .pointer("/properties/permission")
+            .and_then(Value::as_str)
+            == Some("bash")
+    {
+        ingress
+            .open_shell_permission(
+                session_id,
+                turn.turn_generation,
+                &turn.execution_id,
+                mapped.request.clone(),
+            )
+            .await
+    } else {
+        ingress
+            .open(
+                session_id,
+                turn.turn_generation,
+                &turn.execution_id,
+                mapped.request.clone(),
+            )
+            .await
+    };
+    let mut exchange = match opened {
+        Ok(exchange) => Some(exchange),
+        Err(crate::ProviderRequestExchangeError::ShellDenied) => None,
+        Err(_) => return Err(unavailable()),
+    };
+    let resolution = if let Some(exchange) = exchange.as_mut() {
+        exchange.receive().await.map_err(|_| unavailable())?
+    } else {
+        ProviderRequestResolution::Option {
+            option_id: "reject".to_owned(),
+        }
+    };
     let payload = mapped.response(&resolution)?;
     let connection = driver.connect_owned_peer().await?;
     let response = connection
@@ -38,10 +64,12 @@ pub(super) async fn handle(
     let delivered = response
         .as_ref()
         .is_ok_and(|response| response.status.is_success());
-    exchange
-        .complete(delivered)
-        .await
-        .map_err(|_| unavailable())?;
+    if let Some(exchange) = exchange.as_mut() {
+        exchange
+            .complete(delivered)
+            .await
+            .map_err(|_| unavailable())?;
+    }
     if delivered {
         Ok(())
     } else {

@@ -730,3 +730,31 @@ admission predicate was not found in the public tagged source. Stop at the
 security boundary: no adapter/permission change, 15 diagnostic messages, managed
 ignored test fails on room turn 1/6, zero summarize calls. Persistence acceptance
 remains blocked. See the dated MD/JSON evidence for the paired controls and limits.
+
+## Bash ask admission continuation (2026-10-07, base 6cdcf28e)
+
+User authorizes about ten free-model requests to test native bash `ask`. If
+admitted, retain bash in the model tool set for `meeting_read_only`, but reject
+every bash request through the managed provider-request broker and native reply
+endpoint before execution. The persistence owner must validate exact active
+execution and durable permission; no manufactured human authority or user prompt
+for policy denial. `workspace_write` retains its existing human approval flow.
+No global config, secrets, excluded directories, push or paid models. Stop on
+403 or inability to enforce safe denial. Acceptance: successful real MiMo turn,
+actual echo hi bash attempt denied with no execution in isolated workspace,
+unchanged shell-capable policy, then ignored persistence test within six room
+turns and native summarize if cheap. Delivery failure remains an explicit error;
+no approval or execution fallback. Record results and unknowns in dated MD/JSON.
+
+This continuation targets host-managed sessions. External companion custody keeps
+its existing native permission policy: its remote request transport does not carry
+the managed shell-policy classification. Do not widen native tool exposure there
+without a matching server-authorized rejection route. Shell-capable managed and
+external sessions retain `ask`; external read-only remains native `deny`.
+
+Outcome: ask admission passes; managed policy rejection and real no-execution
+probe pass. Two ordinary turns publish before/after native summarize in the same
+session. Native rejection ends the negative turn without publication. Six room
+turns including corrections plus admission and summarize consume eight explicit
+requests. See dated verification MD/JSON for unsuccessful attempts, actual native
+part ordering and the local-only shell-capable preservation boundary.

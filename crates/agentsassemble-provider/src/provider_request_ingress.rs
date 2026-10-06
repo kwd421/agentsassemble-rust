@@ -29,6 +29,7 @@ pub struct ProviderRequestCommand {
     pub turn_generation: u64,
     pub execution_id: String,
     pub request: ProviderRequest,
+    pub shell_permission: bool,
     reply: oneshot::Sender<Result<ProviderRequestExchange, ProviderRequestExchangeError>>,
 }
 
@@ -50,6 +51,33 @@ impl ProviderRequestIngress {
         execution_id: &str,
         request: ProviderRequest,
     ) -> Result<ProviderRequestExchange, ProviderRequestExchangeError> {
+        self.open_inner(session_id, turn_generation, execution_id, request, false)
+            .await
+    }
+
+    /// Opens a native shell permission request for server-owned policy enforcement.
+    ///
+    /// # Errors
+    /// Returns policy denial or the same custody/queue errors as `open`.
+    pub async fn open_shell_permission(
+        &self,
+        session_id: &str,
+        turn_generation: u64,
+        execution_id: &str,
+        request: ProviderRequest,
+    ) -> Result<ProviderRequestExchange, ProviderRequestExchangeError> {
+        self.open_inner(session_id, turn_generation, execution_id, request, true)
+            .await
+    }
+
+    async fn open_inner(
+        &self,
+        session_id: &str,
+        turn_generation: u64,
+        execution_id: &str,
+        request: ProviderRequest,
+        shell_permission: bool,
+    ) -> Result<ProviderRequestExchange, ProviderRequestExchangeError> {
         // Native protocol input crosses a bounded in-process queue before storage authority.
         if !request.is_valid() {
             return Err(ProviderRequestExchangeError::Rejected);
@@ -61,6 +89,7 @@ impl ProviderRequestIngress {
                 turn_generation,
                 execution_id: execution_id.to_owned(),
                 request,
+                shell_permission,
                 reply,
             })
             .map_err(|error| match error {

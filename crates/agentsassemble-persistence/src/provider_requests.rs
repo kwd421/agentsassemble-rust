@@ -80,6 +80,41 @@ pub(crate) async fn snapshot_pending_in(
 }
 
 impl SqliteStore {
+    /// Checks shell policy under the exact managed execution authority before opening a prompt.
+    ///
+    /// # Errors
+    /// Rejects stale or invalid executions; never treats authority failure as permission.
+    pub async fn managed_shell_permission_denied(
+        &self,
+        room_id: &str,
+        session_id: &str,
+        request: &OpenProviderRequest,
+    ) -> Result<bool, PersistenceError> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let session = load_session(&mut tx, room_id, session_id).await?;
+        require_provider_room_tool_authority(
+            &mut tx,
+            &session,
+            &session.public.active_turn_id,
+            session.input_up_to_seq,
+            request.turn_generation,
+            &request.execution_id,
+        )
+        .await?;
+        let denied = match session.public.permission_mode.as_str() {
+            "meeting_read_only" => true,
+            "workspace_write" => false,
+            _ => {
+                return Err(rejected(
+                    "permission_denied",
+                    "Unsupported shell permission policy.",
+                ));
+            }
+        };
+        tx.commit().await?;
+        Ok(denied)
+    }
+
     /// Opens a request under the managed runtime's exact active turn authority.
     ///
     /// # Errors

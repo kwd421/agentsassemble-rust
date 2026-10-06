@@ -115,6 +115,22 @@ impl RequestBroker {
             execution_id: command.execution_id.clone(),
             request: command.request.clone(),
         };
+        if command.shell_permission {
+            match store
+                .managed_shell_permission_denied(room_id, &command.session_id, &input)
+                .await
+            {
+                Ok(true) => {
+                    command.complete(Err(ProviderRequestExchangeError::ShellDenied));
+                    return;
+                }
+                Ok(false) => {}
+                Err(_) => {
+                    command.complete(Err(ProviderRequestExchangeError::Rejected));
+                    return;
+                }
+            }
+        }
         let result = self
             .open(
                 store,

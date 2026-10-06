@@ -412,3 +412,96 @@ architecture/source-growth gates, 19/19 policy/artifact tests and read-only
 artifact maintenance passed (existing size advisories remain). The 642-line JSON
 retains one cohesive dated verification record; no source boundary was added.
 No product test pass or compaction acceptance is claimed from this blocked run. Commit only, no push.
+
+## Bash ask with server-owned denial (2026-10-07)
+
+Continuation from `6cdcf28e`, with about ten free requests authorized. Native
+1.18.34 MiMo accepts a session containing only a bash wildcard `ask` rule:
+text returned in **7.95 s**, no error and no tool call. The production managed
+adapter now leaves bash in the request with `ask`, while the broker rejects it
+under durable `meeting_read_only` policy. No shell grant, sandbox relaxation,
+identity spoof, paid model, global configuration change, or automatic fallback.
+
+| Verification | Result | Evidence |
+| --- | --- | --- |
+| Isolated native bash `ask` admission | Pass | MiMo text, no 403, no tools |
+| Real managed read-only bash attempt | Pass, 14.51 s | Exact `echo hi > bash-executed.txt`; native bash state `error`, permission rejected, no output; scratch sentinel absent; no user request opened; host turn finishes without runtime error |
+| Ordinary managed instruction persistence | Pass, 37.01 s | Two canonical room publications and one native summarize in the same session; no runtime error |
+| Shell-capable `workspace_write` | Preserved, local verification | Native `ask`, human `once` response, exact upstream HTTP reply and room delivery acknowledgement unchanged |
+| External companion read-only | Preserved, local verification | Native `deny` unchanged; managed policy classification is not added to the external protocol |
+
+The denied turn has **zero room publications**: native OpenCode stops processing
+on permission rejection. This is its existing rejection behavior, not a failed
+admission or permission fallback. The successful ordinary turns above separately
+prove room publication. Native ordered part positions are read/publish **4/8**,
+compaction **14**, read/publish **22/26**, plus one assistant summary message.
+Native evidence and hashes are in the `bash_ask_continuation` JSON section; no
+prompts, outputs, credentials, raw records or native session identifiers are copied.
+
+### Enforcement and failure semantics
+
+`opencode.rs::create_session` adds bash `ask` only for host-managed sessions;
+external custody retains its existing native policy. `opencode/requests.rs` marks
+native `permission.asked` / `bash` requests through `open_shell_permission`.
+The exact marker crosses both managed bridge callback endpoints, then
+`provider_request_broker.rs::apply_native` invokes
+`SqliteStore::managed_shell_permission_denied`. That transaction verifies the
+current room turn, generation and execution, and reads the durable permission.
+Read-only returns `ShellDenied` before any human request is opened; the adapter
+sends `{"reply":"reject"}` to the existing `/permission/:id/reply` endpoint.
+There is no manufactured human principal or remembered approval. Each request
+is checked again. Unknown policy, stale execution, absent broker and failed native
+reply remain explicit failures; none grants permission. `workspace_write` continues
+through the original owner prompt, resolution and delivery receipt path.
+
+Production adds one policy-check transaction per native bash request, with no new
+process, polling, timer, persistent state, or schema. The test-only summarize helper
+locates only the exact scratch server/session, keeps its existing credential in
+memory, calls native summarize with `auto=false` and the same free model, and
+emits only a boolean acknowledgement and an allowlisted failure stage. It neither
+changes instructions nor implements compaction in the production adapter.
+
+### Attempts, budget and corrections
+
+Retain failures as evidence rather than counting only passing runs:
+
+1. The first real denial probe exposed a missing managed bridge marker: it reached
+   the human approval queue and timed out (**256.38 s**, exit 101). The fixture
+   reproduced this before the bridge serialization/forwarding correction. Its
+   native pending bash record is not acceptance evidence.
+2. The corrected run rejected bash (**14.66 s**), but the reused test incorrectly
+   required a room publication after native rejection. Exit 101. The negative
+   mode now checks absence of execution and human prompts separately; its final
+   run passed (**14.51 s**) and native history confirms the actual tool attempt.
+3. The first ordinary turn published, then the summarize helper failed discovery
+   because the bound executable is staged under a different basename (**32.32 s**,
+   exit 101). It submitted **no** summarize request. Exact scratch-directory
+   lookup fixed the helper; the final two-turn/one-summary run passed (**37.01 s**).
+
+Total: **six room turns** (three negative probes, one helper-failed baseline, two
+successful persistence turns), **one admission message**, **one summarize** =
+**eight explicit free-model requests**. These counts exclude native internal
+inference/title calls and are not billing receipts. No additional provider runs
+are authorized or implied by this evidence. Shell-capable behavior was verified
+with deterministic protocol/broker tests, not real allowed shell execution.
+
+Reproduce the single ignored test with `AA_VERIFY_PROVIDER=opencode` and
+`AA_VERIFY_MODEL=opencode/mimo-v2.6-flash-free`. `AA_VERIFY_BASH_DENIAL=1` selects
+one negative room turn; `AA_VERIFY_COMPACT=1` selects two ordinary turns with
+native summarize between them. Native transcript inspection remains required to
+prove actual bash attempt and compaction, separately from test assertions.
+
+All owned scratch processes and directories are gone; native provider histories
+are preserved. The initial timed-out test unwound instead of reaching its explicit
+shutdown call; final cleanup inspection still found zero owned scratch processes.
+Passing runs await server shutdown. `.agents/`, `scripts/__pycache__/`, global
+provider config and unrelated processes remain untouched. Commit only; no push,
+packaged UI acceptance, external review, or phase-closeout claim.
+
+Local verification: **22/22** OpenCode provider tests, **1/1** durable shell-policy
+and stale-execution test, **6/6** request-broker integration tests, **3/3** managed
+bridge custody/credential tests; provider,
+persistence and server all-target/all-feature Clippy with warnings denied;
+architecture/source-growth gates, **19/19** policy/artifact tests, formatting,
+JSON parse, diff check and read-only artifact maintenance. Existing ts-rs and
+source-size advisories remain.

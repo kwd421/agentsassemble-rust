@@ -66,11 +66,20 @@ impl ParentCallbacks {
                 turn_generation,
                 execution_id,
                 request,
+                shell_permission,
             } => {
                 require_session(&owner, session_id)?;
                 let ingress = context.and_then(|context| context.request_ingress.clone());
                 self.exchanges.start(|job| {
-                    request_exchange(job, ingress, owner, turn_generation, execution_id, request)
+                    request_exchange(
+                        job,
+                        ingress,
+                        owner,
+                        turn_generation,
+                        execution_id,
+                        request,
+                        shell_permission,
+                    )
                 })?
             }
             reply @ (Callback::ToolBegun { .. } | Callback::Delivered { .. }) => {
@@ -180,11 +189,18 @@ async fn request_exchange(
     turn_generation: u64,
     execution_id: String,
     request: agentsassemble_domain::ProviderRequest,
+    shell_permission: bool,
 ) -> Result<u64, DriverError> {
     let result = if let Some(ingress) = ingress {
-        ingress
-            .open(&session_id, turn_generation, &execution_id, request)
-            .await
+        if shell_permission {
+            ingress
+                .open_shell_permission(&session_id, turn_generation, &execution_id, request)
+                .await
+        } else {
+            ingress
+                .open(&session_id, turn_generation, &execution_id, request)
+                .await
+        }
     } else {
         Err(ProviderRequestExchangeError::Closed)
     };

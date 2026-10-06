@@ -8,6 +8,8 @@ use tokio_util::sync::CancellationToken;
 pub enum ProviderRequestExchangeError {
     #[error("the provider request queue is full")]
     Busy,
+    #[error("shell is denied by the active session policy")]
+    ShellDenied,
     #[error("the provider request was rejected by its authority owner")]
     Rejected,
     #[error("the provider request owner is unavailable or the request has closed")]

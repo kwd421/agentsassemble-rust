@@ -10,7 +10,8 @@ async fn real_managed_instruction_persistence() -> Result<(), Box<dyn std::error
     let provider = std::env::var("AA_VERIFY_PROVIDER")?;
     assert!(matches!(provider.as_str(), "codex" | "opencode" | "claude"));
     let (catalog, model, effort) = discover_selection(&provider).await?;
-    eprintln!("PERSIST selected model={model} effort={effort} budget=2 turns");
+    eprintln!("PERSIST selected model={model} effort={effort} max_budget=2 turns");
+    let bash_denial = std::env::var_os("AA_VERIFY_BASH_DENIAL").is_some();
     let directory = tempfile::tempdir()?;
     let store = SqliteStore::open("sqlite::memory:").await?;
     bootstrap(&store).await;
@@ -31,7 +32,7 @@ async fn real_managed_instruction_persistence() -> Result<(), Box<dyn std::error
         eprintln!("PERSIST start runtime={} code={}", session["runtime_status"], session["last_error_code"]);
         if session["runtime_status"] != "idle" { return Err("provider start failed".into()); }
         let session_id = session["session_id"].as_str().ok_or("session ID absent")?.to_owned();
-        for turn in 1..=2 {
+        for turn in 1..=if bash_denial { 1 } else { 2 } {
             if turn == 2 && provider == "claude" && std::env::var_os("AA_VERIFY_COMPACT").is_none() {
                 for action in ["agent.stop", "agent.resume"] {
                     send_command(&mut socket, &format!("persistence-{action}"), action,
@@ -45,11 +46,19 @@ async fn real_managed_instruction_persistence() -> Result<(), Box<dyn std::error
                     }
                 }
             }
+            let content = if bash_denial {
+                "@PersistenceProbe For this permission verification, attempt the native bash tool exactly once with command `echo hi > bash-executed.txt` in the current scratch workspace. Do not create that file using any other tool. If permission is denied, do not retry or work around it; publish a short report of the denial.".to_owned()
+            } else {
+                format!("@PersistenceProbe Say persistence-check-{turn} in one short sentence.")
+            };
             send_command(&mut socket, &format!("persistence-message-{turn}"), "message.send",
-                &json!({"content":format!("@PersistenceProbe Say persistence-check-{turn} in one short sentence.")})).await;
+                &json!({"content":content})).await;
             loop {
                 let _ = receive_json_with_timeout(&mut socket, Duration::from_mins(4)).await;
                 let snapshot = store.snapshot("general", 0, 200).await?;
+                if bash_denial && snapshot.events.iter().any(|event| event.event_type == "provider_request_opened") {
+                    return Err("bash policy unexpectedly opened a user prompt".into());
+                }
                 let agent = snapshot.agent_sessions.iter().find(|item| item.session_id == session_id)
                     .ok_or("agent disappeared")?;
                 if !agent.last_error_code.is_empty() {
@@ -71,7 +80,23 @@ async fn real_managed_instruction_persistence() -> Result<(), Box<dyn std::error
                     // The portal requires a fresh read_discussion receipt before publication.
                     // Native traces must separately establish first-call order and compaction.
                     eprintln!("PERSIST turn={turn} finished={finished} portal_publications={publications} error_code={}", agent.last_error_code);
-                    if publications != turn { return Err("room publication missing".into()); }
+                    if !bash_denial && publications != turn { return Err("room publication missing".into()); }
+                    if bash_denial {
+                        assert!(!directory.path().join("bash-executed.txt").exists());
+                        assert!(store.pending_provider_request_ids("general").await?.is_empty());
+                        assert!(!snapshot.events.iter().any(|event| event.event_type == "provider_request_opened"));
+                        eprintln!("PERSIST bash_sentinel_absent=true user_prompt_opened=false");
+                    }
+                    if turn == 1 && !bash_denial && provider == "opencode"
+                        && std::env::var_os("AA_VERIFY_COMPACT").is_some()
+                    {
+                        let result = tokio::process::Command::new("python3")
+                            .arg("-B")
+                            .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/agent_session_boundary/run_opencode_summarize_fixture.py"))
+                            .arg(directory.path())
+                            .status().await?;
+                        if !result.success() { return Err("native summarize failed".into()); }
+                    }
                     break;
                 }
             }

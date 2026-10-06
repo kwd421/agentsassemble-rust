@@ -1,5 +1,12 @@
 # Verification Contract
 
+- 2026-10-07 OpenCode bash `ask` passes MiMo free admission. Managed read-only
+  bash is rejected by the durable-policy broker and native reply endpoint without
+  execution or user prompt. Real ordinary turns publish before/after native
+  summarize; shell-capable approval policy is unchanged. Eight explicit requests,
+  six room turns including failed attempts.
+  [Results, enforcement and limits](verification/2026-10-07-instruction-persistence.md#bash-ask-with-server-owned-denial-2026-10-07).
+
 - 2026-10-07 managed OpenCode bisect: isolated config/--pure/instructions pass;
   removing bash via one deny rule or tools.bash=false independently triggers
   free-tier 403. Security stop: no adapter relaxation; 15 diagnostic requests,

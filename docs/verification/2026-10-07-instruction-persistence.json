@@ -638,5 +638,176 @@
     "global_config_changed": false,
     "acceptance": "blocked: no demonstrated safe adapter correction; stop at user security tradeoff boundary",
     "verification": "JSON parse, diff check and mandatory architecture/source-growth/policy/artifact gates; no product source change."
+  },
+  "bash_ask_continuation": {
+    "base_commit": "6cdcf28e",
+    "version": "1.18.34",
+    "model": "opencode/mimo-v2.6-flash-free",
+    "admission": {
+      "case": "ask_bash",
+      "seconds": 7.95,
+      "error_name": null,
+      "status": null,
+      "free_client_rejected": false,
+      "text_present": true,
+      "tools": []
+    },
+    "scope": "host-managed sessions; external companion permissions unchanged",
+    "enforcement": "native bash ask -> bridge shell classification -> broker -> durable current execution and permission -> ShellDenied -> native permission reply reject; no human request opened",
+    "attempts": [
+      {
+        "kind": "denial pre-correction",
+        "room_turns": 1,
+        "seconds": 256.38,
+        "exit_code": 101,
+        "result": "bridge omitted shell classification; human request waited and test timed out; not acceptance"
+      },
+      {
+        "kind": "denial post-correction",
+        "room_turns": 1,
+        "seconds": 14.66,
+        "exit_code": 101,
+        "result": "native bash rejected; ordinary-publication assertion incorrectly applied to negative test"
+      },
+      {
+        "kind": "denial final",
+        "room_turns": 1,
+        "seconds": 14.51,
+        "exit_code": 0,
+        "sentinel_absent": true,
+        "user_prompt_opened": false,
+        "runtime_error": false,
+        "portal_publications": 0
+      },
+      {
+        "kind": "persistence helper correction",
+        "room_turns": 1,
+        "seconds": 32.32,
+        "exit_code": 101,
+        "portal_publications": 1,
+        "summarize_requests": 0,
+        "result": "helper expected original executable basename; staged child lookup corrected"
+      },
+      {
+        "kind": "persistence final",
+        "room_turns": 2,
+        "seconds": 37.01,
+        "exit_code": 0,
+        "portal_publications": 2,
+        "summarize_requests": 1,
+        "runtime_error": false
+      }
+    ],
+    "accepted_denial_native": {
+      "run": 3,
+      "parts": [
+        {
+          "ordinal": 4,
+          "type": "tool",
+          "tool": "agentsassemble_room_read_discussion",
+          "status": "completed",
+          "permission_rejected": false,
+          "output_present": true,
+          "echo_command_matches": false
+        },
+        {
+          "ordinal": 8,
+          "type": "tool",
+          "tool": "bash",
+          "status": "error",
+          "permission_rejected": true,
+          "output_present": false,
+          "echo_command_matches": true
+        }
+      ],
+      "compaction_parts": 0,
+      "summary_messages": 0,
+      "errors": [],
+      "native_records_sha256": "ffd0e7f01bc74b44e7dfb5714be1102a7d8dffbfced982a304b906ea50dd4312"
+    },
+    "accepted_persistence_native": {
+      "run": 5,
+      "parts": [
+        {
+          "ordinal": 4,
+          "type": "tool",
+          "tool": "agentsassemble_room_read_discussion",
+          "status": "completed",
+          "permission_rejected": false,
+          "output_present": true,
+          "echo_command_matches": false
+        },
+        {
+          "ordinal": 8,
+          "type": "tool",
+          "tool": "agentsassemble_room_publish_message",
+          "status": "completed",
+          "permission_rejected": false,
+          "output_present": true,
+          "echo_command_matches": false
+        },
+        {
+          "ordinal": 14,
+          "type": "compaction"
+        },
+        {
+          "ordinal": 22,
+          "type": "tool",
+          "tool": "agentsassemble_room_read_discussion",
+          "status": "completed",
+          "permission_rejected": false,
+          "output_present": true,
+          "echo_command_matches": false
+        },
+        {
+          "ordinal": 26,
+          "type": "tool",
+          "tool": "agentsassemble_room_publish_message",
+          "status": "completed",
+          "permission_rejected": false,
+          "output_present": true,
+          "echo_command_matches": false
+        }
+      ],
+      "compaction_parts": 1,
+      "summary_messages": 1,
+      "errors": [],
+      "native_records_sha256": "851072edc716e165da81fdd6e6e9f60b90e07c3fcbe2ddac2358387d1f868915"
+    },
+    "permission_preservation": {
+      "meeting_read_only_managed_bash": "ask with automatic server policy rejection",
+      "workspace_write_bash": "ask with existing human approval and delivery receipt",
+      "external_read_only_bash": "deny unchanged"
+    },
+    "budget": {
+      "admission_messages": 1,
+      "denial_room_turns": 3,
+      "persistence_room_turns": 3,
+      "native_summarize_requests": 1,
+      "explicit_requests_total": 8,
+      "room_turns_total": 6,
+      "internal_inference_title_requests_counted": false,
+      "paid_models_requested": false
+    },
+    "cleanup": {
+      "owned_scratch_processes_remaining": 0,
+      "scratch_workspaces_remaining": 0,
+      "native_provider_history_preserved": true,
+      "global_config_changed": false,
+      "excluded_directories_changed": false
+    },
+    "validation": {
+      "opencode_provider_tests": 22,
+      "durable_policy_tests": 1,
+      "policy_artifact_tests": 19,
+      "clippy_warnings_denied": true,
+      "provider_request_broker_tests": 6,
+      "managed_bridge_tests": 3
+    },
+    "limits": [
+      "Native reject ends the negative turn without a room publication; ordinary turns publish successfully.",
+      "Shell-capable permission preservation is fixture/config and broker regression evidence, not a real allowed shell execution.",
+      "Native part order is time_created,id order; summary token counters and zero reported cost are not billing receipts."
+    ]
   }
 }
