@@ -14,6 +14,9 @@ use url::Url;
 
 use crate::{CentralHostIdentity, HostIdentityError, public_ingress::PublicIngress};
 
+#[path = "member_sync.rs"]
+mod member_sync;
+
 const HEARTBEAT: Duration = Duration::from_mins(5);
 const LEASE_SECONDS: i64 = 600;
 const RESPONSE_LIMIT: usize = 32 * 1024;
@@ -37,6 +40,13 @@ pub(crate) struct OwnerAdmissionResponse {
     origin: String,
     generation: i64,
     expires_at: i64,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MemberGrantPurpose {
+    Admission,
+    Connect,
 }
 
 #[derive(Deserialize)]
@@ -71,6 +81,8 @@ pub enum CentralDirectoryError {
     Rejected,
     #[error("central directory is temporarily unavailable")]
     Unavailable,
+    #[error("central directory request capacity is temporarily exhausted")]
+    CapacityExhausted,
     #[error("central directory response is invalid")]
     InvalidResponse,
     #[error("host request signing failed")]
@@ -137,6 +149,9 @@ impl CentralDirectory {
         let mut failure_count = 0_u32;
         let mut next_attempt = std::time::Instant::now();
         loop {
+            if let Err(error) = member_sync::send(&inner, &store, &identity).await {
+                inner.status.write().last_error = error.to_string();
+            }
             if name_dirty && std::time::Instant::now() >= next_name_attempt {
                 match publish_default_name(
                     &inner,
@@ -229,21 +244,31 @@ impl CentralDirectory {
         grant: &str,
         challenge_hash: &str,
         epoch: &str,
+        purpose: MemberGrantPurpose,
     ) -> Result<MemberAdmissionResponse, CentralDirectoryError> {
         let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
-        if !grant.starts_with("aamg1.")
+        let (prefix, route) = match purpose {
+            MemberGrantPurpose::Admission => ("aamg1.", "member-grants"),
+            MemberGrantPurpose::Connect => ("aamc1.", "member-connect-grants"),
+        };
+        if !grant.starts_with(prefix)
             || grant.len() > 256
             || store.registration_epoch().await?.as_deref() != Some(epoch)
         {
             return Err(CentralDirectoryError::Rejected);
         }
-        let path = format!("/v1/servers/{}/member-grants/redeem", identity.server_id());
+        let path = format!("/v1/servers/{}/{route}/redeem", identity.server_id());
         let body = json!({"grant_token": grant, "challenge_hash": challenge_hash,
-            "registration_epoch": epoch});
+            "registration_epoch": epoch, "purpose": purpose});
         let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
         let response: MemberAdmissionResponse =
             serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
-        if response.issuer != inner.base_url.origin().ascii_serialization()
+        if base64::Engine::decode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            &response.projection_id,
+        )
+        .map_or(true, |id| id.len() != 16)
+            || response.issuer != inner.base_url.origin().ascii_serialization()
             || response.person_id.is_empty()
             || response.person_id.len() > 256
             || response.display_name.trim().is_empty()
@@ -387,7 +412,9 @@ async fn send_signed(
     path: &str,
     mut body: serde_json::Value,
 ) -> Result<Vec<u8>, CentralDirectoryError> {
-    if let Some(epoch) = store.registration_epoch().await? {
+    if body.get("registration_epoch").is_none()
+        && let Some(epoch) = store.registration_epoch().await?
+    {
         body["registration_epoch"] = epoch.into();
     }
     let body = serde_json::to_vec(&body).map_err(|_| CentralDirectoryError::InvalidResponse)?;
@@ -409,16 +436,15 @@ async fn send_signed(
         .await
         .map_err(CentralDirectoryError::Request)?;
     if response.status() != StatusCode::OK {
-        return Err(
-            if response.status().is_server_error()
-                || response.status() == StatusCode::TOO_MANY_REQUESTS
-                || response.status() == StatusCode::REQUEST_TIMEOUT
-            {
-                CentralDirectoryError::Unavailable
-            } else {
-                CentralDirectoryError::Rejected
-            },
-        );
+        return Err(if response.status() == StatusCode::TOO_MANY_REQUESTS {
+            CentralDirectoryError::CapacityExhausted
+        } else if response.status().is_server_error()
+            || response.status() == StatusCode::REQUEST_TIMEOUT
+        {
+            CentralDirectoryError::Unavailable
+        } else {
+            CentralDirectoryError::Rejected
+        });
     }
     if response
         .content_length()

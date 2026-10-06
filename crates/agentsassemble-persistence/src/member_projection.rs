@@ -85,6 +85,36 @@ pub(crate) async fn room_changed(
 }
 
 impl SqliteStore {
+    /// Retains a redeemed opaque anchor even when existing membership denies admission.
+    /// New bindings are created only by the successful admission transaction.
+    /// # Errors
+    /// Fails closed on stale redemption or persistence errors.
+    pub async fn record_member_projection(
+        &self,
+        member: &crate::MemberAdmission,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        if !member.is_current(&mut tx, now).await? {
+            return Err(crate::account_identity::rejected(
+                "member_challenge_invalid",
+                "Member challenge is no longer current.",
+            ));
+        }
+        let binding: Option<String> = sqlx::query_scalar(
+            "SELECT binding_id FROM central_identity_bindings WHERE issuer=? AND person_id=?",
+        )
+        .bind(&member.issuer)
+        .bind(&member.person_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(binding) = binding {
+            anchor(&mut tx, &binding, member, false).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Reserves one bounded report attempt durably, including crash/unknown outcomes.
     /// # Errors
     /// Returns persistence errors without sending a report.

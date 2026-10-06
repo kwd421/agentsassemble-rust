@@ -84,6 +84,9 @@ registered_routes! {
         same_origin_public "/api/room-invite/join" => post(join),
         same_origin_public "/api/room-invite/member-challenge" => post(member::start),
         same_origin_public "/api/room-invite/member-join" => post(member::join),
+        same_origin_public "/api/member-connect/challenge" => post(member::connect::start),
+        same_origin_public "/api/member-connect/rooms" => post(member::connect::redeem),
+        same_origin_public "/api/member-connect/select" => post(member::connect::select),
     }
 }
 

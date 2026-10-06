@@ -13823,3 +13823,5 @@ contract and evidence below replace that implementation; no migration 0009 is ne
 - Rollback: disable cron, wait 15 minutes, `wrangler rollback 80a4eabf-bf07-4160-8413-a24d3a4fad21`, keep 0009/0010 and cleanup disabled until the budget-fixed release returns.
 
 - 2026-10-06 Rail (c) 저장: v84 outbox/immutable epoch/late ACK/영속 재시도·48회 상한 및 초대 없는 방 조회·선택의 기존 기기 세션 재사용; `cargo test -p agentsassemble-persistence member_ --lib` 30개 통과(중앙 테스트 대역, 서명·수동·배포 제외).
+
+- 2026-10-06 Rail (c) 호스트 HTTP/sender: 중앙 서명 대역으로 connect 전용 grant, 같은 방 동시 재시도 동일 세션, 선택 직전 강퇴 거절, 거절된 재입장의 새 projection 보존, epoch 고정·429 재시도를 통과(`integration member_invite_boundary`, `central::directory::member_sync`); 실제 중앙·서명·수동·배포 미실행.

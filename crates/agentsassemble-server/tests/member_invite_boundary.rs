@@ -15,6 +15,9 @@ use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
+#[path = "member_connect_boundary.rs"]
+mod connect;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 const DEVICE: &str = "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -66,6 +69,7 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
     )
     .await?;
     assert_durable_replay(&store, &invite, &central, &first).await?;
+    connect::verify(&store, &client, &base, invite.join_code(), &mut received).await?;
     cancellation.cancel();
     host_task.await??;
     worker_task.await??;
@@ -131,66 +135,75 @@ fn worker_router(
     issuer: String,
     calls: tokio::sync::mpsc::UnboundedSender<Value>,
 ) -> Router {
-    Router::new().route(
-        "/v1/servers/{server}/member-grants/redeem",
-        post(move |uri: Uri, headers: HeaderMap, body: Bytes| {
-            let calls = calls.clone();
-            let key = key.clone();
-            let issuer = issuer.clone();
-            let server_id = server_id.clone();
-            async move {
-                assert_eq!(
-                    uri.path(),
-                    format!("/v1/servers/{server_id}/member-grants/redeem")
-                );
-                let canonical = format!(
-                    "AA-HOST-1\nPOST\n{}\n{}\n{}\n{}",
-                    uri.path(),
-                    headers["x-aa-host-timestamp"].to_str().unwrap_or_default(),
-                    headers["x-aa-host-nonce"].to_str().unwrap_or_default(),
-                    URL_SAFE_NO_PAD.encode(Sha256::digest(&body))
-                );
-                let signature = URL_SAFE_NO_PAD
-                    .decode(&headers["x-aa-host-signature"])
-                    .unwrap_or_else(|_| panic!("signature"));
-                ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
-                    .verify(canonical.as_bytes(), &signature)
-                    .unwrap_or_else(|_| panic!("route/body signature"));
-                let body: Value = serde_json::from_slice(&body).unwrap_or_else(|_| panic!("body"));
-                assert_eq!(body["registration_epoch"], "member-epoch");
-                calls
-                    .send(body.clone())
-                    .unwrap_or_else(|_| panic!("capture"));
-                let grant = body["grant_token"].as_str().unwrap_or_default();
-                if grant == "aamg1.outage" {
-                    return (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        Json(json!({"error":"unavailable"})),
-                    );
-                }
-                if grant == "aamg1.invalid" {
-                    return (StatusCode::UNAUTHORIZED, Json(json!({"error":"invalid"})));
-                }
-                if grant == "aamg1.lost" {
-                    return (StatusCode::OK, Json(json!({"truncated":"unknown outcome"})));
-                }
-                let issuer = if grant == "aamg1.foreign" {
-                    "https://foreign.example".into()
-                } else {
-                    issuer
-                };
-                let name = if grant == "aamg1.second" {
-                    "Changed central profile"
-                } else {
-                    "Member snapshot"
-                };
-                (
-                    StatusCode::OK,
-                    Json(json!({"projection_id":"projection-test","issuer":issuer,"person_id":"person-1","display_name":name})),
+    let handler = post(move |uri: Uri, headers: HeaderMap, body: Bytes| {
+        let calls = calls.clone();
+        let key = key.clone();
+        let issuer = issuer.clone();
+        let server_id = server_id.clone();
+        async move {
+            assert_eq!(
+                uri.path(),
+                format!(
+                    "/v1/servers/{server_id}/{}",
+                    if uri.path().contains("member-connect-grants") {
+                        "member-connect-grants/redeem"
+                    } else {
+                        "member-grants/redeem"
+                    }
                 )
+            );
+            let canonical = format!(
+                "AA-HOST-1\nPOST\n{}\n{}\n{}\n{}",
+                uri.path(),
+                headers["x-aa-host-timestamp"].to_str().unwrap_or_default(),
+                headers["x-aa-host-nonce"].to_str().unwrap_or_default(),
+                URL_SAFE_NO_PAD.encode(Sha256::digest(&body))
+            );
+            let signature = URL_SAFE_NO_PAD
+                .decode(&headers["x-aa-host-signature"])
+                .unwrap_or_else(|_| panic!("signature"));
+            ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
+                .verify(canonical.as_bytes(), &signature)
+                .unwrap_or_else(|_| panic!("route/body signature"));
+            let body: Value = serde_json::from_slice(&body).unwrap_or_else(|_| panic!("body"));
+            assert_eq!(body["registration_epoch"], "member-epoch");
+            calls
+                .send(body.clone())
+                .unwrap_or_else(|_| panic!("capture"));
+            let grant = body["grant_token"].as_str().unwrap_or_default();
+            if grant == "aamg1.outage" {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"error":"unavailable"})),
+                );
             }
-        }),
-    )
+            if grant == "aamg1.invalid" {
+                return (StatusCode::UNAUTHORIZED, Json(json!({"error":"invalid"})));
+            }
+            if grant == "aamg1.lost" {
+                return (StatusCode::OK, Json(json!({"truncated":"unknown outcome"})));
+            }
+            let issuer = if grant == "aamg1.foreign" {
+                "https://foreign.example".into()
+            } else {
+                issuer
+            };
+            let name = if grant == "aamg1.second" {
+                "Changed central profile"
+            } else {
+                "Member snapshot"
+            };
+            (
+                StatusCode::OK,
+                Json(
+                    json!({"projection_id":(if grant == "aamg1.replacement" {"BBBBBBBBBBBBBBBBBBBBBQ"} else {"AAAAAAAAAAAAAAAAAAAAAA"}),"issuer":issuer,"person_id":"person-1","display_name":name}),
+                ),
+            )
+        }
+    });
+    Router::new()
+        .route("/v1/servers/{server}/member-grants/redeem", handler.clone())
+        .route("/v1/servers/{server}/member-connect-grants/redeem", handler)
 }
 
 async fn assert_admission(

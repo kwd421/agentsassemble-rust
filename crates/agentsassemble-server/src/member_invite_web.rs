@@ -12,6 +12,9 @@ use parking_lot::Mutex;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
+#[path = "member_connect_web.rs"]
+pub(super) mod connect;
+
 const CHALLENGE_LIMIT: usize = 1024;
 const CHALLENGE_TTL: Duration = Duration::seconds(300);
 
@@ -20,7 +23,7 @@ pub(crate) struct MemberChallenges(Mutex<HashMap<String, Challenge>>);
 
 #[derive(Clone)]
 struct Challenge {
-    invite: [u8; 32],
+    purpose: ChallengePurpose,
     browser: [u8; 32],
     epoch: String,
     expires: DateTime<Utc>,
@@ -28,10 +31,26 @@ struct Challenge {
     completed: Option<([u8; 32], MemberAdmission)>,
 }
 
+#[derive(Clone)]
+enum ChallengePurpose {
+    Admission([u8; 32]),
+    Connect(std::sync::Arc<tokio::sync::Mutex<connect::ConnectState>>),
+}
+
 impl MemberChallenges {
     fn issue(
         &self,
         invite: [u8; 32],
+        browser: [u8; 32],
+        epoch: String,
+        now: DateTime<Utc>,
+    ) -> Result<(String, DateTime<Utc>), HumanInviteHttpError> {
+        self.issue_for(ChallengePurpose::Admission(invite), browser, epoch, now)
+    }
+
+    fn issue_for(
+        &self,
+        purpose: ChallengePurpose,
         browser: [u8; 32],
         epoch: String,
         now: DateTime<Utc>,
@@ -55,7 +74,7 @@ impl MemberChallenges {
         entries.insert(
             id.clone(),
             Challenge {
-                invite,
+                purpose,
                 browser,
                 epoch,
                 expires,
@@ -83,7 +102,7 @@ impl MemberChallenges {
                 .as_ref()
                 .is_none_or(|(hash, _)| *hash != request_hash))
             || challenge.expires <= now
-            || challenge.invite != invite
+            || !matches!(challenge.purpose, ChallengePurpose::Admission(value) if value == invite)
             || challenge.browser != browser
             || challenge.epoch != epoch
         {
@@ -258,18 +277,15 @@ async fn redeem_member(
             &body.grant_token,
             &hash,
             &epoch,
+            crate::central::directory::MemberGrantPurpose::Admission,
         )
         .await;
-    let identity = redeemed.map_err(|_| {
+    let identity = redeemed.map_err(|error| {
         // Failed/unknown redemption cannot be retried; only committed success is retained.
         state.member_challenges.0.lock().remove(&body.challenge_id);
-        HumanInviteHttpError::new(
-            StatusCode::BAD_GATEWAY,
-            "member_redeem_failed",
-            "Member verification failed. Start again with a fresh challenge and grant.",
-        )
+        redeem_error(&error)
     })?;
-    Ok(MemberAdmission {
+    let member = MemberAdmission {
         projection_id: identity.projection_id,
         issuer: identity.issuer,
         person_id: identity.person_id,
@@ -277,7 +293,31 @@ async fn redeem_member(
         registration_epoch: epoch,
         challenge_fingerprint: Sha256::digest(body.challenge_id.as_bytes()).into(),
         challenge_expires_at: challenge.expires,
-    })
+    };
+    state
+        .store
+        .record_member_projection(&member, Utc::now())
+        .await?;
+    Ok(member)
+}
+
+fn redeem_error(error: &crate::central::directory::CentralDirectoryError) -> HumanInviteHttpError {
+    if matches!(
+        error,
+        crate::central::directory::CentralDirectoryError::CapacityExhausted
+    ) {
+        HumanInviteHttpError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "member_temporarily_unavailable",
+            "Temporary member capacity exhausted. Retry later.",
+        )
+    } else {
+        HumanInviteHttpError::new(
+            StatusCode::BAD_GATEWAY,
+            "member_redeem_failed",
+            "Member verification failed. Start again with a fresh challenge and grant.",
+        )
+    }
 }
 
 #[cfg(test)]
