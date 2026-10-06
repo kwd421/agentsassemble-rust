@@ -6,7 +6,7 @@ import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import CentralServerList from "./CentralServerList";
 import CentralAccountSettings from "./CentralAccountSettings";
 import { startCentralWebGoogle, completeCentralWebGoogleReturn } from "../../lib/central/webGoogle";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -60,12 +60,14 @@ import { saveLocalProfile } from "../../lib/localProfile";
 
 type Screen = "choice" | "guest" | "recover" | "recovery-code" | "servers";
 
-// Tauri commands reject with their native Result error string, not an Error, so a
-// native startup failure would otherwise reach the user without its cause.
-function failureMessage(reason: unknown, fallback: string): string {
-  if (reason instanceof Error) return reason.message;
-  if (typeof reason === "string" && reason.trim()) return `${fallback} (${reason})`;
-  return fallback;
+// Keep native strings and browser errors available without exposing them by default.
+function failureMessage(reason: unknown, message: string): ReactNode {
+  const detail = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
+  return <>
+    <p>{message}</p>
+    <p>잠시 후 다시 시도해 주세요.</p>
+    {detail && <details><summary>자세히</summary><p className="break-all whitespace-pre-wrap">{detail}</p></details>}
+  </>;
 }
 
 export default function StartupIdentityGate({
@@ -85,7 +87,7 @@ export default function StartupIdentityGate({
   const [hostingChecked, setHostingChecked] = useState(false);
   const [deviceAccount, setDeviceAccount] = useState<string | null>(null);
   const autoOpened = useRef(false);
-  const [localHostError, setLocalHostError] = useState("");
+  const [localHostError, setLocalHostError] = useState<ReactNode>("");
   const [localHost, setLocalHost] = useState<HostDeviceInfo | null>(null);
   const { directory, refresh: refreshCentral } = useCentralDirectory();
   const [connectingServerId, setConnectingServerId] = useState("");
@@ -101,7 +103,7 @@ export default function StartupIdentityGate({
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("저장된 사용자 확인 중");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ReactNode>("");
   const googleAbortController = useRef<AbortController | null>(null);
   const bootstrapRequestId = useRef(createSecureRequestId());
 
@@ -294,7 +296,7 @@ export default function StartupIdentityGate({
         }
       } catch (reason) {
         if (active) {
-          setError(failureMessage(reason, "로컬 신원 권위를 확인하지 못했습니다."));
+          setError(failureMessage(reason, "앱을 시작하지 못했어요."));
           setChecking(false);
         }
         return;
@@ -455,7 +457,7 @@ export default function StartupIdentityGate({
       );
       await enterApplication(localAuthority);
     } catch (reason) {
-      setError(failureMessage(reason, "로컬 프로필을 저장하지 못했어요."));
+      setError(failureMessage(reason, "프로필을 저장하지 못했어요."));
     } finally {
       setBusy(false);
     }
@@ -485,12 +487,12 @@ export default function StartupIdentityGate({
             </p>
           </header>
           {error && (
-            <p
+            <div
               role="alert"
               className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
             >
               {error}
-            </p>
+            </div>
           )}
           <label className="grid gap-2 text-[11px] font-black text-text-secondary">
             게스트 표시 이름
@@ -598,7 +600,7 @@ export default function StartupIdentityGate({
               <button type="button" className="grid h-11 w-11 place-items-center rounded-lg text-text-muted hover:bg-white/5 hover:text-text-primary disabled:opacity-50" aria-label="서버 목록 새로고침" title="새로고침" disabled={busy} onClick={() => void refreshServers()}><RefreshCw size={16} /></button>
             </div>
             {!ownerConflict && centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없어요. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
-            {localHostError && <p role="alert" className="text-sm text-red-300">이 기기 · {localHostError} 서버 목록 새로고침으로 다시 확인해 주세요.</p>}
+            {localHostError && <div role="alert" className="text-sm text-red-300">{localHostError}<p>서버 목록 새로고침으로 다시 확인해 주세요.</p></div>}
             <CentralServerList deviceToken={deviceToken} deviceConnect={Boolean(ownedServer)} conflict={ownerConflict} key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={!ownedServer && !hostingState && !accountDeviceOnly ? localHost : null} onOpenLocal={!webEntry && !ownedServer && ownedServers.length === 0 && !hostingState && !accountDeviceOnly ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
@@ -730,13 +732,13 @@ export default function StartupIdentityGate({
           </p>
         )}
         {error && (
-          <p
+          <div
             role="alert"
             className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
           >
             {error}
             {screen === "choice" && loadCentralSession() && <button type="button" className="ops-button mt-2 block" disabled={busy} onClick={() => void refreshServers()}>다시 확인</button>}
-          </p>
+          </div>
         )}
       </main>
     </div>

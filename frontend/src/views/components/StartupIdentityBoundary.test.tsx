@@ -235,7 +235,7 @@ describe("StartupIdentityBoundary", () => {
 
     render(<StartupIdentityBoundary>{renderProduct}</StartupIdentityBoundary>);
 
-    expect(screen.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeTruthy();
+    expect(screen.getByRole("main", { name: "앱 시작 실패" })).toBeTruthy();
     expect(renderProduct).not.toHaveBeenCalled();
     expect(window.location.search).toBe("?token=invite-token");
   });
@@ -252,7 +252,7 @@ describe("StartupIdentityBoundary", () => {
       <StartupIdentityBoundary>{renderProduct}</StartupIdentityBoundary>
     );
 
-    expect(screen.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeTruthy();
+    expect(screen.getByRole("main", { name: "앱 시작 실패" })).toBeTruthy();
     expect(renderProduct).not.toHaveBeenCalled();
     expect(window.location.search).toBe("?token=aap1_pairing-token");
   });
@@ -268,8 +268,18 @@ describe("StartupIdentityBoundary", () => {
       </StartupIdentityBoundary>
     );
 
-    expect(screen.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeTruthy();
+    expect(screen.getByRole("main", { name: "앱 시작 실패" })).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("저장소");
     expect(screen.queryByRole("main", { name: "product" })).toBeNull();
   });
+});
+
+it.each([true, false])("keeps startup paths collapsed on desktop=%s", (desktop) => {
+  boundaryMocks.desktop = desktop;
+  boundaryMocks.session = { expiresAt: null };
+  deviceMocks.getOrCreateBrowserCredential.mockImplementation(() => { throw new Error("Storage failed at /Users/test/private"); });
+  render(<StartupIdentityBoundary>{() => <main>room</main>}</StartupIdentityBoundary>);
+  expect(screen.getByRole("heading").textContent).toBe("앱을 시작하지 못했어요.");
+  expect(screen.getByRole("alert").textContent).not.toContain("/Users/");
+  expect(screen.getByText("Storage failed at /Users/test/private").closest("details")?.open).toBe(false);
 });

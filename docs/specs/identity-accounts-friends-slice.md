@@ -1,5 +1,13 @@
 # Identity, accounts, friends and human admission
 
+## 시작 실패 안내 보정 (2026-10-07)
+
+공용 desktop/web StartupIdentityGate와 StartupIdentityBoundary는 한국어 해요체 안내를
+기본 표시하고, 원본 오류·절대 로컬 경로는 닫힌 자세히 안에만 표시한다. 기존 재시도와
+실패 전이를 유지하며 새로운 권한·복구 동작은 만들지 않는다. 연결된 방은 표시용 중앙
+목록 조회의 로그인 실패로 시작 화면으로 돌아가지 않는다. 영향받는 Vitest와 타입 검사로
+검증하고 실제 패키지 검증 여부는 별도로 기록한다.
+
 ## 계정당 서버 하나 — 호스트·공용 프론트 (2026-10-06)
 
 확정 one-server-design v2 → v3 → v4 → v5 → v5.1 순으로 초안을 덮어쓴다.

@@ -406,15 +406,17 @@ describe("StartupIdentityGate", () => {
 
   it("keeps the native cause when a desktop command rejects with its error string", async () => {
     desktopMocks.requestHostProductSurface.mockRejectedValue(
-      "runtime tickets are available only to the bundled desktop UI"
+      "runtime failed at /Users/test/Library/Application Support/AgentsAssemble/runtime"
     );
 
     render(<StartupIdentityGate deviceToken="device-1" onComplete={vi.fn()} />);
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("로컬 신원 권위를 확인하지 못했습니다.");
+    expect(alert.textContent).toContain("앱을 시작하지 못했어요.");
+    expect(alert.querySelector("details")?.open).toBe(false);
+    expect(alert.querySelector("details")?.textContent).toContain("/Users/test/");
     expect(alert.textContent).toContain(
-      "runtime tickets are available only to the bundled desktop UI"
+      "runtime failed at /Users/test/Library/Application Support/AgentsAssemble/runtime"
     );
   });
 });

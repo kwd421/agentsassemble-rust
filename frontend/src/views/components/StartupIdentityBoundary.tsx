@@ -108,17 +108,18 @@ export default function StartupIdentityBoundary({
       <div className="fixed inset-0 z-[400] grid place-items-center bg-[#101114] p-5">
         <main
           className="grid w-full max-w-[520px] gap-3 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
-          aria-label="브라우저 신원 사용 불가"
+          aria-label="앱 시작 실패"
         >
           <h1 className="text-2xl font-black text-text-primary">
-            안전한 브라우저 신원을 사용할 수 없어요
+            앱을 시작하지 못했어요.
           </h1>
           <p
             role="alert"
             className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
           >
-            {browserIdentity.error}
+            브라우저의 저장소 접근을 허용한 뒤 다시 열어 주세요.
           </p>
+          <details><summary>자세히</summary><p className="break-all whitespace-pre-wrap">{browserIdentity.error}</p></details>
         </main>
       </div>
     );

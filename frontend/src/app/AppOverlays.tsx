@@ -1,5 +1,6 @@
+import { centralIdentityConfigured, loadCentralSession } from "../lib/central/identity";
 import ConnectionBanner from "../views/components/ConnectionBanner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import type { CompanionInviteControls } from "./useCompanionInvites";
 import OwnComputerCreateModal from "../views/components/OwnComputerCreateModal";
@@ -37,6 +38,13 @@ export default function AppOverlays({ controller, companionInvites }: { controll
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
     stopInviteTunnel, updateRoom,
   } = controller;
+  const { centralDirectory, refreshCentralDirectory } = controller;
+  useEffect(() => {
+    if (agentCreateOpen && (guestSession?.operator || guestSession?.centralOwner) &&
+        !centralDirectory && centralIdentityConfigured() && loadCentralSession()) {
+      void refreshCentralDirectory().catch(() => undefined);
+    }
+  }, [agentCreateOpen, guestSession?.operator, guestSession?.centralOwner, centralDirectory, refreshCentralDirectory]);
   const serverName = controller.centralDirectory?.servers.find((server) =>
     server.server_id === guestSession?.serverSurface.server_id)?.alias || "방을 연 컴퓨터";
   const locationChoice = companionInvites.available && canControlActiveAgents && (guestSession?.operator || guestSession?.centralOwner)

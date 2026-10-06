@@ -6,7 +6,13 @@ import type { CompanionInviteControls } from "./useCompanionInvites";
 import { codexProvider } from "../views/components/AgentCreateModal.testProviders";
 
 vi.mock("../lib/desktopBridge", async (original) => ({ ...await original<typeof import("../lib/desktopBridge")>(), isDesktopWebview: () => true }));
-afterEach(cleanup);
+const identity = vi.hoisted(() => ({ signedIn: false }));
+vi.mock("../lib/central/identity", async (original) => ({
+  ...await original<typeof import("../lib/central/identity")>(),
+  centralIdentityConfigured: () => true,
+  loadCentralSession: () => identity.signedIn ? { token: "test" } : null,
+}));
+afterEach(() => { cleanup(); identity.signedIn = false; });
 const controls = { available: true, provider: "", displayName: "", creating: false, status: "", invites: [],
   setProvider: vi.fn(), setDisplayName: vi.fn(), create: vi.fn(), copy: vi.fn() } as CompanionInviteControls;
 function controller(owner: boolean, local = false): AppController {
@@ -55,4 +61,20 @@ it("uses the unknown server caption instead of the page hostname and exposes pen
   expect(screen.queryByText(window.location.host)).toBeNull();
   expect(screen.getByRole("button", { name: "여는 중…" })).toHaveProperty("disabled", true);
   expect(screen.queryByText("AI 추가")).toBeNull();
+});
+
+it("loads the existing directory for an owner connected from another computer", () => {
+  identity.signedIn = true;
+  const owner = controller(true);
+  owner.centralDirectory = null;
+  owner.refreshCentralDirectory = vi.fn().mockResolvedValue(null);
+  const view = render(<AppOverlays controller={owner} companionInvites={controls} />);
+  expect(owner.refreshCentralDirectory).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("방을 연 컴퓨터")).toBeTruthy();
+  owner.centralDirectory = controller(true).centralDirectory;
+  owner.centralDirectory!.servers[0].alias = "Nel Le의 MacBook Air";
+  view.rerender(<AppOverlays controller={owner} companionInvites={controls} />);
+  expect(screen.getByText("Nel Le의 MacBook Air")).toBeTruthy();
+  expect(screen.queryByText("방을 연 컴퓨터")).toBeNull();
+  expect(owner.refreshCentralDirectory).toHaveBeenCalledTimes(1);
 });

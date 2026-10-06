@@ -39,7 +39,10 @@ it("requires live validation and exposes an owner grant failure without entering
   expect(screen.getByRole("button", { name: "My Windows 서버 열기" })).toHaveProperty("disabled", true);
   expect(screen.getByRole("button", { name: "Invited server 서버 열기" })).toHaveProperty("disabled", true);
   fireEvent.click(open);
-  expect(await screen.findByRole("alert")).toHaveProperty("textContent", "host went offline");
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("서버를 열지 못했어요.");
+  expect(alert.querySelector("details")?.textContent).toContain("host went offline");
+  expect(alert.querySelector("details")?.open).toBe(false);
   mocks.logout.mockResolvedValue(undefined);
   fireEvent.click(screen.getByRole("button", { name: "로그아웃" }));
   await screen.findByRole("button", { name: "Google로 계속" });

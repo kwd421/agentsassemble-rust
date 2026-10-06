@@ -1,5 +1,16 @@
 # External AI admission and bridges
 
+## 추가 창 표시 보정 (2026-10-07)
+
+AgentCreateModal/OwnComputerCreateModal의 위치 선택은 제공자 선택으로 설정이 늘어나도
+잘리지 않아야 한다. 스크롤·선택·설정·생성 의미는 보존한다. AppOverlays는 소유자가
+다른 컴퓨터에서 연결한 자기 서버의 별칭을 기존 중앙 목록 조회로 표시한다. 별칭을
+확인할 수 없는 다른 서버는 기존 안내를 유지한다. 목록 조회는 표시용이며 연결된
+방의 권한이나 수명을 바꾸지 않는다. 새 엔드포인트·저장·제공자 호출은 없다.
+검증: frontend typecheck와 관련 Vitest 14파일/130개 통과. Chromium의 기존 CSS 재현에서
+scrollTop=0인데 위치 선택 높이가 0px(내용 58px)으로 축소됐고, flex-shrink:0 적용 후
+70px/70px로 표시됐다. 구조·소스 크기 검사 통과. 실제 패키지·두 컴퓨터 E2E는 미실행.
+
 Status: all three custody implementations and local packaged user flows are complete
 through `f6da14b`. Windows all-target compilation, Clippy and all six actual runtime
 cases pass. Daybreak approved correction `d70224b`, the cumulative 95-commit phase,
