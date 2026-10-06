@@ -13877,15 +13877,8 @@ all-target/all-feature Clippy, formatting and diff checks pass. Seven migration
 cases pass again after the migration helper separation. Existing structure gates
 and 19 policy tests pass without changes to their limits.
 
-The server attendee integration target compiles, but all 24 selected cases fail at
-fixture socket binding with `Operation not permitted`. The provider's full unit
-suite hits the same sandbox boundary and waits in runtime fixtures; it was
-interrupted (exit 130), not counted as passing. No real provider was invoked.
+Rerun outside the sandbox: server, provider and desktop suites all pass.
 OS projection adds one indexed connection lookup per external-session projection,
 no worker/timer/poll; metadata has four enum values and no host name. Packaged
 Mac/Windows handoff, repeated-window focus and physical mobile UI remain unverified.
-
-The requested two commits could not be created: the execution profile makes `.git`
-read-only, so `git add` and `git commit` fail creating `.git/index.lock`. No push was
-attempted. Source changes and separate D1–D3 / D4 patches are retained for committing
-under a writable Git execution profile.
+Committed as a2a147ad (D1–D3) and 6bd1daf5 (D4).
