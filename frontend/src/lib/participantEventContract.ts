@@ -46,6 +46,7 @@ const GENERATED_AGENT_SESSION_KEYS = [
   "connection_kind",
   "external_owned",
   "external_retained_interrupt",
+  "execution_os",
   "process_ownership",
   "model",
   "reasoning_effort",
@@ -98,7 +99,7 @@ const AGENT_SESSION_INTEGER_KEYS = [
 
 const AGENT_SESSION_STRING_KEYS = AGENT_SESSION_KEYS.filter(
   (key) =>
-    key !== "persona_card" && key !== "external_retained_interrupt" &&
+    key !== "persona_card" && key !== "external_retained_interrupt" && key !== "execution_os" &&
     !AGENT_SESSION_BOOLEAN_KEYS.includes(
       key as (typeof AGENT_SESSION_BOOLEAN_KEYS)[number]
     ) &&
@@ -181,9 +182,10 @@ function exactAgentSession(
   invalidMessage: string,
 ): Record<string, unknown> {
   const session = strictRecord(value, missingMessage);
-  assertExactKeys(session, AGENT_SESSION_KEYS.filter((key) => key !== "external_retained_interrupt"),
-    invalidMessage, ["external_retained_interrupt"]);
+  assertExactKeys(session, AGENT_SESSION_KEYS.filter((key) => key !== "external_retained_interrupt" && key !== "execution_os"),
+    invalidMessage, ["external_retained_interrupt", "execution_os"]);
   if (
+    (session.execution_os !== undefined && !["macos", "windows", "linux", "other"].includes(session.execution_os as string)) ||
     (session.external_retained_interrupt !== undefined && typeof session.external_retained_interrupt !== "boolean") ||
     AGENT_SESSION_STRING_KEYS.some((key) => typeof session[key] !== "string") ||
     AGENT_SESSION_BOOLEAN_KEYS.some((key) => typeof session[key] !== "boolean") ||

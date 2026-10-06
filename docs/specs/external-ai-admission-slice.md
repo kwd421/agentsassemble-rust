@@ -39,6 +39,11 @@ on the authenticated attendee's current connection, display-only, no hostname or
 authority use. Connected member rows show Mac/Windows/Linux running hints; missing,
 other or disconnected values show nothing. Replacement/disconnect must not retain
 an earlier connection's hint. Existing socket/projection owners carry the value.
+The optional `x-attendee-os` upgrade header is parsed as the closed domain enum,
+stored with the newly claimed connection in additive schema 85, and projected only
+from its ready connection. Replacement without the header clears it. Ready and
+disconnect events and room snapshots share that projection; no hostname is read.
+Schema upgrade preserves rows and is checked against the prior schema fixture.
 
 ## Connector and persistence path-only grouping (2026-10-05)
 

@@ -13867,3 +13867,25 @@ test: 42 pass; six existing socket/supervisor/updater cases fail with sandbox
 No new process, timer or polling is introduced; setup windows are bounded to one.
 Real packaged deep-link navigation/focus, Mac-to-Windows execution and mobile visual
 acceptance remain unverified; jsdom handoff checks do not establish OS navigation.
+
+D4: the domain (65), persistence (438, including current-connection OS and v84
+upgrade cases), protocol (6), server attendee unit (1) and native packet decoder
+(1) tests pass. OS/member/socket frontend coverage passes 117 tests; later creation
+copy checks pass 56 and local missing-provider/origin checks pass 52 (overlapping
+suites, not additive totals). Final frontend build/typecheck, all affected Rust
+all-target/all-feature Clippy, formatting and diff checks pass. Seven migration
+cases pass again after the migration helper separation. Existing structure gates
+and 19 policy tests pass without changes to their limits.
+
+The server attendee integration target compiles, but all 24 selected cases fail at
+fixture socket binding with `Operation not permitted`. The provider's full unit
+suite hits the same sandbox boundary and waits in runtime fixtures; it was
+interrupted (exit 130), not counted as passing. No real provider was invoked.
+OS projection adds one indexed connection lookup per external-session projection,
+no worker/timer/poll; metadata has four enum values and no host name. Packaged
+Mac/Windows handoff, repeated-window focus and physical mobile UI remain unverified.
+
+The requested two commits could not be created: the execution profile makes `.git`
+read-only, so `git add` and `git commit` fail creating `.git/index.lock`. No push was
+attempted. Source changes and separate D1–D3 / D4 patches are retained for committing
+under a writable Git execution profile.

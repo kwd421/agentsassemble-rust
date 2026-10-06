@@ -173,6 +173,7 @@ async fn v82_upgrade_preserves_legacy_live_authority_and_bounds_ended_history() 
         .await?;
     // Construct actual v82 columns/indexes with a legacy seed-backed live session.
     for sql in [
+        "ALTER TABLE attendee_connections DROP COLUMN execution_os",
         "DROP INDEX human_room_sessions_member_device_idx",
         "DROP INDEX human_room_sessions_member_history_idx",
         "DROP INDEX human_room_sessions_active_participant_idx",

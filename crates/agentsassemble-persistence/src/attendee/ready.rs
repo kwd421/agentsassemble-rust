@@ -28,6 +28,18 @@ pub(crate) async fn project_session_in(
     } else {
         None
     };
+    projection.execution_os = None;
+    if session.external_owned && session.process_ownership == "external" {
+        let reported: Option<String> = sqlx::query_scalar("SELECT connection.execution_os FROM attendee_connections connection JOIN room_attendee_invites invite USING(session_fingerprint) WHERE invite.room_id=? AND invite.participant_id=? AND connection.state='ready'")
+            .bind(&session.room_id).bind(&session.participant_id).fetch_optional(&mut **tx).await?.flatten();
+        projection.execution_os = reported
+            .map(|value| {
+                agentsassemble_domain::ExecutionOs::parse(&value).ok_or_else(|| {
+                    rejected("invalid_execution_os", "Stored execution OS is invalid.")
+                })
+            })
+            .transpose()?;
+    }
     Ok(projection)
 }
 

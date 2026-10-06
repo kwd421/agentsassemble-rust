@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
-import { providerExecutionLabel } from "../../lib/agentLabels";
+import { executionLocationLabel, providerExecutionLabel } from "../../lib/agentLabels";
 import type { RoomAppearance } from "../../lib/roomAppearance";
 import { isActivePresence, presenceStatusLabel } from "../../lib/presenceStatus";
 import { participantTypeMeta } from "../../lib/participantTypes";
@@ -93,6 +93,7 @@ function MobileMemberItem({
   onParticipantRemove?: ParticipantRemovalAction;
 }) {
   const Icon = row.icon;
+  const executionLocation = executionLocationLabel(session);
   function selectSession() {
     if (session) onSelectAgentSession(session);
   }
@@ -119,6 +120,7 @@ function MobileMemberItem({
         <span className="dc-mobile-info-member-detail preserve-words">
           {roleLabel(row.role)} · {row.detail}
         </span>
+        {executionLocation && <span className="dc-mobile-info-member-detail preserve-words">{executionLocation}</span>}
       </span>
       {onParticipantRemove && row.id !== "operator-local" && (
         <ParticipantRemovalControls showMenuTrigger participantId={row.id} displayName={row.displayName} onRemove={onParticipantRemove} />

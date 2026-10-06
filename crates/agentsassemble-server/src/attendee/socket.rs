@@ -22,6 +22,7 @@ pub(super) async fn run(
     state: AppState,
     session: AttendeeSessionAuthorization,
     _lease: ConnectionLease,
+    execution_os: Option<agentsassemble_domain::ExecutionOs>,
 ) {
     // Subscribe before claiming custody so a concurrent assignment/revocation cannot be lost.
     let room_id = &session.principal().room_id;
@@ -30,6 +31,7 @@ pub(super) async fn run(
     let claim = state
         .rooms
         .execute_attendee(AttendeeOperation::Connect {
+            execution_os,
             session,
             connection_id: Uuid::new_v4(),
         })

@@ -260,7 +260,7 @@ async fn deadline_cancellation_and_replaced_connection_fence_delivery() -> TestR
         .open_attendee_provider_request(fingerprint, connection_id, &request, now)
         .await?;
     store
-        .claim_attendee_connection(connection.session(), Uuid::new_v4(), now)
+        .claim_attendee_connection(connection.session(), Uuid::new_v4(), None, now)
         .await?;
     assert!(matches!(
         store

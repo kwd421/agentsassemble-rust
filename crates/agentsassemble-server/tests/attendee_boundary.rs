@@ -193,6 +193,7 @@ async fn attendee_room_queue_publishes_ready_and_results_without_host_execution(
     let ResultKind::Connected(connection) = server
         .rooms()
         .execute_attendee(Operation::Connect {
+            execution_os: None,
             session: admitted.authorization,
             connection_id: Uuid::new_v4(),
         })
@@ -374,7 +375,7 @@ async fn readiness_observes_reconciled_custody_and_failure_closes_listener() -> 
         )
         .await?;
     let previous = store
-        .claim_attendee_connection(&admitted.authorization, Uuid::new_v4(), now)
+        .claim_attendee_connection(&admitted.authorization, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     store.revalidate_attendee_connection(&previous, now).await?;

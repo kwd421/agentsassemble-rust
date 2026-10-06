@@ -38,6 +38,7 @@ impl SqliteStore {
         &self,
         expected: &AttendeeSessionAuthorization,
         connection_id: Uuid,
+        execution_os: Option<agentsassemble_domain::ExecutionOs>,
         now: DateTime<Utc>,
     ) -> Result<AttendeeConnectionClaim, PersistenceError> {
         if connection_id.is_nil() {
@@ -46,8 +47,8 @@ impl SqliteStore {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let current = crate::attendee::session::revalidate_in(&mut tx, expected, now).await?;
         // A connection identity belongs to one TCP/WebSocket lifetime and is never reused.
-        sqlx::query("INSERT INTO attendee_connections(session_fingerprint,connection_id,state) VALUES(?,?,'connected') ON CONFLICT(session_fingerprint) DO UPDATE SET connection_id=excluded.connection_id,state='connected'")
-            .bind(current.fingerprint.as_slice()).bind(connection_id.to_string()).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO attendee_connections(session_fingerprint,connection_id,execution_os,state) VALUES(?,?,?,'connected') ON CONFLICT(session_fingerprint) DO UPDATE SET connection_id=excluded.connection_id,execution_os=excluded.execution_os,state='connected'")
+            .bind(current.fingerprint.as_slice()).bind(connection_id.to_string()).bind(execution_os.map(agentsassemble_domain::ExecutionOs::as_str)).execute(&mut *tx).await?;
         let events = mark_network_unavailable(&mut tx, &current, now)
             .await?
             .into_iter()

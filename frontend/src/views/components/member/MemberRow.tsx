@@ -1,3 +1,4 @@
+import { executionLocationLabel } from "../../../lib/agentLabels";
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { VolumeX, Zap } from "lucide-react";
@@ -28,6 +29,7 @@ export default function MemberRow({
 }: MemberRowProps) {
   const canOpenDetails = Boolean(entry.agent || entry.agentSession);
   const Icon = entry.icon;
+  const executionLocation = executionLocationLabel(entry.agentSession);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   // Only an assigned room role is worth a tag; plain people and agents need none.
   const assignedRole = ["director", "implementer", "reviewer"].includes(entry.role)
@@ -175,6 +177,7 @@ export default function MemberRow({
             </span>
           )}
         </div>}
+        {executionLocation && <p className="dc-member-detail-row preserve-words">{executionLocation}</p>}
       </div>
     </div>
   );

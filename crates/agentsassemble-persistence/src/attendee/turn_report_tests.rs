@@ -15,7 +15,7 @@ async fn attendee_report_replacement_and_response_loss_preserve_one_canonical_co
 {
     let (store, first, report, now) = assigned_report().await?;
     let replacement = store
-        .claim_attendee_connection(first.session(), Uuid::new_v4(), now)
+        .claim_attendee_connection(first.session(), Uuid::new_v4(), None, now)
         .await?
         .authorization;
     assert!(matches!(
@@ -153,7 +153,7 @@ pub(crate) async fn assigned_report() -> Result<
 > {
     let (store, session, now) = fixture().await?;
     let connection = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     store

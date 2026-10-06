@@ -178,3 +178,13 @@ describe("MobileRoomInfoPanel", () => {
     expect(remoteGroup?.textContent).toContain("Cross Role Agent");
   });
 });
+
+it("shows the same execution location on mobile and clears it on disconnect", () => {
+  const session = { ...SESSION, external_owned: true, process_ownership: "external", runtime_status: "idle" as const, execution_os: "windows" as const };
+  const props = { room: { id: "room-1", label: "Room One", meetingId: "room-1", topic: "" }, appearance: DEFAULT_ROOM_APPEARANCE,
+    channelLabel: "general", agents: [AGENT], members: [STALE_MEMBER], onClose: vi.fn() };
+  const view = render(<MobileRoomInfoPanel {...props} agentSessions={[session]} />);
+  expect(screen.getByText("Windows에서 실행 중")).toBeTruthy();
+  view.rerender(<MobileRoomInfoPanel {...props} agentSessions={[{ ...session, runtime_status: "disconnected" }]} />);
+  expect(screen.queryByText("Windows에서 실행 중")).toBeNull();
+});

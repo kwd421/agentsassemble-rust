@@ -16,7 +16,7 @@ async fn attendee_delivery_recovers_exact_running_input_and_start_acknowledgemen
     assert!(original.resume);
     assert!(original.input_up_to_seq > 0);
     let replacement = store
-        .claim_attendee_connection(first.session(), Uuid::new_v4(), now)
+        .claim_attendee_connection(first.session(), Uuid::new_v4(), None, now)
         .await?
         .authorization;
     assert!(store.deliver_attendee_turn(&first, now).await.is_err());

@@ -213,7 +213,7 @@ async fn idle_external_cleanup_preserves_removal_and_unstarted_cleanup_needs_no_
     for ready in [false, true] {
         let (store, session, now) = crate::attendee::connection_tests::fixture().await?;
         let connection = store
-            .claim_attendee_connection(&session, Uuid::new_v4(), now)
+            .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
             .await?
             .authorization;
         if ready {

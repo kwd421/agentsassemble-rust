@@ -74,6 +74,7 @@ pub(crate) const TABLES: &[TableDefinition] = &[
             "session_fingerprint BLOB PRIMARY KEY CHECK(length(session_fingerprint)=32), ",
             "connection_id TEXT NOT NULL CHECK(length(connection_id)=36), ",
             "state TEXT NOT NULL CHECK(state IN ('connected','ready','disconnected')), ",
+            "execution_os TEXT CHECK(execution_os IN ('macos','windows','linux','other')), ",
             "retained_interrupt INTEGER NOT NULL DEFAULT 0 CHECK(retained_interrupt IN (0,1)), ",
             "FOREIGN KEY(session_fingerprint) REFERENCES room_attendee_invites(session_fingerprint) ON DELETE CASCADE) STRICT"
         ),

@@ -34,6 +34,11 @@ impl RoomAttendeeClient {
                 .parse()
                 .map_err(|_| invalid())?,
         );
+        let os = agentsassemble_domain::ExecutionOs::parse(std::env::consts::OS)
+            .unwrap_or(agentsassemble_domain::ExecutionOs::Other);
+        request
+            .headers_mut()
+            .insert("x-attendee-os", os.as_str().parse().map_err(|_| invalid())?);
         let config = WebSocketConfig::default()
             .max_message_size(Some(MAX_ROOM_SOCKET_MESSAGE_BYTES))
             .max_frame_size(Some(MAX_ROOM_SOCKET_MESSAGE_BYTES));

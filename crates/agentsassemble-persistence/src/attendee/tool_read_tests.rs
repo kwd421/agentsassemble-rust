@@ -12,7 +12,7 @@ async fn attendee_attachment_read_is_bound_to_prestart_input_and_current_connect
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, session, now) = fixture().await?;
     let connection = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     store

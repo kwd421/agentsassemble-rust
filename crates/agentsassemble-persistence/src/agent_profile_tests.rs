@@ -147,7 +147,7 @@ async fn external_profile_ack_reuses_state_projection_and_exact_replay()
         let agent_id = &attendee.principal().participant_id;
         if let Some(capability) = capability {
             let connection = store
-                .claim_attendee_connection(&attendee, uuid::Uuid::new_v4(), now)
+                .claim_attendee_connection(&attendee, uuid::Uuid::new_v4(), None, now)
                 .await?
                 .authorization;
             let mut ready = crate::attendee::ready_tests::report();
@@ -187,7 +187,7 @@ async fn external_profile_ack_reuses_state_projection_and_exact_replay()
         // A later connection report must not rewrite the earlier committed receipt.
         if capability.is_none() {
             let connection = store
-                .claim_attendee_connection(&attendee, uuid::Uuid::new_v4(), now)
+                .claim_attendee_connection(&attendee, uuid::Uuid::new_v4(), None, now)
                 .await?
                 .authorization;
             store

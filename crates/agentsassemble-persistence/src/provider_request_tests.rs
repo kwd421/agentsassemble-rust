@@ -79,7 +79,7 @@ async fn request_open_replays_one_private_event_and_fences_changed_expired_or_re
             .is_err()
     );
     store
-        .claim_attendee_connection(connection.session(), Uuid::new_v4(), now)
+        .claim_attendee_connection(connection.session(), Uuid::new_v4(), None, now)
         .await?;
     assert!(matches!(
         store

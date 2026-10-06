@@ -1,3 +1,5 @@
+mod execution_os;
+pub use execution_os::ExecutionOs;
 mod agent_avatar;
 pub use agent_avatar::{
     AGENT_AVATAR_HEX_LENGTH, AGENT_AVATAR_ID_PREFIX, AGENT_AVATAR_REFERENCE_PREFIX,

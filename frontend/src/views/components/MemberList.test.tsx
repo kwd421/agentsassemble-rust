@@ -537,3 +537,14 @@ describe("MemberList component wiring", () => {
     expect(onAgentConfigure).not.toHaveBeenCalled();
   });
 });
+
+it.each([['macos', 'Mac'], ['windows', 'Windows'], ['linux', 'Linux']] as const)("shows %s only for a connected external AI", (os, label) => {
+  const session = { ...SESSION, external_owned: true, process_ownership: "external", runtime_status: "idle" as const, execution_os: os };
+  const view = render(<MemberList agents={[AGENT]} agentSessions={[session]} roomId="room-1" roomName="Room One" />);
+  expect(screen.getByText(`${label}에서 실행 중`)).toBeTruthy();
+  for (const hidden of [{ ...session, execution_os: undefined }, { ...session, execution_os: 'other' as const },
+    { ...session, runtime_status: 'disconnected' as const }, { ...session, runtime_status: 'busy' as const, last_error_code: 'bridge_disconnected' }]) {
+    view.rerender(<MemberList agents={[AGENT]} agentSessions={[hidden]} roomId="room-1" roomName="Room One" />);
+    expect(screen.queryByText(/에서 실행 중/)).toBeNull();
+  }
+});

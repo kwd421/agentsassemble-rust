@@ -190,6 +190,18 @@ async fn upgrade_socket(
         .map_err(|_| {
             AttendeeHttpError::rejected(StatusCode::SERVICE_UNAVAILABLE, "connection_limit")
         })?;
+    let execution_os = headers
+        .get("x-attendee-os")
+        .map(|value| {
+            value
+                .to_str()
+                .ok()
+                .and_then(agentsassemble_domain::ExecutionOs::parse)
+                .ok_or_else(|| {
+                    AttendeeHttpError::rejected(StatusCode::BAD_REQUEST, "invalid_execution_os")
+                })
+        })
+        .transpose()?;
     let connections = state.connections.clone();
     Ok(upgrade
         .max_message_size(agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES)
@@ -197,7 +209,7 @@ async fn upgrade_socket(
         .write_buffer_size(64 * 1024)
         .max_write_buffer_size(512 * 1024)
         .on_upgrade(move |socket| {
-            connections.track_future(socket::run(socket, state, session, lease))
+            connections.track_future(socket::run(socket, state, session, lease, execution_os))
         })
         .into_response())
 }

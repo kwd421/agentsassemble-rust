@@ -25,6 +25,7 @@ pub enum AttendeeOperation {
         report: Box<agentsassemble_persistence::AttendeeInterruptReport>,
     },
     Connect {
+        execution_os: Option<agentsassemble_domain::ExecutionOs>,
         session: AttendeeSessionAuthorization,
         connection_id: Uuid,
     },
@@ -183,11 +184,12 @@ async fn apply(
             Ok(reported(mutation))
         }
         AttendeeOperation::Connect {
+            execution_os,
             session,
             connection_id,
         } => {
             let claim = store
-                .claim_attendee_connection(&session, connection_id, now)
+                .claim_attendee_connection(&session, connection_id, execution_os, now)
                 .await?;
             empty.events = claim.events;
             Ok((

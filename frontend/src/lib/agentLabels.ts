@@ -1,4 +1,4 @@
-import type { LiveAgent } from "../api";
+import type { LiveAgent, RoomAgentSession } from "../api";
 
 type Tone = "accent" | "online" | "idle" | "danger" | "muted";
 
@@ -379,4 +379,17 @@ export function lastObservedSummary(
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+// OS is self-reported display metadata, never device identity or authority.
+export function executionLocationLabel(session?: RoomAgentSession): string {
+  if (!session?.external_owned || session.process_ownership !== "external" ||
+    !["idle", "busy", "paused", "stopping"].includes(session.runtime_status) ||
+    session.last_error_code === "bridge_disconnected") return "";
+  switch (session.execution_os) {
+    case "macos": return "Mac에서 실행 중";
+    case "windows": return "Windows에서 실행 중";
+    case "linux": return "Linux에서 실행 중";
+    default: return "";
+  }
 }

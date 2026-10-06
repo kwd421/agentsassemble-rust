@@ -281,7 +281,7 @@ async fn assigned_request_with_handle(
         )
         .await?;
     let connection = store
-        .claim_attendee_connection(&admitted.authorization, Uuid::new_v4(), now)
+        .claim_attendee_connection(&admitted.authorization, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     let mut ready = ready_report();

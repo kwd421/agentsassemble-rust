@@ -12,7 +12,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 async fn attendee_ready_reconnect_retains_exact_running_turn_and_external_custody() -> TestResult {
     let (store, session, now) = fixture().await?;
     let first = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     let ready = report();
@@ -72,7 +72,7 @@ async fn attendee_ready_reconnect_retains_exact_running_turn_and_external_custod
             .is_empty()
     );
     let replacement = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     assert!(
@@ -112,7 +112,7 @@ async fn attendee_idle_disconnect_requires_ready_before_assigning_queued_observa
 {
     let (store, session, now) = fixture().await?;
     let connection = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     store
@@ -140,7 +140,7 @@ async fn attendee_idle_disconnect_requires_ready_before_assigning_queued_observa
         .await?;
     assert!(sent.assignments.is_empty());
     let replacement = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     assert!(store.assign_pending_turn("general").await?.is_none());

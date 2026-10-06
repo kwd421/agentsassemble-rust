@@ -105,6 +105,7 @@ async fn initial_session(
         connection_kind: "canonical_room_websocket".to_owned(),
         external_owned: true,
         external_retained_interrupt: None,
+        execution_os: None,
         process_ownership: "external".to_owned(),
         model: String::new(),
         reasoning_effort: String::new(),

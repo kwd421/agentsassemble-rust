@@ -55,20 +55,7 @@ pub(super) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile:
 }
 
 async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>, input_id: String) {
-    let participant = Participant {
-        room_id: "general".to_owned(),
-        participant_id: AGENT_ID.to_owned(),
-        display_name: "Terra".to_owned(),
-        avatar_image_url: String::new(),
-        avatar_label: None,
-        participant_type: "agent".to_owned(),
-        status: ParticipantStatus::Detached,
-        role: ParticipantRole::Agent,
-        owner_id: "operator-local-user".to_owned(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
+    seed_participant(store, now).await;
     let session = DurableAgentSession {
         public: AgentSession {
             avatar_image_url: String::new(),
@@ -84,6 +71,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>, input_id: S
             connection_kind: "native_cli_bridge".to_owned(),
             external_owned: false,
             external_retained_interrupt: None,
+            execution_os: None,
             process_ownership: "server".to_owned(),
             model: "gpt-5.6-terra".to_owned(),
             reasoning_effort: "medium".to_owned(),
@@ -137,6 +125,30 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>, input_id: S
         lifecycle_intent_id: String::new(),
         lifecycle_intent_status: AgentLifecycleIntentStatus::None,
     };
+    sqlx::query("INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES (?, ?, ?)")
+        .bind("general")
+        .bind(AGENT_ID)
+        .bind(encoded(&session))
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert session: {error}"));
+}
+
+async fn seed_participant(store: &SqliteStore, now: chrono::DateTime<Utc>) {
+    let participant = Participant {
+        room_id: "general".to_owned(),
+        participant_id: AGENT_ID.to_owned(),
+        display_name: "Terra".to_owned(),
+        avatar_image_url: String::new(),
+        avatar_label: None,
+        participant_type: "agent".to_owned(),
+        status: ParticipantStatus::Detached,
+        role: ParticipantRole::Agent,
+        owner_id: "operator-local-user".to_owned(),
+        muted: false,
+        created_at: now,
+        updated_at: now,
+    };
     sqlx::query(
         "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
     )
@@ -146,13 +158,6 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>, input_id: S
     .execute(&store.pool)
     .await
     .unwrap_or_else(|error| panic!("insert agent: {error}"));
-    sqlx::query("INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES (?, ?, ?)")
-        .bind("general")
-        .bind(AGENT_ID)
-        .bind(encoded(&session))
-        .execute(&store.pool)
-        .await
-        .unwrap_or_else(|error| panic!("insert session: {error}"));
 }
 
 fn encoded(value: &impl serde::Serialize) -> String {

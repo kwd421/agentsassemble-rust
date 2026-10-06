@@ -63,7 +63,7 @@ async fn exact_external_interrupt_reconnect_and_report_preserve_canonical_quiesc
         assert_eq!(interrupted.authority.execution_id, turn.execution_id);
         assert_interrupt_blocks_turn(&store, &connection, now).await?;
         let replacement = store
-            .claim_attendee_connection(connection.session(), Uuid::new_v4(), now)
+            .claim_attendee_connection(connection.session(), Uuid::new_v4(), None, now)
             .await?
             .authorization;
         assert!(
@@ -118,7 +118,7 @@ async fn exact_external_interrupt_reconnect_and_report_preserve_canonical_quiesc
 async fn readiness_cannot_change_exact_runtime_interrupt_capability_on_reconnect() -> TestResult {
     let (store, connection, _, now) = assigned_report().await?;
     let replacement = store
-        .claim_attendee_connection(connection.session(), Uuid::new_v4(), now)
+        .claim_attendee_connection(connection.session(), Uuid::new_v4(), None, now)
         .await?
         .authorization;
     let mut ready = crate::attendee::ready_tests::report();
@@ -174,7 +174,7 @@ async fn external_runtime_without_retained_interrupt_rejects_before_preparing_ef
 {
     let (store, session, now) = crate::attendee::connection_tests::fixture().await?;
     let connection = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     let mut ready = crate::attendee::ready_tests::report();

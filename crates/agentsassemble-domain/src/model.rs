@@ -381,6 +381,10 @@ pub struct AgentSession {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub external_retained_interrupt: Option<bool>,
+    // Self-reported OS of the current ready attendee connection, display only.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
+    pub execution_os: Option<crate::ExecutionOs>,
     pub process_ownership: String,
     pub model: String,
     pub reasoning_effort: String,

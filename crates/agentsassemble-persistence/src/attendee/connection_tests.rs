@@ -14,11 +14,11 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 async fn attendee_connection_replacement_fences_old_reports_and_old_disconnect() -> TestResult {
     let (store, session, now) = fixture().await?;
     let first = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     let replacement = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     assert!(matches!(
@@ -61,7 +61,7 @@ async fn attendee_connection_replacement_fences_old_reports_and_old_disconnect()
 async fn startup_ends_old_attendee_network_lifetimes_without_revoking_admission() -> TestResult {
     let (store, session, now) = fixture().await?;
     let first = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     store.disconnect_attendees_before_admission().await?;
@@ -72,7 +72,7 @@ async fn startup_ends_old_attendee_network_lifetimes_without_revoking_admission(
             .is_err()
     );
     let replacement = store
-        .claim_attendee_connection(&session, Uuid::new_v4(), now)
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
     store
@@ -88,7 +88,12 @@ async fn startup_ends_old_attendee_network_lifetimes_without_revoking_admission(
     );
     assert!(
         store
-            .claim_attendee_connection(&session, Uuid::new_v4(), now + chrono::Duration::hours(2))
+            .claim_attendee_connection(
+                &session,
+                Uuid::new_v4(),
+                None,
+                now + chrono::Duration::hours(2)
+            )
             .await
             .is_err()
     );
@@ -126,4 +131,105 @@ pub(crate) async fn fixture()
         )
         .await?;
     Ok((store, admitted.authorization, now))
+}
+
+#[tokio::test]
+async fn execution_os_is_only_the_current_ready_connections_display_metadata() -> TestResult {
+    use agentsassemble_domain::ExecutionOs;
+    let (store, session, now) = fixture().await?;
+    let ready = crate::attendee::ready_tests::report();
+    for reported in [
+        Some(ExecutionOs::Macos),
+        Some(ExecutionOs::Windows),
+        Some(ExecutionOs::Linux),
+        Some(ExecutionOs::Other),
+        None,
+    ] {
+        let connection = store
+            .claim_attendee_connection(&session, Uuid::new_v4(), reported, now)
+            .await?
+            .authorization;
+        assert_eq!(
+            store.snapshot("general", 0, 200).await?.agent_sessions[0].execution_os,
+            None
+        );
+        let event = store
+            .record_attendee_ready(&connection, &ready, now)
+            .await?;
+        assert_eq!(
+            store.snapshot("general", 0, 200).await?.agent_sessions[0].execution_os,
+            reported
+        );
+        let projection = &event.events[0].extra["agent_session"];
+        assert_eq!(
+            projection.get("execution_os").cloned(),
+            reported.map(|os| serde_json::json!(os))
+        );
+        let replacement = store
+            .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
+            .await?
+            .authorization;
+        assert_eq!(
+            store.snapshot("general", 0, 200).await?.agent_sessions[0].execution_os,
+            None
+        );
+        assert!(
+            store
+                .disconnect_attendee_connection(&connection, now)
+                .await?
+                .is_none()
+        );
+        store
+            .record_attendee_ready(&replacement, &ready, now)
+            .await?;
+        assert_eq!(
+            store.snapshot("general", 0, 200).await?.agent_sessions[0].execution_os,
+            None
+        );
+        let disconnected = store
+            .disconnect_attendee_connection(&replacement, now)
+            .await?
+            .ok_or("disconnect event missing")?;
+        assert!(
+            disconnected.extra["agent_session"]
+                .get("execution_os")
+                .is_none()
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn v84_upgrade_preserves_attendee_custody_and_adds_only_closed_os_metadata() -> TestResult {
+    let (store, session, now) = fixture().await?;
+    let connection = store
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
+        .await?
+        .authorization;
+    sqlx::query("ALTER TABLE attendee_connections DROP COLUMN execution_os")
+        .execute(&store.pool)
+        .await?;
+    sqlx::query("UPDATE runtime_metadata SET value='84' WHERE key='schema_version'")
+        .execute(&store.pool)
+        .await?;
+    crate::schema_version::upgrade_schema(&store.pool).await?;
+    crate::schema_version::upgrade_schema(&store.pool).await?;
+    store
+        .revalidate_attendee_connection(&connection, now)
+        .await?;
+    assert_eq!(
+        store.snapshot("general", 0, 200).await?.agent_sessions[0].execution_os,
+        None
+    );
+    assert!(
+        sqlx::query("UPDATE attendee_connections SET execution_os='private-host-name'")
+            .execute(&store.pool)
+            .await
+            .is_err()
+    );
+    assert!(
+        serde_json::from_str::<agentsassemble_domain::ExecutionOs>("\"private-host-name\"")
+            .is_err()
+    );
+    Ok(())
 }
