@@ -261,6 +261,8 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
             },
         })),
         Arc::default(),
+        Arc::default(),
+        CancellationToken::new(),
     )
 }
 

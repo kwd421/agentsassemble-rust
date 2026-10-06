@@ -97,3 +97,82 @@ async fn demotion_is_durable_idempotent_and_cannot_be_downgraded()
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn pending_marker_precedes_restricted_fast_path_and_survives_reopen()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = tempfile::tempdir()?;
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        root.path().join("retry.sqlite").display()
+    );
+    let store = SqliteStore::open(&url).await?;
+    let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
+    let ingress = PublicIngress::disabled();
+    // Simulate the retained terminal reason before another signed request arrives.
+    ingress.retain_demotion(true);
+    let directory = CentralDirectory::configured("http://127.0.0.1:1")?;
+    directory.bind_ingress(ingress.clone());
+    let inner = directory.0.as_ref().ok_or("disabled")?;
+    assert!(matches!(
+        send_signed(inner, &identity, &store, Method::POST, "/test", json!({})).await,
+        Err(CentralDirectoryError::ServerRetired)
+    ));
+    assert!(ingress.pending_demotion().is_none());
+    assert!(!ingress.demotion_failure().is_cancelled());
+    store.close().await?;
+    let reopened = SqliteStore::open(&url).await?;
+    assert_eq!(
+        reopened.hosting_restriction().await?.as_deref(),
+        Some("retired")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn unpersistable_demotion_requests_network_shutdown_and_keeps_reason()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    store.clone().close().await?;
+    let ingress = PublicIngress::disabled();
+    assert!(demote_host(&store, &ingress, true).await.is_err());
+    assert!(ingress.demotion_failure().is_cancelled());
+    assert_eq!(ingress.pending_demotion(), Some(true));
+    Ok(())
+}
+
+#[tokio::test]
+async fn demotion_failure_stops_the_runtime_listener() -> Result<(), Box<dyn std::error::Error>> {
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    let state = crate::AppState::local(
+        store,
+        crate::TicketStore::new(Duration::from_secs(30), 32),
+        agentsassemble_provider::ProviderCatalogService::fixed(
+            agentsassemble_domain::ProviderCatalog::default(),
+        ),
+    )
+    .await?;
+    let failure = state.public_ingress().demotion_failure();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let address = listener.local_addr()?;
+    let owner = tokio::spawn(crate::serve(
+        listener,
+        state,
+        CancellationToken::new(),
+        async { Ok(()) },
+    ));
+    assert!(
+        reqwest::get(format!("http://{address}/api/server-info"))
+            .await?
+            .status()
+            .is_success()
+    );
+    failure.cancel();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), owner)
+            .await??
+            .is_err()
+    );
+    assert!(tokio::net::TcpStream::connect(address).await.is_err());
+    Ok(())
+}

@@ -53,7 +53,12 @@ pub(crate) struct TunnelStatus {
 }
 
 #[derive(Clone)]
-pub(crate) struct PublicIngress(Arc<PublicIngressKind>, Arc<std::sync::atomic::AtomicBool>);
+pub(crate) struct PublicIngress(
+    Arc<PublicIngressKind>,
+    Arc<std::sync::atomic::AtomicBool>,
+    Arc<RwLock<Option<bool>>>,
+    CancellationToken,
+);
 
 enum PublicIngressKind {
     Disabled,
@@ -146,7 +151,12 @@ pub(crate) struct ReadyIngress {
 
 impl PublicIngress {
     pub(crate) fn disabled() -> Self {
-        Self(Arc::new(PublicIngressKind::Disabled), Arc::default())
+        Self(
+            Arc::new(PublicIngressKind::Disabled),
+            Arc::default(),
+            Arc::default(),
+            CancellationToken::new(),
+        )
     }
 
     pub(crate) fn configured_manual(
@@ -169,6 +179,8 @@ impl PublicIngress {
                 proxy_secret_digest: Sha256::digest(proxy_secret.as_bytes()).into(),
             })),
             Arc::default(),
+            Arc::default(),
+            CancellationToken::new(),
         ))
     }
 
@@ -201,6 +213,8 @@ impl PublicIngress {
                 },
             })),
             Arc::default(),
+            Arc::default(),
+            CancellationToken::new(),
         ))
     }
 
@@ -315,6 +329,27 @@ impl PublicIngress {
         )
         .await;
         Ok(ingress.status())
+    }
+
+    pub(crate) fn pending_demotion(&self) -> Option<bool> {
+        *self.2.read()
+    }
+
+    pub(crate) fn retain_demotion(&self, retired: bool) {
+        let mut pending = self.2.write();
+        *pending = Some(pending.unwrap_or(false) || retired);
+        self.block_public_admission();
+    }
+
+    pub(crate) fn confirm_demotion(&self, retired: bool) {
+        let mut pending = self.2.write();
+        if *pending == Some(retired) {
+            *pending = None;
+        }
+    }
+
+    pub(crate) fn demotion_failure(&self) -> CancellationToken {
+        self.3.clone()
     }
 
     pub(crate) fn restricted(&self) -> bool {

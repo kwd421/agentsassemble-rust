@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 Daybreak H(강등 영속): 대기 이유 보존·100ms/최대 3회 쓰기·restricted 빠른 경로 선행 재시도·최종 실패 시 소켓/리스너 종료; 첫 SQL 쓰기 실패→성공→재오픈 제한 유지와 실제 리스너 종료 포함 호스트 5/5·관련 저장소 10/10 통과.
+
 - 2026-10-06 Daybreak M(server_exists): 409는 현재 계정 UI 상태만 제한하고 전역 영속 쓰기를 제거; B 호스트→A claim 409→B 재등록·409 후 기기 연결 화면 회귀 통과(관련 프론트 65/65), 서명·수동·배포 없음.
 
 - 2026-10-06 계정당 서버 하나·공용 프론트: 자기 서버 자동 열기·다른 기기/강등 연결·중복 선택/비가역 확인/정확한 incarnation 은퇴·409 안내, 기존 이름/아이콘 편집과 owner connect 재사용; Worker README v5.1 대조·중앙 대역 상태/API 회귀 및 추가 keeper 확인 경합 12/12·최종 빌드 통과. make verify 1회에서 frontend 1,157·desktop 48·Rust 1,120/1,121 통과 후 기존 durable_session_deadline WebSocket closing handshake 1건 실패(단독 재검 1/1 통과); 이후 변경 Rust 22/22·workspace Clippy/doc·구조/포맷/diff/artifact 게이트 통과. 서명·수동·배포, 서버 교체/재승격·동반 AI 2단계 없음.

@@ -17,7 +17,9 @@
 은퇴한다. 은퇴의 비가역성과 기기로만 연결 가능함을 안내한다. 단독 서버 삭제의
 409 server_move_unsupported는 ‘서버 옮기기는 아직 지원하지 않아요’로 표시한다.
 강등 표시는 기존 방 목록 스트림의 hosting_restriction으로 로컬 호스트에만 전달한다.
-기존 2초 directory 관찰/30초 중앙 갱신 주기를 유지하고 새 타이머·프로세스는 만들지 않는다.
+강등 영속 쓰기 실패는 대기 이유를 보존하고 제한 빠른 경로보다 먼저 재시도한다.
+한 강등 작업에서 100ms 간격 최대 3회 쓰기 후에도 실패하면 네트워크 서빙을 종료한다.
+기존 2초 directory 관찰/30초 중앙 갱신 주기를 유지한다.
 runtime_metadata의 한 상태를 추가하며 스키마 상승·방/세션 삭제는 없다.
 중앙 Worker는 별도 작업 소유이며 읽기만 한다. identity-directory/README.md의
 v5.1을 정본으로 확인했다: 중복은 owner 항목이 없는 servers[]와 owner_server_conflict,

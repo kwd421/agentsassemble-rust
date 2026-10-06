@@ -438,6 +438,7 @@ async fn serve_runtime(
     let provider_usage = state.provider_usage.clone();
     let local_attendees = state.local_attendees.clone();
     let public_ingress = state.public_ingress();
+    let demotion_failure = public_ingress.demotion_failure();
     let central_directory = CentralDirectoryTask::spawn(&state, public_ingress.clone());
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
@@ -468,6 +469,10 @@ async fn serve_runtime(
                     quiescing = true;
                     continue;
                 }
+                () = demotion_failure.cancelled() => {
+                    connection_shutdown.cancel();
+                    break Err(std::io::Error::other("host demotion could not be persisted"));
+                }
                 accepted = listener.accept() => accepted,
             };
             let (stream, peer) = match accepted {
@@ -489,6 +494,7 @@ async fn serve_runtime(
             ));
         },
     };
+    drop(listener);
     let attendee_shutdown = match attendee_outcome {
         Some(outcome) => outcome,
         None => attendee_shutdown.await,

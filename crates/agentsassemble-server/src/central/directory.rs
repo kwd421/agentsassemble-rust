@@ -176,6 +176,9 @@ impl CentralDirectory {
         let mut failure_count = 0_u32;
         let mut next_attempt = std::time::Instant::now();
         loop {
+            if let Some(retired) = ingress.pending_demotion() {
+                demote_host(&store, &ingress, retired).await?;
+            }
             if store.hosting_restriction().await?.is_some() {
                 inner.status.write().registered_origin.clear();
                 ingress.demote().await?;
@@ -438,7 +441,11 @@ async fn send_signed(
     path: &str,
     mut body: serde_json::Value,
 ) -> Result<Vec<u8>, CentralDirectoryError> {
-    let restricted = inner.ingress.read().restricted();
+    let ingress = inner.ingress.read().clone();
+    if let Some(retired) = ingress.pending_demotion() {
+        demote_host(store, &ingress, retired).await?;
+    }
+    let restricted = ingress.restricted();
     if restricted || store.hosting_restriction().await?.is_some() {
         return Err(CentralDirectoryError::ServerRetired);
     }
@@ -527,10 +534,14 @@ pub(crate) async fn demote_host(
     ingress: &PublicIngress,
     retired: bool,
 ) -> Result<(), CentralDirectoryError> {
-    // Persist before waiting for process cleanup so a crash cannot forget retirement.
-    // Still cut off admission if persistence fails; never report success then.
-    ingress.block_public_admission();
-    let persisted = store.restrict_hosting(retired).await;
+    ingress.retain_demotion(retired);
+    let reason = ingress.pending_demotion().unwrap_or(retired);
+    let persisted = store.restrict_hosting(reason).await;
+    if persisted.is_ok() {
+        ingress.confirm_demotion(reason);
+    } else {
+        ingress.demotion_failure().cancel();
+    }
     let stopped = ingress.demote().await;
     persisted?;
     stopped.map_err(CentralDirectoryError::Demotion)

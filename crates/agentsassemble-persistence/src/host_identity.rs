@@ -122,12 +122,21 @@ impl SqliteStore {
     /// # Errors
     /// Returns database write failures.
     pub async fn restrict_hosting(&self, retired: bool) -> Result<(), PersistenceError> {
-        let changed = sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES ('hosting_restriction',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE runtime_metadata.value='device' AND excluded.value='retired'")
-            .bind(if retired { "retired" } else { "device" }).execute(&self.pool).await?.rows_affected();
-        if changed > 0 {
-            self.notify_room_directory_changed();
+        for attempt in 0..3 {
+            let result = sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES ('hosting_restriction',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE runtime_metadata.value='device' AND excluded.value='retired'")
+                .bind(if retired { "retired" } else { "device" }).execute(&self.pool).await;
+            match result {
+                Ok(result) => {
+                    if result.rows_affected() > 0 {
+                        self.notify_room_directory_changed();
+                    }
+                    return Ok(());
+                }
+                Err(error) if attempt == 2 => return Err(error.into()),
+                Err(_) => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
+            }
         }
-        Ok(())
+        unreachable!("bounded hosting restriction write attempts")
     }
 
     /// Stores the epoch returned by Central, or clears it before one re-registration.
@@ -202,6 +211,31 @@ mod tests {
         PersistenceError, SqliteStore,
         host_key_file::{HostKeyMaterial, HostKeyPolicy},
     };
+
+    #[tokio::test]
+    async fn failed_hosting_marker_retries_and_survives_reopen()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = tempfile::tempdir()?;
+        let path = root.path().join("retry.sqlite");
+        let store = SqliteStore::open_path(&path).await?;
+        // FAIL (unlike ABORT) preserves the trigger's attempt count, so only the
+        // first actual marker write fails. No sleep or race controls the fault.
+        sqlx::raw_sql("CREATE TABLE marker_attempts (n INTEGER); INSERT INTO marker_attempts VALUES(0); CREATE TRIGGER first_marker_failure BEFORE INSERT ON runtime_metadata WHEN NEW.key='hosting_restriction' AND (SELECT n FROM marker_attempts)=0 BEGIN UPDATE marker_attempts SET n=1; SELECT RAISE(FAIL,'transient marker failure'); END;").execute(&store.pool).await?;
+        store.restrict_hosting(true).await?;
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT n FROM marker_attempts")
+                .fetch_one(&store.pool)
+                .await?,
+            1
+        );
+        store.close().await?;
+        let reopened = SqliteStore::open_path(&path).await?;
+        assert_eq!(
+            reopened.hosting_restriction().await?.as_deref(),
+            Some("retired")
+        );
+        Ok(())
+    }
 
     fn key_path(root: &std::path::Path) -> std::path::PathBuf {
         root.join("central-directory").join("host-ed25519.pk8")
