@@ -37,6 +37,18 @@ manual verification or deployment; visual acceptance belongs to the user.
 
 ## Definition
 
+### Permission reconfiguration (Daybreak M, 2026-10-07)
+
+The shared app/web `agent.configure` stopped-session transaction clears the private
+`provider_session_id` whenever `permission_mode` changes, for every provider using
+this owner. The next start creates a native session under the new permission mode;
+it cannot resume the old session's permissions. Unchanged permission modes retain
+the native identity. Agent Session identity and room history remain intact. Failure
+rolls back both changes; command replay cannot clear a subsequently rebound session.
+Verify a `workspace_write` to `meeting_read_only` downgrade through persistence,
+including rollback, unchanged-mode reuse and replay. This does not change OpenCode's
+bash ask/deny policy or resolve project-wide remembered grants (separate finding H).
+
 A host selects an installed provider/model from the authoritative live catalog, creates a durable Agent Session, and can ultimately start that same session so its canonical room-context reply is published back into the room.
 
 Historical audit context (2026-09-01): the transcript-derived Antigravity attachment/completion and

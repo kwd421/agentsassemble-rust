@@ -424,6 +424,130 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn permission_downgrade_discards_native_session_atomically_and_replay_preserves_rebind() {
+        let (store, principal, directory) = fixture().await;
+        let mut selected = draft(directory.path().to_str().unwrap_or_else(|| panic!("path")));
+        selected.permission_mode = "workspace_write".into();
+        store
+            .execute_agent_create(
+                TrustedPrincipal(&principal),
+                "create-write",
+                &json!({}),
+                &selected,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create: {error}"));
+        let payload =
+            json!({"agent_id": selected.agent_id, "permission_mode": "meeting_read_only"});
+        let mut session = store
+            .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
+            .await
+            .unwrap_or_else(|error| panic!("candidate: {error}"));
+        let agent_session_id = session.public.session_id.clone();
+        session.provider_session_id = "native-with-old-write-grants".into();
+        persist_native_session_fixture(&store, &session).await;
+
+        // An unrelated settings update must retain the native conversation.
+        store
+            .execute_agent_configuration(
+                TrustedPrincipal(&principal),
+                "unchanged-mode",
+                &json!({"agent_id": selected.agent_id}),
+                &selected.runtime_profile_key,
+                &selected,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        let unchanged = store
+            .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        assert_eq!(unchanged.provider_session_id, session.provider_session_id);
+
+        let mut downgraded = selected.clone();
+        downgraded.permission_mode = "meeting_read_only".into();
+        downgraded.runtime_profile_key = "profile-read-only".into();
+        sqlx::query("CREATE TRIGGER reject_configuration_result BEFORE INSERT ON command_results BEGIN SELECT RAISE(ABORT, 'injected failure'); END")
+            .execute(&store.pool).await.unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        assert!(
+            store
+                .execute_agent_configuration(
+                    TrustedPrincipal(&principal),
+                    "downgrade",
+                    &payload,
+                    &selected.runtime_profile_key,
+                    &downgraded,
+                )
+                .await
+                .is_err()
+        );
+        let rolled_back = store
+            .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        assert_eq!(rolled_back.public.permission_mode, "workspace_write");
+        assert_eq!(rolled_back.provider_session_id, session.provider_session_id);
+        sqlx::query("DROP TRIGGER reject_configuration_result")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+
+        store
+            .execute_agent_configuration(
+                TrustedPrincipal(&principal),
+                "downgrade",
+                &payload,
+                &selected.runtime_profile_key,
+                &downgraded,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        let mut fresh = store
+            .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        assert_eq!(fresh.public.permission_mode, "meeting_read_only");
+        assert_eq!(fresh.public.session_id, agent_session_id);
+        assert!(
+            fresh.provider_session_id.is_empty(),
+            "next start must create, not resume, a native session"
+        );
+
+        fresh.provider_session_id = "new-read-only-native-session".into();
+        persist_native_session_fixture(&store, &fresh).await;
+        store
+            .execute_agent_configuration(
+                TrustedPrincipal(&principal),
+                "downgrade",
+                &payload,
+                &selected.runtime_profile_key,
+                &downgraded,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        let replayed = store
+            .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        assert_eq!(replayed.provider_session_id, fresh.provider_session_id);
+    }
+
+    async fn persist_native_session_fixture(store: &SqliteStore, session: &DurableAgentSession) {
+        let mut transaction = store
+            .pool
+            .begin()
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        crate::agent_lifecycle::save_session(&mut transaction, session)
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+        transaction
+            .commit()
+            .await
+            .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
+    }
+
+    #[tokio::test]
     async fn oversized_stored_persona_cannot_mutate_session_authority() {
         let (store, principal, directory) = fixture().await;
         let selected = draft(

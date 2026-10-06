@@ -136,6 +136,11 @@ fn apply_draft(
     draft: &AgentSessionDraft,
     persona_card: Option<Box<agentsassemble_domain::PersonaAssetSummary>>,
 ) {
+    // Native sessions may retain creation-time permissions or remembered grants.
+    // Persist a fresh attachment boundary atomically with the permission change.
+    if session.public.permission_mode != draft.permission_mode {
+        session.provider_session_id.clear();
+    }
     session.public.status = AgentSessionStatus::Available;
     session.public.runtime_status = AgentRuntimeStatus::Stopped;
     session.public.enabled = false;
