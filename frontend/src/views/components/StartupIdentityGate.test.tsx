@@ -491,7 +491,7 @@ it("changes a registration race's server_exists into device connection", async (
   render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
   const open = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
   centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [oneServer], server_time: 1 });
-  centralMocks.hostingState.mockResolvedValue("device");
+  centralMocks.hostingState.mockResolvedValue(null);
   await userEvent.click(open);
   expect(await screen.findByRole("button", { name: "이 기기로 연결" })).toBeTruthy();
   expect(complete).not.toHaveBeenCalled();

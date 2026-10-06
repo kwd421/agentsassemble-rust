@@ -211,7 +211,7 @@ it("shows incarnation conflicts on other operations without retargeting", async 
 });
 
 it.each([
-  [409, "server_exists", undefined, "device"],
+  [409, "server_exists", undefined, null],
   [410, "server_retired", "epoch", "retired"],
   [410, "registration_absent", "epoch", "retired"],
   [410, "registration_absent", undefined, null],
@@ -265,4 +265,29 @@ it("preserves local proof rejection codes so startup can re-read device-only sta
   fetcher.mockResolvedValue(Response.json({ code: "server_retired", error: "This computer can only connect as a device." }, { status: 409 }));
   await expect(registerLocalServer("device")).rejects.toMatchObject({ code: "server_retired", status: 409 });
   expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it("keeps account B hosting after account A claim is rejected with server_exists", async () => {
+  const writes: unknown[] = [];
+  let account = "account-a";
+  saveSession({ person: { ...person, person_id: account }, session });
+  const current = loadCentralSession()!;
+  localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({ ...current, pending_account_switch: true }));
+  fetcher.mockImplementation(async (url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (url === "/api/central-directory/registration-proof") {
+      if (body.hosting_state) { writes.push(body); return Response.json({ hosting_state: body.hosting_state }); }
+      if ("owner_person_id" in body) return Response.json({ server_id: "host-b", host_name: "B Mac", host_os: "macos", host_public_key_jwk: {}, host_registration_proof: {}, registration_epoch: "b-epoch" });
+      return Response.json({ status: "ok" });
+    }
+    expect(body.claim_ownership).toBe(account === "account-a" ? true : undefined);
+    return account === "account-a"
+      ? Response.json({ error: { code: "server_exists" } }, { status: 409 })
+      : Response.json({ registration_epoch: "b-epoch" });
+  });
+  await expect(registerLocalServer("device")).rejects.toMatchObject({ code: "server_exists" });
+  account = "account-b";
+  saveSession({ person: { ...person, person_id: account }, session });
+  await expect(registerLocalServer("device")).resolves.toBeUndefined();
+  expect(writes).toEqual([]);
 });

@@ -814,12 +814,11 @@ export async function registerLocalServer(deviceToken: string, name?: string): P
       });
     } catch (error) {
       if (error instanceof Error && "status" in error && "code" in error &&
-        ((error.status === 409 && error.code === "server_exists") ||
-         (error.status === 410 && "server_id" in error && error.server_id === local.server_id &&
+        (error.status === 410 && "server_id" in error && error.server_id === local.server_id &&
            "registration_epoch" in error && typeof error.registration_epoch === "string" && error.registration_epoch.length > 0 &&
            (!local.registration_epoch || error.registration_epoch === local.registration_epoch) &&
-           (error.code === "server_retired" || error.code === "registration_absent" && local.registration_epoch)))) {
-        await localHostingState(local.server_id, deviceToken, error.code === "server_exists" ? "device" : "retired");
+           (error.code === "server_retired" || error.code === "registration_absent" && local.registration_epoch))) {
+        await localHostingState(local.server_id, deviceToken, "retired");
         throw error;
       }
       if (attempt !== 0 || session.pending_account_switch || !(error instanceof Error) ||

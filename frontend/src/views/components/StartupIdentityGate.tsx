@@ -123,6 +123,7 @@ export default function StartupIdentityGate({
   const [issuedRecoveryCode, setIssuedRecoveryCode] = useState("");
   const [hostingState, setHostingState] = useState<"device" | "retired" | null>(null);
   const [hostingChecked, setHostingChecked] = useState(false);
+  const [deviceAccount, setDeviceAccount] = useState<string | null>(null);
   const autoOpened = useRef(false);
   const [localHostError, setLocalHostError] = useState("");
   const [localHost, setLocalHost] = useState<HostDeviceInfo | null>(null);
@@ -130,6 +131,7 @@ export default function StartupIdentityGate({
   const [connectingServerId, setConnectingServerId] = useState("");
   const centralUnavailable = directory?.status === "central-unconfirmed" || directory?.status === "error";
   const centralPerson = directory?.person;
+  const accountDeviceOnly = Boolean(centralPerson && deviceAccount === centralPerson.person_id);
   const centralServers = directory?.servers || [];
   const ownerConflict = directory?.live?.owner_server_conflict;
   const ownedServers = centralServers.filter(server => server.relation === "owner");
@@ -239,8 +241,9 @@ export default function StartupIdentityGate({
     } catch (reason) {
       setChecking(false);
       if (reason instanceof Error && "code" in reason && (reason.code === "server_exists" || reason.code === "server_retired" || reason.code === "registration_absent")) {
+        if (reason.code === "server_exists") setDeviceAccount(centralPerson.person_id);
         const restriction = await refreshLocalHost();
-        if (restriction) await refreshCentral();
+        if (reason.code === "server_exists" || restriction) await refreshCentral();
         else setError(failureMessage(reason, "서버를 열지 못했어요."));
       } else setError(failureMessage(reason, "서버를 열지 못했어요."));
     } finally {
@@ -249,11 +252,11 @@ export default function StartupIdentityGate({
   }
 
   useEffect(() => {
-    if (screen !== "servers" || webEntry || !hostingChecked || hostingState || busy || autoOpened.current || !localHost?.server_id) return;
+    if (screen !== "servers" || webEntry || !hostingChecked || hostingState || accountDeviceOnly || busy || autoOpened.current || !localHost?.server_id) return;
     if (ownedServer?.server_id !== localHost.server_id || !["connected", "central-unconfirmed"].includes(directory?.status || "")) return;
     autoOpened.current = true;
     void selectCentralServer();
-  }, [screen, webEntry, hostingChecked, hostingState, busy, ownedServer?.server_id, localHost?.server_id, directory?.status]);
+  }, [screen, webEntry, hostingChecked, hostingState, accountDeviceOnly, busy, ownedServer?.server_id, localHost?.server_id, directory?.status]);
 
   async function refreshLocalHost() {
     if (webEntry) return;
@@ -636,7 +639,7 @@ export default function StartupIdentityGate({
             </div>
             {!ownerConflict && centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없어요. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
             {localHostError && <p role="alert" className="text-sm text-red-300">이 기기 · {localHostError} 서버 목록 새로고침으로 다시 확인해 주세요.</p>}
-            <CentralServerList deviceToken={deviceToken} deviceConnect={Boolean(ownedServer)} conflict={ownerConflict} key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={!ownedServer && !hostingState ? localHost : null} onOpenLocal={!webEntry && !ownedServer && ownedServers.length === 0 && !hostingState ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
+            <CentralServerList deviceToken={deviceToken} deviceConnect={Boolean(ownedServer)} conflict={ownerConflict} key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={!ownedServer && !hostingState && !accountDeviceOnly ? localHost : null} onOpenLocal={!webEntry && !ownedServer && ownedServers.length === 0 && !hostingState && !accountDeviceOnly ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}

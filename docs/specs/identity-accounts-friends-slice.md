@@ -5,7 +5,8 @@
 확정 one-server-design v2 → v3 → v4 → v5 → v5.1 순으로 초안을 덮어쓴다.
 등록 진입점은 공용 registerLocalServer/StartupIdentityGate와 Rust registration-proof,
 관찰 진입점은 central directory의 모든 host-signed 요청이다. 409 server_exists는
-로컬 서버 등록/공개 ingress를 막고 기존 owner connect/pairing의 기기 연결로 안내한다.
+현재 계정 UI에서 등록을 중단하고 기존 owner connect/pairing의 기기 연결로 안내한다.
+다른 계정 소유 호스트의 전역 영구 제한은 쓰지 않는다. B 호스트 → A claim 409 → B 복귀도 호스팅을 유지한다.
 410 server_retired와 저장된 epoch가 있는 registration_absent는 구분된 Rust 오류이며,
 단일 멱등 강등 전이가 강등 상태를 저장하고 managed/manual 모두 readiness·새 공개
 권한·디렉터리 발행을 끊는다. managed 소유 프로세스도 종료하되 admitted 세션은
