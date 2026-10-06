@@ -1,6 +1,6 @@
 # Verification Contract
 
-- 2026-10-07 Daybreak companion review correction (this commit, not pushed;
+- 2026-10-07 Daybreak companion review correction (abbda15e, pushed;
   reviewed base `299f2edd`; preceding `667f05d7`, `4f118670`, `0bd78f0c`,
   `299f2edd` are pushed): external companion privileged instructions now come
   only from the local fixed v1 room policy. Host session text is preserved in

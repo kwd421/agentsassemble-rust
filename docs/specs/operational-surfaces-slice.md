@@ -200,7 +200,7 @@ checks and desktop tests/clippy; packaged hang/visual acceptance remains a separ
 runtime evidence boundary.
 
 Packaged E2E6 correction acceptance (2026-10-06; pushed commits `667f05d7`,
-`4f118670`, `0bd78f0c`, `299f2edd`; followed by this unpushed Daybreak correction): same-owner
+`4f118670`, `0bd78f0c`, `299f2edd`; followed by the pushed Daybreak correction `abbda15e`): same-owner
 non-server desktop B must retain its companion through readiness, the first room
 turn and subsequent turns on server A. Investigate empty workspace selection,
 sidecar Codex launch and exact parent/runtime/turn authority without bypasses or
