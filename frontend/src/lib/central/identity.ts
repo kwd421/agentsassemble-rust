@@ -695,7 +695,7 @@ export async function openCentralOwnedServer(server: CentralServer): Promise<voi
     server.endpoint.status !== "likely_online" ||
     (server.endpoint.lease_expires_at ?? 0) <= Math.floor(Date.now() / 1000)
   ) {
-    throw new Error("이 서버에 연결할 수 없어요. 서버 컴퓨터가 꺼져 있을 수 있어요.");
+    throw new Error("이 서버에 연결할 수 없어요. 서버 컴퓨터가 꺼져 있거나 외부 접속이 꺼져 있을 수 있어요.");
   }
   const grant = await signedRequest<CentralConnectGrant>(
     session,
