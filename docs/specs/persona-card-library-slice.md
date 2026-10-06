@@ -704,3 +704,29 @@ with native agent `build`. Isolated official CLI `build` and `plan` MiMo control
 pass. Four model turns total; no summarize call or post-compaction proof. The
 remaining managed-request rejection is unknown and acceptance stays blocked; see
 `docs/verification/2026-10-07-instruction-persistence.{md,json}`.
+
+### Managed OpenCode launch bisect (2026-10-07 continuation)
+
+At HEAD 7c0439e3, bisect plain native `serve` + HTTP against the managed
+`agent.create` / `OpenCodeDriver::spawn_inner`, session creation and `send` paths.
+The authorization permits approximately 15 small free-model diagnostic requests
+and then at most six managed MiMo persistence turns; global config and credentials
+must remain untouched. Compare isolated environment/config, native instructions,
+request fields, permissions/tool exposure and native client identification.
+Keep the same server-owned room authority, deny/ask policy, native session history,
+retry/failure behavior and instruction replacement/clear semantics. Correct only
+the smallest demonstrated adapter cause. If admission requires weaker permissions
+or sandboxing, stop implementation and report that tradeoff; no identity spoof,
+fallback or fake tools. Acceptance requires free-tier admission and, if admitted,
+native summarize followed by a fresh read_discussion and canonical publish_message.
+Record inaccessible upstream admission logic and unexecuted checks as unknown.
+Commit scoped evidence/correction without pushing; preserve excluded directories.
+
+Bisect outcome: all isolated launch/config controls pass; a single session wildcard bash deny
+or message tools.bash=false independently causes the exact 403. Native 1.18.34
+filters that tool from the outgoing request (permission/index.ts:204–212 and
+session/llm/request.ts:210–215). Deny-edit and deny-task controls pass. The Console
+admission predicate was not found in the public tagged source. Stop at the
+security boundary: no adapter/permission change, 15 diagnostic messages, managed
+ignored test fails on room turn 1/6, zero summarize calls. Persistence acceptance
+remains blocked. See the dated MD/JSON evidence for the paired controls and limits.

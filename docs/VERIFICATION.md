@@ -1,5 +1,11 @@
 # Verification Contract
 
+- 2026-10-07 managed OpenCode bisect: isolated config/--pure/instructions pass;
+  removing bash via one deny rule or tools.bash=false independently triggers
+  free-tier 403. Security stop: no adapter relaxation; 15 diagnostic requests,
+  ignored managed persistence test fails on turn 1/6; no compaction.
+  [Evidence and upstream source boundary](verification/2026-10-07-instruction-persistence.md#managed-launch-bisect-bash-tool-admission-boundary-2026-10-07).
+
 - 2026-10-07 OpenCode post-update correction: UI Check's failed MiMo session
   already used 1.18.34; native HTTP 403 is free-tier client rejection, not stale
   1.17 runtime reuse. Two additional ignored-test attempts stop on their first
