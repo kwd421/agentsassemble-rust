@@ -1,3 +1,6 @@
+export const MEMBER_SESSION_ENDED_MESSAGE =
+  "이 방의 접속이 해제됐어요. 다시 참가하려면 방장에게 문의해 주세요.";
+
 export const GUEST_SESSION_EXPIRED_MESSAGE =
   "방 접속이 만료되거나 해제됐어요. 호스트에서 새 접속 링크를 받아 주세요.";
 

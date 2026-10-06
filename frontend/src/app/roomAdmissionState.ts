@@ -1,4 +1,4 @@
-import { GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
+import { GUEST_SESSION_EXPIRED_MESSAGE, MEMBER_SESSION_ENDED_MESSAGE } from "../lib/apiErrors";
 import {
   roomGuestSessionExpired,
   type RoomGuestSession,
@@ -80,7 +80,10 @@ export function initialAdmissionState({
   }
   if (initialSession) {
     if (roomGuestSessionExpired(initialSession)) {
-      return { kind: "expired", session: null, status: GUEST_SESSION_EXPIRED_MESSAGE };
+      return {
+        kind: "expired", session: null,
+        status: initialSession.centralMember ? MEMBER_SESSION_ENDED_MESSAGE : GUEST_SESSION_EXPIRED_MESSAGE,
+      };
     }
     return { kind: "joined", session: initialSession, source: "initial", status: "" };
   }
@@ -133,7 +136,11 @@ export function admissionReducer(
         status: action.status,
       };
     case "expired":
-      return { kind: "expired", session: null, status: action.status };
+      if (state.kind === "expired") return state;
+      return {
+        kind: "expired", session: null,
+        status: state.session?.centralMember ? MEMBER_SESSION_ENDED_MESSAGE : action.status,
+      };
     case "session_surface_failed":
       return {
         kind: "failed",

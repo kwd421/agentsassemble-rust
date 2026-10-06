@@ -31,7 +31,6 @@ import RoomRail, { MOBILE_ROOM_RAIL_WIDTH } from "../views/components/RoomRail";
 import RoomSyncNotice from "../views/components/RoomSyncNotice";
 import UserPanel from "../views/components/UserPanel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel";
-import { GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
@@ -388,7 +387,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : guestExpired && !ownerProfileSession ? (
             <section className="dc-disconnected-room" role="status" style={{ padding: 24 }}>
               <h1>방 접속이 끝났어요</h1>
-              <p>{GUEST_SESSION_EXPIRED_MESSAGE}</p>
+              <p>{controller.guestJoinStatus}</p>
               <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 44, marginTop: 20 }} onClick={exitGuestSurface}>접속 화면 나가기</button>
             </section>
           ) : adminOpen ? (

@@ -219,12 +219,14 @@ export function useRoomAdmission({
         ? {
             displayName:
               guestSession?.displayName ||
-              (guestJoinPending ? "입장 확인 중" : guestExpired ? "게스트 세션 만료" : "게스트"),
+              (guestJoinPending ? "입장 확인 중" : guestExpired
+                ? admissionState.status === GUEST_SESSION_EXPIRED_MESSAGE ? "게스트 세션 만료" : "접속이 끝났어요"
+                : "게스트"),
             avatarLabel:
               (guestSession?.displayName || guestSession?.agentId || "G").slice(0, 1).toUpperCase() || "G",
             avatarImage: guestSession?.avatarImage,
             statusLabel: guestExpired
-              ? "세션 만료"
+              ? admissionState.status === GUEST_SESSION_EXPIRED_MESSAGE ? "세션 만료" : "접속 종료"
               : guestSession?.operator
               ? "운영자로 접속"
               : operatorPairingState === "pairing_failed_retryable"
@@ -236,12 +238,13 @@ export function useRoomAdmission({
               : guestJoinPending
               ? "초대 확인 중"
               : guestSession?.sessionToken
-              ? "게스트로 접속"
+              ? guestSession.centralMember ? "멤버로 접속" : "게스트로 접속"
               : "읽기 전용 미리보기",
             expired: guestExpired,
           }
         : undefined,
     [
+      admissionState.status,
       guestExpired,
       guestJoinPending,
       guestLocked,
@@ -363,7 +366,7 @@ export function useRoomAdmission({
 
   const acceptMemberSession = useCallback(async (payload: RoomInviteJoinResponse) => {
     const attempt = beginAdmissionAttempt();
-    return applyJoinedSession({...roomGuestSessionFromJoinPayload(guestJoinToken, payload), nativeMember:Boolean(memberReturn?.browserCredential)}, "invite", attempt.isCurrent);
+    return applyJoinedSession({...roomGuestSessionFromJoinPayload(guestJoinToken, payload), centralMember:true, nativeMember:Boolean(memberReturn?.browserCredential)}, "invite", attempt.isCurrent);
   }, [applyJoinedSession, beginAdmissionAttempt, guestJoinToken, memberReturn]);
 
   const acceptRecoveredSession = useCallback(

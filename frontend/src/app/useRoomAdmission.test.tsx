@@ -125,7 +125,7 @@ describe("useRoomAdmission", () => {
       });
     });
     expect(result.current.admissionState.kind).toBe("joined");
-    expect(loadRoomGuestSession()?.sessionToken).toBe("member-session");
+    expect(loadRoomGuestSession()).toMatchObject({ sessionToken: "member-session", centralMember: true });
     expect(onRoomJoined).toHaveBeenCalledOnce();
     expect(result.current.admittedSessionToken).toBe("member-session");
     expect(window.location.search).toBe("");
@@ -536,8 +536,9 @@ describe("useRoomAdmission", () => {
     await waitFor(() => expect(result.current.admittedSessionToken).toBe("session-1"));
   });
 
-  it("expires a rejected session without unlocking host-only room access", () => {
-    guestSessionStore.current = SESSION;
+  it.each([false, true])("expires a rejected session with correct member wording (%s)", (centralMember) => {
+    const session = { ...SESSION, centralMember };
+    guestSessionStore.current = session;
     const onResetToLobby = vi.fn();
 
     const { result } = renderHook(() =>
@@ -548,7 +549,7 @@ describe("useRoomAdmission", () => {
         guestJoinToken: "",
         operatorPairingToken: "",
         onPairingTokenConsumed: vi.fn(),
-        initialSession: SESSION,
+        initialSession: session,
         onRoomJoined: vi.fn(),
         onResetToLobby,
       })
@@ -560,12 +561,16 @@ describe("useRoomAdmission", () => {
     expect(result.current.admissionState).toMatchObject({ kind: "expired" });
     expect(result.current.admittedSessionToken).toBe("");
     expect(result.current.guestLocked).toBe(true);
-    expect(onResetToLobby).toHaveBeenCalledOnce();
+    act(() => result.current.expireGuestSession());
+    expect(result.current.guestJoinStatus).toBe(centralMember
+      ? "이 방의 접속이 해제됐어요. 다시 참가하려면 방장에게 문의해 주세요."
+      : "방 접속이 만료되거나 해제됐어요. 호스트에서 새 접속 링크를 받아 주세요.");
+    expect(onResetToLobby).toHaveBeenCalledTimes(2);
   });
 
-  it("expires and removes a stale stored session during startup", async () => {
+  it.each([false, true])("expires a stale stored session during startup with member wording (%s)", async (centralMember) => {
     const expiredSession = {
-      ...SESSION,
+      ...SESSION, centralMember,
       expiresAt: "2000-01-01T00:00:00Z",
     };
     guestSessionStore.current = expiredSession;
@@ -589,6 +594,7 @@ describe("useRoomAdmission", () => {
     expect(result.current.guestSession).toBeNull();
     expect(result.current.admittedSessionToken).toBe("");
     expect(result.current.guestLocked).toBe(true);
+    expect(result.current.guestJoinStatus).toContain(centralMember ? "방장에게 문의" : "호스트에서 새 접속 링크");
   });
 
   it("redeems a dedicated pairing into the canonical operator session", async () => {

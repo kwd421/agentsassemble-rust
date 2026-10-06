@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 E2E 3 종료 문구: 중앙 멤버 표시 정보를 세션에 보존하고 종료 state의 안내를 공용 app/web에 표시, 게스트 기존 문구 보존·재로딩/중복 종료 후 오분류 방지; 입장 callback·세션 저장·종료/만료 회귀와 TypeScript 통과(변경 범위 프론트 60/60); 서명 빌드·수동 검증·배포 없음.
+
 - 2026-10-06 E2E 1 멤버 목록: member-join/member-connect의 새 세션 발급과 canonical participant_joined 원자 기록·기존 publication owner 통지로 만료 snapshot 누락 복구; 멤버 저장소 30/30 + 양 경로 snapshot 회귀 1/1, HTTP/방 이벤트 통합 1/1, 공용 프론트 재연결 없는 목록 회귀 통과; 서명 빌드·수동 검증·배포 없음.
 
 - 2026-10-06 좁은 채팅 도구: 900px 이하 + 메뉴에 첨부/앱/멘션/이모지, 기존 ComposerCommandMenu·토큰·동작/권한 재사용, 넓은 폭 보존; composer 24/24·Chromium 2/2 및 v2 after 17장 확인, 이번 세 건 공통 푸시 직전 make verify 1회 exit 0(frontend 1,124 및 Rust/desktop·필수 게이트); 기존 패널 겹침/작은 회색 안내/모의 side-chat 503은 남음, 서명·배포 없음.

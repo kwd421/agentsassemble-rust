@@ -47,6 +47,13 @@ describe("guest room projection", () => {
     },
   };
 
+  it("retains central member presentation across reload without granting operator authority", () => {
+    const session = { ...roomGuestSessionFromJoinPayload("", joinResponse), centralMember: true };
+    persistRoomGuestSession(session);
+    expect(loadRoomGuestSession()).toMatchObject({ centralMember: true, operator: false });
+    persistRoomGuestSession(null);
+  });
+
   it("restores native pairing with no fixed expiry after browser reopening", () => {
     const { request_id: _request, guide: _guide, client_id: _client, owner_display_name: _ownerName, ...common } = joinResponse;
     const admitted = parseOperatorPairingRedeemResponse({ ...common, operator: true, stable_identity: true, expires_at: null });
