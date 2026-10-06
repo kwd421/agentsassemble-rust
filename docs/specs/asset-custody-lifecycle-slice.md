@@ -56,6 +56,21 @@ them.
   writer is implemented. They will have message/room retention rather than being
   inserted into a profile or appearance lifecycle in advance.
 
+### HTTP avatar admission (2026-10-06, Daybreak M1/M2)
+
+The public `/api/attachments/{id}` avatar fallback and `/api/agent-avatars/{id}`
+share six non-waiting read permits per AppState, acquired before SQLite BLOB reads
+and retained with response bytes until released. Profile `/api/attachments` and
+Agent `/api/agent-avatars/upload/{session_id}` uploads share two non-waiting permits,
+acquired immediately after authority checks and before JSON/Base64 buffering through
+storage completion. The existing attachment endpoint also parses room appearance
+purpose from that body, so its uploads use the same admission. Persistence decoder
+admission remains unchanged. Saturation returns HTTP 429 in the existing error/code
+JSON envelope with “잠시 후 다시 시도해 주세요.”; existing frontend error/retry handling
+remains authoritative. No queue, storage migration or public URL lifecycle change:
+the administrator accepts L1 as part of public URL semantics. Server regressions
+must prove shared saturation, pre-body rejection and recovery after permit release.
+
 ### One safety owner, no generic asset framework
 
 One small persistence module owns only the limits and arithmetic currently shared

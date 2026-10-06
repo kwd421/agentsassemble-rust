@@ -53,6 +53,8 @@ pub struct AppState {
     pub connections: TaskTracker,
     pub(crate) connection_admission: ConnectionAdmission,
     pub(crate) socket_admission: SocketAdmission,
+    pub(crate) avatar_reads: Arc<tokio::sync::Semaphore>,
+    pub(crate) avatar_uploads: Arc<tokio::sync::Semaphore>,
     pub(crate) recovery_attempts: Arc<crate::guest_recovery_attempts::GuestRecoveryAttempts>,
     pub(crate) public_ingress: PublicIngress,
     pub server_product_surface: Arc<ServerProductSurface>,
@@ -187,6 +189,8 @@ impl AppState {
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
             socket_admission: SocketAdmission::new(),
+            avatar_reads: Arc::new(tokio::sync::Semaphore::new(6)),
+            avatar_uploads: Arc::new(tokio::sync::Semaphore::new(2)),
             recovery_attempts: Arc::new(
                 crate::guest_recovery_attempts::GuestRecoveryAttempts::default(),
             ),

@@ -5,7 +5,7 @@ use agentsassemble_persistence::{RoomManagerAuthority, RoomSessionAuthorization}
 
 use super::{
     AppState, EncodedAttachmentUpload, Json, MAX_BASE64_UPLOAD_BODY_BYTES, Path, ProfileHttpError,
-    Request, Response, State, attachment_response, bearer_credential, decode_attachment_content,
+    Request, Response, State, avatar_admission, bearer_credential, decode_attachment_content,
     decode_json_body, ensure_empty_body, json,
 };
 
@@ -39,6 +39,7 @@ pub(super) async fn upload(
         Err(RoomSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
         Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
     };
+    let _permit = avatar_admission::acquire(&state.avatar_uploads)?;
     let payload: EncodedAttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
@@ -64,11 +65,13 @@ pub(super) async fn read(
     ensure_empty_body(request, 0)
         .await
         .map_err(ProfileHttpError::from_body)?;
+    let permit = avatar_admission::acquire(&state.avatar_reads)?;
     let asset = state.store.agent_avatar(&asset_id).await?;
-    attachment_response(
+    avatar_admission::response(
         &asset.metadata.filename,
         &asset.metadata.content_type,
         asset.content,
         true,
+        permit,
     )
 }

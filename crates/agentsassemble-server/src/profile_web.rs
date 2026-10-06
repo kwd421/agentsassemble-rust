@@ -26,6 +26,9 @@ use crate::{
 };
 
 mod agent_avatar;
+mod avatar_admission;
+#[cfg(test)]
+mod avatar_admission_tests;
 mod google_profile;
 
 const MAX_PROFILE_BODY_BYTES: usize = 16 * 1024;
@@ -164,6 +167,7 @@ async fn upload_attachment(
             "Read-only room sessions cannot upload profile avatars.",
         ));
     }
+    let _permit = avatar_admission::acquire(&state.avatar_uploads)?;
     let payload: AttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
@@ -405,12 +409,14 @@ async fn read_attachment(
             true,
         );
     }
+    let permit = avatar_admission::acquire(&state.avatar_reads)?;
     let attachment = state.store.profile_attachment(&attachment_id).await?;
-    attachment_response(
+    avatar_admission::response(
         &attachment.metadata.filename,
         &attachment.metadata.content_type,
         attachment.content,
         query.contains_key("view") && !query.contains_key("download"),
+        permit,
     )
 }
 
@@ -427,7 +433,7 @@ fn attachment_inline_query(query: Option<&str>) -> Result<bool, ProfileHttpError
 fn attachment_response(
     filename: &str,
     content_type: &str,
-    content: Vec<u8>,
+    content: impl Into<body::Body>,
     inline: bool,
 ) -> Result<Response, ProfileHttpError> {
     let disposition = if inline { "inline" } else { "attachment" };
@@ -447,7 +453,7 @@ fn attachment_response(
     } else {
         fallback_name.as_str()
     };
-    let mut response = Response::new(body::Body::from(content));
+    let mut response = Response::new(content.into());
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_str(content_type).map_err(|_| ProfileHttpError::internal())?,
