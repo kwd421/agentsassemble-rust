@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, Pencil } from "lucide-react";
 import { roomInitials } from "../../lib/roomAppearance";
 import {
-  fetchCentralServerIcon,
+  fetchCentralServerIcon, hasPendingLocalDemotion, retryPendingLocalDemotion,
   renameCentralServer,
   setCentralServerIcon,
   type CentralServer, type CentralBootstrap, resolveCentralServerDuplicates,
@@ -79,6 +79,25 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
     setError("");
     iconInputRef.current?.click();
   }
+
+  useEffect(() => {
+    if (!hasPendingLocalDemotion()) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const retry = async () => {
+      try {
+        await retryPendingLocalDemotion(deviceToken);
+        if (!stopped) { setError(""); await onRefresh(); }
+      } catch (reason) {
+        if (!stopped) {
+          setError(reason instanceof Error ? reason.message : "이 컴퓨터의 은퇴를 다시 확인하고 있어요.");
+          timer = setTimeout(() => void retry(), 1000);
+        }
+      }
+    };
+    timer = setTimeout(() => void retry(), 1000);
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [deviceToken, error, onRefresh]);
 
   async function applyIcon(server: CentralServerDisplay, icon: File | null) {
     if (busy || operation.current) return;

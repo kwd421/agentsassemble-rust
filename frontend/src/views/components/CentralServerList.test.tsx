@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import CentralServerList from "./CentralServerList";
 import "../../test/nativeDialog";
 import { loadRoomDockItems } from "../../lib/roomDockPersistence";
 vi.mock("../../lib/roomDockPersistence", () => ({ loadRoomDockItems: vi.fn(() => []) }));
-import { resolveCentralServerDuplicates, fetchCentralServerIcon, renameCentralServer, setCentralServerIcon, type CentralServer } from "../../lib/central/identity";
+import { hasPendingLocalDemotion, retryPendingLocalDemotion, resolveCentralServerDuplicates, fetchCentralServerIcon, renameCentralServer, setCentralServerIcon, type CentralServer } from "../../lib/central/identity";
 
 vi.mock("../../lib/central/identity", () => ({
+  hasPendingLocalDemotion: vi.fn(() => false), retryPendingLocalDemotion: vi.fn(),
   resolveCentralServerDuplicates: vi.fn(),
   renameCentralServer: vi.fn(),
   setCentralServerIcon: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock("./ImageCropper", () => ({
     <button type="button" onClick={() => onCropped(file)}>적용</button>
   ),
 }));
-afterEach(() => { cleanup(); vi.resetAllMocks(); vi.mocked(loadRoomDockItems).mockReturnValue([]); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); vi.mocked(loadRoomDockItems).mockReturnValue([]); });
 const host: CentralServer = { server_id: "server-0001", alias: "Mac Studio", host_os: "macos", relation: "owner", endpoint: null, host_public_key_jwk: {}, host_key_fingerprint: "test" };
 
 it("matches the local installation by ID, opens it explicitly and keeps rename", async () => {
@@ -225,4 +226,21 @@ it("does not retarget a confirmation when another device chooses a different kee
   await userEvent.click(screen.getByRole("button", { name: "나머지 서버 은퇴" }));
   expect(resolveCentralServerDuplicates).toHaveBeenCalledWith(changed, "keeper", undefined);
   expect(await screen.findByRole("alert")).toBeTruthy();
+});
+
+it("retries pending local retirement after the conflict list has disappeared", async () => {
+  vi.useFakeTimers();
+  vi.mocked(hasPendingLocalDemotion).mockReturnValue(true);
+  vi.mocked(retryPendingLocalDemotion).mockRejectedValueOnce(new Error("local write unavailable")).mockImplementationOnce(async () => { vi.mocked(hasPendingLocalDemotion).mockReturnValue(false); });
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  const view = render(<CentralServerList deviceToken="device" servers={[host]} liveServers={[host]} busy={false} onOpen={vi.fn()} onRefresh={refresh} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(screen.getByRole("alert").textContent).toContain("local write unavailable");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(retryPendingLocalDemotion).toHaveBeenCalledTimes(2);
+  expect(resolveCentralServerDuplicates).not.toHaveBeenCalled();
+  expect(refresh).toHaveBeenCalledTimes(1);
+  view.unmount();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(retryPendingLocalDemotion).toHaveBeenCalledTimes(2);
 });

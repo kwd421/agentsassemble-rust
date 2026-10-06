@@ -139,6 +139,21 @@ impl SqliteStore {
         unreachable!("bounded hosting restriction write attempts")
     }
 
+    /// Retires only the incarnation observed by a completed central retirement.
+    /// # Errors
+    /// Returns database write failures.
+    pub async fn retire_hosting_incarnation(
+        &self,
+        epoch: Option<&str>,
+    ) -> Result<bool, PersistenceError> {
+        let changed = sqlx::query("INSERT INTO runtime_metadata(key,value) SELECT 'hosting_restriction','retired' WHERE (SELECT value FROM runtime_metadata WHERE key='central_registration_epoch') IS ? ON CONFLICT(key) DO UPDATE SET value='retired'")
+            .bind(epoch).execute(&self.pool).await?.rows_affected();
+        if changed > 0 {
+            self.notify_room_directory_changed();
+        }
+        Ok(changed > 0)
+    }
+
     /// Stores the epoch returned by Central, or clears it before one re-registration.
     /// # Errors
     /// Returns database write failures.
@@ -147,6 +162,18 @@ impl SqliteStore {
         epoch: Option<&str>,
     ) -> Result<(), PersistenceError> {
         let mut tx = self.pool.begin().await?;
+        if sqlx::query_scalar::<_, i64>(
+            "SELECT EXISTS(SELECT 1 FROM runtime_metadata WHERE key='hosting_restriction')",
+        )
+        .fetch_one(&mut *tx)
+        .await?
+            != 0
+        {
+            return Err(PersistenceError::CommandRejected {
+                code: "server_retired".into(),
+                message: "A restricted host cannot change incarnation.".into(),
+            });
+        }
         if let Some(epoch) = epoch {
             sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('central_registration_epoch', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 .bind(epoch).execute(&mut *tx).await?;
@@ -233,6 +260,47 @@ mod tests {
         assert_eq!(
             reopened.hosting_restriction().await?.as_deref(),
             Some("retired")
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn local_retirement_compares_exact_epoch_and_is_idempotent()
+    -> Result<(), PersistenceError> {
+        let store = SqliteStore::open("sqlite::memory:").await?;
+        store
+            .set_registration_epoch(Some("new-incarnation"))
+            .await?;
+        assert!(
+            !store
+                .retire_hosting_incarnation(Some("retired-old"))
+                .await?
+        );
+        assert!(!store.retire_hosting_incarnation(None).await?);
+        assert!(store.hosting_restriction().await?.is_none());
+        assert!(
+            store
+                .retire_hosting_incarnation(Some("new-incarnation"))
+                .await?
+        );
+        assert!(
+            store
+                .retire_hosting_incarnation(Some("new-incarnation"))
+                .await?
+        );
+        assert_eq!(
+            store.hosting_restriction().await?.as_deref(),
+            Some("retired")
+        );
+        assert!(
+            store
+                .set_registration_epoch(Some("late-registration"))
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            store.registration_epoch().await?.as_deref(),
+            Some("new-incarnation")
         );
         Ok(())
     }

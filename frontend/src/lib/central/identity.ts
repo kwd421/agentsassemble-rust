@@ -765,16 +765,35 @@ export async function resolveCentralServerDuplicates(conflict: NonNullable<Centr
       server_id: server.server_id, registration_epoch: server.registration_epoch, expected_revision: revision,
     });
     if (result.status !== "server_retired" || result.server_id !== server.server_id || result.registration_epoch !== server.registration_epoch) throw new Error("서버 은퇴 결과를 확인하지 못했어요. 목록을 다시 확인해 주세요.");
-    if (local?.serverId === server.server_id) await localHostingState(local.serverId, local.deviceToken, "retired");
+    if (local?.serverId === server.server_id) {
+      localStorage.setItem(PENDING_DEMOTION_KEY, JSON.stringify({ server_id: server.server_id, registration_epoch: server.registration_epoch }));
+      await retryPendingLocalDemotion(local.deviceToken);
+    }
     revision = result.resolution?.revision || null;
     if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었어요. 다시 확인해 주세요.");
   }
 }
 
-export async function localHostingState(serverId: string, deviceToken: string, state = "status"): Promise<"device" | "retired" | null> {
+const PENDING_DEMOTION_KEY = "agentsassemble.pendingLocalDemotion.v1";
+
+export function hasPendingLocalDemotion(): boolean {
+  return localStorage.getItem(PENDING_DEMOTION_KEY) !== null;
+}
+
+export async function retryPendingLocalDemotion(deviceToken: string): Promise<void> {
+  const pending = localStorage.getItem(PENDING_DEMOTION_KEY);
+  if (!pending) return;
+  const value = JSON.parse(pending) as { server_id: string; registration_epoch: string | null };
+  const state = await localHostingState(value.server_id, deviceToken, "retired", value.registration_epoch);
+  if (state !== "retired") throw new Error("이 컴퓨터의 은퇴를 확인하지 못했어요. 다시 시도해 주세요.");
+  if (localStorage.getItem(PENDING_DEMOTION_KEY) === pending) localStorage.removeItem(PENDING_DEMOTION_KEY);
+}
+
+export async function localHostingState(serverId: string, deviceToken: string, state = "status", epoch: string | null = null): Promise<"device" | "retired" | null> {
+  if (state === "status") await retryPendingLocalDemotion(deviceToken);
   const request = { method: "POST", cache: "no-store",
     headers: { "content-type": "application/json", ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }) },
-    body: JSON.stringify({ server_id: serverId, hosting_state: state }),
+    body: JSON.stringify({ server_id: serverId, hosting_state: state, ...(state === "retired" ? { registration_epoch: epoch } : {}) }),
   } satisfies RequestInit;
   const response = isDesktopWebview() ? (await fetchDesktopCentralRegistration(request)).response
     : await fetch("/api/central-directory/registration-proof", request);
@@ -818,7 +837,8 @@ export async function registerLocalServer(deviceToken: string, name?: string): P
            "registration_epoch" in error && typeof error.registration_epoch === "string" && error.registration_epoch.length > 0 &&
            (!local.registration_epoch || error.registration_epoch === local.registration_epoch) &&
            (error.code === "server_retired" || error.code === "registration_absent" && local.registration_epoch))) {
-        await localHostingState(local.server_id, deviceToken, "retired");
+        localStorage.setItem(PENDING_DEMOTION_KEY, JSON.stringify({ server_id: local.server_id, registration_epoch: local.registration_epoch || null }));
+        await retryPendingLocalDemotion(deviceToken);
         throw error;
       }
       if (attempt !== 0 || session.pending_account_switch || !(error instanceof Error) ||

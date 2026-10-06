@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { bootstrapCentral, clearCentralSession, fetchCentralServerIcon, loadCentralSession,
-  registerLocalServer, resolveCentralServerDuplicates, openCentralOwnedServer, renameCentralServer, saveSession, setCentralServerIcon, unsignedPost } from "../lib/central/identity";
+  localHostingState, retryPendingLocalDemotion, hasPendingLocalDemotion, registerLocalServer, resolveCentralServerDuplicates, openCentralOwnedServer, renameCentralServer, saveSession, setCentralServerIcon, unsignedPost } from "../lib/central/identity";
 import { loadCentralDirectoryCache, saveCentralDirectoryCache } from "../lib/central/directoryCache";
 import { useCentralDirectory } from "./useCentralDirectory";
 
@@ -230,7 +230,7 @@ it.each([
   });
   await expect(registerLocalServer("device")).rejects.toMatchObject({ code });
   expect(registrations).toBe(1);
-  expect(changes).toEqual(restriction ? [{ server_id: server.server_id, hosting_state: restriction }] : []);
+  expect(changes).toEqual(restriction ? [{ server_id: server.server_id, hosting_state: restriction, registration_epoch: epoch || null }] : []);
 });
 
 it("carries central duplicate revision and exact epochs between loser retirements", async () => {
@@ -258,7 +258,7 @@ it("immediately demotes the local loser after a confirmed retirement", async () 
       : Response.json({ status: "server_retired", server_id: body.server_id, registration_epoch: body.registration_epoch, resolution: null });
   });
   await resolveCentralServerDuplicates({ servers: ["keep", "local"].map(id => ({ server_id: id, registration_epoch: `${id}-epoch`, name: id, online: true, last_seen_at: 1 })), resolution: null }, "keep", { serverId: "local", deviceToken: "local-device" });
-  expect(calls[1]).toEqual({ server_id: "local", hosting_state: "retired" });
+  expect(calls[1]).toEqual({ server_id: "local", hosting_state: "retired", registration_epoch: "local-epoch" });
 });
 
 it("preserves local proof rejection codes so startup can re-read device-only state", async () => {
@@ -290,4 +290,25 @@ it("keeps account B hosting after account A claim is rejected with server_exists
   saveSession({ person: { ...person, person_id: account }, session });
   await expect(registerLocalServer("device")).resolves.toBeUndefined();
   expect(writes).toEqual([]);
+});
+
+it("retains a committed local loser and retries only local confirmation after refresh", async () => {
+  let centralCalls = 0;
+  const writes: unknown[] = [];
+  fetcher.mockImplementation(async (url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (url !== "/api/central-directory/registration-proof") {
+      centralCalls++;
+      return Response.json({ status: "server_retired", server_id: body.server_id, registration_epoch: body.registration_epoch, resolution: null });
+    }
+    writes.push(body);
+    return writes.length === 1 ? Response.json({ error: "write failed" }, { status: 503 }) : Response.json({ hosting_state: "retired" });
+  });
+  await expect(resolveCentralServerDuplicates({ servers: ["keep", "local"].map(id => ({ server_id: id, registration_epoch: `${id}-epoch`, name: id, online: true, last_seen_at: 1 })), resolution: null }, "keep", { serverId: "local", deviceToken: "device" })).rejects.toThrow();
+  expect(hasPendingLocalDemotion()).toBe(true);
+  await retryPendingLocalDemotion("device");
+  expect(hasPendingLocalDemotion()).toBe(false);
+  expect(writes).toEqual(Array(2).fill({ server_id: "local", hosting_state: "retired", registration_epoch: "local-epoch" }));
+  expect(centralCalls).toBe(1);
+  await expect(localHostingState("local", "device")).resolves.toBe("retired");
 });

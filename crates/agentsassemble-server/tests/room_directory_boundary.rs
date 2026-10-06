@@ -798,9 +798,21 @@ async fn device_only_registration_state_is_local_bound_and_survives_restart()
     );
     for (body, expected) in [
         (json!({"server_id":"other", "hosting_state":"retired"}), 400),
-        (request, 200),
-        (json!({"server_id": id, "hosting_state":"retired"}), 200),
-        (json!({"server_id": id, "hosting_state":"device"}), 200),
+        (request, 400),
+        (
+            json!({"server_id": id, "hosting_state":"retired", "registration_epoch":"old-epoch"}),
+            409,
+        ),
+        (json!({"server_id": id, "hosting_state":"retired"}), 409),
+        (
+            json!({"server_id": id, "hosting_state":"retired", "registration_epoch":"retained-epoch"}),
+            200,
+        ),
+        (
+            json!({"server_id": id, "hosting_state":"retired", "registration_epoch":"retained-epoch"}),
+            200,
+        ),
+        (json!({"server_id": id, "hosting_state":"device"}), 400),
     ] {
         let response = client
             .post(&route)

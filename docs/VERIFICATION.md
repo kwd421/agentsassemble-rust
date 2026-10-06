@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 Daybreak M(로컬 loser): 성공한 서버 ID/epoch 대기 기록을 확인 전까지 유지하고 중앙 은퇴 없이 로컬 전이만 재시도(실패 표시·1초·언마운트 정리/재개); 저장 epoch CAS와 은퇴 후 늦은 epoch 변경 거부, 목록에서 loser가 사라진 회귀 포함 app/web 67/67·로컬 HTTP 1/1·저장소 epoch 회귀 통과.
+
 - 2026-10-06 durable_session_deadline 테스트: 가상시간 전진→SQLx acquire timeout→단일 메모리 연결 교체/테이블 유실로 중간 pong 읽기 실패를 재현(병렬 100회 중 2회); 이 테스트만 임시 파일 DB로 교체하고 만료·keepalive assertion 유지, lifecycle 3/3 및 동일 8-way 병렬 반복 100/100 통과.
 
 - 2026-10-06 Daybreak H(강등 영속): 대기 이유 보존·100ms/최대 3회 쓰기·restricted 빠른 경로 선행 재시도·최종 실패 시 소켓/리스너 종료; 첫 SQL 쓰기 실패→성공→재오픈 제한 유지와 실제 리스너 종료 포함 호스트 5/5·관련 저장소 10/10 통과.

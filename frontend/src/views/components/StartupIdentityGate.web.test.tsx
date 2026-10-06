@@ -5,6 +5,7 @@ import StartupIdentityGate from "./StartupIdentityGate";
 const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), open: vi.fn(), logout: vi.fn(), prepare: vi.fn(),
   session: null as object | null, callback: null as ((response: { credential: string }) => void) | null }));
 vi.mock("../../lib/central/identity", () => ({
+  hasPendingLocalDemotion: vi.fn(() => false), retryPendingLocalDemotion: vi.fn(),
   CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => true, isCentralWebEntry: () => true,
   centralSessionLoggedOut: () => false, loadPendingCentralRecoveryCode: () => "",

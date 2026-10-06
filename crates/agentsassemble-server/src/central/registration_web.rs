@@ -35,6 +35,7 @@ struct EpochRequest {
 struct HostingRequest {
     server_id: String,
     hosting_state: String,
+    registration_epoch: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +70,7 @@ async fn issue_registration_proof(
         RegistrationRequest::Hosting(HostingRequest {
             server_id,
             hosting_state,
+            registration_epoch,
         }) => {
             if server_id != state.central_host_identity.server_id() {
                 return Err(RegistrationHttpError::bad_request(
@@ -76,18 +78,30 @@ async fn issue_registration_proof(
                 ));
             }
             if hosting_state != "status" {
-                if !matches!(hosting_state.as_str(), "device" | "retired") {
+                if hosting_state != "retired"
+                    || registration_epoch.as_ref().is_some_and(String::is_empty)
+                {
                     return Err(RegistrationHttpError::bad_request(
                         "hosting state is invalid",
                     ));
                 }
-                super::directory::demote_host(
-                    &state.store,
-                    &state.public_ingress(),
-                    hosting_state == "retired",
-                )
-                .await
-                .map_err(|_| RegistrationHttpError::persistence())?;
+                if !state
+                    .store
+                    .retire_hosting_incarnation(registration_epoch.as_deref())
+                    .await
+                    .map_err(|_| RegistrationHttpError::persistence())?
+                {
+                    return Err(RegistrationHttpError {
+                        status: StatusCode::CONFLICT,
+                        code: "incarnation_conflict",
+                        message: "Stored incarnation has changed.",
+                    });
+                }
+                state
+                    .public_ingress()
+                    .demote()
+                    .await
+                    .map_err(|_| RegistrationHttpError::persistence())?;
             }
             let restriction = state
                 .store
