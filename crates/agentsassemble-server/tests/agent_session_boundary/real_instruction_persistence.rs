@@ -32,7 +32,7 @@ async fn real_managed_instruction_persistence() -> Result<(), Box<dyn std::error
         if session["runtime_status"] != "idle" { return Err("provider start failed".into()); }
         let session_id = session["session_id"].as_str().ok_or("session ID absent")?.to_owned();
         for turn in 1..=2 {
-            if turn == 2 && provider == "claude" {
+            if turn == 2 && provider == "claude" && std::env::var_os("AA_VERIFY_COMPACT").is_none() {
                 for action in ["agent.stop", "agent.resume"] {
                     send_command(&mut socket, &format!("persistence-{action}"), action,
                         &json!({"session_id":session_id})).await;

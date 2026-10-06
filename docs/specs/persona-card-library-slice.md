@@ -660,3 +660,14 @@ OpenCode at most six turns each; Claude SDK Sonnet at its lowest supported effor
 at most three runs with a few turns each. If cheap compaction is unavailable,
 Claude may verify same-session resume instead. Report unsupported configuration,
 provider error codes, actual turn counts and unverified boundaries explicitly.
+
+Continuation authorization: retry the currently listed free MiMo 2.6 model in
+OpenCode; retry Muse Spark 1.3 contributor only if MiMo fails differently from
+its prior non-retryable HTTP 403. Keep the six-turn ceiling, and use native
+summarize/compact or isolated configuration if the provider admits a turn.
+For Claude, send the SDK `/compact` prompt in the same session between two room
+observations using a test-only SDK wrapper selected by the existing runtime
+bundle override. Require native compact_boundary plus a subsequent first
+read_discussion and canonical room publication. No product command or global
+configuration changes. Keep the three-run total ceiling (including the prior
+resume run), report failed compaction honestly, and do not push.

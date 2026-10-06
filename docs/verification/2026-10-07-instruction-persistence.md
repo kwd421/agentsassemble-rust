@@ -8,10 +8,10 @@ not a companion compaction claim. No production behavior changed.
 | Provider | Actual compaction / resume | Room rule evidence | Result |
 | --- | --- | --- | --- |
 | Codex 0.154.0, `gpt-5.6-luna`, low | Seven native `context_compacted` events across two room turns | Each turn's first actual MCP call is `read_discussion`, followed by successful `publish_message`; two canonical `room_portal` publications, no runtime error | Pass after actual compaction |
-| Claude Agent SDK, `claude-sonnet-5`, low | No `compact_boundary`; `agent.stop` then `agent.resume` between two observations in the same native session | Native calls are read, publish, read, publish; both canonical publications succeed, no runtime error | Pass for resume only; compaction unverified |
-| OpenCode, `opencode/muse-spark-1.3-contributor-free` and `opencode/big-pickle` | Neither reached a successful model turn; no compaction | Each first request ends in native `APIError`, HTTP **403**, `isRetryable=false`; host reports `provider_turn_failed`. No tool calls/publications | Blocked by provider response; persistence unverified |
+| Claude Agent SDK, `claude-sonnet-5`, low | Continuation: SDK `/compact`, manual `compact_boundary`, 13,398 → 1,007 tokens in the same native session | Read/publish at native lines 12/15 before and 39/42 after compaction; two canonical publications | Pass after actual compaction |
+| OpenCode, Muse Spark 1.3 contributor, Big Pickle, and continuation MiMo 2.6 Flash free | All first model requests rejected; no compaction | Native `APIError`, HTTP **403**, `isRetryable=false`; host `provider_turn_failed`. No tool calls/publications | Blocked; same error means no further Muse retry |
 
-## Entry point and evidence
+## Initial run (d062326b): entry point and evidence
 
 Added ignored test:
 `agent_session_boundary::real_instruction_persistence::real_managed_instruction_persistence`.
@@ -41,7 +41,7 @@ Codex native line order:
 
 Claude's one native transcript contains both ordered observations and the four
 tool calls at lines 12/15 and 25/28. The SDK runtime's native Stop receipt checks
-the requested `low` effort. No Opus invocation or compaction attempt was made.
+the requested `low` effort. In that initial run, no Opus invocation or compaction attempt was made.
 
 OpenCode's two isolated native sessions each contain one user text part and an
 assistant `APIError` with HTTP 403, no tool or compaction parts, and zero reported
@@ -110,3 +110,70 @@ this run's copied Codex home/configuration/authentication and private scratch da
 are removed after sanitization. Native Claude/OpenCode test histories remain under
 their existing provider-owned storage. User data, global config, `.agents/` and
 `scripts/__pycache__/` are untouched. No push or external review request.
+
+## Authorized continuation from d062326b
+
+OpenCode 1.17.18 `opencode models opencode` lists the free model as
+`opencode/mimo-v2.6-flash-free` (not an inferred model ID). One discovery-only
+invocation failed with `model_discovery_timeout` / absent models in 10.30 s;
+no agent or model turn started. The next invocation selected the exact listed
+model, started idle, then failed its first room turn in 9.93 s. Native SQLite
+message evidence is `APIError`, HTTP 403, `isRetryable=false`, zero reported
+tokens, and one text part without tools or compaction. This is the same error
+class/status/retryability as the previous Muse run, so Muse was **not retried**.
+This continuation used **1 attempted room turn**, **3/6 cumulatively**.
+
+The [OpenCode server API](https://opencode.ai/docs/server/#sessions) documents
+`POST /session/:id/summarize` with `providerID` and `modelID`; native summarization
+exists. The provider rejection prevented a successful baseline conversation, so
+no extra summary request or low-threshold configuration was applied. Compaction
+remains unverified, rather than being classified as unsupported.
+
+Claude used **one additional run**, **2/3 runs cumulatively**, Sonnet 5 at `low`.
+The test-only SDK decorator is staged through the existing
+`AGENTSASSEMBLE_PROVIDER_RUNTIME` override. It submits `/compact` on the same
+live SDK input queue after the first successful room result, waits for a native
+manual compact boundary and successful command result, then forwards the original
+room result unchanged to the production bridge. The host then submits its second
+ordinary room turn; there is no stop/resume, new session, instruction replacement,
+room-rule reminder, or product feature. Production receipt/effort/tool authority
+validation remains active. This follows the
+[SDK command contract](https://code.claude.com/docs/en/agent-sdk/slash-commands#compact-history-with-compact).
+
+The run passed in **36.77 s**: **2 room turns plus 1 `/compact` input**. Native
+history has a manual compact boundary at line 25 (13,398 pre-tokens, 1,007
+post-tokens), and read/publish at 12/15 before and 39/42 after that boundary.
+The SDK stream independently returned `compact_boundary` and a successful
+command result in the same session. The native transcript records the command
+input at line 28, after its compact boundary; use SDK stream order for command
+submission, not the rewritten native line order. Both canonical `room_portal`
+publications succeeded and the host reported no runtime error. Only Sonnet 5
+appears in the native assistant model records. The bridge's unchanged Stop hook
+verified applied `low` effort for the room turns; the summarizer's separate
+internal effort is not reported. Room assistant token counters total 12 input,
+8,504 cache creation, 74,641 cache read, and 132 output; these exclude separately
+unreported summarization usage and are not a billing receipt.
+
+Reproduce only with explicit real-provider authorization:
+
+```sh
+cargo test -p agentsassemble-server --test integration --no-run
+python3 -B crates/agentsassemble-server/tests/agent_session_boundary/run_compact_sdk_fixture.py \
+  <built-integration-executable> <sanitized-evidence.jsonl>
+```
+
+The helper creates/removes a private runtime bundle, keeps native SDK and bridge
+behavior, and exports only allowlisted event/model/token fields. The test remains
+`#[ignore]`; the ordinary invocation retains its original resume check. Evidence
+is appended under `continuation` in the JSON, preserving the initial results.
+No secrets, prompts, response bodies or session IDs are exported. Native provider
+histories remain provider-owned; only the helper's temporary bundle is removed.
+Global provider configuration, `.agents/` and `scripts/__pycache__/` are untouched.
+
+Continuation local checks: integration target builds; targeted Clippy with warnings
+denied, workspace formatting, JS syntax, architecture/source-growth checks and
+19 policy/artifact tests and read-only artifact maintenance pass. Scoped diff
+checks pass; a whole-workspace diff check reports whitespace in concurrently
+modified frontend files outside this task, which are left untouched. Existing
+source-size and ts-rs advisories remain.
+No product runtime changes, new security scan, push, or phase-closeout claim.

@@ -2,9 +2,11 @@
 
 - 2026-10-07 authorized instruction persistence verification: Codex managed agent
   passed two room turns across seven native compactions; Claude SDK Sonnet 5 at
-  low effort passed two room turns across stop/resume in the same native session
-  (compaction not exercised). OpenCode's two first-turn attempts failed with native
-  HTTP 403 `APIError` / host `provider_turn_failed`; its compaction remains blocked.
+  low effort passed two room turns across a native manual `/compact` boundary
+  (13,398 → 1,007 tokens), following the initial resume check. OpenCode MiMo 2.6
+  Flash free repeated the prior non-retryable HTTP 403 `APIError` / host
+  `provider_turn_failed` (3 attempted turns cumulatively); Muse was not retried
+  because the error was unchanged. OpenCode compaction remains blocked.
   No global provider config or product behavior changed. Added an explicitly ignored
   managed-room test. [Evidence, budgets and limits](verification/2026-10-07-instruction-persistence.md).
 

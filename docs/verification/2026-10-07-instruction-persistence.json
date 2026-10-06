@@ -148,5 +148,88 @@
       "input_tokens": 0,
       "output_tokens": 0
     }
-  ]
+  ],
+  "continuation": {
+    "base_commit": "d062326b",
+    "claude": {
+      "native_sha256": "1b5cb5682f08f698c81608cfd07b0565c0e166a9af17dd0f06fbe9b15683df17",
+      "same_native_session": true,
+      "models": [
+        "claude-sonnet-5"
+      ],
+      "compact_inputs": [
+        28
+      ],
+      "boundaries": [
+        {
+          "line": 25,
+          "metadata": {
+            "trigger": "manual",
+            "preTokens": 13398,
+            "postTokens": 1007
+          }
+        }
+      ],
+      "calls": [
+        {
+          "line": 12,
+          "tool": "mcp__agentsassemble_room__read_discussion"
+        },
+        {
+          "line": 15,
+          "tool": "mcp__agentsassemble_room__publish_message"
+        },
+        {
+          "line": 39,
+          "tool": "mcp__agentsassemble_room__read_discussion"
+        },
+        {
+          "line": 42,
+          "tool": "mcp__agentsassemble_room__publish_message"
+        }
+      ],
+      "effort": "low",
+      "room_turns": 2,
+      "slash_command_inputs": 1,
+      "room_portal_publications": 2,
+      "test_seconds": 36.77,
+      "continuation_runs": 1,
+      "cumulative_runs": 2,
+      "compact_result": "success",
+      "room_assistant_usage_sum": {
+        "input_tokens": 12,
+        "output_tokens": 132,
+        "cache_creation_input_tokens": 8504,
+        "cache_read_input_tokens": 74641
+      }
+    },
+    "opencode": {
+      "model": "mimo-v2.6-flash-free",
+      "error_name": "APIError",
+      "status_code": 403,
+      "retryable": false,
+      "part_types": [
+        "text"
+      ],
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      },
+      "native_message_sha256": "b4ba73ccde42b1fc3e315c1d4826a5759b8a7469617398c4c4d2b2dac7232481",
+      "cli_version": "1.17.18",
+      "room_turns_attempted": 1,
+      "cumulative_room_turns_attempted": 3,
+      "compactions": 0,
+      "test_seconds": 9.93,
+      "discovery_only_failures": 1,
+      "discovery_error": "model_discovery_timeout",
+      "muse_retried": false,
+      "stop_reason": "same APIError HTTP 403 isRetryable=false as previous Muse run"
+    }
+  }
 }
