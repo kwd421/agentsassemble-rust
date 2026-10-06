@@ -392,10 +392,15 @@ impl OpenCodeDriver {
             self.active_turn = Some(request.clone());
         }
         if self.session_instructions != request.session_instructions {
-            let config = json!({"agent": {"agentsassemble_room": {
-                "description": "Managed room participant", "mode": "primary",
-                "prompt": request.session_instructions.as_deref().unwrap_or_default(),
-            }}});
+            // Native instructions are reloaded into the system prompt after compaction.
+            // A custom agent prompt makes OpenCode reject free-tier model requests.
+            let instruction_path = self.config_root.path().join("room-instructions.md");
+            std::fs::write(
+                &instruction_path,
+                request.session_instructions.as_deref().unwrap_or_default(),
+            )
+            .map_err(|_| config_error())?;
+            let config = json!({"instructions": [instruction_path]});
             std::fs::write(
                 self.config_root.path().join("opencode.json"),
                 config.to_string(),
@@ -426,11 +431,9 @@ impl OpenCodeDriver {
                 "providerID": provider_id(&session.public.model)?,
                 "modelID": model_id(&session.public.model)?,
             },
+            "agent": "build",
             "parts": [{"type": "text", "text": request.input}],
         });
-        if request.session_instructions.is_some() {
-            payload["agent"] = json!("agentsassemble_room");
-        }
         if !session.public.variant.is_empty() {
             payload["variant"] = json!(session.public.variant);
         }

@@ -235,3 +235,72 @@ The two ignored real tests failed at provider admission as recorded above; they
 are not counted as passing tests. Packaged visual acceptance of these source
 changes has not been performed; no rebuilt app,
 real updater rerun, deployment, external review or push is claimed.
+
+## Free-tier regression fix (2026-10-07)
+
+This newly authorized regression run is separate from the five historical failed
+room turns above. Installed `opencode --version` and the installed `opencode-ai`
+package both report **1.18.34**. The adapter now explicitly selects native `build`
+and writes fixed instructions to `room-instructions.md` in its existing private
+per-session config root. `opencode.json` contains an absolute `instructions` path;
+no custom agent definition, agent prompt override or per-message `system` fallback.
+Changed or cleared instructions still rewrite files, dispose the same instance and
+re-register the room portal before advancing the cached instruction value.
+Unchanged instructions do not dispose. Existing session permissions remain intact.
+
+Version-matched upstream evidence:
+
+- [Config schema](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/core/src/v1/config/config.ts#L124)
+  accepts `instructions` as an array of strings.
+- [Instruction loader](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/session/instruction.ts#L122)
+  resolves absolute paths even with project config disabled; `system()` reads
+  their contents and returns system instruction text.
+- [Prompt loop](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/session/prompt.ts#L1257)
+  calls `instruction.system()` and passes it as `system` to the processor each
+  iteration, including the next turn after compaction.
+- [Built-in agents](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/agent/agent.ts#L141)
+  mark `build` native and primary, with configured tool permissions. `plan` adds
+  planning/edit restrictions, so `build` preserves the ordinary participant flow.
+- [Summarize handler](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts#L273)
+  creates native compaction with the current agent/model and executes its loop.
+  `auto=false` avoids an extra automatic room continuation.
+
+Actual results (new authorization; separate from historical runs):
+
+| Path / model | Attempted / completed turns | Compaction evidence | Result |
+| --- | --- | --- | --- |
+| Managed ignored test / MiMo 2.6 Flash free, native `build` | 1 / 0 | No native compaction or tools | HTTP 403 `APIError`, non-retryable, free-tier client rejection; 8.47 s |
+| Managed ignored test / Muse Spark 1.3 contributor free, native `build` | 1 / 0 | No native compaction or tools | Same rejection; 9.01 s |
+| Isolated official CLI / MiMo, native `plan` | 1 / 1 | Not requested | Native step/text/step-finish, exit 0 |
+| Isolated official CLI / MiMo, native `build` | 1 / 1 | Not requested | Native step/text/step-finish, exit 0 |
+
+Total **4/6 attempted model turns**: two failed managed room turns and two
+single-turn diagnostic CLI controls. The controls use no room instructions or MCP
+portal, so they prove basic built-in admission, not managed instruction persistence.
+Both managed native records explicitly identify `build`, installed version
+1.18.34, the requested free model and zero reported input/output tokens. No paid
+model was used. Counts are not billing confirmation.
+
+The first managed turn failed in both runs, before the prepared summarize hook
+could run. **Zero summarize calls; no post-compaction read/publish proof.** The
+unexercised test-only hook was removed from the final minimal diff. Reproduce the
+existing ignored test with `AA_VERIFY_PROVIDER=opencode` and `AA_VERIFY_MODEL`
+set to an authorized free model. Once baseline admission works, native
+`POST /session/:id/summarize` with `auto=false` is the documented cheap path.
+
+The custom-agent regression is removed at its instruction owner, but this is
+**not an accepted end-to-end free-tier fix**: built-in selection alone did not
+resolve managed admission here. The remaining rejection trigger is unknown;
+source inspection and CLI controls do not establish whether instructions, tool
+shape, permissions or another managed-request property causes it. No header
+spoof, authentication bypass, permission relaxation, global config change or
+per-message fallback was added. Config `instructions` is supported by the source;
+its failure to obtain model admission does not establish a loader failure.
+
+Validation: provider library **293/293**; integration target build; provider/server
+all-target/all-feature Clippy with warnings denied; architecture/source-growth
+gates and **19/19** policy/artifact tests; workspace formatting, diff check and
+read-only artifact maintenance. Existing ts-rs and source-size advisories remain.
+Both failed managed runs awaited server shutdown. Native histories stay with the
+provider; isolated diagnostic directories were removed. `.agents/` and
+`scripts/__pycache__/` are untouched. Commit only, no push or external review.

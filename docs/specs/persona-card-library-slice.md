@@ -628,8 +628,9 @@ all card content. Tool descriptions own tool usage. Cursor/Grok retain their ful
 existing turn input and receive no persistent instructions.
 Codex applies developer_instructions through thread resume configuration, first
 unsubscribing its sole idle connection so a loaded thread cannot ignore overrides;
-Claude SDK uses systemPrompt.append; OpenCode uses an isolated dedicated agent
-prompt; API/LM Studio/Ollama prepend system on every request. Claude uses
+Claude SDK uses systemPrompt.append; OpenCode uses the built-in `build` agent
+with an absolute instruction-file path in its isolated config `instructions`
+array; API/LM Studio/Ollama prepend system on every request. Claude uses
 `snapshot: false` with append because an existing
 snapshot ignores changed append until compaction; its initial capability preflight
 is non-persistent, and subsequent changed text resumes the same conversation.
@@ -677,3 +678,29 @@ resume run), report failed compaction honestly, and do not push.
 Try native cheap summarization only after a baseline room turn succeeds; record
 native error classification if admission blocks it. Preserve global configuration,
 room instructions and existing provider-owned histories. Update the dated evidence.
+
+### OpenCode free-tier regression acceptance (2026-10-07)
+
+Replace the custom primary agent introduced by 0bd36155 at the existing
+`OpenCodeDriver::send` instruction owner. Managed creation, resumed
+sessions and changed/cleared fixed-card instructions must retain their privileged
+placement without custom agent selection. Use the native built-in `build` agent
+and supported config `instructions`, verified against installed 1.18.34 sources.
+Rewrite the private instruction file/config and dispose/re-register the same
+instance only when instructions change; preserve failed-application/retry behavior,
+room permissions and canonical read-before-publish authority. Never write global
+or workspace configuration; no fallback, new product API or provider identity spoof.
+Verify existing provider request tests for unchanged/replaced/cleared instructions,
+then the ignored managed test on real `opencode/mimo-v2.6-flash-free`, at most six
+room turns in this newly authorized regression run (Muse contributor free only as
+an authorized fallback). Force native summarize after a successful baseline and
+require native compaction plus first `read_discussion` then `publish_message` on
+the next room turn. Record native evidence and actual request counts separately
+from historical failed runs. Commit the scoped fix and evidence; do not push.
+
+Regression result: the built-in/config mechanism and replacement/clear semantics
+pass provider tests, but both managed free-model baselines still return HTTP 403
+with native agent `build`. Isolated official CLI `build` and `plan` MiMo controls
+pass. Four model turns total; no summarize call or post-compaction proof. The
+remaining managed-request rejection is unknown and acceptance stays blocked; see
+`docs/verification/2026-10-07-instruction-persistence.{md,json}`.

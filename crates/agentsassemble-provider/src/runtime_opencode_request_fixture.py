@@ -55,7 +55,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         if path == "/instance/dispose":
             config = pathlib.Path(os.environ["OPENCODE_CONFIG_DIR"]) / "opencode.json"
-            pathlib.Path("agent-prompt.json").write_text(config.read_text())
+            settings = json.loads(config.read_text())
+            assert "agent" not in settings
+            instruction = pathlib.Path(settings["instructions"][0])
+            assert instruction.is_absolute() and instruction.parent == config.parent
+            pathlib.Path("room-instructions.txt").write_text(instruction.read_text())
             with open("agent-refreshes.jsonl", "a") as log:
                 log.write(config.read_text() + "\n")
             return self.reply(True)
