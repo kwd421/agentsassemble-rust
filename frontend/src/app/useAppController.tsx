@@ -101,7 +101,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     !operatorPairingToken &&
     !guestRecoveryRequest;
   const {
-    rooms: directoryRooms, managementRooms, ownerProfileRevision,
+    rooms: directoryRooms, managementRooms, ownerProfileRevision, hostingRestriction,
     replaceRooms, mergeFlowRoom,
     removeRoom,
     updateRoom,
@@ -727,7 +727,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     guestExpired, guestJoinRequested, guestJoinStatus, guestInviteRoomLabel, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
     profileAuthorityReady: startupHostEnabled || Boolean(ownerWorkspace.connect) || Boolean(admittedSessionToken),
-    ownerProfileRevision,
+    ownerProfileRevision, hostingRestriction,
     ownerProfileSession: ownerWorkspace.connect ? { sessionToken: ownerWorkspace.connect.sessionToken, generation: ownerWorkspace.connect.generation } : undefined,
     guestLocked, canCreateRoom, canInviteRooms, guestPanelProfile, guestRecoveryRequest, guestSession,
     handleMobileShellPointerDown, handleMobileShellPointerEnd,

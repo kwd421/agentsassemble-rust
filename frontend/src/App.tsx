@@ -17,7 +17,7 @@ export default function App({
 }) {
   const controller = useAppController(deviceToken, clientId, memberReturn);
   const finishStartup = useCallback(() => { void controller.refreshCentralDirectory(); }, [controller.refreshCentralDirectory]);
-  if (controller.centralDirectory?.status === "authentication-required" && !controller.guestJoinToken) return <StartupIdentityGate deviceToken={deviceToken} onComplete={finishStartup} />;
+  if (controller.hostingRestriction || controller.centralDirectory?.status === "authentication-required" && !controller.guestJoinToken) return <StartupIdentityGate deviceToken={deviceToken} onComplete={finishStartup} />;
   return <>
     {!isDesktopWebview() && <FrontendUpdateNotice connected={controller.canonicalRoom.connectionState === "connected"} />}
     <AppView controller={controller} />

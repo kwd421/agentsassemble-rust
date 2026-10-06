@@ -12,6 +12,7 @@ import { canonicalRoomId } from "./canonicalRoomId";
 
 export type StrictRoomDirectory = {
   profile_revision: number;
+  hosting_restriction?: "device" | "retired" | null;
   server_id: string;
   authority_lineage_id: string;
   server_product_surface: ServerProductSurface;
@@ -195,6 +196,7 @@ export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
     throw new Error("방 목록 rooms가 배열이 아닙니다.");
   }
   if (!Number.isSafeInteger(payload.profile_revision) || Number(payload.profile_revision) < 1) throw new Error("서버 프로필 revision이 올바르지 않습니다.");
+  if (payload.hosting_restriction !== undefined && payload.hosting_restriction !== null && payload.hosting_restriction !== "device" && payload.hosting_restriction !== "retired") throw new Error("서버 상태가 올바르지 않아요.");
   const rooms = payload.rooms.map(validateRoom);
   const roomIds = new Set<string>();
   const roomUids = new Set<string>();
@@ -212,6 +214,7 @@ export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
     server_product_surface: validateServerProductSurface(payload.server_product_surface),
     rooms,
     profile_revision: Number(payload.profile_revision),
+    hosting_restriction: payload.hosting_restriction,
   };
 }
 

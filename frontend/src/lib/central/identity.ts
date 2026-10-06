@@ -64,6 +64,10 @@ export type CentralBootstrap = {
   person: CentralPerson;
   servers: CentralServer[];
   server_time: number;
+  owner_server_conflict?: {
+    servers: { server_id: string; registration_epoch: string; name: string; online: boolean; last_seen_at: number | null }[];
+    resolution: { keeper_server_id: string; keeper_registration_epoch: string; revision: string } | null;
+  } | null;
 };
 
 export type CentralConnectGrant = {
@@ -335,14 +339,21 @@ async function responsePayload<T>(response: Response, central = true, signal?: A
     }
     return {};
   })) as {
-    error?: { code?: string; message?: string };
+    code?: string;
+    error?: { code?: string; message?: string; server_id?: string; registration_epoch?: string };
   } & T;
   if (!response.ok) {
+    const code = central ? payload?.error?.code : payload?.code;
     const message =
-      payload?.error?.message || `로그인 서버가 HTTP ${response.status}을 반환했습니다.`;
-    if (response.status === 401) throw new CentralAuthError(message, payload?.error?.code);
+      (response.status === 409 && code === "server_move_unsupported" ? "서버 옮기기는 아직 지원하지 않아요"
+        : code === "duplicate_resolution_conflict" ? "다른 기기에서 서버를 선택했어요. 목록을 다시 확인해 주세요."
+        : code === "server_retirement_capacity" ? "잠시 후 다시 시도해 주세요" : undefined) ||
+      (central ? payload?.error?.message : typeof payload?.error === "string" ? payload.error : undefined) ||
+      `로그인 서버가 HTTP ${response.status}을 반환했습니다.`;
+    if (response.status === 401) throw new CentralAuthError(message, code);
     if (central && (response.status === 429 || response.status >= 500)) throw new CentralTemporaryError(message);
-    throw Object.assign(new Error(message), { status: response.status, code: payload?.error?.code });
+    throw Object.assign(new Error(message), { status: response.status, code,
+      server_id: payload?.error?.server_id, registration_epoch: payload?.error?.registration_epoch });
   }
   return payload;
 }
@@ -742,6 +753,36 @@ async function updateLocalRegistrationEpoch(serverId: string, epoch: string | nu
   await responsePayload(response, false);
 }
 
+export async function resolveCentralServerDuplicates(conflict: NonNullable<CentralBootstrap["owner_server_conflict"]>, keeperId: string, local?: { serverId: string; deviceToken: string }): Promise<void> {
+  const session = loadCentralSession();
+  if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
+  const keeper = conflict.servers.find(server => server.server_id === keeperId);
+  if (!keeper) throw new Error("남길 서버를 다시 선택해 주세요.");
+  let revision = conflict.resolution?.revision || null;
+  for (const server of conflict.servers.filter(server => server.server_id !== keeperId)) {
+    const result = await signedRequest<{ status: string; server_id: string; registration_epoch: string; resolution: { revision: string } | null }>(session, "/v1/servers/resolve-duplicates", "POST", {
+      keeper_server_id: keeper.server_id, keeper_registration_epoch: keeper.registration_epoch,
+      server_id: server.server_id, registration_epoch: server.registration_epoch, expected_revision: revision,
+    });
+    if (result.status !== "server_retired" || result.server_id !== server.server_id || result.registration_epoch !== server.registration_epoch) throw new Error("서버 은퇴 결과를 확인하지 못했어요. 목록을 다시 확인해 주세요.");
+    if (local?.serverId === server.server_id) await localHostingState(local.serverId, local.deviceToken, "retired");
+    revision = result.resolution?.revision || null;
+    if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었어요. 다시 확인해 주세요.");
+  }
+}
+
+export async function localHostingState(serverId: string, deviceToken: string, state = "status"): Promise<"device" | "retired" | null> {
+  const request = { method: "POST", cache: "no-store",
+    headers: { "content-type": "application/json", ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }) },
+    body: JSON.stringify({ server_id: serverId, hosting_state: state }),
+  } satisfies RequestInit;
+  const response = isDesktopWebview() ? (await fetchDesktopCentralRegistration(request)).response
+    : await fetch("/api/central-directory/registration-proof", request);
+  const payload = await responsePayload<{ hosting_state: "device" | "retired" | null }>(response, false);
+  if (payload.hosting_state !== null && payload.hosting_state !== "device" && payload.hosting_state !== "retired") throw new Error("이 컴퓨터의 서버 상태를 확인하지 못했어요.");
+  return payload.hosting_state;
+}
+
 export async function registerLocalServer(deviceToken: string, name?: string): Promise<void> {
   const session = loadCentralSession();
   if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
@@ -772,6 +813,15 @@ export async function registerLocalServer(deviceToken: string, name?: string): P
         ...(session.pending_account_switch ? { claim_ownership: true } : {}),
       });
     } catch (error) {
+      if (error instanceof Error && "status" in error && "code" in error &&
+        ((error.status === 409 && error.code === "server_exists") ||
+         (error.status === 410 && "server_id" in error && error.server_id === local.server_id &&
+           "registration_epoch" in error && typeof error.registration_epoch === "string" && error.registration_epoch.length > 0 &&
+           (!local.registration_epoch || error.registration_epoch === local.registration_epoch) &&
+           (error.code === "server_retired" || error.code === "registration_absent" && local.registration_epoch)))) {
+        await localHostingState(local.server_id, deviceToken, error.code === "server_exists" ? "device" : "retired");
+        throw error;
+      }
       if (attempt !== 0 || session.pending_account_switch || !(error instanceof Error) ||
         !("status" in error) || error.status !== 409 || !("code" in error) || error.code !== "incarnation_conflict") throw error;
       await updateLocalRegistrationEpoch(local.server_id, null, deviceToken);

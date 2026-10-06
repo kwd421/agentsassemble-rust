@@ -4,6 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import { useRoomDirectory } from "./useRoomDirectory";
 
+const desktopMocks = vi.hoisted(() => ({ isDesktop: vi.fn(() => false), bootstrap: vi.fn() }));
+vi.mock("../lib/desktopBridge", async () => ({
+  ...(await vi.importActual<typeof import("../lib/desktopBridge")>("../lib/desktopBridge")),
+  isDesktopWebview: desktopMocks.isDesktop,
+  requestDesktopBootstrapStatus: desktopMocks.bootstrap,
+}));
+
 const apiMocks = vi.hoisted(() => ({
   fetchRooms: vi.fn(),
 }));
@@ -110,9 +117,25 @@ function mockHydrationRace() {
 describe("useRoomDirectory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    desktopMocks.isDesktop.mockReturnValue(false);
     subscriptionMocks.subscribe.mockReturnValue({ close: subscriptionMocks.close, retry: subscriptionMocks.retry });
     directoryMocks.bindRoomDirectoryAuthority.mockResolvedValue(true);
     directoryMocks.currentRoomDirectoryAuthority.mockReturnValue(null);
+  });
+
+  it.each([false, true])("only the local host projects demotion from the existing directory stream (remote=%s)", async remote => {
+    desktopMocks.isDesktop.mockReturnValue(!remote);
+    desktopMocks.bootstrap.mockResolvedValue({ phase: "complete", server_id: serverId, authority_lineage_id: lineageId, server_product_surface_revision: 1, server_product_surface_digest: "digest" });
+    apiMocks.fetchRooms.mockResolvedValue({ ...verifiedDirectory("room"), hosting_restriction: null });
+    const remoteOwner = remote ? { serverId, fetchRooms: apiMocks.fetchRooms, onStatus: vi.fn(), openStream: vi.fn() } : undefined;
+    const hook = renderHook(() => useRoomDirectory({ initialRooms: [], hostEnabled: !remote, remoteOwner }));
+    await waitFor(() => expect(hook.result.current.syncIssue).toBeNull());
+    apiMocks.fetchRooms.mockResolvedValue({ ...verifiedDirectory("room"), hosting_restriction: "retired" });
+    const changed = subscriptionMocks.subscribe.mock.calls[0][1] as () => Promise<void>;
+    await act(changed);
+    expect(hook.result.current.hostingRestriction).toBe(remote ? null : "retired");
+    expect(hook.result.current.rooms).toHaveLength(1);
+    hook.unmount();
   });
 
   it("reconciles an empty remote workspace on invalidation without superseding foreground continuity", async () => {

@@ -7,7 +7,7 @@ import {
   fetchCentralServerIcon,
   renameCentralServer,
   setCentralServerIcon,
-  type CentralServer,
+  type CentralServer, type CentralBootstrap, resolveCentralServerDuplicates,
 } from "../../lib/central/identity";
 import { loadRoomDockItems } from "../../lib/roomDockPersistence";
 import ImageCropDialog from "./ImageCropDialog";
@@ -15,6 +15,9 @@ import ImageCropDialog from "./ImageCropDialog";
 const OS_LABELS = { macos: "macOS", windows: "Windows", linux: "Linux", other: "기타 OS" };
 
 type Props = {
+  deviceConnect?: boolean;
+  deviceToken?: string;
+  conflict?: CentralBootstrap["owner_server_conflict"];
   servers: CentralServerDisplay[];
   liveServers: CentralServer[];
   centralUnavailable?: boolean;
@@ -55,7 +58,9 @@ export function ServerIcon({ reference, name }: { reference?: string; name: stri
     : <span title={failed ? "아이콘을 불러오지 못했어요" : undefined}>{roomInitials(name)}</span>;
 }
 
-export default function CentralServerList({ servers, busy, localHost, profileName, onOpenLocal, onOpen, onRefresh, liveServers, centralUnavailable = false, connectingServerId }: Props) {
+export default function CentralServerList({ deviceConnect = false, deviceToken = "", conflict, servers, busy, localHost, profileName, onOpenLocal, onOpen, onRefresh, liveServers, centralUnavailable = false, connectingServerId }: Props) {
+  const [keeperId, setKeeperId] = useState("");
+  const [confirmKeeper, setConfirmKeeper] = useState("");
   const [localName, setLocalName] = useState<string | undefined>();
   const localProfileName = localHost?.profile_name || profileName;
   const localDefaultName = localHost && localProfileName ? `${localProfileName}의 ${localHost.device_kind}` : "";
@@ -133,6 +138,39 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
     </form>;
   }
 
+  if (conflict) {
+    const selected = conflict.servers.find(server => server.server_id === (conflict.resolution?.keeper_server_id || keeperId));
+    const confirmed = conflict.servers.find(server => server.server_id === confirmKeeper);
+    const resolve = async () => {
+      if (!confirmed || busy || operation.current) return;
+      operation.current = true; setSaving(true); setError("");
+      try { await resolveCentralServerDuplicates(conflict, confirmed.server_id, localHost?.server_id ? { serverId: localHost.server_id, deviceToken } : undefined); setConfirmKeeper(""); await onRefresh(); }
+      catch (reason) {
+        setError(reason instanceof Error ? reason.message : "서버를 정리하지 못했어요. 다시 확인해 주세요.");
+        // Re-read the central keeper/revision after conflicts or a partial completion.
+        try { await onRefresh(); } catch (refreshError) { setError(refreshError instanceof Error ? refreshError.message : "서버 목록을 다시 확인하지 못했어요."); }
+      } finally { operation.current = false; setSaving(false); }
+    };
+    return <section className="dc-server-list" aria-label="중복 서버 정리" aria-busy={saving}>
+      {confirmed ? <>
+        <p>‘{confirmed.name}’ 서버를 남기고 나머지 서버를 은퇴할까요?</p>
+        <p>은퇴는 되돌릴 수 없어요. 은퇴한 컴퓨터는 이 계정에 기기로만 연결할 수 있어요. 방과 대화 기록은 해당 컴퓨터에 남아요.</p>
+        <button autoFocus className="ops-button min-h-11" disabled={saving} onClick={() => setConfirmKeeper("")}>취소</button>
+        <button className="ops-button min-h-11 text-red-300" disabled={busy || saving} onClick={() => void resolve()}>나머지 서버 은퇴</button>
+      </> : <>
+        <fieldset disabled={busy || saving}>
+          <legend>이 계정에서 사용할 서버 하나를 선택해 주세요.</legend>
+          {conflict.servers.map(server => <label key={server.server_id} className="dc-server-row">
+            <input type="radio" name="keeper" checked={selected?.server_id === server.server_id} disabled={Boolean(conflict.resolution)} onChange={() => setKeeperId(server.server_id)} />
+            <span className="dc-server-row-copy"><strong>{server.name}</strong><span>{server.online ? "연결 가능" : "연결 끊김"} · 마지막 접속: {server.last_seen_at === null ? "기록 없음" : new Date(server.last_seen_at * 1000).toLocaleString("ko-KR")}</span></span>
+          </label>)}
+        </fieldset>
+        <button className="ops-cta min-h-11" disabled={!selected || busy || saving} onClick={() => setConfirmKeeper(selected?.server_id || "")}>이 서버 남기기</button>
+      </>}
+      {error && <p role="alert">{error}</p>}
+    </section>;
+  }
+
   return <div className="dc-server-list" aria-busy={saving}>
     {localHost && onOpenLocal && !servers.some((server) => server.server_id === localHost.server_id) &&
       <div className="dc-server-row" data-state="local">
@@ -176,7 +214,7 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
         </div>
         {editingId !== server.server_id && <div className="dc-server-row-actions">
           {server.relation === "owner" && <button type="button" className="dc-server-row-icon-button" aria-label={`${name} 이름 변경`} title="이름 변경" disabled={busy || saving || centralUnavailable} onClick={() => { setEditingId(server.server_id); setName(server.alias); setError(""); }}><Pencil size={16} /></button>}
-          <button type="button" className={openable ? "ops-cta dc-server-row-open" : "ops-button dc-server-row-open"} aria-label={`${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>열기</button>
+          <button type="button" className={openable ? "ops-cta dc-server-row-open" : "ops-button dc-server-row-open"} aria-label={deviceConnect && server.relation === "owner" ? "이 기기로 연결" : `${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>{deviceConnect && server.relation === "owner" ? "이 기기로 연결" : "열기"}</button>
         </div>}
       </div>;
     })}

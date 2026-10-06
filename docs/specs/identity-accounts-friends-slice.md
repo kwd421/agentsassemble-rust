@@ -18,7 +18,10 @@
 강등 표시는 기존 방 목록 스트림의 hosting_restriction으로 로컬 호스트에만 전달한다.
 기존 2초 directory 관찰/30초 중앙 갱신 주기를 유지하고 새 타이머·프로세스는 만들지 않는다.
 runtime_metadata의 한 상태를 추가하며 스키마 상승·방/세션 삭제는 없다.
-중앙 Worker는 별도 작업 소유이며 읽기만 한다. README의 새 응답 계약이 생기면 정본이다.
+중앙 Worker는 별도 작업 소유이며 읽기만 한다. identity-directory/README.md의
+v5.1을 정본으로 확인했다: 중복은 owner 항목이 없는 servers[]와 owner_server_conflict,
+resolve-duplicates의 keeper_server_id/keeper_registration_epoch/expected_revision 및
+loser server_id/registration_epoch를 사용한다. 로컬 loser의 은퇴 성공도 같은 강등 전이로 연결한다.
 중앙 테스트 대역으로 각 상태 화면, 409/410, 두 ingress 모드·멱등 강등을 검증하고
 바뀐 범위 테스트 및 푸시 직전 make verify 한 번을 실행한다. 기능별 <1,000줄 커밋·푸시,
 VERIFICATION.md 건별 한 줄. 서명 빌드·수동 검증·배포, 서버 교체·재승격,

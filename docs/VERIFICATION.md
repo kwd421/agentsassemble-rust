@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 계정당 서버 하나·공용 프론트: 자기 서버 자동 열기·다른 기기/강등 연결·중복 선택/비가역 확인/정확한 incarnation 은퇴·409 안내, 기존 이름/아이콘 편집과 owner connect 재사용; Worker README v5.1 대조·중앙 대역 상태/API 회귀 및 추가 keeper 확인 경합 12/12·최종 빌드 통과. make verify 1회에서 frontend 1,157·desktop 48·Rust 1,120/1,121 통과 후 기존 durable_session_deadline WebSocket closing handshake 1건 실패(단독 재검 1/1 통과); 이후 변경 Rust 22/22·workspace Clippy/doc·구조/포맷/diff/artifact 게이트 통과. 서명·수동·배포, 서버 교체/재승격·동반 AI 2단계 없음.
+
 - 2026-10-06 계정당 서버 하나·호스트: 410 두 variant·저장 epoch 조건·멱등 영속 강등, managed/manual readiness·공개 권한 차단과 managed 종료 owner 재사용·admitted 수명 보존·등록 409용 로컬 전이; 차단 → 영속 기록 → 종료 대기 순서의 barrier 회귀 포함 최종 directory 8/8·ingress 7/7·등록/재시작 HTTP 7/7·device 상태 파서 통과, 중앙은 테스트 대역이며 서명·수동·배포 없음.
 
 - 2026-10-06 Daybreak avatar M1/M2: 공개 읽기 공유 6개(응답 바이트 해제까지 유지)·권한 직후 본문 파싱 전 업로드 공유 2개 비대기 허가, 포화 429와 기존 메시지 처리, L1 수용·디코더 제한 유지; 서버 회귀 3/3·전체 321/321 통과; 푸시 직전 make verify 1회에서 Rust 1,117/frontend 1,138/desktop 48 통과 후 테스트 expect lint로 중단, 표현 수정 후 회귀 3/3·workspace Clippy·구조/포맷/diff/artifact 게이트 통과.

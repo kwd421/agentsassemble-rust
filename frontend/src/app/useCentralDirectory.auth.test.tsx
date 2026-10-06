@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { bootstrapCentral, clearCentralSession, fetchCentralServerIcon, loadCentralSession,
-  registerLocalServer, openCentralOwnedServer, renameCentralServer, saveSession, setCentralServerIcon, unsignedPost } from "../lib/central/identity";
+  registerLocalServer, resolveCentralServerDuplicates, openCentralOwnedServer, renameCentralServer, saveSession, setCentralServerIcon, unsignedPost } from "../lib/central/identity";
 import { loadCentralDirectoryCache, saveCentralDirectoryCache } from "../lib/central/directoryCache";
 import { useCentralDirectory } from "./useCentralDirectory";
 
@@ -207,5 +207,62 @@ it("does not clear epoch or retry an ownership claim or another registration err
 it("shows incarnation conflicts on other operations without retargeting", async () => {
   fetcher.mockResolvedValue(Response.json({ error: { code: "incarnation_conflict" } }, { status: 409 }));
   await expect(renameCentralServer({ ...server, registration_epoch: "stale" }, "new")).rejects.toMatchObject({ code: "incarnation_conflict" });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  [409, "server_exists", undefined, "device"],
+  [410, "server_retired", "epoch", "retired"],
+  [410, "registration_absent", "epoch", "retired"],
+  [410, "registration_absent", undefined, null],
+  [403, "denied", "epoch", null],
+])("records registration rejection %s %s only when terminal", async (status, code, epoch, restriction) => {
+  const changes: unknown[] = [];
+  let registrations = 0;
+  fetcher.mockImplementation(async (url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (url === "/api/central-directory/registration-proof") {
+      if (body.hosting_state) { changes.push(body); return Response.json({ hosting_state: body.hosting_state }); }
+      return Response.json({ server_id: server.server_id, host_name: "My Mac", host_os: "macos", host_public_key_jwk: {}, host_registration_proof: {}, registration_epoch: epoch });
+    }
+    registrations++;
+    return Response.json({ error: { code, server_id: server.server_id, registration_epoch: epoch || "retired-epoch" } }, { status: Number(status) });
+  });
+  await expect(registerLocalServer("device")).rejects.toMatchObject({ code });
+  expect(registrations).toBe(1);
+  expect(changes).toEqual(restriction ? [{ server_id: server.server_id, hosting_state: restriction }] : []);
+});
+
+it("carries central duplicate revision and exact epochs between loser retirements", async () => {
+  const sent: unknown[] = [];
+  fetcher.mockImplementation(async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    sent.push(body);
+    return Response.json({ status: "server_retired", server_id: body.server_id, registration_epoch: body.registration_epoch, resolution: sent.length === 1 ? { revision: "revision-1" } : null });
+  });
+  await resolveCentralServerDuplicates({ servers: ["keep", "lose-1", "lose-2"].map(id => ({ server_id: id, registration_epoch: `${id}-epoch`, name: id, online: false, last_seen_at: null })), resolution: null }, "keep");
+  expect(sent).toEqual(["lose-1", "lose-2"].map((id, index) => ({ keeper_server_id: "keep", keeper_registration_epoch: "keep-epoch", server_id: id, registration_epoch: `${id}-epoch`, expected_revision: index === 0 ? null : "revision-1" })));
+});
+
+it("shows the unsupported server move message for standalone deletion", async () => {
+  fetcher.mockResolvedValue(Response.json({ error: { code: "server_move_unsupported" } }, { status: 409 }));
+  await expect(unsignedPost("/test-delete", {})).rejects.toThrow("서버 옮기기는 아직 지원하지 않아요");
+});
+
+it("immediately demotes the local loser after a confirmed retirement", async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  fetcher.mockImplementation(async (url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)); calls.push(body);
+    return url === "/api/central-directory/registration-proof"
+      ? Response.json({ hosting_state: "retired" })
+      : Response.json({ status: "server_retired", server_id: body.server_id, registration_epoch: body.registration_epoch, resolution: null });
+  });
+  await resolveCentralServerDuplicates({ servers: ["keep", "local"].map(id => ({ server_id: id, registration_epoch: `${id}-epoch`, name: id, online: true, last_seen_at: 1 })), resolution: null }, "keep", { serverId: "local", deviceToken: "local-device" });
+  expect(calls[1]).toEqual({ server_id: "local", hosting_state: "retired" });
+});
+
+it("preserves local proof rejection codes so startup can re-read device-only state", async () => {
+  fetcher.mockResolvedValue(Response.json({ code: "server_retired", error: "This computer can only connect as a device." }, { status: 409 }));
+  await expect(registerLocalServer("device")).rejects.toMatchObject({ code: "server_retired", status: 409 });
   expect(fetcher).toHaveBeenCalledTimes(1);
 });

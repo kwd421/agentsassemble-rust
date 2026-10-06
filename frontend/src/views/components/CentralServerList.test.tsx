@@ -6,9 +6,10 @@ import CentralServerList from "./CentralServerList";
 import "../../test/nativeDialog";
 import { loadRoomDockItems } from "../../lib/roomDockPersistence";
 vi.mock("../../lib/roomDockPersistence", () => ({ loadRoomDockItems: vi.fn(() => []) }));
-import { fetchCentralServerIcon, renameCentralServer, setCentralServerIcon, type CentralServer } from "../../lib/central/identity";
+import { resolveCentralServerDuplicates, fetchCentralServerIcon, renameCentralServer, setCentralServerIcon, type CentralServer } from "../../lib/central/identity";
 
 vi.mock("../../lib/central/identity", () => ({
+  resolveCentralServerDuplicates: vi.fn(),
   renameCentralServer: vi.fn(),
   setCentralServerIcon: vi.fn(),
   fetchCentralServerIcon: vi.fn(),
@@ -179,4 +180,49 @@ it("restores a fixed server name only after the existing rename operation succee
   vi.mocked(loadRoomDockItems).mockReturnValue([]);
   await user.click(screen.getByRole("button", { name: "Mac Studio 이름 변경" }));
   expect(screen.getByText(/‘새 회의실’ · Mac Studio에서 열린 방/)).toBeTruthy();
+});
+
+const conflict = { servers: [
+  { server_id: "keeper", registration_epoch: "epoch-a", name: "집 Mac", online: true, last_seen_at: 1700000000 },
+  { server_id: "loser", registration_epoch: "epoch-b", name: "노트북", online: false, last_seen_at: null },
+], resolution: null };
+
+it("selects a keeper then confirms irreversible retirement with status and last seen", async () => {
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  render(<CentralServerList servers={[]} liveServers={[]} conflict={conflict} busy={false} onOpen={vi.fn()} onRefresh={refresh} />);
+  expect(screen.getByText(/마지막 접속: 기록 없음/)).toBeTruthy();
+  await userEvent.click(screen.getByRole("radio", { name: /집 Mac/ }));
+  await userEvent.click(screen.getByRole("button", { name: "이 서버 남기기" }));
+  expect(resolveCentralServerDuplicates).not.toHaveBeenCalled();
+  expect(screen.getByText(/은퇴는 되돌릴 수 없어요/)).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "나머지 서버 은퇴" }));
+  expect(resolveCentralServerDuplicates).toHaveBeenCalledWith(conflict, "keeper", undefined);
+  expect(refresh).toHaveBeenCalledOnce();
+});
+
+it("uses the central keeper after a conflicting choice and preserves the failure", async () => {
+  const locked = { ...conflict, resolution: { keeper_server_id: "keeper", keeper_registration_epoch: "epoch-a", revision: "revision" } };
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(resolveCentralServerDuplicates).mockRejectedValue(new Error("다른 기기에서 서버를 선택했어요. 다시 확인해 주세요."));
+  render(<CentralServerList servers={[]} liveServers={[]} conflict={locked} busy={false} onOpen={vi.fn()} onRefresh={refresh} />);
+  expect((screen.getByRole("radio", { name: /노트북/ }) as HTMLInputElement).disabled).toBe(true);
+  await userEvent.click(screen.getByRole("button", { name: "이 서버 남기기" }));
+  await userEvent.click(screen.getByRole("button", { name: "나머지 서버 은퇴" }));
+  expect(await screen.findByRole("alert")).toBeTruthy();
+  expect(refresh).toHaveBeenCalledOnce();
+});
+
+it("does not retarget a confirmation when another device chooses a different keeper", async () => {
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  const props = { servers: [], liveServers: [], busy: false, onOpen: vi.fn(), onRefresh: refresh };
+  const view = render(<CentralServerList {...props} conflict={conflict} />);
+  await userEvent.click(screen.getByRole("radio", { name: /집 Mac/ }));
+  await userEvent.click(screen.getByRole("button", { name: "이 서버 남기기" }));
+  const changed = { ...conflict, resolution: { keeper_server_id: "loser", keeper_registration_epoch: "epoch-b", revision: "other-device" } };
+  view.rerender(<CentralServerList {...props} conflict={changed} />);
+  expect(screen.getByText("‘집 Mac’ 서버를 남기고 나머지 서버를 은퇴할까요?")).toBeTruthy();
+  vi.mocked(resolveCentralServerDuplicates).mockRejectedValue(new Error("다른 기기에서 서버를 선택했어요."));
+  await userEvent.click(screen.getByRole("button", { name: "나머지 서버 은퇴" }));
+  expect(resolveCentralServerDuplicates).toHaveBeenCalledWith(changed, "keeper", undefined);
+  expect(await screen.findByRole("alert")).toBeTruthy();
 });

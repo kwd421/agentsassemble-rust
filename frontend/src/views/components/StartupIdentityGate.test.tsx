@@ -9,6 +9,7 @@ import { PRODUCT_SURFACE_REVISION } from "../../types/generated/PRODUCT_SURFACE_
 import StartupIdentityGate from "./StartupIdentityGate";
 
 const centralMocks = vi.hoisted(() => ({
+  hostingState: vi.fn().mockResolvedValue(null),
   configured: false,
   loggedOut: false,
   login: vi.fn(),
@@ -88,6 +89,7 @@ vi.mock("../../lib/central/identity", () => ({
   openCentralOwnedServer: centralMocks.openServer,
   recoverCentralGuest: centralMocks.recover,
   registerLocalServer: centralMocks.register,
+  localHostingState: centralMocks.hostingState,
 }));
 afterEach(() => {
   cleanup();
@@ -97,6 +99,8 @@ afterEach(() => {
   centralMocks.session = null;
   centralMocks.pending = "";
   vi.clearAllMocks();
+  centralMocks.hostingState.mockResolvedValue(null);
+  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: null, host_name: "Test Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: null });
   desktopMocks.requestHostProductSurface.mockResolvedValue({
     revision: PRODUCT_SURFACE_REVISION,
     digest: "1".repeat(64),
@@ -207,8 +211,8 @@ describe("StartupIdentityGate", () => {
     desktopMocks.requestHostDeviceInfo.mockRejectedValueOnce(new Error("local database is unreadable"));
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
 
-    const remoteButton = await screen.findByRole("button", { name: "Mac의 방 서버 열기" });
-    expect(screen.queryByRole("button", { name: /이 기기/ })).toBeNull();
+    const remoteButton = await screen.findByRole("button", { name: "이 기기로 연결" });
+    expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
     expect(screen.getByRole("alert").textContent).toContain("local database is unreadable");
     expect(onComplete).not.toHaveBeenCalled();
     expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
@@ -261,13 +265,13 @@ describe("StartupIdentityGate", () => {
     const account = { person: centralMocks.session.person, servers: [remote], server_time: 1 };
     centralMocks.bootstrap.mockResolvedValue(account);
     render(<StartupIdentityGate deviceToken="device-1" onComplete={vi.fn()} />);
-    const offline = await screen.findByRole("button", { name: "Main 서버 열기" });
+    const offline = await screen.findByRole("button", { name: "이 기기로 연결" });
     expect((offline as HTMLButtonElement).disabled).toBe(true);
     const online = { ...remote, endpoint: { status: "likely_online", lease_expires_at: Date.now() / 1000 + 600 } };
     centralMocks.bootstrap.mockResolvedValue({ ...account, servers: [online] });
     await userEvent.click(screen.getByRole("button", { name: "서버 목록 새로고침" }));
     centralMocks.openServer.mockRejectedValueOnce(new Error("host unavailable"));
-    await userEvent.click(await screen.findByRole("button", { name: "Main 서버 열기" }));
+    await userEvent.click(await screen.findByRole("button", { name: "이 기기로 연결" }));
     expect((await screen.findByRole("alert")).textContent).toContain("host unavailable");
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
     expect(centralMocks.register).not.toHaveBeenCalled();
@@ -440,8 +444,71 @@ it("keeps the saved-server chooser after the first request times out", async () 
   }));
   desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
   render(<StartupIdentityGate deviceToken="device" onComplete={vi.fn()} />);
-  expect(await screen.findByText("Saved Mac")).toBeTruthy();
+  expect(await screen.findByText("이 계정의 서버는 ‘Saved Mac’예요")).toBeTruthy();
   expect(screen.getByText("로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Google로 계속" })).toBeNull();
   expect(document.body.textContent).not.toMatch(/중앙|Fetch is aborted|저장된 목록을 읽지 못/);
+});
+
+const oneServer = { server_id: SERVER_ID, registration_epoch: "epoch", relation: "owner" as const, alias: "내 Mac", endpoint: { lease_expires_at: Date.now() / 1000 + 600, status: "likely_online", origin: "https://host.test", generation: 1 } };
+function setupOneServer() {
+  centralMocks.configured = true;
+  centralMocks.session = { person: { person_id: "owner", display_name: "Owner" } };
+  centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session.person, servers: [oneServer], server_time: 1 });
+  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: SERVER_ID, host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner" });
+  desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+  desktopMocks.fetchOperatorRuntime.mockImplementation(async () => Response.json(directory()));
+  centralMocks.register.mockResolvedValue(undefined);
+}
+
+it("opens the account's own server immediately without a chooser", async () => {
+  setupOneServer();
+  const complete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
+  await vi.waitFor(() => expect(complete).toHaveBeenCalledOnce());
+  expect(centralMocks.register).toHaveBeenCalledOnce();
+  expect(centralMocks.openServer).not.toHaveBeenCalled();
+  expect(screen.queryByText("열 서버를 선택하세요")).toBeNull();
+});
+
+it("offers device connection for a retired host without registering or opening locally", async () => {
+  setupOneServer();
+  centralMocks.hostingState.mockResolvedValue("retired");
+  const complete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
+  expect(await screen.findByText("이 컴퓨터는 더 이상 이 계정의 서버가 아니에요")).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "이 기기로 연결" }));
+  expect(centralMocks.openServer).toHaveBeenCalledWith(oneServer);
+  expect(centralMocks.register).not.toHaveBeenCalled();
+  expect(complete).not.toHaveBeenCalled();
+});
+
+it("changes a registration race's server_exists into device connection", async () => {
+  setupOneServer();
+  centralMocks.register.mockRejectedValueOnce(Object.assign(new Error("exists"), { status: 409, code: "server_exists" }));
+  centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [], server_time: 1 });
+  const complete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
+  const open = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
+  centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [oneServer], server_time: 1 });
+  centralMocks.hostingState.mockResolvedValue("device");
+  await userEvent.click(open);
+  expect(await screen.findByRole("button", { name: "이 기기로 연결" })).toBeTruthy();
+  expect(complete).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("shows the duplicate screen when bootstrap removes owner entries from the rail", async () => {
+  setupOneServer();
+  centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [], server_time: 1,
+    owner_server_conflict: { servers: [
+      { server_id: SERVER_ID, registration_epoch: "a", name: "집 Mac", online: true, last_seen_at: 1 },
+      { server_id: "other", registration_epoch: "b", name: "노트북", online: false, last_seen_at: null },
+    ], resolution: null } });
+  render(<StartupIdentityGate deviceToken="device" onComplete={vi.fn()} />);
+  expect(await screen.findByRole("heading", { name: "남길 서버를 선택해 주세요" })).toBeTruthy();
+  expect(screen.getAllByRole("radio")).toHaveLength(2);
+  expect(screen.queryByText(/등록된 서버가 없어요/)).toBeNull();
+  expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
+  expect(centralMocks.register).not.toHaveBeenCalled();
 });
