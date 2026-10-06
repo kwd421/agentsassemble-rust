@@ -117,3 +117,6 @@ mod side_chat_live_boundary;
 
 #[path = "../member_invite_boundary.rs"]
 mod member_invite_boundary;
+
+#[path = "../local_attendee_turn.rs"]
+mod local_attendee_turn;

@@ -67,11 +67,11 @@ pub(super) async fn run(custody: &mut Custody, mut input: Input) -> Result<(), L
         }
     })
     .await;
-    publish(&input.status, Phase::Stopping, None);
     let (stop, failure) = match execution {
         Ok(stop) => (stop, None),
         Err(error) => (None, Some(error.code)),
     };
+    publish(&input.status, Phase::Stopping, failure.clone());
     crate::shutdown_attendee(&custody.client, custody.runtime.as_mut(), stop).await?;
     publish(
         &input.status,
@@ -148,6 +148,11 @@ fn prepare(custody: &mut Custody, input: &mut Input) -> Result<(), LocalAttendee
 }
 
 fn publish(status: &watch::Sender<LocalAttendeeStatus>, phase: Phase, error_code: Option<String>) {
+    if let Some(code) = &error_code
+        && status.borrow().error_code.as_ref() != Some(code)
+    {
+        super::log_failure(code);
+    }
     status.send_modify(|status| {
         status.phase = phase;
         status.error_code = error_code;

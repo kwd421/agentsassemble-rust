@@ -3,7 +3,7 @@ import { createLocalAttendee, fetchLocalAttendee, commandLocalAttendee, localAtt
 import { fetchLocalProviderCatalog } from "../../api/providerOperations";
 import { ApiError } from "../../lib/apiErrors";
 import { requestDesktopBootstrapStatus, requestDesktopHostProductSurface } from "../../lib/desktopBridge";
-import { LOCAL_ATTENDEE_PHASE_LABELS, readLocalAttendeeHandoff } from "../../lib/localAttendee";
+import { LOCAL_ATTENDEE_PHASE_LABELS, localAttendeeFailureReason, localAttendeeErrorMessage, readLocalAttendeeHandoff } from "../../lib/localAttendee";
 import type { FrontendLiveAgentCreateRequest } from "../../api";
 import type { AttendeeEntryPacket } from "../../types/generated/AttendeeEntryPacket";
 import type { LocalAttendeeCreate } from "../../types/generated/LocalAttendeeCreate";
@@ -18,7 +18,7 @@ import AgentCreateModal from "./AgentCreateModal";
 export default function LocalAttendeePanel() {
   const [handoff] = useState(() => {
     try { return { packet: readLocalAttendeeHandoff(new URL(window.location.href)), error: "" }; }
-    catch { return { packet: null, error: "초대를 읽지 못했어요. 브라우저에서 에이전트 추가 화면을 다시 열어 주세요." }; }
+    catch { return { packet: null, error: "초대를 읽지 못했어요. 방에서 에이전트 추가를 다시 해 주세요." }; }
   });
   return handoff.packet ? <LocalCreation packet={handoff.packet} />
     : <main style={{ padding: 24 }}><p role="alert">{handoff.error}</p></main>;
@@ -68,11 +68,11 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
         if (current()) {
           const expired = Date.parse(packet.expires_at) <= Date.now();
           setEditable(submitted.current === null && !expired);
-          if (expired) setError("초대가 만료됐어요. 브라우저에서 새 초대를 만들어 주세요.");
+          if (expired) setError("초대가 만료됐어요. 방에서 에이전트 추가를 다시 해 주세요.");
         }
       }
     } catch (failure) {
-      if (current()) setError(failure instanceof Error ? failure.message : typeof failure === "string" && failure.trim() ? failure : "참가 상태를 확인하지 못했어요.");
+      if (current()) setError(localAttendeeErrorMessage(failure, "참가 상태를 확인하지 못했어요."));
     } finally { if (current()) setBusy(false); }
   }, [packet, bootstrapRequestId]);
   useEffect(() => {
@@ -106,8 +106,8 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
           }
         }
       }
-      if (current()) setError(failure instanceof Error ? failure.message : typeof failure === "string" && failure.trim() ? failure : "참가 결과를 확인하지 못했어요.");
-      throw failure;
+      if (current()) setError(localAttendeeErrorMessage(failure, "참가 결과를 확인하지 못했어요."));
+      throw new Error(localAttendeeErrorMessage(failure, "참가 결과를 확인하지 못했어요."));
     } finally { if (current()) setBusy(false); }
   }
 
@@ -120,7 +120,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     else setBusy(true);
     setError("");
     try { const result = await commandLocalAttendee(packet, action); if (current()) setOperation(result); }
-    catch (failure) { if (current()) setError(failure instanceof Error ? failure.message : typeof failure === "string" && failure.trim() ? failure : "참가 상태를 확인하지 못했어요."); }
+    catch (failure) { if (current()) setError(localAttendeeErrorMessage(failure, "참가 상태를 확인하지 못했어요.")); }
     finally { if (current()) { setBusy(false); setCancelling(false); } }
   }
   const roomLabel = new URL(packet.join_url).host;
@@ -132,8 +132,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
       ? LOCAL_ATTENDEE_PHASE_LABELS[operation.phase] : editable ? "이 컴퓨터에서 사용할 AI를 설정해 주세요."
       : submitted.current ? "응답을 받지 못했어요. 상태를 확인하거나 같은 요청으로 다시 시도해 주세요." : "참가 상태를 먼저 확인해 주세요."}</p>
     {error && <p role="alert">{error}</p>}
-    {operation?.error_code && <p className="dc-agent-hint preserve-words">{operation.error_code === "local_attendee_process_restarted"
-      ? "앱을 다시 시작해 이전 실행 결과를 확인할 수 없어요. 방에서 이전 참가자를 정리한 뒤 새 초대를 만들어 주세요." : "AI 실행 중 문제가 생겼어요. 상태를 다시 확인해 주세요."}</p>}
+    {operation?.error_code && <p role="alert" className="dc-agent-hint preserve-words">{localAttendeeFailureReason(operation.error_code)}</p>}
     <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
       <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void read()}>상태 다시 확인</button>
       {editable && dismissed && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} onClick={() => setDismissed(false)}>설정 계속하기</button>}

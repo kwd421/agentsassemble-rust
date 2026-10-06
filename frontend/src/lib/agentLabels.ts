@@ -385,11 +385,26 @@ export function lastObservedSummary(
 export function executionLocationLabel(session?: RoomAgentSession): string {
   if (!session?.external_owned || session.process_ownership !== "external" ||
     !["idle", "busy", "paused", "stopping"].includes(session.runtime_status) ||
-    session.last_error_code === "bridge_disconnected") return "";
+    Boolean(session.last_error_code)) return "";
   switch (session.execution_os) {
     case "macos": return "Mac에서 실행 중";
     case "windows": return "Windows에서 실행 중";
     case "linux": return "Linux에서 실행 중";
     default: return "";
   }
+}
+
+export function reasoningEffortLabel(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    minimal: "최소",
+    low: "낮음",
+    medium: "보통",
+    high: "높음",
+    xhigh: "매우 높음",
+    max: "Max",
+    ultra: "Ultra",
+    ultracode: "UltraCode",
+  };
+  return labels[normalized] || value;
 }

@@ -203,6 +203,7 @@ impl LocalAttendeeService {
         let task = tokio::spawn(async move {
             let outcome = Box::pin(session::run(&mut *owned.lock().await, input)).await;
             if let Err(error) = &outcome {
+                log_failure(&error.code);
                 status.send_modify(|state| {
                     state.phase = Phase::CleanupUnconfirmed;
                     state.error_code = Some(error.code.clone());
@@ -372,4 +373,20 @@ impl Operation {
                 .map_err(|_| LocalAttendeeError::new("local_attendee_task_unresolved"))?;
         }
     }
+}
+
+// Diagnostics contain only bounded protocol identifiers, never provider messages,
+// invitation URLs, executable paths or credential-bearing stderr.
+fn log_failure(code: &str) {
+    let safe = if !code.is_empty()
+        && code.len() <= 96
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    {
+        code
+    } else {
+        "invalid_failure_code"
+    };
+    eprintln!("Local attendee failed: {safe}");
 }

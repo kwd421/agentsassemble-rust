@@ -551,7 +551,8 @@ it.each([['macos', 'Mac'], ['windows', 'Windows'], ['linux', 'Linux']] as const)
   const view = render(<MemberList agents={[AGENT]} agentSessions={[session]} roomId="room-1" roomName="Room One" />);
   expect(screen.getByText(`${label}에서 실행 중`)).toBeTruthy();
   for (const hidden of [{ ...session, execution_os: undefined }, { ...session, execution_os: 'other' as const },
-    { ...session, runtime_status: 'disconnected' as const }, { ...session, runtime_status: 'busy' as const, last_error_code: 'bridge_disconnected' }]) {
+    { ...session, runtime_status: 'disconnected' as const }, { ...session, runtime_status: 'busy' as const, last_error_code: 'bridge_disconnected' },
+    { ...session, last_error_code: 'room_observation_unconfirmed' }, { ...session, runtime_status: 'error' as const }]) {
     view.rerender(<MemberList agents={[AGENT]} agentSessions={[hidden]} roomId="room-1" roomName="Room One" />);
     expect(screen.queryByText(/에서 실행 중/)).toBeNull();
   }

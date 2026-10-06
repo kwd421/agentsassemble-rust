@@ -1,4 +1,4 @@
-import { executionLocationLabel } from "../../../lib/agentLabels";
+import { executionLocationLabel, reasoningEffortLabel } from "../../../lib/agentLabels";
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { VolumeX, Zap } from "lucide-react";
@@ -181,21 +181,6 @@ export default function MemberRow({
       </div>
     </div>
   );
-}
-
-function reasoningEffortLabel(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  const labels: Record<string, string> = {
-    minimal: "최소",
-    low: "낮음",
-    medium: "보통",
-    high: "높음",
-    xhigh: "매우 높음",
-    max: "Max",
-    ultra: "Ultra",
-    ultracode: "UltraCode",
-  };
-  return labels[normalized] || value;
 }
 
 function memberModelAccessibleLabel(entry: MemberEntry): string {

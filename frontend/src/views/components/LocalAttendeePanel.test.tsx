@@ -181,3 +181,32 @@ it.each(["repair_required", "initializing"])("keeps %s authority closed", async 
   expect(fetchLocalProviderCatalog).not.toHaveBeenCalled();
   expect(saveLocalProfile).not.toHaveBeenCalled();
 });
+
+it("shows the exact Korean failure reason without provider diagnostics", async () => {
+  vi.mocked(fetchLocalAttendee).mockResolvedValue({ ...admitted, phase: "failed", error_code: "room_observation_unconfirmed" });
+  render(<LocalAttendeePanel />);
+  await screen.findByText("AI가 전달받은 방 내용을 읽었다고 확인하지 못했어요. 방에서 에이전트 추가를 다시 해 주세요.");
+  expect(screen.queryByText(/브라우저에서/)).toBeNull();
+  expect(screen.queryByText("이 컴퓨터에서 실행 중이에요.")).toBeNull();
+});
+
+it("translates native bootstrap failures and hides empty provider headings", async () => {
+  vi.mocked(requestDesktopBootstrapStatus).mockRejectedValueOnce("Local identity bootstrap is not complete.");
+  render(<LocalAttendeePanel />);
+  await screen.findByText("이 컴퓨터의 사용자 설정이 완료되지 않았어요. 앱에서 로그인한 뒤 상태를 다시 확인해 주세요.");
+  expect(screen.queryByText("Local identity bootstrap is not complete.")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "상태 다시 확인" }));
+  await screen.findByRole("dialog", { name: "에이전트 추가" });
+  expect(screen.queryByRole("heading", { name: "API 키" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "로컬 모델" })).toBeNull();
+});
+
+it("keeps a creation-time bootstrap error Korean in both the panel and modal", async () => {
+  vi.mocked(createLocalAttendee).mockRejectedValueOnce(new Error("Local identity bootstrap is not complete."));
+  render(<LocalAttendeePanel />);
+  await chooseDraft();
+  fireEvent.click(screen.getByRole("button", { name: "추가하고 실행" }));
+  await screen.findByRole("button", { name: "같은 요청 다시 시도" });
+  expect(screen.getAllByText("이 컴퓨터의 사용자 설정이 완료되지 않았어요. 앱에서 로그인한 뒤 상태를 다시 확인해 주세요.").length).toBeGreaterThan(0);
+  expect(screen.queryByText("Local identity bootstrap is not complete.")).toBeNull();
+});

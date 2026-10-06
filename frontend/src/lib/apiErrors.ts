@@ -10,7 +10,7 @@ export class ApiError extends Error {
   resolution?: "rejected" | "unresolved";
 
   constructor(status: number, message: string, code = "", resolution?: "rejected" | "unresolved") {
-    super(message);
+    super(localizeBootstrapError(message));
     this.name = "ApiError";
     this.status = status;
     this.code = code;
@@ -20,4 +20,10 @@ export class ApiError extends Error {
 
 export function isUnauthorizedApiError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401;
+}
+
+export function localizeBootstrapError(message: string): string {
+  return message === "Local identity bootstrap is not complete."
+    ? "이 컴퓨터의 사용자 설정이 완료되지 않았어요. 앱에서 로그인한 뒤 상태를 다시 확인해 주세요."
+    : message;
 }

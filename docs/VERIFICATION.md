@@ -1,5 +1,72 @@
 # Verification Contract
 
+- 2026-10-07 packaged E2E6 first-turn correction (HEAD `0bd78f0c`, working tree;
+  no commit/push/package/deployment): real Codex 0.154.0, `gpt-5.6-luna`, effort
+  `low` reproduced admission → Running → first-turn shutdown with
+  `room_observation_unconfirmed`. The external execution adapter discarded the
+  canonical assignment's `session_instructions`; the persistent room rules also
+  omitted the mandatory first `read_discussion` action. Forward the exact frozen
+  instructions and restore that entry requirement in the existing room-rules owner.
+  MCP inventory was healthy (13 tools including `read_discussion`); parent authority,
+  executable custody and startup were not the reproduced failure. Temporary native
+  diagnostics and unsuccessful broader instruction/API experiments were removed.
+  No receipt gate, authority check, retry/fallback, schema or provider protocol changed.
+  The only additional provider context is the fixed room-entry sentence; no new
+  process, background job or polling was added.
+
+  Final real reproduction: `cargo test -p agentsassemble-server --test integration
+  local_attendee_turn:: -- --ignored --nocapture` passes (30.57s). The harness uses
+  distinct A/B stores, a real redeemed operator pairing and companion invite, B
+  restricted from hosting, and the production server guardian with real Codex.
+  Two successive messages produce nonempty `message_final` events owned by the
+  admitted AI with `message_source=room_portal`. Each turn finishes Idle with no
+  error and active provider; the same parent fingerprint still authorizes after
+  both turns. Local status stays Running, then explicit cancel/shutdown confirms
+  Stopped and the room provider becomes inactive. This opt-in test stays ignored
+  in the normal suite. Empty workspace is rejected as `invalid_workspace` before
+  admission; no implicit workspace was added. The provided 05 capture also has a
+  disabled creation button with its unselected folder.
+
+  Failure observation now writes only bounded error-code identifiers to stderr
+  before cleanup and preserves the original reason while Stopping. The reproduced
+  failing run emitted `Local attendee failed: room_observation_unconfirmed` without
+  provider text, credentials or credential paths. The local UI maps this and other
+  known failures to Korean; bootstrap errors are translated at the API and native
+  display boundaries. Re-add copy points to the room. Empty provider headings are
+  hidden; setup/update actions remain with the selected provider's model section
+  even when discovery has no controls. Creation and member rows share effort labels;
+  rows with a failure code no longer advertise the external provider as running.
+
+  Checks: `cargo test -p agentsassemble-persistence -p agentsassemble-server
+  --all-features -- --test-threads=1` passes 768 tests (438 persistence, 136 server
+  library, 5 binary, 189 integration; one real-provider test intentionally ignored),
+  plus docs. The final local HTTP test helper refactor passes its targeted integration
+  rerun. A pre-existing 101-line local HTTP test and the new real harness were split
+  at their fixture/assertion responsibilities to satisfy Clippy without exceptions.
+  Targeted all-target/all-feature Clippy, architecture/source growth, 19 policy tests,
+  Rust formatting, TypeScript and diff checks pass. Full frontend: 184 files/1,194
+  tests pass; after adding creation-time bootstrap coverage the final local-panel
+  rerun passes 14 tests. Existing source-size and ts-rs attribute warnings remain.
+
+  Changed runtime owners: `crates/agentsassemble-persistence/src/room_turn_context.rs`;
+  `crates/agentsassemble-server/src/attendee/client_execution.rs`, `local_attendee.rs`,
+  `local_attendee_session.rs`. Rust coverage: `room_turn_tests.rs` in persistence;
+  server tests `attendee_client_execution.rs`, `local_attendee_turn.rs` (new),
+  `local_attendee_web.rs`, and `tests/integration/main.rs`.
+  Frontend owners: `src/lib/agentLabels.ts`, `apiErrors.ts`, `localAttendee.ts`;
+  `src/views/components/AgentCreateModal.tsx`, `LocalAttendeePanel.tsx`,
+  `ProviderTileGrid.tsx`, `member/MemberRow.tsx`. Frontend coverage:
+  `AgentCreateModal.test.tsx`, `AgentCreateModal.update.test.tsx`,
+  `LocalAttendeePanel.test.tsx`, `MemberList.test.tsx`. Contract/evidence:
+  `docs/specs/operational-surfaces-slice.md` and this file.
+
+  Limits: the original B failure code/actual submitted workspace was unavailable,
+  so its exact stored failure is not proven identical to the reproduced defect.
+  The live reproduction uses loopback on one Mac; two physical computers, packaged
+  0.1.21 successor pixels, and Cloudflare/public-ingress behavior were not reverified.
+  Other providers were not executed. Existing untracked `.agents/` and
+  `scripts/__pycache__/` were preserved.
+
 - 2026-10-06 packaged 0.1.20 local AI blocker (working tree): bypass entry now
   inspects local bootstrap and reuses the startup profile initializer with a live
   central account only when empty. Operator ticket issuance already ensures the

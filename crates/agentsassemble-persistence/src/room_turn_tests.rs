@@ -233,8 +233,8 @@ fn assert_turn_tool_instructions(assignment: &super::AgentTurnAssignment) {
         .session_instructions
         .as_deref()
         .unwrap_or_default();
-    assert!(!provider_input.contains("read_discussion"));
-    // Tool usage belongs to MCP descriptions; availability and limits stay in room rules.
+    assert!(provider_input.contains("First call the room tool `read_discussion`"));
+    // Room-turn entry is mandatory; individual tool usage stays in MCP descriptions.
     assert!(!provider_input.contains("`publish_message` posts to the room"));
     assert!(!provider_input.contains("read_room_status"));
     assert!(provider_input.contains("unavailable outside tabletop mode"));

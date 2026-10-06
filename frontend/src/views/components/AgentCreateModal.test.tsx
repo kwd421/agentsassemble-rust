@@ -383,8 +383,8 @@ describe("AgentCreateModal", () => {
     await chooseProviderControl("모델", "Variable model");
 
     await userEvent.click(screen.getByRole("combobox", { name: "추론 강도" }));
-    expect(screen.getByRole("option", { name: "low" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "high" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "낮음" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "높음" })).toBeTruthy();
     await userEvent.click(screen.getByRole("combobox", { name: "추론 강도" }));
     expect(screen.queryByRole("option", { name: "Fast" })).toBeNull();
     expect(
@@ -392,7 +392,7 @@ describe("AgentCreateModal", () => {
     ).toBe(true);
     expectProviderControlValue("응답 속도", "기본");
 
-    await chooseProviderControl("추론 강도", "high");
+    await chooseProviderControl("추론 강도", "높음");
     expect(
       (screen.getByRole("switch", { name: "응답 속도" }) as HTMLButtonElement).disabled
     ).toBe(false);
@@ -441,12 +441,12 @@ describe("AgentCreateModal", () => {
     await chooseProviderControl("모델", "High model");
     expectProviderControlValue("추론 강도", "선택 필요");
     expectProviderControlValue("응답 속도", "기본");
-    await chooseProviderControl("추론 강도", "high");
+    await chooseProviderControl("추론 강도", "높음");
 
     await chooseProviderControl("모델", "Variable model");
-    await chooseProviderControl("추론 강도", "high");
+    await chooseProviderControl("추론 강도", "높음");
     await chooseProviderControl("응답 속도", "Fast");
-    await chooseProviderControl("추론 강도", "low");
+    await chooseProviderControl("추론 강도", "낮음");
     expectProviderControlValue("응답 속도", "선택 필요");
     await userEvent.click(screen.getByRole("switch", { name: "응답 속도" }));
     expect(screen.queryByRole("option", { name: "Fast" })).toBeNull();

@@ -83,7 +83,7 @@ impl AttendeeRuntime {
             }
         }
         let request = ProviderTurnRequest {
-            session_instructions: None,
+            session_instructions: delivery.input.session_instructions.clone(),
             request_ingress: requests,
             turn_id: start.turn_id.clone(),
             turn_generation: start.turn_generation,

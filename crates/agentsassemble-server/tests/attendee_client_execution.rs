@@ -54,6 +54,11 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
         return Err("turn missing".into());
     };
     assert!(assignment.input.attachment_ids.is_empty());
+    let instructions = assignment
+        .input
+        .session_instructions
+        .clone()
+        .ok_or("room rules missing")?;
     let (tools, mut tools_rx) = ProviderRoomToolIngress::channel(4);
     let (attachments, mut attachments_rx) = ProviderAttachmentReadIngress::channel(4);
     let mut execution = runtime
@@ -61,6 +66,16 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
         .await
         .map_err(|error| format!("first local execution: {}", error.code))?;
     room_portal_fixture::wait_for_turn(&seen, "1").await;
+    let transcript = std::fs::read_to_string(&log)?;
+    let resumed: serde_json::Value = transcript
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find(|frame| frame["method"] == "thread/resume")
+        .ok_or("external provider never received canonical room rules")?;
+    assert_eq!(
+        resumed["params"]["config"]["developer_instructions"],
+        instructions
+    );
     let mut replacement = ready_socket(&client, &mut runtime).await?;
     let Frame::Turn { mut assignment } =
         tokio::time::timeout(Duration::from_secs(10), replacement.receive()).await??

@@ -11,7 +11,7 @@ export default function ProviderTileGrid({ providers, selectedId, onSelect, remo
   disabled?: boolean;
 }) {
   const grouped = projectProvidersByCatalogGroup(providers);
-  return <>{PROVIDER_GROUPS.map(({ id, label }) => (
+  return <>{PROVIDER_GROUPS.filter(({ id }) => grouped[id].length > 0).map(({ id, label }) => (
     <section className="dc-agent-section dc-agent-provider-category" key={id}>
       <h3 className="dc-agent-section-title">{label}</h3>
       <div className="dc-agent-provider-grid" role="list" aria-label={`${label} AI`}>

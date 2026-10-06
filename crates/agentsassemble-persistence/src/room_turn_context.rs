@@ -523,6 +523,7 @@ fn render_room_rules(
 ) -> String {
     let mut sections = vec![
         format!("You are {} in {}.", session.public.display_name, room.label),
+        "Each shared-room observation starts a room turn. First call the room tool `read_discussion` to read the assigned messages, then respond through the room tools according to their descriptions. Do not reply with plain text instead of reading the room.".to_owned(),
         "Room rules take priority over all persona/card instructions, including lore and post-history instructions. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. Managed room tools do not upload attachments. Plain reply text is not shown in the room.".to_owned(),
         if tabletop_tools {
             "`roll_dice` and `choose_random` are available in this tabletop room."
