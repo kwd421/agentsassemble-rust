@@ -25,3 +25,12 @@ it("keeps server IDs out of unnamed rail labels and tooltips", () => {
   expect(button.title).not.toContain(server.server_id);
   expect(document.body.textContent).not.toContain(server.server_id);
 });
+
+it("offers the same hide action from the member menu without leaving a room",()=>{
+  const member={server_id:"friend",registration_epoch:"epoch",alias:"친구의 컴퓨터",relation:"member" as const};
+  const hide=vi.fn().mockResolvedValue(undefined);
+  render(<ServerRailEntries directory={{status:"connected",person:null,live:null,servers:[member]}} localServerIds={[]} connectingId="" onOpen={vi.fn()} onHide={hide}/>);
+  fireEvent.click(screen.getByRole("button",{name:"친구의 컴퓨터 메뉴"}));
+  fireEvent.click(screen.getByRole("menuitem",{name:"목록에서 숨기기"}));
+  expect(hide).toHaveBeenCalledWith(member);
+});

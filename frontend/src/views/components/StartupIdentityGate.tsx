@@ -31,7 +31,7 @@ import {
   loadPendingCentralRecoveryCode,
   loginCentralGoogle,
   logoutCentral,
-  openCentralOwnedServer,
+  openCentralOwnedServer, openCentralMemberServer,
   recoverCentralGuest,
   registerLocalServer,
 } from "../../lib/central/identity";
@@ -207,7 +207,8 @@ export default function StartupIdentityGate({
         const current = await refreshCentral();
         const live = current.live?.servers.find(item => item.server_id === server.server_id);
         if (!live) throw new Error("서버 연결이 끊겼어요. 로그인 서버 연결을 다시 확인해 주세요.");
-        await openCentralOwnedServer(live);
+        if (live.relation === "member") await openCentralMemberServer(live);
+        else await openCentralOwnedServer(live);
       }
       else {
         if (webEntry) throw new Error("서버를 실행하려면 이 기기의 앱을 열어 주세요.");

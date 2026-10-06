@@ -1776,3 +1776,20 @@ hand-off와 “‘{서버 이름}’에 다시 연결할까요?” 동의, 앱�
 테스트와 푸시 직전 make verify 1회, 각1000줄 미만 기능 커밋/푸시, VERIFICATION 건별
 한 줄을 남긴다. 서명 빌드/수동 검증/배포와 Worker 변경은 제외한다. leave receipt,
 capacity reservation, anonymous merge, 새 owner member 관리 UI는 범위 밖이다.
+
+Rail (c) wire 정본 대조(Worker README 2026-10-06): connect는 별도
+`member-connect-grants[/redeem]`, purpose=connect, aamc1 토큰을 쓴다. member
+endpoint에는 lease_expires_at도 없다. preview는 숨김 여부를 제공하지 않으므로 동의
+화면의 명시적 “목록에 다시 표시하고 참가” 동작이 unhide→새 grant를 수행한다.
+거절을 자동 우회하거나 없는 anchor의 unhide 오류를 무시하지 않는다. 앱 직접 연결은
+기존 서버 열기 명령의 /join#native-member 전달로 확장하며 서버/epoch별 browser
+credential을 사용한다. 도착 origin 검증·fragment 즉시 제거 후 탭별로 보관하고,
+멤버 세션에만 선택하여 기존 일반 browser credential을 덮어쓰지 않는다.
+
+호스트 HTTP: `POST /api/member-connect/challenge` (`{}`),
+`POST /api/member-connect/rooms` (`challenge_id`, `grant_token`),
+`POST /api/member-connect/select` (`challenge_id`, `room_id`, `client_id`).
+모두 기존 `X-Device-Token` browser credential과 same-origin/Tauri 경계를 사용한다.
+최종 결과는 기존 JoinResponse이며 host 생성 request_id와 첫 선택 client_id를 유지한다.
+중앙 예산429는 `member_temporarily_unavailable`/503으로 표시하고 sender는 ACK 없이
+기존 영속 backoff를 유지한다.

@@ -1,6 +1,6 @@
 import { useCentralDirectory } from "./useCentralDirectory";
 import { projectRoomConnections } from "../lib/serverConnectionState";
-import { openCentralOwnedServer } from "../lib/central/identity";
+import { openCentralOwnedServer, openCentralMemberServer, setCentralMemberHidden } from "../lib/central/identity";
 import type { CentralServerDisplay } from "../lib/central/directoryCache";
 import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
 import { Hash } from "lucide-react";
@@ -81,7 +81,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     consumeGuestRecoveryRequestFromUrl
   );
   const [startupRoute] = useState(() =>
-    createStartupRoute({ operatorPairingPending: Boolean(operatorPairingToken), memberInviteToken: memberReturn?.record?.invite_token })
+    createStartupRoute({ operatorPairingPending: Boolean(operatorPairingToken), memberInviteToken: memberReturn?.record?.invite_token, memberConnect: Boolean(memberReturn?.connect || memberReturn?.record?.purpose === "connect") })
   );
   // Navigation custody only: retained admission never authorizes a server request.
   const lastOwnerRoomUid = useRef(startupRoute.guestSession?.centralOwner ? startupRoute.guestSession.roomUid || "" : "");
@@ -132,9 +132,17 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       const current = await refreshCentralDirectory();
       const live = current.live?.servers.find(item => item.server_id === server.server_id);
       if (!live) throw new Error("서버 연결이 끊겼어요. 로그인 서버 연결을 다시 확인하고 있어요.");
-      await openCentralOwnedServer(live);
+      if (live.relation === "member") await openCentralMemberServer(live);
+      else await openCentralOwnedServer(live);
     } catch (error) { setServerConnectionError(error instanceof Error ? error.message : "서버 연결이 끊겼어요."); }
     finally { serverOpening.current = false; setConnectingServerId(""); }
+  }
+  async function hideRailServer(server: CentralServerDisplay) {
+    if (serverOpening.current) return;
+    serverOpening.current=true; setServerConnectionError("");
+    try { await setCentralMemberHidden(server,true); await refreshCentralDirectory(); }
+    catch { setServerConnectionError("목록에서 숨기지 못했어요. 잠시 뒤 다시 시도해 주세요."); }
+    finally { serverOpening.current=false; }
   }
   async function retryRoomConnection(room: RoomDockItem) {
     if (room.roomOrigin === "remote_server") {
@@ -699,7 +707,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
 
   return {
     localServerId: startupHostEnabled ? currentRoomDirectoryAuthority()?.server_id : undefined,
-    centralDirectory, refreshCentralDirectory, openRailServer, connectingServerId, serverConnectionError, retryRoomConnection,
+    centralDirectory, refreshCentralDirectory, openRailServer, hideRailServer, connectingServerId, serverConnectionError, retryRoomConnection,
     roomLifecycle, pairedRoomLifecycle, roomChannels, activeCustomChannel, channelTranscript,
     acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings,

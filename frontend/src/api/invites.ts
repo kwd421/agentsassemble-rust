@@ -126,3 +126,16 @@ export function redeemOperatorPairing({
 export function leaveRoomInvite(identity: { sessionToken: string; deviceToken?: string }) {
   return postJsonWithIdentity<{ status: string }>("/api/room-invite/leave", {}, identity);
 }
+
+export async function challengeMemberConnect(deviceToken: string) {
+  return parseMemberChallenge(await postJsonWithIdentity<unknown>("/api/member-connect/challenge", {}, {deviceToken}));
+}
+export async function redeemMemberConnect(record: MemberHandoff, grantToken: string, deviceToken: string) {
+  const value = await postJsonWithIdentity<{rooms: {room_id:string;name:string}[]}>("/api/member-connect/rooms", {challenge_id:record.challenge_id,grant_token:grantToken}, {deviceToken});
+  if (!Array.isArray(value.rooms) || value.rooms.length > 50 || !value.rooms.every(r => typeof r.room_id === "string" && r.room_id && typeof r.name === "string")) throw new Error("참가 중인 방을 확인하지 못했어요.");
+  return value.rooms;
+}
+export async function selectMemberConnect(record: MemberHandoff, roomId: string, clientId: string, deviceToken: string) {
+  const payload = await postJsonWithIdentity<RoomInviteJoinResponse>("/api/member-connect/select", {challenge_id:record.challenge_id,room_id:roomId,client_id:clientId}, {deviceToken});
+  return parseRoomInviteJoinResponse(payload,payload.request_id,roomId,clientId);
+}

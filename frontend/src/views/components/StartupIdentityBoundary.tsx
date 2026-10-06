@@ -18,7 +18,7 @@ import {
 import { centralAccountEntryUrl, isCentralWebEntry } from "../../lib/central/identity";
 import StartupIdentityGate from "./StartupIdentityGate";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
-import type { MemberReturn } from "../../lib/central/memberConnect";
+import { retainedNativeMemberCredential, type MemberReturn } from "../../lib/central/memberConnect";
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
 
 function browserEntranceHasAuthority(): boolean {
@@ -45,7 +45,7 @@ export default function StartupIdentityBoundary({
     () => isBundledDesktopWebview() && !centralOwnerConnect
   );
   const [browserEntrance] = useState(
-    () => !desktop && (Boolean(centralOwnerConnect || memberReturn?.record) || browserEntranceHasAuthority())
+    () => !desktop && (Boolean(centralOwnerConnect || (memberReturn?.record || memberReturn?.connect)) || browserEntranceHasAuthority())
   );
   const [ready, setReady] = useState(browserEntrance && !centralOwnerConnect);
   const [browserIdentity] = useState(() => {
@@ -54,7 +54,7 @@ export default function StartupIdentityBoundary({
     }
     try {
       return {
-        deviceToken: getOrCreateBrowserCredential(),
+        deviceToken: memberReturn?.browserCredential || (loadRoomGuestSession()?.nativeMember ? retainedNativeMemberCredential() : getOrCreateBrowserCredential()),
         clientId: getOrCreateClientId(),
         error: "",
       };
@@ -75,7 +75,7 @@ export default function StartupIdentityBoundary({
     setReady(true);
   }, []);
 
-  if (memberReturn && !memberReturn.record) return <GuestJoinProfilePanel displayName=""
+  if (memberReturn && !memberReturn.record && !memberReturn.connect) return <GuestJoinProfilePanel displayName=""
     retryMode="join" status="참가를 준비하지 못했어요. 원래 초대 링크를 다시 열어 주세요."
     onDisplayNameChange={() => {}} onAvatarImageChange={() => {}} onJoin={() => window.history.back()} />;
 

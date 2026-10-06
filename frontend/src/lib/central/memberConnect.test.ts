@@ -4,7 +4,7 @@ import { encodeBase64Url } from "../base64Url";
 import {
   centralMemberEntryUrl, consumeCentralMemberRequest, consumeMemberReturn,
   createMemberHandoff, exactMemberOrigin, memberCallbackUrl, memberTargetRequest,
-  parseMemberGrant, purgeMemberHandoffs, storeMemberHandoff,
+  parseMemberGrant, purgeMemberHandoffs, storeMemberHandoff, nativeMemberCallbackUrl, retainedNativeMemberCredential,
 } from "./memberConnect";
 
 const challenge = { server_id: "server", registration_epoch: "epoch", challenge_hash: "a".repeat(43),
@@ -100,4 +100,34 @@ describe("member handoff boundary", () => {
     expect(sessionStorage.getItem(`agentsassemble.memberHandoff.v1:${pending.handoff_state}`)).toBeTruthy();
     expect(sessionStorage.getItem("unrelated")).toBe("preserve");
   });
+});
+
+it("keeps connect purpose across a credential-free handoff and rejects admission tokens",()=>{
+  const pending={...createMemberHandoff(challenge,"",""),purpose:"connect" as const};
+  const request=memberTargetRequest(pending);
+  expect(request.purpose).toBe("connect");
+  expect(()=>parseMemberGrant(grant,request)).toThrow();
+  const issued={...grant,grant_token:`aamc1.${"c".repeat(43)}`};
+  storeMemberHandoff(pending);
+  window.history.replaceState({},"",new URL(memberCallbackUrl(issued,request)).pathname+new URL(memberCallbackUrl(issued,request)).hash);
+  expect(consumeMemberReturn()?.record?.purpose).toBe("connect");
+});
+
+it("validates native connect origin and retains only its scoped browser credential after removing the fragment",()=>{
+  const pending={...createMemberHandoff(challenge,"",""),purpose:"connect" as const};
+  const issued={...grant,grant_token:`aamc1.${"c".repeat(43)}`};
+  const credential=`aad1_${"A".repeat(43)}`;
+  const url=nativeMemberCallbackUrl(pending,issued,credential);
+  localStorage.setItem("agentsassemble.browserCredential.v1","existing-browser");
+  window.history.replaceState({},"",new URL(url).pathname+new URL(url).hash);
+  const result=consumeMemberReturn();
+  expect(result?.record?.purpose).toBe("connect");
+  expect(result?.browserCredential).toBe(credential);
+  expect(window.location.hash).toBe("");
+  expect(retainedNativeMemberCredential()).toBe(credential);
+  expect(localStorage.getItem("agentsassemble.browserCredential.v1")).toBe("existing-browser");
+  const wrong=nativeMemberCallbackUrl(pending,{...issued,endpoint_origin:"https://other.test"},credential);
+  window.history.replaceState({},"","/join"+new URL(wrong).hash);
+  expect(consumeMemberReturn()?.error).toBeTruthy();
+  expect(window.location.hash).toBe("");
 });

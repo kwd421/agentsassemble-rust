@@ -13825,3 +13825,5 @@ contract and evidence below replace that implementation; no migration 0009 is ne
 - 2026-10-06 Rail (c) 저장: v84 outbox/immutable epoch/late ACK/영속 재시도·48회 상한 및 초대 없는 방 조회·선택의 기존 기기 세션 재사용; `cargo test -p agentsassemble-persistence member_ --lib` 30개 통과(중앙 테스트 대역, 서명·수동·배포 제외).
 
 - 2026-10-06 Rail (c) 호스트 HTTP/sender: 중앙 서명 대역으로 connect 전용 grant, 같은 방 동시 재시도 동일 세션, 선택 직전 강퇴 거절, 거절된 재입장의 새 projection 보존, epoch 고정·429 재시도를 통과(`integration member_invite_boundary`, `central::directory::member_sync`); 실제 중앙·서명·수동·배포 미실행.
+
+- 2026-10-06 Rail (c) 공용 프론트/앱 연결: 멤버 allowlist·hide/unhide·connect 동의·방 선택·서버별 앱 credential 전달 검증; frontend 전체 181파일·desktop 48테스트 통과. `make verify` 1회 중 신규 HTTP 대역 응답 불일치를 수정하고 해당 회귀 재실행 및 잔여 doc-test/clippy/format/diff/artifact, 구조·성장 게이트 통과; 서명·수동·배포 미실행.

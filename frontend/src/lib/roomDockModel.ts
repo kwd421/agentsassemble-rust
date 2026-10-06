@@ -405,7 +405,7 @@ function activeRoomIdForStartup(rooms: RoomDockItem[], routeRoom?: RoomDockItem 
   );
 }
 
-export function createStartupRoute({ operatorPairingPending = false, memberInviteToken = "" } = {}): StartupRoute {
+export function createStartupRoute({ operatorPairingPending = false, memberInviteToken = "", memberConnect = false } = {}): StartupRoute {
   const rawJoinToken = operatorPairingPending ? "" : memberInviteToken || joinInviteTokenFromUrl(window.location.href);
   const connectorJoinUrl = isConnectorInviteToken(rawJoinToken)
     ? `${window.location.origin}/join?token=${rawJoinToken}`
@@ -415,7 +415,7 @@ export function createStartupRoute({ operatorPairingPending = false, memberInvit
   const guestInvite =
     operatorPairingPending
       ? roomFromPendingAdmission("pairing")
-      : guestJoinToken || connectorJoinUrl
+      : guestJoinToken || connectorJoinUrl || memberConnect
       ? roomFromPendingAdmission("invite")
       : guestSession
         ? roomFromGuestSession(guestSession)

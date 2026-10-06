@@ -1,3 +1,4 @@
+import { isCanonicalBrowserCredential } from "../deviceIdentity";
 import { decodeCanonicalBase64Url, encodeBase64Url } from "../base64Url";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
@@ -10,6 +11,7 @@ export type MemberTargetRequest = {
   server_id: string; registration_epoch: string; challenge_hash: string; handoff_state: string;
   /** Untrusted presentation only; excluded from grants and callback correlation. */
   room_name?: string;
+  purpose?: "connect";
 };
 export type MemberChallenge = Omit<MemberTargetRequest, "handoff_state" | "room_name"> & {
   challenge_id: string; expires_at: number;
@@ -21,7 +23,7 @@ export type MemberGrant = {
   grant_token: string; server_id: string; registration_epoch: string; expires_at: number;
   endpoint_origin: string; endpoint_generation: number;
 };
-export type MemberReturn = { record?: MemberHandoff; grant?: MemberGrant; error?: string; retry?: boolean };
+export type MemberReturn = { browserCredential?: string; connect?: { server_id: string; registration_epoch: string }; record?: MemberHandoff; grant?: MemberGrant; error?: string; retry?: boolean };
 
 export function memberRoomName(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -37,7 +39,7 @@ function liveExpiry(value: unknown): number {
 
 export function parseMemberTargetRequest(value: unknown): MemberTargetRequest {
   const r = strictRecord(value, "서버 입장 요청");
-  assertExactKeys(r, ["server_id", "registration_epoch", "challenge_hash", "handoff_state"], "서버 입장 요청", ["room_name"]);
+  assertExactKeys(r, ["server_id", "registration_epoch", "challenge_hash", "handoff_state"], "서버 입장 요청", ["room_name", "purpose"]);
   const request = {
     server_id: requiredString(r, "server_id", "서버 입장 요청"),
     registration_epoch: requiredString(r, "registration_epoch", "서버 입장 요청"),
@@ -48,7 +50,8 @@ export function parseMemberTargetRequest(value: unknown): MemberTargetRequest {
       request.server_id.length > 200 || request.registration_epoch.length > 200) {
     throw new Error("서버 입장 요청을 확인하지 못했어요.");
   }
-  return { ...request, ...(r.room_name === undefined ? {} : { room_name: memberRoomName(r.room_name) }) };
+  if (r.purpose !== undefined && r.purpose !== "connect") throw new Error("연결 요청을 확인하지 못했어요.");
+  return { ...request, ...(r.purpose === "connect" ? { purpose: "connect" as const } : {}), ...(r.room_name === undefined ? {} : { room_name: memberRoomName(r.room_name) }) };
 }
 
 export function parseMemberChallenge(value: unknown): MemberChallenge {
@@ -69,7 +72,7 @@ export function parseMemberGrant(value: unknown, expected: MemberTargetRequest):
   assertExactKeys(r, ["grant_token", "server_id", "registration_epoch", "expires_at", "endpoint_origin", "endpoint_generation"], "서버 입장권");
   if (r.server_id !== expected.server_id || r.registration_epoch !== expected.registration_epoch ||
       typeof r.endpoint_generation !== "number" || !Number.isSafeInteger(r.endpoint_generation) || r.endpoint_generation < 1 ||
-      typeof r.grant_token !== "string" || !/^aamg1\.[A-Za-z0-9_-]{43}$/.test(r.grant_token)) {
+      typeof r.grant_token !== "string" || !(expected.purpose === "connect" ? /^aamc1\.[A-Za-z0-9_-]{43}$/ : /^aamg1\.[A-Za-z0-9_-]{43}$/).test(r.grant_token)) {
     throw new Error("서버 입장권이 요청한 서버와 일치하지 않아요.");
   }
   return { grant_token: r.grant_token, server_id: expected.server_id,
@@ -90,7 +93,7 @@ function decode(value: string): unknown {
 }
 export function memberTargetRequest(record: MemberTargetRequest): MemberTargetRequest {
   const { server_id, registration_epoch, challenge_hash, handoff_state } = record;
-  return { server_id, registration_epoch, challenge_hash, handoff_state };
+  return { server_id, registration_epoch, challenge_hash, handoff_state, ...(record.purpose ? { purpose: record.purpose } : {}) };
 }
 export function createMemberHandoff(challenge: MemberChallenge, invite_token: string, meeting_id: string): MemberHandoff {
   return { ...challenge, invite_token, meeting_id,
@@ -119,6 +122,34 @@ export function memberRetryUrl(origin: string, request: MemberTargetRequest): st
 
 /** Called by main before React startup; even malformed grants leave browser history first. */
 export function consumeMemberReturn(): MemberReturn | undefined {
+  if (window.location.hash.startsWith("#native-member=")) {
+    const fragment=window.location.hash;
+    window.history.replaceState({},"",window.location.pathname+window.location.search);
+    try {
+      const value=strictRecord(decode(fragment.slice("#native-member=".length)),"연결 응답");
+      assertExactKeys(value,["record","grant","browser_credential"],"연결 응답");
+      if (typeof value.browser_credential !== "string" || !isCanonicalBrowserCredential(value.browser_credential)) throw new Error("연결 요청을 확인하지 못했어요.");
+      const saved=strictRecord(value.record,"연결 기록");
+      assertExactKeys(saved,["challenge_id","challenge_hash","server_id","registration_epoch","expires_at","handoff_state","purpose","invite_token","meeting_id"],"연결 기록");
+      if (saved.purpose !== "connect" || saved.invite_token !== "" || saved.meeting_id !== "") throw new Error("연결 요청을 확인하지 못했어요.");
+      const {challenge_id,expires_at,invite_token,meeting_id,...tuple}=saved;
+      const request=parseMemberTargetRequest(tuple);
+      requiredString(saved,"challenge_id","연결 기록"); liveExpiry(expires_at);
+      const grant=parseMemberGrant(value.grant,request);
+      if (grant.endpoint_origin !== window.location.origin) throw new Error("서버 주소가 변경됐어요. 다시 시도해 주세요.");
+      sessionStorage.setItem("agentsassemble.nativeMemberBrowser.v1",value.browser_credential);
+      return {record:saved as MemberHandoff,grant,browserCredential:value.browser_credential};
+    } catch { return {error:"연결 요청을 확인하지 못했어요."}; }
+  }
+  if (window.location.hash.startsWith("#member-connect=")) {
+    const fragment = window.location.hash;
+    window.history.replaceState({}, "", window.location.pathname + window.location.search);
+    try {
+      const r = strictRecord(decode(fragment.slice("#member-connect=".length)), "연결 요청");
+      assertExactKeys(r, ["server_id", "registration_epoch"], "연결 요청");
+      return { connect: { server_id: requiredString(r,"server_id","연결 요청"), registration_epoch: requiredString(r,"registration_epoch","연결 요청") } };
+    } catch { return { error: "연결 요청을 확인하지 못했어요." }; }
+  }
   if (!window.location.hash.startsWith("#central-member")) return undefined;
   const fragment = window.location.hash;
   window.history.replaceState({}, "", window.location.pathname + window.location.search);
@@ -135,8 +166,8 @@ export function consumeMemberReturn(): MemberReturn | undefined {
     if (!stored) throw new Error("입장 기록이 없어요. 원래 초대 링크를 다시 열어 주세요.");
     const saved = strictRecord(JSON.parse(stored), "입장 기록");
     assertExactKeys(saved, ["server_id", "registration_epoch", "challenge_hash", "handoff_state",
-      "challenge_id", "expires_at", "invite_token", "meeting_id"], "입장 기록");
-    for (const field of ["challenge_id", "invite_token", "meeting_id"]) requiredString(saved, field, "입장 기록");
+      "challenge_id", "expires_at", "invite_token", "meeting_id"], "입장 기록", ["purpose"]);
+    for (const field of saved.purpose === "connect" ? ["challenge_id"] : ["challenge_id", "invite_token", "meeting_id"]) requiredString(saved, field, "입장 기록");
     record = saved as MemberHandoff;
     if (JSON.stringify(memberTargetRequest(record)) !== JSON.stringify(memberTargetRequest(request))) {
       record = undefined;
@@ -172,3 +203,17 @@ export function consumeCentralMemberRequest(): MemberTargetRequest | undefined {
   return parseMemberTargetRequest(pending.request);
 }
 export function clearCentralMemberRequest(): void { sessionStorage.removeItem(CENTRAL_KEY); }
+
+export function memberServerEntryUrl(origin: string, server: { server_id: string; registration_epoch?: string }): string {
+  if (!server.registration_epoch) throw new Error("서버 등록 정보를 확인하지 못했어요.");
+  return `${exactCentralServerOrigin(origin)}/join#member-connect=${encode({server_id:server.server_id,registration_epoch:server.registration_epoch})}`;
+}
+
+export function nativeMemberCallbackUrl(record: MemberHandoff, grant: MemberGrant, browserCredential: string): string {
+  return `${exactCentralServerOrigin(grant.endpoint_origin)}/join#native-member=${encode({record,grant,browser_credential:browserCredential})}`;
+}
+export function retainedNativeMemberCredential(): string {
+  const credential=sessionStorage.getItem("agentsassemble.nativeMemberBrowser.v1");
+  if (credential === null || !isCanonicalBrowserCredential(credential)) throw new Error("저장된 연결 정보를 확인하지 못했어요.");
+  return credential;
+}

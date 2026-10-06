@@ -363,8 +363,8 @@ export function useRoomAdmission({
 
   const acceptMemberSession = useCallback(async (payload: RoomInviteJoinResponse) => {
     const attempt = beginAdmissionAttempt();
-    return applyJoinedSession(roomGuestSessionFromJoinPayload(guestJoinToken, payload), "invite", attempt.isCurrent);
-  }, [applyJoinedSession, beginAdmissionAttempt, guestJoinToken]);
+    return applyJoinedSession({...roomGuestSessionFromJoinPayload(guestJoinToken, payload), nativeMember:Boolean(memberReturn?.browserCredential)}, "invite", attempt.isCurrent);
+  }, [applyJoinedSession, beginAdmissionAttempt, guestJoinToken, memberReturn]);
 
   const acceptRecoveredSession = useCallback(
     async (payload: GuestRecoveryRedeemResponse) => {
@@ -739,6 +739,7 @@ export function useRoomAdmission({
 
   return {
     memberJoin: admissionState.kind === "profile_required" ? {
+      purpose: memberReturn?.connect || memberReturn?.record?.purpose === "connect" ? "connect" as const : undefined,
       roomName: inviteRoomLabelRef.current,
       inviteToken: guestJoinToken, meetingId: memberReturn?.record?.meeting_id || expectedInviteRoomIdRef.current,
       deviceToken, clientId, callback: memberReturn, onComplete: acceptMemberSession,

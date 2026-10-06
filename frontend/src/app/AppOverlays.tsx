@@ -178,7 +178,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
 
         {connectorJoinUrl ? <ConnectorJoinNotice joinUrl={connectorJoinUrl} /> : null}
 
-        {(guestJoinToken || operatorPairingPending) &&
+        {(guestJoinToken || operatorPairingPending || memberJoin?.purpose === "connect") &&
           (!guestSession || guestPreflightRetryable || guestJoinRetryable) &&
           !guestExpired && (
           memberJoin && (memberSelected || memberJoin.callback) ? <MemberJoinPanel

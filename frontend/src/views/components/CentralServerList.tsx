@@ -153,10 +153,10 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
     {servers.map((server) => {
       const isLocal = Boolean(localHost?.server_id === server.server_id && onOpenLocal);
       const live = liveServers.find(item => item.server_id === server.server_id);
-      const online = !centralUnavailable && server.relation === "owner" && live?.endpoint?.status === "likely_online" && live.endpoint.lease_expires_at > Date.now() / 1000;
+      const online = !centralUnavailable && ["owner", "member"].includes(server.relation) && live?.endpoint?.status === "likely_online" && (server.relation === "member" || (live.endpoint.lease_expires_at ?? 0) > Date.now() / 1000);
       const name = server.alias || "이름 없는 서버";
       const openable = isLocal || online;
-      const state = connectingServerId === server.server_id ? "connecting" : isLocal ? "local" : centralUnavailable ? "central-unconfirmed" : server.relation !== "owner" ? "invited" : online ? "online" : "offline";
+      const state = connectingServerId === server.server_id ? "connecting" : isLocal ? "local" : centralUnavailable ? "central-unconfirmed" : server.relation === "bookmark" ? "invited" : online ? "online" : "offline";
       return <div key={server.server_id} className="dc-server-row" data-state={state}>
         {server.relation === "owner"
           ? <button type="button" className="dc-server-row-icon dc-server-row-icon-edit" aria-label={`${name} 아이콘 변경`} title="아이콘 변경"
@@ -170,7 +170,7 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
           <span className="dc-server-row-meta">
             <span className="dc-server-row-dot" aria-hidden />
             {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기" : state === "online" ? "연결 가능" : "연결 끊김"}
-            {" · "}<span aria-label="호스트 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span>
+            {server.relation !== "member" && <> · <span aria-label="호스트 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span></>}
           </span>
           {editingId === server.server_id && nameEditor(server.default_name, server)}
         </div>

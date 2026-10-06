@@ -37,6 +37,7 @@ export type RoomGuestSession = {
   operator?: boolean;
   // Presentation only; the server revalidates durable owner provenance per request.
   centralOwner?: boolean;
+  nativeMember?: boolean;
 };
 
 const ROOM_GUEST_SESSION_STORAGE_KEY = "agentsassemble.roomGuestSession.v1";
@@ -159,11 +160,12 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
         "operator",
       ],
       "저장된 방 세션",
-      ["avatarImage", "roomLabel", "roomTopic", "roomCreatedAt", "roomUid", "clientId", "centralOwner"]
+      ["avatarImage", "roomLabel", "roomTopic", "roomCreatedAt", "roomUid", "clientId", "centralOwner", "nativeMember"]
     );
     if (
       (record.inviteScope !== "room" && record.inviteScope !== "read_only") ||
       typeof record.operator !== "boolean" ||
+      (record.nativeMember !== undefined && typeof record.nativeMember !== "boolean") ||
       (record.centralOwner !== undefined && typeof record.centralOwner !== "boolean") ||
       (record.centralOwner === true && record.operator !== true)
     ) {
@@ -176,6 +178,7 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
       return null;
     }
     return {
+      ...(record.nativeMember === true ? {nativeMember:true} : {}),
       inviteToken: stringField(record, "inviteToken", "저장된 방 세션"),
       sessionToken: requiredString(record, "sessionToken", "저장된 방 세션"),
       meetingId: requiredString(record, "meetingId", "저장된 방 세션"),

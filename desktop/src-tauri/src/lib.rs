@@ -85,8 +85,8 @@ fn central_owned_server_url(url: &str) -> Result<url::Url, String> {
         || !parsed.username().is_empty()
         || parsed.password().is_some()
         || parsed.query().is_some()
-        || parsed.path() != "/pair"
-        || !fragment.starts_with("central-owner=")
+        || !((parsed.path() == "/pair" && fragment.starts_with("central-owner="))
+            || (parsed.path() == "/join" && fragment.starts_with("native-member=")))
         || fragment.len() > 16_384
     {
         return Err("central server URL is outside the owned-server boundary".to_owned());
@@ -605,6 +605,20 @@ mod tests {
         let parsed = central_owned_server_url(url)
             .unwrap_or_else(|error| panic!("accept frontend owner entry: {error}"));
         assert_eq!(parsed.as_str(), url);
+    }
+
+    #[test]
+    fn member_navigation_uses_only_its_public_join_shell() {
+        assert!(
+            central_owned_server_url("https://host.example/join#native-member=fixture").is_ok()
+        );
+        assert!(
+            central_owned_server_url("https://host.example/pair#native-member=fixture").is_err()
+        );
+        assert!(
+            central_owned_server_url("https://host.example/join?leak=1#native-member=fixture")
+                .is_err()
+        );
     }
 
     #[test]

@@ -7,13 +7,14 @@ import { ApiError } from "../../lib/apiErrors";
 import { consumeCentralMemberRequest, consumeMemberReturn, createMemberHandoff, memberTargetRequest, storeMemberHandoff } from "../../lib/central/memberConnect";
 
 const mocks = vi.hoisted(() => ({
+  connectChallenge: vi.fn(), rooms: vi.fn(), select: vi.fn(), unhide: vi.fn(),
   challenge: vi.fn(), join: vi.fn(), preview: vi.fn(), issue: vi.fn(), session: vi.fn(), nativeLogin: vi.fn(),
   desktop: vi.fn(), webLogin: vi.fn(), webReturn: vi.fn(), navigate: vi.fn(),
 }));
-vi.mock("../../api/invites", () => ({ challengeRoomMember: mocks.challenge, joinRoomMember: mocks.join }));
+vi.mock("../../api/invites", () => ({ challengeRoomMember: mocks.challenge, joinRoomMember: mocks.join, challengeMemberConnect:mocks.connectChallenge,redeemMemberConnect:mocks.rooms,selectMemberConnect:mocks.select }));
 vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: mocks.desktop }));
 vi.mock("../../lib/central/identity", () => ({
-  centralAccountEntryUrl: () => "https://central.test/", loadCentralSession: mocks.session,
+  setCentralMemberHidden: mocks.unhide, centralAccountEntryUrl: () => "https://central.test/", loadCentralSession: mocks.session,
   issueCentralMemberGrant: mocks.issue, previewCentralMember: mocks.preview, loginCentralGoogle: mocks.nativeLogin,
 }));
 vi.mock("../../lib/central/webGoogle", () => ({ startCentralWebGoogle: mocks.webLogin, completeCentralWebGoogleReturn: mocks.webReturn }));
@@ -202,4 +203,29 @@ describe("member invite screen", () => {
     expect(mocks.challenge).toHaveBeenCalledOnce(); expect(mocks.join).not.toHaveBeenCalled();
     expect(mocks.issue).toHaveBeenCalledOnce();
   });
+});
+
+
+it("reconnects through consent and selects only the chosen joined room", async () => {
+  const props={...host(),purpose:"connect" as const,inviteToken:"",meetingId:""};
+  mocks.connectChallenge.mockResolvedValue(challenge);
+  mocks.rooms.mockResolvedValue([{room_id:"one",name:"첫 채팅방"},{room_id:"two",name:"두 번째 채팅방"}]);
+  mocks.select.mockResolvedValue({server_id:"server",session_token:"selected"});
+  render(<MemberJoinPanel host={props} />);
+  expect(await screen.findByRole("heading",{name:"‘친구의 서버’에 다시 연결할까요?"})).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"다시 연결"}));
+  fireEvent.click(await screen.findByRole("button",{name:"두 번째 채팅방"}));
+  await waitFor(()=>expect(props.onComplete).toHaveBeenCalledOnce());
+  expect(mocks.select).toHaveBeenCalledWith(expect.objectContaining({purpose:"connect"}),"two","client","browser-credential");
+  expect(mocks.join).not.toHaveBeenCalled();
+});
+it("unhides on explicit consent before issuing a fresh grant and auto-selects a sole room", async()=>{
+  const props={...host(),purpose:"connect" as const,inviteToken:"",meetingId:""};
+  mocks.connectChallenge.mockResolvedValue(challenge);mocks.preview.mockResolvedValue(target);
+  mocks.rooms.mockResolvedValue([{room_id:"only",name:"채팅방"}]);mocks.select.mockResolvedValue({server_id:"server"});
+  render(<MemberJoinPanel host={props} />);
+  fireEvent.click(await screen.findByRole("button",{name:"목록에 다시 표시하고 참가"}));
+  await waitFor(()=>expect(props.onComplete).toHaveBeenCalledOnce());
+  expect(mocks.unhide.mock.invocationCallOrder[0]).toBeLessThan(mocks.issue.mock.invocationCallOrder[0]);
+  expect(mocks.select).toHaveBeenCalledWith(expect.anything(),"only","client","browser-credential");
 });

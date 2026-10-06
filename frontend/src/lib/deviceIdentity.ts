@@ -20,7 +20,7 @@ export type RememberedGuestProfile = {
   avatarImage?: string;
 };
 
-function isCanonicalBrowserCredential(value: string): boolean {
+export function isCanonicalBrowserCredential(value: string): boolean {
   if (!value.startsWith(BROWSER_CREDENTIAL_PREFIX)) return false;
   const encoded = value.slice(BROWSER_CREDENTIAL_PREFIX.length);
   if (
@@ -38,7 +38,8 @@ function isCanonicalBrowserCredential(value: string): boolean {
  * This owner fails closed. It never imports the old device-token key and never
  * substitutes a weak or page-lifetime value when WebCrypto or durable storage fails.
  */
-export function getOrCreateBrowserCredential(): string {
+export function getOrCreateBrowserCredential(memberServer?: {server_id:string;registration_epoch:string}): string {
+  const storageKey = memberServer ? `${BROWSER_CREDENTIAL_STORAGE_KEY}:member:${memberServer.server_id}:${memberServer.registration_epoch}` : BROWSER_CREDENTIAL_STORAGE_KEY;
   if (typeof globalThis.crypto?.getRandomValues !== "function") {
     throw new Error(BROWSER_CREDENTIAL_UNAVAILABLE);
   }
@@ -46,7 +47,7 @@ export function getOrCreateBrowserCredential(): string {
   let existing: string | null;
   try {
     storage = window.localStorage;
-    existing = storage.getItem(BROWSER_CREDENTIAL_STORAGE_KEY);
+    existing = storage.getItem(storageKey);
   } catch {
     throw new Error(BROWSER_CREDENTIAL_UNAVAILABLE);
   }
@@ -61,8 +62,8 @@ export function getOrCreateBrowserCredential(): string {
     const bytes = new Uint8Array(BROWSER_CREDENTIAL_BYTES);
     globalThis.crypto.getRandomValues(bytes);
     const credential = `${BROWSER_CREDENTIAL_PREFIX}${encodeBase64Url(bytes)}`;
-    storage.setItem(BROWSER_CREDENTIAL_STORAGE_KEY, credential);
-    if (storage.getItem(BROWSER_CREDENTIAL_STORAGE_KEY) !== credential) {
+    storage.setItem(storageKey, credential);
+    if (storage.getItem(storageKey) !== credential) {
       throw new Error(BROWSER_CREDENTIAL_UNAVAILABLE);
     }
     return credential;
