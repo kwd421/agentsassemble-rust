@@ -432,11 +432,6 @@ async fn serve_runtime(
     let ingress = listener_ingress(&listener)?;
     reconcile_before_network_admission(&state, &cancellation).await?;
     let rooms = state.rooms.clone();
-    let provider_catalog = state.provider_catalog.clone();
-    let provider_login = state.provider_login.clone();
-    let provider_update = state.provider_update.clone();
-    let provider_usage = state.provider_usage.clone();
-    let local_attendees = state.local_attendees.clone();
     let public_ingress = state.public_ingress();
     let demotion_failure = public_ingress.demotion_failure();
     let central_directory = CentralDirectoryTask::spawn(&state, public_ingress.clone());
@@ -449,10 +444,10 @@ async fn serve_runtime(
         rooms.clone(),
         connection_shutdown.clone(),
     ));
-    let app = router(state);
+    let app = router(state.clone());
     // Local attendees may target this very listener. Keep their room authority and
     // ingress alive until positive stop and exact remote cleanup have completed.
-    let attendee_shutdown = local_attendees.shutdown();
+    let attendee_shutdown = state.local_attendees.shutdown();
     tokio::pin!(attendee_shutdown);
     let mut quiescing = false;
     let mut attendee_outcome = None;
@@ -509,12 +504,12 @@ async fn serve_runtime(
         usage_shutdown,
         (reconciliation_shutdown, (room_shutdown, provider_shutdown)),
     ) = tokio::join!(
-        provider_login.shutdown(),
-        provider_update.shutdown(),
-        provider_usage.shutdown(),
+        state.provider_login.shutdown(),
+        state.provider_update.shutdown(),
+        state.provider_usage.shutdown(),
         drain_reconciliation_then(reconciliation_owner, async {
             let room_shutdown = rooms.shutdown().await;
-            let provider_shutdown = provider_catalog.shutdown().await;
+            let provider_shutdown = state.provider_catalog.shutdown().await;
             (room_shutdown, provider_shutdown)
         })
     );

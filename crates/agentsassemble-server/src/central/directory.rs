@@ -176,12 +176,8 @@ impl CentralDirectory {
         let mut failure_count = 0_u32;
         let mut next_attempt = std::time::Instant::now();
         loop {
-            if let Some(retired) = ingress.pending_demotion() {
-                demote_host(&store, &ingress, retired).await?;
-            }
-            if store.hosting_restriction().await?.is_some() {
+            if reconcile_demotion(&store, &ingress).await? {
                 inner.status.write().registered_origin.clear();
-                ingress.demote().await?;
                 return Ok(());
             }
             if let Err(error) = member_sync::send(&inner, &store, &identity).await {
@@ -442,11 +438,7 @@ async fn send_signed(
     mut body: serde_json::Value,
 ) -> Result<Vec<u8>, CentralDirectoryError> {
     let ingress = inner.ingress.read().clone();
-    if let Some(retired) = ingress.pending_demotion() {
-        demote_host(store, &ingress, retired).await?;
-    }
-    let restricted = ingress.restricted();
-    if restricted || store.hosting_restriction().await?.is_some() {
+    if reconcile_demotion(store, &ingress).await? {
         return Err(CentralDirectoryError::ServerRetired);
     }
     if body.get("registration_epoch").is_none()
@@ -527,6 +519,20 @@ async fn send_signed(
         return Err(terminal);
     }
     Ok(bytes)
+}
+
+async fn reconcile_demotion(
+    store: &SqliteStore,
+    ingress: &PublicIngress,
+) -> Result<bool, CentralDirectoryError> {
+    if let Some(retired) = ingress.pending_demotion() {
+        demote_host(store, ingress, retired).await?;
+    }
+    if store.hosting_restriction().await?.is_some() {
+        ingress.demote().await?;
+        return Ok(true);
+    }
+    Ok(ingress.restricted())
 }
 
 pub(crate) async fn demote_host(
