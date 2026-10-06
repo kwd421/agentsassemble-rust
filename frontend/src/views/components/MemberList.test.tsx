@@ -40,6 +40,14 @@ afterEach(() => {
 });
 
 describe("MemberList component wiring", () => {
+  it.each([true, false])("uses Korean self badges and no guest badge for ordinary members (host=%s)", (host) => {
+    render(<MemberList agents={[]} members={[participantFixture(), participantFixture({ participant_id: "central-member", display_name: "Hihi" })]}
+      viewerParticipantId={host ? "operator-local" : "central-member"} canEditRoles={host} roomId="general" roomName="General" />);
+    expect(screen.getByText(host ? "방장" : "나")).toBeTruthy();
+    expect(screen.getByText("Hihi")).toBeTruthy();
+    for (const label of ["Guest", "게스트", "HOST", "YOU"]) expect(screen.queryByText(label)).toBeNull();
+  });
+
   it("opens only moderation from the row's context menu, without an overflow button", () => {
     render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onParticipantRemove={vi.fn()} />);
     expect(screen.queryByLabelText("Agent One 관리 메뉴")).toBeNull();

@@ -226,7 +226,7 @@ describe("RoomSettingsModal conversation mode", () => {
         room={room}
         appearance={DEFAULT_ROOM_APPEARANCE}
         appearanceAssetError=""
-        channelSettings={{}}
+        channelSettings={{ lobby: { notifications: "default", lastReadAt: "seq:5" } }}
         settingsStatus="ready"
         settingsError=""
         preferenceStatus="ready"
@@ -249,6 +249,8 @@ describe("RoomSettingsModal conversation mode", () => {
       />
     );
 
+    expect(screen.queryByText(/seq:5/)).toBeNull();
+    expect(screen.getByText("읽음 위치가 저장됐어요.")).toBeTruthy();
     const section = screen.getByRole("heading", { name: "채널 설정" }).closest("section");
     if (!section) throw new Error("Channel settings section was not rendered");
     const channelControls = within(section).getAllByRole("combobox");

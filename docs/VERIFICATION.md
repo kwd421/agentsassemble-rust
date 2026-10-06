@@ -1,5 +1,9 @@
 # Verification Contract
 
+- 2026-10-06 E2E 2 읽음 표시: 공용 방 설정에서 seq 커서 직접 출력을 제거하고 읽음 위치 저장 안내로 교체; seq:5 비노출·기존 채널 알림 변경 회귀 통과(변경 범위 프론트 60/60); 서명 빌드·수동 검증·배포 없음.
+
+- 2026-10-06 E2E 4 배지: 공용 멤버 목록 HOST/YOU를 방장/나로 번역, 기존 Guest label을 게스트로 번역하고 중앙 멤버는 일반 사람과 동일하게 게스트 배지 없이 표시; 방장/멤버 양 시점 회귀 통과(변경 범위 프론트 60/60), E2E 네 건 공통 푸시 직전 make verify 1회 exit 0(Rust 1,114, frontend 1,138, desktop 48 및 Clippy·구조·포맷·diff·artifact 게이트); 서명 빌드·수동 검증·배포 없음.
+
 - 2026-10-06 E2E 3 종료 문구: 중앙 멤버 표시 정보를 세션에 보존하고 종료 state의 안내를 공용 app/web에 표시, 게스트 기존 문구 보존·재로딩/중복 종료 후 오분류 방지; 입장 callback·세션 저장·종료/만료 회귀와 TypeScript 통과(변경 범위 프론트 60/60); 서명 빌드·수동 검증·배포 없음.
 
 - 2026-10-06 E2E 1 멤버 목록: member-join/member-connect의 새 세션 발급과 canonical participant_joined 원자 기록·기존 publication owner 통지로 만료 snapshot 누락 복구; 멤버 저장소 30/30 + 양 경로 snapshot 회귀 1/1, HTTP/방 이벤트 통합 1/1, 공용 프론트 재연결 없는 목록 회귀 통과; 서명 빌드·수동 검증·배포 없음.

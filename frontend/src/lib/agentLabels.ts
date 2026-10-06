@@ -28,7 +28,7 @@ const PROVIDER_EXECUTION_LABELS: Record<string, string> = {
   "local_cli/local_cli": "CLI",
   "local_cli/terminal_session": "Terminal",
   "local_cli/self_service": "Self-service",
-  "manual/manual": "Guest",
+  "manual/manual": "게스트",
 };
 
 const JOIN_SEMANTICS_LABELS: Record<string, string> = {

@@ -430,7 +430,7 @@ export default function RoomSettingsModal({
                     <span>
                       <strong className="preserve-words">#{channel.label}</strong>
                       <small className="preserve-words">
-                        {setting.lastReadAt ? `마지막 읽음 ${setting.lastReadAt}` : "읽음 기록 없음"}
+                        {setting.lastReadAt ? "읽음 위치가 저장됐어요." : "아직 읽음 기록이 없어요."}
                       </small>
                     </span>
                     <select
