@@ -155,3 +155,16 @@ it.each(["reconnect", "channel", "room", "return"])("binds an in-flight receipt 
   expect(screen.queryByRole("alert")).toBeNull();
   expect(command.mock.calls.filter(([action]) => action === "channel.message.send")).toHaveLength(1);
 });
+
+it("introduces the named channel only at the start, inviting only empty histories", async () => {
+  const options = props();
+  const view = render(<CustomChannelView {...options} />);
+  expect(screen.queryByRole("heading", { name: "#Notes에 오신 것을 환영해요" })).toBeNull();
+  view.rerender(<CustomChannelView {...options} transcript={{ ...options.transcript, hasMore: false }} />);
+  expect(screen.getByRole("heading", { name: "#Notes에 오신 것을 환영해요" })).toBeTruthy();
+  expect(screen.getByText("#Notes 채널의 시작이에요.")).toBeTruthy();
+  view.rerender(<CustomChannelView {...options} transcript={{ ...options.transcript, hasMore: false, events: [] }} />);
+  expect(screen.getByText("첫 메시지를 남겨 보세요.")).toBeTruthy();
+  expect(screen.queryByText("#Notes 채널의 시작이에요.")).toBeNull();
+  await act(async () => {});
+});

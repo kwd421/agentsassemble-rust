@@ -11,6 +11,8 @@ it("distinguishes not-run, timed-out and unreadable reports without retaining st
     .mockRejectedValueOnce(new Error("corrupt report"));
   render(<ReleaseHealthPanel />);
   expect(await screen.findByText("미실행")).toBeTruthy();
+  expect(screen.getByText("변경 내용")).toBeTruthy();
+  expect(screen.queryByText(/Git|Rust|게이트|명령줄/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "결과 새로고침" }));
   expect(await screen.findByText("시간 초과")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "결과 새로고침" }));

@@ -526,10 +526,10 @@ export default function LobbyView({
               {appearance?.iconImage ? "" : <Hash size={26} />}
             </span>
             <h2 className="mt-3 text-[28px] font-black leading-tight text-text-primary preserve-words">
-              {activeRoom.label}
+              #general에 오신 것을 환영해요
             </h2>
             <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-text-muted preserve-words">
-              {activeRoom.topic || "이 방의 첫 메시지를 남겨 보세요."}
+              {lobbyRows.length === 0 ? "첫 메시지를 남겨 보세요." : "#general 채널의 시작이에요."}
             </p>
           </section>
         )}

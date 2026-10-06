@@ -822,3 +822,17 @@ it("renders an evicted pending request inside the requesting agent message witho
   expect(screen.queryByRole("button", { name: /에이전트 요청/ })).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+it("invites a first message only in empty general history", async () => {
+  render(<LobbyView activeRoom={room} agents={[]} canonicalEvents={[]} canonicalHistoryReady canonicalHasMoreHistory={false} />);
+  expect(await screen.findByText("첫 메시지를 남겨 보세요.")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "#general에 오신 것을 환영해요" })).toBeTruthy();
+});
+
+it("marks populated general history as the channel beginning", async () => {
+  const message: LobbyEvent = { ...thought("hello"), kind: "message", flow_action: "message_final" };
+  render(<LobbyView activeRoom={room} agents={[]} canonicalEvents={[message]} canonicalHistoryReady canonicalHasMoreHistory={false} />);
+  expect(await screen.findByText("#general 채널의 시작이에요.")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "#general에 오신 것을 환영해요" })).toBeTruthy();
+  expect(screen.queryByText("첫 메시지를 남겨 보세요.")).toBeNull();
+});

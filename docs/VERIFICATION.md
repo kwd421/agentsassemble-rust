@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 채널 소개·내 컴퓨터 공용 app/web 문구 수정: 빈/기존 채널 기록, 도구 이름·MB/GB·PID 숨김·CPU 확인 중·앱 점검 표시의 영향 화면 테스트 36개 통과; 푸시 전 make verify 1회 통과(프론트 1,164개 포함), 패키지 재실행·재촬영은 이번 요청 범위에서 미실시.
+
 - 2026-10-06 Daybreak 수정 최종 게이트: make verify 1회에서 frontend 1,161·desktop 48·Rust 1,127 및 doc 테스트 전부 통과; Clippy 함수 103/100줄 두 건은 공용 강등 확인/종료 상태 소유 정리로 교정(제한·예외 변경 없음), 영향 호스트 5/5·workspace Clippy·구조/포맷/diff/artifact 재검 통과.
 
 - 2026-10-06 Daybreak M(로컬 loser): 성공한 서버 ID/epoch 대기 기록을 확인 전까지 유지하고 중앙 은퇴 없이 로컬 전이만 재시도(실패 표시·1초·언마운트 정리/재개); 저장 epoch CAS와 은퇴 후 늦은 epoch 변경 거부, 목록에서 loser가 사라진 회귀 포함 app/web 67/67·로컬 HTTP 1/1·저장소 epoch 회귀 통과.

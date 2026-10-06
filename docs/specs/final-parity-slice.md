@@ -701,3 +701,16 @@ Missing, conflicting, escaping, or unsupported dependencies fail binding; no ret
 fallback is added. Non-macOS binding stays unchanged. Acceptance: an actual staged
 host starts, Sonnet completes a room turn and normal Stop/Resume, and changed-companion
 or unsafe staging destinations fail without publishing a successful bind.
+
+## Shared channel introduction and computer labels (2026-10-06)
+
+App/web LobbyView (general), CustomChannelView and AdminPanel retain their existing
+components, history-start visibility, authority, loading/error/retry behavior and APIs.
+At the true start of channel history, show `#{name}에 오신 것을 환영해요` and
+`#{name} 채널의 시작이에요.`; only an empty message history invites
+`첫 메시지를 남겨 보세요.`. Room topics do not replace this introduction.
+Computer rows show recognizable app/tool names and decimal MB/GB, without PID.
+Unmeasured CPU reads `확인 중`; unavailable memory remains explicitly unknown.
+Release checks use user-facing Korean labels without Rust, gates or other
+implementation vocabulary. No new sampling, persistence or protocol changes.
+Verify only affected screen tests, then run make verify once before commit/push.

@@ -43,15 +43,15 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             <Metric label="사용 가능한 메모리" value={memory(resources.available_memory_bytes)} />
             <Metric label="부하 평균 (1·5·15분)" value={resources.load_average?.map((value) => value.toFixed(2)).join(" · ") ?? "확인 불가"} />
           </div>
-          <section className="flex flex-col gap-3" aria-label="관련 프로세스">
+          <section className="flex flex-col gap-3" aria-label="앱과 관련 도구">
             <h2 className="mb-4 font-bold">앱과 관련 도구 · {resources.matching_process_count}개</h2>
             <p className="text-[12px] text-text-muted">최대 30개를 표시해요. 다른 앱에서 실행한 같은 도구도 포함돼요.</p>
             <p className="text-[12px] text-text-muted">{resources.cpu_sample_seconds === null
-              ? "CPU는 비교할 표본이 필요해요. 잠시 후 새로고침해 주세요."
+              ? "CPU 사용량을 확인 중이에요. 잠시 후 새로고침해 주세요."
               : `CPU는 최근 ${resources.cpu_sample_seconds.toFixed(1)}초 평균이며 코어 하나가 100%예요.`}</p>
             {resources.processes.map((process) => <article key={process.pid} className="ops-inner rounded-lg p-4 text-[13px]">
-              <strong>{process.label}</strong><span className="text-text-muted"> · PID {process.pid}</span>
-              <p>CPU {process.cpu_percent === null ? "측정 전 또는 확인 불가" : `${process.cpu_percent.toFixed(1)}%`} · 메모리 {memory(process.memory_bytes)}</p>
+              <strong>{toolName(process.label)}</strong>
+              <p>CPU {process.cpu_percent === null ? "확인 중" : `${process.cpu_percent.toFixed(1)}%`} · 메모리 {memory(process.memory_bytes)}</p>
             </article>)}
           </section>
         </>}
@@ -63,7 +63,19 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 }
 
 function memory(bytes: number | null) {
-  return bytes === null ? "확인 불가" : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+  if (bytes === null) return "확인 불가";
+  return bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+function toolName(label: string) {
+  const names: Record<string, string> = {
+    AgentsAssemble: "앱 서버", "runtime-child": "앱 관련 도구",
+    claude: "Claude Code", "claude-code": "Claude Code", codex: "Codex",
+    node: "Node", npm: "npm", python: "Python", python3: "Python", vite: "Vite",
+    antigravity: "Antigravity", "antigravity-cli": "Antigravity",
+    cursor: "Cursor", "cursor-agent": "Cursor", deepseek: "DeepSeek",
+    grok: "Grok", "grok-cli": "Grok", hermes: "Hermes", kiro: "Kiro",
+  };
+  return names[label] ?? "앱 관련 도구";
 }
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="ops-inner rounded-lg p-4"><span className="text-text-muted">{label}</span> <strong>{value}</strong></div>;

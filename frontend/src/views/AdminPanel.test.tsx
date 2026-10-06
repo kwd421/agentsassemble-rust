@@ -11,16 +11,19 @@ afterEach(() => { cleanup(); vi.resetAllMocks(); });
 it("keeps unknown CPU distinct, refreshes explicitly and clears stale results after failure", async () => {
   vi.mocked(fetchLocalResources).mockResolvedValueOnce({
     observed_at: "2026-09-09T00:00:00Z", cpu_sample_seconds: null,
-    cpu_count: 8, total_memory_bytes: null, available_memory_bytes: null,
+    cpu_count: 8, total_memory_bytes: 24_000_000_000, available_memory_bytes: null,
     load_average: null, matching_process_count: 1,
-    processes: [{ pid: 42, label: "AgentsAssemble", cpu_percent: null, memory_bytes: 1048576 }],
+    processes: [{ pid: 42, label: "codex", cpu_percent: null, memory_bytes: 1048576 }],
   }).mockRejectedValueOnce(new Error("unavailable"));
   render(<AdminPanel onClose={() => {}} />);
-  expect(await screen.findByText("AgentsAssemble")).toBeTruthy();
-  expect(screen.getByText(/CPU 측정 전 또는 확인 불가/)).toBeTruthy();
+  expect(await screen.findByText("Codex")).toBeTruthy();
+  expect(screen.getByText(/CPU 확인 중/)).toBeTruthy();
+  expect(screen.getByText("24.0 GB")).toBeTruthy();
+  expect(screen.getByText(/메모리 1.0 MB/)).toBeTruthy();
+  expect(screen.queryByText(/PID|MiB/)).toBeNull();
   expect(fetchLocalResources).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "상태 새로고침" }));
   expect(await screen.findByRole("alert")).toBeTruthy();
-  expect(screen.queryByText("AgentsAssemble")).toBeNull();
+  expect(screen.queryByText("Codex")).toBeNull();
   expect(fetchLocalResources).toHaveBeenCalledTimes(2);
 });

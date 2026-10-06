@@ -154,8 +154,8 @@ export default function CustomChannelView({
       {!transcript.ready && !transcript.error && <p className="px-4 text-[13px] text-text-muted" role="status">채널 연결과 기록을 기다리고 있어요.</p>}
       {transcript.ready && transcript.following && !transcript.hasMore && <section className="dc-channel-intro px-4 pb-5 pt-2">
         <span className="dc-channel-intro-icon"><Hash size={26} /></span>
-        <h2 className="mt-3 text-[28px] font-black leading-tight text-text-primary preserve-words">{channel?.name}</h2>
-        <p className="mt-1 text-[14px] leading-relaxed text-text-muted">이 채널의 대화가 시작되는 곳이에요.</p>
+        <h2 className="mt-3 text-[28px] font-black leading-tight text-text-primary preserve-words">#{channel?.name}에 오신 것을 환영해요</h2>
+        <p className="mt-1 text-[14px] leading-relaxed text-text-muted">{transcript.events.length === 0 ? "첫 메시지를 남겨 보세요." : `#${channel?.name} 채널의 시작이에요.`}</p>
       </section>}
       {transcript.ready && !transcript.following && <p className="px-4 pb-3 text-center text-[12px] text-text-muted">검색한 메시지 주변 기록</p>}
       <ChannelMessageRows events={transcript.events} profiles={participantProfiles} mentionLabels={mentionLabels}
