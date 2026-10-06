@@ -69,6 +69,10 @@ mod runtime_recovery;
 
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+#[cfg(unix)]
+#[path = "agent_session_boundary/real_instruction_persistence.rs"]
+mod real_instruction_persistence;
+
 struct RunningServer {
     base_url: String,
     state: AppState,

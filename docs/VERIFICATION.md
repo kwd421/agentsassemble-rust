@@ -1,5 +1,13 @@
 # Verification Contract
 
+- 2026-10-07 authorized instruction persistence verification: Codex managed agent
+  passed two room turns across seven native compactions; Claude SDK Sonnet 5 at
+  low effort passed two room turns across stop/resume in the same native session
+  (compaction not exercised). OpenCode's two first-turn attempts failed with native
+  HTTP 403 `APIError` / host `provider_turn_failed`; its compaction remains blocked.
+  No global provider config or product behavior changed. Added an explicitly ignored
+  managed-room test. [Evidence, budgets and limits](verification/2026-10-07-instruction-persistence.md).
+
 - 2026-10-07 Daybreak companion review correction (abbda15e, pushed;
   reviewed base `299f2edd`; preceding `667f05d7`, `4f118670`, `0bd78f0c`,
   `299f2edd` are pushed): external companion privileged instructions now come

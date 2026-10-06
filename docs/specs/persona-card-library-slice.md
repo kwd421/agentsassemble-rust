@@ -646,3 +646,17 @@ provider selection, dynamic placement, replacement and recovery with local tests
 Only changed-crate tests during work; make verify once immediately before push.
 Real providers, signed builds, manual verification and deployment are excluded by
 this task; runtime compaction behavior remains unverified.
+
+### Authorized persistence verification (2026-10-07)
+
+Verify the managed `agent.create` / room observation / room portal path after
+provider compaction: each observation must first read discussion and publish only
+through room tools, with host session instructions and no per-turn rule reminder.
+Companion fixed local policy remains a separate authority (299f2edd/abbda15e).
+Use opt-in ignored real-provider tests, isolated supported launch configuration,
+and provider-native compaction evidence; successful ordinary turns alone do not
+prove compaction. Never change global provider configuration. Budgets: Codex and
+OpenCode at most six turns each; Claude SDK Sonnet at its lowest supported effort,
+at most three runs with a few turns each. If cheap compaction is unavailable,
+Claude may verify same-session resume instead. Report unsupported configuration,
+provider error codes, actual turn counts and unverified boundaries explicitly.
