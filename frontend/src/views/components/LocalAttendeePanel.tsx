@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createLocalAttendee, fetchLocalAttendee, commandLocalAttendee, localAttendeeCreateRequest } from "../../api/localAttendee";
 import { fetchLocalProviderCatalog } from "../../api/providerOperations";
 import { ApiError } from "../../lib/apiErrors";
-import { requestDesktopHostProductSurface } from "../../lib/desktopBridge";
+import { requestDesktopBootstrapStatus, requestDesktopHostProductSurface } from "../../lib/desktopBridge";
 import { LOCAL_ATTENDEE_PHASE_LABELS, readLocalAttendeeHandoff } from "../../lib/localAttendee";
 import type { FrontendLiveAgentCreateRequest } from "../../api";
 import type { AttendeeEntryPacket } from "../../types/generated/AttendeeEntryPacket";
@@ -10,6 +10,9 @@ import type { LocalAttendeeCreate } from "../../types/generated/LocalAttendeeCre
 import type { LocalAttendeeStatus } from "../../types/generated/LocalAttendeeStatus";
 import type { LocalAttendeeAction } from "../../types/generated/LocalAttendeeAction";
 import type { ProviderCatalog } from "../../types/generated/ProviderCatalog";
+import { bootstrapCentral } from "../../lib/central/identity";
+import { saveLocalProfile } from "../../lib/localProfile";
+import { createSecureRequestId } from "../../lib/secureRequestId";
 import AgentCreateModal from "./AgentCreateModal";
 
 export default function LocalAttendeePanel() {
@@ -22,6 +25,7 @@ export default function LocalAttendeePanel() {
 }
 
 function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
+  const [bootstrapRequestId] = useState(createSecureRequestId);
   const [catalog, setCatalog] = useState<ProviderCatalog | null>(null);
   const [operation, setOperation] = useState<LocalAttendeeStatus | null>(null);
   const [editable, setEditable] = useState(false);
@@ -42,6 +46,17 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     setError("");
     try {
       await requestDesktopHostProductSurface();
+      const bootstrap = await requestDesktopBootstrapStatus();
+      if (!current()) return;
+      if (bootstrap.phase === "empty") {
+        const identity = await bootstrapCentral(signal);
+        if (!current()) return;
+        if (!identity?.person) throw new Error("앱에서 로그인한 뒤 상태를 다시 확인해 주세요.");
+        await saveLocalProfile(identity.person.display_name, bootstrapRequestId, identity.person);
+      } else if (bootstrap.phase !== "complete") {
+        throw new Error("로컬 신원 권위에 명시적 복구가 필요합니다.");
+      }
+      if (!current()) return;
       const localCatalog = await fetchLocalProviderCatalog(signal);
       if (!current()) return;
       setCatalog(localCatalog);
@@ -57,9 +72,9 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
         }
       }
     } catch (failure) {
-      if (current()) setError(failure instanceof Error ? failure.message : "참가 상태를 확인하지 못했어요.");
+      if (current()) setError(failure instanceof Error ? failure.message : typeof failure === "string" && failure.trim() ? failure : "참가 상태를 확인하지 못했어요.");
     } finally { if (current()) setBusy(false); }
-  }, [packet]);
+  }, [packet, bootstrapRequestId]);
   useEffect(() => {
     active.current = true;
     const controller = new AbortController();
@@ -91,7 +106,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
           }
         }
       }
-      if (current()) setError(failure instanceof Error ? failure.message : "참가 결과를 확인하지 못했어요.");
+      if (current()) setError(failure instanceof Error ? failure.message : typeof failure === "string" && failure.trim() ? failure : "참가 결과를 확인하지 못했어요.");
       throw failure;
     } finally { if (current()) setBusy(false); }
   }
@@ -105,13 +120,14 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     else setBusy(true);
     setError("");
     try { const result = await commandLocalAttendee(packet, action); if (current()) setOperation(result); }
-    catch (failure) { if (current()) setError(failure instanceof Error ? failure.message : "참가 상태를 확인하지 못했어요."); }
+    catch (failure) { if (current()) setError(failure instanceof Error ? failure.message : typeof failure === "string" && failure.trim() ? failure : "참가 상태를 확인하지 못했어요."); }
     finally { if (current()) { setBusy(false); setCancelling(false); } }
   }
-  const roomLabel = new URL(packet.join_url).origin;
-  return <main style={{ padding: 24, maxWidth: 680, margin: "0 auto", display: "grid", gap: 20 }}>
+  const roomLabel = new URL(packet.join_url).host;
+  return <main className="grid min-h-dvh place-items-center bg-chat-bg p-6">
+    <section className="dc-agent-create-modal" style={{ height: "auto", width: "100%", maxWidth: 560, padding: 24, gap: 20 }}>
     <header><h1 className="text-2xl font-black text-text-primary">이 컴퓨터에서 AI 추가</h1>
-      <p className="dc-agent-hint preserve-words">{roomLabel}</p></header>
+      <p className="preserve-words mt-2 text-sm text-text-muted break-all">{roomLabel} 방에 참가해요</p></header>
     <p role="status">{cancelling ? "에이전트 종료와 방 나가기를 확인하고 있어요." : busy ? "참가 상태를 확인하고 있어요." : operation
       ? LOCAL_ATTENDEE_PHASE_LABELS[operation.phase] : editable ? "이 컴퓨터에서 사용할 AI를 설정해 주세요."
       : submitted.current ? "응답을 받지 못했어요. 상태를 확인하거나 같은 요청으로 다시 시도해 주세요." : "참가 상태를 먼저 확인해 주세요."}</p>
@@ -134,5 +150,6 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
         initialSelection={{ providerId: packet.provider, displayName: packet.display_name }} onCatalogChange={setCatalog}
         onCreate={create} onClose={() => setDismissed(true)} />
     </div>}
+    </section>
   </main>;
 }

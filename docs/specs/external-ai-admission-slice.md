@@ -11,6 +11,21 @@ intermediate verification status; this current status and the closure record gov
 
 ## Companion AI entry consolidation (2026-10-06)
 
+Packaged 0.1.20 blocker acceptance: the bypassed bundled entry must inspect local
+bootstrap before operator catalog/status calls, reuse the existing local profile
+initializer only with a live central identity when empty, and retain repair/error
+and explicit create/run semantics. Operator tickets already start/await the
+sidecar and carry the loopback base and credential; no new device authority,
+server registration or host enablement is needed. Native string failures must be
+visible and retryable. Desktop handoff closes the remote creation dialog with
+“이 컴퓨터에 뜬 창에서 마저 설정해 주세요.” status, without accumulating setup
+links; browser links retain their behavior. The local entry uses a centered
+560px panel and a muted server host subtitle, retaining model/workspace/run
+controls. Member effort badges use one Korean display mapping (minimal/low/
+medium/high/xhigh); wire values stay unchanged. Verify entry initialization,
+failure/retry, desktop/browser handoff and existing attendee consent tests;
+packaged B remains separate acceptance evidence.
+
 Packaged 0.1.19 follow-up: the bundled `index.html?attendee-create=<id>`
 entry renders LocalAttendeePanel before StartupIdentityBoundary, only on the
 desktop bundled origin. Other routes retain their identity/server gates. B uses
@@ -20,7 +35,7 @@ native provider discovery must remain available after device demotion or without
 central registration, while room hosting, public ingress and registration remain
 restricted. Keep the explicit create/run action and all invitation validation.
 The window title is `이 컴퓨터에서 AI 추가`; visible setup omits raw room IDs and
-duplicate provider IDs, keeps the server origin, and shows expiry only below two
+duplicate provider IDs, keeps the server host, and shows expiry only below two
 minutes or after expiry. Verify the actual bootstrap entry, existing consent and
 retry tests, non-server local API/discovery, and report packaged B separately from
 unit results. No new authority, fallback, protocol or persistence is introduced.
@@ -40,7 +55,7 @@ local discovery, model/workspace selection and explicit create/run consent.
 Main-webview navigation cancels every agentsassemble URL; only attend is fed to
 attendee_handoff's existing bounded exact decoder. One local-attendee window is
 open at a time; repeated packets focus it without replacing its draft. Its visible
-server origin includes scheme and port. No prepare/result broker, parser, command,
+server host includes the port when present. No prepare/result broker, parser, command,
 capability change, admission-on-navigation, new retry or polling is added.
 Remove member-panel CompanionInviteCard; preserve both room-invite pairing and AI
 tabs. Acceptance covers owner/member/read-only/disconnected gates, unsupported or

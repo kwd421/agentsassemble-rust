@@ -1,9 +1,12 @@
+import { isDesktopWebview } from "../lib/desktopBridge";
 import type { RoomEvent } from "../api";
 import { localAttendeeLink } from "../lib/localAttendee";
 import { useEffect, useRef, useState } from "react";
 import { attendeePacketText, createCompanionAttendeeInvite, type AttendeePacketCustody } from "../api/attendeeInvite";
 import { copyText } from "../lib/copyInviteText";
 import { roomGuestSessionExpired, type RoomGuestSession } from "../lib/roomGuestSession";
+
+const DESKTOP_HANDOFF_STATUS = "이 컴퓨터에 뜬 창에서 마저 설정해 주세요.";
 
 export function useCompanionInvites(session: RoomGuestSession | null, events: RoomEvent[] = [], deviceToken?: string) {
   const current = useRef(session); current.current = session;
@@ -15,6 +18,11 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState({ token: "", text: "" });
   function setStatus(text: string) { setNotice({ token: current.current?.sessionToken ?? "", text }); }
+  useEffect(() => {
+    if (!isDesktopWebview() || notice.text !== DESKTOP_HANDOFF_STATUS) return;
+    const timer = window.setTimeout(() => setNotice({ token: "", text: "" }), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const [records, setRecords] = useState<Array<AttendeePacketCustody & { sessionToken: string }>>([]);
   const [now, setNow] = useState(Date.now);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
@@ -40,9 +48,9 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
       const packet = await createCompanionAttendeeInvite({ ...owner, deviceToken }, { ...request, request_id: requestId });
       pending.current.delete(key);
       if (!isCurrent(owner)) return;
-      setRecords((prior) => [...prior, { ...packet, sessionToken: owner.sessionToken }]);
+      if (!isDesktopWebview()) setRecords((prior) => [...prior, { ...packet, sessionToken: owner.sessionToken }]);
       onIssued?.(localAttendeeLink(packet.result));
-      setStatus("설정 준비가 됐어요. 이 컴퓨터에서 설정하기를 눌러 앱을 열어 주세요.");
+      setStatus(isDesktopWebview() ? DESKTOP_HANDOFF_STATUS : "설정 준비가 됐어요. 이 컴퓨터에서 설정하기를 눌러 앱을 열어 주세요.");
     } catch (error) {
       if (isCurrent(owner)) setStatus(error instanceof Error ? error.message : "초대 결과를 확인하지 못했어요. 다시 시도해 주세요.");
     } finally {

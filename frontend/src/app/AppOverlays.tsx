@@ -1,3 +1,4 @@
+import ConnectionBanner from "../views/components/ConnectionBanner";
 import { useState } from "react";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import type { CompanionInviteControls } from "./useCompanionInvites";
@@ -54,6 +55,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
 
   return createPortal(
     <div data-app-overlays style={{ position: "relative", zIndex: 220 }}>
+        {!agentCreateOpen && isDesktopWebview() && companionInvites.status && <div className="fixed inset-x-6 top-6"><ConnectionBanner message={companionInvites.status} /></div>}
         {leaveRoomTarget && (
           <LeaveRoomDialog
             roomLabel={leaveRoomTarget.label}

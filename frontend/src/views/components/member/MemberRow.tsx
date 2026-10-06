@@ -186,10 +186,11 @@ export default function MemberRow({
 function reasoningEffortLabel(value: string): string {
   const normalized = value.trim().toLowerCase();
   const labels: Record<string, string> = {
-    low: "Low",
-    medium: "Medium",
-    high: "High",
-    xhigh: "Extra High",
+    minimal: "최소",
+    low: "낮음",
+    medium: "보통",
+    high: "높음",
+    xhigh: "매우 높음",
     max: "Max",
     ultra: "Ultra",
     ultracode: "UltraCode",

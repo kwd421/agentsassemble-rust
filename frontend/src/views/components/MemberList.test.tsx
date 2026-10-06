@@ -179,6 +179,14 @@ describe("MemberList component wiring", () => {
     expect(memberRow?.getAttribute("data-ultra")).toBe("true");
   });
 
+  it.each([
+    ["minimal", "최소"], ["low", "낮음"], ["medium", "보통"], ["high", "높음"], ["xhigh", "매우 높음"],
+  ])("localizes %s effort in visible and accessible member labels", (effort, label) => {
+    render(<MemberList agents={[AGENT]} agentSessions={[{ ...SESSION, model: "gpt-5.6-sol", reasoning_effort: effort }]}
+      roomId="room-1" roomName="Room One" />);
+    expect(screen.getByLabelText(`gpt-5.6-sol, 추론 ${label}`).textContent).toContain(label);
+  });
+
   it("keeps a failed canonical role change visible instead of silently diverging", async () => {
     const onRoleChange = vi.fn().mockRejectedValue(
       new Error("canonical role update rejected")

@@ -6,20 +6,26 @@ import { chooseLocalWorkspace } from "../../api";
 import { ApiError } from "../../lib/apiErrors";
 import { localAttendeeLink } from "../../lib/localAttendee";
 import { codexProvider } from "./AgentCreateModal.testProviders";
+import { requestDesktopBootstrapStatus } from "../../lib/desktopBridge";
+import { bootstrapCentral } from "../../lib/central/identity";
+import { saveLocalProfile } from "../../lib/localProfile";
 import LocalAttendeePanel from "./LocalAttendeePanel";
 import type { LocalAttendeeStatus } from "../../types/generated/LocalAttendeeStatus";
 
 vi.mock("../../api/localAttendee", async (original) => ({ ...await original<typeof import("../../api/localAttendee")>(),
   createLocalAttendee: vi.fn(), fetchLocalAttendee: vi.fn(), commandLocalAttendee: vi.fn() }));
 vi.mock("../../api/providerOperations", () => ({ fetchLocalProviderCatalog: vi.fn(), refreshLocalProviderCatalog: vi.fn() }));
-vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: () => true, requestDesktopHostProductSurface: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: () => true, requestDesktopBootstrapStatus: vi.fn(), requestDesktopHostProductSurface: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../api", async (original) => ({ ...await original<typeof import("../../api")>(), chooseLocalWorkspace: vi.fn() }));
+vi.mock("../../lib/central/identity", () => ({ bootstrapCentral: vi.fn() }));
+vi.mock("../../lib/localProfile", () => ({ saveLocalProfile: vi.fn() }));
 const packet = { request_id: "00000000-0000-4000-8000-000000000001", room_id: "remote-room", room_uid: "00000000-0000-4000-8000-000000000002",
   invite_id: "00000000-0000-4000-8000-000000000003", display_name: "Browser draft", provider: "codex",
   attend_command: "assemble room attend --provider codex", expires_at: "2099-01-01T00:00:00Z", join_url: "https://room.example.test/join?token=fixture-invitation" };
 const admitted = { request_id: packet.request_id, room_id: packet.room_id, room_uid: packet.room_uid, participant_id: "remote-participant", phase: "admitted" as const, error_code: null };
 const missing = () => new ApiError(404, "missing", "local_attendee_missing");
 beforeEach(() => {
+  vi.mocked(requestDesktopBootstrapStatus).mockResolvedValue({ phase: "complete" } as Awaited<ReturnType<typeof requestDesktopBootstrapStatus>>);
   const fragment = new URL(localAttendeeLink(packet)).hash;
   window.history.replaceState(null, "", `/?attendee-create=${packet.request_id}${fragment}`);
   const catalog = { status: "ready", catalog_revision: "local-revision", providers: [codexProvider()] };
@@ -132,13 +138,46 @@ it("retains a failed cancel and exact status access instead of allowing a replac
 });
 
 
-it("shows the canonical origin with its port and rejects a provider absent from this computer", async () => {
+it("shows the server host with its port and rejects a provider absent from this computer", async () => {
   const link = new URL(localAttendeeLink({ ...packet, join_url: "https://room.example.test:8443/join?token=fixture" }));
   window.history.replaceState(null, "", `/?attendee-create=${packet.request_id}${link.hash}`);
   vi.mocked(fetchLocalProviderCatalog).mockResolvedValue({ status: "ready", catalog_revision: "local", providers: [] });
   render(<LocalAttendeePanel />);
   expect(await screen.findByText("선택한 AI가 현재 목록에 없어요.")).toBeTruthy();
-  expect(screen.getAllByText("https://room.example.test:8443").length).toBeGreaterThan(0);
+  expect(screen.getByText("room.example.test:8443 방에 참가해요")).toBeTruthy();
   expect(screen.queryByText(/remote-room/)).toBeNull();
   expect(createLocalAttendee).not.toHaveBeenCalled();
+});
+
+
+it("initializes empty local authority from the live account before catalog access, without admission", async () => {
+  vi.mocked(requestDesktopBootstrapStatus).mockResolvedValue({ phase: "empty" } as Awaited<ReturnType<typeof requestDesktopBootstrapStatus>>);
+  const person = { display_name: "Local owner", identity_kind: "guest" };
+  vi.mocked(bootstrapCentral).mockResolvedValue({ person } as Awaited<ReturnType<typeof bootstrapCentral>>);
+  let finish!: () => void;
+  vi.mocked(saveLocalProfile).mockReturnValue(new Promise(resolve => { finish = () => resolve({ phase: "complete" } as Awaited<ReturnType<typeof saveLocalProfile>>); }));
+  render(<LocalAttendeePanel />);
+  await waitFor(() => expect(saveLocalProfile).toHaveBeenCalledWith("Local owner", expect.any(String), person));
+  expect(fetchLocalProviderCatalog).not.toHaveBeenCalled();
+  await act(async () => finish());
+  await screen.findByRole("dialog");
+  expect(createLocalAttendee).not.toHaveBeenCalled();
+});
+
+it("exposes native string errors and retries bootstrap before fetching the catalog", async () => {
+  vi.mocked(requestDesktopBootstrapStatus).mockRejectedValueOnce("native control unavailable");
+  render(<LocalAttendeePanel />);
+  expect(await screen.findByRole("alert")).toHaveProperty("textContent", "native control unavailable");
+  expect(fetchLocalProviderCatalog).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "상태 다시 확인" }));
+  await screen.findByRole("dialog");
+  expect(bootstrapCentral).not.toHaveBeenCalled();
+});
+
+it.each(["repair_required", "initializing"])("keeps %s authority closed", async phase => {
+  vi.mocked(requestDesktopBootstrapStatus).mockResolvedValue({ phase } as Awaited<ReturnType<typeof requestDesktopBootstrapStatus>>);
+  render(<LocalAttendeePanel />);
+  await screen.findByRole("alert");
+  expect(fetchLocalProviderCatalog).not.toHaveBeenCalled();
+  expect(saveLocalProfile).not.toHaveBeenCalled();
 });

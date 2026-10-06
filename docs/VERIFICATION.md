@@ -1,5 +1,18 @@
 # Verification Contract
 
+- 2026-10-06 packaged 0.1.20 local AI blocker (working tree): bypass entry now
+  inspects local bootstrap and reuses the startup profile initializer with a live
+  central account only when empty. Operator ticket issuance already ensures the
+  runtime; its bootstrap-complete requirement explained the missing prerequisite.
+  Native string errors are visible. Desktop handoff closes with a five-second
+  existing status banner and no retained setup links; browser links stay. Local
+  560px card/host subtitle and Korean effort labels are applied. TypeScript and
+  affected Vitest 97/97 (9 files), architecture/source-growth and diff checks pass
+  (existing source-size warnings remain). No Rust crate changed, so cargo tests
+  were not applicable. jsdom cannot execute native navigation; packaged B,
+  actual handoff success and post-change pixels remain unverified. No commit,
+  push, release, provider execution or user-data cleanup was performed.
+
 - 2026-10-06 채널 소개·내 컴퓨터 공용 app/web 문구 수정: 빈/기존 채널 기록, 도구 이름·MB/GB·PID 숨김·CPU 확인 중·앱 점검 표시의 영향 화면 테스트 36개 통과; 푸시 전 make verify 1회 통과(프론트 1,164개 포함), 패키지 재실행·재촬영은 이번 요청 범위에서 미실시.
 
 - 2026-10-06 Daybreak 수정 최종 게이트: make verify 1회에서 frontend 1,161·desktop 48·Rust 1,127 및 doc 테스트 전부 통과; Clippy 함수 103/100줄 두 건은 공용 강등 확인/종료 상태 소유 정리로 교정(제한·예외 변경 없음), 영향 호스트 5/5·workspace Clippy·구조/포맷/diff/artifact 재검 통과.
