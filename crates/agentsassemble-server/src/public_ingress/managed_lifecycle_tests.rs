@@ -241,24 +241,27 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
     let stable_entry = crate::stable_entry::StableEntry::new(None, Path::new("."))
         .await
         .unwrap_or_else(|error| panic!("build unconfigured stable entry: {error}"));
-    PublicIngress(Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
-        projection: Arc::new(RwLock::new(ManagedProjection::new(
-            "http://127.0.0.1:41955",
-            true,
-        ))),
-        controller: ManagedController {
-            config: ManagedIngressConfig {
-                local_url: "http://127.0.0.1:41955".to_owned(),
-                cloudflared: None,
-                stable_entry,
+    PublicIngress(
+        Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
+            projection: Arc::new(RwLock::new(ManagedProjection::new(
+                "http://127.0.0.1:41955",
+                true,
+            ))),
+            controller: ManagedController {
+                config: ManagedIngressConfig {
+                    local_url: "http://127.0.0.1:41955".to_owned(),
+                    cloudflared: None,
+                    stable_entry,
+                },
+                lifecycle: Mutex::new(ManagedLifecycle {
+                    closed: false,
+                    latest_control_sequence: None,
+                    active,
+                }),
             },
-            lifecycle: Mutex::new(ManagedLifecycle {
-                closed: false,
-                latest_control_sequence: None,
-                active,
-            }),
-        },
-    })))
+        })),
+        Arc::default(),
+    )
 }
 
 fn sequence(value: u64) -> NonZeroU64 {
@@ -281,4 +284,125 @@ fn trusted_headers() -> HeaderMap {
     );
     headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
     headers
+}
+
+#[tokio::test]
+async fn demotion_cuts_both_ingress_modes_and_joins_managed_owner_without_revoking_admitted_lifetime()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cancellation = CancellationToken::new();
+    let stopped = cancellation.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let owner = tokio::spawn(async move {
+        stopped.cancelled().await;
+        let _ = tx.send(());
+    });
+    let managed = managed(Some(ActiveGeneration {
+        number: 1,
+        cancellation,
+        owner,
+    }))
+    .await;
+    let PublicIngressKind::Managed(inner) = managed.0.as_ref() else {
+        unreachable!()
+    };
+    let generation = inner.projection.write().begin_start();
+    inner.projection.write().ready_managed(
+        generation,
+        origin("https://first.trycloudflare.com"),
+        "secret.origin.invalid",
+    );
+    let manual = PublicIngress::configured_manual(
+        "127.0.0.1:41955".parse()?,
+        "https://host.test",
+        &"s".repeat(32),
+    )?;
+    for (ingress, origin, headers) in [
+        (
+            managed.clone(),
+            "https://first.trycloudflare.com",
+            trusted_headers(),
+        ),
+        (manual, "https://host.test", {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::HOST, HeaderValue::from_static("host.test"));
+            headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+            headers.insert(
+                super::MANUAL_PROXY_TOKEN_HEADER,
+                HeaderValue::from_str(&"s".repeat(32))?,
+            );
+            headers
+        }),
+    ] {
+        let peer = crate::ingress_trust::PeerAddr("127.0.0.1:4000".parse()?);
+        assert!(
+            ingress
+                .authorize(peer, &headers, RouteExposure::IdentityProbePublic)
+                .is_some()
+        );
+        let admitted = ingress
+            .ready_lifetime(origin)
+            .ok_or("missing admitted lifetime")?;
+        assert!(ingress.ready_snapshot().is_some());
+        ingress.demote().await?;
+        ingress.demote().await?;
+        assert!(ingress.ready_snapshot().is_none());
+        assert!(ingress.ready_lifetime(origin).is_none());
+        assert!(
+            ingress
+                .authorize(peer, &headers, RouteExposure::IdentityProbePublic)
+                .is_none()
+        );
+        assert!(!admitted.is_cancelled());
+    }
+    rx.await?;
+    assert!(inner.controller.lifecycle.lock().await.active.is_none());
+    assert!(matches!(
+        managed.start(sequence(9)).await,
+        Err(PublicIngressControlError::Closed)
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn demotion_is_durable_before_waiting_for_managed_cleanup()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store = agentsassemble_persistence::SqliteStore::open("sqlite::memory:").await?;
+    let cancellation = CancellationToken::new();
+    let stopped = cancellation.clone();
+    let (release, released) = tokio::sync::oneshot::channel();
+    let owner = tokio::spawn(async move {
+        stopped.cancelled().await;
+        let _ = released.await;
+    });
+    let ingress = managed(Some(ActiveGeneration {
+        number: 1,
+        cancellation: cancellation.clone(),
+        owner,
+    }))
+    .await;
+    let PublicIngressKind::Managed(inner) = ingress.0.as_ref() else {
+        unreachable!()
+    };
+    let generation = inner.projection.write().begin_start();
+    inner.projection.write().ready_managed(
+        generation,
+        origin("https://first.trycloudflare.com"),
+        "secret.origin.invalid",
+    );
+    let (host_store, host_ingress) = (store.clone(), ingress.clone());
+    let transition = tokio::spawn(async move {
+        crate::central::directory::demote_host(&host_store, &host_ingress, true).await
+    });
+    tokio::time::timeout(Duration::from_secs(1), cancellation.cancelled()).await?;
+    assert_eq!(
+        store.hosting_restriction().await?.as_deref(),
+        Some("retired")
+    );
+    assert!(ingress.ready_snapshot().is_none());
+    assert!(!transition.is_finished());
+    release
+        .send(())
+        .map_err(|()| "cleanup owner stopped early")?;
+    transition.await??;
+    Ok(())
 }

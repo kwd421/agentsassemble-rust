@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 계정당 서버 하나·호스트: 410 두 variant·저장 epoch 조건·멱등 영속 강등, managed/manual readiness·공개 권한 차단과 managed 종료 owner 재사용·admitted 수명 보존·등록 409용 로컬 전이; 차단 → 영속 기록 → 종료 대기 순서의 barrier 회귀 포함 최종 directory 8/8·ingress 7/7·등록/재시작 HTTP 7/7·device 상태 파서 통과, 중앙은 테스트 대역이며 서명·수동·배포 없음.
+
 - 2026-10-06 Daybreak avatar M1/M2: 공개 읽기 공유 6개(응답 바이트 해제까지 유지)·권한 직후 본문 파싱 전 업로드 공유 2개 비대기 허가, 포화 429와 기존 메시지 처리, L1 수용·디코더 제한 유지; 서버 회귀 3/3·전체 321/321 통과; 푸시 직전 make verify 1회에서 Rust 1,117/frontend 1,138/desktop 48 통과 후 테스트 expect lint로 중단, 표현 수정 후 회귀 3/3·workspace Clippy·구조/포맷/diff/artifact 게이트 통과.
 
 - 2026-10-06 E2E 2 읽음 표시: 공용 방 설정에서 seq 커서 직접 출력을 제거하고 읽음 위치 저장 안내로 교체; seq:5 비노출·기존 채널 알림 변경 회귀 통과(변경 범위 프론트 60/60); 서명 빌드·수동 검증·배포 없음.

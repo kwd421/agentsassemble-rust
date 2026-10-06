@@ -1,5 +1,29 @@
 # Identity, accounts, friends and human admission
 
+## 계정당 서버 하나 — 호스트·공용 프론트 (2026-10-06)
+
+확정 one-server-design v2 → v3 → v4 → v5 → v5.1 순으로 초안을 덮어쓴다.
+등록 진입점은 공용 registerLocalServer/StartupIdentityGate와 Rust registration-proof,
+관찰 진입점은 central directory의 모든 host-signed 요청이다. 409 server_exists는
+로컬 서버 등록/공개 ingress를 막고 기존 owner connect/pairing의 기기 연결로 안내한다.
+410 server_retired와 저장된 epoch가 있는 registration_absent는 구분된 Rust 오류이며,
+단일 멱등 강등 전이가 강등 상태를 저장하고 managed/manual 모두 readiness·새 공개
+권한·디렉터리 발행을 끊는다. managed 소유 프로세스도 종료하되 admitted 세션은
+취소하지 않는다. 다른 4xx의 기존 실패/재시도 의미를 보존한다. 재시작도 강등을 유지한다.
+공용 시작 화면은 자기 서버를 바로 열고 다른 컴퓨터에는 계정 서버 이름과 ‘이 기기로
+연결’을 보인다. 중복은 이름·연결 상태·마지막 접속 목록에서 keeper 선택 후 별도
+확인하며, 중앙의 account-scoped keeper epoch/revision과 정확한 loser incarnation으로
+은퇴한다. 은퇴의 비가역성과 기기로만 연결 가능함을 안내한다. 단독 서버 삭제의
+409 server_move_unsupported는 ‘서버 옮기기는 아직 지원하지 않아요’로 표시한다.
+강등 표시는 기존 방 목록 스트림의 hosting_restriction으로 로컬 호스트에만 전달한다.
+기존 2초 directory 관찰/30초 중앙 갱신 주기를 유지하고 새 타이머·프로세스는 만들지 않는다.
+runtime_metadata의 한 상태를 추가하며 스키마 상승·방/세션 삭제는 없다.
+중앙 Worker는 별도 작업 소유이며 읽기만 한다. README의 새 응답 계약이 생기면 정본이다.
+중앙 테스트 대역으로 각 상태 화면, 409/410, 두 ingress 모드·멱등 강등을 검증하고
+바뀐 범위 테스트 및 푸시 직전 make verify 한 번을 실행한다. 기능별 <1,000줄 커밋·푸시,
+VERIFICATION.md 건별 한 줄. 서명 빌드·수동 검증·배포, 서버 교체·재승격,
+동반 AI 네이티브 handoff(2단계)는 범위 밖이다. .agents/와 scripts/__pycache__/는 건드리지 않는다.
+
 ## 화면 보고서 후속 수정 (2026-10-06)
 
 공용 app/web의 MemberJoinPanel, StartupIdentityGate → CentralServerList(첫 서버와

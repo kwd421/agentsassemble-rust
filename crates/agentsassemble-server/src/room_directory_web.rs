@@ -286,6 +286,7 @@ async fn list_rooms(
         "server_product_surface": state.server_product_surface,
         "rooms": rooms,
         "profile_revision": profile_revision,
+        "hosting_restriction": state.store.hosting_restriction().await?,
     })))
 }
 

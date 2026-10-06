@@ -228,6 +228,8 @@ impl AppState {
         url: &str,
     ) -> Result<Self, crate::central::directory::CentralDirectoryError> {
         self.central_directory = crate::central::directory::CentralDirectory::configured(url)?;
+        self.central_directory
+            .bind_ingress(self.public_ingress.clone());
         Ok(self)
     }
 
@@ -243,6 +245,8 @@ impl AppState {
         proxy_secret: &str,
     ) -> Result<Self, ManualPublicIngressError> {
         self.public_ingress = PublicIngress::configured_manual(listener, origin, proxy_secret)?;
+        self.central_directory
+            .bind_ingress(self.public_ingress.clone());
         Ok(self)
     }
 
@@ -258,6 +262,8 @@ impl AppState {
         state_root: &Path,
     ) -> Result<Self, StableEntryActivationError> {
         self.public_ingress = PublicIngress::managed(listener, stable_entry, state_root).await?;
+        self.central_directory
+            .bind_ingress(self.public_ingress.clone());
         Ok(self)
     }
 

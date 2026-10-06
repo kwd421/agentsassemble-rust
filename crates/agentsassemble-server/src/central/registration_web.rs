@@ -31,8 +31,16 @@ struct EpochRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostingRequest {
+    server_id: String,
+    hosting_state: String,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum RegistrationRequest {
+    Hosting(HostingRequest),
     Proof(ProofRequest),
     Epoch(EpochRequest),
 }
@@ -58,6 +66,36 @@ async fn issue_registration_proof(
         .await
         .map_err(RegistrationHttpError::from_body)?;
     let payload = match payload {
+        RegistrationRequest::Hosting(HostingRequest {
+            server_id,
+            hosting_state,
+        }) => {
+            if server_id != state.central_host_identity.server_id() {
+                return Err(RegistrationHttpError::bad_request(
+                    "host binding is invalid",
+                ));
+            }
+            if hosting_state != "status" {
+                if !matches!(hosting_state.as_str(), "device" | "retired") {
+                    return Err(RegistrationHttpError::bad_request(
+                        "hosting state is invalid",
+                    ));
+                }
+                super::directory::demote_host(
+                    &state.store,
+                    &state.public_ingress(),
+                    hosting_state == "retired",
+                )
+                .await
+                .map_err(|_| RegistrationHttpError::persistence())?;
+            }
+            let restriction = state
+                .store
+                .hosting_restriction()
+                .await
+                .map_err(|_| RegistrationHttpError::persistence())?;
+            return Ok(Json(json!({"hosting_state": restriction})));
+        }
         RegistrationRequest::Epoch(epoch) => {
             if epoch.server_id != state.central_host_identity.server_id()
                 || epoch
@@ -78,11 +116,34 @@ async fn issue_registration_proof(
         }
         RegistrationRequest::Proof(proof) => proof,
     };
+    registration_envelope(&state, payload).await
+}
+
+async fn registration_envelope(
+    state: &AppState,
+    payload: ProofRequest,
+) -> Result<Json<serde_json::Value>, RegistrationHttpError> {
     let owner_person_id = payload.owner_person_id.trim();
     if !valid_owner_person_id(owner_person_id) {
         return Err(RegistrationHttpError::bad_request(
             "owner_person_id is invalid",
         ));
+    }
+    if let Some(reason) = state
+        .store
+        .hosting_restriction()
+        .await
+        .map_err(|_| RegistrationHttpError::persistence())?
+    {
+        return Err(RegistrationHttpError {
+            status: StatusCode::CONFLICT,
+            code: if reason == "retired" {
+                "server_retired"
+            } else {
+                "server_exists"
+            },
+            message: "This computer can only connect as a device.",
+        });
     }
     let epoch = state
         .store

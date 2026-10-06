@@ -53,7 +53,7 @@ pub(crate) struct TunnelStatus {
 }
 
 #[derive(Clone)]
-pub(crate) struct PublicIngress(Arc<PublicIngressKind>);
+pub(crate) struct PublicIngress(Arc<PublicIngressKind>, Arc<std::sync::atomic::AtomicBool>);
 
 enum PublicIngressKind {
     Disabled,
@@ -146,7 +146,7 @@ pub(crate) struct ReadyIngress {
 
 impl PublicIngress {
     pub(crate) fn disabled() -> Self {
-        Self(Arc::new(PublicIngressKind::Disabled))
+        Self(Arc::new(PublicIngressKind::Disabled), Arc::default())
     }
 
     pub(crate) fn configured_manual(
@@ -160,15 +160,16 @@ impl PublicIngress {
         {
             return Err(ManualPublicIngressError::InvalidSecret);
         }
-        Ok(Self(Arc::new(PublicIngressKind::Manual(
-            ManualPublicIngress {
+        Ok(Self(
+            Arc::new(PublicIngressKind::Manual(ManualPublicIngress {
                 local_url: format!("http://{listener}").into(),
                 origin: origin.value.into(),
                 host: origin.host.into(),
                 port: origin.port,
                 proxy_secret_digest: Sha256::digest(proxy_secret.as_bytes()).into(),
-            },
-        ))))
+            })),
+            Arc::default(),
+        ))
     }
 
     pub(crate) async fn managed(
@@ -183,8 +184,8 @@ impl PublicIngress {
             &local_url,
             cloudflared.is_some(),
         )));
-        Ok(Self(Arc::new(PublicIngressKind::Managed(
-            ManagedPublicIngress {
+        Ok(Self(
+            Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
                 projection,
                 controller: ManagedController {
                     config: ManagedIngressConfig {
@@ -198,11 +199,22 @@ impl PublicIngress {
                         active: None,
                     }),
                 },
-            },
-        ))))
+            })),
+            Arc::default(),
+        ))
     }
 
     pub(crate) fn status(&self) -> PublicIngressStatus {
+        if self.restricted() {
+            let mut status = static_status("device", "");
+            if let PublicIngressKind::Managed(ingress) = self.0.as_ref() {
+                status
+                    .tunnel
+                    .last_error
+                    .clone_from(&ingress.projection.read().last_error);
+            }
+            return status;
+        }
         match self.0.as_ref() {
             PublicIngressKind::Disabled => static_status("unconfigured", ""),
             PublicIngressKind::Manual(ingress) => static_status("manual", &ingress.origin),
@@ -211,6 +223,9 @@ impl PublicIngress {
     }
 
     pub(crate) fn ready_snapshot(&self) -> Option<ReadyIngress> {
+        if self.restricted() {
+            return None;
+        }
         match self.0.as_ref() {
             PublicIngressKind::Disabled => None,
             PublicIngressKind::Manual(ingress) => Some(ReadyIngress {
@@ -223,6 +238,9 @@ impl PublicIngress {
 
     /// Ends admitted remote transports when the ingress trust that admitted them ends.
     pub(crate) fn ready_lifetime(&self, origin: &str) -> Option<CancellationToken> {
+        if self.restricted() {
+            return None;
+        }
         match self.0.as_ref() {
             PublicIngressKind::Manual(ingress) if ingress.origin.as_ref() == origin => {
                 Some(CancellationToken::new())
@@ -255,7 +273,7 @@ impl PublicIngress {
     ) -> Result<PublicIngressStatus, PublicIngressControlError> {
         let ingress = self.managed_ingress()?;
         let mut lifecycle = ingress.controller.lifecycle.lock().await;
-        if lifecycle.closed {
+        if lifecycle.closed || self.restricted() {
             return Err(PublicIngressControlError::Closed);
         }
         if !lifecycle.accept_control(issue_sequence) {
@@ -284,7 +302,7 @@ impl PublicIngress {
     ) -> Result<PublicIngressStatus, PublicIngressControlError> {
         let ingress = self.managed_ingress()?;
         let mut lifecycle = ingress.controller.lifecycle.lock().await;
-        if lifecycle.closed {
+        if lifecycle.closed || self.restricted() {
             return Err(PublicIngressControlError::Closed);
         }
         if !lifecycle.accept_control(issue_sequence) {
@@ -297,6 +315,38 @@ impl PublicIngress {
         )
         .await;
         Ok(ingress.status())
+    }
+
+    pub(crate) fn restricted(&self) -> bool {
+        self.1.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    pub(crate) fn block_public_admission(&self) {
+        self.1.store(true, std::sync::atomic::Ordering::Release);
+    }
+
+    /// One-way admission cutoff; existing session authority is not revoked.
+    pub(crate) async fn demote(&self) -> Result<(), PublicIngressControlError> {
+        self.block_public_admission();
+        if let PublicIngressKind::Managed(ingress) = self.0.as_ref() {
+            let mut lifecycle = ingress.controller.lifecycle.lock().await;
+            if lifecycle.closed && lifecycle.active.is_none() {
+                return ingress.projection.read().cleanup_result();
+            }
+            lifecycle.closed = true;
+            if let Some(trust) = ingress.projection.write().trust.as_mut() {
+                // Detach the admitted lifetime before the process owner drops trust.
+                trust.ended = CancellationToken::new();
+            }
+            stop_active(
+                &ingress.projection,
+                &ingress.controller.config.stable_entry,
+                &mut lifecycle.active,
+            )
+            .await;
+            ingress.projection.read().cleanup_result()?;
+        }
+        Ok(())
     }
 
     pub(crate) async fn shutdown(&self) -> Result<(), PublicIngressControlError> {
@@ -320,6 +370,9 @@ impl PublicIngress {
         headers: &HeaderMap,
         exposure: RouteExposure,
     ) -> Option<PublicIngressAuthorization> {
+        if self.restricted() {
+            return None;
+        }
         match self.0.as_ref() {
             PublicIngressKind::Disabled => None,
             PublicIngressKind::Manual(ingress) => ingress

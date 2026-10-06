@@ -176,3 +176,9 @@ describe("parsePublicIngressStatus", () => {
     );
   });
 });
+
+it.each([undefined, "managed public ingress cleanup failed"])("accepts device-only status and preserves cleanup failures (%s)", last_error => {
+  const payload = { mode: "device", public_url: "", stable_url: "", tunnel: { available: false, running: false, phase: "stopped", public_url: "", local_url: "", stable_phase: "unconfigured", ...(last_error ? { last_error } : {}) } };
+  expect(parsePublicIngressStatus(payload)).toEqual(payload);
+  expect(() => parsePublicIngressStatus({ ...payload, public_url: "https://host.test" })).toThrow();
+});

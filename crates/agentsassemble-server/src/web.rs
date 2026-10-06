@@ -335,7 +335,7 @@ pub async fn serve(
 async fn reconcile_before_network_admission(
     state: &AppState,
     cancellation: &CancellationToken,
-) -> Result<(), agentsassemble_persistence::PersistenceError> {
+) -> Result<(), ServeError> {
     state
         .store
         .fail_provider_requests_before_admission()
@@ -373,6 +373,13 @@ async fn reconcile_before_network_admission(
             .rooms
             .publish_then_resume_assigned_turns(&room_id, vec![assignment])
             .await?;
+    }
+    if state.store.hosting_restriction().await?.is_some() {
+        state
+            .public_ingress()
+            .demote()
+            .await
+            .map_err(|_| ServeError::PublicIngressCleanup)?;
     }
     Ok(())
 }

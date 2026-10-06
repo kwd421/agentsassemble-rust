@@ -1,6 +1,6 @@
 export const PUBLIC_INGRESS_START_ERROR = "외부 접속을 열지 못했어요. 잠시 후 다시 시도해 주세요.";
 
-export type PublicIngressMode = "unconfigured" | "manual" | "managed";
+export type PublicIngressMode = "unconfigured" | "manual" | "managed" | "device";
 export type PublicIngressPhase =
   | "stopped"
   | "starting"
@@ -29,7 +29,7 @@ const ACTIVE_PHASES = new Set<PublicIngressPhase>([
   "running",
   "stopping",
 ]);
-const MODES = new Set<PublicIngressMode>(["unconfigured", "manual", "managed"]);
+const MODES = new Set<PublicIngressMode>(["unconfigured", "manual", "managed", "device"]);
 const PHASES = new Set<PublicIngressPhase>([
   "stopped",
   "starting",
@@ -157,7 +157,7 @@ function staticStatusIsExact(status: PublicIngressStatus, manual: boolean): bool
     status.tunnel.public_url === status.public_url &&
     status.tunnel.local_url === "" &&
     status.tunnel.stable_phase === "unconfigured" &&
-    status.tunnel.last_error === undefined &&
+    (status.tunnel.last_error === undefined || status.mode === "device") &&
     (manual ? status.public_url !== "" : status.public_url === "")
   );
 }
@@ -203,7 +203,7 @@ export function parsePublicIngressStatus(value: unknown): PublicIngressStatus {
       ...(lastError === undefined ? {} : { last_error: lastError }),
     },
   };
-  if (status.mode === "unconfigured") {
+  if (status.mode === "unconfigured" || status.mode === "device") {
     if (!staticStatusIsExact(status, false)) invalid();
     return status;
   }

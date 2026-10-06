@@ -17,6 +17,10 @@ use crate::{CentralHostIdentity, HostIdentityError, public_ingress::PublicIngres
 #[path = "member_sync.rs"]
 mod member_sync;
 
+#[cfg(test)]
+#[path = "directory_terminal_tests.rs"]
+mod terminal_tests;
+
 const HEARTBEAT: Duration = Duration::from_mins(5);
 const LEASE_SECONDS: i64 = 600;
 const RESPONSE_LIMIT: usize = 32 * 1024;
@@ -28,6 +32,7 @@ struct CentralDirectoryInner {
     base_url: Url,
     client: Client,
     status: RwLock<CentralDirectoryStatus>,
+    ingress: RwLock<PublicIngress>,
 }
 
 #[derive(Deserialize)]
@@ -67,6 +72,14 @@ pub(crate) struct CentralDirectoryStatus {
     pub(crate) name_sync_error: String,
 }
 
+impl CentralDirectoryStatus {
+    fn published(&mut self, origin: &str) {
+        origin.clone_into(&mut self.registered_origin);
+        self.last_success_at = Utc::now().timestamp();
+        self.last_error.clear();
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum CentralDirectoryError {
     #[error("central directory is unavailable")]
@@ -79,6 +92,12 @@ pub enum CentralDirectoryError {
     Request(#[source] reqwest::Error),
     #[error("central directory rejected the request")]
     Rejected,
+    #[error("server_retired")]
+    ServerRetired,
+    #[error("registration_absent")]
+    RegistrationAbsent,
+    #[error("public ingress demotion failed")]
+    Demotion(#[from] crate::PublicIngressControlError),
     #[error("central directory is temporarily unavailable")]
     Unavailable,
     #[error("central directory request capacity is temporarily exhausted")]
@@ -107,6 +126,7 @@ impl CentralDirectory {
         Ok(Self(Some(Arc::new(CentralDirectoryInner {
             base_url,
             client,
+            ingress: RwLock::new(PublicIngress::disabled()),
             status: RwLock::new(CentralDirectoryStatus {
                 enabled: true,
                 registered_origin: String::new(),
@@ -115,6 +135,12 @@ impl CentralDirectory {
                 name_sync_error: String::new(),
             }),
         }))))
+    }
+
+    pub(crate) fn bind_ingress(&self, ingress: PublicIngress) {
+        if let Some(inner) = &self.0 {
+            *inner.ingress.write() = ingress;
+        }
     }
 
     pub(crate) fn status(&self) -> CentralDirectoryStatus {
@@ -137,6 +163,7 @@ impl CentralDirectory {
         identity: CentralHostIdentity,
         cancellation: CancellationToken,
     ) -> Result<(), CentralDirectoryError> {
+        self.bind_ingress(ingress.clone());
         let Some(inner) = self.0 else { return Ok(()) };
         let mut profile_changes = store.subscribe_room_directory();
         let mut name_dirty = true;
@@ -149,6 +176,11 @@ impl CentralDirectory {
         let mut failure_count = 0_u32;
         let mut next_attempt = std::time::Instant::now();
         loop {
+            if store.hosting_restriction().await?.is_some() {
+                inner.status.write().registered_origin.clear();
+                ingress.demote().await?;
+                return Ok(());
+            }
             if let Err(error) = member_sync::send(&inner, &store, &identity).await {
                 inner.status.write().last_error = error.to_string();
             }
@@ -191,10 +223,7 @@ impl CentralDirectory {
                             last_success = Some(std::time::Instant::now());
                             failure_count = 0;
                             next_attempt = std::time::Instant::now() + HEARTBEAT;
-                            let mut status = inner.status.write();
-                            status.registered_origin = origin;
-                            status.last_success_at = Utc::now().timestamp();
-                            status.last_error.clear();
+                            inner.status.write().published(&origin);
                         }
                         Err(error) => {
                             failure_count = failure_count.saturating_add(1);
@@ -210,10 +239,7 @@ impl CentralDirectory {
                         last_success = None;
                         failure_count = 0;
                         next_attempt = std::time::Instant::now() + HEARTBEAT;
-                        let mut status = inner.status.write();
-                        status.registered_origin.clear();
-                        status.last_success_at = Utc::now().timestamp();
-                        status.last_error.clear();
+                        inner.status.write().published("");
                     }
                     Err(error) => {
                         failure_count = failure_count.saturating_add(1);
@@ -412,6 +438,10 @@ async fn send_signed(
     path: &str,
     mut body: serde_json::Value,
 ) -> Result<Vec<u8>, CentralDirectoryError> {
+    let restricted = inner.ingress.read().restricted();
+    if restricted || store.hosting_restriction().await?.is_some() {
+        return Err(CentralDirectoryError::ServerRetired);
+    }
     if body.get("registration_epoch").is_none()
         && let Some(epoch) = store.registration_epoch().await?
     {
@@ -435,7 +465,8 @@ async fn send_signed(
         .send()
         .await
         .map_err(CentralDirectoryError::Request)?;
-    if response.status() != StatusCode::OK {
+    let status = response.status();
+    if status != StatusCode::OK && status != StatusCode::GONE {
         return Err(if response.status() == StatusCode::TOO_MANY_REQUESTS {
             CentralDirectoryError::CapacityExhausted
         } else if response.status().is_server_error()
@@ -461,7 +492,48 @@ async fn send_signed(
         }
         bytes.extend_from_slice(&chunk);
     }
+    if status == StatusCode::GONE {
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::Rejected)?;
+        let epoch = store.registration_epoch().await?;
+        let code = value["error"]["code"].as_str();
+        let terminal = match code {
+            Some("server_retired") => CentralDirectoryError::ServerRetired,
+            Some("registration_absent") if epoch.is_some() => {
+                CentralDirectoryError::RegistrationAbsent
+            }
+            _ => return Err(CentralDirectoryError::Rejected),
+        };
+        if value["error"]["registration_epoch"]
+            .as_str()
+            .is_none_or(str::is_empty)
+            || value["error"]["server_id"].as_str() != Some(identity.server_id())
+            || epoch
+                .as_deref()
+                .is_some_and(|epoch| value["error"]["registration_epoch"].as_str() != Some(epoch))
+        {
+            return Err(CentralDirectoryError::InvalidResponse);
+        }
+        let ingress = inner.ingress.read().clone();
+        demote_host(store, &ingress, true).await?;
+        inner.status.write().registered_origin.clear();
+        return Err(terminal);
+    }
     Ok(bytes)
+}
+
+pub(crate) async fn demote_host(
+    store: &SqliteStore,
+    ingress: &PublicIngress,
+    retired: bool,
+) -> Result<(), CentralDirectoryError> {
+    // Persist before waiting for process cleanup so a crash cannot forget retirement.
+    // Still cut off admission if persistence fails; never report success then.
+    ingress.block_public_admission();
+    let persisted = store.restrict_hosting(retired).await;
+    let stopped = ingress.demote().await;
+    persisted?;
+    stopped.map_err(CentralDirectoryError::Demotion)
 }
 
 fn normalize_base_url(value: &str) -> Result<Url, CentralDirectoryError> {

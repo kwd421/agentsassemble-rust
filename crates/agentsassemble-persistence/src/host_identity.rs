@@ -105,6 +105,31 @@ impl SqliteStore {
         .await?)
     }
 
+    /// Reads the durable device-only reason for this host.
+    /// # Errors
+    /// Returns database read failures.
+    pub async fn hosting_restriction(&self) -> Result<Option<String>, PersistenceError> {
+        Ok(
+            sqlx::query_scalar(
+                "SELECT value FROM runtime_metadata WHERE key='hosting_restriction'",
+            )
+            .fetch_optional(&self.pool)
+            .await?,
+        )
+    }
+
+    /// Permanently restricts this installation to device connections.
+    /// # Errors
+    /// Returns database write failures.
+    pub async fn restrict_hosting(&self, retired: bool) -> Result<(), PersistenceError> {
+        let changed = sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES ('hosting_restriction',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE runtime_metadata.value='device' AND excluded.value='retired'")
+            .bind(if retired { "retired" } else { "device" }).execute(&self.pool).await?.rows_affected();
+        if changed > 0 {
+            self.notify_room_directory_changed();
+        }
+        Ok(())
+    }
+
     /// Stores the epoch returned by Central, or clears it before one re-registration.
     /// # Errors
     /// Returns database write failures.

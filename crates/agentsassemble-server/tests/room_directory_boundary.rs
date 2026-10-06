@@ -777,3 +777,73 @@ fn local_principal(room_id: &str) -> AuthenticatedPrincipal {
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
     }
 }
+
+#[tokio::test]
+async fn device_only_registration_state_is_local_bound_and_survives_restart()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store = zero_room_fixture().await;
+    store.set_registration_epoch(Some("retained-epoch")).await?;
+    let id = store.host_identity().await?.server_id().to_owned();
+    let tickets = TicketStore::new(Duration::from_secs(30), 32);
+    let server = start_with_registration(store.clone(), tickets.clone()).await;
+    let client = Client::new();
+    let route = format!(
+        "{}/api/central-directory/registration-proof",
+        server.base_url
+    );
+    let request = json!({"server_id": id, "hosting_state": "device"});
+    assert_eq!(
+        client.post(&route).json(&request).send().await?.status(),
+        reqwest::StatusCode::FORBIDDEN
+    );
+    for (body, expected) in [
+        (json!({"server_id":"other", "hosting_state":"retired"}), 400),
+        (request, 200),
+        (json!({"server_id": id, "hosting_state":"retired"}), 200),
+        (json!({"server_id": id, "hosting_state":"device"}), 200),
+    ] {
+        let response = client
+            .post(&route)
+            .bearer_auth(issue_registration_ticket(&tickets).await)
+            .json(&body)
+            .send()
+            .await?;
+        assert_eq!(response.status().as_u16(), expected);
+    }
+    let response = client
+        .post(&route)
+        .bearer_auth(issue_registration_ticket(&tickets).await)
+        .json(&json!({"owner_person_id":"per_owner_12345678"}))
+        .send()
+        .await?;
+    assert_eq!(response.status(), reqwest::StatusCode::CONFLICT);
+    assert_eq!(response.json::<Value>().await?["code"], "server_retired");
+    assert_eq!(
+        store.registration_epoch().await?.as_deref(),
+        Some("retained-epoch")
+    );
+    server.stop().await;
+    let restarted = start_with_registration(store.clone(), tickets.clone()).await;
+    let state = client
+        .post(format!(
+            "{}/api/central-directory/registration-proof",
+            restarted.base_url
+        ))
+        .bearer_auth(issue_registration_ticket(&tickets).await)
+        .json(&json!({"server_id":id,"hosting_state":"status"}))
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+    assert_eq!(state["hosting_state"], "retired");
+    let directory = client
+        .get(format!("{}/api/rooms", restarted.base_url))
+        .bearer_auth(issue_operator_ticket(&tickets).await)
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+    assert_eq!(directory["hosting_restriction"], "retired");
+    restarted.stop().await;
+    Ok(())
+}
