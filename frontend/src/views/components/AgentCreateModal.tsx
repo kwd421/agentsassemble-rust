@@ -51,6 +51,7 @@ type AgentCreateModalProps = {
   participants?: RoomMember[];
   catalogRevision?: string;
   localProviderActions?: boolean;
+  openCodeFreePermissionHint?: string;
   initialSelection?: { providerId: string; displayName: string };
   onCatalogChange?: (catalog: ProviderCatalog) => void;
   onClose: () => void;
@@ -68,6 +69,7 @@ export default function AgentCreateModal({
   participants = [],
   catalogRevision = "",
   localProviderActions = true,
+  openCodeFreePermissionHint = OPENCODE_FREE_PERMISSION_HINT,
   initialSelection,
   onCatalogChange,
   onClose,
@@ -505,7 +507,7 @@ export default function AgentCreateModal({
 
               <div className="dc-agent-field-grid dc-agent-field-grid--dual">
                 {requiresOpenCodeApproval(selectedProvider, settings) && (
-                  <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{OPENCODE_FREE_PERMISSION_HINT}</p>
+                  <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{openCodeFreePermissionHint}</p>
                 )}
                 {selectedProvider.controls.length > 0 && displayProviderControls(selectedProvider).map((control) => {
                   const providerSupportsControl = selectedProvider.controls.some(

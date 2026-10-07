@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createLocalAttendee, fetchLocalAttendee, commandLocalAttendee, localAttendeeCreateRequest } from "../../api/localAttendee";
 import { fetchLocalProviderCatalog } from "../../api/providerOperations";
 import { ApiError } from "../../lib/apiErrors";
@@ -27,6 +27,12 @@ export default function LocalAttendeePanel() {
 function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
   const [bootstrapRequestId] = useState(createSecureRequestId);
   const [catalog, setCatalog] = useState<ProviderCatalog | null>(null);
+  const companionProviders = useMemo(() => catalog?.providers
+    .filter((provider) => provider.id === packet.provider)
+    .map((provider) => ({ ...provider, controls: provider.controls.map((control) =>
+      control.key === "permission_mode"
+        ? { ...control, options: control.options.filter((option) => option.value !== "workspace_write") }
+        : control) })) ?? [], [catalog, packet.provider]);
   const [operation, setOperation] = useState<LocalAttendeeStatus | null>(null);
   const [needsPreparation, setNeedsPreparation] = useState(false);
   const [editable, setEditable] = useState(false);
@@ -135,7 +141,6 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     <p role="status">{cancelling ? "에이전트 종료와 방 나가기를 확인하고 있어요." : busy ? "참가 상태를 확인하고 있어요." : operation
       ? LOCAL_ATTENDEE_PHASE_LABELS[operation.phase] : editable ? "이 컴퓨터에서 사용할 AI를 설정해 주세요."
       : submitted.current ? "응답을 받지 못했어요. 상태를 확인하거나 같은 요청으로 다시 시도해 주세요." : "참가 상태를 먼저 확인해 주세요."}</p>
-    {editable && <p className="text-sm text-text-muted">작업 폴더 쓰기에서는 승인이 필요한 명령·파일 수정을 자동 거절해요.</p>}
     {needsPreparation && <p className="text-sm text-text-muted">AI를 실행하려면 이 컴퓨터에 사용자 설정을 저장해야 해요.</p>}
     {error && <p role="alert">{error}</p>}
     {operation?.error_code && <p role="alert" className="dc-agent-hint preserve-words">{localAttendeeFailureReason(operation.error_code)}</p>}
@@ -153,7 +158,8 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     </div>
     {catalog && (editable || submitted.current) && !operation && <div style={{ display: editable && !dismissed ? undefined : "none" }}>
       <AgentCreateModal open meetingId={packet.room_id} roomLabel={roomLabel}
-        providers={catalog.providers.filter((provider) => provider.id === packet.provider)} catalogRevision={catalog.catalog_revision}
+        providers={companionProviders} catalogRevision={catalog.catalog_revision}
+        openCodeFreePermissionHint="OpenCode 무료 모델은 이 컴퓨터에서 전체 액세스로만 쓸 수 있어요."
         initialSelection={{ providerId: packet.provider, displayName: packet.display_name }} onCatalogChange={setCatalog}
         onCreate={create} onClose={() => setDismissed(true)} />
     </div>}

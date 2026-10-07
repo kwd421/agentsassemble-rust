@@ -37,9 +37,29 @@ manual verification or deployment; visual acceptance belongs to the user.
 
 ## Definition
 
+### Companion permission choices (owner decision, 2026-10-07; base 6501d387)
+
+The bundled `LocalAttendeePanel` projects the local companion catalog to offer
+only `대화 전용` and catalog-supported `전체 액세스`, including after refresh.
+`workspace_write` is removed because companion Permission requests are always
+rejected under H1b. Local attendee selection validation in
+`crates/agentsassemble-server/src/local_attendee.rs` rejects an effective
+`workspace_write` before remote admission or local receipt reservation; it never
+rewrites the request. OpenCode catalog-marked free models therefore require
+`full_access` in this window, retaining the warning and request-local acknowledgement.
+The existing free-model hint becomes
+`OpenCode 무료 모델은 이 컴퓨터에서 전체 액세스로만 쓸 수 있어요.`
+Server-run creation/configuration, their three permission choices and free-model
+hint, invitation authority, exact retries and existing companion denial remain
+unchanged. No provider execution, persistence, fallback or background task is added.
+Acceptance: local window choices after refresh, supported/unsupported full access,
+free-model initialization/selection and warned submission, local HTTP rejection
+before admission, affected tests and mandatory structure/format gates. Packaged
+visual and live-provider evidence remain unknown unless separately recorded.
+
 ### Three permission levels (owner decision, 2026-10-07)
 
-Creation and stopped-session configuration share catalog-owned availability:
+Server-run creation and stopped-session configuration share catalog-owned availability:
 `대화 전용` (`meeting_read_only`, room tools only), `작업 폴더 쓰기`
 (`workspace_write`, approval per command/edit), and `전체 액세스` (`full_access`,
 native commands/edits without approval). Only Codex, Claude Agent SDK and OpenCode
@@ -60,7 +80,7 @@ rollback/replay semantics. No schema, background task or new authority is added.
 
 Shared add/settings selects show exactly one warning when full access is selected:
 `방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.`
-OpenCode free models require either write level; initialization/model changes may
+Server-run OpenCode free models require either write level; initialization/model changes may
 replace conversation-only with workspace-write but must preserve full-access.
 Acceptance: native launch/session payloads, SDK init receipt, catalog rejection,
 local/remote/member authority rejection, configuration retirement/rollback/replay,
@@ -81,14 +101,14 @@ unknown unless separately recorded.
   if none exists, the exchange fails closed. These requests never enter remote
   room approval. The persistence open/resolution owners also reject companion
   Permission requests, including pending requests from older clients. Other user
-  questions retain their existing room-owner flow. Companion `workspace_write`
+  questions retain their existing room-owner flow. Older companion `workspace_write`
   thus cannot execute commands/edits that require native approval; native sandbox
   permissions and the user's own existing grants still apply. Local full access
   remains the local operator's explicitly warned choice.
 - H1c: OpenCode grants the user created outside AgentsAssemble are accepted as that
   user's own decision. Native remembered grants can bypass `ask`, including after
   `full_access` -> `workspace_write`; session retirement does not erase them.
-  The existing 작업 폴더 쓰기 hint remains owner-approved under this limitation.
+  The server-run 작업 폴더 쓰기 hint remains owner-approved under this limitation.
 - M1: `agent.create`, `agent.configure` and private local-attendee creation require
   request-local JSON `full_access_acknowledged: true` whenever the effective selected
   permission is `full_access`. It is not a stored grant or inherited configuration.

@@ -153,6 +153,36 @@ async fn reject_before_admission(
             .is_empty()
     );
     let mut input = input.clone();
+    input["creation"]["permission_mode"] = json!("workspace_write");
+    let response = client
+        .post(route)
+        .bearer_auth(operator_ticket(tickets).await?)
+        .json(&input)
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let error: serde_json::Value = response.json().await?;
+    assert_eq!(error["error"]["code"], "unsupported_control");
+    assert_eq!(
+        client
+            .get(format!(
+                "{route}/{}",
+                input["request_id"].as_str().ok_or("request id")?
+            ))
+            .bearer_auth(operator_ticket(tickets).await?)
+            .send()
+            .await?
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert!(
+        room_store
+            .snapshot("general", 0, 200)
+            .await?
+            .agent_sessions
+            .is_empty()
+    );
+    input["creation"]["permission_mode"] = json!("full_access");
     for acknowledgement in [None, Some(json!(false)), Some(json!("true"))] {
         if let Some(value) = acknowledgement {
             input["creation"]["full_access_acknowledged"] = value;
@@ -222,10 +252,18 @@ fn full_access_catalog(
         .find(|control| control.key == "permission_mode")
         .ok_or("permission control")?
         .options
-        .push(agentsassemble_domain::ProviderControlOption {
-            value: "full_access".into(),
-            label: "전체 액세스".into(),
-            metadata: std::collections::BTreeMap::default(),
-        });
+        .extend(
+            [
+                ("workspace_write", "작업 폴더 쓰기"),
+                ("full_access", "전체 액세스"),
+            ]
+            .map(
+                |(value, label)| agentsassemble_domain::ProviderControlOption {
+                    value: value.into(),
+                    label: label.into(),
+                    metadata: std::collections::BTreeMap::default(),
+                },
+            ),
+        );
     Ok(catalog)
 }

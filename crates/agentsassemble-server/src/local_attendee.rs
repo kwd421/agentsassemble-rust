@@ -121,6 +121,15 @@ impl LocalAttendeeService {
                         code: error.code.to_owned(),
                         message: Some(error.message),
                     })?;
+                if selection.permission_mode == "workspace_write" {
+                    return Err(LocalAttendeeError {
+                        code: "unsupported_control".to_owned(),
+                        message: Some(
+                            "이 컴퓨터의 AI 권한은 대화 전용이나 전체 액세스로 선택해 주세요."
+                                .to_owned(),
+                        ),
+                    });
+                }
                 let persona = if selection.persona_card_id.is_empty() {
                     None
                 } else {

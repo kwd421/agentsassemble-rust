@@ -1,11 +1,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createLocalAttendee, fetchLocalAttendee, commandLocalAttendee } from "../../api/localAttendee";
 import { fetchLocalProviderCatalog, refreshLocalProviderCatalog } from "../../api/providerOperations";
 import { chooseLocalWorkspace } from "../../api";
 import { ApiError } from "../../lib/apiErrors";
 import { localAttendeeLink } from "../../lib/localAttendee";
-import { codexProvider } from "./AgentCreateModal.testProviders";
+import { codexProvider, openCodeProvider, workPermissionControl } from "./AgentCreateModal.testProviders";
 import { requestDesktopBootstrapStatus } from "../../lib/desktopBridge";
 import { bootstrapCentral } from "../../lib/central/identity";
 import { saveLocalProfile } from "../../lib/localProfile";
@@ -42,6 +43,59 @@ async function chooseDraft() {
   fireEvent.click(screen.getByRole("button", { name: "폴더 선택" }));
   await waitFor(() => expect((screen.getByLabelText("선택한 작업 폴더") as HTMLInputElement).value).toBe("/local/workspace"));
 }
+
+it.each([false, true])("offers only supported companion permissions after catalog refresh (full access: %s)", async fullAccess => {
+  const provider = codexProvider();
+  const permission = workPermissionControl();
+  provider.controls.push(permission);
+  if (fullAccess) permission.options.push({ value: "full_access", label: "전체 액세스" });
+  const catalog = { status: "ready", catalog_revision: "local-revision", providers: [provider] };
+  vi.mocked(fetchLocalProviderCatalog).mockResolvedValue(catalog);
+  vi.mocked(refreshLocalProviderCatalog).mockResolvedValue(catalog);
+  render(<LocalAttendeePanel />);
+  await chooseDraft();
+  await userEvent.click(screen.getByRole("button", { name: "AI 다시 확인" }));
+  await screen.findByText("모델 목록을 새로고침했어요.");
+  const control = screen.getByRole("combobox", { name: "권한" });
+  expect(control.textContent).toContain("대화 전용");
+  if (fullAccess) {
+    await userEvent.click(control);
+    expect(screen.getAllByRole("option").map(option => option.textContent)).toEqual(["대화 전용", "전체 액세스"]);
+  } else {
+    expect((control as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("전체 액세스")).toBeNull();
+  }
+  expect(screen.queryByText(/작업 폴더 쓰기/)).toBeNull();
+});
+
+it("requires warned full access for a free OpenCode companion and submits its acknowledgement", async () => {
+  const provider = openCodeProvider();
+  provider.controls[0].default_value = provider.controls[0].options[0].value;
+  const permission = workPermissionControl();
+  permission.options.push({ value: "full_access", label: "전체 액세스" });
+  provider.controls.push(permission);
+  const catalog = { status: "ready", catalog_revision: "local-revision", providers: [provider] };
+  vi.mocked(fetchLocalProviderCatalog).mockResolvedValue(catalog);
+  vi.mocked(refreshLocalProviderCatalog).mockResolvedValue(catalog);
+  const openCodePacket = { ...packet, provider: "opencode", attend_command: "assemble room attend --provider opencode" };
+  window.history.replaceState(null, "", `/?attendee-create=${packet.request_id}${new URL(localAttendeeLink(openCodePacket)).hash}`);
+  vi.mocked(createLocalAttendee).mockResolvedValue(admitted);
+  render(<LocalAttendeePanel />);
+  await chooseDraft();
+  expect(screen.getByText("OpenCode 무료 모델은 이 컴퓨터에서 전체 액세스로만 쓸 수 있어요.")).toBeTruthy();
+  const control = screen.getByRole("combobox", { name: "권한" });
+  expect(control.textContent).toContain("전체 액세스");
+  await userEvent.click(control);
+  expect((screen.getByRole("option", { name: "대화 전용" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("option", { name: "작업 폴더 쓰기" })).toBeNull();
+  await userEvent.click(screen.getByRole("option", { name: "전체 액세스" }));
+  expect(screen.getAllByText("방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.")).toHaveLength(1);
+  await userEvent.click(screen.getByRole("button", { name: "추가하고 실행" }));
+  await screen.findByRole("button", { name: "이 컴퓨터에서 실행" });
+  expect(createLocalAttendee).toHaveBeenCalledWith(openCodePacket, expect.objectContaining({
+    creation: expect.objectContaining({ permission_mode: "full_access", full_access_acknowledged: true }),
+  }));
+});
 
 it("preserves the local draft after rejection, then adds and starts through the same retained owner", async () => {
   vi.mocked(createLocalAttendee).mockRejectedValueOnce(new ApiError(409, "모델을 다시 선택해 주세요.", "invalid_model"))

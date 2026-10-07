@@ -1,5 +1,27 @@
 # Verification Contract
 
+- 2026-10-07 companion permission-choice correction at base `6501d387`:
+  bundled `LocalAttendeePanel` removes workspace_write from its derived local
+  companion catalog on every read/refresh and removes its obsolete denial hint.
+  Conversation-only and catalog-supported full access remain; unsupported full
+  access is never added. Shared free-model normalization chooses an offered write
+  level, so OpenCode free companions use full_access with the adjusted local hint,
+  existing warning and explicit acknowledgement. Server-run choices/hint stay intact.
+  `local_attendee.rs` rejects effective workspace_write after catalog selection,
+  before local receipt reservation or remote admission, without rewriting input.
+  Extended local HTTP test proves conflict, missing local receipt and no remote
+  session, then admits the same request with acknowledged full access. Existing
+  conversation-only add/start/cancel/retry/cleanup flows also pass.
+  Passed: `cargo test -p agentsassemble-server --test integration local_attendee`
+  (7 passed, 1 existing real-Codex test ignored); frontend LocalAttendeePanel,
+  AgentCreateModal.selection, providerControlSettings, AgentSessionDetails and
+  ProviderControlSelect suites (57 tests across 5 files; corrected local test
+  assertions rerun as 19/19); TypeScript/Vite build; server all-target/all-feature
+  Clippy with warnings denied; architecture/source-growth checks, 19 policy-gate
+  tests, cargo fmt and git diff checks. No schema, background task or provider change;
+  local catalog projection is memoized per catalog update. Live-provider and
+  packaged visual acceptance remain unknown. No push.
+
 - 2026-10-07 full-access Daybreak correction at reviewed base `a2621770`
   (review `f43b6994-3778-4ca2-8834-d04c0c670717/full-access-review.md`):
   H1a removes managed OpenCode remembered-grant choices from native request mapping

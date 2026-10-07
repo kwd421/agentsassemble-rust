@@ -141,7 +141,9 @@ function normalizeProviderSettings(
     );
   }
   if (requiresOpenCodeApproval(provider, next) && next.permission_mode !== "full_access") {
-    next.permission_mode = "workspace_write";
+    const permissions = provider.controls.find((control) => control.key === "permission_mode")?.options;
+    next.permission_mode = ["workspace_write", "full_access"]
+      .find((value) => permissions?.some((option) => option.value === value)) ?? "";
   }
   return next;
 }
