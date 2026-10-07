@@ -56,7 +56,7 @@ struct RecoveryResponse<'a> {
 
 registered_routes! {
     fn recovery_routes<AppState>() {
-        same_origin_public "/api/identity/recovery-code" => post(issue),
+        secure_remote "/api/identity/recovery-code" => post(issue),
         same_origin_public "/api/identity/recovery-code/redeem" => post(redeem),
     }
 }

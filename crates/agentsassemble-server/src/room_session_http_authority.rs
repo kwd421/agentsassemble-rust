@@ -86,7 +86,12 @@ pub(crate) async fn resolve_room_session_bearer(
         return Ok(RoomSessionBearerResolution::Authorized(Box::new(session)));
     }
     match resolve_human_session_bearer(state, bearer, origin).await {
-        Ok(HumanSessionBearerResolution::Other) => Ok(RoomSessionBearerResolution::Other),
+        Ok(HumanSessionBearerResolution::Other) => {
+            if origin.is_some_and(|origin| origin.secure.is_some()) {
+                return Err(RoomSessionBearerError::Invalid);
+            }
+            Ok(RoomSessionBearerResolution::Other)
+        }
         Ok(HumanSessionBearerResolution::Authorized(session)) => {
             Ok(RoomSessionBearerResolution::Authorized(Box::new(
                 RoomSessionAuthorization::Human(session),

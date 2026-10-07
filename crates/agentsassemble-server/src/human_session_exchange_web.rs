@@ -59,8 +59,8 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn session_exchange_routes<AppState>() {
-        same_origin_public "/api/session-tickets/socket" => post(issue_socket_ticket),
-        same_origin_public "/api/room-invite/leave" => post(leave_room),
+        secure_remote "/api/session-tickets/socket" => post(issue_socket_ticket),
+        secure_remote "/api/room-invite/leave" => post(leave_room),
     }
 }
 

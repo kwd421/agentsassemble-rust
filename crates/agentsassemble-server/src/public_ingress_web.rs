@@ -22,7 +22,7 @@ const MAX_CONTROL_BODY_BYTES: usize = 4 * 1024;
 registered_routes! {
     fn control_routes<AppState>() {
         private "/api/public-invite/status" => get(status),
-        same_origin_public "/api/central-owner/public-invite/origin" => get(invite_origin),
+        secure_remote "/api/central-owner/public-invite/origin" => get(invite_origin),
         private "/api/public-invite/tunnel/start" => post(start),
         private "/api/public-invite/tunnel/stop" => post(stop),
     }

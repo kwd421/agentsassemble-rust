@@ -59,8 +59,8 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn search_routes<AppState>() {
-        same_origin_public "/api/room-search" => get(search_messages),
-        same_origin_public "/api/room-search/context" => get(message_context),
+        secure_remote "/api/room-search" => get(search_messages),
+        secure_remote "/api/room-search/context" => get(message_context),
     }
 }
 

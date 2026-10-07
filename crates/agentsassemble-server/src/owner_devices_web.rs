@@ -24,8 +24,8 @@ registered_routes! {
     fn owner_device_routes<AppState>() {
         private "/api/owner-sessions" => get(list),
         private "/api/owner-sessions/revoke" => post(revoke),
-        same_origin_public "/api/central-owner/sessions" => get(list),
-        same_origin_public "/api/central-owner/sessions/revoke" => post(revoke),
+        secure_remote "/api/central-owner/sessions" => get(list),
+        secure_remote "/api/central-owner/sessions/revoke" => post(revoke),
     }
 }
 

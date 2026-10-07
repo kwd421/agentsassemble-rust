@@ -10,7 +10,37 @@ macro_rules! http_method {
     };
 }
 
+macro_rules! secure_access {
+    (secure_remote) => {
+        crate::product_surface::SecureAccess::Product
+    };
+    (secure_owner) => {
+        crate::product_surface::SecureAccess::Admission("owner")
+    };
+    (secure_member) => {
+        crate::product_surface::SecureAccess::Admission("member_admission")
+    };
+    (secure_connect) => {
+        crate::product_surface::SecureAccess::Admission("member_connect")
+    };
+    ($other:ident) => {
+        crate::product_surface::SecureAccess::Excluded
+    };
+}
+
 macro_rules! route_exposure {
+    (secure_remote) => {
+        crate::product_surface::RouteExposure::SameOriginPublic
+    };
+    (secure_owner) => {
+        crate::product_surface::RouteExposure::SameOriginPublic
+    };
+    (secure_member) => {
+        crate::product_surface::RouteExposure::SameOriginPublic
+    };
+    (secure_connect) => {
+        crate::product_surface::RouteExposure::SameOriginPublic
+    };
     (private) => {
         crate::product_surface::RouteExposure::Private
     };
@@ -33,12 +63,14 @@ macro_rules! registered_routes {
                     method: http_method!($first_method),
                     path: $path,
                     exposure: route_exposure!($exposure),
+                    secure: secure_access!($exposure),
                 },
                 $(
                     crate::product_surface::RegisteredHttpRoute {
                         method: http_method!($more_method),
                         path: $path,
                         exposure: route_exposure!($exposure),
+                    secure: secure_access!($exposure),
                     },
                 )*
             )+
@@ -131,6 +163,7 @@ mod room_agent_lifecycle_runtime;
 mod room_channel;
 mod room_client_transport;
 mod secure_client;
+mod secure_queue;
 pub use attendee::client::{AttendeeClientError, AttendeeJoined, RoomAttendeeClient};
 pub use attendee::client_run::run_attendee_session;
 pub use attendee::client_runtime::{AttendeeExecution, AttendeeInterrupt, AttendeeRuntime};

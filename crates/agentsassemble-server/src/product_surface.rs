@@ -7,7 +7,25 @@ pub(crate) enum RouteExposure {
     IdentityProbePublic,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum SecureAccess {
+    Excluded,
+    Product,
+    Admission(&'static str),
+}
+
+impl SecureAccess {
+    pub(crate) fn allows(self, client: &crate::secure_client::SecureClient) -> bool {
+        match self {
+            Self::Excluded => false,
+            Self::Product => client.admitted(),
+            Self::Admission(purpose) => client.hello().purpose == purpose,
+        }
+    }
+}
+
 pub(crate) struct RegisteredHttpRoute {
+    pub(crate) secure: SecureAccess,
     pub(crate) method: agentsassemble_protocol::HttpMethod,
     pub(crate) path: &'static str,
     pub(crate) exposure: RouteExposure,
@@ -20,6 +38,20 @@ pub(crate) fn registered_route_exposure(
     registered_routes(true)
         .find(|route| route.method == method && route.path == path)
         .map(|route| route.exposure)
+}
+
+pub(crate) fn registered_secure_access(method: &axum::http::Method, path: &str) -> SecureAccess {
+    let method = match *method {
+        axum::http::Method::GET | axum::http::Method::HEAD => {
+            agentsassemble_protocol::HttpMethod::Get
+        }
+        axum::http::Method::POST => agentsassemble_protocol::HttpMethod::Post,
+        axum::http::Method::DELETE => agentsassemble_protocol::HttpMethod::Delete,
+        _ => return SecureAccess::Excluded,
+    };
+    registered_routes(true)
+        .find(|route| route.method == method && route.path == path)
+        .map_or(SecureAccess::Excluded, |route| route.secure)
 }
 
 pub(crate) fn registered_route_path(path: &str) -> bool {

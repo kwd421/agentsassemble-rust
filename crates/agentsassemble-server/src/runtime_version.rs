@@ -21,7 +21,7 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn version_routes<AppState>() {
-        same_origin_public "/api/runtime/version" => get(version),
+        secure_remote "/api/runtime/version" => get(version),
     }
 }
 

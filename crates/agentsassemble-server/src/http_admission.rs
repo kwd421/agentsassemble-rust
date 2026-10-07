@@ -74,6 +74,11 @@ impl HttpAdmission {
 }
 
 impl HttpConnectionAdmission {
+    pub(crate) fn admit_virtual(&self) -> Option<Self> {
+        let child = self.0.owner.admit()?;
+        child.admit_public().then_some(child)
+    }
+
     /// HTTP/1 admits one active handler; only its authorized room wait retains this lease.
     pub(crate) fn retain_authenticated_wait(&self) -> AuthenticatedHttpWait {
         self.0.authenticated_wait.send_replace(true);

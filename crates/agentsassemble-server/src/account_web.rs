@@ -58,9 +58,9 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn account_routes<AppState>() {
-        same_origin_public "/api/account" => get(status),
-        same_origin_public "/api/account/google/challenge" => post(challenge),
-        same_origin_public "/api/account/google" => post(connect).delete(disconnect),
+        secure_remote "/api/account" => get(status),
+        secure_remote "/api/account/google/challenge" => post(challenge),
+        secure_remote "/api/account/google" => post(connect).delete(disconnect),
     }
 }
 

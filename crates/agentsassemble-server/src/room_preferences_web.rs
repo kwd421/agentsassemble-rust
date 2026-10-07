@@ -47,7 +47,7 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn preference_routes<AppState>() {
-        same_origin_public "/api/room-settings" => get(read_settings).post(update_preferences),
+        secure_remote "/api/room-settings" => get(read_settings).post(update_preferences),
     }
 }
 

@@ -40,7 +40,7 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn friend_routes<AppState>() {
         private "/api/room-friends" => get(list).post(save).delete(delete),
-        same_origin_public "/api/central-owner/friends" => get(list).post(save).delete(delete),
+        secure_remote "/api/central-owner/friends" => get(list).post(save).delete(delete),
     }
 }
 

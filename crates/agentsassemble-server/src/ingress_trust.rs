@@ -116,6 +116,22 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
     if !(local_trusted || public_trusted) || !registered {
         return StatusCode::FORBIDDEN.into_response();
     }
+    let secure = request
+        .extensions()
+        .get::<crate::secure_client::SecureClient>()
+        .cloned();
+    if let Some(client) = &secure {
+        let allowed = request
+            .extensions()
+            .get::<MatchedPath>()
+            .is_some_and(|path| {
+                crate::product_surface::registered_secure_access(request.method(), path.as_str())
+                    .allows(client)
+            });
+        if !public_trusted || local_trusted || !allowed || client.closed().is_cancelled() {
+            return StatusCode::FORBIDDEN.into_response();
+        }
+    }
     if public_trusted && !local_trusted {
         let admitted = request
             .extensions()
@@ -131,7 +147,9 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
             request.extensions_mut().insert(origin);
         }
     } else if let Some(PublicIngressAuthorization::Authorized(origin)) = &public_authorization {
-        request.extensions_mut().insert(origin.clone());
+        let mut origin = origin.clone();
+        origin.secure = secure.as_ref().map(|client| client.binding().clone());
+        request.extensions_mut().insert(origin);
     }
     if exact_exposure == Some(RouteExposure::IdentityProbePublic) {
         let identity_origin = if local_trusted {

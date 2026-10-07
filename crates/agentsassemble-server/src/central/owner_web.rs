@@ -64,11 +64,11 @@ struct CreateRequest {
 
 registered_routes! {
     fn central_owner_routes<AppState>() {
-        same_origin_public "/api/central-owner/session" => post(exchange),
-        same_origin_public "/api/central-owner/directory" => post(directory),
-        same_origin_public "/api/central-owner/events" => post(directory_events),
-        same_origin_public "/api/central-owner/room" => post(room),
-        same_origin_public "/api/central-owner/rooms" => post(create),
+        secure_owner "/api/central-owner/session" => post(exchange),
+        secure_remote "/api/central-owner/directory" => post(directory),
+        secure_remote "/api/central-owner/events" => post(directory_events),
+        secure_remote "/api/central-owner/room" => post(room),
+        secure_remote "/api/central-owner/rooms" => post(create),
     }
 }
 

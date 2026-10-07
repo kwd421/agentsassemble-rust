@@ -18,7 +18,7 @@ use crate::{
 registered_routes! {
     fn manager_routes<AppState>() {
         private "/api/room-connector/invite" => post(create),
-        same_origin_public "/api/central-owner/room-connector/invite" => post(create),
+        secure_remote "/api/central-owner/room-connector/invite" => post(create),
     }
 }
 

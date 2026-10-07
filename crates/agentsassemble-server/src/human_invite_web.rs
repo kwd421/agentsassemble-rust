@@ -82,11 +82,11 @@ registered_routes! {
     fn invite_routes<AppState>() {
         same_origin_public "/api/room-invite/admission" => post(preflight),
         same_origin_public "/api/room-invite/join" => post(join),
-        same_origin_public "/api/room-invite/member-challenge" => post(member::start),
-        same_origin_public "/api/room-invite/member-join" => post(member::join),
-        same_origin_public "/api/member-connect/challenge" => post(member::connect::start),
-        same_origin_public "/api/member-connect/rooms" => post(member::connect::redeem),
-        same_origin_public "/api/member-connect/select" => post(member::connect::select),
+        secure_member "/api/room-invite/member-challenge" => post(member::start),
+        secure_member "/api/room-invite/member-join" => post(member::join),
+        secure_connect "/api/member-connect/challenge" => post(member::connect::start),
+        secure_connect "/api/member-connect/rooms" => post(member::connect::redeem),
+        secure_connect "/api/member-connect/select" => post(member::connect::select),
     }
 }
 

@@ -68,8 +68,8 @@ registered_routes! {
     fn manager_routes<AppState>() {
         private "/api/room-invite/create" => post(create_invite),
         private "/api/room-invite/revoke" => post(revoke_invite),
-        same_origin_public "/api/central-owner/room-invite/create" => post(create_invite),
-        same_origin_public "/api/central-owner/room-invite/revoke" => post(revoke_invite),
+        secure_remote "/api/central-owner/room-invite/create" => post(create_invite),
+        secure_remote "/api/central-owner/room-invite/revoke" => post(revoke_invite),
     }
 }
 

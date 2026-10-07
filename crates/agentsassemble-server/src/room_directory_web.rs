@@ -61,7 +61,7 @@ registered_routes! {
         private "/api/rooms" => get(list_rooms).post(create_room),
         private "/api/rooms/events" => get(directory_events),
         private "/api/rooms/lifecycle" => post(change_lifecycle),
-        same_origin_public "/api/room-session/lifecycle" => post(change_session_lifecycle),
+        secure_remote "/api/room-session/lifecycle" => post(change_session_lifecycle),
     }
 }
 

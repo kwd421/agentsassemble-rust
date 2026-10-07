@@ -62,7 +62,7 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn pin_routes<AppState>() {
-        same_origin_public "/api/room-pins" => get(list_pins).post(set_pin),
+        secure_remote "/api/room-pins" => get(list_pins).post(set_pin),
     }
 }
 

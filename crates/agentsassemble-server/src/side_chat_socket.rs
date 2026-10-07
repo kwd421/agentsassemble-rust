@@ -1,8 +1,7 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, SideChatUpdate};
 use agentsassemble_persistence::{RoomMutationAuthority, RoomSessionAuthorization};
 use agentsassemble_protocol::ServerFrame;
-use axum::extract::ws::{Message, WebSocket};
-use futures_util::stream::SplitSink;
+use axum::extract::ws::Message;
 use tokio::sync::broadcast;
 
 use crate::{AppState, room_channel::send_frame, room_socket::refresh_room_session};
@@ -16,14 +15,17 @@ pub(crate) async fn receive_update(
     }
 }
 
-pub(crate) async fn deliver_update(
+pub(crate) async fn deliver_update<S>(
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
     session: &mut Option<RoomSessionAuthorization>,
     incarnation: uuid::Uuid,
-    sender: &mut SplitSink<WebSocket, Message>,
+    sender: &mut S,
     update: Result<SideChatUpdate, broadcast::error::RecvError>,
-) -> Option<()> {
+) -> Option<()>
+where
+    S: futures_util::Sink<Message, Error = axum::Error> + Unpin,
+{
     refresh_room_session(state, principal, session).await?;
     let authority = session.as_ref().map_or(
         RoomMutationAuthority::TrustedPrincipal(principal),

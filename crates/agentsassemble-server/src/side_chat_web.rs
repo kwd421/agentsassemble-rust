@@ -40,7 +40,7 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn side_chat_routes<AppState>() {
-        same_origin_public "/api/side-chat" => get(read_side_chat),
+        secure_remote "/api/side-chat" => get(read_side_chat),
     }
 }
 

@@ -57,8 +57,8 @@ registered_routes! {
     fn pairing_routes<AppState>() {
         private "/api/operator-pairing/create" => post(create),
         private "/api/operator-pairing/revoke" => post(revoke),
-        same_origin_public "/api/central-owner/operator-pairing/create" => post(create),
-        same_origin_public "/api/central-owner/operator-pairing/revoke" => post(revoke),
+        secure_remote "/api/central-owner/operator-pairing/create" => post(create),
+        secure_remote "/api/central-owner/operator-pairing/revoke" => post(revoke),
         same_origin_public "/api/operator-pairing/redeem" => post(redeem),
     }
 }

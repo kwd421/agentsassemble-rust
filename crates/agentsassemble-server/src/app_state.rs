@@ -53,6 +53,7 @@ pub struct AppState {
     pub connections: TaskTracker,
     pub(crate) connection_admission: ConnectionAdmission,
     pub(crate) socket_admission: SocketAdmission,
+    pub(crate) secure_queue_budget: Arc<tokio::sync::Semaphore>,
     pub(crate) avatar_reads: Arc<tokio::sync::Semaphore>,
     pub(crate) avatar_uploads: Arc<tokio::sync::Semaphore>,
     pub(crate) recovery_attempts: Arc<crate::guest_recovery_attempts::GuestRecoveryAttempts>,
@@ -189,6 +190,9 @@ impl AppState {
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
             socket_admission: SocketAdmission::new(),
+            secure_queue_budget: Arc::new(tokio::sync::Semaphore::new(
+                crate::secure_queue::GLOBAL_BYTES,
+            )),
             avatar_reads: Arc::new(tokio::sync::Semaphore::new(6)),
             avatar_uploads: Arc::new(tokio::sync::Semaphore::new(2)),
             recovery_attempts: Arc::new(

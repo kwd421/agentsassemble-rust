@@ -68,12 +68,12 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn profile_routes<AppState>() {
-        same_origin_public "/api/agent-avatars/upload/{session_id}" => post(agent_avatar::upload),
-        same_origin_public "/api/agent-avatars/{asset_id}" => get(agent_avatar::read),
-        same_origin_public "/api/user-profile" => get(read_profile).post(update_profile),
-        same_origin_public "/api/attachments" => post(upload_attachment),
-        same_origin_public "/api/message-attachments" => post(upload_message_attachment),
-        same_origin_public "/api/attachments/{attachment_id}" => get(read_attachment),
+        secure_remote "/api/agent-avatars/upload/{session_id}" => post(agent_avatar::upload),
+        secure_remote "/api/agent-avatars/{asset_id}" => get(agent_avatar::read),
+        secure_remote "/api/user-profile" => get(read_profile).post(update_profile),
+        secure_remote "/api/attachments" => post(upload_attachment),
+        secure_remote "/api/message-attachments" => post(upload_message_attachment),
+        secure_remote "/api/attachments/{attachment_id}" => get(read_attachment),
     }
 }
 

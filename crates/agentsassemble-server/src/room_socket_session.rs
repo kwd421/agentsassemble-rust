@@ -5,7 +5,7 @@ use agentsassemble_persistence::RoomSessionAuthorization;
 use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandResolution, ProtocolError, RoomAction, ServerFrame,
 };
-use axum::extract::ws::{Message, WebSocket};
+use axum::extract::ws::Message;
 use futures_util::StreamExt;
 use tokio::sync::broadcast;
 
@@ -23,13 +23,17 @@ use crate::{
 const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 
 #[allow(clippy::too_many_lines)] // One select loop owns the socket's ordering and lifecycle.
-pub(crate) async fn run(
-    socket: WebSocket,
+pub(crate) async fn run<S>(
+    socket: S,
     state: AppState,
     grant: ConsumedSocketTicket,
     mut revocations: Option<broadcast::Receiver<crate::SessionRevocation>>,
     _lease: ConnectionLease,
-) {
+) where
+    S: futures_util::Sink<Message, Error = axum::Error>
+        + futures_util::Stream<Item = Result<Message, axum::Error>>
+        + Unpin,
+{
     let (mut sender, mut receiver) = socket.split();
     let Some(EstablishedSubscription {
         mut owner_lease,
@@ -343,13 +347,15 @@ async fn session_remains_authorized_after_revocation_signal(
     }
 }
 
-async fn send_terminal_room_event(
+async fn send_terminal_room_event<S>(
     state: &AppState,
     principal: &agentsassemble_domain::AuthenticatedPrincipal,
     room_uid: uuid::Uuid,
-    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    sender: &mut S,
     event: &agentsassemble_domain::RoomEvent,
-) {
+) where
+    S: futures_util::Sink<Message, Error = axum::Error> + Unpin,
+{
     // An already-admitted local observer receives one final room transition.
     // This neither admits an inactive socket nor authorizes further commands.
     let Some(raw_room) = event.extra.get("room") else {

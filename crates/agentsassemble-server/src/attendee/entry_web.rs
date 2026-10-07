@@ -25,8 +25,8 @@ use uuid::Uuid;
 registered_routes! {
     fn entry_routes<AppState>() {
         private "/api/room-attendee/friend-invite" => post(friend),
-        same_origin_public "/api/central-owner/room-attendee/friend-invite" => post(friend),
-        same_origin_public "/api/room-attendee/companion-invite" => post(companion),
+        secure_remote "/api/central-owner/room-attendee/friend-invite" => post(friend),
+        secure_remote "/api/room-attendee/companion-invite" => post(companion),
     }
 }
 
