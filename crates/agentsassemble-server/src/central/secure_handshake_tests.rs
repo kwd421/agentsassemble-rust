@@ -14,6 +14,13 @@ async fn webcrypto_ring_bidirectional_cipher_and_replay_rejection()
         .arg("-e")
         .arg(include_str!("secure_crypto_peer.mjs"))
         .arg("--input-type=module")
+        .env(
+            "AA_SECURE_CRYPTO_MODULE",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../frontend/src/lib/remote/secureCrypto.ts"
+            ),
+        )
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -25,7 +32,7 @@ async fn webcrypto_ring_bidirectional_cipher_and_replay_rejection()
         .write_all(
             format!(
                 "{}\n",
-                json!({"server_id":identity.server_id(),"key":identity.public_key_x()})
+                json!({"server_id":identity.server_id(),"key":identity.public_key_x(), "fingerprint":identity.fingerprint()})
             )
             .as_bytes(),
         )

@@ -72,6 +72,9 @@ async fn upgrade(
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 enum Frame {
+    Ack {
+        sequence: u64,
+    },
     Request {
         id: u32,
         method: String,
@@ -201,7 +204,9 @@ fn run(
             Output::new(state.secure_queue_budget.clone(), client.closed().clone());
         let (mut sender, mut receiver) = socket.split();
         let writer_client = client.clone();
+        let (ack_tx, mut ack_rx) = tokio::sync::mpsc::channel::<u64>(1);
         let writer = tokio::spawn(async move {
+            let mut sequence = 0;
             loop {
                 let item = tokio::select! { () = writer_client.closed().cancelled() => break, item = outgoing.recv() => item };
                 let Some(item) = item else {
@@ -214,6 +219,11 @@ fn run(
                 if sent.is_err() {
                     break;
                 }
+                let ack = tokio::select! { () = writer_client.closed().cancelled() => break, ack = ack_rx.recv() => ack };
+                if ack != Some(sequence) {
+                    break;
+                }
+                sequence += 1;
             }
             writer_client.close();
         });
@@ -241,6 +251,7 @@ fn run(
                 break;
             };
             let result = match frame {
+                Frame::Ack { sequence } => ack_tx.try_send(sequence).map_err(|_| ()),
                 Frame::Request {
                     id,
                     method,
@@ -287,6 +298,7 @@ fn run(
                 }
                 Frame::Data { id, data, end } => match inputs.get_mut(&id) {
                     Some(Input::Http(input)) => input.push(&data, end, &budget),
+                    None if id <= last_id => Ok(()),
                     _ => Err(()),
                 },
                 Frame::Cancel { id } => {
@@ -333,6 +345,7 @@ fn run(
                 }
                 Frame::SocketData { id, data, end } => match inputs.get_mut(&id) {
                     Some(Input::Socket(input)) => input.push(&data, end, &budget),
+                    None if id <= last_id => Ok(()),
                     _ => Err(()),
                 },
                 Frame::SocketClose { id } => {

@@ -35,6 +35,8 @@ mod invitations;
 mod lifecycle;
 #[path = "central_owner_boundary/lifetimes.rs"]
 mod lifetimes;
+#[path = "central_owner_boundary/secure.rs"]
+mod secure;
 use crate::support::room_socket_peer;
 
 const ORIGIN: &str = "https://owner.example.test";
@@ -49,6 +51,7 @@ struct WorkerState {
     generation: Arc<AtomicI64>,
     reject: Arc<AtomicBool>,
     unavailable: Arc<AtomicBool>,
+    secure_binding: Arc<tokio::sync::Mutex<Option<(String, String)>>>,
 }
 
 struct WorkerCall {
@@ -119,15 +122,40 @@ async fn owner_connection(
             Json(json!({"error": {"code": "connect_grant_invalid"}})),
         );
     }
-    (
-        StatusCode::OK,
-        Json(json!({
-            "status": "authorized", "server_id": server_id,
-            "person_id": "person-owner", "device_id": "device-owner",
-            "origin": ORIGIN, "generation": parsed["generation"],
-            "expires_at": chrono::Utc::now().timestamp() + 300,
-        })),
-    )
+    let mut response = json!({
+        "status": "authorized", "server_id": server_id,
+        "person_id": "person-owner", "device_id": "device-owner",
+        "origin": ORIGIN, "generation": parsed["generation"],
+        "expires_at": chrono::Utc::now().timestamp() + 300,
+    });
+    if parsed["protocol"] == "secure_admission_v1" {
+        let key = parsed["client_public_key"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let channel = parsed["channel_id"].as_str().unwrap_or_default().to_owned();
+        let mut binding = state.secure_binding.lock().await;
+        if binding
+            .as_ref()
+            .is_some_and(|value| value != &(key.clone(), channel.clone()))
+        {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error":"connect_grant_invalid"})),
+            );
+        }
+        *binding = Some((key, channel));
+        for field in [
+            "protocol",
+            "registration_epoch",
+            "client_public_key",
+            "channel_id",
+            "purpose",
+        ] {
+            response[field] = parsed[field].clone();
+        }
+    }
+    (StatusCode::OK, Json(response))
 }
 
 fn verify_signed_call(call: &WorkerCall, public_key: &[u8]) {
@@ -214,6 +242,7 @@ async fn start_fixture() -> Fixture {
         generation: Arc::new(AtomicI64::new(0)),
         reject: Arc::new(AtomicBool::new(false)),
         unavailable: Arc::new(AtomicBool::new(false)),
+        secure_binding: Arc::default(),
     };
     let worker = Router::new()
         .route(

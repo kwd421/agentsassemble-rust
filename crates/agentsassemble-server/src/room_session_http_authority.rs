@@ -82,7 +82,14 @@ pub(crate) async fn resolve_room_session_bearer(
             .store
             .require_secure_room_transport(&session, observed.secure.as_ref())
             .await
-            .map_err(RoomSessionBearerError::Persistence)?;
+            .map_err(|error| match &error {
+                PersistenceError::CommandRejected { code, .. }
+                    if code.as_bytes() == b"secure_transport_required" =>
+                {
+                    RoomSessionBearerError::Invalid
+                }
+                _ => RoomSessionBearerError::Persistence(error),
+            })?;
         return Ok(RoomSessionBearerResolution::Authorized(Box::new(session)));
     }
     match resolve_human_session_bearer(state, bearer, origin).await {

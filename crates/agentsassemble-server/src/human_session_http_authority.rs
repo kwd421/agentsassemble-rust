@@ -37,6 +37,13 @@ pub(crate) async fn resolve_human_session_bearer(
             origin.and_then(|value| value.secure.as_ref()),
         )
         .await
-        .map_err(HumanSessionBearerError::Persistence)?;
+        .map_err(|error| match &error {
+            PersistenceError::CommandRejected { code, .. }
+                if code.as_bytes() == b"secure_transport_required" =>
+            {
+                HumanSessionBearerError::Invalid
+            }
+            _ => HumanSessionBearerError::Persistence(error),
+        })?;
     Ok(HumanSessionBearerResolution::Authorized(session))
 }
