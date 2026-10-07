@@ -19,6 +19,7 @@ use uuid::Uuid;
 /// Neither serializable nor debuggable; browser payloads cannot be deserialized into it.
 #[derive(Clone)]
 pub struct MemberAdmission {
+    pub secure: Option<crate::SecureSessionBinding>,
     pub projection_id: String,
     pub issuer: String,
     pub person_id: String,
@@ -141,6 +142,7 @@ pub(crate) async fn admit(
         .bind(&invite.room_id).bind(user).bind(participant).bind(invite_scope_storage(invite.invite_scope))
         .bind(request.browser_credential_fingerprint().as_slice()).bind(&result_json).bind(now.timestamp_micros()).bind(expires.timestamp_micros()).bind(member.challenge_expires_at.timestamp_micros()).bind(now.timestamp_micros())
         .execute(&mut **tx).await?;
+    crate::secure_session::bind_member(tx, &issued.fingerprint, member.secure.as_ref()).await?;
     anchor(tx, &binding, member, true).await?;
     // Single SQLite writer serializes competing devices; the loser reads the row above.
     Ok(HumanAdmissionDecision::Admitted(Box::new(
@@ -254,6 +256,12 @@ pub(crate) async fn mint_session(
         )?;
         let issued = derive_session_bearer(store.host_key.session_hmac_key(), &key, HumanAdmission);
         session_provenance(tx, &issued.fingerprint).await?;
+        crate::secure_session::require_member_binding(
+            tx,
+            &issued.fingerprint,
+            member.secure.as_ref(),
+        )
+        .await?;
         return Ok(HumanAdmissionDecision::Admitted(Box::new(
             HumanAdmissionCommit {
                 result: serde_json::from_str(exact.try_get("result_json")?)?,
@@ -287,6 +295,7 @@ pub(crate) async fn mint_session(
         .bind(now.timestamp_micros()).bind(result.expires_at.timestamp_micros())
         .bind(member.challenge_fingerprint.as_slice()).bind(member.challenge_expires_at.timestamp_micros()).bind(now.timestamp_micros())
         .bind(admission).execute(&mut **tx).await?;
+    crate::secure_session::bind_member(tx, &issued.fingerprint, member.secure.as_ref()).await?;
     crate::member_sessions::prune(tx, admission).await?;
     // A Joined membership can be absent from live snapshots after all sessions expire.
     // Publish its canonical row again when a new session makes it visible.

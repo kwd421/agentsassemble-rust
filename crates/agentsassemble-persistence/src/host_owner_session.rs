@@ -15,6 +15,8 @@ pub(crate) const DDL: &str = "CREATE TABLE host_owner_sessions (
     server_id TEXT NOT NULL, person_id TEXT NOT NULL, device_id TEXT NOT NULL,
     browser_fingerprint BLOB NOT NULL CHECK(length(browser_fingerprint)=32),
     origin TEXT NOT NULL, generation INTEGER NOT NULL, admission_expires_at INTEGER NOT NULL,
+    secure_client_key_fingerprint BLOB CHECK(secure_client_key_fingerprint IS NULL OR length(secure_client_key_fingerprint)=32),
+    secure_channel_id TEXT CHECK(secure_channel_id IS NULL OR length(secure_channel_id)=43),
     created_at INTEGER NOT NULL, last_connected_at INTEGER NOT NULL,
     device_name TEXT NOT NULL, browser TEXT NOT NULL, os TEXT NOT NULL,
     connected INTEGER NOT NULL DEFAULT 1 CHECK(connected IN (0,1)),
@@ -53,6 +55,7 @@ impl OwnerDeviceDescription {
 /// Immutable provenance from a host-signed central entry redemption.
 #[derive(Clone, PartialEq, Eq)]
 pub struct OwnerAdmissionBinding {
+    pub secure: Option<crate::SecureSessionBinding>,
     pub entry_fingerprint: [u8; 32],
     pub server_id: String,
     pub person_id: String,
@@ -183,11 +186,13 @@ impl SqliteStore {
                 });
             }
             let now = Utc::now().timestamp();
-            sqlx::query("INSERT INTO host_owner_sessions (fingerprint, session_id, entry_fingerprint, server_id, person_id, device_id, browser_fingerprint, origin, generation, admission_expires_at, created_at, last_connected_at, device_name, browser, os) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            sqlx::query("INSERT INTO host_owner_sessions (fingerprint, session_id, entry_fingerprint, server_id, person_id, device_id, browser_fingerprint, origin, generation, admission_expires_at, created_at, last_connected_at, device_name, browser, os, secure_client_key_fingerprint, secure_channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                 .bind(issued.fingerprint.as_slice()).bind(Uuid::new_v4().to_string()).bind(binding.entry_fingerprint.as_slice())
                 .bind(&binding.server_id).bind(&binding.person_id).bind(&binding.device_id).bind(binding.browser_fingerprint.as_slice())
                 .bind(&binding.origin).bind(binding.generation).bind(admission.expires_at).bind(now).bind(now)
-                .bind(&description.device_name).bind(&description.browser).bind(&description.os).execute(&mut *tx).await?;
+                .bind(&description.device_name).bind(&description.browser).bind(&description.os)
+                .bind(binding.secure.as_ref().map(|secure| secure.client_key_fingerprint.as_slice()))
+                .bind(binding.secure.as_ref().map(|secure| secure.channel_id.as_str())).execute(&mut *tx).await?;
         }
         let authorization = resolve(
             &mut tx,
@@ -258,6 +263,7 @@ pub(crate) async fn resolve(
         .await?
         .ok_or_else(invalid)?;
     let binding = OwnerAdmissionBinding {
+        secure: crate::secure_session::from_row(&row)?,
         entry_fingerprint: fingerprint_column(&row, "entry_fingerprint")?,
         server_id: row.try_get("server_id")?,
         person_id: row.try_get("person_id")?,

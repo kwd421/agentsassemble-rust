@@ -16,6 +16,7 @@ async fn setup() -> Result<(SqliteStore, OwnerAdmissionBinding), Box<dyn std::er
     Ok((
         store,
         OwnerAdmissionBinding {
+            secure: None,
             entry_fingerprint: [1; 32],
             server_id,
             person_id: "central-person".into(),
@@ -394,6 +395,74 @@ async fn publication_recovery_generation_only_gates_new_admission()
     assert!(
         store
             .revalidate_room_session_authorization(&room_session)
+            .await
+            .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn secure_owner_retry_and_child_transport_require_the_same_channel()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, mut binding) = setup().await?;
+    let secure = crate::SecureSessionBinding {
+        client_key_fingerprint: [7; 32],
+        channel_id: "a".repeat(43),
+    };
+    binding.secure = Some(secure.clone());
+    let entry = admission(binding.clone())?;
+    let first = store.create_owner_session(&entry, &description()?).await?;
+    let exact = store.create_owner_session(&entry, &description()?).await?;
+    assert_eq!(first.session_bearer, exact.session_bearer);
+    binding.secure.as_mut().ok_or("missing binding")?.channel_id = "b".repeat(43);
+    assert!(
+        store
+            .create_owner_session(&admission(binding.clone())?, &description()?)
+            .await
+            .is_err()
+    );
+    let room = store
+        .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "secure-room", "Room")
+        .await?;
+    let child = store
+        .create_central_owner_session(
+            &ServerOwnerAuthority::CentralSession(Box::new(first.authorization.clone())),
+            &CentralOwnerSessionRequest::host_owned(
+                "secure-room",
+                room.room.room_uid,
+                &[17; 32],
+                &[42; 32],
+                &binding.origin,
+                Utc::now(),
+            ),
+        )
+        .await?;
+    let room_session = RoomSessionAuthorization::Operator(child.authorization);
+    store
+        .require_secure_room_transport(&room_session, Some(&secure))
+        .await?;
+    assert!(
+        store
+            .require_secure_room_transport(&room_session, None)
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .require_secure_room_transport(&room_session, binding.secure.as_ref())
+            .await
+            .is_err()
+    );
+    store.disconnect_secure_channel(&secure.channel_id).await?;
+    assert!(
+        store
+            .revalidate_room_session_authorization(&room_session)
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .create_owner_session(&entry, &description()?)
             .await
             .is_err()
     );

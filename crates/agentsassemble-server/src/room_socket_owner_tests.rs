@@ -40,6 +40,7 @@ async fn fixture()
         "socket-owner-test-proxy-secret-0000001",
     )?;
     let binding = OwnerAdmissionBinding {
+        secure: None,
         entry_fingerprint: [1; 32],
         server_id: store.local_bootstrap_status().await?.server_id,
         person_id: "person".into(),

@@ -10,6 +10,7 @@ async fn connect_rechecks_membership_scope_and_never_consumes_invites() -> TestR
     store.set_registration_epoch(Some("epoch")).await?;
     insert_invite(&store, [1; 32], [2; 32], "guest", 1, now).await;
     let member = MemberAdmission {
+        secure: None,
         projection_id: "id".into(),
         issuer: "https://central.example".into(),
         person_id: "person".into(),

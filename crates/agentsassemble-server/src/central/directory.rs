@@ -329,6 +329,7 @@ impl CentralDirectory {
         }
         agentsassemble_persistence::OwnerAdmission::verified(
             agentsassemble_persistence::OwnerAdmissionBinding {
+                secure: None,
                 entry_fingerprint: sha2::Sha256::digest(credential.as_bytes()).into(),
                 server_id: response.server_id,
                 person_id: response.person_id,

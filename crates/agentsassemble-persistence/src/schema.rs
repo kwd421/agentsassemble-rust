@@ -328,6 +328,8 @@ pub(crate) const TABLES: &[TableDefinition] = &[
             "member_challenge BLOB CHECK(member_challenge IS NULL OR length(member_challenge) = 32), ",
             "member_challenge_expires_at INTEGER NOT NULL DEFAULT 0, ",
             "member_last_used_at INTEGER NOT NULL DEFAULT 0, ",
+            "secure_client_key_fingerprint BLOB CHECK(secure_client_key_fingerprint IS NULL OR length(secure_client_key_fingerprint)=32), ",
+            "secure_channel_id TEXT CHECK(secure_channel_id IS NULL OR length(secure_channel_id)=43), ",
             "first_request_id TEXT CHECK(length(first_request_id) = 36), ",
             "invite_id TEXT, ",
             "payload_hash BLOB ",

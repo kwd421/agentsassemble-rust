@@ -286,6 +286,7 @@ async fn redeem_member(
         redeem_error(&error)
     })?;
     let member = MemberAdmission {
+        secure: None,
         projection_id: identity.projection_id,
         issuer: identity.issuer,
         person_id: identity.person_id,

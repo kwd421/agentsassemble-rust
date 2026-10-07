@@ -112,6 +112,7 @@ pub(crate) async fn redeem(
         .await
         .map_err(|error| redeem_error(&error))?;
     let member = MemberAdmission {
+        secure: None,
         projection_id: identity.projection_id,
         issuer: identity.issuer,
         person_id: identity.person_id,

@@ -27,7 +27,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
         sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
             .fetch_one(&mut *connection)
             .await?;
-    if matches!(version.as_str(), "83" | "84" | "85") {
+    if matches!(version.as_str(), "83" | "84" | "85" | "86") {
         return Ok(());
     }
     if version == "82" {
@@ -85,7 +85,7 @@ pub(crate) async fn restore_v80_fixture(store: &crate::SqliteStore) -> Result<()
         .await?
         .iter()
         .map(|r| r.get::<String, _>("name"))
-        .filter(|n| !n.starts_with("member_"))
+        .filter(|n| !n.starts_with("member_") && !n.starts_with("secure_"))
         .collect::<Vec<_>>()
         .join(",");
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(

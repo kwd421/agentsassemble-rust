@@ -433,6 +433,7 @@ async fn assert_durable_replay(
         },
     )?
     .with_member(MemberAdmission {
+        secure: None,
         projection_id: "projection-test".into(),
         issuer: issuer.into(),
         person_id: "person-1".into(),

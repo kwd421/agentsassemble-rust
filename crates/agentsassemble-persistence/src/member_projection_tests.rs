@@ -12,6 +12,7 @@ async fn projection_revision_replacement_late_ack_and_epoch_are_exact() -> TestR
     insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
     let request = prepared([2; 32], [3; 32], &uuid::Uuid::new_v4().to_string(), "name")
         .with_member(crate::MemberAdmission {
+            secure: None,
             projection_id: "first".into(),
             issuer: "https://central.example".into(),
             person_id: "person".into(),
@@ -79,6 +80,7 @@ async fn retry_schedule_and_daily_budget_are_durable() -> TestResult {
     insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
     let request = prepared([2; 32], [3; 32], &uuid::Uuid::new_v4().to_string(), "name")
         .with_member(crate::MemberAdmission {
+            secure: None,
             projection_id: "id".into(),
             issuer: "https://central.example".into(),
             person_id: "person".into(),
@@ -149,6 +151,7 @@ async fn leaving_one_of_two_rooms_keeps_server_visible() -> TestResult {
     store.set_registration_epoch(Some("epoch")).await?;
     insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
     let member = crate::MemberAdmission {
+        secure: None,
         projection_id: "id".into(),
         issuer: "https://central.example".into(),
         person_id: "person".into(),
@@ -206,6 +209,7 @@ async fn batch_is_sixteen_and_jitter_stays_within_twenty_percent() -> TestResult
     insert_invite(&store, [1; 32], [2; 32], "guest", 30, now).await;
     for index in 0..17 {
         let member = crate::MemberAdmission {
+            secure: None,
             projection_id: format!("projection-{index}"),
             issuer: "https://central.example".into(),
             person_id: format!("person-{index}"),

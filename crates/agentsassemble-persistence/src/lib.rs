@@ -269,3 +269,6 @@ pub use provider_turn_execution::ProviderTurnAssignmentEnvelope;
 
 #[cfg(test)]
 mod member_floor_tests;
+
+mod secure_session;
+pub use secure_session::SecureSessionBinding;

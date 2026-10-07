@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 85;
+pub const CURRENT_SCHEMA_VERSION: i64 = 86;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -172,7 +172,8 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
     }
     tx.commit().await?;
     crate::member_schema::upgrade(pool).await?;
-    upgrade_display_metadata(pool, &version).await
+    upgrade_display_metadata(pool, &version).await?;
+    crate::secure_session::upgrade(pool, &version).await
 }
 
 async fn upgrade_display_metadata(

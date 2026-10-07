@@ -14,6 +14,7 @@ fn member(join: u8, browser: u8, name: &str) -> PreparedHumanAdmission {
         "ignored",
     )
     .with_member(MemberAdmission {
+        secure: None,
         projection_id: "projection-test".into(),
         issuer: "https://central.example".into(),
         person_id: "person-1".into(),
@@ -518,5 +519,48 @@ async fn join_and_connect_restore_expired_live_roster_with_canonical_event() -> 
         assert!(event.seq > before.last_seq);
         assert!(after.events.iter().any(|stored| stored == event));
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn secure_member_bearer_and_retry_cannot_escape_or_revive_channel() -> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "secure-member", 10, now).await;
+    let secure = crate::SecureSessionBinding {
+        client_key_fingerprint: [7; 32],
+        channel_id: "a".repeat(43),
+    };
+    let mut request = member(2, 3, "Member");
+    request.member.as_mut().ok_or("missing member")?.secure = Some(secure.clone());
+    let first = admitted(store.admit_human(&request, now).await?);
+    let fingerprint: [u8; 32] = Sha256::digest(first.session_bearer().as_bytes()).into();
+    store
+        .require_secure_human_transport(&fingerprint, Some(&secure))
+        .await?;
+    assert!(
+        store
+            .require_secure_human_transport(&fingerprint, None)
+            .await
+            .is_err()
+    );
+    let exact = admitted(store.admit_human(&request, now).await?);
+    assert_eq!(first.session_bearer(), exact.session_bearer());
+    request
+        .member
+        .as_mut()
+        .ok_or("missing member")?
+        .secure
+        .as_mut()
+        .ok_or("missing channel")?
+        .channel_id = "b".repeat(43);
+    assert!(store.admit_human(&request, now).await.is_err());
+    store.disconnect_secure_channel(&secure.channel_id).await?;
+    assert!(store.authorize_human_session(&fingerprint).await.is_err());
+    request.member.as_mut().ok_or("missing member")?.secure = Some(secure);
+    assert!(matches!(
+        store.admit_human(&request, now).await?,
+        HumanAdmissionDecision::Rejected(_)
+    ));
     Ok(())
 }
