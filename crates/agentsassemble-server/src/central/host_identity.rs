@@ -1,3 +1,6 @@
+#[path = "secure_handshake.rs"]
+mod secure;
+pub use secure::{SecureChannelError, SecureClientHello, SecureHandshake};
 use std::{collections::BTreeMap, sync::Arc};
 
 use agentsassemble_persistence::PersistentHostIdentity;
@@ -254,6 +257,27 @@ impl CentralHostIdentity {
             status: "ready",
             central_directory,
         }
+    }
+
+    /// Authenticates a key agreement using the same persisted key as server-info.
+    /// The admission owner must separately require the current epoch/endpoint tuple.
+    /// # Errors
+    /// Rejects malformed keys, origins, protocol, or a different server identity.
+    pub fn secure_handshake(
+        &self,
+        client: SecureClientHello,
+    ) -> Result<SecureHandshake, SecureChannelError> {
+        if client.server_id != self.server_id.as_ref()
+            || normalize_server_identity_origin(&client.origin)
+                .ok()
+                .as_deref()
+                != Some(client.origin.as_str())
+        {
+            return Err(SecureChannelError);
+        }
+        SecureHandshake::new(client, |bytes| {
+            URL_SAFE_NO_PAD.encode(self.key_pair.sign(bytes).as_ref())
+        })
     }
 
     pub(crate) fn challenge_envelope(
