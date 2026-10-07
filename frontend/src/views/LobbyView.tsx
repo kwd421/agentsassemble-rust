@@ -605,6 +605,7 @@ export default function LobbyView({
                 requestCard={event.provider_request_id ? <ProviderRequestMessage
                   entry={providerRequests.find((entry) => entry.request.provider_request_id === event.provider_request_id)}
                   title={event.provider_request_title} state={event.provider_request_state}
+                  providerKind={event.provider_kind || providerKindByParticipant.get(event.actor_id || "")}
                   socket={roomSocket} connected={providerRequestsConnected} canPost={canPostMessages}
                 /> : undefined}
                 voteCard={

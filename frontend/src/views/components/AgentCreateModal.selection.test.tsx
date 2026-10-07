@@ -3,7 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import AgentCreateModal from "./AgentCreateModal";
+import { agentCreationPayload } from "../../api/agentSessions";
+import { localAttendeeCreateRequest } from "../../api/localAttendee";
+import { chooseWorkspace } from "./AgentCreateModal.testUi";
 import { workPermissionControl, codexProvider, claudeProvider, openCodeProvider, deepSeekProvider, lmStudioProvider } from "./AgentCreateModal.testProviders";
+
+vi.mock("../../api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../api")>()),
+  chooseLocalWorkspace: vi.fn().mockResolvedValue({ selected: true, path: "/tmp/local-workspace" }),
+}));
 
 afterEach(cleanup);
 
@@ -69,6 +77,7 @@ it("keeps initial loading providers undimmed in catalog order", () => {
 });
 
 it("disables conversation-only permission for a free OpenCode model", async () => {
+  const onCreate = vi.fn().mockResolvedValue(undefined);
   const provider = openCodeProvider();
   const model = provider.controls[0];
   model.default_value = model.options[0].value;
@@ -76,7 +85,7 @@ it("disables conversation-only permission for a free OpenCode model", async () =
   permissions.options.push({ value: "full_access", label: "전체 액세스" });
   provider.controls.push(permissions);
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
-    providers={[provider]} onClose={() => undefined} onCreate={vi.fn()} />);
+    providers={[provider]} catalogRevision="local-revision" onClose={() => undefined} onCreate={onCreate} />);
   await userEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
   expect(screen.getByText("OpenCode 무료 모델은 작업 폴더 쓰기나 전체 액세스 권한이 필요해요.")).toBeTruthy();
   const permission = screen.getByRole("combobox", { name: "권한" });
@@ -86,4 +95,12 @@ it("disables conversation-only permission for a free OpenCode model", async () =
   await userEvent.click(screen.getByRole("option", { name: "전체 액세스" }));
   expect(permission.textContent).toContain("전체 액세스");
   expect(screen.getAllByText("방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.")).toHaveLength(1);
+  await chooseWorkspace();
+  await userEvent.click(screen.getByRole("button", { name: "추가하고 실행" }));
+  const request = onCreate.mock.calls[0][0];
+  expect(request.fullAccessAcknowledged).toBe(true);
+  expect(agentCreationPayload(request)).toMatchObject({ full_access_acknowledged: true });
+  const packet = { request_id: "local-request", room_id: "room-a", room_uid: "room-uid", provider: "opencode", display_name: "Local", invite_id: "invite", expires_at: "2030-01-01T00:00:00Z", attend_command: "attend", join_url: "https://example.test/join?token=secret" };
+  expect(localAttendeeCreateRequest(packet, request).creation).toMatchObject({ full_access_acknowledged: true });
+  expect(agentCreationPayload({ ...request, fullAccessAcknowledged: undefined })).not.toHaveProperty("full_access_acknowledged");
 });

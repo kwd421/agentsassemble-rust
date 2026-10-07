@@ -105,7 +105,8 @@ export default function AgentSessionDetails({
   ) => void | Promise<void>;
   onConfigure?: (
     session: RoomAgentSession,
-    settings: Record<string, string>
+    settings: Record<string, string>,
+    fullAccessAcknowledged?: true
   ) => void | Promise<void>;
   activityVisible?: boolean;
   onActivityVisibilityChange?: (session: RoomAgentSession, visible: boolean) => void;
@@ -213,7 +214,8 @@ export default function AgentSessionDetails({
     setSettingsBusy(true);
     setActionStatus("");
     try {
-      await onConfigure(session, settings);
+      if (settings.permission_mode === "full_access") await onConfigure(session, settings, true);
+      else await onConfigure(session, settings);
       setActionStatus("런타임 설정 저장 완료 · 다음 시작부터 적용");
     } catch (error) {
       setActionStatus(error instanceof Error ? error.message : "런타임 설정 저장 실패");

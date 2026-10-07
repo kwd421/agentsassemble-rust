@@ -62,7 +62,7 @@ impl SelectionInput {
 }
 
 fn reject_unknown_fields(values: &Map<String, Value>) -> Result<(), ProviderSelectionError> {
-    const ALLOWED: [&str; 21] = [
+    const ALLOWED: [&str; 22] = [
         "catalog_revision",
         "provider_id",
         "provider_kind",
@@ -74,6 +74,7 @@ fn reject_unknown_fields(values: &Map<String, Value>) -> Result<(), ProviderSele
         "service_tier",
         "variant",
         "permission_mode",
+        "full_access_acknowledged",
         "permission_option",
         "execution_harness",
         "display_name",

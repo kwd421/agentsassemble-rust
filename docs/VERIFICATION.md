@@ -1,5 +1,39 @@
 # Verification Contract
 
+- 2026-10-07 full-access Daybreak correction at reviewed base `a2621770`
+  (review `f43b6994-3778-4ca2-8834-d04c0c670717/full-access-review.md`):
+  H1a removes managed OpenCode remembered-grant choices from native request mapping
+  and app/web controls; persistence also rejects stale `always`/`allow_always`
+  responses even if an old pending row offers them. Native fixture supplies a
+  nonempty `always` pattern and proves only once/reject are offered and once reaches
+  the native reply endpoint.
+  H1b decision: no companion local approval UI exists (only local setup/start/cancel),
+  so the common local attendee callback auto-rejects Permission requests for every
+  provider via its offered one-time denial, failing closed when none is available.
+  No permission request is sent to the remote room. Persistence rejects companion
+  permission opens and remote resolutions, including pre-upgrade pending rows.
+  Companion workspace_write cannot execute actions requiring native approval;
+  its local setup explains automatic rejection. UserInput/ExternalAction room
+  flows and their delivery/reconnect receipts retain existing behavior.
+  H1c accepts the user's own OpenCode grants created outside AgentsAssemble:
+  remembered native grants can bypass ask after a downgrade; the spec records this
+  limit and the existing 작업 폴더 쓰기 hint remains unchanged. No global grants changed.
+  M1 requires request-local boolean `full_access_acknowledged: true` through shared
+  catalog validation for create/configure/local-companion selection. Warning-bearing
+  add/settings UI supplies it; serializers do not infer it from full_access.
+  Missing/false/string values and configuration inheriting full access are rejected
+  with `full_access_acknowledgement_required` and Korean reload guidance, before
+  mutation/local admission. No schema, migration or background task added.
+  Passed: provider OpenCode (25) and selection (19) tests; persistence provider-request
+  tests (7); local companion rejection and existing remote receipt tests (2);
+  server integration configuration (2), local-attendee HTTP (1), request broker (6).
+  Frontend affected suites pass (77 tests across 11 files); the extended configuration
+  wire assertions pass again within 32 hook tests. TypeScript/Vite build, architecture/
+  source-growth checks, 19 policy-gate tests, cargo fmt, git diff checks and affected
+  provider/persistence/server all-target/all-feature Clippy with warnings denied pass.
+  Tests use local fixtures, including real local HTTP/WebSocket entry points; no live
+  provider execution or packaged visual acceptance. Those remain unknown. No push.
+
 - 2026-10-07 owner correction at base `12b805bb`: Daybreak static review returned
   C0/H1/M1/L0 (REVISE). H: project-level saved `always` grants bypass native bash
   `ask` before broker ingress; the previous real denial probe did not test that

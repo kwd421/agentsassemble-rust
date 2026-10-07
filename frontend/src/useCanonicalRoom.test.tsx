@@ -399,6 +399,18 @@ describe("useCanonicalRoom", () => {
       catalog_revision: "cat-test",
       model: "gpt-5.6-terra",
     });
+    await act(async () => {
+      await result.current.sendAgentConfigure(session("stopped"), { permission_mode: "full_access" });
+    });
+    expect(command).toHaveBeenLastCalledWith("agent.configure", {
+      agent_id: "codex", catalog_revision: "cat-test", permission_mode: "full_access",
+    });
+    await act(async () => {
+      await result.current.sendAgentConfigure(session("stopped"), { permission_mode: "full_access" }, true);
+    });
+    expect(command).toHaveBeenLastCalledWith("agent.configure", {
+      agent_id: "codex", catalog_revision: "cat-test", permission_mode: "full_access", full_access_acknowledged: true,
+    });
   });
 
   it("keeps Agent Session identity while applying room-owned participant changes", async () => {

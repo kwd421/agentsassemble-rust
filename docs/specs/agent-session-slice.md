@@ -68,6 +68,43 @@ shared warning and free-model selection tests; affected Cargo/frontend tests and
 mandatory structure/format gates. Live providers and packaged visual evidence are
 unknown unless separately recorded.
 
+### Full-access review corrections (owner decision, 2026-10-07; base a2621770)
+
+- H1a: managed OpenCode permission requests expose and forward only `once`/`reject`;
+  `always`/`allow_always` must be rejected even when an old pending request or client
+  offers it. No user-global provider grants are deleted or modified.
+- H1b: approval of computer actions belongs to that computer's local operator,
+  never the remote companion invitation issuer or host-side owner. The bundled
+  companion window currently offers setup/start/cancel, without a native approval UI.
+  Until such a local UI exists, the local attendee callback owner automatically
+  rejects every provider's Permission request using its offered one-time denial;
+  if none exists, the exchange fails closed. These requests never enter remote
+  room approval. The persistence open/resolution owners also reject companion
+  Permission requests, including pending requests from older clients. Other user
+  questions retain their existing room-owner flow. Companion `workspace_write`
+  thus cannot execute commands/edits that require native approval; native sandbox
+  permissions and the user's own existing grants still apply. Local full access
+  remains the local operator's explicitly warned choice.
+- H1c: OpenCode grants the user created outside AgentsAssemble are accepted as that
+  user's own decision. Native remembered grants can bypass `ask`, including after
+  `full_access` -> `workspace_write`; session retirement does not erase them.
+  The existing 작업 폴더 쓰기 hint remains owner-approved under this limitation.
+- M1: `agent.create`, `agent.configure` and private local-attendee creation require
+  request-local JSON `full_access_acknowledged: true` whenever the effective selected
+  permission is `full_access`. It is not a stored grant or inherited configuration.
+  Only add/settings UI that displays the full-access warning supplies it; shared
+  creation serialization merely carries the UI's value, including local companion
+  setup. Omitted/false/non-boolean acknowledgement fails before admission or mutation
+  with `full_access_acknowledgement_required` and Korean guidance to reload.
+
+Acceptance: native OpenCode options/replies and stale response rejection; all-provider
+local companion denial, missing-denial failure and remote persistence rejection,
+including old pending rows; create/configure/local HTTP missing/false/malformed
+acknowledgement rejection and warned UI serialization; affected Cargo/frontend
+checks, architecture/source-growth, format and diff gates. No migration, namespace,
+background task, global grant change or live-provider run. Packaged visual evidence
+remains unknown unless separately recorded.
+
 ### OpenCode permission correction (owner decision, 2026-10-07)
 
 Daybreak H: saved project `always` grants can bypass native bash `ask` before
@@ -99,7 +136,7 @@ the native identity. Agent Session identity and room history remain intact. Fail
 rolls back both changes; command replay cannot clear a subsequently rebound session.
 Verify a `workspace_write` to `meeting_read_only` downgrade through persistence,
 including rollback, unchanged-mode reuse and replay. This does not change OpenCode's
-bash ask/deny policy or resolve project-wide remembered grants (separate finding H).
+bash ask/deny policy or erase the user-created grants accepted under H1c above.
 
 A host selects an installed provider/model from the authoritative live catalog, creates a durable Agent Session, and can ultimately start that same session so its canonical room-context reply is published back into the room.
 

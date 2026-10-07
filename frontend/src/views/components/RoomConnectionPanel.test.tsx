@@ -767,4 +767,9 @@ it("preserves stored full access for free OpenCode settings and submits a downgr
   await userEvent.click(screen.getByRole("option", { name: "작업 폴더 쓰기" }));
   await userEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
   expect(onAgentConfigure).toHaveBeenCalledWith(session, expect.objectContaining({ permission_mode: "workspace_write" }));
+  await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
+  await userEvent.click(screen.getByRole("option", { name: "전체 액세스" }));
+  await chooseProviderControl("추론 강도", "high");
+  await userEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
+  expect(onAgentConfigure).toHaveBeenLastCalledWith(session, expect.objectContaining({ permission_mode: "full_access" }), true);
 });

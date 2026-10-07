@@ -46,3 +46,20 @@ describe("provider request controls", () => {
     expect(screen.queryByLabelText("답변")).toBeNull();
   });
 });
+
+it("hides pre-upgrade OpenCode remembered grants and submits only a one-time choice", async () => {
+  const resolve = vi.fn().mockResolvedValue(ack);
+  const entry = { ...pendingRequest, request: { ...pendingRequest.request,
+    request_kind: "permission" as const,
+    prompt: { response_kind: "option" as const, options: [
+      { id: "once", kind: "allow_once", label: "Allow once", description: "" },
+      { id: "always", kind: "allow_always", label: "Always allow", description: "" },
+      { id: "reject", kind: "reject_once", label: "Reject", description: "" },
+    ] },
+  } };
+  render(<ProviderRequestMessage entry={entry} providerKind="opencode_server" socket={socket(resolve)} connected canPost />);
+  expect(screen.queryByLabelText("Always allow")).toBeNull();
+  fireEvent.click(screen.getByLabelText("Allow once"));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "응답 보내기" })); });
+  expect(resolve).toHaveBeenCalledWith(entry.request.provider_request_id, { response_kind: "option", option_id: "once" });
+});

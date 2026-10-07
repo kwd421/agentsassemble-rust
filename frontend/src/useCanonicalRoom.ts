@@ -556,12 +556,13 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   );
 
   const sendAgentConfigure = useCallback(
-    async (session: RoomAgentSession, settings: Record<string, string>) => {
+    async (session: RoomAgentSession, settings: Record<string, string>, fullAccessAcknowledged?: true) => {
       const operationSocket = requireCurrentProjectionSocket();
       const ack = await operationSocket.command("agent.configure", {
         agent_id: session.participant_id,
         catalog_revision: activeCatalogRevision,
         ...settings,
+        ...(fullAccessAcknowledged === true ? { full_access_acknowledged: true } : {}),
       });
       requireCurrentProjectionSocket();
       const result = ack.result || {};

@@ -1,4 +1,7 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, ClientKind, DurableAgentSession, InviteScope};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, ClientKind, DurableAgentSession, InviteScope, ProviderRequest,
+    ProviderRequestKind,
+};
 use chrono::{DateTime, Utc};
 use sqlx::{Row, Sqlite, Transaction, sqlite::SqliteRow};
 use uuid::Uuid;
@@ -23,6 +26,8 @@ pub(crate) async fn authorize_resolution_in(
     }
     let session =
         crate::agent_lifecycle::load_session(tx, &principal.room_id, row.get("session_id")).await?;
+    let request: ProviderRequest = serde_json::from_str(row.get("request_json"))?;
+    reject_remote_companion_permission(&session, &request)?;
     require_pending_authority_in(tx, &session, row, now).await?;
     Ok(session)
 }
@@ -92,4 +97,18 @@ pub(crate) async fn require_execution_in(
         )
         .await
     }
+}
+
+// Invitation custody is room authority, never authority to approve actions on another PC.
+pub(crate) fn reject_remote_companion_permission(
+    session: &DurableAgentSession,
+    request: &ProviderRequest,
+) -> Result<(), PersistenceError> {
+    if session.public.external_owned && request.request_kind == ProviderRequestKind::Permission {
+        return Err(rejected(
+            "permission_denied",
+            "Companion actions require that computer's local operator; remote approval is unavailable.",
+        ));
+    }
+    Ok(())
 }

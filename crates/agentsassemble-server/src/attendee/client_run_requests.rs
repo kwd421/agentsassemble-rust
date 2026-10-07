@@ -1,4 +1,7 @@
 //! Native callback custody is connection-local; secret answers are never replayed on reconnect.
+use agentsassemble_domain::{
+    ProviderRequestKind, ProviderRequestPrompt, ProviderRequestResolution,
+};
 use agentsassemble_persistence::OpenProviderRequest;
 use agentsassemble_provider::{
     ProviderRequestCommand, ProviderRequestCompletion, ProviderRequestExchange,
@@ -17,6 +20,7 @@ enum Phase {
     Opening,
     Waiting,
     Answered,
+    LocalRejected,
     Reporting,
 }
 
@@ -87,8 +91,13 @@ impl Requests {
                 }
             } => {
                 let pending = self.pending.as_mut().ok_or_else(|| error("attendee_provider_request_missing"))?;
-                if pending.phase != Phase::Answered {
+                if !matches!(pending.phase, Phase::Answered | Phase::LocalRejected) {
                     return Err(error("attendee_provider_request_cancelled"));
+                }
+                if pending.phase == Phase::LocalRejected {
+                    let pending = self.pending.take().ok_or_else(|| error("attendee_provider_request_missing"))?;
+                    pending.completion.finish(Ok(()));
+                    return Ok(());
                 }
                 pending.phase = Phase::Reporting;
                 self.outbound = Some(outbound(Request::ProviderRequestDelivered {
@@ -105,6 +114,40 @@ impl Requests {
             return;
         }
         let id = command.request.provider_request_id;
+        if command.request.request_kind == ProviderRequestKind::Permission {
+            // No local approval UI exists. Never give the invitation issuer this authority.
+            let denial = match &command.request.prompt {
+                ProviderRequestPrompt::Option { options } if command.request.is_valid() => {
+                    options.iter().find(|option| {
+                        matches!(
+                            option.kind.as_str(),
+                            "reject_once" | "deny" | "decline" | "cancel"
+                        )
+                    })
+                }
+                _ => None,
+            };
+            let Some(denial) = denial else {
+                command.complete(Err(ProviderRequestExchangeError::Closed));
+                return;
+            };
+            let resolution = ProviderRequestResolution::Option {
+                option_id: denial.id.clone(),
+            };
+            let (exchange, mut responder, completion) = ProviderRequestExchange::channel();
+            if responder.respond(resolution).is_err() {
+                command.complete(Err(ProviderRequestExchangeError::Closed));
+                return;
+            }
+            self.pending = Some(Pending {
+                id,
+                responder,
+                completion,
+                phase: Phase::LocalRejected,
+            });
+            command.complete(Ok(exchange));
+            return;
+        }
         self.outbound = Some(outbound(Request::ProviderRequestOpen {
             request_id: Uuid::new_v4(),
             request: Box::new(OpenProviderRequest {
@@ -183,7 +226,7 @@ impl Requests {
                             .ok_or_else(|| error("attendee_provider_request_missing"))?;
                         pending.completion.finish(Ok(()));
                     }
-                    Phase::Waiting | Phase::Answered => {
+                    Phase::Waiting | Phase::Answered | Phase::LocalRejected => {
                         return Err(error("attendee_provider_ack_mismatch"));
                     }
                 }
@@ -282,6 +325,65 @@ mod tests {
                 relay.clear();
             }
             assert_eq!(completed.await.is_ok(), acknowledged);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn companion_permissions_are_denied_locally_without_remote_authority()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // OpenCode/Claude/ACP, Codex scope grants and Codex command/edit denials.
+        for kind in ["reject_once", "deny", "decline", "cancel", "allow_once"] {
+            let mut relay = Requests::new();
+            let ingress = relay.ingress.clone();
+            let request = ProviderRequest {
+                provider_request_id: Uuid::new_v4(),
+                request_kind: ProviderRequestKind::Permission,
+                title: "Execute on this computer".into(),
+                description: String::new(),
+                timeout_seconds: 15,
+                prompt: ProviderRequestPrompt::Option {
+                    options: vec![agentsassemble_domain::ProviderRequestOption {
+                        id: "native-choice".into(),
+                        label: "Native choice".into(),
+                        kind: kind.into(),
+                        description: String::new(),
+                    }],
+                },
+            };
+            let id = request.provider_request_id;
+            let (accepted, native) = tokio::join!(
+                relay.step(),
+                ingress.open("session", 1, "execution", request)
+            );
+            accepted?;
+            assert!(
+                relay.outbound.is_none(),
+                "computer approval reached remote room"
+            );
+            if kind == "allow_once" {
+                assert!(native.is_err(), "missing denial must fail closed");
+                continue;
+            }
+            let mut native = native?;
+            assert!(
+                matches!(native.receive().await?, ProviderRequestResolution::Option { option_id } if option_id == "native-choice")
+            );
+            assert!(
+                relay
+                    .frame(Frame::ProviderResponse {
+                        provider_request_id: id,
+                        resolution: ProviderRequestResolution::Option {
+                            option_id: "allow".into()
+                        },
+                    })
+                    .is_err(),
+                "remote response must not replace local rejection"
+            );
+            let (processed, completed) = tokio::join!(relay.step(), native.complete(true));
+            processed?;
+            completed?;
+            assert!(relay.pending.is_none() && relay.outbound.is_none());
         }
         Ok(())
     }

@@ -63,17 +63,10 @@ impl NativeRequest {
                 Some("permission.asked") => {
                     let permission = text(properties, "permission")?;
                     let patterns = strings(properties, "patterns")?;
-                    let always = strings(properties, "always")?;
-                    let mut options = vec![option("once", "Allow once", "allow_once", "")];
-                    if !always.is_empty() {
-                        options.push(option(
-                            "always",
-                            "Always allow in this project",
-                            "allow_always",
-                            &display(&always.join(", ")),
-                        ));
-                    }
-                    options.push(option("reject", "Reject", "reject_once", ""));
+                    let options = vec![
+                        option("once", "Allow once", "allow_once", ""),
+                        option("reject", "Reject", "reject_once", ""),
+                    ];
                     (
                         ProviderRequestKind::Permission,
                         format!("OpenCode requests {permission}"),
@@ -276,7 +269,7 @@ mod tests {
                 .is_err()
         );
         let permission = NativeRequest::parse(
-            &json!({"type": "permission.asked", "properties": {"id": "p-1", "permission":"bash", "patterns":[], "always":[]}}),
+            &json!({"type": "permission.asked", "properties": {"id": "p-1", "permission":"bash", "patterns":[], "always":["*"]}}),
         )?;
         assert!(
             permission

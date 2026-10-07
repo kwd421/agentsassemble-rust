@@ -39,11 +39,12 @@ async fn local_http_creation_uses_only_its_local_operator_and_preserves_remote_m
     assert_non_host_catalog(&client, &base, &tickets, &local_store).await?;
     let id = Uuid::new_v4();
     let route = format!("{base}/api/local-attendees");
-    let input = json!({"request_id":id,"room_id":"general","room_uid":invite.room_uid,
+    let mut input = json!({"request_id":id,"room_id":"general","room_uid":invite.room_uid,
         "invite_url":format!("{}/join?token={}", room_server.base_url, invite.invite_bearer),
         "creation":{"provider_id":"codex","display_name":"Local HTTP draft","workspace":directory.path(),
             "catalog_revision":"catalog-boundary-1","permission_mode":"full_access","start":false}});
     reject_before_admission(&client, &route, &input, &tickets, &room_store).await?;
+    input["creation"]["full_access_acknowledged"] = json!(true);
     let token = operator_ticket(&tickets).await?;
     let response = client
         .post(&route)
@@ -151,6 +152,36 @@ async fn reject_before_admission(
             .agent_sessions
             .is_empty()
     );
+    let mut input = input.clone();
+    for acknowledgement in [None, Some(json!(false)), Some(json!("true"))] {
+        if let Some(value) = acknowledgement {
+            input["creation"]["full_access_acknowledged"] = value;
+        }
+        let response = client
+            .post(route)
+            .bearer_auth(operator_ticket(tickets).await?)
+            .json(&input)
+            .send()
+            .await?;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let error: serde_json::Value = response.json().await?;
+        assert_eq!(
+            error["error"]["code"],
+            "full_access_acknowledgement_required"
+        );
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("새로고침"))
+        );
+        assert!(
+            room_store
+                .snapshot("general", 0, 200)
+                .await?
+                .agent_sessions
+                .is_empty()
+        );
+    }
     Ok(())
 }
 

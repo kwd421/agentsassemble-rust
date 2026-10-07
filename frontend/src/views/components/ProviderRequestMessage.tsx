@@ -10,19 +10,19 @@ const terminalLabels: Record<string, string> = {
   cancelled: "요청이 취소됐어요.", expired: "응답 시간이 만료됐어요.",
 };
 
-export default function ProviderRequestMessage({ entry, title, state, socket, connected, canPost }: {
-  entry?: PendingProviderRequest; title?: string; state?: string;
+export default function ProviderRequestMessage({ entry, title, state, socket, connected, canPost, providerKind }: {
+  entry?: PendingProviderRequest; title?: string; state?: string; providerKind?: string;
   socket: RoomSocketHandle | null; connected: boolean; canPost: boolean;
 }) {
   return <section aria-label="에이전트 요청" style={{ marginTop: 8, maxWidth: 560, borderLeft: "2px solid var(--color-panel-separator)", padding: "4px 0 4px 12px", fontSize: 14, overflowWrap: "anywhere" }}>
     {entry ? <>
       {!connected && <p role="status">연결을 복구하고 있어요. 연결되면 응답할 수 있어요.</p>}
-      <RequestForm key={entry.request.provider_request_id} entry={entry} socket={socket} enabled={connected && canPost} />
+      <RequestForm key={entry.request.provider_request_id} entry={entry} socket={socket} enabled={connected && canPost} providerKind={providerKind} />
     </> : <><p className="font-semibold">{title || "요청"}</p><p role="status">{terminalLabels[state || ""] || "현재 응답할 수 없는 요청이에요."}</p></>}
   </section>;
 }
 
-function RequestForm({ entry, socket, enabled }: { entry: PendingProviderRequest; socket: RoomSocketHandle | null; enabled: boolean }) {
+function RequestForm({ entry, socket, enabled, providerKind }: { entry: PendingProviderRequest; socket: RoomSocketHandle | null; enabled: boolean; providerKind?: string }) {
   const { request, state } = entry;
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [optionId, setOptionId] = useState("");
@@ -56,7 +56,7 @@ function RequestForm({ entry, socket, enabled }: { entry: PendingProviderRequest
     <div><h3 style={{ fontWeight: 700 }}>{request.title}</h3><p style={{ whiteSpace: "pre-wrap" }}>{request.description}</p></div>
     <p>응답 기한: <time dateTime={entry.expires_at}>{new Date(entry.expires_at).toLocaleString("ko-KR")}</time></p>
     <fieldset disabled={locked} style={{ display: "grid", gap: 12, minWidth: 0 }}>
-      {request.prompt.response_kind === "option" && request.prompt.options.map((option) => <label key={option.id} style={{ ...controlStyle, display: "flex", alignItems: "center", gap: 12 }}>
+      {request.prompt.response_kind === "option" && request.prompt.options.filter((option) => !(providerKind === "opencode_server" && request.request_kind === "permission" && (option.id === "always" || option.kind === "allow_always"))).map((option) => <label key={option.id} style={{ ...controlStyle, display: "flex", alignItems: "center", gap: 12 }}>
         <input type="radio" name={request.provider_request_id} required checked={optionId === option.id} onChange={() => setOptionId(option.id)} />
         <span>{option.label}{option.description && <small style={{ display: "block" }}>{option.description}</small>}</span>
       </label>)}

@@ -16,6 +16,7 @@ export interface FrontendLiveAgentCreateRequest {
   serviceTier?: string;
   variant?: string;
   permissionMode?: string;
+  fullAccessAcknowledged?: true;
   maxOutputTokens?: number;
   personaCardId?: string;
   startNow?: boolean;
@@ -33,6 +34,7 @@ export function agentCreationPayload(request: FrontendLiveAgentCreateRequest) {
     service_tier: request.serviceTier || "",
     variant: request.variant || "",
     permission_mode: request.permissionMode || "meeting_read_only",
+    ...(request.fullAccessAcknowledged === true ? { full_access_acknowledged: true } : {}),
     max_output_tokens: request.maxOutputTokens || 0,
     persona_card_id: request.personaCardId || "",
     start: Boolean(request.startNow),

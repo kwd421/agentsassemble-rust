@@ -359,7 +359,8 @@ export default function MobileRoomInfoPanel({
   onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
     session: RoomAgentSession,
-    settings: Record<string, string>
+    settings: Record<string, string>,
+    fullAccessAcknowledged?: true
   ) => void | Promise<void>;
   agentActivityVisibility?: Record<string, boolean>;
   onAgentActivityVisibilityChange?: (session: RoomAgentSession, visible: boolean) => void;

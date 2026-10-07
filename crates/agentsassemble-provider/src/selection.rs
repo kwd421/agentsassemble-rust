@@ -138,6 +138,14 @@ impl ProviderSelection {
         validate_runtime_variant(provider, &model, &reasoning_effort, &service_tier)?;
         let variant = selected_value(provider, "variant", input.variant)?;
         let permission_mode = selected_value(provider, "permission_mode", input.permission_mode)?;
+        if permission_mode == "full_access"
+            && payload.get("full_access_acknowledged") != Some(&Value::Bool(true))
+        {
+            return Err(ProviderSelectionError::new(
+                "full_access_acknowledgement_required",
+                "전체 액세스 경고를 확인하려면 화면을 새로고침한 뒤 다시 선택해 주세요.",
+            ));
+        }
         controls::validate_model_permission(provider, &model, &permission_mode)?;
         let execution_harness = input
             .execution_harness

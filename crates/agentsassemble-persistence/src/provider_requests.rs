@@ -147,6 +147,7 @@ async fn open_in(
             "Provider request is invalid.",
         ));
     }
+    crate::provider_request_authority::reject_remote_companion_permission(session, &input.request)?;
     let room_id = &session.public.room_id;
     let session_id = &session.public.session_id;
     let (_, participant) =

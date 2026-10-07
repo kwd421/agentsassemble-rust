@@ -78,7 +78,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         answered.clear()
         pathlib.Path("prompt-request.json").write_text(json.dumps(payload))
         event("message.updated", info={"id": "user-1", "role": "user"})
-        event("permission.asked", id="permission-1", permission="bash", patterns=["echo fixture"], always=[])
+        event("permission.asked", id="permission-1", permission="bash", patterns=["echo fixture"], always=["echo *"])
         if not answered.wait(10):
             return self.send_error(504)
         event("message.updated", info=assistant)

@@ -15,6 +15,7 @@ const CONFIGURE_FIELDS: &[&str] = &[
     "variant",
     "execution_harness",
     "permission_mode",
+    "full_access_acknowledged",
     "max_output_tokens",
     "persona_card_id",
 ];
@@ -116,6 +117,9 @@ fn merged_configuration(
     provider_id: &str,
 ) -> Result<Map<String, Value>, ProviderSelectionError> {
     let mut merged = Map::new();
+    if let Some(acknowledged) = values.get("full_access_acknowledged") {
+        merged.insert("full_access_acknowledged".to_owned(), acknowledged.clone());
+    }
     merged.insert(
         "catalog_revision".to_owned(),
         values

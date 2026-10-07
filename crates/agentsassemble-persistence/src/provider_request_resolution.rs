@@ -1,7 +1,10 @@
 //! Claims one live response while persisting only its secret-free projection.
 use std::collections::BTreeMap;
 
-use agentsassemble_domain::{ProviderRequest, ProviderRequestResolution, RoomEvent};
+use agentsassemble_domain::{
+    ProviderRequest, ProviderRequestKind, ProviderRequestPrompt, ProviderRequestResolution,
+    RoomEvent,
+};
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use serde_json::json;
@@ -79,6 +82,7 @@ impl SqliteStore {
         )
         .await?;
         let request: ProviderRequest = serde_json::from_str(row.get("request_json"))?;
+        reject_remembered_opencode_permission(&session.public.provider_kind, &request, resolution)?;
         let durable = request.durable_resolution(resolution).ok_or_else(|| {
             rejected(
                 "invalid_provider_response",
@@ -182,4 +186,76 @@ fn response_fingerprint(
     signer.update(b"agentsassemble-provider-response-v1\0");
     signer.update(&serde_json::to_vec(&(room_id, request_id, resolution))?);
     Ok(signer.finalize().into_bytes().into())
+}
+
+// Old pending rows can still contain a remembered grant offered before this correction.
+fn reject_remembered_opencode_permission(
+    provider_kind: &str,
+    request: &ProviderRequest,
+    resolution: &ProviderRequestResolution,
+) -> Result<(), PersistenceError> {
+    if provider_kind == "opencode_server"
+        && request.request_kind == ProviderRequestKind::Permission
+        && let ProviderRequestResolution::Option { option_id } = resolution
+        && (matches!(option_id.as_str(), "always" | "allow_always")
+            || matches!(&request.prompt, ProviderRequestPrompt::Option { options }
+                if options.iter().any(|option| option.id == *option_id && option.kind == "allow_always")))
+    {
+        return Err(rejected(
+            "invalid_provider_response",
+            "Remembered OpenCode grants are unavailable.",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_opencode_remembered_grants_are_rejected_even_when_offered() {
+        let request = ProviderRequest {
+            provider_request_id: Uuid::new_v4(),
+            request_kind: ProviderRequestKind::Permission,
+            title: "Permission".into(),
+            description: String::new(),
+            timeout_seconds: 60,
+            prompt: ProviderRequestPrompt::Option {
+                options: [
+                    ("once", "allow_once"),
+                    ("always", "allow_always"),
+                    ("old-grant", "allow_always"),
+                    ("reject", "reject_once"),
+                ]
+                .into_iter()
+                .map(|(id, kind)| agentsassemble_domain::ProviderRequestOption {
+                    id: id.into(),
+                    kind: kind.into(),
+                    label: id.into(),
+                    description: String::new(),
+                })
+                .collect(),
+            },
+        };
+        for id in ["always", "allow_always", "old-grant"] {
+            assert!(
+                matches!(reject_remembered_opencode_permission("opencode_server", &request,
+                &ProviderRequestResolution::Option { option_id: id.into() }),
+                Err(PersistenceError::CommandRejected { code, .. }) if code == "invalid_provider_response")
+            );
+        }
+        for id in ["once", "reject"] {
+            assert!(
+                reject_remembered_opencode_permission(
+                    "opencode_server",
+                    &request,
+                    &ProviderRequestResolution::Option {
+                        option_id: id.into()
+                    }
+                )
+                .is_ok()
+            );
+        }
+    }
 }

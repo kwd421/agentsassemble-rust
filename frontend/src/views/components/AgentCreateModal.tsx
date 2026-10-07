@@ -285,6 +285,7 @@ export default function AgentCreateModal({
       serviceTier: settings.service_tier || "",
       variant: settings.variant || "",
       permissionMode: settings.permission_mode || "meeting_read_only",
+      ...(settings.permission_mode === "full_access" ? { fullAccessAcknowledged: true as const } : {}),
       maxOutputTokens: Number(settings.max_output_tokens || 0),
       personaCardId,
       startNow,

@@ -100,6 +100,9 @@ async fn check_native_permissions(
             .await?
             .ok_or("request channel closed")?;
         assert_eq!(command.session_id, active.public.session_id);
+        assert!(matches!(&command.request.prompt,
+            agentsassemble_domain::ProviderRequestPrompt::Option { options }
+            if options.iter().map(|option| option.id.as_str()).collect::<Vec<_>>() == ["once", "reject"]));
         let (exchange, mut responder, mut delivery) = ProviderRequestExchange::channel();
         command.complete(Ok(exchange));
         responder.respond(ProviderRequestResolution::Option {

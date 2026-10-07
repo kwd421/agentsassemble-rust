@@ -356,3 +356,70 @@ async fn existing_connection_turn_and_startup_transitions_close_pending_requests
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn companion_permission_open_and_preupgrade_remote_resolution_are_denied() -> TestResult {
+    let (store, connection, turn, now) = assigned_report().await?;
+    let human = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await?;
+    let mut request = request_for(&turn);
+    let permission = agentsassemble_domain::ProviderRequest {
+        request_kind: ProviderRequestKind::Permission,
+        prompt: ProviderRequestPrompt::Option {
+            options: vec![agentsassemble_domain::ProviderRequestOption {
+                id: "allow".into(),
+                label: "Allow".into(),
+                kind: "allow_once".into(),
+                description: String::new(),
+            }],
+        },
+        ..request.request.clone()
+    };
+    request.request = permission.clone();
+    assert!(matches!(store.open_attendee_provider_request(
+        connection.session().session_fingerprint(), connection.connection_id(), &request, now,
+    ).await, Err(PersistenceError::CommandRejected { code, .. }) if code == "permission_denied"));
+    assert!(
+        store
+            .pending_provider_request_ids("general")
+            .await?
+            .is_empty()
+    );
+    // Simulate a Permission row created before the policy changed; no migration deletes it.
+    request = request_for(&turn);
+    store
+        .open_attendee_provider_request(
+            connection.session().session_fingerprint(),
+            connection.connection_id(),
+            &request,
+            now,
+        )
+        .await?;
+    let mut permission = permission;
+    permission.provider_request_id = request.request.provider_request_id;
+    sqlx::query("UPDATE provider_requests SET request_json=? WHERE request_id=?")
+        .bind(serde_json::to_string(&permission)?)
+        .bind(permission.provider_request_id.to_string())
+        .execute(&store.pool)
+        .await?;
+    let response = ProviderRequestResolution::Option {
+        option_id: "allow".into(),
+    };
+    for authority in [
+        RoomMutationAuthority::HumanSession(&human),
+        RoomMutationAuthority::TrustedPrincipal(human.principal()),
+    ] {
+        assert!(
+            matches!(store.resolve_provider_request(authority, permission.provider_request_id, &response, now).await,
+            Err(PersistenceError::CommandRejected { code, .. }) if code == "permission_denied")
+        );
+    }
+    let state: String =
+        sqlx::query_scalar("SELECT state FROM provider_requests WHERE request_id=?")
+            .bind(permission.provider_request_id.to_string())
+            .fetch_one(&store.pool)
+            .await?;
+    assert_eq!(state, "open");
+    Ok(())
+}

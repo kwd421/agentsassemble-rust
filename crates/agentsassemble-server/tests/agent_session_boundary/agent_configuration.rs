@@ -218,8 +218,9 @@ async fn opencode_free_create_and_configure_reject_conversation_only() {
             .permission_mode,
         "workspace_write"
     );
+    reject_unwarned_full_access(&mut socket, session_id, &payload).await;
     send_command(&mut socket, "free-full-access", "agent.configure", &json!({
-        "agent_id":session_id, "catalog_revision":"catalog-boundary-1", "permission_mode":"full_access"
+        "agent_id":session_id, "catalog_revision":"catalog-boundary-1", "permission_mode":"full_access", "full_access_acknowledged":true
     })).await;
     let configured = receive_until_ack(&mut socket, 2).await;
     assert_eq!(
@@ -227,13 +228,75 @@ async fn opencode_free_create_and_configure_reject_conversation_only() {
         "full_access"
     );
     payload["permission_mode"] = json!("full_access");
+    payload["full_access_acknowledged"] = json!(true);
     send_create(&mut socket, "free-full-create", &payload).await;
     let created = receive_until_ack(&mut socket, 2).await;
     assert_eq!(
         created["result"]["agent_session"]["permission_mode"],
         "full_access"
     );
+    send_command(
+        &mut socket,
+        "unwarned-retained-full",
+        "agent.configure",
+        &json!({
+            "agent_id":session_id, "catalog_revision":"catalog-boundary-1"
+        }),
+    )
+    .await;
+    assert_eq!(
+        receive_json(&mut socket).await["error"]["code"],
+        "full_access_acknowledgement_required"
+    );
     server.stop_and_close().await;
+}
+
+async fn reject_unwarned_full_access<S>(
+    socket: &mut RoomSocketPeer<S>,
+    session_id: &Value,
+    payload: &Value,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    for (index, acknowledgement) in [None, Some(json!(false)), Some(json!("true"))]
+        .into_iter()
+        .enumerate()
+    {
+        let mut full = json!({"agent_id":session_id, "catalog_revision":"catalog-boundary-1", "permission_mode":"full_access"});
+        if let Some(value) = acknowledgement {
+            full["full_access_acknowledged"] = value;
+        }
+        send_command(
+            socket,
+            &format!("unwarned-config-{index}"),
+            "agent.configure",
+            &full,
+        )
+        .await;
+        let error = receive_json(socket).await;
+        assert_eq!(
+            error["error"]["code"],
+            "full_access_acknowledgement_required"
+        );
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("새로고침"))
+        );
+        let mut full = payload.clone();
+        full["permission_mode"] = json!("full_access");
+        // Each create is independently rejected without reserving a session.
+        match index {
+            1 => full["full_access_acknowledged"] = json!(false),
+            2 => full["full_access_acknowledged"] = json!("true"),
+            _ => {}
+        }
+        send_create(socket, &format!("unwarned-create-{index}"), &full).await;
+        assert_eq!(
+            receive_json(socket).await["error"]["code"],
+            "full_access_acknowledgement_required"
+        );
+    }
 }
 
 fn free_opencode_catalog(directory: &Path) -> ProviderCatalog {
