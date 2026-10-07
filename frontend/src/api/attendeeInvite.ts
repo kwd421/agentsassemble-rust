@@ -46,7 +46,7 @@ async function readPacket(response: Response, expected: Expected): Promise<Atten
   if (!response.ok) {
     const failure = await response.json().catch(() => null) as { error?: { code?: string } } | null;
     const message = failure?.error?.code === "unsupported_provider" ? "이 제공자는 AI 참가자로 연결할 수 없어요. 제공자 이름을 확인해 주세요."
-      : failure?.error?.code === "companion_limit_reached" ? "동반 AI 초대와 참가자는 최대 8명까지 유지할 수 있어요."
+      : failure?.error?.code === "companion_limit_reached" ? "이 컴퓨터에서 추가한 AI는 최대 8개까지 둘 수 있어요."
       : failure?.error?.code === "public_ingress_not_ready" ? "공개 연결을 시작한 뒤 초대를 만들어 주세요."
       : "AI 참가 초대 결과를 확인하지 못했어요. 현재 권한을 확인하고 다시 시도해 주세요.";
     throw new Error(message);
