@@ -4,9 +4,8 @@ import { CENTRAL_SESSION_CLEARED_EVENT, bootstrapCentral, centralIdentityConfigu
 import { loadCentralDirectoryCache, type CentralServerDisplay } from "../lib/central/directoryCache";
 import { isCentralTemporaryError } from "../lib/central/connectionError";
 
-// Every signed bootstrap currently reserves three GENERAL nonce units centrally.
-// Idle observers must leave capacity for admission; explicit actions still refresh.
-const DIRECTORY_CHECK_MS = 30 * 60_000;
+// Focus/visible checks are throttled; online and explicit actions refresh immediately.
+const FOCUS_CHECK_MS = 5 * 60_000;
 
 export type CentralDirectoryState = {
   status: "connected" | "central-unconfirmed" | "authentication-required" | "error";
@@ -34,7 +33,7 @@ export function useCentralDirectory(autoStart = false) {
   const flight = useRef<Promise<CentralDirectoryState> | null>(null);
   const flightToken = useRef<string | undefined>(undefined);
   const controller = useRef<AbortController | null>(null);
-  const failures = useRef(0);
+  const lastSuccess = useRef<{ token: string | undefined; at: number } | null>(null);
   const refresh = useCallback((): Promise<CentralDirectoryState> => {
     const session = loadCentralSession();
     if (flight.current && flightToken.current === session?.token) return flight.current;
@@ -48,12 +47,10 @@ export function useCentralDirectory(autoStart = false) {
         const live = await bootstrapCentral(abort.signal);
         next = { status: live ? "connected" : "authentication-required", person: live?.person || null,
           servers: live?.servers || [], live };
-        failures.current = 0;
       } catch (error) {
         if (abort.signal.aborted) throw error;
         const current = loadCentralSession();
         if (isCentralTemporaryError(error) && current && current.token === session?.token) {
-          failures.current += 1;
           next = retainedDirectory(current);
         } else {
           next = { status: isCentralAuthenticationError(error) || !current ? "authentication-required" : "error",
@@ -64,7 +61,10 @@ export function useCentralDirectory(autoStart = false) {
       if (abort.signal.aborted || currentToken !== session?.token) {
         throw new DOMException("로그인 서버 확인 요청이 바뀌었어요.", "AbortError");
       }
-      if (active.current && controller.current === abort) setDirectory(next);
+      if (active.current && controller.current === abort) {
+        if (next.status === "connected") lastSuccess.current = { token: currentToken, at: Date.now() };
+        setDirectory(next);
+      }
       return next;
     })();
     flight.current = request;
@@ -76,7 +76,7 @@ export function useCentralDirectory(autoStart = false) {
     const cleared = () => {
       controller.current?.abort();
       flight.current = null;
-      failures.current = 0;
+      lastSuccess.current = null;
       setDirectory({ status: "authentication-required", person: null, servers: [], live: null });
     };
     window.addEventListener(CENTRAL_SESSION_CLEARED_EVENT, cleared);
@@ -89,13 +89,22 @@ export function useCentralDirectory(autoStart = false) {
     return () => { active.current = false; controller.current?.abort(); flight.current = null; };
   }, [autoStart, refresh]);
   useEffect(() => {
-    if (!directory || !["connected", "central-unconfirmed"].includes(directory.status)) return;
-    const delay = directory.status === "connected" ? DIRECTORY_CHECK_MS
-      : Math.min(DIRECTORY_CHECK_MS, 1000 * 2 ** Math.max(0, Math.min(11, failures.current - 1)));
+    if (!directory || directory.status === "authentication-required") return;
     const retry = () => { void refresh().catch(() => undefined); };
-    const timer = window.setTimeout(retry, delay);
+    const focus = () => {
+      const checked = lastSuccess.current;
+      if (checked && checked.token === loadCentralSession()?.token && Date.now() - checked.at < FOCUS_CHECK_MS) return;
+      retry();
+    };
+    const visible = () => { if (document.visibilityState === "visible") focus(); };
+    window.addEventListener("focus", focus);
+    document.addEventListener("visibilitychange", visible);
     window.addEventListener("online", retry);
-    return () => { window.clearTimeout(timer); window.removeEventListener("online", retry); };
+    return () => {
+      window.removeEventListener("focus", focus);
+      document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("online", retry);
+    };
   }, [directory, refresh]);
   return { directory, refresh };
 }

@@ -33,7 +33,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   cleanup(); clearCentralSession(); localStorage.clear(); fetcher.mockReset();
-  vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs();
+  vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs();
 });
 
 it.each(["bootstrap", "unsigned login"])("deletes the legacy directory before offline %s network work", async (entry) => {
@@ -57,7 +57,7 @@ const operations = [
   ["registration", () => registerLocalServer("fixture-local-token")],
   ["icon write", () => setCentralServerIcon(server, null)],
 ] as const;
-it.each(operations)("immediately requires authentication on signed %s 401 and stops polling", async (_name, operation) => {
+it.each(operations)("immediately requires authentication on signed %s 401 and stops event-driven checks", async (_name, operation) => {
   fetcher.mockResolvedValueOnce(Response.json(directory));
   const { result } = renderHook(() => useCentralDirectory());
   await act(async () => { await result.current.refresh(); });
@@ -74,7 +74,10 @@ it.each(operations)("immediately requires authentication on signed %s 401 and st
   expect(loadCentralDirectoryCache(person.person_id)).toEqual([]);
   expect(result.current.directory).toMatchObject({ status: "authentication-required", person: null, servers: [], live: null });
   const calls = fetcher.mock.calls.length;
-  await act(async () => { await vi.advanceTimersByTimeAsync(90_000); window.dispatchEvent(new Event("online")); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
+    window.dispatchEvent(new Event("online")); window.dispatchEvent(new Event("focus"));
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange")); });
   expect(fetcher).toHaveBeenCalledTimes(calls);
 });
 

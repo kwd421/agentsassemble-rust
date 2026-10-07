@@ -1,5 +1,20 @@
 # Verification Contract
 
+- 2026-10-07 event-driven central directory at base `5f577577`:
+  owner decision supersedes the `0309ebc2` 30-minute polling/backoff below.
+  `useCentralDirectory` schedules no observation or retry timer. Mount/startup,
+  focus/visible (five minutes since the current session's successful completion),
+  online, explicit refresh and existing admission/mutation checks are retained.
+  Fake-clock regressions prove a healthy or failed idle day makes no extra calls,
+  exact throttle boundary, hidden visibility suppression, event/action recovery,
+  single flight, per-account throttle, 401 termination and listener/abort cleanup.
+  Passed: 18 affected frontend suites / 186 tests (directory/authentication,
+  startup/rail/server list, owner/member connect, local attendee, identity/cache/
+  transport); TypeScript/Vite build; architecture/source-growth and 19 policy/
+  artifact-owner unit tests; diff check. Existing source-size and bundle warnings
+  remain. No push; `.agents/` and `scripts/__pycache__/` are untouched. Packaged
+  behavior and production recovery were not exercised.
+
 - 2026-10-07 central GENERAL exhaustion client mitigation at base `916fcf3c`:
   shared desktop/web directory healthy checks change from 30 seconds to 30 minutes;
   transient exponential retries now cap at 30 minutes. Two fake-clock regressions

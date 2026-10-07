@@ -11,8 +11,14 @@ vi.mock("../lib/central/identity", () => ({ bootstrapCentral: mocks.bootstrap,
 }));
 const person = { person_id: "person", display_name: "Name", identity_kind: "google" };
 const server = { server_id: "server", alias: "Saved Mac", icon: "", host_os: "macos" as const, relation: "owner" as const };
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
-it("shows cached display only during outage, caps backoff and automatically replaces it on recovery", async () => {
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.resetAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
+function wake(trigger: string) {
+  if (trigger === "visible") {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+  } else window.dispatchEvent(new Event(trigger));
+}
+it.each(["focus", "visible", "online", "explicit"])("retains outage display without scheduled retries and recovers on %s", async (trigger) => {
   vi.useFakeTimers();
   mocks.session = { token: "session", person };
   saveCentralDirectoryCache(person.person_id, [server]);
@@ -20,21 +26,15 @@ it("shows cached display only during outage, caps backoff and automatically repl
   const { result, unmount } = renderHook(() => useCentralDirectory());
   await act(async () => { await result.current.refresh(); });
   expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", servers: [server], live: null });
-  for (const delay of [1000, 2000, 4000, 8000, 16000, 32000, 64000,
-    128000, 256000, 512000, 1024000, 1800000, 1800000]) {
-    const calls = mocks.bootstrap.mock.calls.length;
-    await act(async () => { await vi.advanceTimersByTimeAsync(delay - 1); });
-    expect(mocks.bootstrap).toHaveBeenCalledTimes(calls);
-    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-    expect(mocks.bootstrap).toHaveBeenCalledTimes(calls + 1);
-  }
+  await act(async () => { await vi.advanceTimersByTimeAsync(24 * 60 * 60_000); });
+  expect(mocks.bootstrap).toHaveBeenCalledOnce();
   mocks.bootstrap.mockResolvedValue({ person, servers: [{ ...server, alias: "Recovered Mac" }], server_time: 1 });
-  await act(async () => { window.dispatchEvent(new Event("online")); });
+  await act(async () => { if (trigger === "explicit") await result.current.refresh(); else wake(trigger); });
   expect(result.current.directory).toMatchObject({ status: "connected", servers: [{ alias: "Recovered Mac" }] });
   unmount();
   const calls = mocks.bootstrap.mock.calls.length;
   await vi.advanceTimersByTimeAsync(60_000);
-  window.dispatchEvent(new Event("online"));
+  wake("online"); wake("focus"); wake("visible");
   expect(mocks.bootstrap).toHaveBeenCalledTimes(calls);
 });
 it("coalesces retry requests, stops at authentication failure and never reads cache as authority", async () => {
@@ -50,7 +50,7 @@ it("coalesces retry requests, stops at authentication failure and never reads ca
     reject(new Error("401")); await first;
   });
   expect(result.current.directory).toMatchObject({ status: "authentication-required", person: null, servers: [], live: null });
-  await act(async () => { await vi.advanceTimersByTimeAsync(90_000); window.dispatchEvent(new Event("online")); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(24 * 60 * 60_000); wake("online"); wake("focus"); wake("visible"); });
   expect(mocks.bootstrap).toHaveBeenCalledOnce();
 });
 it("does not restore a previous account after a pending outage or unmount", async () => {
@@ -105,7 +105,7 @@ it("rejects a successful flight when the session is cleared before publication",
   expect(result.current.directory).toBeNull();
 });
 
-it("retains saved servers on the first WebKit timeout and retries in the background", async () => {
+it("retains saved servers on the first WebKit timeout until an online retry", async () => {
   vi.useFakeTimers();
   mocks.session = { token: "session", person };
   saveCentralDirectoryCache(person.person_id, [server]);
@@ -118,63 +118,98 @@ it("retains saved servers on the first WebKit timeout and retries in the backgro
   expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", person, servers: [server], live: null });
   expect(result.current.directory?.error).toBeUndefined();
   mocks.bootstrap.mockResolvedValue({ person, servers: [server], server_time: 1 });
-  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(24 * 60 * 60_000); });
+  expect(mocks.bootstrap).toHaveBeenCalledOnce();
+  await act(async () => { wake("online"); });
   expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
   expect(result.current.directory?.status).toBe("connected");
 });
 
-it("keeps an idle directory within capacity and still refreshes before explicit actions", async () => {
+it("never polls an idle directory and bypasses focus throttling for explicit and online checks", async () => {
   vi.useFakeTimers();
   mocks.session = { token: "session", person };
-  saveCentralDirectoryCache(person.person_id, [server]);
-  let units = 0;
-  let alias = server.alias;
-  mocks.bootstrap.mockImplementation(async () => {
-    units += 3;
-    if (units > 700) throw new CentralTemporaryError("temporary_capacity_exhausted");
-    return { person, servers: [{ ...server, alias }], server_time: 1 };
-  });
-  const { result, unmount } = renderHook(() => useCentralDirectory(true));
-  await act(async () => {});
-  expect(result.current.directory).toMatchObject({ status: "connected", servers: [{ alias: server.alias }] });
-  alias = "Updated remotely";
-  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
-  expect(result.current.directory?.servers[0].alias).toBe(server.alias);
-  await act(async () => { await vi.advanceTimersByTimeAsync(30 * 60_000 - 30_000); });
-  expect(result.current.directory?.servers[0].alias).toBe(alias);
-  // Walk a UTC-day's idle observer in separate acts so React installs each timer.
-  for (let check = 1; check < 48; check++) {
-    await act(async () => { await vi.advanceTimersByTimeAsync(30 * 60_000); });
-  }
-  expect(result.current.directory?.status).toBe("connected");
-  expect(units).toBeLessThan(700);
-  alias = "Fresh before connecting";
-  await act(async () => { await result.current.refresh(); });
-  expect(result.current.directory?.live?.servers[0].alias).toBe(alias);
-  unmount();
-  const finalUnits = units;
-  await vi.advanceTimersByTimeAsync(30 * 60_000);
-  window.dispatchEvent(new Event("online"));
-  expect(units).toBe(finalUnits);
-});
-
-it("backs off capacity failures beyond 30 seconds and automatically recovers", async () => {
-  vi.useFakeTimers();
-  mocks.session = { token: "session", person };
-  saveCentralDirectoryCache(person.person_id, [server]);
-  mocks.bootstrap.mockRejectedValue(new CentralTemporaryError("temporary_capacity_exhausted"));
+  mocks.bootstrap.mockResolvedValue({ person, servers: [server], server_time: 1 });
   const { result } = renderHook(() => useCentralDirectory(true));
   await act(async () => {});
-  for (const delay of [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]) {
-    await act(async () => { await vi.advanceTimersByTimeAsync(delay * 1000); });
-  }
-  expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", servers: [server], live: null });
-  mocks.bootstrap.mockResolvedValue({ person, servers: [{ ...server, alias: "Recovered" }], server_time: 1 });
-  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(24 * 60 * 60_000); });
+  expect(mocks.bootstrap).toHaveBeenCalledOnce();
+  await act(async () => { await result.current.refresh(); });
+  await act(async () => { await result.current.refresh(); });
+  await act(async () => { wake("online"); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(4);
+  expect(result.current.directory?.status).toBe("connected");
+});
+
+it.each(["focus", "visible"])("throttles %s checks until five minutes after the last successful completion", async (trigger) => {
+  vi.useFakeTimers();
+  mocks.session = { token: "session", person };
+  let complete!: (value: object) => void;
+  mocks.bootstrap.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  const { result } = renderHook(() => useCentralDirectory(true));
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  await act(async () => { complete({ person, servers: [server], server_time: 1 }); });
+  mocks.bootstrap.mockResolvedValue({ person, servers: [{ ...server, alias: "Changed" }], server_time: 1 });
+  await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000 - 1); wake(trigger); });
+  expect(mocks.bootstrap).toHaveBeenCalledOnce();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); wake(trigger); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+  expect(result.current.directory?.servers[0].alias).toBe("Changed");
+  await act(async () => { wake("focus"); wake("visible"); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+});
+
+it("ignores hidden visibility and coalesces focus, visible, online and explicit checks", async () => {
+  vi.useFakeTimers();
+  mocks.session = { token: "session", person };
+  mocks.bootstrap.mockResolvedValueOnce({ person, servers: [server], server_time: 1 });
+  const { result } = renderHook(() => useCentralDirectory(true));
+  await act(async () => {});
+  await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000); });
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+  expect(mocks.bootstrap).toHaveBeenCalledOnce();
+  let complete!: (value: object) => void;
+  mocks.bootstrap.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  await act(async () => { wake("focus"); wake("visible"); wake("online"); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    const pending = result.current.refresh();
+    complete({ person, servers: [server], server_time: 1 });
+    await pending;
+  });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+});
+
+it("does not throttle a new account using the old account's successful check", async () => {
+  vi.useFakeTimers();
+  mocks.session = { token: "old", person };
+  mocks.bootstrap.mockResolvedValueOnce({ person, servers: [server], server_time: 1 });
+  const { result } = renderHook(() => useCentralDirectory(true));
+  await act(async () => {});
+  const nextPerson = { ...person, person_id: "new" };
+  mocks.session = { token: "new", person: nextPerson };
+  mocks.bootstrap.mockResolvedValueOnce({ person: nextPerson, servers: [], server_time: 1 });
+  await act(async () => { wake("focus"); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+  expect(result.current.directory).toMatchObject({ person: nextPerson, servers: [] });
+});
+
+it("waits for the next eligible focus after repeated failures, including a non-temporary error", async () => {
+  vi.useFakeTimers();
+  mocks.session = { token: "session", person };
+  mocks.bootstrap.mockResolvedValueOnce({ person, servers: [server], server_time: 1 });
+  const { result } = renderHook(() => useCentralDirectory(true));
+  await act(async () => {});
+  mocks.bootstrap.mockRejectedValueOnce(new CentralTemporaryError("temporary_capacity_exhausted"));
+  await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000); wake("focus"); });
   expect(result.current.directory?.status).toBe("central-unconfirmed");
-  await act(async () => { await vi.advanceTimersByTimeAsync(30 * 60_000 - 30_000); });
-  expect(result.current.directory).toMatchObject({ status: "connected", servers: [{ alias: "Recovered" }] });
-  mocks.bootstrap.mockResolvedValue({ person, servers: [{ ...server, alias: "Online update" }], server_time: 1 });
-  await act(async () => { window.dispatchEvent(new Event("online")); });
-  expect(result.current.directory?.servers[0].alias).toBe("Online update");
+  mocks.bootstrap.mockRejectedValueOnce(new Error("invalid directory"));
+  await act(async () => { wake("visible"); });
+  expect(result.current.directory?.status).toBe("error");
+  mocks.bootstrap.mockResolvedValueOnce({ person, servers: [server], server_time: 1 });
+  await act(async () => { await vi.advanceTimersByTimeAsync(24 * 60 * 60_000); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(3);
+  await act(async () => { wake("focus"); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(4);
+  expect(result.current.directory?.status).toBe("connected");
 });

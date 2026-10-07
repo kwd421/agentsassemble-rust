@@ -1,5 +1,26 @@
 # Identity, accounts, friends and human admission
 
+## Event-driven central directory (owner decision, 2026-10-07)
+
+Signed GET `/v1/bootstrap` through `useCentralDirectory` must never poll or retry
+on a timer. Refresh only at app start/mount, window focus or visibility becoming
+visible, browser online, explicit refresh, and the existing immediate checks before
+rail admission/connect and after mutations. Focus/visible events skip a check when
+the current session's last successful check was less than five minutes ago; online
+and explicit/admission/mutation checks bypass that throttle. A failed check waits
+for the next eligible event/action, with no scheduled recovery loop.
+
+Affected entries: desktop startup/rail (`StartupIdentityGate`, `useAppController`),
+shared directory display/refresh, and remote-owner dialog loading. Preserve one
+in-flight request per session, account isolation, cancellation, signed 401 clearing,
+display-only outage cache, immediate admission authority and host-owned sessions.
+This supersedes the 0309ebc2 30-minute observation/backoff below and the original
+step-1 polling contract. No Worker/schema/provider/transport change is authorized.
+Acceptance: fake-clock regressions prove no idle or failure-driven calls, exact
+five-minute focus/visible throttle, immediate online/explicit recovery, coalescing,
+account isolation, 401 termination and unmount cleanup; affected tests, frontend
+build and mandatory architecture/source-growth gates pass. Commit without pushing.
+
 ## Central GENERAL exhaustion correction (2026-10-07)
 
 Required behavior: idle desktop hosts, another owner computer, and remote room
