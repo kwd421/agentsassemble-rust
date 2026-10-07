@@ -2,6 +2,11 @@
 
 ### Code-review acceptance correction (2026-10-07)
 
+Duplicate-owner bootstrap and registration `server_exists` projections must show
+event endpoints as published only for online state and the current registration
+epoch. Lease expiry applies only to legacy endpoints. Preserve offline/stale-epoch
+denial so the irreversible keeper-selection flow cannot mislabel the active host.
+
 Shared remote directory/session surfaces, dock entries and companion invitation
 custody use the host-signed channel origin, never the central/Tauri document origin.
 Returning to the server list and admitting another host in the same document must

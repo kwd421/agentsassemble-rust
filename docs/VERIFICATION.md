@@ -1,5 +1,17 @@
 # Verification Contract
 
+- 2026-10-07 secure-admission code review round 2: Daybreak Blue xhigh reviewed
+  full Rust range through `e58058e1` and Worker through `05dcde0c`;
+  REVISE C0/H0/M1/L0. Both round-1 findings closed. Worker `79e5c93b`
+  corrects the remaining owner conflict/registration projection: published event
+  endpoints use state and current epoch, while legacy endpoints retain lease
+  expiry. The new public bootstrap + `server_exists` regression failed before
+  correction (online event falsely disconnected); all five event/legacy cases
+  and the full Worker suite (235 tests) pass after, plus syntax/diff checks.
+  Logs: `/tmp/aa-review-owner-status-before.log`,
+  `/tmp/aa-review-owner-status-after.log`. Final code review round 3 is pending.
+  No push, deployment or packaged acceptance has occurred yet.
+
 - 2026-10-07 secure-admission code review round 1: Daybreak Blue xhigh reviewed
   Rust `5c20622f` and Worker `05dcde0c`, all individual/cumulative commits;
   REVISE C0/H0/M2/L0. M1 is corrected by `d83668a8`: signed host origins own
