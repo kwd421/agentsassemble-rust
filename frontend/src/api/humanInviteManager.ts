@@ -1,3 +1,4 @@
+import { centralAccountEntryUrl } from "../lib/central/identity";
 import { fetchRemoteRoomInvite, type RemoteInviteTransport } from "./roomInviteTransport";
 import type { RoomAppearance } from "../lib/roomAppearance";
 import { decodeCanonicalBase64Url } from "../lib/base64Url";
@@ -157,7 +158,7 @@ function parseServerExpiry(value: unknown) {
   return Object.freeze({ exact, epochMilliseconds });
 }
 
-function parseJoinUrl(value: unknown, joinCode: string) {
+function parseJoinUrl(value: unknown, joinCode: string, serverId: string, publicOrigin?: unknown) {
   const exact = exactString(value);
   let url: URL;
   try {
@@ -166,6 +167,15 @@ function parseJoinUrl(value: unknown, joinCode: string) {
   } catch {
     invalidResponse();
   }
+  if (url.pathname === "/member-join") {
+    const central = centralAccountEntryUrl();
+    if (!central || url.origin !== new URL(central).origin || url.username || url.password || url.hash ||
+        [...url.searchParams.keys()].sort().join() !== "protocol,registration_epoch,server_id,token" ||
+        url.searchParams.get("protocol") !== "secure_admission_v1" || url.searchParams.get("server_id") !== serverId ||
+        !/^[A-Za-z0-9._:-]{1,200}$/.test(url.searchParams.get("registration_epoch") || "") || url.searchParams.get("token") !== joinCode) invalidResponse();
+    return { exact, origin: parsePublicIngressOrigin(exactString(publicOrigin)) };
+  }
+  if (publicOrigin !== undefined) invalidResponse();
   if (
     exact !== url.toString() ||
     url.pathname !== "/join" ||
@@ -233,7 +243,7 @@ export async function parseManagedHumanInviteCreateResponse(
   intent: ManagedHumanInviteCreateIntent
 ): Promise<ManagedHumanInviteCustody> {
   const request = validateCreateIntent(intent);
-  const response = exactObject(value, CREATE_RESPONSE_KEYS);
+  const response = exactObject(value, value && typeof value === "object" && "public_origin" in value ? [...CREATE_RESPONSE_KEYS, "public_origin"] : CREATE_RESPONSE_KEYS);
   const inviteToken = exactString(response.invite_token);
   const joinCode = exactString(response.join_code);
   const inviteId = exactString(response.invite_id);
@@ -260,7 +270,7 @@ export async function parseManagedHumanInviteCreateResponse(
   } catch {
     invalidResponse();
   }
-  const join = parseJoinUrl(response.join_url, joinCode);
+  const join = parseJoinUrl(response.join_url, joinCode, request.authority.server_id, response.public_origin);
   return Object.freeze({
     authority: request.authority,
     inviteId,

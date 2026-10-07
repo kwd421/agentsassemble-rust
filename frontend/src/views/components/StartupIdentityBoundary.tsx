@@ -1,4 +1,7 @@
-import { useCallback, useState, type ReactNode } from "react";
+import MemberJoinPanel from "./MemberJoinPanel";
+import RemoteMemberWorkspaceBoundary from "./RemoteMemberWorkspaceBoundary";
+import { remoteWorkspaceSnapshot, subscribeRemoteWorkspace, pendingMemberSnapshot, selectRemoteMember } from "../../lib/remote/remoteWorkspace";
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import {
   getOrCreateBrowserCredential,
@@ -39,6 +42,8 @@ export default function StartupIdentityBoundary({
   children: (identity: { deviceToken: string; clientId: string }) => ReactNode;
   memberReturn?: MemberReturn;
 }) {
+  const remote = useSyncExternalStore(subscribeRemoteWorkspace, remoteWorkspaceSnapshot);
+  const pendingMember = useSyncExternalStore(subscribeRemoteWorkspace, pendingMemberSnapshot);
   const [centralOwnerConnect] = useState(() => { clearStoredCentralOwnerWorkspace(); return consumeCentralOwnerConnectFromUrl(); });
   const [ownerWorkspace, setOwnerWorkspace] = useState<CentralOwnerWorkspace | null>(null);
   const [desktop] = useState(
@@ -74,6 +79,13 @@ export default function StartupIdentityBoundary({
     setOwnerWorkspace(session);
     setReady(true);
   }, []);
+
+  if (pendingMember) return <MemberJoinPanel secureEntry={pendingMember} onCancel={() => selectRemoteMember(null)} />;
+  if (remote) {
+    const content = children({ deviceToken: remote.deviceToken, clientId: remote.clientId });
+    return remote.owner ? <CentralOwnerWorkspaceBoundary key={remote.owner.sessionId} session={remote.owner}>{content}</CentralOwnerWorkspaceBoundary>
+      : <RemoteMemberWorkspaceBoundary key={remote.transport.hello.channel_id} transport={remote.transport}>{content}</RemoteMemberWorkspaceBoundary>;
+  }
 
   if (memberReturn && !memberReturn.record && !memberReturn.connect) return <GuestJoinProfilePanel displayName=""
     retryMode="join" status="참가를 준비하지 못했어요. 원래 초대 링크를 다시 열어 주세요."

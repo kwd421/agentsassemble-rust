@@ -75,10 +75,13 @@ impl SqliteStore {
                     .await
             }
             RoomSessionAuthorization::Operator(operator) => {
-                let expected = self
-                    .owner_for_operator_session(operator)
-                    .await?
-                    .and_then(|owner| owner.binding().secure.clone());
+                let expected = if operator.is_central_owner() {
+                    self.owner_for_operator_session(operator)
+                        .await?
+                        .and_then(|owner| owner.binding().secure.clone())
+                } else {
+                    None
+                };
                 SecureSessionBinding::require_match(expected.as_ref(), presented)
             }
         }

@@ -92,6 +92,25 @@ impl CentralDirectory {
         Self(None)
     }
 
+    pub(crate) fn member_entry_url(
+        &self,
+        server_id: &str,
+        epoch: &str,
+        code: &str,
+    ) -> Result<String, CentralDirectoryError> {
+        let inner = self.0.as_ref().ok_or(CentralDirectoryError::InvalidUrl)?;
+        let mut url = inner
+            .base_url
+            .join("/member-join")
+            .map_err(|_| CentralDirectoryError::InvalidUrl)?;
+        url.query_pairs_mut()
+            .append_pair("protocol", "secure_admission_v1")
+            .append_pair("server_id", server_id)
+            .append_pair("registration_epoch", epoch)
+            .append_pair("token", code);
+        Ok(url.into())
+    }
+
     pub(crate) fn configured(value: &str) -> Result<Self, CentralDirectoryError> {
         let base_url = normalize_base_url(value)?;
         let client = Client::builder()

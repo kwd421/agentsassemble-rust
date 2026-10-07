@@ -1,3 +1,5 @@
+import { SecureMemberAdmission, previewSecureMember, type SecureMemberEntry } from "../../lib/central/secureMemberEntry";
+import { loginMemberPopup } from "../../lib/central/memberPopup";
 import { useEffect, useRef, useState } from "react";
 import { challengeMemberConnect, redeemMemberConnect, selectMemberConnect, challengeRoomMember, joinRoomMember, type RoomInviteJoinResponse } from "../../api/invites";
 import { ApiError } from "../../lib/apiErrors";
@@ -21,7 +23,7 @@ export type MemberJoinHost = {
   callback?: MemberReturn; onComplete: (payload: RoomInviteJoinResponse) => Promise<boolean>;
 };
 type Consent = {
-  request: MemberTargetRequest; target: Awaited<ReturnType<typeof previewCentralMember>>;
+  request: MemberTargetRequest; target: Awaited<ReturnType<typeof previewCentralMember>> & { target?: import("../../lib/remote/secureCrypto").SecureTarget };
   account: string; sessionToken: string;
 };
 
@@ -55,14 +57,15 @@ function failureMessage(error: unknown): string {
     ? error.message : "참가를 마치지 못했어요. 다시 시도해 주세요.";
 }
 
-export default function MemberJoinPanel({ host, request, entryError, onCancel }: {
-  host?: MemberJoinHost; request?: MemberTargetRequest; entryError?: string; onCancel?: () => void;
+export default function MemberJoinPanel({ host, request, entryError, onCancel, secureEntry }: {
+  secureEntry?: SecureMemberEntry; host?: MemberJoinHost; request?: MemberTargetRequest; entryError?: string; onCancel?: () => void;
 }) {
   const [rooms, setRooms] = useState<{room_id:string;name:string}[]>([]);
   const [consent, setConsent] = useState<Consent | null>(null);
   const [busy, setBusy] = useState(!entryError);
   const [status, setStatus] = useState("참가를 준비하고 있어요");
   const [error, setError] = useState(entryError ? failureMessage(new Error(entryError)) : "");
+  const secureAdmission = useRef<SecureMemberAdmission | null>(null);
   const record = useRef<MemberHandoff | undefined>(host?.callback?.record);
   const active = useRef(true);
   const flight = useRef(false);
@@ -97,6 +100,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
   }
 
   async function selectRoom(roomId: string, pending = record.current) {
+    if (secureAdmission.current) { await secureAdmission.current.select(roomId); return; }
     if (!host || !pending) return;
     const payload = await selectMemberConnect(pending, roomId, host.clientId, host.deviceToken);
     if (!active.current) return;
@@ -104,7 +108,16 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
   }
 
   async function prepare() {
-    setConsent(null);
+    setConsent(null); setRooms([]);
+    secureAdmission.current?.close(); secureAdmission.current = null;
+    if (secureEntry) {
+      const session = loadCentralSession();
+      if (!session) { setStatus("로그인하면 참가를 이어갈 수 있어요."); return; }
+      const target = await previewSecureMember(secureEntry);
+      if (!active.current) return;
+      setConsent({ request: { ...secureEntry, challenge_hash: "", handoff_state: "", ...(secureEntry.inviteToken ? {} : { purpose: "connect" as const }) }, target, account: session.person.display_name, sessionToken: session.token });
+      setStatus(""); return;
+    }
     let targetRequest = request;
     if (host) {
       setStatus("참가를 준비하고 있어요");
@@ -156,7 +169,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
       if (event.persisted && host && !isDesktopWebview()) setError("참가를 완료하지 않았어요. 다시 시도해 주세요.");
     };
     window.addEventListener("pageshow", returned);
-    return () => { active.current = false; loginAbort.current?.abort(); window.removeEventListener("pageshow", returned); };
+    return () => { active.current = false; loginAbort.current?.abort(); secureAdmission.current?.close(); window.removeEventListener("pageshow", returned); };
     // This component owns one selected invite/return. Explicit retries use prepare().
   }, []);
 
@@ -167,6 +180,19 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
       if (loadCentralSession()?.token !== consent.sessionToken) throw new Error("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
       if (record.current && record.current.expires_at <= Date.now() / 1000) throw new Error("참가 요청이 만료됐어요. 다시 시도해 주세요.");
       if (restoreHidden) await setCentralMemberHidden(consent.request, false);
+      if (secureEntry && consent.target.target) {
+        loginAbort.current = new AbortController();
+        secureAdmission.current?.close();
+        const admission = await SecureMemberAdmission.open(secureEntry, consent.target.target, consent.sessionToken, loginAbort.current.signal);
+        secureAdmission.current = admission;
+        try {
+          const available = await admission.admit();
+          if (!active.current) { admission.close(); return; }
+          if (available?.length === 1) await admission.select(available[0].room_id);
+          else if (available) { setConsent(null); setRooms(available); setStatus(""); }
+        } catch (error) { admission.close(); throw error; }
+        return;
+      }
       const grant = await issueCentralMemberGrant(consent.request);
       if (!active.current) return;
       if (grant.endpoint_origin !== consent.target.endpoint_origin || grant.endpoint_generation !== consent.target.endpoint_generation) {
@@ -181,7 +207,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
   }
 
   function retry() {
-    if (host) { void run(prepare); return; }
+    if (host || secureEntry) { void run(prepare); return; }
     clearCentralMemberRequest();
     if (consent) window.location.assign(memberRetryUrl(consent.target.endpoint_origin, consent.request));
     else window.history.back();
@@ -207,10 +233,14 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
         <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>{reconnect ? "다시 연결" : "참가하기"}</button>
       </>}
       {consent && <button type="button" className="dc-join-cancel" disabled={busy} onClick={() => void confirm(true)}>목록에 다시 표시하고 참가</button>}
-      {!host && !busy && !error && !consent && <button type="button" className="dc-guest-join-button"
+      {!host && !busy && !error && !consent && rooms.length === 0 && <button type="button" className="dc-guest-join-button"
         onClick={() => void run(async () => {
           loginAbort.current = new AbortController();
-          await startCentralWebGoogle(loginAbort.current.signal);
+          if (secureEntry) {
+            if (isDesktopWebview()) await loginCentralGoogle(() => {}, loginAbort.current.signal);
+            else await loginMemberPopup(loginAbort.current.signal);
+            await prepare();
+          } else await startCentralWebGoogle(loginAbort.current.signal);
         })}>Google로 계속</button>}
       {(!host || onCancel) && !busy && <button type="button" className="dc-join-cancel"
         onClick={onCancel || (() => { clearCentralMemberRequest(); window.history.back(); })}>취소</button>}

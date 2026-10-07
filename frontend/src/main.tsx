@@ -1,3 +1,7 @@
+import { consumeSecureMemberEntry } from "./lib/central/secureMemberEntry";
+import { selectRemoteMember } from "./lib/remote/remoteWorkspace";
+import { isMemberLoginPopup } from "./lib/central/memberPopup";
+import MemberLoginPopup from "./views/components/MemberLoginPopup";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -10,13 +14,16 @@ import { clearCentralMemberRequest, consumeMemberReturn, consumeCentralMemberReq
 import { isCentralWebEntry } from "./lib/central/identity";
 import MemberJoinPanel from "./views/components/MemberJoinPanel";
 
+const memberLoginPopup = isMemberLoginPopup();
 const memberReturn = consumeMemberReturn();
 let memberRequest: MemberTargetRequest | undefined;
 let memberEntryError = "";
 if (isCentralWebEntry()) {
   try {
-    memberRequest = consumeCentralMemberRequest();
-    if (!memberRequest && window.location.pathname === "/member-join") memberEntryError = "입장 요청이 없어요. 원래 초대 링크를 다시 열어 주세요.";
+    const secureEntry = consumeSecureMemberEntry();
+    if (secureEntry) selectRemoteMember(secureEntry);
+    else if (!memberLoginPopup) memberRequest = consumeCentralMemberRequest();
+    if (!secureEntry && !memberRequest && window.location.pathname === "/member-join") memberEntryError = "입장 요청이 없어요. 원래 초대 링크를 다시 열어 주세요.";
   } catch {
     memberEntryError = "입장 요청이 만료됐거나 올바르지 않아요. 원래 초대 링크에서 다시 시도해 주세요.";
     try { clearCentralMemberRequest(); }
@@ -30,7 +37,7 @@ const setupProvider = isDesktopWebview()
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {localAttendee ? <LocalAttendeePanel /> : memberRequest || memberEntryError ? <MemberJoinPanel request={memberRequest} entryError={memberEntryError} /> : <StartupIdentityBoundary memberReturn={memberReturn}>
+    {memberLoginPopup ? <MemberLoginPopup /> : localAttendee ? <LocalAttendeePanel /> : memberRequest || memberEntryError ? <MemberJoinPanel request={memberRequest} entryError={memberEntryError} /> : <StartupIdentityBoundary memberReturn={memberReturn}>
       {({ deviceToken, clientId }) => (
         setupProvider ? <ProviderSetupPanel providerId={setupProvider} />
           : <App deviceToken={deviceToken} clientId={clientId} memberReturn={memberReturn} />

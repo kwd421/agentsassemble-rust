@@ -62,6 +62,8 @@ struct CreateInviteResponse {
     expires_at: String,
     room_url: String,
     join_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    public_origin: Option<String>,
 }
 
 registered_routes! {
@@ -140,6 +142,23 @@ async fn create_invite(
             issued_at,
             expires_at,
         })?;
+    let epoch = state.store.registration_epoch().await?;
+    let join_url = if let Some(epoch) = &epoch {
+        state
+            .central_directory
+            .member_entry_url(
+                state.central_host_identity.server_id(),
+                epoch,
+                credentials.join_code(),
+            )
+            .map_err(|_| InviteManagerHttpError::internal())?
+    } else {
+        format!(
+            "{}/join?token={}",
+            ingress.public_url,
+            credentials.join_code()
+        )
+    };
     let invite = state
         .store
         .create_human_invite_for_manager(
@@ -172,11 +191,8 @@ async fn create_invite(
         max_uses,
         expires_at: format_invite_timestamp(expires_at),
         room_url: ingress.local_url,
-        join_url: format!(
-            "{}/join?token={}",
-            ingress.public_url,
-            credentials.join_code()
-        ),
+        join_url,
+        public_origin: epoch.map(|_| ingress.public_url),
     }))
 }
 

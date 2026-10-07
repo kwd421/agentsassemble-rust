@@ -114,7 +114,12 @@ async fn exchange(
         .owner_sessions
         .admit(&state, session.authorization.clone())?;
     if let Some(client) = &client {
-        client.adopt(&state, Some(&session.authorization))?;
+        if let Err(error) = client.adopt(&state, Some(&session.authorization)) {
+            state
+                .owner_sessions
+                .disconnect(session.authorization.fingerprint());
+            return Err(error.into());
+        }
     }
     Ok(Json(agentsassemble_protocol::CentralOwnerSessionGrant {
         session_token: session.session_bearer,

@@ -68,6 +68,9 @@ visible capacity failure, no unbounded buffers or in-use eviction. Central/Tauri
 and wss:, with restricted scripts/navigation/images. Frontend authority selection
 injects one RemoteTransport into shared flows; no global fetch override, feature
 transport copies or local operator authority inherited by a remote workspace.
+The legacy host-served frontend build notice remains on host pages only: trusted
+entries execute their own bundle, validate the host protocol/product surface on
+admission, and never poll central or compare their bundle with host static assets.
 
 A fresh non-extractable client ECDH key is approved by central device-signed grant
 issue. AEAD fresh transcript confirmation proves client possession to host before

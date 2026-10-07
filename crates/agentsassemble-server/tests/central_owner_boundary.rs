@@ -47,11 +47,15 @@ const DEVICE: &str = "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 #[derive(Clone)]
 struct WorkerState {
+    issuer: String,
     calls: mpsc::UnboundedSender<WorkerCall>,
     generation: Arc<AtomicI64>,
     reject: Arc<AtomicBool>,
     unavailable: Arc<AtomicBool>,
-    secure_binding: Arc<tokio::sync::Mutex<Option<(String, String)>>>,
+    secure_binding: Arc<tokio::sync::Mutex<std::collections::HashMap<String, (String, String)>>>,
+    late_enabled: Arc<AtomicBool>,
+    late_started: Arc<tokio::sync::Notify>,
+    late_release: Arc<tokio::sync::Notify>,
 }
 
 struct WorkerCall {
@@ -106,6 +110,10 @@ async fn owner_connection(
             body,
         })
         .unwrap_or_else(|error| panic!("record redemption call: {error:?}"));
+    if parsed["grant_token"] == SECOND_TOKEN && state.late_enabled.load(Ordering::SeqCst) {
+        state.late_started.notify_one();
+        state.late_release.notified().await;
+    }
     if state.unavailable.load(Ordering::SeqCst) {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -135,8 +143,12 @@ async fn owner_connection(
             .to_owned();
         let channel = parsed["channel_id"].as_str().unwrap_or_default().to_owned();
         let mut binding = state.secure_binding.lock().await;
+        let grant = parsed["grant_token"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
         if binding
-            .as_ref()
+            .get(&grant)
             .is_some_and(|value| value != &(key.clone(), channel.clone()))
         {
             return (
@@ -144,7 +156,7 @@ async fn owner_connection(
                 Json(json!({"error":"connect_grant_invalid"})),
             );
         }
-        *binding = Some((key, channel));
+        binding.insert(grant, (key, channel));
         for field in [
             "protocol",
             "registration_epoch",
@@ -238,11 +250,15 @@ async fn start_fixture() -> Fixture {
     );
     let (call_tx, calls) = mpsc::unbounded_channel();
     let worker_state = WorkerState {
+        issuer: worker_url.clone(),
         calls: call_tx,
         generation: Arc::new(AtomicI64::new(0)),
         reject: Arc::new(AtomicBool::new(false)),
         unavailable: Arc::new(AtomicBool::new(false)),
         secure_binding: Arc::default(),
+        late_enabled: Arc::default(),
+        late_started: Arc::default(),
+        late_release: Arc::default(),
     };
     let worker = Router::new()
         .route(
@@ -252,6 +268,14 @@ async fn start_fixture() -> Fixture {
         .route(
             "/v1/servers/{server_id}/connect-grants/redeem",
             post_route(owner_connection),
+        )
+        .route(
+            "/v1/servers/{server_id}/member-grants/redeem",
+            post_route(secure::member_redemption),
+        )
+        .route(
+            "/v1/servers/{server_id}/member-connect-grants/redeem",
+            post_route(secure::member_redemption),
         )
         .with_state(worker_state.clone());
     let worker_task: JoinHandle<()> = tokio::spawn(async move {

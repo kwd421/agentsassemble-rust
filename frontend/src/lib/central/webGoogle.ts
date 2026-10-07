@@ -10,7 +10,7 @@ type PendingLogin = {
   authorizationCode?: string;
 };
 
-export async function startCentralWebGoogle(signal: AbortSignal): Promise<void> {
+export async function startCentralWebGoogle(signal: AbortSignal, onStarted?: (handoff: import("./identity").CentralGoogleHandoff) => void): Promise<void> {
   if (!isCentralWebEntry()) throw new Error("계정 페이지에서 로그인해 주세요.");
   const verifier = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const state = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
@@ -27,6 +27,7 @@ export async function startCentralWebGoogle(signal: AbortSignal): Promise<void> 
   const pending: PendingLogin = { handoffId: started.handoff_id, verifier, state, expiresAt: started.expires_at };
   // The verifier stays in this tab on the central origin, never in a URL or room host.
   sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+  onStarted?.(started);
   window.location.assign(url.toString());
 }
 

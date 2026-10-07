@@ -46,8 +46,40 @@ assert.equal((await post('/api/central-owner/directory',root)).rooms.length,1,'o
 const wrong = await RemoteTransport.connect(config.target,'owner');
 const stolen = await wrong.fetch('/api/central-owner/session',{method:'POST',headers,body:JSON.stringify({grant_token:config.grant,generation:config.target.generation,device:{device_name:'Other',browser:'Node',os:'test'}})});
 assert.equal(stolen.status,401); await stolen.text(); wrong.close();
-console.log(JSON.stringify({owner:owner.session_token,room:joined.session_token,channel:remote.hello.channel_id}));
+
+// The existing invitation, Joined transaction, reconnect selection and socket
+// owner all run over the same production encrypted transport for members.
+const invitation = await post('/api/central-owner/room-invite/create', {meeting_id:'secure-room',display_name:'Guest',invite_scope:'room',ttl_seconds:600,max_uses:2}, {authorization:`Bearer ${joined.session_token}`});
+assert.equal(new URL(invitation.join_url).pathname, '/member-join');
+assert.equal(new URL(invitation.join_url).searchParams.get('protocol'), 'secure_admission_v1');
+const memberDevice = 'aad1.B'.replace('.', '_') + 'A'.repeat(42);
+async function memberPost(channel,path,body) {
+  const response=await channel.fetch(path,{method:'POST',headers:{'content-type':'application/json','x-device-token':memberDevice},body:JSON.stringify(body)});
+  const value=await response.json(); assert.equal(response.status,200,`${path}: ${JSON.stringify(value)}`); return value;
+}
+const member=await RemoteTransport.connect(config.target,'member_admission');
+const challenge=await memberPost(member,'/api/room-invite/member-challenge',{invite_token:invitation.join_code});
+const preflight=await memberPost(member,'/api/room-invite/admission',{invite_token:invitation.join_code}); assert.equal(preflight.room_id,'secure-room');
+const memberJoined=await memberPost(member,'/api/room-invite/member-join',{invite_token:invitation.join_code,challenge_id:challenge.challenge_id,grant_token:'aamg1.'+'A'.repeat(43),request_id:crypto.randomUUID(),client_id:'secure-member-client'});
+assert.equal(memberJoined.status,'admitted');
+const wrongChannel=await member.fetch('/api/session-tickets/socket',{method:'POST',headers:{'x-device-token':config.device,authorization:`Bearer ${joined.session_token}`},body:'{}'});
+assert.equal(wrongChannel.status,401); await wrongChannel.text();
+const memberTicketResponse=await member.fetch('/api/session-tickets/socket',{method:'POST',headers:{'x-device-token':memberDevice,authorization:`Bearer ${memberJoined.session_token}`} });
+assert.equal(memberTicketResponse.status,200); const memberTicket=await memberTicketResponse.json();
+const memberSocket=member.openSocket(memberTicket.ticket);
+await new Promise((resolve,reject)=>{memberSocket.onopen=resolve;memberSocket.onerror=reject;});
+memberSocket.close(); member.close();
+const reconnect=await RemoteTransport.connect(config.target,'member_connect');
+const connectChallenge=await memberPost(reconnect,'/api/member-connect/challenge',{});
+const available=await memberPost(reconnect,'/api/member-connect/rooms',{challenge_id:connectChallenge.challenge_id,grant_token:'aamc1.'+'A'.repeat(43)});
+assert.equal(available.rooms[0].room_id,'secure-room');
+const selected=await memberPost(reconnect,'/api/member-connect/select',{challenge_id:connectChallenge.challenge_id,room_id:'secure-room',client_id:'secure-member-client'});
+assert.equal(selected.status,'admitted'); reconnect.close();
+const late=await RemoteTransport.connect(config.target,'owner');
+const lateResult=late.fetch('/api/central-owner/session',{method:'POST',headers,body:JSON.stringify({grant_token:config.late_grant,generation:config.target.generation,device:{device_name:'Late admission',browser:'Node',os:'test'}})}).then(()=>{throw new Error('late admission unexpectedly returned');},()=>{});
+console.log(JSON.stringify({owner:owner.session_token,room:joined.session_token,channel:remote.hello.channel_id,late_channel:late.hello.channel_id,late_key:late.hello.client_public_key}));
 await lines.next();
-socket.close(); remote.close();
+late.close(); socket.close(); remote.close();
+await lateResult;
 console.log('closed');
 process.exit(0);

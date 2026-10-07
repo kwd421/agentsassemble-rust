@@ -1,3 +1,4 @@
+import { remoteWorkspaceSnapshot } from "./lib/remote/remoteWorkspace";
 import { useCallback } from "react";
 import StartupIdentityGate from "./views/components/StartupIdentityGate";
 import "./styles/componentOrder";
@@ -19,7 +20,7 @@ export default function App({
   const finishStartup = useCallback(() => { void controller.refreshCentralDirectory(); }, [controller.refreshCentralDirectory]);
   if (controller.hostingRestriction || controller.centralDirectory?.status === "authentication-required" && !controller.guestJoinToken && !controller.guestSession && !controller.ownerProfileSession) return <StartupIdentityGate deviceToken={deviceToken} onComplete={finishStartup} />;
   return <>
-    {!isDesktopWebview() && <FrontendUpdateNotice connected={controller.canonicalRoom.connectionState === "connected"} />}
+    {!isDesktopWebview() && !remoteWorkspaceSnapshot() && <FrontendUpdateNotice connected={controller.canonicalRoom.connectionState === "connected"} />}
     <AppView controller={controller} />
   </>;
 }

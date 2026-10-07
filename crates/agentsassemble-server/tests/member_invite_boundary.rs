@@ -36,7 +36,8 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
     let (calls, mut received) = tokio::sync::mpsc::unbounded_channel();
     let worker = worker_router(key, server_id, issuer, calls);
     let cancellation = CancellationToken::new();
-    let worker_shutdown = cancellation.clone();
+    let worker_cancellation = CancellationToken::new();
+    let worker_shutdown = worker_cancellation.clone();
     let worker_task = tokio::spawn(async move {
         axum::serve(listener, worker)
             .with_graceful_shutdown(worker_shutdown.cancelled_owned())
@@ -99,6 +100,7 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
     assert_eq!(event.participant_id.as_deref(), first["agent_id"].as_str());
     cancellation.cancel();
     host_task.await??;
+    worker_cancellation.cancel();
     worker_task.await??;
     Ok(())
 }
@@ -229,6 +231,11 @@ fn worker_router(
         }
     });
     Router::new()
+        .route(
+            "/v1/servers/{server}/endpoint",
+            axum::routing::put(|| async { Json(json!({"status":"ok"})) })
+                .delete(|| async { Json(json!({"status":"ok"})) }),
+        )
         .route("/v1/servers/{server}/member-grants/redeem", handler.clone())
         .route("/v1/servers/{server}/member-connect-grants/redeem", handler)
 }

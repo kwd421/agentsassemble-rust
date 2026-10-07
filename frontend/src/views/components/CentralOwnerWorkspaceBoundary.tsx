@@ -1,3 +1,4 @@
+import { closeRemoteWorkspace, remoteSessionTransport, remoteWorkspaceSnapshot } from "../../lib/remote/remoteWorkspace";
 import { observeOwnerSessionRejection } from "../../lib/ownerSessionTransport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { centralAccountEntryUrl } from "../../lib/central/identity";
@@ -15,6 +16,7 @@ export default function CentralOwnerWorkspaceBoundary({ session, children }: { s
   }, []);
   useEffect(() => observeOwnerSessionRejection(session.sessionToken,
     () => onStatus({ state: "ended", reason: "disconnected" })), [session.sessionToken, onStatus]);
+  useEffect(() => remoteSessionTransport(session.sessionToken)?.onClose(() => onStatus({ state: "ended", reason: "disconnected" })), [session.sessionToken, onStatus]);
   const context = useMemo(() => ({ session, onStatus }), [session, onStatus]);
   const ended = status?.state === "ended";
   return <CentralOwnerWorkspaceContext.Provider value={context}>
@@ -23,7 +25,7 @@ export default function CentralOwnerWorkspaceBoundary({ session, children }: { s
   </CentralOwnerWorkspaceContext.Provider>;
 }
 
-function EndedWorkspace({ reason }: { reason: "revoked" | "disconnected" | "unavailable" }) {
+export function EndedWorkspace({ reason }: { reason: "revoked" | "disconnected" | "unavailable" }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const element = dialog.current;
@@ -40,7 +42,7 @@ function EndedWorkspace({ reason }: { reason: "revoked" | "disconnected" | "unav
           ? "호스트에서 이 기기의 연결을 해제했어요."
           : reason === "disconnected" ? "호스트와의 연결이 끊겼어요."
           : "서버 접속 권한을 확인하지 못했어요."} 내 서버 목록에서 다시 연결해 주세요.</p>
-        {centralAccountEntryUrl() && <a className="ops-button" href={centralAccountEntryUrl()}>내 서버 목록으로</a>}
+        {centralAccountEntryUrl() && <a className="ops-button" href={centralAccountEntryUrl()} onClick={event => { if (remoteWorkspaceSnapshot()) { event.preventDefault(); closeRemoteWorkspace(); } }}>내 서버 목록으로</a>}
       </main>
     </dialog>;
 }

@@ -101,6 +101,12 @@ impl OwnerSessionLifetimes {
         })
     }
 
+    pub(crate) fn disconnect(&self, fingerprint: &[u8; 32]) {
+        if let Some(entry) = self.0.lock().get(fingerprint) {
+            entry.cancel.cancel();
+        }
+    }
+
     /// Called only with the fingerprints returned by committed host revocation.
     pub(crate) fn revoke(&self, fingerprints: &[[u8; 32]]) {
         let entries = self.0.lock();
