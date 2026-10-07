@@ -113,8 +113,10 @@ pub(crate) async fn redeem(
     let identity = state
         .central_directory
         .member_admission(
-            &state.central_host_identity,
-            &state.store,
+            crate::central::directory::RedeemHost {
+                identity: &state.central_host_identity,
+                store: &state.store,
+            },
             &body.grant_token,
             &URL_SAFE_NO_PAD.encode(Sha256::digest(body.challenge_id.as_bytes())),
             &entry.epoch,

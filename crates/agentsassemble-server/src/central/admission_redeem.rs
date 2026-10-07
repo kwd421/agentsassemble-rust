@@ -1,4 +1,13 @@
-use super::*;
+use super::{
+    CentralDirectory, CentralDirectoryError, CentralHostIdentity, Deserialize, Digest, Method,
+    Serialize, SqliteStore, json, send_signed,
+};
+
+#[derive(Clone, Copy)]
+pub(crate) struct RedeemHost<'a> {
+    pub identity: &'a CentralHostIdentity,
+    pub store: &'a SqliteStore,
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,14 +40,14 @@ pub(crate) struct MemberAdmissionResponse {
 impl CentralDirectory {
     pub(crate) async fn member_admission(
         &self,
-        identity: &CentralHostIdentity,
-        store: &SqliteStore,
+        host: RedeemHost<'_>,
         grant: &str,
         challenge_hash: &str,
         epoch: &str,
         purpose: MemberGrantPurpose,
         secure: Option<&crate::secure_client::SecureClient>,
     ) -> Result<MemberAdmissionResponse, CentralDirectoryError> {
+        let RedeemHost { identity, store } = host;
         let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
         let (prefix, route) = match purpose {
             MemberGrantPurpose::Admission => ("aamg1.", "member-grants"),
@@ -62,7 +71,7 @@ impl CentralDirectory {
                         MemberGrantPurpose::Connect => "connect",
                     },
                 )
-                .map_err(|_| CentralDirectoryError::Rejected)?;
+                .map_err(|()| CentralDirectoryError::Rejected)?;
         }
         let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
         let mut value: serde_json::Value =
@@ -76,7 +85,7 @@ impl CentralDirectory {
                         MemberGrantPurpose::Connect => "connect",
                     },
                 )
-                .map_err(|_| CentralDirectoryError::InvalidResponse)?;
+                .map_err(|()| CentralDirectoryError::InvalidResponse)?;
             for field in ["protocol", "client_public_key", "channel_id", "purpose"] {
                 value
                     .as_object_mut()
@@ -104,14 +113,14 @@ impl CentralDirectory {
 
     pub(crate) async fn owner_admission(
         &self,
-        identity: &CentralHostIdentity,
-        store: &SqliteStore,
+        host: RedeemHost<'_>,
         credential: &str,
         origin: &str,
         generation: i64,
         device: &[u8; 32],
         secure: Option<&crate::secure_client::SecureClient>,
     ) -> Result<agentsassemble_persistence::OwnerAdmission, CentralDirectoryError> {
+        let RedeemHost { identity, store } = host;
         let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
         let path = format!("/v1/servers/{}/connect-grants/redeem", identity.server_id());
         let mut body = json!({ "grant_token": credential, "origin": origin,
@@ -119,7 +128,7 @@ impl CentralDirectory {
         if let Some(secure) = secure {
             secure
                 .add_redeem_fields(&mut body, "owner")
-                .map_err(|_| CentralDirectoryError::Rejected)?;
+                .map_err(|()| CentralDirectoryError::Rejected)?;
         }
         let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
         let mut value: serde_json::Value =
@@ -127,7 +136,7 @@ impl CentralDirectory {
         if let Some(secure) = secure {
             secure
                 .verify_echo(&value, "owner")
-                .map_err(|_| CentralDirectoryError::InvalidResponse)?;
+                .map_err(|()| CentralDirectoryError::InvalidResponse)?;
             if value["registration_epoch"] != secure.hello().registration_epoch {
                 return Err(CentralDirectoryError::InvalidResponse);
             }

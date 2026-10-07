@@ -84,6 +84,22 @@ pub(crate) fn routes() -> Router<AppState> {
         .layer(exact_tauri_cors([Method::POST]))
 }
 
+fn member_join_url(
+    state: &AppState,
+    epoch: Option<&str>,
+    public_url: &str,
+    code: &str,
+) -> Result<String, InviteManagerHttpError> {
+    if let Some(epoch) = epoch {
+        state
+            .central_directory
+            .member_entry_url(state.central_host_identity.server_id(), epoch, code)
+            .map_err(|_| InviteManagerHttpError::internal())
+    } else {
+        Ok(format!("{public_url}/join?token={code}"))
+    }
+}
+
 async fn create_invite(
     State(state): State<AppState>,
     request: Request,
@@ -143,22 +159,12 @@ async fn create_invite(
             expires_at,
         })?;
     let epoch = state.store.registration_epoch().await?;
-    let join_url = if let Some(epoch) = &epoch {
-        state
-            .central_directory
-            .member_entry_url(
-                state.central_host_identity.server_id(),
-                epoch,
-                credentials.join_code(),
-            )
-            .map_err(|_| InviteManagerHttpError::internal())?
-    } else {
-        format!(
-            "{}/join?token={}",
-            ingress.public_url,
-            credentials.join_code()
-        )
-    };
+    let join_url = member_join_url(
+        &state,
+        epoch.as_deref(),
+        &ingress.public_url,
+        credentials.join_code(),
+    )?;
     let invite = state
         .store
         .create_human_invite_for_manager(

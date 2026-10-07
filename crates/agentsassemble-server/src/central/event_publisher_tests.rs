@@ -1,3 +1,4 @@
+use super::super::{CentralDirectory, StatusCode};
 use super::*;
 use axum::{Router, body::Bytes, extract::Path, routing::any};
 
@@ -12,33 +13,7 @@ async fn idle_directory_has_no_timer_wakes_and_failure_retries_keep_generation()
         store.set_registration_epoch(Some("event-epoch")).await?;
         let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
         let (tx, mut requests) = tokio::sync::mpsc::unbounded_channel();
-        let app = Router::new().route(
-            "/v1/servers/{id}/{operation}",
-            any(
-                move |Path((_, operation)): Path<(String, String)>,
-                      method: axum::http::Method,
-                      bytes: Bytes| {
-                    let tx = tx.clone();
-                    async move {
-                        let value: serde_json::Value =
-                            serde_json::from_slice(&bytes).unwrap_or_else(|_| panic!("JSON"));
-                        let fail = fail_online
-                            && operation == "endpoint"
-                            && method == axum::http::Method::PUT;
-                        tx.send((operation, method, value))
-                            .unwrap_or_else(|_| panic!("capture"));
-                        (
-                            if fail {
-                                StatusCode::SERVICE_UNAVAILABLE
-                            } else {
-                                StatusCode::OK
-                            },
-                            axum::Json(json!({"status":"ok"})),
-                        )
-                    }
-                },
-            ),
-        );
+        let app = capture_requests(tx, fail_online);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let directory =
             CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
@@ -90,7 +65,7 @@ async fn idle_directory_has_no_timer_wakes_and_failure_retries_keep_generation()
         }
         let before = *probe.borrow();
         tokio::time::pause();
-        tokio::time::advance(Duration::from_secs(3600)).await;
+        tokio::time::advance(Duration::from_hours(1)).await;
         tokio::task::yield_now().await;
         assert_eq!(
             *probe.borrow(),
@@ -118,4 +93,36 @@ async fn idle_directory_has_no_timer_wakes_and_failure_retries_keep_generation()
         http.await??;
     }
     Ok(())
+}
+
+fn capture_requests(
+    tx: tokio::sync::mpsc::UnboundedSender<(String, Method, serde_json::Value)>,
+    fail_online: bool,
+) -> Router {
+    Router::new().route(
+        "/v1/servers/{id}/{operation}",
+        any(
+            move |Path((_, operation)): Path<(String, String)>,
+                  method: axum::http::Method,
+                  bytes: Bytes| {
+                let tx = tx.clone();
+                async move {
+                    let value: serde_json::Value =
+                        serde_json::from_slice(&bytes).unwrap_or_else(|_| panic!("JSON"));
+                    let fail =
+                        fail_online && operation == "endpoint" && method == axum::http::Method::PUT;
+                    tx.send((operation, method, value))
+                        .unwrap_or_else(|_| panic!("capture"));
+                    (
+                        if fail {
+                            StatusCode::SERVICE_UNAVAILABLE
+                        } else {
+                            StatusCode::OK
+                        },
+                        axum::Json(json!({"status":"ok"})),
+                    )
+                }
+            },
+        ),
+    )
 }

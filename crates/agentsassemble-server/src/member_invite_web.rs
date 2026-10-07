@@ -38,6 +38,14 @@ enum ChallengePurpose {
     Connect(std::sync::Arc<tokio::sync::Mutex<connect::ConnectState>>),
 }
 
+#[derive(Clone, Copy)]
+struct AdmissionClaim<'a> {
+    invite: [u8; 32],
+    browser: [u8; 32],
+    epoch: &'a str,
+    secure: Option<&'a agentsassemble_persistence::SecureSessionBinding>,
+}
+
 impl MemberChallenges {
     fn issue(
         &self,
@@ -98,13 +106,16 @@ impl MemberChallenges {
     fn claim(
         &self,
         id: &str,
-        invite: [u8; 32],
-        browser: [u8; 32],
-        epoch: &str,
+        binding: AdmissionClaim<'_>,
         now: DateTime<Utc>,
         request_hash: [u8; 32],
-        secure: Option<&agentsassemble_persistence::SecureSessionBinding>,
     ) -> Result<Challenge, HumanInviteHttpError> {
+        let AdmissionClaim {
+            invite,
+            browser,
+            epoch,
+            secure,
+        } = binding;
         let mut entries = self.0.lock();
         let challenge = entries.get_mut(id).ok_or_else(invalid_challenge)?;
         if (challenge.redeeming
@@ -278,12 +289,14 @@ async fn redeem_member(
         .ok_or_else(invalid_challenge)?;
     let challenge = state.member_challenges.claim(
         &body.challenge_id,
-        Sha256::digest(body.invite_token.trim().as_bytes()).into(),
-        browser,
-        &epoch,
+        AdmissionClaim {
+            invite: Sha256::digest(body.invite_token.trim().as_bytes()).into(),
+            browser,
+            epoch: &epoch,
+            secure: client.map(crate::secure_client::SecureClient::binding),
+        },
         Utc::now(),
         request_hash,
-        client.map(crate::secure_client::SecureClient::binding),
     )?;
     if let Some((_, member)) = challenge.completed {
         return Ok(member);
@@ -292,8 +305,10 @@ async fn redeem_member(
     let redeemed = state
         .central_directory
         .member_admission(
-            &state.central_host_identity,
-            &state.store,
+            crate::central::directory::RedeemHost {
+                identity: &state.central_host_identity,
+                store: &state.store,
+            },
             &body.grant_token,
             &hash,
             &epoch,
@@ -362,13 +377,33 @@ mod tests {
         for presented in [None, Some(&other)] {
             assert!(
                 challenges
-                    .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], presented)
+                    .claim(
+                        &id,
+                        AdmissionClaim {
+                            invite: [1; 32],
+                            browser: [2; 32],
+                            epoch: "epoch",
+                            secure: presented
+                        },
+                        now,
+                        [0; 32]
+                    )
                     .is_err()
             );
         }
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], Some(&binding))
+                .claim(
+                    &id,
+                    AdmissionClaim {
+                        invite: [1; 32],
+                        browser: [2; 32],
+                        epoch: "epoch",
+                        secure: Some(&binding)
+                    },
+                    now,
+                    [0; 32]
+                )
                 .is_ok()
         );
     }
@@ -387,23 +422,63 @@ mod tests {
         ] {
             assert!(
                 challenges
-                    .claim(&id, invite, browser, epoch, now, [0; 32], None)
+                    .claim(
+                        &id,
+                        AdmissionClaim {
+                            invite,
+                            browser,
+                            epoch,
+                            secure: None
+                        },
+                        now,
+                        [0; 32]
+                    )
                     .is_err()
             );
         }
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", expires, [0; 32], None)
+                .claim(
+                    &id,
+                    AdmissionClaim {
+                        invite: [1; 32],
+                        browser: [2; 32],
+                        epoch: "epoch",
+                        secure: None
+                    },
+                    expires,
+                    [0; 32]
+                )
                 .is_err()
         );
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], None)
+                .claim(
+                    &id,
+                    AdmissionClaim {
+                        invite: [1; 32],
+                        browser: [2; 32],
+                        epoch: "epoch",
+                        secure: None
+                    },
+                    now,
+                    [0; 32]
+                )
                 .is_ok()
         );
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], None)
+                .claim(
+                    &id,
+                    AdmissionClaim {
+                        invite: [1; 32],
+                        browser: [2; 32],
+                        epoch: "epoch",
+                        secure: None
+                    },
+                    now,
+                    [0; 32]
+                )
                 .is_err()
         );
         for _ in 1..CHALLENGE_LIMIT {
@@ -441,7 +516,17 @@ mod tests {
             tasks.push(tokio::spawn(async move {
                 barrier.wait().await;
                 challenges
-                    .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], None)
+                    .claim(
+                        &id,
+                        AdmissionClaim {
+                            invite: [1; 32],
+                            browser: [2; 32],
+                            epoch: "epoch",
+                            secure: None,
+                        },
+                        now,
+                        [0; 32],
+                    )
                     .is_ok()
             }));
         }

@@ -95,8 +95,10 @@ async fn exchange(
     let admission = state
         .central_directory
         .owner_admission(
-            &state.central_host_identity,
-            &state.store,
+            crate::central::directory::RedeemHost {
+                identity: &state.central_host_identity,
+                store: &state.store,
+            },
             &body.grant_token,
             &origin,
             body.generation,
@@ -113,13 +115,13 @@ async fn exchange(
     state
         .owner_sessions
         .admit(&state, session.authorization.clone())?;
-    if let Some(client) = &client {
-        if let Err(error) = client.adopt(&state, Some(&session.authorization)) {
-            state
-                .owner_sessions
-                .disconnect(session.authorization.fingerprint());
-            return Err(error.into());
-        }
+    if let Some(client) = &client
+        && let Err(error) = client.adopt(&state, Some(&session.authorization))
+    {
+        state
+            .owner_sessions
+            .disconnect(session.authorization.fingerprint());
+        return Err(error.into());
     }
     Ok(Json(agentsassemble_protocol::CentralOwnerSessionGrant {
         session_token: session.session_bearer,

@@ -82,14 +82,8 @@ pub(crate) async fn admit(
     let (binding, identity) =
         crate::human_admission_identity::resolve_member_identity(tx, member, now).await?;
     let participant = &identity.participant_id;
-    if let Some(current) =
-        crate::participant_rows::load_participant_by_key(tx, &invite.room_id, participant).await?
-        && current.status != ParticipantStatus::Joined
-    {
-        return Ok(denied(match current.status {
-            ParticipantStatus::Left | ParticipantStatus::Kicked => Rejection::MemberMembershipEnded,
-            _ => Rejection::SessionUnavailable,
-        }));
+    if let Some(reason) = membership_rejection(tx, &invite.room_id, participant).await? {
+        return Ok(denied(reason));
     }
     let input_hash = canonical_input_hash(&binding, &invite)?;
     let previous =
@@ -158,6 +152,24 @@ pub(crate) async fn admit(
             deduplicated: false,
         },
     )))
+}
+
+async fn membership_rejection(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    participant: &str,
+) -> Result<Option<Rejection>, PersistenceError> {
+    Ok(
+        crate::participant_rows::load_participant_by_key(tx, room_id, participant)
+            .await?
+            .and_then(|current| match current.status {
+                ParticipantStatus::Joined => None,
+                ParticipantStatus::Left | ParticipantStatus::Kicked => {
+                    Some(Rejection::MemberMembershipEnded)
+                }
+                _ => Some(Rejection::SessionUnavailable),
+            }),
+    )
 }
 
 // Device, request UUID and name snapshot do not change the admission authority.

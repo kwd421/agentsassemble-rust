@@ -20,7 +20,7 @@ mod admission_redeem;
 mod event_publisher;
 #[path = "member_sync.rs"]
 mod member_sync;
-pub(crate) use admission_redeem::MemberGrantPurpose;
+pub(crate) use admission_redeem::{MemberGrantPurpose, RedeemHost};
 
 #[cfg(test)]
 #[path = "directory_terminal_tests.rs"]
@@ -429,8 +429,10 @@ mod tests {
             assert!(
                 directory
                     .owner_admission(
-                        &identity,
-                        &store,
+                        super::RedeemHost {
+                            identity: &identity,
+                            store: &store
+                        },
                         "grant",
                         "https://host.example",
                         1,

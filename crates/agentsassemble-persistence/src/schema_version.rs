@@ -171,15 +171,11 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .await?;
     }
     tx.commit().await?;
-    crate::member_schema::upgrade(pool).await?;
-    upgrade_display_metadata(pool, &version).await?;
-    crate::secure_session::upgrade(pool, &version).await
+    upgrade_member_schema(pool, &version).await
 }
 
-async fn upgrade_display_metadata(
-    pool: &SqlitePool,
-    version: &str,
-) -> Result<(), PersistenceError> {
+async fn upgrade_member_schema(pool: &SqlitePool, version: &str) -> Result<(), PersistenceError> {
+    crate::member_schema::upgrade(pool).await?;
     crate::member_projection::upgrade(pool, version).await?;
     if version.parse::<i64>().is_ok_and(|version| version < 85) {
         let mut tx = pool.begin().await?;
@@ -190,7 +186,7 @@ async fn upgrade_display_metadata(
             .await?;
         tx.commit().await?;
     }
-    Ok(())
+    crate::secure_session::upgrade(pool, version).await
 }
 
 // Turn custody upgrades share the receipt and immutable-input routing boundary.
