@@ -17,6 +17,18 @@ Decide ambient-proxy exclusion only from an explicit credential/proxy policy and
 operating evidence. A future caller-selected Custom API endpoint has a separate SSRF
 owner and cannot inherit this fixed-host decision.
 
+## Secure remote owner continuation (2026-10-07)
+
+The shared server-computer picker and stopped-session settings remain available to
+an admitted central owner. List, import and fixed-path safe thumbnail reads use the
+existing persona service through the encrypted owner channel, with explicit root
+owner-session authorization and current device/generation checks. Local desktop
+access retains one-use local-operator tickets and private routes. No member, plain
+HTTP owner bearer, cross-channel bearer or inherited local credential can authorize
+the remote library. Import format, bounds, atomic replacement and prompt semantics
+remain owned by the existing library. Exercise actual encrypted list/import/thumbnail
+and denied member/plaintext/cross-channel requests alongside local persona tests.
+
 ## Verified original behavior
 
 The authority baseline is reachable code at original commit

@@ -269,7 +269,7 @@ async fn json_body(response: reqwest::Response) -> Value {
         .unwrap_or_else(|error| panic!("decode persona response: {error}"))
 }
 
-fn png_card() -> Vec<u8> {
+pub(super) fn png_card() -> Vec<u8> {
     let card = json!({
         "spec": "chara_card_v3",
         "spec_version": "3.0",

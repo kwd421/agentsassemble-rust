@@ -21,6 +21,14 @@ const owner = await post('/api/central-owner/session', { grant_token:config.gran
   device:{device_name:'Encrypted test',browser:'Node WebCrypto',os:'test'} });
 const root = {session_token:owner.session_token,generation:config.target.generation};
 const directory = await post('/api/central-owner/directory', root); assert.equal(directory.rooms.length, 0);
+const personaHeaders = {authorization:`Bearer ${owner.session_token}`, 'x-central-generation':String(config.target.generation), 'x-device-token':config.device};
+const imported = await post('/api/central-owner/personas/import', {filename:'Harbor Guide.png',data_base64:config.persona_png}, personaHeaders);
+assert.equal(imported.persona.id, 'Harbor-Guide');
+const personas = await remote.fetch('/api/central-owner/personas', {headers:personaHeaders});
+assert.equal(personas.status,200); assert.equal((await personas.json()).items[0].id,'Harbor-Guide');
+const thumbnail = await remote.fetch('/api/central-owner/personas/Harbor-Guide/thumbnail', {headers:personaHeaders});
+assert.equal(thumbnail.status,200); assert.equal(thumbnail.headers.get('cache-control'),'private, no-store');
+assert.deepEqual([...new Uint8Array(await thumbnail.arrayBuffer()).slice(0,8)], [137,80,78,71,13,10,26,10]);
 const created = await post('/api/central-owner/rooms', {...root, request_id:crypto.randomUUID(),room_id:'secure-room',label:'Encrypted room'});
 const listing = await post('/api/central-owner/directory',root);
 assert.equal(listing.rooms.length,1);
@@ -62,6 +70,12 @@ const challenge=await memberPost(member,'/api/room-invite/member-challenge',{inv
 const preflight=await memberPost(member,'/api/room-invite/admission',{invite_token:invitation.join_code}); assert.equal(preflight.room_id,'secure-room');
 const memberJoined=await memberPost(member,'/api/room-invite/member-join',{invite_token:invitation.join_code,challenge_id:challenge.challenge_id,grant_token:'aamg1.'+'A'.repeat(43),request_id:crypto.randomUUID(),client_id:'secure-member-client'});
 assert.equal(memberJoined.status,'admitted');
+for (const credential of [memberJoined.session_token, owner.session_token]) {
+  for (const path of ['/api/central-owner/personas','/api/central-owner/personas/Harbor-Guide/thumbnail','/api/central-owner/personas/import']) {
+    const rejected = await member.fetch(path, { method:path.endsWith('/import')?'POST':'GET', headers:{...personaHeaders,authorization:`Bearer ${credential}`} });
+    assert.equal(rejected.status,401); await rejected.text();
+  }
+}
 const wrongChannel=await member.fetch('/api/session-tickets/socket',{method:'POST',headers:{'x-device-token':config.device,authorization:`Bearer ${joined.session_token}`},body:'{}'});
 assert.equal(wrongChannel.status,401); await wrongChannel.text();
 const memberTicketResponse=await member.fetch('/api/session-tickets/socket',{method:'POST',headers:{'x-device-token':memberDevice,authorization:`Bearer ${memberJoined.session_token}`} });

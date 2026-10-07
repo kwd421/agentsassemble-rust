@@ -47,6 +47,9 @@ registered_routes! {
         private "/api/personas" => get(list_personas),
         private "/api/personas/import" => post(import_persona),
         private "/api/personas/{persona_id}/thumbnail" => get(persona_thumbnail),
+        secure_remote "/api/central-owner/personas" => get(list_personas),
+        secure_remote "/api/central-owner/personas/import" => post(import_persona),
+        secure_remote "/api/central-owner/personas/{persona_id}/thumbnail" => get(persona_thumbnail),
     }
 }
 
@@ -54,7 +57,13 @@ async fn list_personas(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, PersonaHttpError> {
-    authorize(&state, request.headers()).await?;
+    authorize(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        request.uri().path().starts_with("/api/central-owner/"),
+    )
+    .await?;
     ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
         .await
         .map_err(PersonaHttpError::from_body)?;
@@ -65,7 +74,13 @@ async fn import_persona(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, PersonaHttpError> {
-    authorize(&state, request.headers()).await?;
+    authorize(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        request.uri().path().starts_with("/api/central-owner/"),
+    )
+    .await?;
     let permit = import_admission()
         .acquire()
         .await
@@ -123,7 +138,13 @@ async fn persona_thumbnail(
     Path(persona_id): Path<String>,
     request: Request,
 ) -> Result<Response, PersonaHttpError> {
-    authorize(&state, request.headers()).await?;
+    authorize(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        request.uri().path().starts_with("/api/central-owner/"),
+    )
+    .await?;
     ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
         .await
         .map_err(PersonaHttpError::from_body)?;
@@ -142,7 +163,22 @@ async fn persona_thumbnail(
 async fn authorize(
     state: &AppState,
     headers: &axum::http::HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
+    remote: bool,
 ) -> Result<(), PersonaHttpError> {
+    if remote {
+        if origin.is_none_or(|origin| origin.secure.is_none()) {
+            return Err(PersonaHttpError::unauthorized());
+        }
+        crate::central::owner_web::owner_from_session_headers(state, headers, origin)
+            .await
+            .map_err(|error| PersonaHttpError {
+                status: error.status,
+                code: error.code,
+                message: error.message.to_owned(),
+            })?;
+        return Ok(());
+    }
     consume_local_operator(state, headers)
         .await
         .ok_or_else(PersonaHttpError::unauthorized)?;

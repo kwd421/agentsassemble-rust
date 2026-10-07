@@ -43,39 +43,14 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
         .spawn()?;
     let mut input = peer.stdin.take().ok_or("stdin")?;
     let mut output = BufReader::new(peer.stdout.take().ok_or("stdout")?).lines();
-    input.write_all(format!("{}\n",json!({"proxy":proxy_address.to_string(),"device":DEVICE,"grant":TOKEN,"late_grant":SECOND_TOKEN,"target":{
+    input.write_all(format!("{}\n",json!({"proxy":proxy_address.to_string(),"device":DEVICE,"grant":TOKEN,"late_grant":SECOND_TOKEN,"persona_png":base64::engine::general_purpose::STANDARD.encode(super::super::persona_library_boundary::png_card()),"target":{
         "server_id":info["server_id"],"registration_epoch":"secure-test-epoch","origin":ORIGIN,"generation":generation,
         "host_public_key_jwk":info["host_public_key_jwk"],"host_key_fingerprint":info["host_key_fingerprint"]}})).as_bytes()).await?;
     let completed = tokio::time::timeout(Duration::from_secs(30), output.next_line())
         .await??
         .ok_or("peer failed")?;
     let credentials: Value = serde_json::from_str(&completed)?;
-    let stolen = post(
-        &fixture.client,
-        fixture.address,
-        "/api/central-owner/directory",
-        json!({"session_token":credentials["owner"],"generation":generation}),
-        ORIGIN,
-        DEVICE,
-    )
-    .await;
-    assert_eq!(stolen.status(), StatusCode::UNAUTHORIZED);
-    let stolen_room = fixture
-        .client
-        .post(format!(
-            "http://{}/api/session-tickets/socket",
-            fixture.address
-        ))
-        .header("host", "owner.example.test")
-        .header("x-forwarded-proto", "https")
-        .header("x-agentsassemble-proxy-token", SECRET)
-        .header("origin", ORIGIN)
-        .header("x-device-token", DEVICE)
-        .bearer_auth(credentials["room"].as_str().ok_or("room")?)
-        .json(&json!({"device":{"device_name":"Stolen","browser":"Node","os":"test"}}))
-        .send()
-        .await?;
-    assert_eq!(stolen_room.status(), StatusCode::UNAUTHORIZED);
+    verify_plaintext_denial(&fixture, &credentials, generation).await?;
     tokio::time::timeout(
         Duration::from_secs(5),
         fixture.worker_state.late_started.notified(),
@@ -203,5 +178,55 @@ async fn verify_late_admission(
             .is_err(),
         "accepted late admission was cancelled instead of committed and disconnected"
     );
+    Ok(())
+}
+
+async fn verify_plaintext_denial(
+    fixture: &Fixture,
+    credentials: &Value,
+    generation: i64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let stolen = post(
+        &fixture.client,
+        fixture.address,
+        "/api/central-owner/directory",
+        json!({"session_token":credentials["owner"],"generation":generation}),
+        ORIGIN,
+        DEVICE,
+    )
+    .await;
+    assert_eq!(stolen.status(), StatusCode::UNAUTHORIZED);
+    let stolen_room = fixture
+        .client
+        .post(format!(
+            "http://{}/api/session-tickets/socket",
+            fixture.address
+        ))
+        .header("host", "owner.example.test")
+        .header("x-forwarded-proto", "https")
+        .header("x-agentsassemble-proxy-token", SECRET)
+        .header("origin", ORIGIN)
+        .header("x-device-token", DEVICE)
+        .bearer_auth(credentials["room"].as_str().ok_or("room")?)
+        .json(&json!({"device":{"device_name":"Stolen","browser":"Node","os":"test"}}))
+        .send()
+        .await?;
+    assert_eq!(stolen_room.status(), StatusCode::UNAUTHORIZED);
+    let persona = fixture
+        .client
+        .get(format!(
+            "http://{}/api/central-owner/personas",
+            fixture.address
+        ))
+        .header("host", "owner.example.test")
+        .header("x-forwarded-proto", "https")
+        .header("x-agentsassemble-proxy-token", SECRET)
+        .header("origin", ORIGIN)
+        .header("x-device-token", DEVICE)
+        .header("x-central-generation", generation)
+        .bearer_auth(credentials["owner"].as_str().ok_or("owner")?)
+        .send()
+        .await?;
+    assert_eq!(persona.status(), StatusCode::UNAUTHORIZED);
     Ok(())
 }
