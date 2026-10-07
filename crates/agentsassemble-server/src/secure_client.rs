@@ -26,6 +26,7 @@ struct Custody {
     admitted: AtomicBool,
     owner: Mutex<Option<OwnerSessionLease>>,
     closed: CancellationToken,
+    adopted: tokio::sync::Notify,
 }
 
 impl SecureClient {
@@ -42,6 +43,7 @@ impl SecureClient {
             admitted: AtomicBool::new(false),
             owner: Mutex::new(None),
             closed: CancellationToken::new(),
+            adopted: tokio::sync::Notify::new(),
         })))
     }
 
@@ -82,7 +84,32 @@ impl SecureClient {
             *lease = Some(state.owner_sessions.retain(owner)?);
         }
         self.0.admitted.store(true, Ordering::Release);
+        self.0.adopted.notify_one();
         Ok(())
+    }
+
+    pub(crate) async fn owner_ended(&self) {
+        loop {
+            let changed = self.0.adopted.notified();
+            let status = self
+                .0
+                .owner
+                .lock()
+                .as_ref()
+                .map(|lease| lease.status.clone());
+            if let Some(mut status) = status {
+                let _ = status
+                    .wait_for(|value| {
+                        matches!(
+                            value,
+                            agentsassemble_protocol::CentralOwnerSessionStatus::Ended { .. }
+                        )
+                    })
+                    .await;
+                return;
+            }
+            changed.await;
+        }
     }
 
     pub(crate) fn add_redeem_fields(&self, body: &mut Value, purpose: &str) -> Result<(), ()> {
