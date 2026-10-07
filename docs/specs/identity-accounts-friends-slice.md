@@ -1,5 +1,38 @@
 # Identity, accounts, friends and human admission
 
+## Central GENERAL exhaustion correction (2026-10-07)
+
+Required behavior: idle desktop hosts, another owner computer, and remote room
+pages with the agent-add dialog must not exhaust central capacity by keeping a
+directory observer open. Affected entry points are `useCentralDirectory`, desktop
+startup/rail, remote-owner dialog directory loading, and explicit rail open/refresh.
+Keep signed authentication, fresh bootstrap before admission, one in-flight request,
+account isolation, cancellation, visible outage/authentication states, automatic
+recovery, and host-owned connected sessions. No Worker, schema, replay-protection,
+deployment, or production D1 changes are authorized here.
+
+The shared observer checks a healthy directory every 30 minutes instead of every
+30 seconds. Transient retries use 1/2/4/8/... seconds up to 30 minutes; successful
+checks reset backoff. Existing online events and explicit user refresh wake the
+same observer immediately. Directory changes/outages can take up to 30 minutes to
+appear when idle; host room streams and explicit admission checks remain immediate.
+This supersedes the step-1 30-second observation/backoff contract below. One idle
+client now schedules 48 rather than 2,880 checks/day (144 rather than 8,640 GENERAL
+nonce units at three units/check), plus initial/event/action checks. This is only a
+client mitigation: the global 700-unit pool still needs a separately approved
+Worker design fix. Existing host endpoint renewal remains five minutes (ENDPOINT),
+default-name publication remains revision/event-driven (GENERAL; failed sends
+back off 2/4/8/16/32 seconds), and durable member-sync retry remains
+1/2/4/8/... minutes up to six hours with 80-120% jitter, at most 48 sends/day
+(successful acknowledgements impose a one-minute gap).
+
+Acceptance: demonstrate pre-fix failure through bootstrap boundary responses under
+controlled time; verify bounded idle checks, delayed automatic outage recovery,
+fresh explicit refresh, 401 termination, stale-account rejection, unmount
+cancellation, and remote-owner dialog naming. Run affected frontend tests/build
+and mandatory architecture/source-growth gates; commit only scoped client changes,
+with no push. Production recovery and packaged acceptance remain unverified.
+
 ## 시작 실패 안내 보정 (2026-10-07)
 
 공용 desktop/web StartupIdentityGate와 StartupIdentityBoundary는 한국어 해요체 안내를

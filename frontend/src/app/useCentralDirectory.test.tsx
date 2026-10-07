@@ -20,7 +20,8 @@ it("shows cached display only during outage, caps backoff and automatically repl
   const { result, unmount } = renderHook(() => useCentralDirectory());
   await act(async () => { await result.current.refresh(); });
   expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", servers: [server], live: null });
-  for (const delay of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+  for (const delay of [1000, 2000, 4000, 8000, 16000, 32000, 64000,
+    128000, 256000, 512000, 1024000, 1800000, 1800000]) {
     const calls = mocks.bootstrap.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(delay - 1); });
     expect(mocks.bootstrap).toHaveBeenCalledTimes(calls);
@@ -120,4 +121,60 @@ it("retains saved servers on the first WebKit timeout and retries in the backgro
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
   expect(result.current.directory?.status).toBe("connected");
+});
+
+it("keeps an idle directory within capacity and still refreshes before explicit actions", async () => {
+  vi.useFakeTimers();
+  mocks.session = { token: "session", person };
+  saveCentralDirectoryCache(person.person_id, [server]);
+  let units = 0;
+  let alias = server.alias;
+  mocks.bootstrap.mockImplementation(async () => {
+    units += 3;
+    if (units > 700) throw new CentralTemporaryError("temporary_capacity_exhausted");
+    return { person, servers: [{ ...server, alias }], server_time: 1 };
+  });
+  const { result, unmount } = renderHook(() => useCentralDirectory(true));
+  await act(async () => {});
+  expect(result.current.directory).toMatchObject({ status: "connected", servers: [{ alias: server.alias }] });
+  alias = "Updated remotely";
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(result.current.directory?.servers[0].alias).toBe(server.alias);
+  await act(async () => { await vi.advanceTimersByTimeAsync(30 * 60_000 - 30_000); });
+  expect(result.current.directory?.servers[0].alias).toBe(alias);
+  // Walk a UTC-day's idle observer in separate acts so React installs each timer.
+  for (let check = 1; check < 48; check++) {
+    await act(async () => { await vi.advanceTimersByTimeAsync(30 * 60_000); });
+  }
+  expect(result.current.directory?.status).toBe("connected");
+  expect(units).toBeLessThan(700);
+  alias = "Fresh before connecting";
+  await act(async () => { await result.current.refresh(); });
+  expect(result.current.directory?.live?.servers[0].alias).toBe(alias);
+  unmount();
+  const finalUnits = units;
+  await vi.advanceTimersByTimeAsync(30 * 60_000);
+  window.dispatchEvent(new Event("online"));
+  expect(units).toBe(finalUnits);
+});
+
+it("backs off capacity failures beyond 30 seconds and automatically recovers", async () => {
+  vi.useFakeTimers();
+  mocks.session = { token: "session", person };
+  saveCentralDirectoryCache(person.person_id, [server]);
+  mocks.bootstrap.mockRejectedValue(new CentralTemporaryError("temporary_capacity_exhausted"));
+  const { result } = renderHook(() => useCentralDirectory(true));
+  await act(async () => {});
+  for (const delay of [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]) {
+    await act(async () => { await vi.advanceTimersByTimeAsync(delay * 1000); });
+  }
+  expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", servers: [server], live: null });
+  mocks.bootstrap.mockResolvedValue({ person, servers: [{ ...server, alias: "Recovered" }], server_time: 1 });
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(result.current.directory?.status).toBe("central-unconfirmed");
+  await act(async () => { await vi.advanceTimersByTimeAsync(30 * 60_000 - 30_000); });
+  expect(result.current.directory).toMatchObject({ status: "connected", servers: [{ alias: "Recovered" }] });
+  mocks.bootstrap.mockResolvedValue({ person, servers: [{ ...server, alias: "Online update" }], server_time: 1 });
+  await act(async () => { window.dispatchEvent(new Event("online")); });
+  expect(result.current.directory?.servers[0].alias).toBe("Online update");
 });

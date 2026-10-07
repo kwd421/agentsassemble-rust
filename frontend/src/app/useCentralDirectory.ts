@@ -4,6 +4,10 @@ import { CENTRAL_SESSION_CLEARED_EVENT, bootstrapCentral, centralIdentityConfigu
 import { loadCentralDirectoryCache, type CentralServerDisplay } from "../lib/central/directoryCache";
 import { isCentralTemporaryError } from "../lib/central/connectionError";
 
+// Every signed bootstrap currently reserves three GENERAL nonce units centrally.
+// Idle observers must leave capacity for admission; explicit actions still refresh.
+const DIRECTORY_CHECK_MS = 30 * 60_000;
+
 export type CentralDirectoryState = {
   status: "connected" | "central-unconfirmed" | "authentication-required" | "error";
   person: CentralPerson | null;
@@ -86,7 +90,8 @@ export function useCentralDirectory(autoStart = false) {
   }, [autoStart, refresh]);
   useEffect(() => {
     if (!directory || !["connected", "central-unconfirmed"].includes(directory.status)) return;
-    const delay = directory.status === "connected" ? 30_000 : Math.min(30_000, 1000 * 2 ** Math.max(0, Math.min(5, failures.current - 1)));
+    const delay = directory.status === "connected" ? DIRECTORY_CHECK_MS
+      : Math.min(DIRECTORY_CHECK_MS, 1000 * 2 ** Math.max(0, Math.min(11, failures.current - 1)));
     const retry = () => { void refresh().catch(() => undefined); };
     const timer = window.setTimeout(retry, delay);
     window.addEventListener("online", retry);

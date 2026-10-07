@@ -1,5 +1,19 @@
 # Verification Contract
 
+- 2026-10-07 central GENERAL exhaustion client mitigation at base `916fcf3c`:
+  shared desktop/web directory healthy checks change from 30 seconds to 30 minutes;
+  transient exponential retries now cap at 30 minutes. Two fake-clock regressions
+  failed on the original owner (early directory update and early outage retry),
+  then passed with a simulated idle day, explicit refresh, automatic/online
+  recovery and cancellation. Affected frontend suites: 19 files / 148 tests pass;
+  frontend TypeScript/Vite build and architecture/source-growth/policy gates pass
+  (19 policy tests; existing source-size and bundle warnings). Existing signed
+  authentication, account isolation, rail admission and dialog tests pass.
+  Worker proposal is outside Git at the requested scratchpad/general-budget-design.md;
+  no Worker edits, production D1 access, deployment or push. Packaged behavior
+  and production recovery remain unverified; this reduces idle scheduled GENERAL
+  nonce debt by 60x but does not resolve the global pool's isolation defect.
+
 - 2026-10-07 companion permission-choice correction at base `6501d387`:
   bundled `LocalAttendeePanel` removes workspace_write from its derived local
   companion catalog on every read/refresh and removes its obsolete denial hint.
