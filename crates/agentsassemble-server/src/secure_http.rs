@@ -73,10 +73,10 @@ pub(crate) struct Start {
 
 pub(crate) fn start(
     state: AppState,
-    client: SecureClient,
+    client: &SecureClient,
     provenance: &Provenance,
-    start: Start,
-    output: Output,
+    start: &Start,
+    output: &Output,
     permit: OwnedSemaphorePermit,
 ) -> Result<
     (
@@ -86,69 +86,7 @@ pub(crate) fn start(
     (),
 > {
     let admission = provenance.admission.admit_virtual().ok_or(())?;
-    let method: Method = start.method.parse().map_err(|_| ())?;
-    if !matches!(
-        method,
-        Method::GET | Method::POST | Method::DELETE | Method::HEAD
-    ) {
-        return Err(());
-    }
-    let uri: Uri = start.path.parse().map_err(|_| ())?;
-    if !start.path.starts_with('/')
-        || start.path.starts_with("//")
-        || uri.scheme().is_some()
-        || uri.authority().is_some()
-        || start.path.len() > 8192
-        || start.headers.len() > 64
-    {
-        return Err(());
-    }
-    let mut headers = provenance.headers.clone();
-    for name in [
-        "origin",
-        "authorization",
-        "cookie",
-        "content-length",
-        "content-type",
-        "connection",
-        "upgrade",
-        "sec-websocket-key",
-        "sec-websocket-version",
-        "sec-websocket-extensions",
-        "sec-websocket-protocol",
-        "accept",
-        "if-none-match",
-        "range",
-        "x-device-token",
-        "x-central-generation",
-    ] {
-        headers.remove(name);
-    }
-    headers.insert("origin", client.hello().origin.parse().map_err(|_| ())?);
-    let mut size = 0;
-    for (name, value) in start.headers {
-        size += name.len() + value.len();
-        // Product credentials/content only. Physical proxy/host identity belongs to the outer request.
-        if size > 16 * 1024
-            || !matches!(
-                name.to_ascii_lowercase().as_str(),
-                "authorization"
-                    | "content-type"
-                    | "x-device-token"
-                    | "x-central-generation"
-                    | "accept"
-                    | "if-none-match"
-                    | "range"
-            )
-        {
-            return Err(());
-        }
-        let name: HeaderName = name.parse().map_err(|_| ())?;
-        if headers.contains_key(&name) {
-            return Err(());
-        }
-        headers.insert(name, HeaderValue::from_str(&value).map_err(|_| ())?);
-    }
+    let (method, uri, headers) = request_metadata(client, provenance, start)?;
     let (tx, rx) = mpsc::channel::<Part>(16);
     let cancel = client.closed().child_token();
     let body_cancel = cancel.clone();
@@ -192,6 +130,7 @@ pub(crate) fn start(
         ended: false,
     };
     let output = output.with_cancel(cancel.clone());
+    let id = start.id;
     let task = async move {
         let _permit = permit;
         let _admission = admission;
@@ -209,7 +148,7 @@ pub(crate) fn start(
             })
             .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.as_str(), value)))
             .collect::<Vec<_>>();
-        if output.send(json!({"op":"response", "id":start.id, "status":response.status().as_u16(), "headers":headers})).await.is_err() { return; }
+        if output.send(json!({"op":"response", "id":id, "status":response.status().as_u16(), "headers":headers})).await.is_err() { return; }
         let mut body = response.into_body().into_data_stream();
         loop {
             let next =
@@ -217,18 +156,18 @@ pub(crate) fn start(
             match next {
                 Some(Ok(bytes)) => {
                     for chunk in bytes.chunks(CHUNK_BYTES) {
-                        if output.send(json!({"op":"data", "id":start.id, "data":URL_SAFE_NO_PAD.encode(chunk), "end":false})).await.is_err() { return; }
+                        if output.send(json!({"op":"data", "id":id, "data":URL_SAFE_NO_PAD.encode(chunk), "end":false})).await.is_err() { return; }
                     }
                 }
                 Some(Err(_)) => {
                     let _ = output
-                        .send(json!({"op":"error", "id":start.id, "code":"response_failed"}))
+                        .send(json!({"op":"error", "id":id, "code":"response_failed"}))
                         .await;
                     return;
                 }
                 None => {
                     let _ = output
-                        .send(json!({"op":"data", "id":start.id, "data":"", "end":true}))
+                        .send(json!({"op":"data", "id":id, "data":"", "end":true}))
                         .await;
                     return;
                 }
@@ -236,4 +175,75 @@ pub(crate) fn start(
         }
     };
     Ok((input, task))
+}
+
+fn request_metadata(
+    client: &SecureClient,
+    provenance: &Provenance,
+    start: &Start,
+) -> Result<(Method, Uri, HeaderMap), ()> {
+    let method: Method = start.method.parse().map_err(|_| ())?;
+    if !matches!(
+        method,
+        Method::GET | Method::POST | Method::DELETE | Method::HEAD
+    ) {
+        return Err(());
+    }
+    let uri: Uri = start.path.parse().map_err(|_| ())?;
+    if !start.path.starts_with('/')
+        || start.path.starts_with("//")
+        || uri.scheme().is_some()
+        || uri.authority().is_some()
+        || start.path.len() > 8192
+        || start.headers.len() > 64
+    {
+        return Err(());
+    }
+    let mut headers = provenance.headers.clone();
+    for name in [
+        "origin",
+        "authorization",
+        "cookie",
+        "content-length",
+        "content-type",
+        "connection",
+        "upgrade",
+        "sec-websocket-key",
+        "sec-websocket-version",
+        "sec-websocket-extensions",
+        "sec-websocket-protocol",
+        "accept",
+        "if-none-match",
+        "range",
+        "x-device-token",
+        "x-central-generation",
+    ] {
+        headers.remove(name);
+    }
+    headers.insert("origin", client.hello().origin.parse().map_err(|_| ())?);
+    let mut size = 0;
+    for (name, value) in &start.headers {
+        size += name.len() + value.len();
+        // Product credentials/content only. Physical proxy/host identity belongs to the outer request.
+        if size > 16 * 1024
+            || !matches!(
+                name.to_ascii_lowercase().as_str(),
+                "authorization"
+                    | "content-type"
+                    | "x-device-token"
+                    | "x-central-generation"
+                    | "accept"
+                    | "if-none-match"
+                    | "range"
+            )
+        {
+            return Err(());
+        }
+        let name: HeaderName = name.parse().map_err(|_| ())?;
+        if headers.contains_key(&name) {
+            return Err(());
+        }
+        headers.insert(name, HeaderValue::from_str(value).map_err(|_| ())?);
+    }
+    Ok((method, uri, headers))
 }

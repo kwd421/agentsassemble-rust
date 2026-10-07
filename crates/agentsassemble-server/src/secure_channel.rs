@@ -10,8 +10,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
-use std::{collections::HashMap, time::Duration};
-use tokio::{sync::Semaphore, task::JoinSet};
+use std::time::Duration;
 
 use crate::{
     AppState,
@@ -20,7 +19,7 @@ use crate::{
     ingress_trust::{PeerAddr, TrustedIngressOrigin},
     public_ingress::PublicIngress,
     secure_client::SecureClient,
-    secure_http::{Provenance, Start},
+    secure_http::Provenance,
     secure_queue::{Budget, Output},
 };
 
@@ -102,10 +101,9 @@ enum Frame {
         id: u32,
     },
 }
-enum Input {
-    Http(crate::secure_http::Input),
-    Socket(crate::secure_socket::Input),
-}
+#[path = "secure_channel_requests.rs"]
+mod requests;
+use requests::Requests;
 
 async fn handshake(
     socket: &mut WebSocket,
@@ -181,44 +179,7 @@ fn run(
         else {
             return;
         };
-        let lifetime_client = client.clone();
-        let shutdown = state.shutdown.clone();
-        let custody_store = state.store.clone();
-        let mut custody_changes = custody_store.subscribe_room_directory();
-        let lifetime = tokio::spawn(async move {
-            let first_admission = async {
-                tokio::time::sleep(Duration::from_secs(30)).await;
-                if lifetime_client.admitted() {
-                    std::future::pending::<()>().await;
-                }
-            };
-            let registration_changed = async {
-                loop {
-                    if custody_store
-                        .registration_epoch()
-                        .await
-                        .ok()
-                        .flatten()
-                        .as_deref()
-                        != Some(&lifetime_client.hello().registration_epoch)
-                    {
-                        return;
-                    }
-                    if custody_changes.changed().await.is_err() {
-                        return;
-                    }
-                }
-            };
-            tokio::select! {
-                () = registration_changed => {},
-                () = lifetime_client.closed().cancelled() => {},
-                () = shutdown.cancelled() => {},
-                () = ingress_lifetime.cancelled() => {},
-                () = lifetime_client.owner_ended() => {},
-                () = first_admission => {},
-            }
-            lifetime_client.close();
-        });
+        let lifetime = monitor_lifetime(&state, &client, ingress_lifetime);
         let budget = Budget::new(state.secure_queue_budget.clone());
         let (output, mut outgoing) =
             Output::new(state.secure_queue_budget.clone(), client.closed().clone());
@@ -248,17 +209,21 @@ fn run(
             writer_client.close();
         });
         let _ = output.send(json!({"op":"ready"})).await;
-        let limits = std::sync::Arc::new(Semaphore::new(32));
-        let mut inputs = HashMap::<u32, Input>::new();
-        let mut tasks = JoinSet::<u32>::new();
-        let mut last_id = 0;
+        let mut requests = Requests::new(
+            state.clone(),
+            client.clone(),
+            provenance,
+            output.clone(),
+            budget,
+            ack_tx,
+        );
         let first_admission = tokio::time::Instant::now() + Duration::from_secs(30);
         loop {
             let incoming = tokio::select! {
                 () = client.closed().cancelled() => break,
                 () = state.shutdown.cancelled() => break,
                 () = tokio::time::sleep_until(first_admission), if !client.admitted() => { if !client.admitted() { break; } continue; },
-                done = tasks.join_next(), if !tasks.is_empty() => { match done { Some(Ok(id)) => { inputs.remove(&id); }, _ => break } continue; },
+                done = requests.tasks.join_next(), if !requests.tasks.is_empty() => { match done { Some(Ok(id)) => { requests.remove(id); }, _ => break } continue; },
                 incoming = receiver.next() => incoming,
             };
             let Some(Ok(Message::Binary(record))) = incoming else {
@@ -270,115 +235,13 @@ fn run(
             let Ok(frame) = serde_json::from_slice::<Frame>(&plaintext) else {
                 break;
             };
-            let result = match frame {
-                Frame::Ack { sequence } => ack_tx.try_send(sequence).map_err(|_| ()),
-                Frame::Request {
-                    id,
-                    method,
-                    path,
-                    headers,
-                } => {
-                    if id <= last_id {
-                        break;
-                    }
-                    last_id = id;
-                    let Ok(permit) = limits.clone().try_acquire_owned() else {
-                        let _ = output
-                            .send(json!({"op":"error","id":id,"code":"capacity"}))
-                            .await;
-                        continue;
-                    };
-                    match crate::secure_http::start(
-                        state.clone(),
-                        client.clone(),
-                        &provenance,
-                        Start {
-                            id,
-                            method,
-                            path,
-                            headers,
-                        },
-                        output.clone(),
-                        permit,
-                    ) {
-                        Ok((input, task)) => {
-                            inputs.insert(id, Input::Http(input));
-                            tasks.spawn(async move {
-                                task.await;
-                                id
-                            });
-                            Ok(())
-                        }
-                        Err(()) => {
-                            output
-                                .send(json!({"op":"error","id":id,"code":"request_rejected"}))
-                                .await
-                        }
-                    }
-                }
-                Frame::Data { id, data, end } => match inputs.get_mut(&id) {
-                    Some(Input::Http(input)) => input.push(&data, end, &budget),
-                    None if id <= last_id => Ok(()),
-                    _ => Err(()),
-                },
-                Frame::Cancel { id } => {
-                    if let Some(Input::Http(input)) = inputs.remove(&id) {
-                        input.cancel.cancel();
-                    }
-                    Ok(())
-                }
-                Frame::SocketOpen { id, ticket } => {
-                    if id <= last_id {
-                        break;
-                    }
-                    last_id = id;
-                    let Ok(permit) = limits.clone().try_acquire_owned() else {
-                        let _ = output
-                            .send(json!({"op":"error","id":id,"code":"capacity"}))
-                            .await;
-                        continue;
-                    };
-                    match crate::secure_socket::start(
-                        state.clone(),
-                        &client,
-                        &ticket,
-                        id,
-                        output.clone(),
-                    )
-                    .await
-                    {
-                        Ok((input, task)) => {
-                            inputs.insert(id, Input::Socket(input));
-                            tasks.spawn(async move {
-                                let _permit = permit;
-                                task.await;
-                                id
-                            });
-                            Ok(())
-                        }
-                        Err(()) => {
-                            output
-                                .send(json!({"op":"error","id":id,"code":"socket_rejected"}))
-                                .await
-                        }
-                    }
-                }
-                Frame::SocketData { id, data, end } => match inputs.get_mut(&id) {
-                    Some(Input::Socket(input)) => input.push(&data, end, &budget),
-                    None if id <= last_id => Ok(()),
-                    _ => Err(()),
-                },
-                Frame::SocketClose { id } => {
-                    inputs.remove(&id);
-                    Ok(())
-                }
-            };
-            if result.is_err() {
+            if requests.accept(frame).await.is_err() {
                 break;
             }
         }
+
         client.close();
-        inputs.clear();
+        requests.clear();
         if state
             .store
             .disconnect_secure_channel(&client.binding().channel_id)
@@ -388,7 +251,7 @@ fn run(
             tracing::error!("Secure channel disconnect persistence failed");
         }
         // Drain accepted work; every late admission is durably disconnected before releasing this owner.
-        while tasks.join_next().await.is_some() {
+        while requests.tasks.join_next().await.is_some() {
             if state
                 .store
                 .disconnect_secure_channel(&client.binding().channel_id)
@@ -400,5 +263,50 @@ fn run(
         }
         let _ = writer.await;
         let _ = lifetime.await;
+    })
+}
+
+fn monitor_lifetime(
+    state: &AppState,
+    client: &SecureClient,
+    ingress_lifetime: tokio_util::sync::CancellationToken,
+) -> tokio::task::JoinHandle<()> {
+    let lifetime_client = client.clone();
+    let shutdown = state.shutdown.clone();
+    let custody_store = state.store.clone();
+    let mut custody_changes = custody_store.subscribe_room_directory();
+    tokio::spawn(async move {
+        let first_admission = async {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            if lifetime_client.admitted() {
+                std::future::pending::<()>().await;
+            }
+        };
+        let registration_changed = async {
+            loop {
+                if custody_store
+                    .registration_epoch()
+                    .await
+                    .ok()
+                    .flatten()
+                    .as_deref()
+                    != Some(&lifetime_client.hello().registration_epoch)
+                {
+                    return;
+                }
+                if custody_changes.changed().await.is_err() {
+                    return;
+                }
+            }
+        };
+        tokio::select! {
+            () = registration_changed => {},
+            () = lifetime_client.closed().cancelled() => {},
+            () = shutdown.cancelled() => {},
+            () = ingress_lifetime.cancelled() => {},
+            () = lifetime_client.owner_ended() => {},
+            () = first_admission => {},
+        }
+        lifetime_client.close();
     })
 }

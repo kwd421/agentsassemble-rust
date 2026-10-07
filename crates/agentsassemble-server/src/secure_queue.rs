@@ -113,7 +113,7 @@ mod tests {
         let budget = Budget::new(global.clone());
         let charge = budget
             .charge(DIRECTION_BYTES)
-            .unwrap_or_else(|_| panic!("capacity"));
+            .unwrap_or_else(|()| panic!("capacity"));
         assert!(budget.charge(1).is_err());
         drop(charge);
         assert!(budget.charge(DIRECTION_BYTES).is_ok());
@@ -124,7 +124,7 @@ mod tests {
             .iter()
             .map(|b| {
                 b.charge(DIRECTION_BYTES)
-                    .unwrap_or_else(|_| panic!("global"))
+                    .unwrap_or_else(|()| panic!("global"))
             })
             .collect::<Vec<_>>();
         assert!(budget.charge(1).is_err());

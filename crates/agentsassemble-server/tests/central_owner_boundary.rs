@@ -260,24 +260,7 @@ async fn start_fixture() -> Fixture {
         late_started: Arc::default(),
         late_release: Arc::default(),
     };
-    let worker = Router::new()
-        .route(
-            "/v1/servers/{server_id}/endpoint",
-            axum::routing::put(endpoint).delete(endpoint),
-        )
-        .route(
-            "/v1/servers/{server_id}/connect-grants/redeem",
-            post_route(owner_connection),
-        )
-        .route(
-            "/v1/servers/{server_id}/member-grants/redeem",
-            post_route(secure::member_redemption),
-        )
-        .route(
-            "/v1/servers/{server_id}/member-connect-grants/redeem",
-            post_route(secure::member_redemption),
-        )
-        .with_state(worker_state.clone());
+    let worker = fixture_worker(worker_state.clone());
     let worker_task: JoinHandle<()> = tokio::spawn(async move {
         axum::serve(worker_listener, worker)
             .await
@@ -772,4 +755,25 @@ async fn central_owner_routes_use_bound_session_and_join_offline_publication() {
     verify_signed_call(&offline, &public_key);
     fixture.worker_task.abort();
     let _ = fixture.worker_task.await;
+}
+
+fn fixture_worker(worker_state: WorkerState) -> Router {
+    Router::new()
+        .route(
+            "/v1/servers/{server_id}/endpoint",
+            axum::routing::put(endpoint).delete(endpoint),
+        )
+        .route(
+            "/v1/servers/{server_id}/connect-grants/redeem",
+            post_route(owner_connection),
+        )
+        .route(
+            "/v1/servers/{server_id}/member-grants/redeem",
+            post_route(secure::member_redemption),
+        )
+        .route(
+            "/v1/servers/{server_id}/member-connect-grants/redeem",
+            post_route(secure::member_redemption),
+        )
+        .with_state(worker_state)
 }

@@ -1,5 +1,5 @@
 use super::*;
-use std::process::Stdio;
+use std::{fmt::Write as _, process::Stdio};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::test]
@@ -23,39 +23,8 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
         .await?;
     let proxy = TcpListener::bind("127.0.0.1:0").await?;
     let proxy_address = proxy.local_addr()?;
-    let address = fixture.address;
     let proxy_cancel = CancellationToken::new();
-    let proxy_stop = proxy_cancel.clone();
-    let proxy_task = tokio::spawn(async move {
-        let mut children = tokio::task::JoinSet::new();
-        loop {
-            let accepted = tokio::select! { () = proxy_stop.cancelled() => break, accepted = proxy.accept() => accepted };
-            let Ok((mut incoming, _)) = accepted else {
-                break;
-            };
-            children.spawn(async move {
-                let mut header = Vec::new();
-                while !header.ends_with(b"\r\n\r\n") {
-                    if header.len() >= 16384 { return; }
-                    let Ok(byte) = incoming.read_u8().await else { return; };
-                    header.push(byte);
-                }
-                let Ok(header) = String::from_utf8(header) else { return; };
-                let mut lines = header.lines();
-                let Some(first) = lines.next() else { return; };
-                let mut forwarded = format!("{first}\r\n");
-                for line in lines {
-                    if line.is_empty() || line.to_ascii_lowercase().starts_with("host:") || line.to_ascii_lowercase().starts_with("origin:") { continue; }
-                    forwarded.push_str(line); forwarded.push_str("\r\n");
-                }
-                forwarded.push_str(&format!("host: owner.example.test\r\norigin: https://trusted-entry.test\r\nx-forwarded-proto: https\r\nx-agentsassemble-proxy-token: {SECRET}\r\n\r\n"));
-                let Ok(mut outgoing) = tokio::net::TcpStream::connect(address).await else { return; };
-                if outgoing.write_all(forwarded.as_bytes()).await.is_err() { return; }
-                let _ = tokio::io::copy_bidirectional(&mut incoming, &mut outgoing).await;
-            });
-        }
-        while children.join_next().await.is_some() {}
-    });
+    let proxy_task = start_proxy(proxy, fixture.address, proxy_cancel.clone());
     let mut peer = tokio::process::Command::new("node")
         .arg("--input-type=module")
         .arg("-e")
@@ -116,6 +85,71 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
     input.write_all(b"close\n").await?;
     assert_eq!(output.next_line().await?.as_deref(), Some("closed"));
     assert!(peer.wait().await?.success());
+    verify_late_admission(&fixture, &info, &credentials, generation).await?;
+    fixture.cancel.cancel();
+    fixture.host_task.await?;
+    proxy_cancel.cancel();
+    proxy_task.await?;
+    fixture.worker_task.abort();
+    Ok(())
+}
+
+pub(super) async fn member_redemption(
+    State(state): State<WorkerState>,
+    axum::Json(body): axum::Json<Value>,
+) -> Json<Value> {
+    assert_eq!(body["protocol"], "secure_admission_v1");
+    assert_eq!(body["registration_epoch"], "secure-test-epoch");
+    let mut result = json!({"projection_id":"AAAAAAAAAAAAAAAAAAAAAA","issuer":state.issuer,"person_id":"secure-member","display_name":"Secure member"});
+    for field in ["protocol", "client_public_key", "channel_id", "purpose"] {
+        result[field] = body[field].clone();
+    }
+    Json(result)
+}
+
+fn start_proxy(
+    proxy: TcpListener,
+    address: SocketAddr,
+    proxy_stop: CancellationToken,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut children = tokio::task::JoinSet::new();
+        loop {
+            let accepted = tokio::select! { () = proxy_stop.cancelled() => break, accepted = proxy.accept() => accepted };
+            let Ok((mut incoming, _)) = accepted else {
+                break;
+            };
+            children.spawn(async move {
+                let mut header = Vec::new();
+                while !header.ends_with(b"\r\n\r\n") {
+                    if header.len() >= 16384 { return; }
+                    let Ok(byte) = incoming.read_u8().await else { return; };
+                    header.push(byte);
+                }
+                let Ok(header) = String::from_utf8(header) else { return; };
+                let mut lines = header.lines();
+                let Some(first) = lines.next() else { return; };
+                let mut forwarded = format!("{first}\r\n");
+                for line in lines {
+                    if line.is_empty() || line.to_ascii_lowercase().starts_with("host:") || line.to_ascii_lowercase().starts_with("origin:") { continue; }
+                    forwarded.push_str(line); forwarded.push_str("\r\n");
+                }
+                let _ = write!(forwarded, "host: owner.example.test\r\norigin: https://trusted-entry.test\r\nx-forwarded-proto: https\r\nx-agentsassemble-proxy-token: {SECRET}\r\n\r\n");
+                let Ok(mut outgoing) = tokio::net::TcpStream::connect(address).await else { return; };
+                if outgoing.write_all(forwarded.as_bytes()).await.is_err() { return; }
+                let _ = tokio::io::copy_bidirectional(&mut incoming, &mut outgoing).await;
+            });
+        }
+        while children.join_next().await.is_some() {}
+    })
+}
+
+async fn verify_late_admission(
+    fixture: &Fixture,
+    info: &Value,
+    credentials: &Value,
+    generation: i64,
+) -> Result<(), Box<dyn std::error::Error>> {
     fixture.worker_state.late_release.notify_one();
     fixture.connections.close();
     tokio::time::timeout(Duration::from_secs(20), fixture.connections.wait())
@@ -169,23 +203,5 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
             .is_err(),
         "accepted late admission was cancelled instead of committed and disconnected"
     );
-    fixture.cancel.cancel();
-    fixture.host_task.await?;
-    proxy_cancel.cancel();
-    proxy_task.await?;
-    fixture.worker_task.abort();
     Ok(())
-}
-
-pub(super) async fn member_redemption(
-    State(state): State<WorkerState>,
-    axum::Json(body): axum::Json<Value>,
-) -> Json<Value> {
-    assert_eq!(body["protocol"], "secure_admission_v1");
-    assert_eq!(body["registration_epoch"], "secure-test-epoch");
-    let mut result = json!({"projection_id":"AAAAAAAAAAAAAAAAAAAAAA","issuer":state.issuer,"person_id":"secure-member","display_name":"Secure member"});
-    for field in ["protocol", "client_public_key", "channel_id", "purpose"] {
-        result[field] = body[field].clone();
-    }
-    Json(result)
 }

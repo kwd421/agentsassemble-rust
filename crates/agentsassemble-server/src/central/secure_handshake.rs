@@ -1,5 +1,5 @@
 //! Host-key authenticated P-256 agreement and ordered directional AEAD records.
-//! WebCrypto uses these exact transcript/AAD bytes; no product authorization lives here.
+//! `WebCrypto` uses these exact transcript/AAD bytes; no product authorization lives here.
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::{
     aead, agreement, hkdf,
