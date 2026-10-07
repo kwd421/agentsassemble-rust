@@ -1,5 +1,149 @@
 # Identity, accounts, friends and human admission
 
+## Secure admission and event-only publication (owner task, 2026-10-07)
+
+Status: Daybreak round 3 APPROVE (C0/H0/M0/L0, 2026-10-07); implementation and
+runtime acceptance pending. Required entries:
+local start/register/claim/retirement; owner startup chooser/rail → remote directory,
+create/open room; member rail reconnect/selection; invite → login/consent/join;
+shared app/web API, attachments, room WS and owner-directory SSE; exact retries,
+revocation, ingress replacement/stop. Existing host room transactions, Joined and
+entitlement remain sole authority; connected lifetime remains host-owned. Central
+atomic redeem rechecks current logout/device/account/ownership/registration/key/
+endpoint at every new admission. This task authorizes scoped Worker/transport,
+commit/push/deploy/signing/E2E; .agents/, scripts/__pycache__ and cleanup configs stay.
+
+Trusted packaged or central ASSETS UI owns remote workspace and all private keys/
+credentials throughout admission/API/streams. Host-origin JavaScript and fragments
+never receive central grant, browser credential, bearer, private key or child ticket.
+Event central invitation creation opens trusted central /member-join from the outset
+with versioned query containing protocol, server_id, registration_epoch and aaj1;
+existing aaj1 invitation capability is initial trusted-entry query input, immediately
+removed from history, retained in memory and sent only through the verified encrypted
+host channel. No invite/input URL logging or asset-query forwarding. Existing opaque
+invite credentials and host invite row/scope/expiry/consumption remain unchanged.
+Web Google login runs in a trusted popup while the opener retains invitation in
+memory. Correlate exact origin/popup/nonce/state; completion message contains no
+credentials. Opener reads existing central session after correlated completion and
+rechecks account. Invitation is never stored in web storage, OAuth state/callback or
+popup; blocked/closed/expired popup or opener reload requires explicit original-link
+retry. Popup expires at min(handoff expiry,300s); cancel/unmount ends its owned wait.
+No navigation/storage fallback or central polling. Legacy host-origin links and
+existing non-central guests stay at their existing owner; no upgrade from that origin to event central admission. The invitation contract
+owner records this affected creation/link/challenge transition before implementation.
+
+Reuse server-info/challenge identity owner and persisted Ed25519 host key. Keep
+legacy POST challenge stateless. Secure handshake runs in /api/secure-channel:
+ClientHello → signed ServerHello → AEAD confirmation, with existing public connection
+permit and 10-second deadline; no unauthenticated pending map. Signature canonical
+JSON array binds domain AA-SECURE-ADMISSION-1, secure_admission_v1, server ID, epoch,
+exact origin/generation, purpose, fresh 32-byte nonce, client P-256 public key, host
+P-256 ephemeral key, random channel ID and timestamp. Client pins fresh central
+registration/key/endpoint, validates every tuple field, ±60s and Ed25519 signature
+before sending secrets. WebCrypto and maintained Rust ring provide P-256 ECDH,
+HKDF-SHA256 and AES-256-GCM. HKDF salt=client nonce/context=transcript, separate c2h/
+h2c direction keys; 96-bit AEAD nonce=zero prefix + big-endian 64-bit counter.
+AAD binds protocol/channel/direction/counter; serialized strict contiguous frames,
+no wrap/reuse. Invalid authentication/order/schema/size terminates without fallback.
+
+One secure outer WS transports admission/HTTP/responses/resources/SSE/virtual room
+WS. The existing route registry declares secure_remote eligibility once, excluding
+private/static/registration/login/recursive channel/upgrade routes; no parallel path
+allowlist or fabricated loopback authority. Existing HTTP connection admission,
+public ingress provenance, capacity/body limits and handler authorization remain.
+Verified SecureClient context adds key/pinned tuple; original public router and room
+socket/ticket owners execute operations. User login/preview/consent precedes channel creation. After 10s handshake, first
+successful admission has a 30s deadline; before admission dispatch only its encrypted
+purpose-specific challenge/admission, never other product/guest/pairing APIs.
+At most 32 virtual requests/channel; each additionally acquires existing process-wide
+128 total/127 public HTTP permits before buffering/dispatch, held through response/
+SSE or accepted-mutation terminal completion. Room socket retains 128 global/8 principal/
+64 room limits; ceilings unchanged. Immediate encrypted capacity failure on exhaustion.
+Transport chunks <=64KiB; product WS frames <=256KiB. Cipher queues <=512KiB/direction/
+channel and <=8MiB server aggregate, charged before enqueue. Trusted workspace resource/
+Blob URL custody <=64MiB with original 10MiB attachment cap; release on resource unmount/
+download completion and revoke all URLs on workspace close/replacement. Backpressure/
+visible capacity failure, no unbounded buffers or in-use eviction. Central/Tauri connect-src permits https:
+and wss:, with restricted scripts/navigation/images. Frontend authority selection
+injects one RemoteTransport into shared flows; no global fetch override, feature
+transport copies or local operator authority inherited by a remote workspace.
+
+A fresh non-extractable client ECDH key is approved by central device-signed grant
+issue. AEAD fresh transcript confirmation proves client possession to host before
+central redeem/local session commit. Strict signed issue/redeem fields and response
+echo bind protocol, epoch, origin/generation, purpose, client key, server-generated channel_id and existing member
+challenge. Add grant protocol default legacy/client key/channel_id columns; reuse tuple owners.
+Atomic SQL joins current session/device/person/registration/registered host key and
+endpoint mode/epoch/tuple, including owner redeem's key recheck. Keep existing caps.
+Member host transaction remains final Joined/entitlement owner.
+
+Preserve durable aad1 browser/device identity; persist secure_client_key_fingerprint
+and secure_channel_id as additional owner/member session bindings. Exact retry and secure custody use
+require both identities, exact channel_id and current tuple. Secure child tickets require the same key
+and channel; plaintext routes cannot use secure grants/sessions/tickets. Exactly one outer channel owns committed custody. Same key/grant cannot attach to
+another channel; signed issue/D1/response echo/redeem/local result bind channel_id.
+Outer cancellation ends unaccepted body/read, response forwarding/SSE/socket waits;
+already accepted/dequeued mutations finish their original durable result/events,
+tracked with permits to terminal. Do not abort authoritative mutations. Client shows
+uncertain failure; exact durable retry is only inside same live channel. Close/adoption
+is serialized; admission finishing after close cannot adopt authority and terminal
+cleanup durably disconnects any late row before releasing tracked work. Only virtual reconnect
+inside a live channel is central-free. Outer close/restart/ingress replacement/revoke
+ends authority; new channel requires fresh central issue/redeem. Initial incomplete
+admission may retry exact same grant/key/browser/channel and virtual admission identity
+inside that live channel within original 300s window, recovering only
+its matching live committed result, never a disconnected/revoked session. Reload
+requires fresh admission; no credentials/private keys persisted outside trusted owner.
+
+Add endpoint mode default legacy_lease and nullable registration_epoch. Event row
+lease_expires_at=0; additive DB constraints/triggers reject nonzero event lease,
+missing event epoch and event→legacy transition even for older Worker writes. Old
+Worker legacy live-endpoint SQL therefore denies event rows while mixed serving;
+old host writes cannot mint a positive event lease. No new lease/TTL. Legacy
+rows retain lease gates, formats and expiry. Event_secure_v1 accepts only secure
+admission; legacy writes cannot downgrade event rows. Old clients get no usable
+origin and offline/unsupported; secure clients require explicit protocol echoes and
+never fall back. Bootstrap capability preference is representation only; divergent
+preview/issue/redeem/publication version fields are signed. Migrations expand first;
+secure Worker/shared UI/host and actual encrypted-flow verification precede event
+activation; roll-forward only under Rule 10 pre-release exception.
+
+Event generation is reserved durably at actual start/origin-change/graceful-stop,
+fixed across retries and above all prior reservations at replacement start.
+Local ACK/park compares exact epoch/generation/state/origin/mode against current pending;
+superseded responses cannot clear/park/increment failure of newer event. Reread latest
+pending; new actual event resets retries, delivery retry never reserves generation. One
+endpoint row stores epoch/mode/state/origin/generation. Event reads/issue/redeem
+require row epoch=current server epoch; new current epoch replaces old row, old epoch
+cannot write. Signed mutation atomically rechecks live registration/key/epoch and
+CAS: higher applies, identical ACKs, same generation different payload conflicts,
+lower is stale. Offline retains empty origin and high-watermark while registration
+active; no TTL/history/client offline publication. Grant expiry for event endpoints
+is min(now+300, central session expiry); direct client host liveness creates no
+central writes. No polling, heartbeat or unknown-protocol fallback.
+
+Replace five-minute renew/two-second scan with ingress/registration/profile/member
+outbox notifications. Endpoint delivery retries same fixed event at 0/2/8s then parks,
+visible failure until new actual event/explicit retry. Graceful stop reserves one
+offline event and attempts one immediate final send under existing 8s HTTP timeout,
+no retry sleeps; exact pending compare-and-clear, report failure then terminate.
+Unchanged same-origin readiness fluctuations do not publish central health. Existing
+name/member durable retry policy remains, scheduler waits only actual pending work's
+due time/events. No /v2 family, GET-preview, quota/cleanup, online TTL/history redesign.
+Independent transport and scheduler owners keep existing file/structure ceilings.
+
+Acceptance: stolen grant/other key cannot commit; wrong-key bearer/child tickets,
+tampered transcript/AEAD replay/order and authority races fail; exact member retry/
+leave/kick stays correct; old clients denied event and legacy expiry preserved;
+late offline/idempotency/conflict/epoch retention; controlled time shows zero idle
+renew/publisher polling and fixed retry generations. Test actual WebCrypto↔ring
+interoperability and bounded cancellation/resource cost. Run affected tests/mandatory
+gates, <1000-line independent commits and full-range Daybreak approval. Record deploy
+version/migrations/exact HEAD assets; signed two-app owner room E2E/member if feasible.
+UI states use 해요체: 확인 중이에요 / 서버를 확인하지 못했어요 / 연결이 끝났어요 /
+잠시 후 다시 시도해 주세요. Protocol/key/epoch/channel jargon stays off screen.
+Unknown runtime/Windows/member outcomes stay separate from test/review evidence.
+
 ## Event-driven central directory (owner decision, 2026-10-07)
 
 Signed GET `/v1/bootstrap` through `useCentralDirectory` must never poll or retry

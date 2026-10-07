@@ -1,5 +1,32 @@
 # Human Invite, Admission, and Room Session Slice
 
+## Secure central entry follow-up (owner task, 2026-10-07)
+
+Daybreak design round 3 APPROVE (2026-10-07); implementation pending. Event_secure_v1 central-account invite creation emits the
+trusted central /member-join URL directly, carrying original aaj1 invitation input
+only to that trusted entry (query, never a credential fragment/host-origin landing).
+Versioned query includes protocol/server_id/registration_epoch/aaj1. Entry removes
+input from history immediately, retains it in the opener memory across Google login
+in a trusted popup (exact origin/source/nonce/state completion, no credential message),
+never web storage/OAuth state/callback. Blocked/closed/expired popup/reload requires
+original-link explicit retry; no fallback. Entry strips query
+before asset dispatch and never logs it. It obtains fresh central registration,
+verifies host-signed key agreement, then sends original invitation/browser credential
+and creates member challenge only inside encrypted transport. Existing aai1/aaj1
+credentials, durable invite/scope/expiry/consumption and Joined/entitlement remain
+the host owners. Host-origin legacy/non-central guest links never upgrade to event
+central admission. App/web retain one shared consent/join/room flow.
+
+Keep durable aad1 browser/device fingerprint and retry/multi-device semantics;
+client PoP key and exact server-generated channel_id are additional bindings. Exactly one outer channel owns custody; another channel cannot adopt live exact
+retry even with same key/grant. Outer termination cancels forwarding/waits/unaccepted
+work and durably disconnects custody. Accepted/dequeued mutations retain their owning
+terminal result/events, tracked to completion with late secure-row disconnect; fresh outer connection requires central
+issue/redeem. Virtual streams/socket reconnect inside a live outer channel remains
+local. Exact retry cannot revive ended/revoked custody. Full security/lifecycle and
+verification contract: identity-accounts-friends-slice.md secure admission section.
+
+
 Status: admission implementation retained; Phase 5 removes D-07 unconsumed signed
 claim self-description. The D-02 frame correction and D-03 direct remote HTTP target
 authorization are implemented. Human admission/session, the one-use WebSocket
