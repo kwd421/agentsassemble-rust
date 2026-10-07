@@ -14,8 +14,11 @@ use url::Url;
 
 use crate::{CentralHostIdentity, HostIdentityError, public_ingress::PublicIngress};
 
+#[path = "admission_redeem.rs"]
+mod admission_redeem;
 #[path = "member_sync.rs"]
 mod member_sync;
+pub(crate) use admission_redeem::MemberGrantPurpose;
 
 #[cfg(test)]
 #[path = "directory_terminal_tests.rs"]
@@ -33,34 +36,6 @@ struct CentralDirectoryInner {
     client: Client,
     status: RwLock<CentralDirectoryStatus>,
     ingress: RwLock<PublicIngress>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct OwnerAdmissionResponse {
-    status: String,
-    server_id: String,
-    person_id: String,
-    device_id: String,
-    origin: String,
-    generation: i64,
-    expires_at: i64,
-}
-
-#[derive(Clone, Copy, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum MemberGrantPurpose {
-    Admission,
-    Connect,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct MemberAdmissionResponse {
-    pub(crate) projection_id: String,
-    pub(crate) person_id: String,
-    pub(crate) issuer: String,
-    pub(crate) display_name: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -260,87 +235,6 @@ impl CentralDirectory {
             publish_offline(&inner, &store, &identity).await?;
         }
         Ok(())
-    }
-
-    pub(crate) async fn member_admission(
-        &self,
-        identity: &CentralHostIdentity,
-        store: &SqliteStore,
-        grant: &str,
-        challenge_hash: &str,
-        epoch: &str,
-        purpose: MemberGrantPurpose,
-    ) -> Result<MemberAdmissionResponse, CentralDirectoryError> {
-        let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
-        let (prefix, route) = match purpose {
-            MemberGrantPurpose::Admission => ("aamg1.", "member-grants"),
-            MemberGrantPurpose::Connect => ("aamc1.", "member-connect-grants"),
-        };
-        if !grant.starts_with(prefix)
-            || grant.len() > 256
-            || store.registration_epoch().await?.as_deref() != Some(epoch)
-        {
-            return Err(CentralDirectoryError::Rejected);
-        }
-        let path = format!("/v1/servers/{}/{route}/redeem", identity.server_id());
-        let body = json!({"grant_token": grant, "challenge_hash": challenge_hash,
-            "registration_epoch": epoch, "purpose": purpose});
-        let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
-        let response: MemberAdmissionResponse =
-            serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
-        if base64::Engine::decode(
-            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-            &response.projection_id,
-        )
-        .map_or(true, |id| id.len() != 16)
-            || response.issuer != inner.base_url.origin().ascii_serialization()
-            || response.person_id.is_empty()
-            || response.person_id.len() > 256
-            || response.display_name.trim().is_empty()
-            || response.display_name.chars().count() > 80
-        {
-            return Err(CentralDirectoryError::InvalidResponse);
-        }
-        Ok(response)
-    }
-
-    pub(crate) async fn owner_admission(
-        &self,
-        identity: &CentralHostIdentity,
-        store: &SqliteStore,
-        credential: &str,
-        origin: &str,
-        generation: i64,
-        device: &[u8; 32],
-    ) -> Result<agentsassemble_persistence::OwnerAdmission, CentralDirectoryError> {
-        let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
-        let path = format!("/v1/servers/{}/connect-grants/redeem", identity.server_id());
-        let body = json!({ "grant_token": credential, "origin": origin,
-            "generation": generation });
-        let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
-        let response: OwnerAdmissionResponse =
-            serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
-        if response.status != "authorized"
-            || response.server_id != identity.server_id()
-            || response.origin != origin
-            || response.generation != generation
-        {
-            return Err(CentralDirectoryError::InvalidResponse);
-        }
-        agentsassemble_persistence::OwnerAdmission::verified(
-            agentsassemble_persistence::OwnerAdmissionBinding {
-                secure: None,
-                entry_fingerprint: sha2::Sha256::digest(credential.as_bytes()).into(),
-                server_id: response.server_id,
-                person_id: response.person_id,
-                device_id: response.device_id,
-                browser_fingerprint: *device,
-                origin: response.origin,
-                generation: response.generation,
-            },
-            response.expires_at,
-        )
-        .map_err(|_| CentralDirectoryError::InvalidResponse)
     }
 }
 
@@ -650,7 +544,8 @@ mod tests {
                         "grant",
                         "https://host.example",
                         1,
-                        &[0; 32]
+                        &[0; 32],
+                        None,
                     )
                     .await
                     .is_err()

@@ -25,6 +25,7 @@ pub(crate) struct MemberChallenges(Mutex<HashMap<String, Challenge>>);
 struct Challenge {
     purpose: ChallengePurpose,
     browser: [u8; 32],
+    secure: Option<agentsassemble_persistence::SecureSessionBinding>,
     epoch: String,
     expires: DateTime<Utc>,
     redeeming: bool,
@@ -44,8 +45,15 @@ impl MemberChallenges {
         browser: [u8; 32],
         epoch: String,
         now: DateTime<Utc>,
+        secure: Option<agentsassemble_persistence::SecureSessionBinding>,
     ) -> Result<(String, DateTime<Utc>), HumanInviteHttpError> {
-        self.issue_for(ChallengePurpose::Admission(invite), browser, epoch, now)
+        self.issue_for(
+            ChallengePurpose::Admission(invite),
+            browser,
+            epoch,
+            now,
+            secure,
+        )
     }
 
     fn issue_for(
@@ -54,6 +62,7 @@ impl MemberChallenges {
         browser: [u8; 32],
         epoch: String,
         now: DateTime<Utc>,
+        secure: Option<agentsassemble_persistence::SecureSessionBinding>,
     ) -> Result<(String, DateTime<Utc>), HumanInviteHttpError> {
         let mut entries = self.0.lock();
         entries.retain(|_, challenge| challenge.expires > now);
@@ -76,6 +85,7 @@ impl MemberChallenges {
             Challenge {
                 purpose,
                 browser,
+                secure,
                 epoch,
                 expires,
                 redeeming: false,
@@ -93,6 +103,7 @@ impl MemberChallenges {
         epoch: &str,
         now: DateTime<Utc>,
         request_hash: [u8; 32],
+        secure: Option<&agentsassemble_persistence::SecureSessionBinding>,
     ) -> Result<Challenge, HumanInviteHttpError> {
         let mut entries = self.0.lock();
         let challenge = entries.get_mut(id).ok_or_else(invalid_challenge)?;
@@ -103,6 +114,7 @@ impl MemberChallenges {
                 .is_none_or(|(hash, _)| *hash != request_hash))
             || challenge.expires <= now
             || !matches!(challenge.purpose, ChallengePurpose::Admission(value) if value == invite)
+            || challenge.secure.as_ref() != secure
             || challenge.browser != browser
             || challenge.epoch != epoch
         {
@@ -139,6 +151,7 @@ pub(super) async fn start(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, HumanInviteHttpError> {
+    let client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
     let body: PreflightRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
@@ -176,6 +189,7 @@ pub(super) async fn start(
         browser,
         epoch.clone(),
         now,
+        client.as_ref().map(|client| client.binding().clone()),
     )?;
     Ok(Json(
         json!({"challenge_id": id, "challenge_hash": URL_SAFE_NO_PAD.encode(Sha256::digest(id.as_bytes())),
@@ -187,6 +201,7 @@ pub(super) async fn join(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<JoinResponse>, HumanInviteHttpError> {
+    let client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
     let body: MemberJoinRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
@@ -222,12 +237,15 @@ pub(super) async fn join(
             .as_bytes(),
     )
     .into();
-    let member = redeem_member(&state, &body, browser, request_hash).await?;
+    let member = redeem_member(&state, &body, browser, request_hash, client.as_ref()).await?;
     let prepared = prepared.with_member(member.clone());
     match state.rooms.admit_human(prepared).await? {
         HumanAdmissionDecision::Admitted(commit) => {
             if let Some(challenge) = state.member_challenges.0.lock().get_mut(&body.challenge_id) {
                 challenge.completed = Some((request_hash, member));
+            }
+            if let Some(client) = &client {
+                client.adopt(&state, None)?;
             }
             let (mut result, session_token) = commit.into_result_and_bearer();
             // Correlate this HTTP response without changing the durable canonical result.
@@ -251,6 +269,7 @@ async fn redeem_member(
     body: &MemberJoinRequest,
     browser: [u8; 32],
     request_hash: [u8; 32],
+    client: Option<&crate::secure_client::SecureClient>,
 ) -> Result<MemberAdmission, HumanInviteHttpError> {
     let epoch = state
         .store
@@ -264,6 +283,7 @@ async fn redeem_member(
         &epoch,
         Utc::now(),
         request_hash,
+        client.map(crate::secure_client::SecureClient::binding),
     )?;
     if let Some((_, member)) = challenge.completed {
         return Ok(member);
@@ -278,6 +298,7 @@ async fn redeem_member(
             &hash,
             &epoch,
             crate::central::directory::MemberGrantPurpose::Admission,
+            client,
         )
         .await;
     let identity = redeemed.map_err(|error| {
@@ -286,7 +307,7 @@ async fn redeem_member(
         redeem_error(&error)
     })?;
     let member = MemberAdmission {
-        secure: None,
+        secure: client.map(|client| client.binding().clone()),
         projection_id: identity.projection_id,
         issuer: identity.issuer,
         person_id: identity.person_id,
@@ -326,11 +347,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn secure_challenge_rejects_plaintext_and_another_channel_before_claim() {
+        let challenges = MemberChallenges::default();
+        let now = Utc::now();
+        let binding = agentsassemble_persistence::SecureSessionBinding {
+            client_key_fingerprint: [7; 32],
+            channel_id: "a".repeat(43),
+        };
+        let (id, _) = challenges
+            .issue([1; 32], [2; 32], "epoch".into(), now, Some(binding.clone()))
+            .unwrap_or_else(|_| panic!("issue"));
+        let mut other = binding.clone();
+        other.channel_id = "b".repeat(43);
+        for presented in [None, Some(&other)] {
+            assert!(
+                challenges
+                    .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], presented)
+                    .is_err()
+            );
+        }
+        assert!(
+            challenges
+                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], Some(&binding))
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn challenge_browser_invite_epoch_expiry_claim_and_capacity_are_enforced() {
         let challenges = MemberChallenges::default();
         let now = Utc::now();
         let (id, expires) = challenges
-            .issue([1; 32], [2; 32], "epoch".into(), now)
+            .issue([1; 32], [2; 32], "epoch".into(), now, None)
             .unwrap_or_else(|_| panic!("issue"));
         for (invite, browser, epoch) in [
             ([3; 32], [2; 32], "epoch"),
@@ -339,40 +387,40 @@ mod tests {
         ] {
             assert!(
                 challenges
-                    .claim(&id, invite, browser, epoch, now, [0; 32])
+                    .claim(&id, invite, browser, epoch, now, [0; 32], None)
                     .is_err()
             );
         }
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", expires, [0; 32])
+                .claim(&id, [1; 32], [2; 32], "epoch", expires, [0; 32], None)
                 .is_err()
         );
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32])
+                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], None)
                 .is_ok()
         );
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32])
+                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], None)
                 .is_err()
         );
         for _ in 1..CHALLENGE_LIMIT {
             assert!(
                 challenges
-                    .issue([1; 32], [2; 32], "epoch".into(), now)
+                    .issue([1; 32], [2; 32], "epoch".into(), now, None)
                     .is_ok()
             );
         }
         assert!(
             challenges
-                .issue([1; 32], [2; 32], "epoch".into(), now)
+                .issue([1; 32], [2; 32], "epoch".into(), now, None)
                 .is_err()
         );
         assert!(
             challenges
-                .issue([1; 32], [2; 32], "epoch".into(), expires)
+                .issue([1; 32], [2; 32], "epoch".into(), expires, None)
                 .is_ok()
         );
     }
@@ -382,7 +430,7 @@ mod tests {
         let challenges = std::sync::Arc::new(MemberChallenges::default());
         let now = Utc::now();
         let (id, _) = challenges
-            .issue([1; 32], [2; 32], "epoch".into(), now)
+            .issue([1; 32], [2; 32], "epoch".into(), now, None)
             .unwrap_or_else(|_| panic!("issue"));
         let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
         let mut tasks = Vec::new();
@@ -393,7 +441,7 @@ mod tests {
             tasks.push(tokio::spawn(async move {
                 barrier.wait().await;
                 challenges
-                    .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32])
+                    .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32], None)
                     .is_ok()
             }));
         }

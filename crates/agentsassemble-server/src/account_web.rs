@@ -68,7 +68,15 @@ async fn status(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, AccountHttpError> {
-    let identity = resolve_identity(&state, request.headers(), local_transport(&request)).await?;
+    let identity = resolve_identity(
+        &state,
+        request.headers(),
+        local_transport(&request),
+        request
+            .extensions()
+            .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+    )
+    .await?;
     ensure_empty_body(request, MAX_ACCOUNT_BODY_BYTES).await?;
     let account = match identity {
         Some(identity) => state.store.google_account(&identity).await?,
@@ -83,9 +91,16 @@ async fn challenge(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, AccountHttpError> {
-    let identity = resolve_identity(&state, request.headers(), local_transport(&request))
-        .await?
-        .ok_or_else(AccountHttpError::unauthorized)?;
+    let identity = resolve_identity(
+        &state,
+        request.headers(),
+        local_transport(&request),
+        request
+            .extensions()
+            .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+    )
+    .await?
+    .ok_or_else(AccountHttpError::unauthorized)?;
     let _: ChallengeRequest = decode_json_body(request, MAX_ACCOUNT_BODY_BYTES).await?;
     Ok(Json(json!(state.google_accounts.start(identity).await?)))
 }
@@ -94,9 +109,16 @@ async fn connect(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, AccountHttpError> {
-    let identity = resolve_identity(&state, request.headers(), local_transport(&request))
-        .await?
-        .ok_or_else(AccountHttpError::unauthorized)?;
+    let identity = resolve_identity(
+        &state,
+        request.headers(),
+        local_transport(&request),
+        request
+            .extensions()
+            .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+    )
+    .await?
+    .ok_or_else(AccountHttpError::unauthorized)?;
     let input: ConnectRequest = decode_json_body(request, MAX_ACCOUNT_BODY_BYTES).await?;
     let fingerprint = state
         .google_accounts
@@ -123,9 +145,16 @@ async fn disconnect(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, AccountHttpError> {
-    let identity = resolve_identity(&state, request.headers(), local_transport(&request))
-        .await?
-        .ok_or_else(AccountHttpError::unauthorized)?;
+    let identity = resolve_identity(
+        &state,
+        request.headers(),
+        local_transport(&request),
+        request
+            .extensions()
+            .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+    )
+    .await?
+    .ok_or_else(AccountHttpError::unauthorized)?;
     ensure_empty_body(request, MAX_ACCOUNT_BODY_BYTES).await?;
     state.store.disconnect_google_account(&identity).await?;
     Ok(Json(json!({"status": "disconnected"})))
@@ -149,6 +178,7 @@ async fn resolve_identity(
     state: &AppState,
     headers: &axum::http::HeaderMap,
     local: bool,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
 ) -> Result<Option<AccountIdentity>, AccountHttpError> {
     let device = if headers.contains_key(&DEVICE_CREDENTIAL_HEADER) {
         Some(
@@ -162,7 +192,7 @@ async fn resolve_identity(
     let authority = if headers.contains_key(header::AUTHORIZATION) {
         single_header(headers, header::AUTHORIZATION).ok_or_else(AccountHttpError::unauthorized)?;
         let credential = bearer_credential(headers).ok_or_else(AccountHttpError::unauthorized)?;
-        match resolve_human_session_bearer(state, credential).await {
+        match resolve_human_session_bearer(state, credential, origin).await {
             Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
                 AccountAuthority::HumanSession {
                     authorization,

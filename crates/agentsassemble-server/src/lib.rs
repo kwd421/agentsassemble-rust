@@ -130,6 +130,7 @@ pub mod release_health;
 mod room_agent_lifecycle_runtime;
 mod room_channel;
 mod room_client_transport;
+mod secure_client;
 pub use attendee::client::{AttendeeClientError, AttendeeJoined, RoomAttendeeClient};
 pub use attendee::client_run::run_attendee_session;
 pub use attendee::client_runtime::{AttendeeExecution, AttendeeInterrupt, AttendeeRuntime};

@@ -85,7 +85,15 @@ async fn issue(
         .ok_or_else(RecoveryHttpError::unauthorized)?;
     let bearer =
         bearer_credential(request.headers()).ok_or_else(RecoveryHttpError::unauthorized)?;
-    let session = match resolve_human_session_bearer(&state, bearer).await {
+    let session = match resolve_human_session_bearer(
+        &state,
+        bearer,
+        request
+            .extensions()
+            .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+    )
+    .await
+    {
         Ok(HumanSessionBearerResolution::Authorized(session)) => session,
         Err(HumanSessionBearerError::Persistence(error)) => return Err(error.into()),
         _ => return Err(RecoveryHttpError::unauthorized()),

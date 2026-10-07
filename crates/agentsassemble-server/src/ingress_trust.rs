@@ -65,11 +65,21 @@ pub fn local_bind_is_supported(address: SocketAddr) -> bool {
 pub(crate) struct PeerAddr(pub(crate) SocketAddr);
 
 #[derive(Clone)]
-pub(crate) struct TrustedIngressOrigin(pub(crate) Arc<str>);
+pub(crate) struct TrustedIngressOrigin {
+    pub(crate) origin: Arc<str>,
+    pub(crate) secure: Option<agentsassemble_persistence::SecureSessionBinding>,
+}
 
 impl TrustedIngressOrigin {
+    pub(crate) fn plain(origin: Arc<str>) -> Self {
+        Self {
+            origin,
+            secure: None,
+        }
+    }
+
     pub(crate) fn as_str(&self) -> &str {
-        &self.0
+        &self.origin
     }
 }
 
@@ -117,7 +127,7 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
     }
     if local_trusted {
         if let Some(host) = single_header(request.headers(), header::HOST) {
-            let origin = TrustedIngressOrigin(format!("http://{host}").into());
+            let origin = TrustedIngressOrigin::plain(format!("http://{host}").into());
             request.extensions_mut().insert(origin);
         }
     } else if let Some(PublicIngressAuthorization::Authorized(origin)) = &public_authorization {
@@ -126,7 +136,7 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
     if exact_exposure == Some(RouteExposure::IdentityProbePublic) {
         let identity_origin = if local_trusted {
             single_header(request.headers(), header::HOST)
-                .map(|host| TrustedIngressOrigin(format!("http://{host}").into()))
+                .map(|host| TrustedIngressOrigin::plain(format!("http://{host}").into()))
         } else {
             match public_authorization {
                 Some(PublicIngressAuthorization::Identity(origin)) => Some(origin),

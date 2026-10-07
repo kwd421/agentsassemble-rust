@@ -80,6 +80,7 @@ async fn exchange(
         .map_err(|_| CentralOwnerHttpError::unauthorized())?;
     let device =
         device_fingerprint(request.headers()).ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let client = crate::secure_client::from_request(&request);
     let body: EntryRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(CentralOwnerHttpError::body)?;
@@ -100,6 +101,7 @@ async fn exchange(
             &origin,
             body.generation,
             &device,
+            client.as_ref(),
         )
         .await
         .map_err(|error| CentralOwnerHttpError::central(&error))?;
@@ -111,6 +113,9 @@ async fn exchange(
     state
         .owner_sessions
         .admit(&state, session.authorization.clone())?;
+    if let Some(client) = &client {
+        client.adopt(&state, Some(&session.authorization))?;
+    }
     Ok(Json(agentsassemble_protocol::CentralOwnerSessionGrant {
         session_token: session.session_bearer,
         session_id: session.authorization.session_id(),
@@ -138,6 +143,10 @@ async fn directory_events(
         .map_err(|_| CentralOwnerHttpError::unauthorized())?;
     let device =
         device_fingerprint(request.headers()).ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let secure = request
+        .extensions()
+        .get::<crate::ingress_trust::TrustedIngressOrigin>()
+        .and_then(|origin| origin.secure.clone());
     let body: DirectoryRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(CentralOwnerHttpError::body)?;
@@ -148,6 +157,7 @@ async fn directory_events(
         &origin,
         body.generation,
         device,
+        secure.as_ref(),
     )
     .await?;
     let owner_lease = state.owner_sessions.retain(&owner)?;
@@ -179,6 +189,7 @@ pub(crate) async fn authorize_directory_owner(
     origin: &str,
     generation: i64,
     device: [u8; 32],
+    secure: Option<&agentsassemble_persistence::SecureSessionBinding>,
 ) -> Result<OwnerSessionAuthorization, CentralOwnerHttpError> {
     // The configured ingress origin may have changed since HTTP admission.
     let mut headers = axum::http::HeaderMap::new();
@@ -198,6 +209,10 @@ pub(crate) async fn authorize_directory_owner(
     if owner.binding().generation != generation {
         return Err(CentralOwnerHttpError::unauthorized());
     }
+    agentsassemble_persistence::SecureSessionBinding::require_match(
+        owner.binding().secure.as_ref(),
+        secure,
+    )?;
     state.owner_sessions.require_live(&owner)?;
     Ok(owner)
 }
@@ -222,14 +237,20 @@ pub(crate) async fn owner_from_session_headers(
             .filter(|parsed| parsed.to_string() == value)
     })
     .ok_or_else(CentralOwnerHttpError::unauthorized)?;
-    let origin = origin
-        .ok_or_else(CentralOwnerHttpError::unauthorized)?
-        .as_str();
+    let observed = origin.ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let origin = observed.as_str();
     let device = device_fingerprint(headers).ok_or_else(CentralOwnerHttpError::unauthorized)?;
-    authorize_directory_owner(state, token, origin, generation, device)
-        .await
-        .map(Box::new)
-        .map(ServerOwnerAuthority::CentralSession)
+    authorize_directory_owner(
+        state,
+        token,
+        origin,
+        generation,
+        device,
+        observed.secure.as_ref(),
+    )
+    .await
+    .map(Box::new)
+    .map(ServerOwnerAuthority::CentralSession)
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -252,6 +273,10 @@ async fn directory(
         .map_err(|_| CentralOwnerHttpError::unauthorized())?;
     let device =
         device_fingerprint(request.headers()).ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let secure = request
+        .extensions()
+        .get::<crate::ingress_trust::TrustedIngressOrigin>()
+        .and_then(|origin| origin.secure.clone());
     let body: DirectoryRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(CentralOwnerHttpError::body)?;
@@ -261,6 +286,7 @@ async fn directory(
         &origin,
         body.generation,
         device,
+        secure.as_ref(),
     )
     .await?;
     let authority = ServerOwnerAuthority::CentralSession(Box::new(owner));
@@ -291,12 +317,22 @@ async fn create(State(state): State<AppState>, request: Request) -> Response {
             .map_err(|_| CentralOwnerHttpError::unauthorized())?;
         let device = device_fingerprint(request.headers())
             .ok_or_else(CentralOwnerHttpError::unauthorized)?;
+        let secure = request
+            .extensions()
+            .get::<crate::ingress_trust::TrustedIngressOrigin>()
+            .and_then(|origin| origin.secure.clone());
         let body: CreateRequest = decode_json_body(request, MAX_BODY)
             .await
             .map_err(CentralOwnerHttpError::body)?;
-        let owner =
-            authorize_directory_owner(state, &body.session_token, &origin, body.generation, device)
-                .await?;
+        let owner = authorize_directory_owner(
+            state,
+            &body.session_token,
+            &origin,
+            body.generation,
+            device,
+            secure.as_ref(),
+        )
+        .await?;
         let authority = ServerOwnerAuthority::CentralSession(Box::new(owner));
         Ok(crate::room_directory_web::create_room_for_owner(
             state,
@@ -321,6 +357,10 @@ async fn room(
         .map_err(|_| CentralOwnerHttpError::unauthorized())?;
     let device =
         device_fingerprint(request.headers()).ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let secure = request
+        .extensions()
+        .get::<crate::ingress_trust::TrustedIngressOrigin>()
+        .and_then(|origin| origin.secure.clone());
     let body: RoomRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(CentralOwnerHttpError::body)?;
@@ -330,6 +370,7 @@ async fn room(
         &origin,
         body.generation,
         device,
+        secure.as_ref(),
     )
     .await?;
     let room_incarnation = Uuid::parse_str(&body.room_uid)

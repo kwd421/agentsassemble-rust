@@ -52,7 +52,8 @@ pub(crate) async fn resolve_room_session_bearer(
         let fingerprint = fingerprint_token(bearer, OPERATOR_SESSION_BEARER_PREFIX)
             .ok_or(RoomSessionBearerError::Invalid)?;
         let device = device_fingerprint(headers).ok_or(RoomSessionBearerError::Invalid)?;
-        let origin = origin.ok_or(RoomSessionBearerError::Invalid)?.as_str();
+        let observed = origin.ok_or(RoomSessionBearerError::Invalid)?;
+        let origin = observed.as_str();
         let ready = state
             .public_ingress
             .ready_snapshot()
@@ -76,11 +77,15 @@ pub(crate) async fn resolve_room_session_bearer(
                 .require_live(&owner)
                 .map_err(RoomSessionBearerError::Persistence)?;
         }
-        return Ok(RoomSessionBearerResolution::Authorized(Box::new(
-            RoomSessionAuthorization::Operator(session),
-        )));
+        let session = RoomSessionAuthorization::Operator(session);
+        state
+            .store
+            .require_secure_room_transport(&session, observed.secure.as_ref())
+            .await
+            .map_err(RoomSessionBearerError::Persistence)?;
+        return Ok(RoomSessionBearerResolution::Authorized(Box::new(session)));
     }
-    match resolve_human_session_bearer(state, bearer).await {
+    match resolve_human_session_bearer(state, bearer, origin).await {
         Ok(HumanSessionBearerResolution::Other) => Ok(RoomSessionBearerResolution::Other),
         Ok(HumanSessionBearerResolution::Authorized(session)) => {
             Ok(RoomSessionBearerResolution::Authorized(Box::new(

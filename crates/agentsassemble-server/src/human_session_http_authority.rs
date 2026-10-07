@@ -18,16 +18,25 @@ pub(crate) enum HumanSessionBearerError {
 pub(crate) async fn resolve_human_session_bearer(
     state: &AppState,
     bearer: &str,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
 ) -> Result<HumanSessionBearerResolution, HumanSessionBearerError> {
     let fingerprint = match classify_presented_bearer(bearer) {
         PresentedHumanSessionBearer::Other => return Ok(HumanSessionBearerResolution::Other),
         PresentedHumanSessionBearer::Invalid => return Err(HumanSessionBearerError::Invalid),
         PresentedHumanSessionBearer::Fingerprint(fingerprint) => fingerprint,
     };
-    state
+    let session = state
         .store
         .authorize_human_session(&fingerprint)
         .await
-        .map(HumanSessionBearerResolution::Authorized)
-        .map_err(HumanSessionBearerError::Persistence)
+        .map_err(HumanSessionBearerError::Persistence)?;
+    state
+        .store
+        .require_secure_human_transport(
+            &fingerprint,
+            origin.and_then(|value| value.secure.as_ref()),
+        )
+        .await
+        .map_err(HumanSessionBearerError::Persistence)?;
+    Ok(HumanSessionBearerResolution::Authorized(session))
 }

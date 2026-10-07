@@ -38,6 +38,7 @@ pub(crate) async fn start(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, HumanInviteHttpError> {
+    let secure_client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
     let _: ChallengeRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
@@ -52,6 +53,9 @@ pub(crate) async fn start(
         browser,
         epoch.clone(),
         Utc::now(),
+        secure_client
+            .as_ref()
+            .map(|client| client.binding().clone()),
     )?;
     Ok(Json(
         json!({"challenge_id":id,"challenge_hash":URL_SAFE_NO_PAD.encode(Sha256::digest(id.as_bytes())),"server_id":state.central_host_identity.server_id(),"registration_epoch":epoch,"expires_at":expires.timestamp()}),
@@ -62,6 +66,7 @@ async fn challenge(
     state: &AppState,
     id: &str,
     browser: [u8; 32],
+    client: Option<&crate::secure_client::SecureClient>,
 ) -> Result<(Challenge, Arc<tokio::sync::Mutex<ConnectState>>), HumanInviteHttpError> {
     let epoch = state
         .store
@@ -75,7 +80,11 @@ async fn challenge(
         .get(id)
         .cloned()
         .ok_or_else(invalid_challenge)?;
-    if entry.browser != browser || entry.epoch != epoch || entry.expires <= Utc::now() {
+    if entry.secure.as_ref() != client.map(crate::secure_client::SecureClient::binding)
+        || entry.browser != browser
+        || entry.epoch != epoch
+        || entry.expires <= Utc::now()
+    {
         return Err(invalid_challenge());
     }
     let ChallengePurpose::Connect(record) = &entry.purpose else {
@@ -89,11 +98,13 @@ pub(crate) async fn redeem(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, HumanInviteHttpError> {
+    let secure_client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
     let body: RedeemRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
         .map_err(HumanInviteHttpError::from_body)?;
-    let (entry, record) = challenge(&state, &body.challenge_id, browser).await?;
+    let (entry, record) =
+        challenge(&state, &body.challenge_id, browser, secure_client.as_ref()).await?;
     let mut record = record.lock().await;
     if !matches!(*record, ConnectState::Issued) {
         return Err(invalid_challenge());
@@ -108,11 +119,14 @@ pub(crate) async fn redeem(
             &URL_SAFE_NO_PAD.encode(Sha256::digest(body.challenge_id.as_bytes())),
             &entry.epoch,
             MemberGrantPurpose::Connect,
+            secure_client.as_ref(),
         )
         .await
         .map_err(|error| redeem_error(&error))?;
     let member = MemberAdmission {
-        secure: None,
+        secure: secure_client
+            .as_ref()
+            .map(|client| client.binding().clone()),
         projection_id: identity.projection_id,
         issuer: identity.issuer,
         person_id: identity.person_id,
@@ -144,6 +158,7 @@ pub(crate) async fn select(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, HumanInviteHttpError> {
+    let secure_client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
     let body: SelectRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
@@ -158,7 +173,7 @@ pub(crate) async fn select(
             "A bounded client ID is required.",
         ));
     }
-    let (_, record) = challenge(&state, &body.challenge, browser).await?;
+    let (_, record) = challenge(&state, &body.challenge, browser, secure_client.as_ref()).await?;
     // Lock one existing challenge across mint: exact concurrent retries await its result.
     let mut record = record.lock().await;
     let ConnectState::ConnectRedeemed {
@@ -217,5 +232,8 @@ pub(crate) async fn select(
     })
     .map_err(|_| invalid_challenge())?;
     *completed = Some(response.clone());
+    if let Some(client) = &secure_client {
+        client.adopt(&state, None)?;
+    }
     Ok(Json(response))
 }

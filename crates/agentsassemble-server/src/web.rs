@@ -574,6 +574,7 @@ async fn upgrade_socket(
     State(state): State<AppState>,
     Query(query): Query<TicketQuery>,
     upgrade: WebSocketUpgrade,
+    origin: Option<Extension<crate::ingress_trust::TrustedIngressOrigin>>,
 ) -> Result<Response, ApiError> {
     let hint = state
         .tickets
@@ -591,6 +592,16 @@ async fn upgrade_socket(
         .consume_socket(&query.ticket)
         .await
         .map_err(|error| ApiError::unauthorized(error.to_string()))?;
+    if let ConsumedSocketTicket::RoomSession(session) = &grant {
+        state
+            .store
+            .require_secure_room_transport(
+                session.authorization(),
+                origin.as_ref().and_then(|origin| origin.secure.as_ref()),
+            )
+            .await
+            .map_err(|_| ApiError::unauthorized("Socket transport does not match admission."))?;
+    }
     if !socket_hint_matches_grant(&hint, &grant) {
         return Err(ApiError::unauthorized("Socket ticket authority changed."));
     }

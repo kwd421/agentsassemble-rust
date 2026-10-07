@@ -37,6 +37,10 @@ impl ConsumedSocketTicket {
 }
 
 impl ConsumedRoomSessionSocketTicket {
+    pub(crate) fn authorization(&self) -> &RoomSessionAuthorization {
+        &self.authorization
+    }
+
     #[must_use]
     pub fn into_authorization(self) -> RoomSessionAuthorization {
         self.authorization

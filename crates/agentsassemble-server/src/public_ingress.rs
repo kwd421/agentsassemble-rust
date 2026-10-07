@@ -410,9 +410,13 @@ impl PublicIngress {
         }
         match self.0.as_ref() {
             PublicIngressKind::Disabled => None,
-            PublicIngressKind::Manual(ingress) => ingress
-                .authorizes(peer, headers, exposure)
-                .then(|| authorization(exposure, || TrustedIngressOrigin(ingress.origin.clone()))),
+            PublicIngressKind::Manual(ingress) => {
+                ingress.authorizes(peer, headers, exposure).then(|| {
+                    authorization(exposure, || {
+                        TrustedIngressOrigin::plain(ingress.origin.clone())
+                    })
+                })
+            }
             PublicIngressKind::Managed(ingress) => {
                 if !peer.0.ip().is_loopback() || exposure == RouteExposure::Private {
                     return None;
@@ -861,7 +865,7 @@ impl ManagedProjection {
         let trust = self.trust.as_ref()?;
         trust.authorizes(headers, exposure).then(|| {
             authorization(exposure, || {
-                TrustedIngressOrigin(trust.origin.value.as_str().into())
+                TrustedIngressOrigin::plain(trust.origin.value.as_str().into())
             })
         })
     }
