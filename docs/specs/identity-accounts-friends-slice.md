@@ -8,8 +8,22 @@ directory observer open. Affected entry points are `useCentralDirectory`, deskto
 startup/rail, remote-owner dialog directory loading, and explicit rail open/refresh.
 Keep signed authentication, fresh bootstrap before admission, one in-flight request,
 account isolation, cancellation, visible outage/authentication states, automatic
-recovery, and host-owned connected sessions. No Worker, schema, replay-protection,
-deployment, or production D1 changes are authorized here.
+recovery, and host-owned connected sessions. The original client mitigation did
+not authorize Worker/schema changes; the manager subsequently approved the bounded
+Worker correction described below. Deployment and remote migration remain excluded.
+
+Approved Worker follow-up: exact signed GET `/v1/bootstrap` and authorized icon
+GETs retain signature, clock-window, live authority, authorization and edge rate
+limits, but may repeat within the clock window without nonce persistence/debt.
+Other methods/routes retain replay protection. Additive migration
+`0016_general_actor_budget.sql` atomically caps GENERAL nonce debt at 90 units per
+account, 45 per session and 45 per host per UTC day, derived from existing verified
+session/server ownership. The global 700 pool and cleanup bounds stay unchanged.
+The shared central response owner maps `actor_quota_exhausted` (429) to Korean,
+identifying the daily actor allowance and UTC-midnight retry; existing temporary
+error classification and retained-directory/authentication behavior stay intact.
+Apply migration before Worker code; retain schema on code rollback. This local
+slice does not deploy, change polling again or apply production migrations.
 
 The shared observer checks a healthy directory every 30 minutes instead of every
 30 seconds. Transient retries use 1/2/4/8/... seconds up to 30 minutes; successful
@@ -19,8 +33,9 @@ appear when idle; host room streams and explicit admission checks remain immedia
 This supersedes the step-1 30-second observation/backoff contract below. One idle
 client now schedules 48 rather than 2,880 checks/day (144 rather than 8,640 GENERAL
 nonce units at three units/check), plus initial/event/action checks. This is only a
-client mitigation: the global 700-unit pool still needs a separately approved
-Worker design fix. Existing host endpoint renewal remains five minutes (ENDPOINT),
+client mitigation; once the approved Worker correction is deployed, exact
+bootstrap reads spend zero GENERAL nonce units. The global 700-unit pool remains.
+Existing host endpoint renewal remains five minutes (ENDPOINT),
 default-name publication remains revision/event-driven (GENERAL; failed sends
 back off 2/4/8/16/32 seconds), and durable member-sync retry remains
 1/2/4/8/... minutes up to six hours with 80-120% jitter, at most 48 sends/day

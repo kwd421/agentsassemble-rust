@@ -347,6 +347,7 @@ async function responsePayload<T>(response: Response, central = true, signal?: A
     const message =
       (response.status === 409 && code === "server_move_unsupported" ? "서버 옮기기는 아직 지원하지 않아요"
         : code === "duplicate_resolution_conflict" ? "다른 기기에서 서버를 선택했어요. 목록을 다시 확인해 주세요."
+        : central && code === "actor_quota_exhausted" ? "오늘 계정·기기·서버의 변경 요청 한도를 다 썼어요. UTC 자정(한국 시간 오전 9시) 이후 다시 시도해 주세요."
         : code === "server_retirement_capacity" ? "잠시 후 다시 시도해 주세요" : undefined) ||
       (central ? payload?.error?.message : typeof payload?.error === "string" ? payload.error : undefined) ||
       `로그인 서버가 HTTP ${response.status}을 반환했습니다.`;
