@@ -1,5 +1,28 @@
 # Verification Contract
 
+- 2026-10-07 secure-admission code review round 1: Daybreak Blue xhigh reviewed
+  Rust `5c20622f` and Worker `05dcde0c`, all individual/cumulative commits;
+  REVISE C0/H0/M2/L0. M1 is corrected by `d83668a8`: signed host origins own
+  directory/member surface pins, dock entries, canonical projection and invitation
+  creation/copy custody. Three new regressions failed before the correction and
+  pass after, including server A -> B in one central-origin document.
+  M2 is corrected by `ace8fbe0`: three explicit owner
+  entry routes reuse the existing persona service, requiring encrypted provenance
+  and the existing exact owner-session/device/generation/channel check. Local
+  operator routes stay private. Production Node WebCrypto -> Rust integration
+  imports the actual PNG persona fixture, lists its summary and reads its private
+  thumbnail; admitted member and cross-channel owner requests are denied for all
+  three operations, and the plaintext owner request is denied. Frontend tests
+  reject member/closed-channel authority and a workspace change during upload.
+  Passed after corrections: frontend build and all 190 suites / 1,234 tests;
+  server 142 unit tests, 4 persona integration tests, expanded encrypted runtime
+  integration; full workspace Clippy, architecture/source-growth/policy gates,
+  format and diff checks. Logs: `/tmp/aa-review-front-full.log`,
+  `/tmp/aa-review-persona-runtime3.log`, `/tmp/aa-review-local-persona.log`,
+  `/tmp/aa-review-clippy.log`. Full cumulative code re-review is pending;
+  no push, deployment or packaged acceptance has occurred yet.
+
+
 - 2026-10-07 secure admission / event endpoint implementation at Rust
   `73002fd5..6d3b4521` and Worker `da05954f..05dcde0c`:
   central device-signed grants bind fresh client public key/channel, with atomic
