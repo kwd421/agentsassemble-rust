@@ -109,7 +109,7 @@ export default function AgentCreateModal({
   const workspaceRequired = Boolean(
     selectedProvider && (
       selectedProvider.workspace_required ||
-      settings.permission_mode === "workspace_write"
+      ["workspace_write", "full_access"].includes(settings.permission_mode)
     )
   );
   const selectedProviderMissing = Boolean((providerId || initialSelection?.providerId) &&

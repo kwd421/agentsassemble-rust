@@ -303,10 +303,10 @@ impl OpenCodeDriver {
         &mut self,
         session: &DurableAgentSession,
     ) -> Result<String, DriverError> {
-        let permission_action = if session.public.permission_mode == "meeting_read_only" {
-            "deny"
-        } else {
-            "ask"
+        let permission_action = match session.public.permission_mode.as_str() {
+            "meeting_read_only" => "deny",
+            "full_access" => "allow",
+            _ => "ask",
         };
         let mut model = json!({
             "id": model_id(&session.public.model)?,
@@ -329,7 +329,7 @@ impl OpenCodeDriver {
                         {"permission": "glob", "pattern": "*", "action": "allow"},
                         {"permission": "grep", "pattern": "*", "action": "allow"},
                         {"permission": "list", "pattern": "*", "action": "allow"},
-                        {"permission": "external_directory", "pattern": "*", "action": "deny"},
+                        {"permission": "external_directory", "pattern": "*", "action": if permission_action == "allow" { "allow" } else { "deny" }},
                         {"permission": "agentsassemble_room_*", "pattern": "*", "action": "allow"},
                     ],
                 }),

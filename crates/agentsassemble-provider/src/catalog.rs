@@ -127,7 +127,7 @@ pub(crate) async fn discover_codex(
             control("model", "모델", "combobox", models, &default_model),
             control("reasoning_effort", "추론 강도", "select", efforts, "low"),
             control("service_tier", "응답 속도", "select", tiers, "default"),
-            permission_control(true),
+            permission_control(true, true),
         ],
     )
 }
@@ -207,7 +207,7 @@ pub(crate) async fn discover_opencode(
                 ],
                 "",
             ),
-            permission_control(true),
+            permission_control(true, true),
         ],
     )
 }
@@ -322,7 +322,10 @@ pub(crate) async fn discover_custom_api(
     ready_provider(
         provider,
         String::new(),
-        vec![remote_output_token_control(), permission_control(true)],
+        vec![
+            remote_output_token_control(),
+            permission_control(true, false),
+        ],
     )
 }
 
@@ -359,7 +362,10 @@ fn ready_gateway(
     let default_model = preferred_model(&models, preferred);
     let mut controls = vec![control("model", "모델", "combobox", models, &default_model)];
     controls.extend(provider_control);
-    controls.extend([remote_output_token_control(), permission_control(true)]);
+    controls.extend([
+        remote_output_token_control(),
+        permission_control(true, false),
+    ]);
     ready_provider(provider, default_model.clone(), controls)
 }
 
@@ -480,10 +486,13 @@ pub(crate) fn control(
     }
 }
 
-pub(crate) fn permission_control(workspace_write: bool) -> ProviderControl {
+pub(crate) fn permission_control(workspace_write: bool, full_access: bool) -> ProviderControl {
     let mut options = vec![option("meeting_read_only", "대화 전용")];
     if workspace_write {
         options.push(option("workspace_write", "작업 폴더 쓰기"));
+    }
+    if full_access {
+        options.push(option("full_access", "전체 액세스"));
     }
     control(
         "permission_mode",

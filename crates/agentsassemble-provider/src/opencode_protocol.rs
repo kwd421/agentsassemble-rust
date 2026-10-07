@@ -97,7 +97,7 @@ pub(crate) fn validate_profile(session: &DurableAgentSession) -> Result<(), Driv
     if !matches!(session.public.variant.as_str(), "" | "high" | "max")
         || !matches!(
             session.public.permission_mode.as_str(),
-            "meeting_read_only" | "workspace_write"
+            "meeting_read_only" | "workspace_write" | "full_access"
         )
         || !session.public.reasoning_effort.is_empty()
         || !session.public.service_tier.is_empty()

@@ -646,6 +646,7 @@ fn profile_permissions(
     session: &DurableAgentSession,
 ) -> Result<(&'static str, &'static str), DriverError> {
     match session.public.permission_mode.as_str() {
+        "full_access" => Ok(("never", "danger-full-access")),
         "workspace_write" => Ok(("on-request", "workspace-write")),
         "meeting_read_only" => Ok(("never", "read-only")),
         _ => Err(invalid_runtime_profile()),

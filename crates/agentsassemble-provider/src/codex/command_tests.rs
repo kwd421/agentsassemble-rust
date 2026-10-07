@@ -9,6 +9,27 @@ use crate::{
     test_support::durable_session,
 };
 
+#[tokio::test]
+async fn full_access_sets_native_sandbox_and_approval_policy() {
+    let mut session = codex_session_fixture();
+    session.public.permission_mode = "full_access".to_owned();
+    let portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("portal: {error}"));
+    let arguments = command_arguments(&session, &portal, &[])
+        .unwrap_or_else(|error| panic!("arguments: {error}"));
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value == "approval_policy=\"never\"")
+    );
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value == "sandbox_mode=\"danger-full-access\"")
+    );
+}
+
 #[test]
 fn resume_carries_the_sessions_current_model() {
     let mut session = codex_session_fixture();

@@ -72,13 +72,18 @@ it("disables conversation-only permission for a free OpenCode model", async () =
   const provider = openCodeProvider();
   const model = provider.controls[0];
   model.default_value = model.options[0].value;
-  provider.controls.push(workPermissionControl());
+  const permissions = workPermissionControl();
+  permissions.options.push({ value: "full_access", label: "전체 액세스" });
+  provider.controls.push(permissions);
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
     providers={[provider]} onClose={() => undefined} onCreate={vi.fn()} />);
   await userEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
-  expect(screen.getByText("OpenCode 무료 모델은 명령 실행 도구가 켜져 있어야 써서, 승인 모드에서만 쓸 수 있어요.")).toBeTruthy();
+  expect(screen.getByText("OpenCode 무료 모델은 작업 폴더 쓰기나 전체 액세스 권한이 필요해요.")).toBeTruthy();
   const permission = screen.getByRole("combobox", { name: "권한" });
   expect(permission.textContent).toContain("작업 폴더 쓰기");
   await userEvent.click(permission);
   expect((screen.getByRole("option", { name: "대화 전용" }) as HTMLButtonElement).disabled).toBe(true);
+  await userEvent.click(screen.getByRole("option", { name: "전체 액세스" }));
+  expect(permission.textContent).toContain("전체 액세스");
+  expect(screen.getAllByText("방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.")).toHaveLength(1);
 });

@@ -14114,3 +14114,39 @@ Cargo test command did not pass. Desktop `cargo clippy --locked --all-targets --
 and `git diff --check` passed. Existing ts-rs attribute warnings remain.
 No packaged GUI rerun was performed; native hang resolution and visual acceptance
 remain unverified at runtime. No commit or push was made.
+
+## Three agent permission levels (2026-10-07)
+
+Owner-requested change from `1a64a694`: catalog offers `전체 액세스` / `full_access`
+only for Codex, Claude Agent SDK and OpenCode. Codex sets `never` with
+`danger-full-access` at launch/thread creation and `dangerFullAccess` on every
+turn. Claude selects `bypassPermissions` and `allowDangerouslySkipPermissions`;
+workspace-write uses native `default` plus command/edit ask rules instead of
+`acceptEdits`, which would auto-approve edits. OpenCode selects native wildcard
+`allow`, including external-directory access. The other catalogs retain their
+existing levels; selection rejects unsupported values. Native restrictions remain
+in force ([Claude permissions](https://code.claude.com/docs/en/agent-sdk/permissions),
+[OpenCode permissions](https://opencode.ai/docs/permissions/)). No room-tool ingress,
+turn authority, request-broker auto-approval, schema or background task changes.
+
+Acceptance evidence: provider/persistence/server all-feature Cargo suite passes;
+focused full-access native payload/catalog tests, permission transition
+rollback/replay tests, server create/configure free-model tests, real HTTP local
+operator selection and real WebSocket non-operator denial pass. Transaction tests
+also deny member configuration and server-operator modification of companion
+custody. Permission changes retain 12b805bb's atomic native-session retirement;
+unchanged-mode and replay preserve the rebound session. Bundled handoff test rejects
+injected `permission_mode`. Frontend full suite (1,209 tests) and production build
+pass; added create/settings regressions (25 tests in the affected two files) prove
+one exact warning, preservation of free-model full access and submitted downgrade.
+Claude SDK bridge suite passes 18 tests across all three modes. Architecture,
+source-growth/policy, format, diff and all-target/all-feature Clippy gates pass.
+Packaged visual acceptance and live-provider execution remain unknown; fixtures and
+native request payloads do not claim those results. Changes are committed locally;
+no push, deployment, external review or scan is part of this request.
+Artifact gate initially found the separate desktop target created by the handoff
+unit-test invocation. After all Cargo/Tauri work exited, the prescribed
+`make artifact-prune` cleaned both that target (1.8 GiB) and the shared Cargo target
+(15.3 GiB); final `make artifact-check` passes. These generated caches will rebuild
+on the next Rust build. User data and the excluded untracked directories were left
+untouched.

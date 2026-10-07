@@ -19,6 +19,11 @@ async fn opencode_workspace_shell_keeps_human_approval() -> Result<(), Box<dyn s
 }
 
 #[tokio::test]
+async fn opencode_full_access_uses_native_allow() -> Result<(), Box<dyn std::error::Error>> {
+    check_native_permissions("full_access", false).await
+}
+
+#[tokio::test]
 async fn opencode_external_read_only_keeps_native_denial() -> Result<(), Box<dyn std::error::Error>>
 {
     check_native_permissions("meeting_read_only", true).await
@@ -44,10 +49,10 @@ async fn check_native_permissions(
     )?)?;
     assert_eq!(
         creation["permission"][0]["action"],
-        if mode == "meeting_read_only" {
-            "deny"
-        } else {
-            "ask"
+        match mode {
+            "meeting_read_only" => "deny",
+            "full_access" => "allow",
+            _ => "ask",
         }
     );
     assert_eq!(
@@ -55,7 +60,15 @@ async fn check_native_permissions(
         json!({"permission":"read", "pattern":"*", "action":"allow"})
     );
     let mut active = active_session(&session, &started, "room-turn-1");
-    if external || mode == "meeting_read_only" {
+    assert_eq!(
+        creation["permission"][5]["action"],
+        if mode == "full_access" {
+            "allow"
+        } else {
+            "deny"
+        }
+    );
+    if external || mode != "workspace_write" {
         stop_and_release(&adapter, &active, &started).await;
         return Ok(());
     }

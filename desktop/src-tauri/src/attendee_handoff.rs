@@ -118,6 +118,7 @@ mod tests {
             ("command", "/bin/sh"),
             ("session_token", "human-credential"),
             ("workspace", "/private/workspace"),
+            ("permission_mode", "full_access"),
         ] {
             let mut injected = packet.clone();
             injected[key] = value.into();

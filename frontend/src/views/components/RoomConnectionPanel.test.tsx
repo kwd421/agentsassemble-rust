@@ -743,3 +743,28 @@ it("requires approval when saving a legacy free OpenCode conversation-only sessi
   await userEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
   expect(onAgentConfigure).toHaveBeenCalledWith(session, expect.objectContaining({ permission_mode: "workspace_write" }));
 });
+
+it("preserves stored full access for free OpenCode settings and submits a downgrade", async () => {
+  const provider = codexProvider();
+  provider.id = "opencode";
+  provider.provider_kind = "opencode_server";
+  provider.runtime_kind = "opencode";
+  provider.controls[0].options[0].metadata = { pricing: "free" };
+  provider.controls.find((control) => control.key === "permission_mode")!.options
+    .push({ value: "full_access", label: "전체 액세스" });
+  const session = { ...agentSession("stopped"), enabled: false,
+    provider_kind: "opencode_server", runtime_kind: "opencode", model: "gpt-current",
+    reasoning_effort: "low", service_tier: "default", variant: "",
+    permission_mode: "full_access", max_output_tokens: 4096 };
+  const onAgentConfigure = vi.fn().mockResolvedValue(undefined);
+  render(<RoomConnectionPanel room={room} agents={[agent("offline")]} members={[member()]}
+    agentSessions={[session]} capabilities={agentControlCapability}
+    availableProviders={[provider]} onAgentConfigure={onAgentConfigure} />);
+  openAgentDetails();
+  expectProviderControlValue("권한", "전체 액세스");
+  expect(screen.getAllByText("방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.")).toHaveLength(1);
+  await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
+  await userEvent.click(screen.getByRole("option", { name: "작업 폴더 쓰기" }));
+  await userEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
+  expect(onAgentConfigure).toHaveBeenCalledWith(session, expect.objectContaining({ permission_mode: "workspace_write" }));
+});

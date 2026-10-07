@@ -425,9 +425,21 @@ mod tests {
 
     #[tokio::test]
     async fn permission_downgrade_discards_native_session_atomically_and_replay_preserves_rebind() {
+        for (old, new) in [
+            ("workspace_write", "meeting_read_only"),
+            ("full_access", "workspace_write"),
+            ("full_access", "meeting_read_only"),
+            ("workspace_write", "full_access"),
+            ("meeting_read_only", "full_access"),
+        ] {
+            check_permission_reconfiguration(old, new).await;
+        }
+    }
+
+    async fn check_permission_reconfiguration(old: &str, new: &str) {
         let (store, principal, directory) = fixture().await;
         let mut selected = draft(directory.path().to_str().unwrap_or_else(|| panic!("path")));
-        selected.permission_mode = "workspace_write".into();
+        selected.permission_mode = old.into();
         store
             .execute_agent_create(
                 TrustedPrincipal(&principal),
@@ -437,13 +449,11 @@ mod tests {
             )
             .await
             .unwrap_or_else(|error| panic!("create: {error}"));
-        let payload =
-            json!({"agent_id": selected.agent_id, "permission_mode": "meeting_read_only"});
+        let payload = json!({"agent_id": selected.agent_id, "permission_mode": new});
         let mut session = store
             .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
             .await
             .unwrap_or_else(|error| panic!("candidate: {error}"));
-        let agent_session_id = session.public.session_id.clone();
         session.provider_session_id = "native-with-old-write-grants".into();
         persist_native_session_fixture(&store, &session).await;
 
@@ -465,7 +475,7 @@ mod tests {
         assert_eq!(unchanged.provider_session_id, session.provider_session_id);
 
         let mut downgraded = selected.clone();
-        downgraded.permission_mode = "meeting_read_only".into();
+        downgraded.permission_mode = new.into();
         downgraded.runtime_profile_key = "profile-read-only".into();
         sqlx::query("CREATE TRIGGER reject_configuration_result BEFORE INSERT ON command_results BEGIN SELECT RAISE(ABORT, 'injected failure'); END")
             .execute(&store.pool).await.unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
@@ -485,7 +495,7 @@ mod tests {
             .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
             .await
             .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
-        assert_eq!(rolled_back.public.permission_mode, "workspace_write");
+        assert_eq!(rolled_back.public.permission_mode, old);
         assert_eq!(rolled_back.provider_session_id, session.provider_session_id);
         sqlx::query("DROP TRIGGER reject_configuration_result")
             .execute(&store.pool)
@@ -506,8 +516,8 @@ mod tests {
             .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
             .await
             .unwrap_or_else(|error| panic!("permission downgrade fixture: {error}"));
-        assert_eq!(fresh.public.permission_mode, "meeting_read_only");
-        assert_eq!(fresh.public.session_id, agent_session_id);
+        assert_eq!(fresh.public.permission_mode, new);
+        assert_eq!(fresh.public.session_id, session.public.session_id);
         assert!(
             fresh.provider_session_id.is_empty(),
             "next start must create, not resume, a native session"
@@ -860,25 +870,65 @@ mod tests {
             .path()
             .to_str()
             .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
+        let mut selection = draft(workspace);
+        selection.permission_mode = "full_access".into();
         let result = store
             .execute_agent_create(
                 TrustedPrincipal(&principal),
                 "create-denied",
                 &json!({"provider_id": "codex"}),
-                &draft(workspace),
+                &selection,
             )
             .await;
         assert!(matches!(
             result,
             Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
         ));
+        principal.capabilities.agent_control = true;
+        store
+            .execute_agent_create(
+                TrustedPrincipal(&principal),
+                "owner-full",
+                &json!({}),
+                &selection,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("owner create: {error}"));
+        let payload = json!({"agent_id":selection.agent_id, "permission_mode":"full_access"});
+        principal.capabilities.agent_control = false;
+        assert!(
+            matches!(store.agent_configuration_candidate(TrustedPrincipal(&principal), &payload).await,
+            Err(PersistenceError::CommandRejected { code, .. }) if code == "permission_denied")
+        );
+        assert!(
+            matches!(store.execute_agent_configuration(TrustedPrincipal(&principal), "denied-config", &payload,
+            &selection.runtime_profile_key, &selection).await,
+            Err(PersistenceError::CommandRejected { code, .. }) if code == "permission_denied")
+        );
+        principal.capabilities.agent_control = true;
+        let mut companion = store
+            .agent_configuration_candidate(TrustedPrincipal(&principal), &payload)
+            .await
+            .unwrap_or_else(|error| panic!("candidate: {error}"));
+        companion.public.external_owned = true;
+        companion.public.process_ownership = "companion".into();
+        persist_native_session_fixture(&store, &companion).await;
+        assert!(
+            matches!(store.agent_configuration_candidate(TrustedPrincipal(&principal), &payload).await,
+            Err(PersistenceError::CommandRejected { code, .. }) if code == "external_runtime_owned")
+        );
+        assert!(
+            matches!(store.execute_agent_configuration(TrustedPrincipal(&principal), "remote-config", &payload,
+            &selection.runtime_profile_key, &selection).await,
+            Err(PersistenceError::CommandRejected { code, .. }) if code == "external_runtime_owned")
+        );
         let snapshot = store
             .snapshot("general", 0, 200)
             .await
             .unwrap_or_else(|error| panic!("snapshot: {error}"));
-        assert!(snapshot.agent_sessions.is_empty());
-        assert_eq!(snapshot.participants.len(), 1);
-        assert_eq!(snapshot.events.len(), 1);
+        assert_eq!(snapshot.agent_sessions.len(), 1);
+        assert_eq!(snapshot.participants.len(), 2);
+        assert_eq!(snapshot.events.len(), 2);
         assert_eq!(snapshot.events[0].event_type, "room_created");
     }
 

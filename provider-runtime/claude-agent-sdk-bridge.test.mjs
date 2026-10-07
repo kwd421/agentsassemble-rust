@@ -64,7 +64,8 @@ test("usage projects structured SDK limits without session or transcript metadat
   assert.equal(await exit, 0);
 });
 
-test("session correlates one SDK result and closes explicitly", async () => {
+for (const permission of ["meeting_read_only", "workspace_write", "full_access"]) {
+test(`session uses ${permission}, correlates one SDK result and closes explicitly`, async () => {
   const runtime = start("session");
   runtime.child.stdin.write(
     `${JSON.stringify({
@@ -73,7 +74,7 @@ test("session correlates one SDK result and closes explicitly", async () => {
       model: "claude-sonnet-5",
       reasoning_effort: "high",
       service_tier: "fast",
-      permission_mode: "meeting_read_only",
+      permission_mode: permission,
       resume_session_id: "",
       room_portal: { url: "http://127.0.0.1:43210/mcp", bearer_token: "fixture-token" },
     })}\n`,
@@ -94,6 +95,7 @@ test("session correlates one SDK result and closes explicitly", async () => {
   assert.deepEqual(await runtime.next(), { type: "stopped" });
   assert.equal(await closed(runtime.child), 0);
 });
+}
 
 for (const [reported, accepted] of [
   ["C:\\fixture\\workspace", true],

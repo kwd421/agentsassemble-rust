@@ -184,7 +184,7 @@ export default function AgentSessionDetails({
     session.max_output_tokens,
   ]);
 
-  useEffect(() => { setSettings(provider && requiresOpenCodeApproval(provider, storedSettings)
+  useEffect(() => { setSettings(provider && requiresOpenCodeApproval(provider, storedSettings) && storedSettings.permission_mode !== "full_access"
     ? { ...storedSettings, permission_mode: "workspace_write" } : storedSettings); }, [provider, storedSettings]);
   const settingsChanged = Object.entries(storedSettings).some(([key, value]) => settings[key] !== value);
 

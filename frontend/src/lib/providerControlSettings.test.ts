@@ -240,13 +240,16 @@ describe("providerControlSettings", () => {
   });
 });
 
-it("forces approval for catalog-marked OpenCode free models on initialization and edits", () => {
+it("requires write access for catalog-marked OpenCode free models on initialization and edits", () => {
   const provider = relatedProvider();
   provider.id = "opencode";
   const models = provider.controls.find((control) => control.key === "model")!;
   models.options[0].metadata = { pricing: "free" };
   const permission = provider.controls.find((control) => control.key === "permission_mode")!;
+  permission.options.push({ value: "full_access", label: "전체 액세스" });
   const initial = initializeProviderSettings(provider);
+  expect(reconcileProviderSettings(provider, { ...initial, permission_mode: "full_access" }).permission_mode)
+    .toBe("full_access");
   expect(initial.permission_mode).toBe("workspace_write");
   expect(effectiveProviderControlOptions(provider, permission, initial)[0].metadata?.disabled).toBe(true);
   expect(reconcileProviderSettings(provider, { ...initial, permission_mode: "meeting_read_only" }).permission_mode)

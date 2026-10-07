@@ -37,6 +37,37 @@ manual verification or deployment; visual acceptance belongs to the user.
 
 ## Definition
 
+### Three permission levels (owner decision, 2026-10-07)
+
+Creation and stopped-session configuration share catalog-owned availability:
+`대화 전용` (`meeting_read_only`, room tools only), `작업 폴더 쓰기`
+(`workspace_write`, approval per command/edit), and `전체 액세스` (`full_access`,
+native commands/edits without approval). Only Codex, Claude Agent SDK and OpenCode
+offer full access: Codex uses `danger-full-access` + `never`, Claude uses
+`bypassPermissions`, OpenCode uses native `allow`, including external directories.
+Other adapters retain their existing options; unsupported selections are rejected.
+Provider-native safety restrictions remain authoritative; no broker auto-approval
+or room-tool ingress/turn authority change is permitted.
+
+Server-owned create/configure requires the existing server operator/owner
+`agent.control` authority, revalidated at mutation. Members/guests cannot mutate
+it. Remote operators cannot configure companion custody: `agent.configure` rejects
+external ownership. Companion selection is made only in the bundled local setup
+window through the private local-attendee API's local-operator ticket; invitation
+packets cannot carry runtime permissions. Permission changes atomically retire the
+native session under 12b805bb, in either direction, preserving room history and
+rollback/replay semantics. No schema, background task or new authority is added.
+
+Shared add/settings selects show exactly one warning when full access is selected:
+`방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.`
+OpenCode free models require either write level; initialization/model changes may
+replace conversation-only with workspace-write but must preserve full-access.
+Acceptance: native launch/session payloads, SDK init receipt, catalog rejection,
+local/remote/member authority rejection, configuration retirement/rollback/replay,
+shared warning and free-model selection tests; affected Cargo/frontend tests and
+mandatory structure/format gates. Live providers and packaged visual evidence are
+unknown unless separately recorded.
+
 ### OpenCode permission correction (owner decision, 2026-10-07)
 
 Daybreak H: saved project `always` grants can bypass native bash `ask` before
@@ -47,12 +78,12 @@ The earlier bash-ask acceptance is superseded, not proof against remembered gran
 Shared app/web agent add and stopped-session settings show `대화 전용` for the
 unchanged `meeting_read_only` wire value; `작업 폴더 쓰기` remains unchanged.
 The short write hint is `명령 실행·파일 수정은 할 때마다 승인해요`.
-For OpenCode models marked free by the catalog, the UI forces workspace_write,
+For OpenCode models marked free by the catalog, the UI requires either write level,
 disables conversation-only selection and shows one muted explanation:
-`OpenCode 무료 모델은 명령 실행 도구가 켜져 있어야 써서, 승인 모드에서만 쓸 수 있어요.`
+`OpenCode 무료 모델은 작업 폴더 쓰기나 전체 액세스 권한이 필요해요.`
 The catalog/selection owner rejects create/configure with a free model and
 meeting_read_only using a Korean-mapped error; it never silently changes server
-input. Other providers and paid models retain both existing permission semantics.
+input. The three-level owner decision above adds native full access where supported.
 Acceptance: native deny payload, normal approval receipts, catalog free detection,
 selection rejection, shared UI initialization/model changes/configuration, and M
 rollback/replay tests. No new persistence or background tasks; packaged visual and

@@ -215,6 +215,9 @@ export default function ProviderControlSelect({
         )}
         <ChevronDown size={15} aria-hidden="true" />
       </button>
+      {label === "권한" && value === "full_access" && (
+        <p className="text-xs text-amber-600">방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.</p>
+      )}
       {open &&
         menuPosition &&
         createPortal(

@@ -215,7 +215,7 @@ impl CursorCatalog {
                     .collect(),
                 "default",
             ),
-            permission_control(false),
+            permission_control(false, false),
         ]
     }
 }

@@ -78,7 +78,7 @@ impl GrokCatalog {
                 ],
                 "medium",
             ),
-            permission_control(true),
+            permission_control(true, false),
         ]
     }
 }

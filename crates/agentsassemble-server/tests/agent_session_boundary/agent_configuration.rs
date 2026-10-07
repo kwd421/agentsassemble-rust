@@ -164,41 +164,7 @@ async fn opencode_free_create_and_configure_reject_conversation_only() {
         .await
         .unwrap_or_else(|error| panic!("store: {error:?}"));
     bootstrap(&store).await;
-    let mut catalog = agent_catalog(directory.path(), None);
-    let provider = &mut catalog.providers[0];
-    provider.id = "opencode".to_owned();
-    provider.provider_kind = "opencode_server".to_owned();
-    provider.runtime_kind = "opencode".to_owned();
-    let mut file = std::fs::File::open(&provider.executable)
-        .unwrap_or_else(|error| panic!("executable: {error:?}"));
-    let handle = same_file::Handle::from_file(
-        file.try_clone()
-            .unwrap_or_else(|error| panic!("clone: {error:?}")),
-    )
-    .unwrap_or_else(|error| panic!("handle: {error:?}"));
-    provider.executable_identity =
-        agentsassemble_domain::stable_content_identity(&handle, &mut file)
-            .unwrap_or_else(|error| panic!("single-file identity: {error:?}"));
-    let models = provider
-        .controls
-        .iter_mut()
-        .find(|control| control.key == "model")
-        .unwrap_or_else(|| panic!("models"));
-    models.options[0]
-        .metadata
-        .insert("pricing".to_owned(), json!("free"));
-    let permissions = provider
-        .controls
-        .iter_mut()
-        .find(|control| control.key == "permission_mode")
-        .unwrap_or_else(|| panic!("permissions"));
-    permissions
-        .options
-        .push(agentsassemble_domain::ProviderControlOption {
-            value: "workspace_write".to_owned(),
-            label: "작업 폴더 쓰기".to_owned(),
-            metadata: std::collections::BTreeMap::default(),
-        });
+    let catalog = free_opencode_catalog(directory.path());
     let server = start(store, catalog).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
@@ -252,5 +218,66 @@ async fn opencode_free_create_and_configure_reject_conversation_only() {
             .permission_mode,
         "workspace_write"
     );
+    send_command(&mut socket, "free-full-access", "agent.configure", &json!({
+        "agent_id":session_id, "catalog_revision":"catalog-boundary-1", "permission_mode":"full_access"
+    })).await;
+    let configured = receive_until_ack(&mut socket, 2).await;
+    assert_eq!(
+        configured["result"]["agent_session"]["permission_mode"],
+        "full_access"
+    );
+    payload["permission_mode"] = json!("full_access");
+    send_create(&mut socket, "free-full-create", &payload).await;
+    let created = receive_until_ack(&mut socket, 2).await;
+    assert_eq!(
+        created["result"]["agent_session"]["permission_mode"],
+        "full_access"
+    );
     server.stop_and_close().await;
+}
+
+fn free_opencode_catalog(directory: &Path) -> ProviderCatalog {
+    let mut catalog = agent_catalog(directory, None);
+    let provider = &mut catalog.providers[0];
+    "opencode".clone_into(&mut provider.id);
+    "opencode_server".clone_into(&mut provider.provider_kind);
+    "opencode".clone_into(&mut provider.runtime_kind);
+    let mut file = std::fs::File::open(&provider.executable)
+        .unwrap_or_else(|error| panic!("executable: {error:?}"));
+    let handle = same_file::Handle::from_file(
+        file.try_clone()
+            .unwrap_or_else(|error| panic!("clone: {error:?}")),
+    )
+    .unwrap_or_else(|error| panic!("handle: {error:?}"));
+    provider.executable_identity =
+        agentsassemble_domain::stable_content_identity(&handle, &mut file)
+            .unwrap_or_else(|error| panic!("single-file identity: {error:?}"));
+    let models = provider
+        .controls
+        .iter_mut()
+        .find(|control| control.key == "model")
+        .unwrap_or_else(|| panic!("models"));
+    models.options[0]
+        .metadata
+        .insert("pricing".to_owned(), json!("free"));
+    let permissions = provider
+        .controls
+        .iter_mut()
+        .find(|control| control.key == "permission_mode")
+        .unwrap_or_else(|| panic!("permissions"));
+    permissions
+        .options
+        .push(agentsassemble_domain::ProviderControlOption {
+            value: "workspace_write".to_owned(),
+            label: "작업 폴더 쓰기".to_owned(),
+            metadata: std::collections::BTreeMap::default(),
+        });
+    permissions
+        .options
+        .push(agentsassemble_domain::ProviderControlOption {
+            value: "full_access".into(),
+            label: "전체 액세스".into(),
+            metadata: std::collections::BTreeMap::default(),
+        });
+    catalog
 }

@@ -164,6 +164,11 @@ function requireString(value, name) {
   return value;
 }
 
+function nativePermissionMode(permission) {
+  return permission === "full_access" ? "bypassPermissions" :
+    permission === "workspace_write" ? "default" : "dontAsk";
+}
+
 function sessionOptions(command, claudePath, sessionId) {
   const workspace = requireString(command.workspace, "workspace");
   const model = requireString(command.model, "model");
@@ -171,7 +176,7 @@ function sessionOptions(command, claudePath, sessionId) {
   const permission = command.permission_mode;
   const tier = command.service_tier;
   if (!MODEL_ID.test(model) || !EFFORTS.has(effort)) throw new Error("invalid runtime selection");
-  if (!new Set(["meeting_read_only", "workspace_write"]).has(permission)) {
+  if (!new Set(["meeting_read_only", "workspace_write", "full_access"]).has(permission)) {
     throw new Error("invalid permission mode");
   }
   if (!new Set(["default", "fast"]).has(tier)) throw new Error("invalid service tier");
@@ -184,8 +189,9 @@ function sessionOptions(command, claudePath, sessionId) {
     cwd: workspace,
     model,
     effort,
-    permissionMode: permission === "workspace_write" ? "acceptEdits" : "dontAsk",
-    tools: permission === "workspace_write" ? { type: "preset", preset: "claude_code" } : ["AskUserQuestion"],
+    permissionMode: nativePermissionMode(permission),
+    ...(permission === "full_access" ? { allowDangerouslySkipPermissions: true } : {}),
+    tools: permission !== "meeting_read_only" ? { type: "preset", preset: "claude_code" } : ["AskUserQuestion"],
     allowedTools: ["mcp__agentsassemble_room__*"],
     mcpServers: {
       agentsassemble_room: {
@@ -196,7 +202,10 @@ function sessionOptions(command, claudePath, sessionId) {
       },
     },
     systemPrompt: { type: "preset", preset: "claude_code", snapshot: true },
-    ...(tier === "fast" ? { settings: { fastMode: true, fastModePerSessionOptIn: true } } : {}),
+    settings: {
+      ...(tier === "fast" ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
+      ...(permission === "workspace_write" ? { permissions: { ask: ["Bash", "Edit", "Write", "NotebookEdit"] } } : {}),
+    },
     ...(command.resume_session_id ? { resume: sessionId } : { sessionId }),
   };
   return { options, workspace, model, effort, tier, permission };
@@ -225,7 +234,7 @@ function validInit(message, active, session) {
     win32Form(message.cwd) === win32Form(session.workspace) &&
     message.model === session.model &&
     (session.tier === "fast" ? message.fast_mode_state === "on" : message.fast_mode_state !== "on") &&
-    message.permissionMode === (session.permission === "workspace_write" ? "acceptEdits" : "dontAsk") &&
+    message.permissionMode === nativePermissionMode(session.permission) &&
     Array.isArray(message.tools) &&
     (session.permission !== "meeting_read_only" ||
       message.tools.every((tool) => tool === "AskUserQuestion" || tool.startsWith("mcp__agentsassemble_room__"))) &&

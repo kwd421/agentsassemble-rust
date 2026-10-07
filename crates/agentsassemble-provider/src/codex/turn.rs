@@ -489,6 +489,7 @@ fn turn_start_params(
 ) -> Result<Value, DriverError> {
     let (approval_policy, sandbox) = super::profile_permissions(session)?;
     let sandbox_policy = match sandbox {
+        "danger-full-access" => json!({"type": "dangerFullAccess"}),
         "read-only" => json!({"type": "readOnly", "networkAccess": false}),
         "workspace-write" => {
             json!({"type": "workspaceWrite", "networkAccess": false, "writableRoots": []})
@@ -699,4 +700,36 @@ const fn output_missing() -> DriverError {
         "provider_turn_output_missing",
         "The Codex provider turn completed without a final message.",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn full_access_is_applied_to_each_native_turn() {
+        let mut session = crate::test_support::durable_session(
+            "room",
+            "agent",
+            "Codex",
+            "codex_live_session",
+            "gpt-5.6-terra",
+            "stdio_jsonl",
+        );
+        session.public.permission_mode = "full_access".into();
+        let request = crate::ProviderTurnRequest {
+            input: "hello".into(),
+            turn_id: "turn".into(),
+            turn_generation: 1,
+            execution_id: "execution".into(),
+            session_instructions: None,
+            request_ingress: None,
+            room_observation: None,
+        };
+        let params = super::turn_start_params(&session, &request, "thread")
+            .unwrap_or_else(|error| panic!("turn params: {error}"));
+        assert_eq!(params["approvalPolicy"], "never");
+        assert_eq!(
+            params["sandboxPolicy"],
+            serde_json::json!({"type":"dangerFullAccess"})
+        );
+    }
 }

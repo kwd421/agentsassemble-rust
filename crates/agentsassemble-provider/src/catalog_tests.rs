@@ -335,3 +335,17 @@ fn opencode_free_pricing_uses_native_costs_not_a_model_list() {
     assert!(opencode_models("opencode/unknown\n{}").is_err());
     assert!(opencode_models("opencode/unknown\n{broken").is_err());
 }
+
+#[test]
+fn full_access_is_catalog_opt_in() {
+    for supported in [false, true] {
+        let control = super::permission_control(true, supported);
+        let values: Vec<_> = control
+            .options
+            .iter()
+            .map(|option| option.value.as_str())
+            .collect();
+        assert_eq!(values.contains(&"full_access"), supported);
+        assert_eq!(control.default_value, "meeting_read_only");
+    }
+}

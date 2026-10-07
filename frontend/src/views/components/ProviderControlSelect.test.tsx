@@ -237,3 +237,19 @@ describe("whole-row menu sizing", () => {
     }
   });
 });
+
+it("shows exactly one full-access warning only while selected", async () => {
+  const warning = "방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.";
+  const props = { label: "권한", options: [
+    { value: "meeting_read_only", label: "대화 전용" },
+    { value: "workspace_write", label: "작업 폴더 쓰기" },
+    { value: "full_access", label: "전체 액세스" },
+  ], onChange: vi.fn() };
+  const view = render(<ProviderControlSelect {...props} value="full_access" />);
+  expect(screen.getAllByText(warning)).toHaveLength(1);
+  await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
+  await userEvent.click(screen.getByRole("option", { name: "작업 폴더 쓰기" }));
+  expect(props.onChange).toHaveBeenCalledWith("workspace_write");
+  view.rerender(<ProviderControlSelect {...props} value="workspace_write" />);
+  expect(screen.queryByText(warning)).toBeNull();
+});

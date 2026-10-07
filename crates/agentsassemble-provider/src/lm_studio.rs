@@ -143,7 +143,7 @@ async fn discover(
         default_model.clone(),
         vec![
             control("model", "모델", "combobox", options, &default_model),
-            permission_control(true),
+            permission_control(true, false),
         ],
     )
 }

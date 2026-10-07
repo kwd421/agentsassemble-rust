@@ -795,3 +795,47 @@ async fn header_only_prejoin_upload(
     String::from_utf8(response)
         .unwrap_or_else(|error| panic!("prejoin header-only response is not UTF-8: {error}"))
 }
+
+#[tokio::test]
+async fn admitted_non_operators_cannot_create_or_raise_agent_permissions() {
+    for scope in [InviteScope::ReadWrite, InviteScope::ReadOnly] {
+        let (store, credentials) = fixture(scope).await;
+        let server = start(store.clone()).await;
+        let client = Client::new();
+        let browser = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0xB8; 32]));
+        let admitted = join(
+            &client,
+            &server.base_url,
+            credentials.join_code(),
+            &browser,
+            "123e4567-e89b-12d3-a456-426614174001",
+            "Permission guest",
+            "",
+        )
+        .await;
+        let mut socket = open_session_socket(
+            &client,
+            &server.base_url,
+            canonical_session_token(&admitted),
+        )
+        .await;
+        for action in ["agent.create", "agent.configure"] {
+            socket.send_json(&json!({"op":"command", "request_id":action, "action":action,
+                "payload":{"provider_id":"codex", "agent_id":"another-computer", "permission_mode":"full_access"}
+            })).await;
+            let denied = socket.receive_json().await;
+            assert_eq!(denied["op"], "nack");
+            assert_eq!(denied["error"]["code"], "permission_denied");
+        }
+        assert!(
+            store
+                .snapshot("general", 0, 200)
+                .await
+                .unwrap_or_else(|error| panic!("snapshot: {error}"))
+                .agent_sessions
+                .is_empty()
+        );
+        socket.close().await;
+        server.stop().await;
+    }
+}

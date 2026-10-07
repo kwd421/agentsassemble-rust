@@ -26,8 +26,7 @@ async fn local_http_creation_uses_only_its_local_operator_and_preserves_remote_m
     // Computer B remains a local operator after the account's server is A.
     local_store.restrict_hosting(false).await?;
     let directory = tempfile::tempdir()?;
-    let catalog =
-        ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
+    let catalog = ProviderCatalogService::fixed(full_access_catalog(directory.path())?);
     let tickets = TicketStore::new(std::time::Duration::from_secs(30), 16);
     let state = AppState::local(local_store.clone(), tickets.clone(), catalog).await?;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -43,7 +42,7 @@ async fn local_http_creation_uses_only_its_local_operator_and_preserves_remote_m
     let input = json!({"request_id":id,"room_id":"general","room_uid":invite.room_uid,
         "invite_url":format!("{}/join?token={}", room_server.base_url, invite.invite_bearer),
         "creation":{"provider_id":"codex","display_name":"Local HTTP draft","workspace":directory.path(),
-            "catalog_revision":"catalog-boundary-1","start":false}});
+            "catalog_revision":"catalog-boundary-1","permission_mode":"full_access","start":false}});
     reject_before_admission(&client, &route, &input, &tickets, &room_store).await?;
     let token = operator_ticket(&tickets).await?;
     let response = client
@@ -180,4 +179,22 @@ async fn assert_non_host_catalog(
     );
     assert!(local_store.registration_epoch().await?.is_none());
     Ok(())
+}
+
+fn full_access_catalog(
+    directory: &std::path::Path,
+) -> Result<agentsassemble_domain::ProviderCatalog, Box<dyn std::error::Error>> {
+    let mut catalog = provider_fixture::agent_catalog(directory, None);
+    catalog.providers[0]
+        .controls
+        .iter_mut()
+        .find(|control| control.key == "permission_mode")
+        .ok_or("permission control")?
+        .options
+        .push(agentsassemble_domain::ProviderControlOption {
+            value: "full_access".into(),
+            label: "전체 액세스".into(),
+            metadata: std::collections::BTreeMap::default(),
+        });
+    Ok(catalog)
 }

@@ -185,7 +185,7 @@ impl ProviderSelection {
             String::new()
         };
         let workspace_required = registration.workspace_required
-            || permission_mode == "workspace_write"
+            || matches!(permission_mode.as_str(), "workspace_write" | "full_access")
             || execution_harness != "builtin";
         let (workspace, workspace_identity) = if workspace_required {
             canonical_workspace(input.workspace)

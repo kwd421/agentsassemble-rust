@@ -196,7 +196,7 @@ pub(super) fn validate_model_permission(
     if provider.id == "opencode" && free && permission_mode == "meeting_read_only" {
         return Err(ProviderSelectionError::new(
             "opencode_free_requires_workspace_write",
-            "OpenCode 무료 모델은 작업 폴더 쓰기 권한을 선택해야 사용할 수 있어요.",
+            "OpenCode 무료 모델은 작업 폴더 쓰기나 전체 액세스 권한을 선택해야 사용할 수 있어요.",
         ));
     }
     Ok(())
@@ -205,6 +205,19 @@ pub(super) fn validate_model_permission(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn full_access_requires_catalog_support() {
+        let mut provider =
+            crate::registration::loading_provider(&crate::registration::OPENCODE_PROVIDER);
+        for supported in [false, true] {
+            provider.controls = vec![crate::catalog::permission_control(true, supported)];
+            assert_eq!(
+                selected_value(&provider, "permission_mode", Some("full_access".into())).is_ok(),
+                supported
+            );
+        }
+    }
 
     #[test]
     fn free_opencode_permission_is_rejected_without_changing_selection() {
@@ -229,6 +242,7 @@ mod tests {
         assert!(
             validate_model_permission(&provider, "opencode/no-suffix", "workspace_write").is_ok()
         );
+        assert!(validate_model_permission(&provider, "opencode/no-suffix", "full_access").is_ok());
         provider.controls[0].options[0]
             .metadata
             .insert("pricing".to_owned(), serde_json::json!("paid"));

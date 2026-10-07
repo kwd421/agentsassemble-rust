@@ -49,7 +49,7 @@ export function canonicalProviderModelValue(
 }
 
 export const OPENCODE_FREE_PERMISSION_HINT =
-  "OpenCode 무료 모델은 명령 실행 도구가 켜져 있어야 써서, 승인 모드에서만 쓸 수 있어요.";
+  "OpenCode 무료 모델은 작업 폴더 쓰기나 전체 액세스 권한이 필요해요.";
 
 export function requiresOpenCodeApproval(
   provider: NativeCliProviderAvailability,
@@ -140,7 +140,9 @@ function normalizeProviderSettings(
       useDefaults
     );
   }
-  if (requiresOpenCodeApproval(provider, next)) next.permission_mode = "workspace_write";
+  if (requiresOpenCodeApproval(provider, next) && next.permission_mode !== "full_access") {
+    next.permission_mode = "workspace_write";
+  }
   return next;
 }
 

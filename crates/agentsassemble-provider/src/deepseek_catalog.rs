@@ -96,7 +96,7 @@ fn ready(
                 "thinking",
             ),
             remote_output_token_control(),
-            permission_control(true),
+            permission_control(true, false),
         ],
     )
 }

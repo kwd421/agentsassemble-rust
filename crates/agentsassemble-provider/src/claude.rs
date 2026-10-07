@@ -198,7 +198,7 @@ impl ClaudeCatalog {
             tiers,
             "default",
         ));
-        controls.push(permission_control(true));
+        controls.push(permission_control(true, true));
         controls
     }
 }
@@ -390,7 +390,7 @@ fn validate_profile(session: &DurableAgentSession) -> Result<(), DriverError> {
         || !matches!(session.public.service_tier.as_str(), "default" | "fast")
         || !matches!(
             session.public.permission_mode.as_str(),
-            "meeting_read_only" | "workspace_write"
+            "meeting_read_only" | "workspace_write" | "full_access"
         )
     {
         return Err(profile_error());

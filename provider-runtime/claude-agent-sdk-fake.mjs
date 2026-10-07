@@ -28,6 +28,10 @@ class FakeQuery {
       this.options.allowedTools[0] !== "mcp__agentsassemble_room__*" ||
       this.options.mcpServers.agentsassemble_room.headers.Authorization !== "Bearer fixture-token" ||
       this.options.systemPrompt.snapshot !== (this.options.systemPrompt.append === undefined) ||
+      (this.options.permissionMode === "bypassPermissions" &&
+        (this.options.allowDangerouslySkipPermissions !== true || this.options.tools?.preset !== "claude_code" || this.options.settings?.permissions !== undefined)) ||
+      (this.options.permissionMode === "default" &&
+        (JSON.stringify(this.options.settings?.permissions?.ask) !== '["Bash","Edit","Write","NotebookEdit"]' || this.options.tools?.preset !== "claude_code" || this.options.allowDangerouslySkipPermissions === true)) ||
       (this.options.permissionMode === "dontAsk" && JSON.stringify(this.options.tools) !== '["AskUserQuestion"]')
     ) {
       throw new Error("unexpected SDK options");
