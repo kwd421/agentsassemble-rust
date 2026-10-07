@@ -1,5 +1,36 @@
 # Verification Contract
 
+- 2026-10-07 secure admission / event endpoint implementation at Rust
+  `73002fd5..6d3b4521` and Worker `da05954f..05dcde0c`:
+  central device-signed grants bind fresh client public key/channel, with atomic
+  current-state redeem and event-mode downgrade fences (migration 0017).
+  Ring/WebCrypto host-signed P-256 agreement carries the shared HTTP, SSE,
+  room socket and resource paths in one bounded encrypted channel. Owner/member
+  session custody rejects plaintext and another channel; the accepted-operation
+  barrier verifies late owner admission commits and then disconnects durably.
+  Trusted invite entry clears query state; OAuth popup retains the invite in the
+  opener only. Native pairing retains its original revocation owner.
+  Endpoint publication reserves fixed durable generations and reacts to start,
+  ingress changes and shutdown. Fake time verifies healthy/parked idle publication
+  makes no timer wakes or heartbeat writes; controlled CAS/channel mutations fail.
+  Passed: `make test` (frontend 189 suites / 1,229 tests; Rust desktop 48,
+  domain 65, persistence 445, protocol 6, providers 302, server 142 + 5,
+  integration 192 with 2 explicit-provider tests ignored), `make clippy`,
+  architecture/source-growth/policy gates, format/diff checks, artifact check
+  (no maintenance needed), Worker 229 tests and codebase-map check.
+  After gate-driven function separation: persistence 445, server 142 + 5 and
+  integration 192 pass again (same 2 ignored); frontend final entry/boundary
+  regressions 3 suites / 37 tests pass. Node runs the production RemoteTransport
+  against the actual Rust router for encrypted owner admission/directory/room,
+  SSE, room socket, trusted member invite/join/reconnect and cross-channel denial.
+  Its central redemption is a controlled test double; Worker atomic SQL is tested
+  separately. This is not packaged UI or production provider proof.
+  Logs: `/tmp/aa-secure-mandatory-test2.log`, `/tmp/aa-secure-refactor-tests.log`,
+  `/tmp/aa-secure-clippy7.log`, `/tmp/aa-secure-worker-final-tests2.log`.
+  Design: Daybreak Blue xhigh round 3 APPROVE C0/H0/M0/L0; implementation review,
+  push, deployment and signed two-app owner/member acceptance remain pending.
+
+
 - 2026-10-07 event-driven central directory at base `5f577577`:
   owner decision supersedes the `0309ebc2` 30-minute polling/backoff below.
   `useCentralDirectory` schedules no observation or retry timer. Mount/startup,

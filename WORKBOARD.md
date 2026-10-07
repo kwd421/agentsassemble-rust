@@ -5,6 +5,12 @@
 Completed work lives in Git and `docs/VERIFICATION.md`. Add an entry here only while
 work is active or waiting, and remove it when it closes.
 
+- Secure admission + event-only endpoints (2026-10-07): implemented from Rust
+  `73002fd5` and Worker `da05954f`; final design review APPROVE (round 3,
+  C0/H0/M0/L0). WebCrypto/ring HTTP/SSE/socket owner/member integration, full
+  tests and mandatory gates pass; full-range Daybreak code review is next.
+  Push/deploy and signed two-app acceptance remain pending the code verdict.
+  Evidence: latest `docs/VERIFICATION.md`; contract: identity-accounts-friends slice.
 - Contract follow-up: after cached old frontends retire, remove server-surface digest wire fields/producers/types/tests where unused; native bootstrap trust, content-bound lifetime pin and admission cache consumers must be resolved first (2026-10-05 expand cleanup).
 - Active phase: Phase 9 final exposure, integration, resource measurement and
   authorized real-provider verification. [Acceptance](docs/specs/final-parity-slice.md).
