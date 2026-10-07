@@ -1,3 +1,5 @@
+import { createResourceUrl, revokeResourceUrl } from "../../../lib/remote/remoteResources";
+import ResourceImage from "../ResourceImage";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Camera, MoreHorizontal, Pencil, X } from "lucide-react";
 import { AGENT_PROFILE_NAME_CHARACTER_LIMIT } from "../../../types/generated/AGENT_PROFILE_WIRE";
@@ -28,9 +30,9 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
   useEffect(() => () => uploadRef.current?.abort(), []);
   useEffect(() => {
     if (!photo) { setPhotoPreview(""); return; }
-    const url = URL.createObjectURL(photo);
+    const url = createResourceUrl(photo);
     setPhotoPreview(url);
-    return () => URL.revokeObjectURL(url);
+    return () => revokeResourceUrl(url);
   }, [photo]);
   const canEdit = Boolean(onSave);
   useEffect(() => {
@@ -104,7 +106,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
           <button type="button" className="dc-member-detail-modal-avatar relative" style={{ width: 80, height: 80 }}
             aria-label="프로필 사진 변경" title="프로필 사진 변경" disabled={busy || !onAvatarUpdate}
             onClick={() => inputRef.current?.click()}>
-            {preview ? <img className="dc-member-avatar-image" src={preview} alt="프로필 사진 미리보기" /> : <ProviderLogo providerKind={session.provider_kind} size={40} />}
+            {preview ? <ResourceImage className="dc-member-avatar-image" src={preview} alt="프로필 사진 미리보기" /> : <ProviderLogo providerKind={session.provider_kind} size={40} />}
             {onAvatarUpdate && <Camera size={20} className="absolute" style={{ bottom: 0, right: 0 }} aria-hidden />}
           </button>
           <div className="min-w-0 flex-1">
@@ -140,7 +142,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
     {editing && canEdit ? editor : <>
     <header className="dc-member-detail-modal-head">
       <span className="dc-member-detail-modal-avatar">
-        {avatarImage ? <img className="dc-member-avatar-image" src={avatarImage} alt="" /> : <ProviderLogo providerKind={session.provider_kind} size={48} />}
+        {avatarImage ? <ResourceImage className="dc-member-avatar-image" src={avatarImage} alt="" /> : <ProviderLogo providerKind={session.provider_kind} size={48} />}
       </span>
       <div className="min-w-0 flex-1">
         <h2 className="truncate preserve-words">{session.display_name}</h2>

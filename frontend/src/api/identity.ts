@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { responseError } from "./http";
 import { assertExactKeys, requiredString, strictRecord } from "../lib/strictJsonContract";
 import {
@@ -23,7 +24,7 @@ export async function issueGuestRecoveryCode({
   deviceToken?: string;
 }): Promise<GuestRecoveryCodeResponse> {
   if (!sessionToken || !deviceToken) throw new Error("현재 방 세션과 기기 정보가 필요해요.");
-  const response = await fetch("/api/identity/recovery-code", {
+  const response = await fetchProductTransport("/api/identity/recovery-code", {
     method: "POST", cache: "no-store", redirect: "error",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}`, "X-Device-Token": deviceToken },
     body: "{}",
@@ -52,7 +53,7 @@ export async function redeemGuestRecoveryCode({
   deviceToken: string;
   clientId: string;
 }): Promise<GuestRecoveryRedeemResponse> {
-  const response = await fetch("/api/identity/recovery-code/redeem", {
+  const response = await fetchProductTransport("/api/identity/recovery-code/redeem", {
     method: "POST", cache: "no-store", redirect: "error",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ recovery_code: recoveryCode, room_id: roomId, device_token: deviceToken, client_id: clientId }),

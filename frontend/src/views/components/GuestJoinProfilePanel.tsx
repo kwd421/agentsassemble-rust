@@ -1,3 +1,4 @@
+import ResourceImage from "./ResourceImage";
 import { useState, type ReactNode } from "react";
 import { LogIn, RotateCcw } from "lucide-react";
 import { fileToBase64 } from "../../api/http";
@@ -90,7 +91,7 @@ export default function GuestJoinProfilePanel({
         {!children && !pairing && !retryMode && (
           <div className="dc-guest-avatar-row">
             <label className="dc-guest-avatar" data-has-image={Boolean(avatarImage)}>
-              {avatarImage ? <img src={avatarImage} alt="" /> : <span aria-hidden="true">{avatarLabel}</span>}
+              {avatarImage ? <ResourceImage src={avatarImage} alt="" /> : <span aria-hidden="true">{avatarLabel}</span>}
               <input
                 className="sr-only"
                 type="file"

@@ -1,6 +1,5 @@
-import { getOrCreateBrowserCredential } from "../deviceIdentity";
 import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
-import { createMemberHandoff, memberTargetRequest, nativeMemberCallbackUrl, parseMemberChallenge, memberServerEntryUrl, parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
+import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
 import { CentralTemporaryError, fetchCentral } from "./connectionError";
@@ -10,10 +9,8 @@ import {
   fetchDesktopOperatorRuntime,
   isDesktopWebview,
   openDesktopCentralGoogleLogin,
-  openDesktopCentralOwnedServer,
 } from "../desktopBridge";
 import { encodeBase64Url } from "../base64Url";
-import { centralOwnerServerUrl } from "./ownerConnect";
 import { type HostOs, type HostRegistrationEnvelope, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./registrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
@@ -56,7 +53,9 @@ export type CentralServer = {
     origin: string;
     generation: number;
     lease_expires_at?: number;
-    status: "likely_online" | "offline";
+    status: "likely_online" | "published" | "offline";
+    mode?: string;
+    protocol?: string;
   };
 };
 
@@ -459,7 +458,7 @@ function waitForGoogleReturn(signal?: AbortSignal): Promise<void> {
   });
 }
 
-async function signedRequest<T>(
+export async function signedRequest<T>(
   session: CentralSession,
   path: string,
   method: "GET" | "POST" | "DELETE",
@@ -511,6 +510,7 @@ async function signedFetch(
     headers: {
       authorization: `Bearer ${session.token}`,
       "content-type": "application/json",
+      "x-aa-admission-protocol": "secure_admission_v1",
       "x-aa-device-id": device.deviceId,
       "x-aa-timestamp": String(timestamp),
       "x-aa-nonce": nonce,
@@ -649,9 +649,11 @@ export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBoo
   signal?.throwIfAborted();
   if (!payload.person || payload.person.person_id !== session.person.person_id || !Array.isArray(payload.servers)) throw new Error("서버 목록 응답이 올바르지 않습니다.");
   payload.servers = payload.servers.map(server => server.relation === "member" ? {
-    server_id:server.server_id,relation:"member",alias:server.alias,icon:server.icon,
-    registration_epoch:server.registration_epoch,host_key_fingerprint:server.host_key_fingerprint,
-    endpoint:server.endpoint ? {origin:server.endpoint.origin,generation:server.endpoint.generation,status:server.endpoint.status} : null,
+    server_id: server.server_id, relation: "member", alias: server.alias, icon: server.icon,
+    registration_epoch: server.registration_epoch, host_key_fingerprint: server.host_key_fingerprint,
+    host_public_key_jwk: server.host_public_key_jwk,
+    endpoint: server.endpoint ? { origin: server.endpoint.origin, generation: server.endpoint.generation,
+      status: server.endpoint.status, mode: server.endpoint.mode, protocol: server.endpoint.protocol } : null,
   } : server);
   const current = loadCentralSession();
   if (current?.token !== session.token) throw new CentralAuthError("로그인 상태가 바뀌었어요. 다시 로그인해 주세요.");
@@ -687,47 +689,7 @@ export async function previewCentralMember(request: MemberTargetRequest, signal?
     endpoint_generation: value.endpoint_generation };
 }
 
-export async function openCentralOwnedServer(server: CentralServer): Promise<void> {
-  const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
-  if (
-    server.relation !== "owner" ||
-    !server.endpoint ||
-    server.endpoint.status !== "likely_online" ||
-    (server.endpoint.lease_expires_at ?? 0) <= Math.floor(Date.now() / 1000)
-  ) {
-    throw new Error("이 서버에 연결할 수 없어요. 서버 컴퓨터가 꺼져 있거나 외부 접속이 꺼져 있을 수 있어요.");
-  }
-  const grant = await signedRequest<CentralConnectGrant>(
-    session,
-    `/v1/servers/${encodeURIComponent(server.server_id)}/connect-grants`,
-    "POST",
-    { registration_epoch: server.registration_epoch }
-  );
-  const keys = Object.keys(grant as object).sort().join(",");
-  if (
-    keys !== "expires_at,generation,grant_token,origin,server_id" ||
-    grant.server_id !== server.server_id ||
-    grant.origin !== server.endpoint.origin ||
-    grant.generation !== server.endpoint.generation ||
-    !/^aacg1\.[A-Za-z0-9_-]{43}$/.test(grant.grant_token) ||
-    !Number.isSafeInteger(grant.expires_at) ||
-    grant.expires_at <= Math.floor(Date.now() / 1000)
-  ) {
-    throw new Error("서버 접속권 응답이 올바르지 않습니다.");
-  }
-  const target = centralOwnerServerUrl(grant.origin, {
-      grantToken: grant.grant_token,
-      serverId: grant.server_id,
-      generation: grant.generation,
-      expiresAt: grant.expires_at,
-      hostPublicKeyX: String(server.host_public_key_jwk?.x || ""),
-      hostKeyFingerprint: server.host_key_fingerprint,
-    });
-  if (isDesktopWebview()) await openDesktopCentralOwnedServer(target);
-  else if (isCentralWebEntry()) window.location.assign(target);
-  else throw new Error("계정 페이지에서 서버를 열어 주세요.");
-}
+export { openCentralOwnedServer } from "./secureOwnerEntry";
 
 export type LocalServerInfo = {
   server_id: string;
@@ -944,22 +906,7 @@ export async function setCentralMemberHidden(server: {server_id:string;registrat
   if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
 }
 export async function openCentralMemberServer(server: CentralServer): Promise<void> {
-  if (server.relation !== "member" || !server.endpoint || server.endpoint.status !== "likely_online") throw new Error("이 서버에 연결할 수 없어요. 컴퓨터가 켜져 있는지 확인해 주세요.");
-  try {
-  if (isDesktopWebview()) {
-    if (!server.registration_epoch) throw new Error("서버 등록 정보를 확인하지 못했어요.");
-    const browserCredential=getOrCreateBrowserCredential({server_id:server.server_id,registration_epoch:server.registration_epoch});
-    const origin=exactCentralServerOrigin(server.endpoint.origin);
-    const response=await fetch(`${origin}/api/member-connect/challenge`,{method:"POST",headers:{"Content-Type":"application/json","X-Device-Token":browserCredential},body:"{}",credentials:"omit",redirect:"error",referrerPolicy:"no-referrer"});
-    const challenge=parseMemberChallenge(await responsePayload(response,false));
-    if (challenge.server_id !== server.server_id || challenge.registration_epoch !== server.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 시도해 주세요.");
-    const record={...createMemberHandoff(challenge,"",""),purpose:"connect" as const};
-    const grant=await issueCentralMemberGrant(memberTargetRequest(record));
-    if (grant.endpoint_origin !== origin || grant.endpoint_generation !== server.endpoint.generation) throw new Error("서버 주소가 변경됐어요. 다시 시도해 주세요.");
-    await openDesktopCentralOwnedServer(nativeMemberCallbackUrl(record,grant,browserCredential));
-  } else window.location.assign(memberServerEntryUrl(server.endpoint.origin,server));
-  } catch (error) {
-    if (error instanceof CentralAuthError) throw new CentralAuthError("다시 로그인한 뒤 연결해 주세요.");
-    throw new Error("이 컴퓨터에 다시 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
-  }
+  if (server.relation !== "member" || !server.registration_epoch || server.endpoint?.mode !== "event_secure_v1") throw new Error("이 서버에 연결할 수 없어요. 서버 앱을 업데이트해 주세요.");
+  const { selectRemoteMember } = await import("../remote/remoteWorkspace");
+  selectRemoteMember({ server_id: server.server_id, registration_epoch: server.registration_epoch });
 }

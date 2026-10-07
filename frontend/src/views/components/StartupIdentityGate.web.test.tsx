@@ -21,9 +21,9 @@ vi.mock("../../lib/desktopBridge", () => ({
 }));
 const completeStartup = () => {};
 const account = { person: { display_name: "Existing Google User" }, servers: [
-  { server_id: "online", alias: "My Mac", relation: "owner", endpoint: { status: "likely_online", lease_expires_at: 9_999_999_999 } },
+  { server_id: "online", alias: "My Mac", relation: "owner", endpoint: { mode: "event_secure_v1", protocol: "secure_admission_v1", status: "published", lease_expires_at: 9_999_999_999 } },
   { server_id: "offline", alias: "My Windows", relation: "owner", endpoint: null },
-  { server_id: "bookmark", alias: "Invited server", relation: "bookmark", endpoint: { status: "likely_online", lease_expires_at: 9_999_999_999 } },
+  { server_id: "bookmark", alias: "Invited server", relation: "bookmark", endpoint: { mode: "event_secure_v1", protocol: "secure_admission_v1", status: "published", lease_expires_at: 9_999_999_999 } },
 ] };
 afterEach(() => { cleanup(); vi.resetAllMocks(); mocks.session = null; mocks.callback = null; });
 

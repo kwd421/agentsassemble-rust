@@ -1,3 +1,4 @@
+import { useResourceImage } from "./ResourceImage";
 import { useEffect, useRef, type RefObject } from "react";
 import { X, Camera, Headphones, Mic, MicOff } from "lucide-react";
 
@@ -61,10 +62,10 @@ export default function UserSettingsPanel({
   const sections = USER_SETTINGS_SECTIONS.filter(section => section.id === "recovery"
     ? profileIdentity?.sessionToken && !profileIdentity.centralOwner
     : section.id !== "devices" || canManageDevices);
-  const draftAvatarUrl = resolveAttachmentReference(
+  const draftAvatarUrl = useResourceImage(resolveAttachmentReference(
     draft.avatarImage,
     displayResourceBase
-  );
+  )).url;
   const activeSectionLabel =
     sections.find((section) => section.id === settingsSection)?.label || "사용자 설정";
   return (

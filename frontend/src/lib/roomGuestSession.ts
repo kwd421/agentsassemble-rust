@@ -1,3 +1,4 @@
+import { remoteWorkspaceSnapshot, remoteSessionTransport } from "./remote/remoteWorkspace";
 import type { RoomAppearance } from "./roomAppearance";
 import {
   parseRoomSessionSurface,
@@ -220,6 +221,8 @@ export function roomGuestSessionExpired(
 }
 
 export function loadRoomGuestSession(): RoomGuestSession | null {
+  const remote = remoteWorkspaceSnapshot();
+  if (remote) return remote.member || null;
   try {
     const raw = window.localStorage.getItem(ROOM_GUEST_SESSION_STORAGE_KEY);
     const session = normalizeRoomGuestSession(raw ? JSON.parse(raw) : null);
@@ -234,6 +237,7 @@ export function loadRoomGuestSession(): RoomGuestSession | null {
 }
 
 export function persistRoomGuestSession(session: RoomGuestSession | null) {
+  if (remoteWorkspaceSnapshot() || remoteSessionTransport(session?.sessionToken)) return;
   if (session?.centralOwner) return;
   if (session) {
     try {

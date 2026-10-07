@@ -1,3 +1,4 @@
+import ResourceImage from "../ResourceImage";
 import { executionLocationLabel, reasoningEffortLabel } from "../../../lib/agentLabels";
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
@@ -89,7 +90,7 @@ export default function MemberRow({
       <span className="relative shrink-0">
         <span className="dc-member-avatar">
           {entry.avatarImage ? (
-            <img className="dc-member-avatar-image" src={entry.avatarImage} alt="" />
+            <ResourceImage className="dc-member-avatar-image" src={entry.avatarImage} alt="" />
           ) : (
             <ParticipantAvatarContent
               participantType={entry.member?.participant_type}

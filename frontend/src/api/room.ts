@@ -1,3 +1,5 @@
+import { remoteSessionTransport } from "../lib/remote/remoteWorkspace";
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { isCustomChannelId } from "../lib/customChannelId";
 import type { RoomAppearance } from "../lib/roomAppearance";
 import type { Participant } from "../types/generated/Participant";
@@ -510,7 +512,7 @@ async function requestSessionRoomPreferences(
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${sessionToken}`);
   if (deviceToken) headers.set("X-Device-Token", deviceToken);
-  const response = await fetch(url, { ...init, cache: "no-store", headers });
+  const response = await fetchProductTransport(url, { ...init, cache: "no-store", headers });
   if (!response.ok) throw await responseError(response);
   return response.json();
 }
@@ -561,7 +563,7 @@ export async function getWsTicket(auth: RoomSocketAuth): Promise<RoomSocketTicke
   }
   if (auth.kind === "session") {
     const payload = await exchangeSessionSocketTicket(auth.sessionToken, auth.deviceToken);
-    return parseBrowserRoomRuntimeTicket(payload, window.location.href);
+    return parseBrowserRoomRuntimeTicket(payload, remoteSessionTransport(auth.sessionToken)?.hello.origin || window.location.href);
   }
   throw new Error("Host WebSocket authority requires the desktop Rust runtime.");
 }

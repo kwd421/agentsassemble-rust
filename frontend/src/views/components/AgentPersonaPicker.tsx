@@ -1,3 +1,4 @@
+import ResourceImage from "./ResourceImage";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, FileUser, PackageOpen, Search, Upload } from "lucide-react";
 import {
@@ -138,7 +139,7 @@ export default function AgentPersonaPicker({
       >
         <span className="dc-persona-symbol" data-kind={selectedItem?.asset_kind || "none"}>
           {selectedItem?.thumbnail_url && thumbnailUrls[selectedItem.id] ? (
-            <img src={thumbnailUrls[selectedItem.id]} alt="" />
+            <ResourceImage src={thumbnailUrls[selectedItem.id]} alt="" />
           ) : selectedItem?.asset_kind === "module" ? (
             <PackageOpen size={19} aria-hidden="true" />
           ) : selectedItem ? (
@@ -221,7 +222,7 @@ export default function AgentPersonaPicker({
                     >
                       <span className="dc-persona-symbol" data-kind={item.asset_kind}>
                         {item.thumbnail_url && thumbnailUrls[item.id] ? (
-                          <img src={thumbnailUrls[item.id]} alt="" />
+                          <ResourceImage src={thumbnailUrls[item.id]} alt="" />
                         ) : (
                           <Icon size={19} aria-hidden="true" />
                         )}

@@ -1,3 +1,4 @@
+import ResourceImage from "../components/ResourceImage";
 import { useId, useState, type ReactNode } from "react";
 import {
   Bot,
@@ -314,7 +315,7 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
               }}
             >
               {skip.avatar_image_url
-                ? <img src={skip.avatar_image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ? <ResourceImage src={skip.avatar_image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 : <ProviderLogo providerKind={skip.provider_kind} size={18} fallback={<Bot size={11} />} />}
             </span>
           ))}
@@ -340,7 +341,7 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
                 style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 16, height: 16, borderRadius: "50%", overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                   {skip.avatar_image_url
-                    ? <img src={skip.avatar_image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ? <ResourceImage src={skip.avatar_image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : <ProviderLogo providerKind={skip.provider_kind} size={16} fallback={<Bot size={10} />} />}
                 </span>
                 <span>{skip.name}</span>

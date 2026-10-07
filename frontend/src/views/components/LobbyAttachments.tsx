@@ -1,3 +1,5 @@
+import { createResourceUrl, revokeResourceUrl, releaseResourceBlob } from "../../lib/remote/remoteResources";
+import ResourceImage from "./ResourceImage";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileDown, X } from "lucide-react";
@@ -37,7 +39,7 @@ function LobbyFileAttachment({
     setError("");
     try {
       const blob = await scheduler.read(attachment, "download", controller.signal);
-      controller.signal.throwIfAborted();
+      if (controller.signal.aborted) { releaseResourceBlob(blob); controller.signal.throwIfAborted(); }
       await startMessageAttachmentDownload(blob, attachment.filename);
     } catch (errorValue) {
       if (!controller.signal.aborted && activeRead.current === controller) {
@@ -107,9 +109,9 @@ function LobbyImageAttachment({
     setError("");
     void scheduler.read(attachment, "view", controller.signal).then(
       (blob) => {
-        controller.signal.throwIfAborted();
+        if (controller.signal.aborted) { releaseResourceBlob(blob); return; }
         previewBlobRef.current = blob;
-        createdUrl = URL.createObjectURL(blob);
+        try { createdUrl = createResourceUrl(blob); } catch (errorValue) { releaseResourceBlob(blob); setError(errorValue instanceof Error ? errorValue.message : "이미지 미리보기 실패"); return; }
         setObjectUrl(createdUrl);
       },
       (errorValue) => {
@@ -121,7 +123,7 @@ function LobbyImageAttachment({
     return () => {
       controller.abort();
       previewBlobRef.current = null;
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
+      if (createdUrl) revokeResourceUrl(createdUrl);
     };
   }, [attachment.id, intersecting, retry, scheduler]);
 
@@ -193,7 +195,7 @@ function LobbyImageAttachment({
         title={error || undefined}
       >
         {objectUrl ? (
-          <img
+          <ResourceImage
             src={objectUrl}
             alt={attachment.filename}
             className="dc-image-attachment-preview"
@@ -246,7 +248,7 @@ function LobbyImageAttachment({
               </div>
             </div>
             <div className="max-h-[calc(90vh-58px)] overflow-auto bg-black/32 p-3">
-              <img
+              <ResourceImage
                 src={objectUrl}
                 alt={attachment.filename}
                 className="mx-auto max-h-[calc(90vh-90px)] max-w-full rounded-lg object-contain"

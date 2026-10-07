@@ -1,3 +1,5 @@
+import { bindRemoteSession, remoteSessionTransport } from "../remote/remoteWorkspace";
+import type { RemoteTransport } from "../remote/remoteTransport";
 import { fetchOwnerSession } from "../ownerSessionTransport";
 import { ApiError } from "../apiErrors";
 import { browserDeviceDescription } from "../ownerDeviceDescription";
@@ -16,10 +18,10 @@ export function clearStoredCentralOwnerWorkspace() {
   sessionStorage.removeItem("agentsassemble.central-owner-workspace.v2");
 }
 
-export async function exchangeCentralOwnerSession(connect: CentralOwnerConnect, deviceToken: string): Promise<CentralOwnerWorkspace> {
+export async function exchangeCentralOwnerSession(connect: CentralOwnerConnect, deviceToken: string, transport?: RemoteTransport): Promise<CentralOwnerWorkspace> {
   const record = strictRecord(await request("session", deviceToken, {
     grant_token: connect.grantToken, generation: connect.generation, device: browserDeviceDescription(),
-  }), "서버 세션");
+  }, undefined, transport), "서버 세션");
   assertExactKeys(record, ["session_token", "session_id", "server_id", "generation"], "서버 세션");
   const session: CentralOwnerWorkspace = {
     sessionToken: requiredString(record, "session_token", "서버 세션"),
@@ -33,6 +35,7 @@ export async function exchangeCentralOwnerSession(connect: CentralOwnerConnect, 
       session.serverId !== connect.serverId || session.generation !== connect.generation) {
     throw new Error("선택한 서버와 발급된 세션이 일치하지 않습니다.");
   }
+  if (transport) bindRemoteSession(session.sessionToken, transport);
   return session;
 }
 
@@ -48,8 +51,9 @@ export function openCentralOwnerDirectoryStream(session: CentralOwnerWorkspace, 
     body: JSON.stringify(sessionBody(session)) });
 }
 
-async function request(route: string, deviceToken: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
-  const response = await fetchOwnerSession(typeof body.session_token === "string" ? body.session_token : undefined, `/api/central-owner/${route}`, { method: "POST", cache: "no-store",
+async function request(route: string, deviceToken: string, body: Record<string, unknown>, signal?: AbortSignal, transport?: RemoteTransport): Promise<unknown> {
+  const send = transport ? (_token: string | undefined, path: string, init: RequestInit) => transport.fetch(path, init) : fetchOwnerSession;
+  const response = await send(typeof body.session_token === "string" ? body.session_token : undefined, `/api/central-owner/${route}`, { method: "POST", cache: "no-store",
     credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
     headers: { "content-type": "application/json", "x-device-token": deviceToken }, body: JSON.stringify(body) });
   const payload = await response.json().catch(() => null);
@@ -77,5 +81,7 @@ export async function enterCentralOwnerRoom(session: CentralOwnerWorkspace, devi
   if (payload.central_owner !== true || payload.server_id !== session.serverId || payload.meeting_id !== roomId || payload.room_uid !== roomUid) {
     throw new Error("선택한 서버·방과 발급된 접속권이 일치하지 않습니다.");
   }
+  const transport = remoteSessionTransport(session.sessionToken);
+  if (transport) bindRemoteSession(payload.session_token, transport);
   return payload;
 }

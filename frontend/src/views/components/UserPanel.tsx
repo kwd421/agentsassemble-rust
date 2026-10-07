@@ -1,3 +1,4 @@
+import { useResourceImage } from "./ResourceImage";
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -359,6 +360,8 @@ export default function UserPanel({
     }
   }
 
+  const guestAvatar = useResourceImage(guestProfile?.avatarImage).url;
+
   if (guestProfile && (guestProfile.expired || guestAwaitingAdmission || pairedRoomSession)) {
     return (
       <div className="dc-user-panel" ref={rootRef}>
@@ -374,7 +377,7 @@ export default function UserPanel({
                 data-has-image={guestHasAvatarImage}
                 style={
                   guestHasAvatarImage
-                    ? { backgroundImage: `url(${guestProfile?.avatarImage})` }
+                    ? { backgroundImage: `url(${guestAvatar})` }
                     : undefined
                 }
               >

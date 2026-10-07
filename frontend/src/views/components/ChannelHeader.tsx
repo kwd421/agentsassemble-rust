@@ -1,3 +1,4 @@
+import ResourceImage from "./ResourceImage";
 import {
   useEffect,
   useMemo,
@@ -446,7 +447,7 @@ export default function ChannelHeader({
                             {item.avatarImage ? (
                               <>
                                 {(item.author || "R").slice(0, 1).toLocaleUpperCase()}
-                                <img
+                                <ResourceImage
                                   src={item.avatarImage}
                                   alt=""
                                   onError={(event) => {

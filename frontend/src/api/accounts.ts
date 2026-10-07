@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import type { UserProfileIdentity } from "./userProfile";
 import { responseError } from "./http";
 import { fetchDesktopOperatorRuntime, isDesktopWebview } from "../lib/desktopBridge";
@@ -29,7 +30,7 @@ async function accountRequest<T>(path: string, identity: UserProfileIdentity, in
   } else {
     if (identity.sessionToken) headers.set("Authorization", `Bearer ${identity.sessionToken}`);
     if (identity.deviceToken) headers.set("X-Device-Token", identity.deviceToken);
-    response = await fetch(path, { ...init, cache: "no-store", headers });
+    response = await fetchProductTransport(path, { ...init, cache: "no-store", headers });
   }
   if (!response.ok) throw await responseError(response);
   return response.json() as Promise<T>;

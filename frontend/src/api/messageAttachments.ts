@@ -1,3 +1,5 @@
+import { readResourceBlob, releaseResourceBlob } from "../lib/remote/remoteResources";
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import {
   requestDesktopMessageAttachmentReadTicket,
   requestDesktopMessageAttachmentUploadTicket,
@@ -179,7 +181,7 @@ export async function uploadMessageAttachment(
   const dataBase64 = await fileToBase64(file, signal);
   signal?.throwIfAborted();
   beforeDispatch?.();
-  const response = await fetch(`${resolvedAuthority.baseUrl}/api/message-attachments`, {
+  const response = await fetchProductTransport(`${resolvedAuthority.baseUrl}/api/message-attachments`, {
     cache: "no-store",
     method: "POST",
     headers: bearer(resolvedAuthority.credential, true, resolvedAuthority.deviceToken),
@@ -214,21 +216,21 @@ export async function fetchMessageAttachmentBlob(
   const reference =
     mode === "view" ? attachment.url : attachment.download_url;
   beforeDispatch?.();
-  const response = await fetch(`${resolvedAuthority.baseUrl}${reference}`, {
+  const response = await fetchProductTransport(`${resolvedAuthority.baseUrl}${reference}`, {
     cache: "no-store",
     headers: bearer(resolvedAuthority.credential, false, resolvedAuthority.deviceToken),
     signal,
   });
   if (!response.ok) throw await responseError(response);
   if (!isPrivateNoStoreResponse(response, attachment.content_type)) invalidResponse();
-  const blob = await response.blob();
+  const blob = await readResourceBlob(response);
   if (
     blob.size !== attachment.size ||
     blob.size < 1 ||
     blob.size > MAX_ATTACHMENT_BYTES ||
     blob.type !== attachment.content_type
   ) {
-    invalidResponse();
+    releaseResourceBlob(blob); invalidResponse();
   }
   return blob;
 }

@@ -1,3 +1,4 @@
+import ResourceImage from "../ResourceImage";
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import AgentProfileCard from "./AgentProfileCard";
@@ -92,7 +93,7 @@ export default function MemberDetailModal({
         </AgentProfileCard> : <>
           <header className="dc-member-detail-modal-head">
             <span className="dc-member-detail-modal-avatar" data-role={entry.role}>
-              {entry.avatarImage ? <img className="dc-member-avatar-image" src={entry.avatarImage} alt="" /> :
+              {entry.avatarImage ? <ResourceImage className="dc-member-avatar-image" src={entry.avatarImage} alt="" /> :
                 <ProviderLogo providerKind={entry.providerKind} size={48} fallback={<DetailIcon size={22} />} />}
             </span>
             <div className="min-w-0 flex-1">

@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { messageAttachmentId } from "../lib/messageAttachmentId";
 import { isCustomChannelId, requireMessageChannelId } from "../lib/customChannelId";
 import { publicRoomEventIsValid } from "../lib/roomSocketValidation";
@@ -482,7 +483,7 @@ async function fetchSearchJson(
   beforeDispatch?: () => void
 ): Promise<unknown> {
   beforeDispatch?.();
-  const response = await fetch(`${authority.baseUrl}${path}`, {
+  const response = await fetchProductTransport(`${authority.baseUrl}${path}`, {
     cache: "no-store",
     headers: { Authorization: `Bearer ${authority.credential}`,
       ...(authority.deviceToken ? { "X-Device-Token": authority.deviceToken } : {}),

@@ -190,7 +190,7 @@ describe("StartupIdentityGate", () => {
         origin: "https://mac-room.example.test",
         generation: 7,
         lease_expires_at: Math.floor(Date.now() / 1000) + 600,
-        status: "likely_online" as const,
+        mode: "event_secure_v1", protocol: "secure_admission_v1", status: "published" as const,
       },
     };
     centralMocks.configured = true;
@@ -268,7 +268,7 @@ describe("StartupIdentityGate", () => {
     render(<StartupIdentityGate deviceToken="device-1" onComplete={vi.fn()} />);
     const offline = await screen.findByRole("button", { name: "이 기기로 연결" });
     expect((offline as HTMLButtonElement).disabled).toBe(true);
-    const online = { ...remote, endpoint: { status: "likely_online", lease_expires_at: Date.now() / 1000 + 600 } };
+    const online = { ...remote, endpoint: { mode: "event_secure_v1", protocol: "secure_admission_v1", status: "published", lease_expires_at: Date.now() / 1000 + 600 } };
     centralMocks.bootstrap.mockResolvedValue({ ...account, servers: [online] });
     await userEvent.click(screen.getByRole("button", { name: "서버 목록 새로고침" }));
     centralMocks.openServer.mockRejectedValueOnce(new Error("host unavailable"));
@@ -453,7 +453,7 @@ it("keeps the saved-server chooser after the first request times out", async () 
   expect(document.body.textContent).not.toMatch(/중앙|Fetch is aborted|저장된 목록을 읽지 못/);
 });
 
-const oneServer = { server_id: SERVER_ID, registration_epoch: "epoch", relation: "owner" as const, alias: "내 Mac", endpoint: { lease_expires_at: Date.now() / 1000 + 600, status: "likely_online", origin: "https://host.test", generation: 1 } };
+const oneServer = { server_id: SERVER_ID, registration_epoch: "epoch", relation: "owner" as const, alias: "내 Mac", endpoint: { lease_expires_at: Date.now() / 1000 + 600, mode: "event_secure_v1", protocol: "secure_admission_v1", status: "published", origin: "https://host.test", generation: 1 } };
 function setupOneServer() {
   centralMocks.configured = true;
   centralMocks.session = { person: { person_id: "owner", display_name: "Owner" } };

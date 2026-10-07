@@ -1,3 +1,4 @@
+import { readResourceBlob, releaseResourceBlob } from "../lib/remote/remoteResources";
 import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 import { isPrivateNoStoreResponse } from "./http";
 
@@ -10,15 +11,15 @@ export async function strictPrivatePngBlob(
   if (!isPrivateNoStoreResponse(response, "image/png")) {
     throw new Error(invalidMessage);
   }
-  const blob = await response.blob();
+  const blob = await readResourceBlob(response);
   if (blob.size < PNG_SIGNATURE.length || blob.size > MAX_ATTACHMENT_BYTES) {
-    throw new Error(invalidMessage);
+    releaseResourceBlob(blob); throw new Error(invalidMessage);
   }
   const signature = new Uint8Array(
     await blob.slice(0, PNG_SIGNATURE.length).arrayBuffer()
   );
   if (signature.some((byte, index) => byte !== PNG_SIGNATURE[index])) {
-    throw new Error(invalidMessage);
+    releaseResourceBlob(blob); throw new Error(invalidMessage);
   }
   return blob;
 }

@@ -1,3 +1,4 @@
+import { fetchSessionTransport } from "./remote/remoteWorkspace";
 // The workspace boundary owns these listeners. Credentials stay in memory and
 // are never published in DOM events; a response only affects its exact session.
 const rejections = new Map<string, Set<() => void>>();
@@ -13,7 +14,7 @@ export function observeOwnerSessionRejection(sessionToken: string, rejected: () 
 }
 
 export async function fetchOwnerSession(sessionToken: string | undefined, url: string, init: RequestInit): Promise<Response> {
-  const response = await fetch(url, init);
+  const response = await fetchSessionTransport(sessionToken, url, init);
   if (sessionToken && [401, 403].includes(response.status)) {
     rejections.get(sessionToken)?.forEach(rejected => rejected());
   }

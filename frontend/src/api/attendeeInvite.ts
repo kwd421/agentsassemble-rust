@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { fetchRemoteRoomInvite, type RemoteInviteTransport } from "./roomInviteTransport";
 import { requestDesktopAttendeeInviteCreateTicket, type DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import type { RoomGuestSession } from "../lib/roomGuestSession";
@@ -20,7 +21,7 @@ export async function createFriendAttendeeInvite(
     : await (async () => {
         const ticket = await requestDesktopAttendeeInviteCreateTicket(authority);
         assertCurrent();
-        return fetch(`${ticket.http_base_url}/api/room-attendee/friend-invite`, {
+        return fetchProductTransport(`${ticket.http_base_url}/api/room-attendee/friend-invite`, {
           method: "POST", cache: "no-store", redirect: "error",
           headers: { Authorization: `Bearer ${ticket.ticket}`, "Content-Type": "application/json" }, body: JSON.stringify(request),
         });
@@ -32,7 +33,7 @@ export async function createCompanionAttendeeInvite(
   session: Pick<RoomGuestSession, "roomUid" | "sessionToken" | "meetingId"> & { deviceToken?: string }, request: CreateCompanionAttendeeInvite,
 ): Promise<AttendeePacketCustody> {
   if (!session.roomUid || !session.sessionToken) throw new Error("현재 방의 참가 권한을 확인할 수 없어요.");
-  const response = await fetch("/api/room-attendee/companion-invite", {
+  const response = await fetchProductTransport("/api/room-attendee/companion-invite", {
     method: "POST", cache: "no-store", redirect: "error",
     headers: { Authorization: `Bearer ${session.sessionToken}`, "Content-Type": "application/json",
       ...(session.deviceToken ? { "X-Device-Token": session.deviceToken } : {}) }, body: JSON.stringify(request),

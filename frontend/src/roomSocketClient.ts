@@ -1,3 +1,5 @@
+import { remoteSessionTransport } from "./lib/remote/remoteWorkspace";
+import type { RoomSocketConnection } from "./lib/remote/remoteTransport";
 import { parsePublicRoom } from "./lib/roomLifecycleContract";
 import {
   getWsTicket,
@@ -111,7 +113,7 @@ export function openRoomSocket(
   handlers: RoomSocketHandlers,
   dependencies: RoomSocketClientDependencies
 ): RoomSocketHandle {
-  let socket: WebSocket | null = null;
+  let socket: RoomSocketConnection | null = null;
   let closed = false;
   let reconnectTimer = 0;
   let reconnectAttempt = 0;
@@ -206,7 +208,7 @@ export function openRoomSocket(
       ? Math.max(0, command.retryNotBefore - Date.now()) : 0));
   }
 
-  function fail(currentSocket: WebSocket, generation: number, error: unknown) {
+  function fail(currentSocket: RoomSocketConnection, generation: number, error: unknown) {
     if (closed || generation !== connectionGeneration) return;
     const normalized =
       error instanceof SubscriptionContractError
@@ -301,7 +303,8 @@ export function openRoomSocket(
           "runtime_ticket_invalid"
         );
       }
-      const currentSocket = createSocket(ticketSocketUrl(issued.websocket_base_url, issued.ticket));
+      const remote = auth.kind === "session" ? remoteSessionTransport(auth.sessionToken) : undefined;
+      const currentSocket = remote ? remote.openSocket(issued.ticket) : createSocket(ticketSocketUrl(issued.websocket_base_url, issued.ticket));
       socket = currentSocket;
       transportReady = false;
       let receipt: SubscriptionReceipt | null = null;

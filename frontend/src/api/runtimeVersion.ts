@@ -1,7 +1,8 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import type { RuntimeVersion } from "../types/generated/RuntimeVersion";
 
 export async function readRuntimeVersion(signal: AbortSignal): Promise<RuntimeVersion> {
-  const response = await fetch("/api/runtime/version", {
+  const response = await fetchProductTransport("/api/runtime/version", {
     cache: "no-store", credentials: "same-origin", signal,
   });
   if (!response.ok) throw new Error("화면 버전을 확인하지 못했어요.");

@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import {
   fileToBase64,
   isPrivateNoStoreResponse,
@@ -116,7 +117,7 @@ async function fetchLocalAppearance(
           authority.manager,
           reference.assetId
         );
-  return fetch(`${grant.http_base_url}${reference.url}`, {
+  return fetchProductTransport(`${grant.http_base_url}${reference.url}`, {
     cache: "no-store",
     headers: bearer(grant.ticket),
     signal,
@@ -131,7 +132,7 @@ async function fetchRemoteAppearance(
   if (!authority.sessionToken) {
     throw new Error("방 세션 권위를 사용할 수 없습니다.");
   }
-  return fetch(reference.url, {
+  return fetchProductTransport(reference.url, {
     cache: "no-store",
     headers: bearer(authority.sessionToken, authority.deviceToken),
     signal,
@@ -147,7 +148,7 @@ export async function uploadRoomAppearance(
     throw new Error("현재 기기의 방 세션 권위를 사용할 수 없습니다.");
   }
   const grant = authority.kind === "local" ? await requestDesktopAppearanceUploadTicket(authority.manager) : null;
-  const response = await fetch(`${authority.kind === "local" ? grant!.http_base_url : ""}/api/attachments`, {
+  const response = await fetchProductTransport(`${authority.kind === "local" ? grant!.http_base_url : ""}/api/attachments`, {
     cache: "no-store", redirect: "error",
     method: "POST",
     headers: new Headers({

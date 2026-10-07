@@ -1,3 +1,4 @@
+import { remoteWorkspaceSnapshot } from "./remote/remoteWorkspace";
 import type { HostDeviceInfo } from "../types/generated/HostDeviceInfo";
 import type { HostProductSurface } from "../types/generated/HostProductSurface";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
@@ -128,6 +129,7 @@ export interface DesktopWorkspaceSelection {
 let desktopHostSurface: HostProductSurface | null = null;
 
 function requireDesktopHostCommand(command: string) {
+  if (remoteWorkspaceSnapshot() && !["save_message_attachment", "runtime_central_login", "open_central_google_login"].includes(command)) throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
   if (!desktopHostSurface) {
     throw new Error("데스크톱 호스트 제품 표면이 아직 고정되지 않았습니다.");
   }

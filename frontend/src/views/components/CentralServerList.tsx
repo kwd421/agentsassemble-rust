@@ -1,3 +1,5 @@
+import { createResourceUrl, revokeResourceUrl } from "../../lib/remote/remoteResources";
+import ResourceImage from "./ResourceImage";
 import type { CentralServerDisplay } from "../../lib/central/directoryCache";
 import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import { useEffect, useRef, useState } from "react";
@@ -44,17 +46,17 @@ export function ServerIcon({ reference, name }: { reference?: string; name: stri
     fetchCentralServerIcon(reference)
       .then((blob) => {
         if (!current) return;
-        objectUrl = URL.createObjectURL(blob);
+        objectUrl = createResourceUrl(blob);
         setUrl(objectUrl);
       })
       .catch(() => { if (current) setFailed(true); });
     return () => {
       current = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl) revokeResourceUrl(objectUrl);
     };
   }, [reference]);
   return url
-    ? <img className="dc-server-row-icon-image" src={url} alt="" />
+    ? <ResourceImage className="dc-server-row-icon-image" src={url} alt="" />
     : <span title={failed ? "아이콘을 불러오지 못했어요" : undefined}>{roomInitials(name)}</span>;
 }
 
@@ -210,7 +212,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
     {servers.map((server) => {
       const isLocal = Boolean(localHost?.server_id === server.server_id && onOpenLocal);
       const live = liveServers.find(item => item.server_id === server.server_id);
-      const online = !centralUnavailable && ["owner", "member"].includes(server.relation) && live?.endpoint?.status === "likely_online" && (server.relation === "member" || (live.endpoint.lease_expires_at ?? 0) > Date.now() / 1000);
+      const online = !centralUnavailable && ["owner", "member"].includes(server.relation) && live?.endpoint?.status === "published" && live.endpoint.mode === "event_secure_v1";
       const name = server.alias || "이름 없는 서버";
       const openable = isLocal || online;
       const state = connectingServerId === server.server_id ? "connecting" : isLocal ? "local" : centralUnavailable ? "central-unconfirmed" : server.relation === "bookmark" ? "invited" : online ? "online" : "offline";

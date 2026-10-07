@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { requireMessageChannelId } from "../lib/customChannelId";
 import {
   requestDesktopMessagePinsReadTicket,
@@ -191,7 +192,7 @@ export async function fetchMessagePins({
     channel_id: channelId,
   })}`;
   beforeDispatch?.();
-  const response = await fetch(`${resolved.baseUrl}${path}`, {
+  const response = await fetchProductTransport(`${resolved.baseUrl}${path}`, {
     cache: "no-store",
     headers: bearer(resolved.credential, false, resolved.deviceToken),
   });
@@ -219,7 +220,7 @@ export async function setMessagePinned({
   const canonicalEvent = canonicalEventId(eventId);
   const resolved = await operationAuthority(canonicalRoom, authority, "write");
   beforeDispatch?.();
-  const response = await fetch(`${resolved.baseUrl}/api/room-pins`, {
+  const response = await fetchProductTransport(`${resolved.baseUrl}/api/room-pins`, {
     cache: "no-store",
     method: "POST",
     headers: bearer(resolved.credential, true, resolved.deviceToken),

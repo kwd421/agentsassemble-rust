@@ -1,3 +1,4 @@
+import { createResourceUrl, revokeResourceUrl, releaseResourceBlob } from "../../lib/remote/remoteResources";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fetchPersonaThumbnail } from "../../api/personas";
 
@@ -51,9 +52,9 @@ export function usePersonaThumbnails(
             request.controller.signal.aborted ||
             requestsRef.current.get(personaId) !== request
           ) {
-            return;
+            releaseResourceBlob(blob); return;
           }
-          const objectUrl = URL.createObjectURL(blob);
+          const objectUrl = createResourceUrl(blob);
           liveObjectUrlsRef.current.add(objectUrl);
           setUrls((current) => ({ ...current, [personaId]: objectUrl }));
           setFailedIds((current) => difference(current, new Set([personaId])));
@@ -73,7 +74,7 @@ export function usePersonaThumbnails(
     const next = new Set(Object.values(urls));
     for (const objectUrl of renderedObjectUrlsRef.current) {
       if (!next.has(objectUrl)) {
-        URL.revokeObjectURL(objectUrl);
+        revokeResourceUrl(objectUrl);
         liveObjectUrlsRef.current.delete(objectUrl);
       }
     }
@@ -89,7 +90,7 @@ export function usePersonaThumbnails(
       }
       requestsRef.current.clear();
       for (const objectUrl of liveObjectUrlsRef.current) {
-        URL.revokeObjectURL(objectUrl);
+        revokeResourceUrl(objectUrl);
       }
       liveObjectUrlsRef.current.clear();
       renderedObjectUrlsRef.current.clear();

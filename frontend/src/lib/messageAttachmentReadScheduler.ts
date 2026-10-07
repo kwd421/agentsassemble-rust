@@ -1,3 +1,4 @@
+import { releaseResourceBlob } from "./remote/remoteResources";
 import {
   fetchMessageAttachmentBlob,
   type LobbyAttachmentRef,
@@ -57,7 +58,7 @@ export function createMessageAttachmentReadOwner(
   const active = new Set<ReadTask>();
 
   function settleCaller(task: ReadTask, value: Blob | unknown, failed: boolean) {
-    if (task.callerSettled) return;
+    if (task.callerSettled) { if (!failed && value instanceof Blob) releaseResourceBlob(value); return; }
     task.callerSettled = true;
     task.detachCaller();
     if (failed) task.reject(value);

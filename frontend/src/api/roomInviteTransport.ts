@@ -1,3 +1,5 @@
+import { remoteSessionTransport } from "../lib/remote/remoteWorkspace";
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { assertExactKeys, requiredString, strictRecord } from "../lib/strictJsonContract";
 import { parsePublicIngressOrigin } from "../lib/publicIngressStatus";
 
@@ -15,7 +17,7 @@ export function fetchRemoteRoomInvite(
   headers.set("Authorization", `Bearer ${authority.sessionToken}`);
   headers.set("X-Device-Token", authority.deviceToken);
   beforeDispatch?.();
-  return fetch(`/api/central-owner${path}`, {
+  return fetchProductTransport(`/api/central-owner${path}`, {
     ...init, headers, cache: "no-store", redirect: "error", credentials: "omit",
   });
 }
@@ -26,6 +28,6 @@ export async function fetchRemoteInviteOrigin(authority: RemoteInviteTransport, 
   const value = strictRecord(await response.json(), "초대 주소");
   assertExactKeys(value, ["public_url"], "초대 주소");
   const public_url = parsePublicIngressOrigin(requiredString(value, "public_url", "초대 주소"));
-  if (public_url !== window.location.origin) throw new Error("서버 주소가 변경됐어요. 서버 목록에서 다시 연결해 주세요.");
+  if (public_url !== (remoteSessionTransport(authority.sessionToken)?.hello.origin || window.location.origin)) throw new Error("서버 주소가 변경됐어요. 서버 목록에서 다시 연결해 주세요.");
   return { public_url, remote: true as const };
 }

@@ -1,3 +1,4 @@
+import ResourceImage from "./ResourceImage";
 import type { ReactNode } from "react";
 import { Bot, Braces } from "lucide-react";
 import {
@@ -41,7 +42,7 @@ export default function ProviderLogo({
       }}
     >
       {brand.logo ? (
-        <img
+        <ResourceImage
           src={brand.logo}
           alt=""
           draggable={false}

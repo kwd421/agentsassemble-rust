@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { fetchRemoteRoomInvite, type RemoteInviteTransport } from "./roomInviteTransport";
 import { requestDesktopConnectorInviteCreateTicket, type DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import { strictRecord, requiredString, assertExactKeys } from "../lib/strictJsonContract";
@@ -41,7 +42,7 @@ export async function createConnectorInvite(
     : await (async () => {
         const ticket = await requestDesktopConnectorInviteCreateTicket(authority);
         assertCurrent();
-        return fetch(`${ticket.http_base_url}/api/room-connector/invite`, {
+        return fetchProductTransport(`${ticket.http_base_url}/api/room-connector/invite`, {
           method: "POST", cache: "no-store", redirect: "error",
           headers: { Authorization: `Bearer ${ticket.ticket}`, "Content-Type": "application/json" },
           body: JSON.stringify(request),

@@ -1,3 +1,5 @@
+import { createResourceUrl, revokeResourceUrl } from "../../lib/remote/remoteResources";
+import ResourceImage from "./ResourceImage";
 import {
   useCallback,
   useEffect,
@@ -202,7 +204,7 @@ export default function LobbyComposer({
     );
     const stale = Object.keys(localPreviews).filter((id) => !pending.has(id));
     if (stale.length === 0) return;
-    for (const id of stale) URL.revokeObjectURL(localPreviews[id].url);
+    for (const id of stale) revokeResourceUrl(localPreviews[id].url);
     setLocalPreviews((current) => {
       const next = { ...current };
       for (const id of stale) delete next[id];
@@ -212,7 +214,7 @@ export default function LobbyComposer({
   useEffect(
     () => () => {
       for (const preview of Object.values(localPreviewsRef.current)) {
-        URL.revokeObjectURL(preview.url);
+        revokeResourceUrl(preview.url);
       }
     },
     []
@@ -358,7 +360,7 @@ export default function LobbyComposer({
         });
         uploaded.push(attachment);
         const kind = localPreviewKind(file.type);
-        if (kind) previews[attachment.id] = { kind, url: URL.createObjectURL(file) };
+        if (kind) previews[attachment.id] = { kind, url: createResourceUrl(file) };
       }
       requireCurrentAttachmentUpload(operation, activeUploadOperation.current);
       setLocalPreviews((current) => ({ ...current, ...previews }));
@@ -598,7 +600,7 @@ export default function LobbyComposer({
                 }`}
               >
                 {preview?.kind === "image" && (
-                  <img
+                  <ResourceImage
                     src={preview.url}
                     alt=""
                     className="h-32 w-full rounded-[3px] bg-black/30 object-contain"

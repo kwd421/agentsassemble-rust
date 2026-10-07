@@ -1,3 +1,4 @@
+import { createResourceUrl, revokeResourceUrl, releaseResourceBlob } from "../lib/remote/remoteResources";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   fetchRoomAppearanceBlob,
@@ -223,9 +224,9 @@ export function useRoomAppearanceAssets({
             (request.authority.kind === "local" &&
               !localAuthorityCurrentRef.current)
           ) {
-            return;
+            releaseResourceBlob(blob); return;
           }
-          const objectUrl = URL.createObjectURL(blob);
+          const objectUrl = createResourceUrl(blob);
           liveObjectUrlsRef.current.add(objectUrl);
           setResolvedUrls((urls) => ({ ...urls, [key]: objectUrl }));
         })
@@ -267,7 +268,7 @@ export function useRoomAppearanceAssets({
     const next = new Set(Object.values(resolvedUrls));
     for (const objectUrl of renderedObjectUrlsRef.current) {
       if (!next.has(objectUrl)) {
-        URL.revokeObjectURL(objectUrl);
+        revokeResourceUrl(objectUrl);
         liveObjectUrlsRef.current.delete(objectUrl);
       }
     }
@@ -285,7 +286,7 @@ export function useRoomAppearanceAssets({
         }
         requestsRef.current.clear();
         for (const objectUrl of liveObjectUrlsRef.current) {
-          URL.revokeObjectURL(objectUrl);
+          revokeResourceUrl(objectUrl);
         }
         liveObjectUrlsRef.current.clear();
       };

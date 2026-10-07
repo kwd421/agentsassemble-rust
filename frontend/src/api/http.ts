@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { fetchOwnerSession } from "../lib/ownerSessionTransport";
 import { ApiError } from "../lib/apiErrors";
 import { browserDeviceDescription } from "../lib/ownerDeviceDescription";
@@ -26,7 +27,7 @@ export async function exchangeSessionSocketTicket(
   sessionToken: string,
   deviceToken = ""
 ): Promise<Record<string, unknown>> {
-  const res = await fetch("/api/session-tickets/socket", {
+  const res = await fetchProductTransport("/api/session-tickets/socket", {
     cache: "no-store",
     method: "POST",
     headers: {
@@ -88,13 +89,13 @@ export function clearHostToken() {
 }
 
 export async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetchProductTransport(url);
   if (!res.ok) throw await responseError(res);
   return res.json();
 }
 
 export async function postJson<T>(url: string, body: object): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetchProductTransport(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -162,14 +163,14 @@ async function fetchServerOperator(
     return fetchDesktopOperatorRuntime(url, init ?? {}, beforeDispatch);
   }
   beforeDispatch?.();
-  return init ? fetch(url, init) : fetch(url);
+  return init ? fetchProductTransport(url, init) : fetchProductTransport(url);
 }
 
 export async function postJsonHost<T>(url: string, body: object): Promise<T> {
   const hostToken = loadHostToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (hostToken) headers["X-Host-Token"] = hostToken;
-  const res = await fetch(url, {
+  const res = await fetchProductTransport(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
@@ -187,7 +188,7 @@ export async function postJsonModerator<T>(url: string, body: object, sessionTok
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (hostToken) headers["X-Host-Token"] = hostToken;
   if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  const res = await fetchProductTransport(url, { method: "POST", headers, body: JSON.stringify(body) });
   if (!res.ok) {
     throw await responseError(res);
   }
@@ -195,7 +196,7 @@ export async function postJsonModerator<T>(url: string, body: object, sessionTok
 }
 
 export async function fetchJsonWithToken<T>(url: string, sessionToken: string): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetchProductTransport(url, {
     headers: { Authorization: `Bearer ${sessionToken}` },
   });
   if (!res.ok) throw await responseError(res);
@@ -203,7 +204,7 @@ export async function fetchJsonWithToken<T>(url: string, sessionToken: string): 
 }
 
 export async function postJsonWithToken<T>(url: string, body: object, sessionToken: string): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetchProductTransport(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${sessionToken}`,
@@ -236,7 +237,7 @@ export async function fetchJsonWithIdentity<T>(
   const headers: Record<string, string> = centralSession ? serverOwnerSessionHeaders(centralSession, deviceToken) : {};
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
-  const res = await fetchOwnerSession(centralSession?.sessionToken, url, { ...profileRequest, headers });
+  const res = await fetchOwnerSession(centralSession?.sessionToken || sessionToken, url, { ...profileRequest, headers });
   if (!res.ok) throw await responseError(res);
   return res.json();
 }
@@ -271,7 +272,7 @@ export async function postJsonWithIdentity<T>(
   const headers: Record<string, string> = { ...(centralSession ? serverOwnerSessionHeaders(centralSession, deviceToken) : {}), "Content-Type": "application/json" };
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
-  const res = await fetchOwnerSession(centralSession?.sessionToken, url, {
+  const res = await fetchOwnerSession(centralSession?.sessionToken || sessionToken, url, {
     ...profileRequest,
     method: "POST",
     headers,
@@ -288,13 +289,13 @@ export async function deleteJsonWithIdentity<T>(
   const headers: Record<string, string> = {};
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
-  const res = await fetch(url, { method: "DELETE", headers });
+  const res = await fetchProductTransport(url, { method: "DELETE", headers });
   if (!res.ok) throw await responseError(res);
   return res.json();
 }
 
 export async function deleteJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { method: "DELETE" });
+  const res = await fetchProductTransport(url, { method: "DELETE" });
   if (!res.ok) {
     throw await responseError(res);
   }

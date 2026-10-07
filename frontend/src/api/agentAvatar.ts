@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { fileToBase64, isPrivateNoStoreResponse, responseError } from "./http";
 import { requestDesktopAgentAvatarUploadTicket } from "../lib/desktopBridge";
 import { parseAgentAvatarReference } from "../lib/agentAvatarReference";
@@ -14,7 +15,7 @@ export async function uploadAgentAvatar(file: File, authority: RoomAssetUploadAu
   }
   const grant = authority.kind === "local" ? await requestDesktopAgentAvatarUploadTicket(authority.manager, sessionId) : null;
   signal.throwIfAborted();
-  const response = await fetch(`${authority.kind === "local" ? grant!.http_base_url : ""}/api/agent-avatars/upload/${encodeURIComponent(sessionId)}`, {
+  const response = await fetchProductTransport(`${authority.kind === "local" ? grant!.http_base_url : ""}/api/agent-avatars/upload/${encodeURIComponent(sessionId)}`, {
     method: "POST", cache: "no-store", redirect: "error", signal,
     headers: { Authorization: `Bearer ${authority.kind === "remote" ? authority.sessionToken : grant!.ticket}`, "Content-Type": "application/json",
       ...(authority.kind === "remote" ? { "X-Device-Token": authority.deviceToken } : {}) },

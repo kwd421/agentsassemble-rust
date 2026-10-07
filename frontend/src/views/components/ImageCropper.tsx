@@ -1,3 +1,4 @@
+import { createResourceUrl, revokeResourceUrl } from "../../lib/remote/remoteResources";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
@@ -82,7 +83,7 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
   const aspect = output.width / output.height;
 
   useEffect(() => {
-    const url = URL.createObjectURL(file);
+    const url = createResourceUrl(file);
     let cancelled = false;
     setObjectUrl(url);
     setNatural(null);
@@ -99,7 +100,7 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
       });
     return () => {
       cancelled = true;
-      URL.revokeObjectURL(url);
+      revokeResourceUrl(url);
     };
   }, [file]);
 

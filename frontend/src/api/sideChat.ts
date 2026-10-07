@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { requestDesktopSideChatReadTicket } from "../lib/desktopBridge";
 import { canonicalRoomId } from "../lib/canonicalRoomId";
 import { parseSideChatSnapshot } from "../lib/sideChatContract";
@@ -16,7 +17,7 @@ export async function fetchSideChatSnapshot(
     : { http_base_url: "", ticket: authority.sessionToken };
   signal.throwIfAborted();
   if (!grant.ticket) throw new Error("사이드챗 읽기 권한을 사용할 수 없어요.");
-  const response = await fetch(`${grant.http_base_url}/api/side-chat${queryString({ room_id: room })}`, {
+  const response = await fetchProductTransport(`${grant.http_base_url}/api/side-chat${queryString({ room_id: room })}`, {
     signal, cache: "no-store",
     headers: {
       Authorization: `Bearer ${grant.ticket}`,

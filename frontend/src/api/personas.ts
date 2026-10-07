@@ -1,3 +1,4 @@
+import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import {
   fetchJsonServerOperator,
   fileToBase64,
@@ -43,7 +44,7 @@ export async function fetchPersonaThumbnail(
   const init: RequestInit = { cache: "no-store", signal };
   const response = isDesktopWebview()
     ? await fetchDesktopOperatorRuntime(path, init)
-    : await fetch(path, init);
+    : await fetchProductTransport(path, init);
   if (!response.ok) throw await responseError(response);
   return strictPrivatePngBlob(
     response,

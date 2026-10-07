@@ -1,3 +1,4 @@
+import ResourceImage from "./ResourceImage";
 import {
   useEffect,
   useId,
@@ -180,7 +181,7 @@ export default function MentionInput({
                 data-participant-kind={option.participantKind || "unknown"}
               >
                 {option.avatarImage ? (
-                  <img src={option.avatarImage} alt="" />
+                  <ResourceImage src={option.avatarImage} alt="" />
                 ) : option.participantKind === "agent" ? (
                   <ProviderLogo
                     providerKind={option.providerKind}

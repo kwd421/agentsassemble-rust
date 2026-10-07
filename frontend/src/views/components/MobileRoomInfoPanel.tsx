@@ -1,3 +1,4 @@
+import ResourceImage from "./ResourceImage";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import { useMemo, useState } from "react";
 import {
@@ -104,7 +105,7 @@ function MobileMemberItem({
     >
       <span className="dc-mobile-info-member-avatar" data-status={statusTone(row.active)}>
         {row.avatarImage ? (
-          <img className="dc-member-avatar-image" src={row.avatarImage} alt="" />
+          <ResourceImage className="dc-member-avatar-image" src={row.avatarImage} alt="" />
         ) : (
           <ProviderLogo
             providerKind={row.providerKind}

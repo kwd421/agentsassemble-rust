@@ -1,3 +1,4 @@
+import ResourceImage from "./ResourceImage";
 import type { ReactNode } from "react";
 import { CornerUpLeft, Pin, Zap } from "lucide-react";
 import ParticipantAvatarContent from "./ParticipantAvatarContent";
@@ -17,7 +18,7 @@ export function MessageAvatar({ avatarImage, providerKind, participantType, avat
   return <span className={show ? `dc-message-avatar mt-0.5 ${system ? "system" : "agent"}` : ""}
     data-has-image={Boolean(show && avatarImage && !system)} aria-hidden="true">
     {show && (avatarImage && !system
-      ? <img className="dc-message-avatar-image" src={avatarImage} alt="" />
+      ? <ResourceImage className="dc-message-avatar-image" src={avatarImage} alt="" />
       : system ? <Zap size={16} />
       : <ParticipantAvatarContent participantType={participantType} displayName={displayName} avatarLabel={avatarLabel} providerKind={providerKind} size={40} />)}
   </span>;
