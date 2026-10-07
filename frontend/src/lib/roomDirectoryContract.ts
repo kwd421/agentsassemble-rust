@@ -1,3 +1,4 @@
+import { productWorkspaceOrigin } from "./remote/remoteWorkspace";
 import type { ServerRoomDockSource } from "./roomDockModel";
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
@@ -264,7 +265,7 @@ export function retainRoomDirectoryAuthority(
 export async function bindRoomDirectoryAuthority(
   authority: RoomSessionSurface,
   trustedSurface: TrustedServerProductSurface | null = null,
-  origin = window.location.origin,
+  origin = productWorkspaceOrigin(),
   isCurrent: () => boolean = () => true
 ): Promise<boolean> {
   const surface = authority.server_product_surface;
@@ -319,19 +320,19 @@ function bindVerifiedRoomDirectoryAuthority(
 export async function verifyAndBindRoomSessionSurface(
   authority: RoomSessionSurface,
   isCurrent: () => boolean,
-  origin = window.location.origin
+  origin = productWorkspaceOrigin()
 ): Promise<boolean> {
   return bindRoomDirectoryAuthority(authority, null, origin, isCurrent);
 }
 
 export function currentRoomDirectoryAuthority(
-  origin = window.location.origin
+  origin = productWorkspaceOrigin()
 ): RoomDirectoryAuthority | null {
   return boundAuthority?.origin === origin ? { ...boundAuthority.authority } : null;
 }
 
 export function currentServerProductSurface(
-  origin = window.location.origin
+  origin = productWorkspaceOrigin()
 ): ServerProductSurface | null {
   return boundSurface?.origin === origin ? structuredClone(boundSurface.surface) : null;
 }

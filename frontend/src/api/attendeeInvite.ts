@@ -1,3 +1,4 @@
+import { sessionHostOrigin } from "../lib/remote/remoteWorkspace";
 import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { fetchRemoteRoomInvite, type RemoteInviteTransport } from "./roomInviteTransport";
 import { requestDesktopAttendeeInviteCreateTicket, type DesktopManagerRoomAuthority } from "../lib/desktopBridge";
@@ -39,7 +40,7 @@ export async function createCompanionAttendeeInvite(
       ...(session.deviceToken ? { "X-Device-Token": session.deviceToken } : {}) }, body: JSON.stringify(request),
   });
   const packet = await readPacket(response, { requestId: request.request_id, roomId: session.meetingId, roomUid: session.roomUid });
-  if (packet.origin !== window.location.origin) throw new Error("공개 주소가 변경됐어요. 현재 방 주소에서 다시 시도해 주세요.");
+  if (packet.origin !== sessionHostOrigin(session.sessionToken)) throw new Error("공개 주소가 변경됐어요. 현재 방 주소에서 다시 시도해 주세요.");
   return packet;
 }
 

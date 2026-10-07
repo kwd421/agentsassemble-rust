@@ -1,3 +1,4 @@
+import { sessionHostOrigin } from "../lib/remote/remoteWorkspace";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import type { RoomEvent } from "../api";
 import { localAttendeeLink } from "../lib/localAttendee";
@@ -63,7 +64,7 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
     const record = records.find((item) => item.result.invite_id === inviteId && item.sessionToken === owner?.sessionToken);
     if (!owner || !record) return;
     const assertCurrent = () => {
-      if (!isCurrent(owner) || record.origin !== window.location.origin || record.expiresAtMs <= Date.now()) {
+      if (!isCurrent(owner) || record.origin !== sessionHostOrigin(owner.sessionToken) || record.expiresAtMs <= Date.now()) {
         throw new Error("현재 사용할 수 없는 초대예요. 방에 다시 연결한 뒤 확인해 주세요.");
       }
     };
@@ -81,7 +82,7 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
         nativeLink: localAttendeeLink(record.result),
         joined: events.some((event) => event.room_id === record.result.room_id && event.type === "agent_session_created" &&
           event.attendee_invite_id === record.result.invite_id),
-        expiresAt: record.result.expires_at, copyable: record.expiresAtMs > now && record.origin === window.location.origin })).reverse(),
+        expiresAt: record.result.expires_at, copyable: record.expiresAtMs > now && record.origin === sessionHostOrigin(record.sessionToken) })).reverse(),
   };
 }
 

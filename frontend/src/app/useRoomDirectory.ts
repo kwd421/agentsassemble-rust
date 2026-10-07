@@ -1,3 +1,4 @@
+import { productWorkspaceOrigin } from "../lib/remote/remoteWorkspace";
 import type { CentralOwnerSessionStatus } from "../types/generated/CentralOwnerSessionStatus";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fetchRooms } from "../api";
@@ -150,6 +151,7 @@ export function useRoomDirectory({
   hostEnabled,
   remoteOwner,
 }: UseRoomDirectoryOptions) {
+  const directoryOrigin = productWorkspaceOrigin();
   const directoryEnabled = hostEnabled || Boolean(remoteOwner);
   const initialIssue = directoryEnabled ? UNCONFIRMED_ISSUE : null;
   const roomsRef = useRef<RoomDockItem[]>(initialRooms);
@@ -388,7 +390,7 @@ export function useRoomDirectory({
         const bound = await bindRoomDirectoryAuthority(
           payload,
           stagedTrust.trustedSurface,
-          window.location.origin,
+          directoryOrigin,
           () => isCurrentEpoch(epoch)
         );
         if (!bound) throw new RoomDirectoryOperationSuperseded();
@@ -400,17 +402,17 @@ export function useRoomDirectory({
       void read.finally(() => directoryReadsRef.current.delete(read)).catch(() => undefined);
       return read;
     },
-    [assertCurrentEpoch, isCurrentEpoch, resolveTrustedRoomDirectoryAuthority, remoteOwner]
+    [assertCurrentEpoch, isCurrentEpoch, resolveTrustedRoomDirectoryAuthority, remoteOwner, directoryOrigin]
   );
 
   const publishDirectory = useCallback(
     (payload: StrictRoomDirectory, epoch: number) => {
       const synchronized = remoteOwner
-        ? payload.rooms.map(room => roomFromServerRoom(room, { roomOrigin: "remote_server", serverOrigin: window.location.origin }, window.location.origin, payload.server_id)).filter((room): room is RoomDockItem => room !== null)
+        ? payload.rooms.map(room => roomFromServerRoom(room, { roomOrigin: "remote_server", serverOrigin: directoryOrigin }, directoryOrigin, payload.server_id)).filter((room): room is RoomDockItem => room !== null)
         : mergeServerRoomsIntoDock(
         roomsRef.current,
         payload.rooms,
-        window.location.origin,
+        directoryOrigin,
         payload.server_id
       );
       const snapshot = hostEnabled ? managerAuthoritySnapshot(synchronized, payload, epoch) : null;
@@ -424,7 +426,7 @@ export function useRoomDirectory({
       publishSyncIssue(null);
       return synchronized;
     },
-    [assertCurrentEpoch, publishSyncIssue, hostEnabled, remoteOwner]
+    [assertCurrentEpoch, publishSyncIssue, hostEnabled, remoteOwner, directoryOrigin]
   );
 
   const refreshRoomDirectory = useCallback(

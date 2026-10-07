@@ -1,5 +1,19 @@
 # Identity, accounts, friends and human admission
 
+### Code-review acceptance correction (2026-10-07)
+
+Shared remote directory/session surfaces, dock entries and companion invitation
+custody use the host-signed channel origin, never the central/Tauri document origin.
+Returning to the server list and admitting another host in the same document must
+retain each server's exact authority boundary without mistaking the common shell
+for the host. Closed-channel bearer tombstones retain their origin but cannot send.
+Central owners selecting server-computer AI creation or stopped-session settings
+must list/import persona cards and load private thumbnails through the admitted
+owner channel. Local operators retain their existing private API; members,
+plaintext requests and another channel cannot use owner persona authority.
+Verify unequal shell/host origins, A-to-B switching, invite creation/copy, and
+owner success plus member/plaintext/cross-channel denial before re-review.
+
 ## Secure admission and event-only publication (owner task, 2026-10-07)
 
 Status: Daybreak round 3 APPROVE (C0/H0/M0/L0, 2026-10-07); implementation and

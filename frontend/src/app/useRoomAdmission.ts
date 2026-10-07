@@ -1,3 +1,4 @@
+import { sessionHostOrigin } from "../lib/remote/remoteWorkspace";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   joinRoomInvite,
@@ -125,7 +126,7 @@ export function useRoomAdmission({
     session: RoomGuestSession,
     isCurrent: () => boolean
   ) => {
-    const bound = await verifyAndBindRoomSessionSurface(session.serverSurface, isCurrent);
+    const bound = await verifyAndBindRoomSessionSurface(session.serverSurface, isCurrent, sessionHostOrigin(session.sessionToken));
     if (!bound || !isCurrent()) return false;
     const key = roomSessionSurfaceKey(session);
     boundSurfaceKeyRef.current = key;

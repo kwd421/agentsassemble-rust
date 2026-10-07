@@ -6,7 +6,7 @@ afterEach(() => { closeRemoteWorkspace(); vi.unstubAllGlobals(); });
 it("routes only the admitted credential and never downgrades it after channel/workspace close", async () => {
   const plain = vi.fn(); vi.stubGlobal("fetch", plain);
   const listeners = new Set<() => void>();
-  const remote = { active: true, fetch: vi.fn().mockResolvedValue(new Response("encrypted")),
+  const remote = { hello: { origin: "https://host.test" }, active: true, fetch: vi.fn().mockResolvedValue(new Response("encrypted")),
     onClose: (fn: () => void) => { listeners.add(fn); return () => listeners.delete(fn); },
     close: () => { remote.active = false; for (const listener of listeners) listener(); },
   };

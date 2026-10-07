@@ -11,16 +11,19 @@ export function selectRemoteMember(entry: SecureMemberEntry | null) { pendingMem
 const listeners = new Set<() => void>();
 // Entries remain until page disposal, including after a channel ends: an old
 // bearer must never fall through to a plaintext request.
-const sessions = new Map<string, RemoteTransport | null>();
+const sessions = new Map<string, { transport: RemoteTransport | null; origin: string }>();
 export const remoteWorkspaceSnapshot = () => workspace;
 export function subscribeRemoteWorkspace(listener: () => void) {
   listeners.add(listener); return () => { listeners.delete(listener); };
 }
 export function bindRemoteSession(token: string, transport: RemoteTransport) {
-  sessions.set(token, transport);
-  transport.onClose(() => { if (sessions.get(token) === transport) sessions.set(token, null); });
+  const binding = { transport: transport as RemoteTransport | null, origin: transport.hello.origin };
+  sessions.set(token, binding);
+  transport.onClose(() => { if (sessions.get(token) === binding) binding.transport = null; });
 }
-export function remoteSessionTransport(token?: string) { return token ? sessions.get(token) ?? undefined : undefined; }
+export function remoteSessionTransport(token?: string) { return token ? sessions.get(token)?.transport ?? undefined : undefined; }
+export function productWorkspaceOrigin() { return workspace?.transport.hello.origin ?? (typeof window !== "undefined" ? window.location.origin : ""); }
+export function sessionHostOrigin(token: string) { return sessions.get(token)?.origin ?? (typeof window !== "undefined" ? window.location.origin : ""); }
 export function installRemoteWorkspace(next: Workspace) {
   workspace?.transport.close();
   workspace = next; pendingMember = null;
