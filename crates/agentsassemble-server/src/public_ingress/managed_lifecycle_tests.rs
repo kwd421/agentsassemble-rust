@@ -241,12 +241,14 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
     let stable_entry = crate::stable_entry::StableEntry::new(None, Path::new("."))
         .await
         .unwrap_or_else(|error| panic!("build unconfigured stable entry: {error}"));
+    let projection = Arc::new(RwLock::new(ManagedProjection::new(
+        "http://127.0.0.1:41955",
+        true,
+    )));
+    let endpoint_changes = projection.read().endpoint_changes.clone();
     PublicIngress(
         Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
-            projection: Arc::new(RwLock::new(ManagedProjection::new(
-                "http://127.0.0.1:41955",
-                true,
-            ))),
+            projection,
             controller: ManagedController {
                 config: ManagedIngressConfig {
                     local_url: "http://127.0.0.1:41955".to_owned(),
@@ -263,6 +265,7 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
         Arc::default(),
         Arc::default(),
         CancellationToken::new(),
+        endpoint_changes,
     )
 }
 
@@ -407,4 +410,31 @@ async fn demotion_is_durable_before_waiting_for_managed_cleanup()
         .map_err(|()| "cleanup owner stopped early")?;
     transition.await??;
     Ok(())
+}
+
+#[test]
+fn endpoint_events_ignore_health_fluctuations_and_keep_explicit_stop() {
+    let mut projection = ManagedProjection::new("http://127.0.0.1:41955", true);
+    let mut changes = projection.endpoint_changes.subscribe();
+    let generation = projection.begin_start();
+    let origin =
+        CanonicalPublicOrigin::parse("https://event.test").unwrap_or_else(|_| panic!("origin"));
+    projection.ready_managed(generation, origin, "proxy.test");
+    assert_eq!(
+        *changes.borrow_and_update(),
+        (generation, "https://event.test".into())
+    );
+    projection.revoke(generation);
+    assert!(!changes.has_changed().unwrap_or(true));
+    projection.ready_managed(
+        generation,
+        CanonicalPublicOrigin::parse("https://event.test").unwrap_or_else(|_| panic!("origin")),
+        "proxy.test",
+    );
+    assert_eq!(
+        *changes.borrow_and_update(),
+        (generation, "https://event.test".into())
+    );
+    projection.begin_stop(generation);
+    assert_eq!(*changes.borrow_and_update(), (generation, String::new()));
 }

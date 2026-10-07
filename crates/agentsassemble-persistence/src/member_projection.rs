@@ -112,7 +112,21 @@ impl SqliteStore {
             anchor(&mut tx, &binding, member, false).await?;
         }
         tx.commit().await?;
+        self.notify_room_directory_changed();
         Ok(())
+    }
+
+    /// Returns a due time only while current-epoch member projection work exists.
+    /// Existing durable backoff and daily cap remain the delivery authority.
+    /// # Errors
+    /// Propagates database failures.
+    pub async fn next_member_projection_attempt(
+        &self,
+        now: i64,
+    ) -> Result<Option<i64>, PersistenceError> {
+        let due = sqlx::query_scalar("SELECT MAX(COALESCE(s.next_attempt_at,0), CASE WHEN s.day=? AND s.attempts>=48 THEN (?+1)*86400 ELSE ? END) FROM (SELECT 1) LEFT JOIN member_projection_sender s ON s.singleton=1 WHERE EXISTS(SELECT 1 FROM member_projection_outbox WHERE parked=0 AND acked_revision<revision AND registration_epoch=(SELECT value FROM runtime_metadata WHERE key='central_registration_epoch'))")
+            .bind(now.div_euclid(86400)).bind(now.div_euclid(86400)).bind(now).fetch_optional(&self.pool).await?;
+        Ok(due)
     }
 
     /// Reserves one bounded report attempt durably, including crash/unknown outcomes.
@@ -123,8 +137,7 @@ impl SqliteStore {
         now: i64,
         jitter: u8,
     ) -> Result<Vec<MemberProjection>, PersistenceError> {
-        // The existing directory loop wakes every two seconds. Idle/backoff wakes only read;
-        // the transaction below rechecks the durable reservation before any network dispatch.
+        // Event/timer wakeups only dispatch after this durable reservation is due.
         let due: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM member_projection_outbox WHERE parked=0 AND acked_revision<revision) AND NOT EXISTS(SELECT 1 FROM member_projection_sender WHERE singleton=1 AND (next_attempt_at>? OR (day=? AND attempts>=48)))")
             .bind(now).bind(now.div_euclid(86400)).fetch_one(&self.pool).await?;
         if !due {

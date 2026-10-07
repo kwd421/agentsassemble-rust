@@ -77,6 +77,9 @@ impl SqliteStore {
             return Ok(rejected(HumanAdmissionRejection::SessionUnavailable));
         }
         transaction.commit().await?;
+        if request.member.is_some() {
+            self.notify_room_directory_changed();
+        }
         Ok(decision)
     }
 }

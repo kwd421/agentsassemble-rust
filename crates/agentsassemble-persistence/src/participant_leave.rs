@@ -48,6 +48,7 @@ impl SqliteStore {
         let mutation =
             execute_leave_in(&mut transaction, principal, request_id, payload, None).await?;
         transaction.commit().await?;
+        self.notify_room_directory_changed();
         Ok(mutation)
     }
 
@@ -74,6 +75,7 @@ impl SqliteStore {
                 )
                 .await?;
                 transaction.commit().await?;
+                self.notify_room_directory_changed();
                 return Ok(mutation);
             }
             RoomSessionAuthorization::Human(session) => session,
@@ -89,6 +91,7 @@ impl SqliteStore {
         )
         .await?;
         transaction.commit().await?;
+        self.notify_room_directory_changed();
         Ok(mutation)
     }
 }

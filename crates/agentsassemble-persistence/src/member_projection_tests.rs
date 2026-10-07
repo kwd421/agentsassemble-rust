@@ -47,6 +47,12 @@ async fn projection_revision_replacement_late_ack_and_epoch_are_exact() -> TestR
     store
         .finish_member_projection_batch(&new, true, now.timestamp() + 60)
         .await?;
+    assert_eq!(
+        store
+            .next_member_projection_attempt(now.timestamp() + 120)
+            .await?,
+        None
+    );
     assert!(
         store
             .take_member_projection_batch(now.timestamp() + 120, 20)
@@ -112,6 +118,10 @@ async fn retry_schedule_and_daily_budget_are_durable() -> TestResult {
         .fetch_one(&store.pool)
         .await?;
     assert_eq!(deadline, start + 180);
+    assert_eq!(
+        store.next_member_projection_attempt(start + 60).await?,
+        Some(deadline)
+    );
     // A successful report permits more work after one minute, but never request 49.
     for i in 2..48 {
         sqlx::query("UPDATE member_projection_sender SET next_attempt_at=0")
@@ -133,6 +143,10 @@ async fn retry_schedule_and_daily_budget_are_durable() -> TestResult {
             .take_member_projection_batch(start + 4000, 20)
             .await?
             .is_empty()
+    );
+    assert_eq!(
+        store.next_member_projection_attempt(start + 4000).await?,
+        Some(start + 86400)
     );
     assert_eq!(
         store

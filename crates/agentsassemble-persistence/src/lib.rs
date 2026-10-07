@@ -68,6 +68,7 @@ mod room_session_authority;
 pub use room_session_authority::RoomSessionAuthorization;
 mod bootstrap;
 mod central_endpoint;
+pub use central_endpoint::CentralEndpointEvent;
 mod channel_messages;
 mod command_admission;
 mod runtime_restart;

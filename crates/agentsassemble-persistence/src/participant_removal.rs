@@ -61,6 +61,7 @@ impl SqliteStore {
         {
             authorization.record_success(&mut transaction).await?;
             transaction.commit().await?;
+            self.notify_room_directory_changed();
             return Ok(ParticipantRemovalMutation {
                 outcome,
                 revoked_session_fingerprints: Vec::new(),
@@ -130,6 +131,7 @@ impl SqliteStore {
         .await?;
         authorization.record_success(&mut transaction).await?;
         transaction.commit().await?;
+        self.notify_room_directory_changed();
         Ok(ParticipantRemovalMutation {
             outcome,
             revoked_session_fingerprints,

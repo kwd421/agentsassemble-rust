@@ -58,6 +58,7 @@ pub(crate) struct PublicIngress(
     Arc<std::sync::atomic::AtomicBool>,
     Arc<RwLock<Option<bool>>>,
     CancellationToken,
+    tokio::sync::watch::Sender<(u64, String)>,
 );
 
 enum PublicIngressKind {
@@ -156,6 +157,7 @@ impl PublicIngress {
             Arc::default(),
             Arc::default(),
             CancellationToken::new(),
+            tokio::sync::watch::channel((0, String::new())).0,
         )
     }
 
@@ -170,6 +172,7 @@ impl PublicIngress {
         {
             return Err(ManualPublicIngressError::InvalidSecret);
         }
+        let endpoint_changes = tokio::sync::watch::channel((0, origin.value.clone())).0;
         Ok(Self(
             Arc::new(PublicIngressKind::Manual(ManualPublicIngress {
                 local_url: format!("http://{listener}").into(),
@@ -181,6 +184,7 @@ impl PublicIngress {
             Arc::default(),
             Arc::default(),
             CancellationToken::new(),
+            endpoint_changes,
         ))
     }
 
@@ -196,6 +200,7 @@ impl PublicIngress {
             &local_url,
             cloudflared.is_some(),
         )));
+        let endpoint_changes = projection.read().endpoint_changes.clone();
         Ok(Self(
             Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
                 projection,
@@ -215,6 +220,7 @@ impl PublicIngress {
             Arc::default(),
             Arc::default(),
             CancellationToken::new(),
+            endpoint_changes,
         ))
     }
 
@@ -234,6 +240,11 @@ impl PublicIngress {
             PublicIngressKind::Manual(ingress) => static_status("manual", &ingress.origin),
             PublicIngressKind::Managed(ingress) => ingress.status(),
         }
+    }
+
+    /// Endpoint events represent start/origin replacement/explicit stop, not tunnel health.
+    pub(crate) fn subscribe_endpoint_changes(&self) -> tokio::sync::watch::Receiver<(u64, String)> {
+        self.4.subscribe()
     }
 
     pub(crate) fn ready_snapshot(&self) -> Option<ReadyIngress> {
@@ -678,6 +689,7 @@ enum IngressPhase {
 }
 
 pub(crate) struct ManagedProjection {
+    endpoint_changes: tokio::sync::watch::Sender<(u64, String)>,
     generation: u64,
     phase: IngressPhase,
     trust: Option<ManagedTrust>,
@@ -709,6 +721,7 @@ impl Drop for ManagedTrust {
 impl ManagedProjection {
     fn new(local_url: &str, available: bool) -> Self {
         Self {
+            endpoint_changes: tokio::sync::watch::channel((0, String::new())).0,
             generation: 0,
             phase: IngressPhase::Stopped,
             trust: None,
@@ -747,6 +760,8 @@ impl ManagedProjection {
         {
             return ManagedReadiness::Unchanged;
         }
+        self.endpoint_changes
+            .send_replace((generation, origin.value.clone()));
         self.phase = IngressPhase::Running;
         self.trust = Some(ManagedTrust {
             origin,
@@ -760,6 +775,8 @@ impl ManagedProjection {
         if self.generation == generation
             && matches!(self.phase, IngressPhase::Starting | IngressPhase::Running)
         {
+            self.endpoint_changes
+                .send_replace((generation, String::new()));
             self.phase = IngressPhase::Stopping;
             self.trust = None;
         }

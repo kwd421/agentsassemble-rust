@@ -51,6 +51,7 @@ impl SqliteStore {
             });
         }
         tx.commit().await?;
+        self.notify_room_directory_changed();
         Ok(rooms)
     }
 
