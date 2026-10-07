@@ -46,7 +46,15 @@ async fn terminal_responses_preserve_variants_and_stop_further_publication()
         )?;
         directory.bind_ingress(ingress.clone());
         let inner = directory.0.as_ref().ok_or("directory disabled")?;
-        let result = publish_online(inner, &store, &identity, "https://host.test", false).await;
+        let result = send_signed(
+            inner,
+            &identity,
+            &store,
+            Method::PUT,
+            &format!("/v1/servers/{}/endpoint", identity.server_id()),
+            json!({"origin":"https://host.test","generation":1}),
+        )
+        .await;
         match code {
             "server_retired" => {
                 assert!(matches!(result, Err(CentralDirectoryError::ServerRetired)));
@@ -62,7 +70,18 @@ async fn terminal_responses_preserve_variants_and_stop_further_publication()
         assert_eq!(store.hosting_restriction().await?.is_some(), terminal);
         assert_eq!(store.registration_epoch().await?.as_deref(), epoch);
         if terminal {
-            assert!(publish_offline(inner, &store, &identity).await.is_err());
+            assert!(
+                send_signed(
+                    inner,
+                    &identity,
+                    &store,
+                    Method::DELETE,
+                    &format!("/v1/servers/{}/endpoint", identity.server_id()),
+                    json!({"generation":2})
+                )
+                .await
+                .is_err()
+            );
             assert!(requests.try_recv().is_err());
         }
         cancellation.cancel();

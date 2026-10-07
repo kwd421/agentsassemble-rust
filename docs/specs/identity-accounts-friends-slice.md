@@ -59,6 +59,7 @@ At most 32 virtual requests/channel; each additionally acquires existing process
 128 total/127 public HTTP permits before buffering/dispatch, held through response/
 SSE or accepted-mutation terminal completion. Room socket retains 128 global/8 principal/
 64 room limits; ceilings unchanged. Immediate encrypted capacity failure on exhaustion.
+Encrypted receive ACKs bind the host record sequence; only one host record is in flight until the trusted consumer accepts it, providing bounded stream backpressure.
 Transport chunks <=64KiB; product WS frames <=256KiB. Cipher queues <=512KiB/direction/
 channel and <=8MiB server aggregate, charged before enqueue. Trusted workspace resource/
 Blob URL custody <=64MiB with original 10MiB attachment cap; release on resource unmount/

@@ -1,15 +1,15 @@
 //! Runs within the single host directory sender and its cancellation lifecycle.
 use super::{
-    CentralDirectoryError, CentralDirectoryInner, CentralHostIdentity, Method, SqliteStore, Utc,
-    json, send_signed,
+    CentralDirectoryError, CentralDirectoryInner, CentralHostIdentity, Method, SqliteStore, json,
+    send_signed,
 };
 
 pub(super) async fn send(
     inner: &CentralDirectoryInner,
     store: &SqliteStore,
     identity: &CentralHostIdentity,
+    now: i64,
 ) -> Result<(), CentralDirectoryError> {
-    let now = Utc::now().timestamp();
     let batch = store
         .take_member_projection_batch(now, uuid::Uuid::new_v4().as_bytes()[0])
         .await?;

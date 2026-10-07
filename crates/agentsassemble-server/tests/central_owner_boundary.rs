@@ -273,6 +273,10 @@ async fn start_fixture() -> Fixture {
         .bootstrap_local_authority("518f301c-e3bf-4b1c-82dd-5853bacb837f", "Host")
         .await
         .unwrap_or_else(|error| panic!("host bootstrap: {error:?}"));
+    store
+        .set_registration_epoch(Some("secure-test-epoch"))
+        .await
+        .unwrap_or_else(|error| panic!("host epoch: {error}"));
     let room_uid = String::new();
     let runtime_state = AppState::local(
         store.clone(),

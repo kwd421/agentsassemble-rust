@@ -183,6 +183,8 @@ fn run(
         };
         let lifetime_client = client.clone();
         let shutdown = state.shutdown.clone();
+        let custody_store = state.store.clone();
+        let mut custody_changes = custody_store.subscribe_room_directory();
         let lifetime = tokio::spawn(async move {
             let first_admission = async {
                 tokio::time::sleep(Duration::from_secs(30)).await;
@@ -190,7 +192,25 @@ fn run(
                     std::future::pending::<()>().await;
                 }
             };
+            let registration_changed = async {
+                loop {
+                    if custody_store
+                        .registration_epoch()
+                        .await
+                        .ok()
+                        .flatten()
+                        .as_deref()
+                        != Some(&lifetime_client.hello().registration_epoch)
+                    {
+                        return;
+                    }
+                    if custody_changes.changed().await.is_err() {
+                        return;
+                    }
+                }
+            };
             tokio::select! {
+                () = registration_changed => {},
                 () = lifetime_client.closed().cancelled() => {},
                 () = shutdown.cancelled() => {},
                 () = ingress_lifetime.cancelled() => {},

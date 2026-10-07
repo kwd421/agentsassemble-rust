@@ -16,6 +16,8 @@ use crate::{CentralHostIdentity, HostIdentityError, public_ingress::PublicIngres
 
 #[path = "admission_redeem.rs"]
 mod admission_redeem;
+#[path = "event_publisher.rs"]
+mod event_publisher;
 #[path = "member_sync.rs"]
 mod member_sync;
 pub(crate) use admission_redeem::MemberGrantPurpose;
@@ -24,8 +26,6 @@ pub(crate) use admission_redeem::MemberGrantPurpose;
 #[path = "directory_terminal_tests.rs"]
 mod terminal_tests;
 
-const HEARTBEAT: Duration = Duration::from_mins(5);
-const LEASE_SECONDS: i64 = 600;
 const RESPONSE_LIMIT: usize = 32 * 1024;
 
 #[derive(Clone)]
@@ -36,6 +36,8 @@ struct CentralDirectoryInner {
     client: Client,
     status: RwLock<CentralDirectoryStatus>,
     ingress: RwLock<PublicIngress>,
+    #[cfg(test)]
+    publisher_probe: tokio::sync::watch::Sender<(u64, bool)>,
 }
 
 #[derive(Clone, Serialize)]
@@ -99,6 +101,8 @@ impl CentralDirectory {
             .build()
             .map_err(CentralDirectoryError::Client)?;
         Ok(Self(Some(Arc::new(CentralDirectoryInner {
+            #[cfg(test)]
+            publisher_probe: tokio::sync::watch::channel((0, false)).0,
             base_url,
             client,
             ingress: RwLock::new(PublicIngress::disabled()),
@@ -140,101 +144,7 @@ impl CentralDirectory {
     ) -> Result<(), CentralDirectoryError> {
         self.bind_ingress(ingress.clone());
         let Some(inner) = self.0 else { return Ok(()) };
-        let mut profile_changes = store.subscribe_room_directory();
-        let mut name_dirty = true;
-        let mut published_name = None;
-        let mut parked_name = None;
-        let mut name_failures = 0_u32;
-        let mut next_name_attempt = std::time::Instant::now();
-        let mut registered = String::new();
-        let mut last_success: Option<std::time::Instant> = None;
-        let mut failure_count = 0_u32;
-        let mut next_attempt = std::time::Instant::now();
-        loop {
-            if reconcile_demotion(&store, &ingress).await? {
-                inner.status.write().registered_origin.clear();
-                return Ok(());
-            }
-            if let Err(error) = member_sync::send(&inner, &store, &identity).await {
-                inner.status.write().last_error = error.to_string();
-            }
-            if name_dirty && std::time::Instant::now() >= next_name_attempt {
-                match publish_default_name(
-                    &inner,
-                    &store,
-                    &identity,
-                    published_name.as_ref(),
-                    &mut parked_name,
-                )
-                .await
-                {
-                    Ok(version) => {
-                        published_name = version;
-                        name_dirty = false;
-                        name_failures = 0;
-                        inner.status.write().name_sync_error.clear();
-                    }
-                    Err(error) => {
-                        name_dirty = !matches!(error, CentralDirectoryError::Rejected);
-                        name_failures = name_failures.saturating_add(1);
-                        next_name_attempt = std::time::Instant::now() + retry_delay(name_failures);
-                        inner.status.write().name_sync_error = error.to_string();
-                    }
-                }
-            }
-            let ready = ingress.ready_snapshot().map(|ready| ready.public_url);
-            let renewal_due = last_success.is_none_or(|at| at.elapsed() >= HEARTBEAT);
-            let attempt_due = std::time::Instant::now() >= next_attempt;
-            if let Some(origin) = ready {
-                if (origin != registered || renewal_due) && attempt_due {
-                    let renew = origin == registered
-                        && last_success.is_some_and(|at| {
-                            at.elapsed() < Duration::from_secs(LEASE_SECONDS.cast_unsigned())
-                        });
-                    match publish_online(&inner, &store, &identity, &origin, renew).await {
-                        Ok(()) => {
-                            registered.clone_from(&origin);
-                            last_success = Some(std::time::Instant::now());
-                            failure_count = 0;
-                            next_attempt = std::time::Instant::now() + HEARTBEAT;
-                            inner.status.write().published(&origin);
-                        }
-                        Err(error) => {
-                            failure_count = failure_count.saturating_add(1);
-                            next_attempt = std::time::Instant::now() + retry_delay(failure_count);
-                            inner.status.write().last_error = error.to_string();
-                        }
-                    }
-                }
-            } else if !registered.is_empty() && attempt_due {
-                match publish_offline(&inner, &store, &identity).await {
-                    Ok(()) => {
-                        registered.clear();
-                        last_success = None;
-                        failure_count = 0;
-                        next_attempt = std::time::Instant::now() + HEARTBEAT;
-                        inner.status.write().published("");
-                    }
-                    Err(error) => {
-                        failure_count = failure_count.saturating_add(1);
-                        next_attempt = std::time::Instant::now() + retry_delay(failure_count);
-                        inner.status.write().last_error = error.to_string();
-                    }
-                }
-            }
-            tokio::select! {
-                () = cancellation.cancelled() => break,
-                () = tokio::time::sleep(Duration::from_secs(2)) => {}
-                result = profile_changes.changed() => {
-                    if result.is_err() { break; }
-                    name_dirty = true;
-                }
-            }
-        }
-        if !registered.is_empty() {
-            publish_offline(&inner, &store, &identity).await?;
-        }
-        Ok(())
+        event_publisher::run(inner, store, ingress, identity, cancellation).await
     }
 }
 
@@ -280,48 +190,6 @@ async fn publish_default_name(
     }
     *parked = None;
     Ok(Some(version))
-}
-
-async fn publish_online(
-    inner: &CentralDirectoryInner,
-    store: &SqliteStore,
-    identity: &CentralHostIdentity,
-    origin: &str,
-    renew: bool,
-) -> Result<(), CentralDirectoryError> {
-    let now = Utc::now().timestamp();
-    let body = json!({
-        "origin": origin,
-        "generation": if renew { store.current_central_endpoint_generation().await? } else { store.next_central_endpoint_generation().await? },
-        "issued_at": now,
-        "lease_expires_at": now + LEASE_SECONDS,
-    });
-    let suffix = if renew { "/renew" } else { "" };
-    let path = format!("/v1/servers/{}/endpoint{suffix}", identity.server_id());
-    send_signed(
-        inner,
-        identity,
-        store,
-        if renew { Method::POST } else { Method::PUT },
-        &path,
-        body,
-    )
-    .await?;
-    Ok(())
-}
-
-async fn publish_offline(
-    inner: &CentralDirectoryInner,
-    store: &SqliteStore,
-    identity: &CentralHostIdentity,
-) -> Result<(), CentralDirectoryError> {
-    let body = json!({
-        "generation": store.next_central_endpoint_generation().await?,
-        "issued_at": Utc::now().timestamp(),
-    });
-    let path = format!("/v1/servers/{}/endpoint", identity.server_id());
-    send_signed(inner, identity, store, Method::DELETE, &path, body).await?;
-    Ok(())
 }
 
 async fn send_signed(
@@ -527,15 +395,18 @@ mod tests {
                 .set_registration_epoch(epoch)
                 .await
                 .unwrap_or_else(|e| panic!("epoch: {e}"));
-            super::publish_online(inner, &store, &identity, "https://host.example", false)
+            for method in [reqwest::Method::PUT, reqwest::Method::DELETE] {
+                super::send_signed(
+                    inner,
+                    &identity,
+                    &store,
+                    method,
+                    &format!("/v1/servers/{}/endpoint", identity.server_id()),
+                    serde_json::json!({"generation":1}),
+                )
                 .await
-                .unwrap_or_else(|e| panic!("publish: {e}"));
-            super::publish_online(inner, &store, &identity, "https://host.example", true)
-                .await
-                .unwrap_or_else(|e| panic!("renew: {e}"));
-            super::publish_offline(inner, &store, &identity)
-                .await
-                .unwrap_or_else(|e| panic!("offline: {e}"));
+                .unwrap_or_else(|e| panic!("signed publication: {e}"));
+            }
             assert!(
                 directory
                     .owner_admission(
@@ -552,7 +423,6 @@ mod tests {
             );
             for (method, suffix) in [
                 ("PUT", "endpoint"),
-                ("POST", "endpoint/renew"),
                 ("DELETE", "endpoint"),
                 ("POST", "connect-grants/redeem"),
             ] {
@@ -581,32 +451,38 @@ mod tests {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let verify_identity = identity.clone();
         let verify_path = path.clone();
-        let router = Router::new().route(
-            &path,
-            put(move |headers: HeaderMap, body: Bytes| {
-                let (tx, identity, path) =
-                    (tx.clone(), verify_identity.clone(), verify_path.clone());
-                async move {
-                    verify_epoch_request(
-                        &identity,
-                        &headers,
-                        &body,
-                        "PUT",
-                        &path,
-                        Some("name-epoch"),
-                    );
-                    let value: serde_json::Value = serde_json::from_slice(&body)
-                        .unwrap_or_else(|error| panic!("name body: {error}"));
-                    tx.send(value)
-                        .unwrap_or_else(|error| panic!("capture: {error}"));
-                    axum::Json(serde_json::json!({"status": "ok"}))
-                }
-            }),
-        );
+        let router = Router::new()
+            .route(
+                "/v1/servers/{id}/endpoint",
+                axum::routing::delete(|| async { axum::Json(serde_json::json!({"status":"ok"})) }),
+            )
+            .route(
+                &path,
+                put(move |headers: HeaderMap, body: Bytes| {
+                    let (tx, identity, path) =
+                        (tx.clone(), verify_identity.clone(), verify_path.clone());
+                    async move {
+                        verify_epoch_request(
+                            &identity,
+                            &headers,
+                            &body,
+                            "PUT",
+                            &path,
+                            Some("name-epoch"),
+                        );
+                        let value: serde_json::Value = serde_json::from_slice(&body)
+                            .unwrap_or_else(|error| panic!("name body: {error}"));
+                        tx.send(value)
+                            .unwrap_or_else(|error| panic!("capture: {error}"));
+                        axum::Json(serde_json::json!({"status": "ok"}))
+                    }
+                }),
+            );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;
         let cancellation = tokio_util::sync::CancellationToken::new();
-        let shutdown = cancellation.clone();
+        let server_cancellation = tokio_util::sync::CancellationToken::new();
+        let shutdown = server_cancellation.clone();
         let server = tokio::spawn(async move {
             axum::serve(listener, router)
                 .with_graceful_shutdown(shutdown.cancelled_owned())
@@ -653,6 +529,7 @@ mod tests {
         );
         cancellation.cancel();
         host.await??;
+        server_cancellation.cancel();
         server.await?;
         Ok(())
     }

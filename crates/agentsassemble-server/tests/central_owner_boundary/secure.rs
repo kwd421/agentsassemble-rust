@@ -10,10 +10,6 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
     let generation = serde_json::from_slice::<Value>(&published.body)?["generation"]
         .as_i64()
         .ok_or("generation")?;
-    fixture
-        .store
-        .set_registration_epoch(Some("secure-test-epoch"))
-        .await?;
     let info: Value = fixture
         .client
         .get(format!("http://{}/api/server-info", fixture.address))
