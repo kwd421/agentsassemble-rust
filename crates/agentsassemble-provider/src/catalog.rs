@@ -177,7 +177,7 @@ pub(crate) async fn discover_opencode(
     // Native --refresh updates OpenCode's own model cache when discovery is requested.
     let output = match Box::pin(probe(
         &executable,
-        &["models", "--refresh"],
+        &["models", "--refresh", "--verbose"],
         cancellation,
         &[],
     ))
@@ -186,7 +186,10 @@ pub(crate) async fn discover_opencode(
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };
-    let models = opencode_models(&output);
+    let models = match opencode_models(&output) {
+        Ok(models) => models,
+        Err(error) => return failed_provider(provider, error),
+    };
     let default_model = preferred_model(&models, "opencode/muse-spark-1.2-contributor-free");
     ready_provider(
         provider,
@@ -478,7 +481,7 @@ pub(crate) fn control(
 }
 
 pub(crate) fn permission_control(workspace_write: bool) -> ProviderControl {
-    let mut options = vec![option("meeting_read_only", "방 읽기 전용")];
+    let mut options = vec![option("meeting_read_only", "대화 전용")];
     if workspace_write {
         options.push(option("workspace_write", "작업 폴더 쓰기"));
     }
@@ -536,15 +539,41 @@ fn nonempty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-fn opencode_models(output: &str) -> Vec<ProviderControlOption> {
-    output
-        .lines()
-        .map(str::trim)
-        .filter(|model| valid_opencode_model(model))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .map(|model| option(model, model))
-        .collect()
+fn opencode_models(output: &str) -> Result<Vec<ProviderControlOption>, ProbeFailure> {
+    let mut remaining = output.trim();
+    let mut models = BTreeMap::new();
+    while !remaining.is_empty() {
+        let (model, metadata) = remaining.split_once('\n').ok_or(ProbeFailure::Malformed)?;
+        let metadata = metadata.trim_start();
+        let mut stream = serde_json::Deserializer::from_str(metadata).into_iter::<Value>();
+        let native = stream
+            .next()
+            .ok_or(ProbeFailure::Malformed)?
+            .map_err(|_| ProbeFailure::Malformed)?;
+        remaining = metadata[stream.byte_offset()..].trim_start();
+        if !valid_opencode_model(model) {
+            continue;
+        }
+        let input = native
+            .pointer("/cost/input")
+            .and_then(Value::as_f64)
+            .ok_or(ProbeFailure::Malformed)?;
+        let output = native
+            .pointer("/cost/output")
+            .and_then(Value::as_f64)
+            .ok_or(ProbeFailure::Malformed)?;
+        let mut entry = option(model, model);
+        entry.metadata.insert(
+            "pricing".to_owned(),
+            json!(if input == 0.0 && output == 0.0 {
+                "free"
+            } else {
+                "paid"
+            }),
+        );
+        models.insert(model.to_owned(), entry);
+    }
+    Ok(models.into_values().collect())
 }
 
 fn valid_opencode_model(model: &str) -> bool {

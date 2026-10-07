@@ -733,6 +733,15 @@ remains blocked. See the dated MD/JSON evidence for the paired controls and limi
 
 ## Bash ask admission continuation (2026-10-07, base 6cdcf28e)
 
+Superseded by the owner decision after Daybreak H/M: native saved project `always`
+grants bypass ask before the broker receives an event. The local no-execution
+probe below did not cover remembered grants. Restore native deny, remove the
+unused auto-reject path, retain 7c0439e3 instructions and 12b805bb permission reset.
+Free models now require explicit workspace_write selection; see the
+[permission contract](agent-session-slice.md#opencode-permission-correction-owner-decision-2026-10-07).
+The historical results below do not establish the current security boundary.
+
+
 User authorizes about ten free-model requests to test native bash `ask`. If
 admitted, retain bash in the model tool set for `meeting_read_only`, but reject
 every bash request through the managed provider-request broker and native reply

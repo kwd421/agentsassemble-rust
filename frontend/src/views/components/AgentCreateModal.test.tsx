@@ -630,7 +630,7 @@ describe("AgentCreateModal", () => {
     expect(screen.getByRole("button", { name: /적용 안 함/ })).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "추론 강도" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "응답 속도" })).toBeNull();
-    expectProviderControlValue("권한", "읽기 전용");
+    expectProviderControlValue("권한", "대화 전용");
     expect(screen.queryByRole("button", { name: "폴더 선택" })).toBeNull();
     await userEvent.click(primaryActionButton());
 

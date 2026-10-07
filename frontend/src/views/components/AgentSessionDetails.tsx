@@ -5,6 +5,8 @@ import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import {
   canonicalProviderModelValue,
   displayProviderControls,
+  requiresOpenCodeApproval,
+  OPENCODE_FREE_PERMISSION_HINT,
   effectiveProviderControlOptions,
   reconcileProviderSettings,
 } from "../../lib/providerControlSettings";
@@ -182,7 +184,8 @@ export default function AgentSessionDetails({
     session.max_output_tokens,
   ]);
 
-  useEffect(() => { setSettings(storedSettings); }, [storedSettings]);
+  useEffect(() => { setSettings(provider && requiresOpenCodeApproval(provider, storedSettings)
+    ? { ...storedSettings, permission_mode: "workspace_write" } : storedSettings); }, [provider, storedSettings]);
   const settingsChanged = Object.entries(storedSettings).some(([key, value]) => settings[key] !== value);
 
   async function runControl(action: AgentSessionControlAction) {
@@ -313,6 +316,9 @@ export default function AgentSessionDetails({
           {settingsOpen && <div style={{ gridColumn: "1 / -1" }}><ProviderModelRefresh title="모델" providerId={provider.id}
             localAvailable={localProviderActions}
             automaticAllowed={provider.discovery_error_code !== "authentication_required"} /></div>}
+          {requiresOpenCodeApproval(provider, settings) && (
+            <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{OPENCODE_FREE_PERMISSION_HINT}</p>
+          )}
           {displayProviderControls(provider).map((control) => {
             const providerSupportsControl = provider.controls.some(
               (candidate) => candidate.key === control.key

@@ -178,3 +178,69 @@ pub(super) fn validate_runtime_variant(
         ),
     ))
 }
+
+/// The same catalog selection owner validates both create and stopped configuration.
+pub(super) fn validate_model_permission(
+    provider: &ProviderAvailability,
+    model: &str,
+    permission_mode: &str,
+) -> Result<(), ProviderSelectionError> {
+    let free = provider
+        .controls
+        .iter()
+        .find(|control| control.key == "model")
+        .and_then(|control| control.options.iter().find(|option| option.value == model))
+        .and_then(|option| option.metadata.get("pricing"))
+        .and_then(Value::as_str)
+        .is_some_and(|pricing| matches!(pricing, "free" | "free_tier"));
+    if provider.id == "opencode" && free && permission_mode == "meeting_read_only" {
+        return Err(ProviderSelectionError::new(
+            "opencode_free_requires_workspace_write",
+            "OpenCode 무료 모델은 작업 폴더 쓰기 권한을 선택해야 사용할 수 있어요.",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn free_opencode_permission_is_rejected_without_changing_selection() {
+        let mut provider =
+            crate::registration::loading_provider(&crate::registration::OPENCODE_PROVIDER);
+        let mut model = crate::catalog::option("opencode/no-suffix", "Free");
+        model
+            .metadata
+            .insert("pricing".to_owned(), serde_json::json!("free"));
+        provider.controls = vec![crate::catalog::control(
+            "model",
+            "Model",
+            "select",
+            vec![model],
+            "",
+        )];
+        let error = validate_model_permission(&provider, "opencode/no-suffix", "meeting_read_only")
+            .err()
+            .unwrap_or_else(|| panic!("free model cannot use conversation-only"));
+        assert_eq!(error.code, "opencode_free_requires_workspace_write");
+        assert!(error.message.contains("작업 폴더 쓰기"));
+        assert!(
+            validate_model_permission(&provider, "opencode/no-suffix", "workspace_write").is_ok()
+        );
+        provider.controls[0].options[0]
+            .metadata
+            .insert("pricing".to_owned(), serde_json::json!("paid"));
+        assert!(
+            validate_model_permission(&provider, "opencode/no-suffix", "meeting_read_only").is_ok()
+        );
+        provider.id = "other".to_owned();
+        provider.controls[0].options[0]
+            .metadata
+            .insert("pricing".to_owned(), serde_json::json!("free"));
+        assert!(
+            validate_model_permission(&provider, "opencode/no-suffix", "meeting_read_only").is_ok()
+        );
+    }
+}

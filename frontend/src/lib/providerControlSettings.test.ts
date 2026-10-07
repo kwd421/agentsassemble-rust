@@ -98,7 +98,7 @@ function relatedProvider(): NativeCliProviderAvailability {
         kind: "select",
         default_value: "meeting_read_only",
         options: [
-          { value: "meeting_read_only", label: "읽기 전용" },
+          { value: "meeting_read_only", label: "대화 전용" },
           { value: "workspace_write", label: "작업 폴더 쓰기" },
         ],
       },
@@ -238,4 +238,23 @@ describe("providerControlSettings", () => {
       permission_mode: "meeting_read_only",
     });
   });
+});
+
+it("forces approval for catalog-marked OpenCode free models on initialization and edits", () => {
+  const provider = relatedProvider();
+  provider.id = "opencode";
+  const models = provider.controls.find((control) => control.key === "model")!;
+  models.options[0].metadata = { pricing: "free" };
+  const permission = provider.controls.find((control) => control.key === "permission_mode")!;
+  const initial = initializeProviderSettings(provider);
+  expect(initial.permission_mode).toBe("workspace_write");
+  expect(effectiveProviderControlOptions(provider, permission, initial)[0].metadata?.disabled).toBe(true);
+  expect(reconcileProviderSettings(provider, { ...initial, permission_mode: "meeting_read_only" }).permission_mode)
+    .toBe("workspace_write");
+  const paid = reconcileProviderSettings(provider, { ...initial, model: models.options[1].value });
+  expect(effectiveProviderControlOptions(provider, permission, paid)[0].metadata?.disabled).not.toBe(true);
+  expect(reconcileProviderSettings(provider, { ...paid, permission_mode: "meeting_read_only" }).permission_mode)
+    .toBe("meeting_read_only");
+  provider.id = "codex";
+  expect(initializeProviderSettings(provider).permission_mode).toBe("meeting_read_only");
 });

@@ -63,10 +63,19 @@ async fn cancelled_catalog_does_not_wait_for_stalled_filesystem_work() {
 
 #[test]
 fn opencode_catalog_accepts_only_managed_valid_namespaces() {
-    let models = opencode_models(
-        "openai/gpt-5\nopencode/hy3-free\nopencode-go/free/model\nopencode/HY3-free\n\
-         opencode/bad model\nopencode/bad?model\nopencode/hy3-free\n",
-    );
+    let output = [
+        "openai/gpt-5",
+        "opencode/hy3-free",
+        "opencode-go/free/model",
+        "opencode/HY3-free",
+        "opencode/bad model",
+        "opencode/bad?model",
+        "opencode/hy3-free",
+    ]
+    .map(|id| format!("{id}\n{{\"cost\":{{\"input\":0,\"output\":0}}}}\n"))
+    .join("");
+    let models =
+        opencode_models(&output).unwrap_or_else(|error| panic!("verbose catalog: {error:?}"));
     let values = models
         .iter()
         .map(|model| model.value.as_str())
@@ -312,4 +321,17 @@ fn fixture_provider() -> ProviderAvailability {
         crate::registration::loading_provider(&crate::registration::OPENCODE_PROVIDER);
     "/bin/true".clone_into(&mut provider.executable);
     provider
+}
+
+#[test]
+fn opencode_free_pricing_uses_native_costs_not_a_model_list() {
+    let models = opencode_models(concat!(
+        "opencode/big-pickle\n{\"cost\":{\"input\":0,\"output\":0}}\n",
+        "opencode/paid\n{\"cost\":{\"input\":1,\"output\":0}}\n"
+    ))
+    .unwrap_or_else(|error| panic!("native costs: {error:?}"));
+    assert_eq!(models[0].metadata["pricing"], "free");
+    assert_eq!(models[1].metadata["pricing"], "paid");
+    assert!(opencode_models("opencode/unknown\n{}").is_err());
+    assert!(opencode_models("opencode/unknown\n{broken").is_err());
 }

@@ -37,6 +37,27 @@ manual verification or deployment; visual acceptance belongs to the user.
 
 ## Definition
 
+### OpenCode permission correction (owner decision, 2026-10-07)
+
+Daybreak H: saved project `always` grants can bypass native bash `ask` before
+broker ingress. Restore native `deny` for managed `meeting_read_only`; remove
+cb777abf's unused shell classification/auto-reject plumbing. Keep 7c0439e3's
+built-in agent/instructions file and 12b805bb's atomic native-session reset (M).
+The earlier bash-ask acceptance is superseded, not proof against remembered grants.
+Shared app/web agent add and stopped-session settings show `대화 전용` for the
+unchanged `meeting_read_only` wire value; `작업 폴더 쓰기` remains unchanged.
+The short write hint is `명령 실행·파일 수정은 할 때마다 승인해요`.
+For OpenCode models marked free by the catalog, the UI forces workspace_write,
+disables conversation-only selection and shows one muted explanation:
+`OpenCode 무료 모델은 명령 실행 도구가 켜져 있어야 써서, 승인 모드에서만 쓸 수 있어요.`
+The catalog/selection owner rejects create/configure with a free model and
+meeting_read_only using a Korean-mapped error; it never silently changes server
+input. Other providers and paid models retain both existing permission semantics.
+Acceptance: native deny payload, normal approval receipts, catalog free detection,
+selection rejection, shared UI initialization/model changes/configuration, and M
+rollback/replay tests. No new persistence or background tasks; packaged visual and
+real-provider checks remain unknown unless explicitly recorded in verification.
+
 ### Permission reconfiguration (Daybreak M, 2026-10-07)
 
 The shared app/web `agent.configure` stopped-session transaction clears the private

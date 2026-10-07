@@ -158,7 +158,7 @@ function codexProvider(): NativeCliProviderAvailability {
         kind: "select",
         default_value: "meeting_read_only",
         options: [
-          { value: "meeting_read_only", label: "읽기 전용" },
+          { value: "meeting_read_only", label: "대화 전용" },
           { value: "workspace_write", label: "작업 폴더 쓰기" },
         ],
       },
@@ -719,4 +719,27 @@ describe("RoomConnectionPanel", () => {
     expect(screen.queryByRole("button", { name: "변경사항 저장" })).toBeNull();
   });
 
+});
+
+it("requires approval when saving a legacy free OpenCode conversation-only session", async () => {
+  const provider = codexProvider();
+  provider.id = "opencode";
+  provider.provider_kind = "opencode_server";
+  provider.runtime_kind = "opencode";
+  provider.controls[0].options[0].metadata = { pricing: "free" };
+  const session = { ...agentSession("stopped"), enabled: false,
+    provider_kind: "opencode_server", runtime_kind: "opencode",
+    model: "gpt-current", reasoning_effort: "low", service_tier: "default", variant: "",
+    permission_mode: "meeting_read_only", max_output_tokens: 4096 };
+  const onAgentConfigure = vi.fn().mockResolvedValue(undefined);
+  render(<RoomConnectionPanel room={room} agents={[agent("offline")]} members={[member()]}
+    agentSessions={[session]} capabilities={agentControlCapability}
+    availableProviders={[provider]} onAgentConfigure={onAgentConfigure} />);
+  openAgentDetails();
+  expectProviderControlValue("권한", "작업 폴더 쓰기");
+  await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
+  expect((screen.getByRole("option", { name: "대화 전용" }) as HTMLButtonElement).disabled).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await userEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
+  expect(onAgentConfigure).toHaveBeenCalledWith(session, expect.objectContaining({ permission_mode: "workspace_write" }));
 });

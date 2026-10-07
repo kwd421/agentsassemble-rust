@@ -182,6 +182,7 @@ export default function ProviderControlSelect({
   }
 
   function selectOption(option: ProviderControlOption) {
+    if (option.metadata?.disabled === true) return;
     onChange(option.value);
     setOpen(false);
     setActiveGroup("");
@@ -317,6 +318,7 @@ export default function ProviderControlSelect({
                         role="option"
                         aria-label={providerControlOptionAccessibleName(option)}
                         aria-selected={selected}
+                        disabled={option.metadata?.disabled === true}
                         data-selected={selected}
                         data-effect={providerControlOptionEffect(option)}
                         {...modelDetails.bind(option)}
@@ -391,6 +393,7 @@ export default function ProviderControlSelect({
                       role="option"
                       aria-label={providerControlOptionAccessibleName(option)}
                       aria-selected={selected}
+                      disabled={option.metadata?.disabled === true}
                       data-selected={selected}
                       data-effect={providerControlOptionEffect(option)}
                       {...modelDetails.bind(option)}

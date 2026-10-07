@@ -8,7 +8,7 @@ use super::{ProviderAdapter, ProviderTurnRequest, tests::fixture_session};
 use crate::{ProviderRequestExchange, ProviderRequestIngress, profile::runtime_profile_key};
 
 #[tokio::test]
-async fn opencode_native_permission_waits_for_exact_http_and_room_receipts()
+async fn opencode_managed_conversation_only_keeps_native_denial()
 -> Result<(), Box<dyn std::error::Error>> {
     check_native_permissions("meeting_read_only", false).await
 }
@@ -52,10 +52,10 @@ async fn check_native_permissions(
     );
     assert_eq!(
         creation["permission"][1],
-        json!({"permission":"bash", "pattern":"*", "action":if external { "deny" } else { "ask" }})
+        json!({"permission":"read", "pattern":"*", "action":"allow"})
     );
     let mut active = active_session(&session, &started, "room-turn-1");
-    if external {
+    if external || mode == "meeting_read_only" {
         stop_and_release(&adapter, &active, &started).await;
         return Ok(());
     }
@@ -87,27 +87,18 @@ async fn check_native_permissions(
             .await?
             .ok_or("request channel closed")?;
         assert_eq!(command.session_id, active.public.session_id);
-        assert!(command.shell_permission);
-        let policy_denied = index == 3 && mode == "meeting_read_only";
         let (exchange, mut responder, mut delivery) = ProviderRequestExchange::channel();
-        if policy_denied {
-            command.complete(Err(crate::ProviderRequestExchangeError::ShellDenied));
-        } else {
-            command.complete(Ok(exchange));
-            responder.respond(ProviderRequestResolution::Option {
-                option_id: "once".to_owned(),
-            })?;
-            assert!(delivery.completion().await);
-            assert!(!turn.is_finished());
-            delivery.finish(Ok(()));
-        }
+        command.complete(Ok(exchange));
+        responder.respond(ProviderRequestResolution::Option {
+            option_id: "once".to_owned(),
+        })?;
+        assert!(delivery.completion().await);
+        assert!(!turn.is_finished());
+        delivery.finish(Ok(()));
         assert_eq!(turn.await??.provider_turn_id, "assistant-1");
         let reply: serde_json::Value =
             serde_json::from_slice(&std::fs::read(directory.path().join("native-reply.json"))?)?;
-        assert_eq!(
-            reply,
-            json!({"reply": if policy_denied { "reject" } else { "once" }})
-        );
+        assert_eq!(reply, json!({"reply": "once"}));
         assert_eq!(
             std::fs::read_to_string(directory.path().join("room-instructions.txt"))?,
             instructions.unwrap_or_default()

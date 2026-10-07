@@ -155,3 +155,102 @@ async fn assert_live_profile_update<S>(
         "Renamed live"
     );
 }
+
+#[tokio::test]
+async fn opencode_free_create_and_configure_reject_conversation_only() {
+    let _serial = AGENT_BOUNDARY_LOCK.lock().await;
+    let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("workspace: {error:?}"));
+    let store = SqliteStore::open("sqlite::memory:")
+        .await
+        .unwrap_or_else(|error| panic!("store: {error:?}"));
+    bootstrap(&store).await;
+    let mut catalog = agent_catalog(directory.path(), None);
+    let provider = &mut catalog.providers[0];
+    provider.id = "opencode".to_owned();
+    provider.provider_kind = "opencode_server".to_owned();
+    provider.runtime_kind = "opencode".to_owned();
+    let mut file = std::fs::File::open(&provider.executable)
+        .unwrap_or_else(|error| panic!("executable: {error:?}"));
+    let handle = same_file::Handle::from_file(
+        file.try_clone()
+            .unwrap_or_else(|error| panic!("clone: {error:?}")),
+    )
+    .unwrap_or_else(|error| panic!("handle: {error:?}"));
+    provider.executable_identity =
+        agentsassemble_domain::stable_content_identity(&handle, &mut file)
+            .unwrap_or_else(|error| panic!("single-file identity: {error:?}"));
+    let models = provider
+        .controls
+        .iter_mut()
+        .find(|control| control.key == "model")
+        .unwrap_or_else(|| panic!("models"));
+    models.options[0]
+        .metadata
+        .insert("pricing".to_owned(), json!("free"));
+    let permissions = provider
+        .controls
+        .iter_mut()
+        .find(|control| control.key == "permission_mode")
+        .unwrap_or_else(|| panic!("permissions"));
+    permissions
+        .options
+        .push(agentsassemble_domain::ProviderControlOption {
+            value: "workspace_write".to_owned(),
+            label: "작업 폴더 쓰기".to_owned(),
+            metadata: std::collections::BTreeMap::default(),
+        });
+    let server = start(store, catalog).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
+    subscribe(&mut socket).await;
+    let _snapshot = receive_json(&mut socket).await;
+    let mut payload = json!({"provider_id":"opencode", "catalog_revision":"catalog-boundary-1",
+        "display_name":"Free", "workspace":directory.path(), "model":"gpt-5.6-terra",
+        "permission_mode":"meeting_read_only", "start_now":false});
+    send_create(&mut socket, "free-denied", &payload).await;
+    let error = receive_json(&mut socket).await;
+    assert_eq!(
+        error["error"]["code"],
+        "opencode_free_requires_workspace_write"
+    );
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .unwrap_or_else(|| panic!("Korean message"))
+            .contains("작업 폴더 쓰기")
+    );
+    assert!(
+        server
+            .state
+            .store
+            .snapshot("general", 0, 200)
+            .await
+            .unwrap_or_else(|error| panic!("snapshot: {error:?}"))
+            .agent_sessions
+            .is_empty()
+    );
+    payload["permission_mode"] = json!("workspace_write");
+    send_create(&mut socket, "free-approved-mode", &payload).await;
+    let created = receive_until_ack(&mut socket, 2).await;
+    let session_id = &created["result"]["agent_session"]["session_id"];
+    assert!(session_id.is_string());
+    send_command(&mut socket, "free-config-denied", "agent.configure", &json!({
+        "agent_id":session_id, "catalog_revision":"catalog-boundary-1", "permission_mode":"meeting_read_only"
+    })).await;
+    let error = receive_json(&mut socket).await;
+    assert_eq!(
+        error["error"]["code"],
+        "opencode_free_requires_workspace_write"
+    );
+    assert_eq!(
+        server
+            .state
+            .store
+            .snapshot("general", 0, 200)
+            .await
+            .unwrap_or_else(|error| panic!("snapshot: {error:?}"))
+            .agent_sessions[0]
+            .permission_mode,
+        "workspace_write"
+    );
+    server.stop_and_close().await;
+}

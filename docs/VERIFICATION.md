@@ -1,6 +1,33 @@
 # Verification Contract
 
-- 2026-10-07 OpenCode bash `ask` passes MiMo free admission. Managed read-only
+- 2026-10-07 owner correction at base `12b805bb`: Daybreak static review returned
+  C0/H1/M1/L0 (REVISE). H: project-level saved `always` grants bypass native bash
+  `ask` before broker ingress; the previous real denial probe did not test that
+  case. Restore native `deny` for managed conversation-only sessions and remove
+  unused shell-policy callback/broker plumbing. M: retain `12b805bb`'s atomic
+  native-session reset on permission changes, including rollback/replay protection.
+  Keep `7c0439e3`'s built-in agent and instructions-file behavior.
+  Permission label is now `대화 전용` with unchanged wire value. Shared add/settings
+  UI forces workspace_write for catalog-marked free OpenCode models, disables
+  conversation-only and shows the owner-approved muted explanation. Both server
+  create and configure use catalog selection validation and return Korean error
+  `opencode_free_requires_workspace_write` instead of changing the request.
+  Native `models --verbose` costs populate existing `pricing` metadata, including
+  free models without a suffix; no hardcoded model list. Local CLI read-only check:
+  48,828 bytes, 39 managed models, 11 free, no missing costs (existing 2 MiB probe
+  bound unchanged). No extra background tasks or persistence added.
+  Affected checks: OpenCode provider tests (24), selection tests (18), managed
+  bridge tests (5), permission downgrade/rollback/replay (1), and server WebSocket
+  create/configure rejection (1) pass. Frontend affected suites pass (65 tests
+  across provider settings, agent add, session settings and permission selector);
+  Provider-request broker integration (6), TypeScript/Vite build, architecture/
+  source gates, 19 gate tests, affected-crate all-target Clippy with warnings denied,
+  cargo fmt and git diff checks pass.
+  Packaged visual acceptance and a new real-provider remembered-grant run remain unknown;
+  no claim of either from unit/build evidence. No push.
+
+- Historical, superseded by the owner correction above: 2026-10-07 OpenCode
+  bash `ask` passes MiMo free admission. Managed read-only
   bash is rejected by the durable-policy broker and native reply endpoint without
   execution or user prompt. Real ordinary turns publish before/after native
   summarize; shell-capable approval policy is unchanged. Eight explicit requests,

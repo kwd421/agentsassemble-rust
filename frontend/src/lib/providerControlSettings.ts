@@ -48,11 +48,30 @@ export function canonicalProviderModelValue(
   return matchingModelOptionValue(modelControl.options, candidate) || candidate;
 }
 
+export const OPENCODE_FREE_PERMISSION_HINT =
+  "OpenCode 무료 모델은 명령 실행 도구가 켜져 있어야 써서, 승인 모드에서만 쓸 수 있어요.";
+
+export function requiresOpenCodeApproval(
+  provider: NativeCliProviderAvailability,
+  settings: Record<string, string>
+): boolean {
+  const model = provider.controls.find((control) => control.key === "model")
+    ?.options.find((option) => option.value === settings.model);
+  return provider.id === "opencode" &&
+    ["free", "free_tier"].includes(String(model?.metadata?.pricing || ""));
+}
+
 export function effectiveProviderControlOptions(
   provider: NativeCliProviderAvailability,
   control: ProviderControl,
   settings: Record<string, string>
 ): ProviderControl["options"] {
+  if (control.key === "permission_mode" && requiresOpenCodeApproval(provider, settings)) {
+    return control.options.map((option) => ({
+      ...option,
+      metadata: { ...option.metadata, disabled: option.value === "meeting_read_only" },
+    }));
+  }
   if (!["reasoning_effort", "service_tier"].includes(control.key)) {
     return control.options;
   }
@@ -121,6 +140,7 @@ function normalizeProviderSettings(
       useDefaults
     );
   }
+  if (requiresOpenCodeApproval(provider, next)) next.permission_mode = "workspace_write";
   return next;
 }
 

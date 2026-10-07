@@ -138,6 +138,7 @@ impl ProviderSelection {
         validate_runtime_variant(provider, &model, &reasoning_effort, &service_tier)?;
         let variant = selected_value(provider, "variant", input.variant)?;
         let permission_mode = selected_value(provider, "permission_mode", input.permission_mode)?;
+        controls::validate_model_permission(provider, &model, &permission_mode)?;
         let execution_harness = input
             .execution_harness
             .unwrap_or_else(|| "builtin".to_owned());

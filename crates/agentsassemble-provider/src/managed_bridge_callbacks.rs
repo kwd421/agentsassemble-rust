@@ -50,7 +50,6 @@ pub(super) enum Callback {
         turn_generation: u64,
         execution_id: String,
         request: ProviderRequest,
-        shell_permission: bool,
     },
     Delivered {
         delivered: bool,
@@ -192,7 +191,6 @@ async fn request(mut job: Job, command: ProviderRequestCommand) -> Result<u64, D
         turn_generation: command.turn_generation,
         execution_id: command.execution_id.clone(),
         request: command.request.clone(),
-        shell_permission: command.shell_permission,
     })
     .await?;
     let Reply::RequestOpened { result } = job.receive().await? else {

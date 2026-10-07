@@ -32,8 +32,6 @@ mod message_search_provider_tests;
 mod ordered_recovery_tests;
 #[path = "persona_turn_tests.rs"]
 mod persona_turn_tests;
-#[path = "provider_shell_permission_tests.rs"]
-mod provider_shell_permission_tests;
 #[path = "provider_turn_completion_recovery_tests.rs"]
 mod provider_turn_completion_recovery_tests;
 #[path = "provider_turn_mute_tests.rs"]

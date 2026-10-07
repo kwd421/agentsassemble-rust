@@ -325,7 +325,6 @@ impl OpenCodeDriver {
                     "model": model,
                     "permission": [
                         {"permission": "*", "pattern": "*", "action": permission_action},
-                        {"permission": "bash", "pattern": "*", "action": if session.public.external_owned { permission_action } else { "ask" }},
                         {"permission": "read", "pattern": "*", "action": "allow"},
                         {"permission": "glob", "pattern": "*", "action": "allow"},
                         {"permission": "grep", "pattern": "*", "action": "allow"},

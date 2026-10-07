@@ -13,6 +13,8 @@ import {
 import { RoomSocketSayError, type NativeCliProviderAvailability, type ProviderControl } from "../../roomSocketClient";
 import {
   displayProviderControls,
+  requiresOpenCodeApproval,
+  OPENCODE_FREE_PERMISSION_HINT,
   effectiveProviderControlOptions,
   initializeProviderSettings,
   reconcileProviderSettings,
@@ -443,7 +445,7 @@ export default function AgentCreateModal({
                   value={workspacePath}
                   description={
                     settings.permission_mode === "workspace_write" && providerGroup !== "harness"
-                      ? "모델이 이 폴더의 텍스트를 읽을 수 있어요. 파일 변경은 매번 승인을 요청해요."
+                      ? "명령 실행·파일 수정은 할 때마다 승인해요"
                       : ""
                   }
                   onChange={setWorkspacePath}
@@ -501,6 +503,9 @@ export default function AgentCreateModal({
                 })} />}
 
               <div className="dc-agent-field-grid dc-agent-field-grid--dual">
+                {requiresOpenCodeApproval(selectedProvider, settings) && (
+                  <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{OPENCODE_FREE_PERMISSION_HINT}</p>
+                )}
                 {selectedProvider.controls.length > 0 && displayProviderControls(selectedProvider).map((control) => {
                   const providerSupportsControl = selectedProvider.controls.some(
                     (candidate) => candidate.key === control.key

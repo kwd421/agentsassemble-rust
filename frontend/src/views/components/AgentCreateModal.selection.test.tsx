@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import AgentCreateModal from "./AgentCreateModal";
-import { codexProvider, claudeProvider, openCodeProvider, deepSeekProvider, lmStudioProvider } from "./AgentCreateModal.testProviders";
+import { workPermissionControl, codexProvider, claudeProvider, openCodeProvider, deepSeekProvider, lmStudioProvider } from "./AgentCreateModal.testProviders";
 
 afterEach(cleanup);
 
@@ -66,4 +66,19 @@ it("keeps initial loading providers undimmed in catalog order", () => {
     onClose={() => undefined} onCreate={vi.fn()} />);
   expect(choices().map((item) => item.getAttribute("aria-label"))).toEqual(["Claude Code", "OpenCode", "Codex"]);
   expect(choices().map((item) => item.getAttribute("data-unavailable"))).toEqual(["false", "false", "true"]);
+});
+
+it("disables conversation-only permission for a free OpenCode model", async () => {
+  const provider = openCodeProvider();
+  const model = provider.controls[0];
+  model.default_value = model.options[0].value;
+  provider.controls.push(workPermissionControl());
+  render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
+    providers={[provider]} onClose={() => undefined} onCreate={vi.fn()} />);
+  await userEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
+  expect(screen.getByText("OpenCode 무료 모델은 명령 실행 도구가 켜져 있어야 써서, 승인 모드에서만 쓸 수 있어요.")).toBeTruthy();
+  const permission = screen.getByRole("combobox", { name: "권한" });
+  expect(permission.textContent).toContain("작업 폴더 쓰기");
+  await userEvent.click(permission);
+  expect((screen.getByRole("option", { name: "대화 전용" }) as HTMLButtonElement).disabled).toBe(true);
 });

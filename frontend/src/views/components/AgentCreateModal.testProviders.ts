@@ -101,7 +101,7 @@ export function workPermissionControl() {
     kind: "select" as const,
     default_value: "meeting_read_only",
     options: [
-      { value: "meeting_read_only", label: "읽기 전용" },
+      { value: "meeting_read_only", label: "대화 전용" },
       { value: "workspace_write", label: "작업 폴더 쓰기" },
     ],
   };
@@ -184,7 +184,7 @@ export function customApiProvider(): NativeCliProviderAvailability {
         label: "권한",
         kind: "select",
         default_value: "meeting_read_only",
-        options: [{ value: "meeting_read_only", label: "읽기 전용" }],
+        options: [{ value: "meeting_read_only", label: "대화 전용" }],
       },
     ],
   };
