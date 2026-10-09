@@ -1,4 +1,6 @@
 mod attendee;
+#[cfg(test)]
+mod central_removal_owner_tests;
 mod host_owner_session;
 #[cfg(test)]
 mod host_owner_session_tests;
@@ -137,6 +139,8 @@ pub use provider_requests::{OpenProviderRequest, ProviderRequestCommit};
 mod central_identity_bindings;
 mod central_member_removal;
 pub use central_member_removal::{MemberRemovalKey, MemberRemovalPrincipal};
+mod central_removal_authority;
+pub use central_removal_authority::MemberRemovalAuthorityPage;
 mod member_admission;
 mod member_connect;
 pub use member_connect::MemberConnectRoom;

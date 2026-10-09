@@ -1,5 +1,50 @@
 # Verification Contract
 
+## Account deletion — owner/derived authority pages implemented, not shipped (2026-10-10)
+
+Rust extends eb629971's person-local fence to host-owner entry/revalidation and
+separately paired issuer/companion parent authority. Use actual stored owner person
+custody from the pinned central entry, never the shared local operator actor.
+Pending removal retains parent root/pairing provenance through unrelated normal
+cleanup; independent native pairing, local operator profile and other persons stay.
+Existing removal job advances owner_sessions -> owner_pairings -> human_sessions
+-> companions in stable-key pages32 plus one checkpoint (<=33 metadata rows),
+with bounded encoded descriptors/patch keys <=128KiB. Cursor and revocations share
+the transaction; unknown phase/schema and checkpoint failure remain errors.
+Returned fingerprints are effect work, NOT proof of transport/process termination.
+No public endpoint, support advertisement, completion response or new lifecycle task.
+
+Before-change owner test initially had an AttendeeAdmission fixture type error;
+corrected fixture, then reproduced continued owner authority after member fence.
+After owner change focused1/0 and full450/0 pass; static check caught similar names
+and a long test. Split by fence/control, provenance preservation and bounded-page
+oracles with shared existing fixtures; no lint/gate exceptions. Final full451/0
+exit0 (16.62s); additional existing member test verifies two persisted ended sessions
+and exact per-room revocation fingerprints, focused3/0 exit0 (0.04s).
+97 historical owner roots page32/32/32/1 with no duplicate; injected checkpoint
+failure rolls back every root/cursor; unrelated owner stays live. Unrelated normal
+entry/pairing cleanup preserves the pending companion parent rows. Format/diff and
+architecture/source-growth/policy gates pass. The extended member oracle also
+exceeded the existing100-line lint; extracted retry/page assertions, preserving
+the same public/DB checks. Final persistence clippy all-targets -D warnings passes.
+Logs /private/tmp/account-deletion-v2-owner-fence-{before,before-fixed,test,full,
+full-final,members,members-final,format,gates,gates-final,gates-commit,clippy,
+clippy-fixed,clippy-final,clippy-final-fixed}.log.
+
+Still incomplete: companion cleanup/effect handoff, bounded snapshot/FTS/avatar
+anonymization and sequenced client override, secure-purpose host route/client,
+account_deleted host transition, native optional wipe, shared deletion and explicit
+Google-registration UI, packaged/web actual acceptance and final Daybreak review.
+Unreferenced companion phase draft was moved out of the checkout to
+/private/tmp/account-deletion-v2-companion-phase-draft.rs; it is uncompiled/unverified,
+not part of this implementation or a completion claim. Actual native AND web Google
+fresh auth_time remains unknown; requested a designated fresh Google test account
+and user authentication, no reply yet. This is an external acceptance dependency,
+not evidence that the remaining independent implementation is complete.
+Design gate satisfied C0/H0/M corrected; manager extra design rounds1/3 used;
+code reviews0/3, APPROVE still mandatory before push/deploy. No push/deploy,
+production-account/owner deletion or protected-path changes.
+
 ## Account deletion — durable member authority fence implemented, not shipped (2026-10-10)
 
 Rust schema87 adds person-local removal work beside the unchanged frozen central

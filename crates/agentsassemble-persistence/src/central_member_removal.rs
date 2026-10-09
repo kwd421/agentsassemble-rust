@@ -183,6 +183,32 @@ pub(crate) async fn require_live_actor(
     Ok(())
 }
 
+// Host owner sessions are issued only by the configured pinned central issuer.
+// They predate issuer storage; use their actual person custody, never the shared local actor.
+pub(crate) async fn require_live_owner_person(
+    tx: &mut Transaction<'_, Sqlite>,
+    person: &str,
+) -> Result<(), PersistenceError> {
+    let version: String =
+        sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key='schema_version'")
+            .fetch_one(&mut **tx)
+            .await?;
+    if version.parse::<i64>().is_ok_and(|v| (70..=86).contains(&v)) {
+        return Ok(());
+    }
+    require_schema(tx).await?;
+    let removed: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM central_member_removals WHERE person_id=?)",
+    )
+    .bind(person)
+    .fetch_one(&mut **tx)
+    .await?;
+    if removed {
+        return Err(crate::host_owner_session::invalid());
+    }
+    Ok(())
+}
+
 pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let mut tx = pool.begin().await?;
     let version: String =

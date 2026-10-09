@@ -172,7 +172,7 @@ impl SqliteStore {
         if !exists {
             // Retain consumed entries until their grant expires, and retain an issuer
             // while a separately paired device still depends on its revocation state.
-            sqlx::query("DELETE FROM host_owner_sessions WHERE connected = 0 AND admission_expires_at <= ? AND NOT EXISTS (SELECT 1 FROM operator_pairings WHERE host_owner_session_fingerprint = host_owner_sessions.fingerprint AND central_owner = 0 AND revoked = 0 AND COALESCE(session_expires_at, expires_at) > ?)")
+            sqlx::query("DELETE FROM host_owner_sessions WHERE connected = 0 AND admission_expires_at <= ? AND NOT EXISTS (SELECT 1 FROM operator_pairings WHERE host_owner_session_fingerprint = host_owner_sessions.fingerprint AND central_owner = 0 AND revoked = 0 AND COALESCE(session_expires_at, expires_at) > ?) AND NOT EXISTS (SELECT 1 FROM central_member_removals r WHERE r.person_id=host_owner_sessions.person_id AND r.phase!='complete')")
                 .bind(Utc::now().timestamp()).bind(Utc::now().timestamp_micros()).execute(&mut *tx).await?;
             let count: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM host_owner_sessions WHERE connected = 1 AND revoked = 0",
@@ -272,6 +272,7 @@ pub(crate) async fn resolve(
         origin: row.try_get("origin")?,
         generation: row.try_get("generation")?,
     };
+    crate::central_member_removal::require_live_owner_person(tx, &binding.person_id).await?;
     if row.try_get::<bool, _>("revoked")?
         || !row.try_get::<bool, _>("connected")?
         || binding.browser_fingerprint != *device
@@ -300,11 +301,10 @@ pub(crate) async fn require_unrevoked_issuer(
     fingerprint: &[u8; 32],
     origin: &str,
 ) -> Result<(), PersistenceError> {
-    let live: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM host_owner_sessions WHERE fingerprint = ? AND origin = ? AND revoked = 0)")
-        .bind(fingerprint.as_slice()).bind(origin).fetch_one(&mut **tx).await?;
-    if !live {
-        return Err(invalid());
-    }
+    let person: Option<String> = sqlx::query_scalar("SELECT person_id FROM host_owner_sessions WHERE fingerprint = ? AND origin = ? AND revoked = 0")
+        .bind(fingerprint.as_slice()).bind(origin).fetch_optional(&mut **tx).await?;
+    crate::central_member_removal::require_live_owner_person(tx, &person.ok_or_else(invalid)?)
+        .await?;
     Ok(())
 }
 
@@ -312,6 +312,7 @@ async fn validate_admission(
     tx: &mut Transaction<'_, Sqlite>,
     binding: &OwnerAdmissionBinding,
 ) -> Result<(), PersistenceError> {
+    crate::central_member_removal::require_live_owner_person(tx, &binding.person_id).await?;
     let bootstrap = crate::bootstrap::require_complete_bootstrap_in_transaction(tx).await?;
     let generation: Option<String> = sqlx::query_scalar(
         "SELECT value FROM runtime_metadata WHERE key = 'central_endpoint_generation'",

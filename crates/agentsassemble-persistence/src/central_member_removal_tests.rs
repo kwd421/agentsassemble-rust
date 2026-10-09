@@ -104,6 +104,22 @@ async fn removal_commit_fences_both_existing_devices_replay_connect_and_mutation
             .await
             .is_err()
     );
+    verify_retry_and_committed_member_page(
+        &store,
+        &key,
+        [
+            fingerprint(first.session_bearer()),
+            fingerprint(second.session_bearer()),
+        ],
+    )
+    .await
+}
+
+async fn verify_retry_and_committed_member_page(
+    store: &SqliteStore,
+    key: &MemberRemovalKey,
+    expected: [[u8; 32]; 2],
+) -> TestResult {
     // Repeat proof-bound entry continues the original work, never creates another binding/job.
     store
         .begin_member_account_removal(&principal("epoch")?, &secure())
@@ -127,6 +143,39 @@ async fn removal_commit_fences_both_existing_devices_replay_connect_and_mutation
         1
     );
     assert_eq!(store.local_operator_profile().await?.display_name, "Host");
+    assert_eq!(
+        store
+            .advance_member_removal_authority(key)
+            .await?
+            .next_phase,
+        "owner_pairings"
+    );
+    assert_eq!(
+        store
+            .advance_member_removal_authority(key)
+            .await?
+            .next_phase,
+        "human_sessions"
+    );
+    let page = store.advance_member_removal_authority(key).await?;
+    assert_eq!(page.next_phase, "companions");
+    let actual = page
+        .room_sessions
+        .into_iter()
+        .map(|(room, fp)| {
+            assert_eq!(room, "general");
+            fp
+        })
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(actual, std::collections::HashSet::from(expected));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM human_room_sessions WHERE state='ended'"
+        )
+        .fetch_one(&store.pool)
+        .await?,
+        2
+    );
     Ok(())
 }
 

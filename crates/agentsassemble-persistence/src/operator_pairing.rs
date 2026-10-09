@@ -513,7 +513,7 @@ async fn cleanup_pairings(
     tx: &mut Transaction<'_, Sqlite>,
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
-    sqlx::query("DELETE FROM operator_pairings WHERE (COALESCE(session_expires_at, expires_at) > 0 AND COALESCE(session_expires_at, expires_at) <= ?) OR (central_owner = 0 AND host_owner_session_fingerprint IS NULL AND session_expires_at = 0 AND last_connected_at <= ?) OR (central_owner = 1 AND host_owner_session_fingerprint IS NOT NULL AND EXISTS (SELECT 1 FROM host_owner_sessions WHERE fingerprint = operator_pairings.host_owner_session_fingerprint AND (connected = 0 OR revoked = 1)))")
+    sqlx::query("DELETE FROM operator_pairings WHERE ((COALESCE(session_expires_at, expires_at) > 0 AND COALESCE(session_expires_at, expires_at) <= ?) OR (central_owner = 0 AND host_owner_session_fingerprint IS NULL AND session_expires_at = 0 AND last_connected_at <= ?) OR (central_owner = 1 AND host_owner_session_fingerprint IS NOT NULL AND EXISTS (SELECT 1 FROM host_owner_sessions WHERE fingerprint = operator_pairings.host_owner_session_fingerprint AND (connected = 0 OR revoked = 1)))) AND NOT EXISTS(SELECT 1 FROM host_owner_sessions h JOIN central_member_removals r ON r.person_id=h.person_id WHERE h.fingerprint=operator_pairings.host_owner_session_fingerprint AND r.phase!='complete')")
         .bind(now.timestamp_micros()).bind((now - NATIVE_IDLE_TTL).timestamp()).execute(&mut **tx).await?;
     Ok(())
 }

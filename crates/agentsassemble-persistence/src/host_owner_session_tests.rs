@@ -6,7 +6,8 @@ use crate::{
     RoomManagerAuthority, RoomSessionAuthorization, ServerOwnerAuthority, SqliteStore,
 };
 
-async fn setup() -> Result<(SqliteStore, OwnerAdmissionBinding), Box<dyn std::error::Error>> {
+pub(crate) async fn setup()
+-> Result<(SqliteStore, OwnerAdmissionBinding), Box<dyn std::error::Error>> {
     let store = SqliteStore::open("sqlite::memory:").await?;
     store
         .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Owner")
@@ -28,11 +29,13 @@ async fn setup() -> Result<(SqliteStore, OwnerAdmissionBinding), Box<dyn std::er
     ))
 }
 
-fn admission(binding: OwnerAdmissionBinding) -> Result<OwnerAdmission, crate::PersistenceError> {
+pub(crate) fn admission(
+    binding: OwnerAdmissionBinding,
+) -> Result<OwnerAdmission, crate::PersistenceError> {
     OwnerAdmission::verified(binding, Utc::now().timestamp() + 300)
 }
 
-fn description() -> Result<OwnerDeviceDescription, crate::PersistenceError> {
+pub(crate) fn description() -> Result<OwnerDeviceDescription, crate::PersistenceError> {
     OwnerDeviceDescription::verified("Chrome · macOS".into(), "Chrome".into(), "macOS".into())
 }
 
@@ -267,7 +270,7 @@ async fn separately_paired_device_survives_disconnect_but_not_issuer_revocation(
     Ok(())
 }
 
-async fn admit_companion(
+pub(crate) async fn admit_companion(
     store: &SqliteStore,
     session: &RoomSessionAuthorization,
 ) -> Result<crate::AttendeeAdmission, crate::PersistenceError> {
