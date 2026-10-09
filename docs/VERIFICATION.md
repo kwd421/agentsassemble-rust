@@ -1,5 +1,24 @@
 # Verification Contract
 
+## Account deletion — signed capability storage implemented, not shipped (2026-10-10)
+
+Worker e5191781: existing exact signed endpoint publication alone accepts account_deletion_protocol
+v1; additive0024 stores it in that endpoint row, with mode/live-epoch guards.
+Same-generation full-body replay cannot change it; new omission (including offline)
+and epoch replacement clear it. Secure bootstrap/deletion-list project only current
+endpoint tuple. No new registration capability, inventory, row/index or budget.
+Rust does not advertise support until the complete host contract is implemented.
+
+Before-change regression failed400 vs expected200; after change affected10 tests
+and full279/0 exit0 (5.40s) pass, architecture/source-growth/maps/diff gates pass.
+Actual isolated D1 mixed old29b423b1 HTTP Worker rejects signed capability400;
+new publication200 and member secure bootstrap showv1; omitted offline publication
+clears it. Existing purpose-grant mixed rollback test still passes. Logs
+/private/tmp/account-deletion-v2-capability-{before,tests,full,gates,d1}.log.
+Source under1000 lines and required coauthor; no push/deploy/production deletion/
+protected edits. Code reviews0/3. Host terminal/durable person removal, native wipe,
+shared UI and actual Google/packaged/web acceptance still required before review.
+
 ## Account deletion — explicit Google check/register implemented, not shipped (2026-10-10)
 
 Worker64eff73a: additive0023 retains verified subject HMAC, bounded defaults and
