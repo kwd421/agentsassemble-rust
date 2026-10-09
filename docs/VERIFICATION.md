@@ -1,5 +1,22 @@
 # Verification Contract
 
+## Account deletion — code APPROVE and release gate (2026-10-10)
+
+Completed Daybreak Blue xhigh read-only code round2 APPROVE C0/H0/M0/L0;
+report /private/tmp/account-deletion-v3-code-review-2-report.md read in full.
+Approved Rust ce3e4b958331c2913621f18183f101fabf8d6333 (product885e6e15) and
+Worker0e099ce31466898e9226d59c8d916429612b356a, every33 Rust/14 Worker individual
+commit, cumulative baseline d12077f2 /0b19205e ranges and resulting integration.
+H1 staged rollout, M1 exact own registration exclusion and L1 status all resolved;
+no supported remaining finding or weakened architecture/source/policy/storage gate.
+Reviewer did not rerun tests and did not claim new executed evidence. Google real
+E2E, actual30-day passage and deferred broader mobile UX remain stated limits.
+This commit records approval only; reviewed product code is unchanged. Push both
+branches, then deploy confirmed6f829f0a floor with old d12077f2 assets BEFORE0019–24,
+then build exact final Rust HEAD assets and deploy final Worker. Production new
+Guest/recovery-step-up/receipt and final cleanup remain next. No owner Google or
+existing production account may be used. No remote mutation yet at this checkpoint.
+
 ## Account deletion — completed code review1 and supported corrections (2026-10-10)
 
 Daybreak Blue xhigh read-only code review1 completed REVISE C0/H1/M1/L1 at
