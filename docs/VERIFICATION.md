@@ -1,5 +1,34 @@
 # Verification Contract
 
+## Account deletion — completed code review1 and supported corrections (2026-10-10)
+
+Daybreak Blue xhigh read-only code review1 completed REVISE C0/H1/M1/L1 at
+Rust70b644ec / Worker240a604a; every32 Rust and13 Worker commit, both cumulative
+ranges, final integration and repository authority/storage call sites reviewed.
+Report /private/tmp/account-deletion-v3-code-review-1-report.md read in full.
+H1: Worker runbook incorrectly allowed direct final-tip/migrations-first without
+recorded atomic Guest prerequisite. Corrected existing-production runbook stages
+reviewed6f829f0a plus old d12077f2 UI, confirms100% full version, then0019–0024
+(one retry), final exact assets HEAD/Worker deployment and new disposable Guest.
+This order was independently identified while review ran; no remote mutation occurred.
+Prepared detached floor worktree and old-assets build; unchanged protected config
+with positional exact floor entry passed current Wrangler4.149 dry-run.
+M1: own registration could coexist with ordinary member projection. Contract now
+specifies exact server/epoch/owner exclusion before implementation; single snapshot
+query excludes only matching ownership, keeps foreign visible/hidden and unavailable
+incarnations. Regression constructs owner+member via signed real HTTP, two foreign
+hosts including hidden one, and stale epoch. Affected21/0 and full Worker281/0 pass;
+syntax check and Rust architecture/source/policy gates pass. Worker generated-map
+check detected drift; regenerated through existing owner and recheck passes.
+L1: obsolete implementation/design status replaced with actual evidence and pending
+code APPROVE/deployment/production Guest. Round2 re-review follows frozen corrections.
+Actual isolated apps/children and local Worker are stopped; only three run-owned
+compiled identifiers' app-data/WebKit/cache directories and local fixture DB/config
+removed (11 exact paths). Computer Use reset; screenshots/public evidence and build
+artifacts retained. Other apps/providers/production/user data and protected files remain.
+No pushes/deployments yet. Google real E2E and real30-day passage remain explicit
+verification limits; reviewer treated them as limits, not observed defects.
+
 ## Account deletion — frozen integration and corrected connected Guest flow (2026-10-10)
 
 Rust product885e6e15 / Worker240a604a. Full frontend1266/0 in198 files38.41s;

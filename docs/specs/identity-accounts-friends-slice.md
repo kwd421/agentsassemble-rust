@@ -97,7 +97,10 @@ as a general limitation, not falsely claimed detected. Existing bootstrap's visi
 rail is insufficient, so add signed account-only POST /v1/account/deletion-servers
 (no-store, ordinary authenticated read lane, no extra retained inventory).
 Use its EXISTING secure member admission with exact issuer/server/epoch/key/origin
-binding. Owner registrations are not member-list targets; own-server computer
+binding. Owner registrations are not member-list targets. Exclude only the exact
+server_id/registration_epoch/owner_person_id matching registration, even when its
+owner also has a retained member projection; foreign visible/hidden and unavailable
+member tuples remain in the same bounded snapshot. Own-server computer
 behavior is separately owned below, and remote own-server shutdown follows next 410. Do not send arbitrary
 URLs, follow redirects, borrow another device/identity, or fall back to anonymous
 admission/plaintext. A currently connected verified channel may be reused. Otherwise
