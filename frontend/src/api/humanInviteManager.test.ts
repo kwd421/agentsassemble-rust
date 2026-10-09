@@ -337,3 +337,14 @@ describe("managed human invite contract", () => {
     });
   });
 });
+
+it("uses the exact configured central origin for member entry while retaining HTTPS host validation", async () => {
+  vi.stubEnv("VITE_AGENTSASSEMBLE_CENTRAL_URL", "http://127.0.0.1:8886");
+  try {
+    const join_url = `http://127.0.0.1:8886/member-join?protocol=secure_admission_v1&registration_epoch=epoch&server_id=${authority.server_id}&token=${joinCode}`;
+    const body = { ...await exactResponse(), join_url, public_origin: "https://public.example.test" };
+    expect((await parseManagedHumanInviteCreateResponse(body, intent)).joinUrl).toBe(join_url);
+    await expect(parseManagedHumanInviteCreateResponse({ ...body, join_url: join_url.replace(":8886", ":8887") }, intent)).rejects.toThrow();
+    await expect(parseManagedHumanInviteCreateResponse({ ...body, public_origin: "http://public.example.test" }, intent)).rejects.toThrow();
+  } finally { vi.unstubAllEnvs(); }
+});

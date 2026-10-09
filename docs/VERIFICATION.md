@@ -1,5 +1,24 @@
 # Verification Contract
 
+## Account deletion — packaged Guest startup and configured-central invite correction (2026-10-10)
+
+A packaged debug app built from7c81bf8d with isolated compiled identifier
+app.agentsassemble.accountdeletionguest.v4 and generated local Worker fixture
+configuration. Actual UI created a new disposable server Guest and its recovery-code
+consent, opened its server, created a room and opened a run-owned quick tunnel.
+Info.plist and exact child args confirm the separate app-data DB; owner installation
+was not used. Native recovery value held only in the Computer Use session RAM and
+redacted before output. Current signed endpoint row advertises v1 in actual workerd D1.
+Actual invite creation then exposed existing parser applying public HTTPS validation
+to the configured loopback central origin, after host had already committed invite.
+Contract updated before correction: exact configured central member-entry origin is
+validated by central owner, public host still canonical HTTPS; no arbitrary HTTP
+origin/fallback. Affected11/0 and build/gates pass; logs /private/tmp/account-deletion-
+v3-local-central-invite-{test,build,gates}.log. Existing unknown result kept honest;
+no automatic retry/revoke. Only this isolated app was quit for updated packaging.
+Browser/native record anonymization and stop/wipe verification continue. Code review
+APPROVE0/3, pushes/deploy pending. Real Google E2E remains owner spare-account action.
+
 ## Account deletion — first actual disposable web Guest and pixel correction (2026-10-10)
 
 Isolated current Worker/local workerd D1 migrations0001–0024 and shared frontend ran

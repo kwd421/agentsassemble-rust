@@ -2,6 +2,12 @@
 
 ## Account deletion — owner redesign (2026-10-09)
 
+Actual disposable-GUEST verification also exercises the existing configured loopback
+central/Miniflare origin. Human invite creation/consumption must accept that exact
+central member-entry origin already admitted by identity configuration, while its
+public host response origin remains canonical HTTPS. Public ingress validation must
+not be applied to the central account origin; no arbitrary HTTP host is accepted.
+
 Status: binding owner decision supersedes the stopped custody/tombstone design and
 its historical approvals. Continue from Rust b884d6c0 / Worker 913d963d.
 Manager authorization (2026-10-10): up to THREE ADDITIONAL Daybreak Blue xhigh,

@@ -163,7 +163,6 @@ function parseJoinUrl(value: unknown, joinCode: string, serverId: string, public
   let url: URL;
   try {
     url = new URL(exact);
-    parsePublicIngressOrigin(url.origin);
   } catch {
     invalidResponse();
   }
@@ -175,6 +174,7 @@ function parseJoinUrl(value: unknown, joinCode: string, serverId: string, public
         !/^[A-Za-z0-9._:-]{1,200}$/.test(url.searchParams.get("registration_epoch") || "") || url.searchParams.get("token") !== joinCode) invalidResponse();
     return { exact, origin: parsePublicIngressOrigin(exactString(publicOrigin)) };
   }
+  try { parsePublicIngressOrigin(url.origin); } catch { invalidResponse(); }
   if (publicOrigin !== undefined) invalidResponse();
   if (
     exact !== url.toString() ||
