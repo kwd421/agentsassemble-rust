@@ -209,6 +209,20 @@ stable terminal ACK without changing state, visibility, revision or capacity ref
 
 ### Step-up, receipt, registration and retention
 
+Implementation representation (before source changes): reserve proof storage in
+the existing session row (additive columns), and receipt/deletion-ledger storage in
+the existing person row. Read-only `account_deletion_proofs` and writable-cleanup
+`account_deletions` views expose those logical records. This adds no expiring proof
+row, index or purpose pool and preserves the existing heavy-day admission gate.
+Final disable also uses a fixed one-row CHECK assertion in the same transaction;
+zero authority cannot produce a receipt or successful response. Receipt status
+supplies the former person hint plus request ID and opaque receipt, allowing an
+indexed person lookup without another secret, retained device key or new index.
+Only bounded cleanup may clear the ledger on a purge-ready person, before parent
+purge. New custody-writing persons reserve the measured parent/ledger purge cost;
+legacy unknown remains retained. These storage choices do not change step-up,
+terminal authority, disclosure, retention or the approved host ACK requirements.
+
 Proof/final termination has a non-borrowable lane: ordinary IP/actor/GENERAL traffic
 cannot exhaust a valid fresh proof's pre-reserved O(1) disable. Failure attempts use
 separate IP/session limits. Valid final device signature + proof bypasses ordinary
