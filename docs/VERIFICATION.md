@@ -1,5 +1,30 @@
 # Verification Contract
 
+## Account deletion — central custody removal implemented, not shipped (2026-10-10)
+
+Worker feature commit explicitly reverses only unshipped custody/floor/ACK portions
+of 457d48cf and the inspected/backed-up stopped edits. Removes 0022/0023 custody
+migration, sync/state/floor source and exclusive custody tests. Current remote
+migration refresh confirms these were never applied; no production DROP. Removes
+unshipped legacy_unknown column/view projection and cleanup_pending result; central
+status now claims account disable only. Applicable guest/proof/Google/SQL guards,
+non-borrowable final lane and active-person member result CAS retained. Existing
+owner/member wire behavior returned to the pre-custody owners; no new fallback.
+
+Full Worker suite 258 passed/0 failed, exit0 (6.15s), log
+/private/tmp/account-deletion-v2-central-cleanup-tests.log. npm check, architecture
+and source-growth gates, regenerated map check and diff --check passed; logs same
+prefix central-cleanup-{check,gates}.log. Real isolated Miniflare D1/signature flow
+exit0: wrong session401, injected disable500 rolls back proof/ledger, final disable
+rows_written[1,1,1], deleted bootstrap401/other200, children retained, receipt200;
+synthetic signed Google stale401/fresh200, no proof-created identity/session. Log
+/private/tmp/account-deletion-v2-central-cleanup-d1.log. These fixtures do not prove
+real Google auth_time, host/UI or full deletion acceptance. Feature <1000 changed
+lines, required coauthor; code review0/3, push/deploy/UI exposure still gated.
+Next implement same-owner secure removal-only grant and bounded membership snapshot,
+then central explicit registration/cleanup, host/removal/runtime/UI/native acceptance.
+Protected paths unchanged. No owner/existing production account deletion.
+
 ## Account deletion — manager continuation / additional design round 5 (2026-10-10)
 
 Starting HEADs directly verified: Rust b884d6c0, Worker 913d963d. Binding prompt:
