@@ -1,5 +1,26 @@
 # Verification Contract
 
+## Account deletion — actual visitor anonymization and modal authority correction (2026-10-10)
+
+Developer ID signed isolated V5 package at26b0bb94 created a new local-central
+Guest/room/quick tunnel. A distinct newly created visiting Guest joined through the
+actual secure invite, posted two messages, uploaded a synthetic32px photo and changed
+its server profile. Host pinned the message and kept pins open. Actual web settings,
+Guest recovery step-up and typed confirmation removed that person's participation.
+Existing native host immediately showed '탈퇴한 사용자' in history and open pins,
+removed its photo and member entry while preserving message content and local operator.
+Visitor had one idle disconnect before deletion and explicitly rejoined from its
+server list. No preexisting production or owner account was used. All recovery codes
+remain only in Computer Use RAM. Stable exact Developer ID certificate hash used;
+prior ad-hoc V4 restart key promise remains unconfirmed, not attributed to signing.
+Actual removal then exposed ended-room modal covering the root deletion result.
+Contract recorded before fix: existing ended owner/member room defers modal focus
+while root account operation is visible, preserving inert ended room. Affected16/0,
+build and unchanged architecture/source gates pass. Logs /private/tmp/account-deletion-
+v3-modal-authority-{tests,build}.log. Actual corrected flow/package stop/wipe, production
+Guest, Daybreak APPROVE0/3, both pushes and central deployment continue. Google E2E
+remains pending owner spare-account action; only local controlled Google tests ran.
+
 ## Account deletion — packaged Guest startup and configured-central invite correction (2026-10-10)
 
 A packaged debug app built from7c81bf8d with isolated compiled identifier

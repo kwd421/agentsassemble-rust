@@ -1,6 +1,7 @@
 import { closeRemoteWorkspace, remoteSessionTransport, remoteWorkspaceSnapshot } from "../../lib/remote/remoteWorkspace";
 import { observeOwnerSessionRejection } from "../../lib/ownerSessionTransport";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AccountDeletionActiveContext } from "./AccountDeletionContext";
 import { centralAccountEntryUrl } from "../../lib/central/identity";
 import { CentralOwnerWorkspaceContext } from "../../lib/central/ownerWorkspaceContext";
 import { type CentralOwnerWorkspace } from "../../lib/central/ownerWorkspace";
@@ -26,12 +27,14 @@ export default function CentralOwnerWorkspaceBoundary({ session, children }: { s
 }
 
 export function EndedWorkspace({ reason }: { reason: "revoked" | "disconnected" | "unavailable" }) {
+  const accountOperation = useContext(AccountDeletionActiveContext);
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
     return () => element?.close();
-  }, []);
+  }, [accountOperation]);
+  if (accountOperation) return null;
   return <dialog ref={dialog} aria-modal="true" aria-label="서버 연결 종료"
     className="fixed inset-0 grid place-items-center bg-[#101114]/95 p-5"
     style={{ margin: 0, width: "100vw", height: "100dvh", maxWidth: "none", maxHeight: "none" }}

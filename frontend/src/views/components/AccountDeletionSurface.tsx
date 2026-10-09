@@ -1,6 +1,6 @@
 import "./AccountDeletionSurface.css";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { AccountDeletionContext } from "./AccountDeletionContext";
+import { AccountDeletionActiveContext, AccountDeletionContext } from "./AccountDeletionContext";
 import { AccountDeletionFlow } from "./AccountDeletionSettings";
 import { clearDeletionGoogleReturn, deletionGoogleReturnSnapshot, subscribeDeletionGoogleReturn } from "../../lib/central/accountDeletionGoogle";
 
@@ -18,9 +18,11 @@ export default function AccountDeletionSurface({ children }: { children: ReactNo
   }, [visible]);
   const close = () => { clearDeletionGoogleReturn(); setOpened(false); };
   return <AccountDeletionContext.Provider value={() => { setEverOpened(true); setOpened(true); }}>
+    <AccountDeletionActiveContext.Provider value={visible}>
     {children}
     {(everOpened || returned) && <dialog ref={dialog} aria-label="계정 탈퇴" aria-modal="true" className="dc-account-deletion-dialog" onCancel={event => event.preventDefault()}>
       <AccountDeletionFlow disabled={false} onClose={close} initial={returned} />
     </dialog>}
+    </AccountDeletionActiveContext.Provider>
   </AccountDeletionContext.Provider>;
 }

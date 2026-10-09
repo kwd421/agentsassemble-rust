@@ -46,6 +46,13 @@ existing tests; no new parallel product flow.
 
 ### Required user flow, owners and entry points
 
+Actual packaged/web verification (2026-10-10): person removal closes the visiting
+room transport while the root deletion result still needs explicit central disable.
+The existing owner/member ended-workspace modal must defer to the visible account
+operation, retaining the ended room's inert/fail-closed state. After the account
+operation closes, the ordinary ended-workspace entry returns. Neither dialog may
+replace the other operation or hide its remaining buttons; app/web share this owner.
+
 Shared app/web settings → 계정 → 계정 탈퇴, including roomless startup/server chooser,
 uses `UserSettingsPanel` / `CentralAccountSettings` and trusted central credentials.
 Local guest/Google unlink, logout, ordinary leave/kick keep their existing meanings.
