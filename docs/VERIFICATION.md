@@ -1,5 +1,158 @@
 # Verification Contract
 
+## Account deletion — four-round design gate BLOCKED (2026-10-10)
+
+Binding owner redesign recorded in identity contract, linked invite clauses and
+Worker README. All four requested Daybreak design reviews completed and were fully
+read: round1 REVISE C0/H5/M1/L0; round2 REVISE C0/H2/M2/L0;
+round3 REVISE C0/H2/M3/L0; round4 REVISE C0/H0/M1/L0. No APPROVE.
+Round4 exact requested packaged CLI: gpt-daybreak-blue-latest / xhigh / read-only /
+never, session 01a12144-64db-7ad2-8149-8c3b9f8afd49; exit0. Report
+/private/tmp/account-deletion-owner-design-review-4.md; prompt/log same prefix
+account-deletion-owner-review-4.prompt / account-deletion-owner-design-review-4.log.
+No model availability/capacity failure occurred, so no retry was needed.
+
+Final supported finding independently confirmed: setMemberHidden's legacy tokenless
+bulk UPDATE sets used_at on ALL matching member grants. Disjoint token prefix alone
+cannot protect deletion grants. Contract corrected with additive nullable exact
+account_deletion_consumed_at and insert/update NULL-or-equal constraints; only exact
+new host-authenticated deletion redeem updates both times. Old hidden mutation fails
+atomically, no partial visibility/consumption; new ordinary updates exclude deletion
+purpose. Required old/new mixed tests and active-count/once-only checks recorded.
+Final central DELETE still consumes only step-up proof. This correction is DOCUMENTED,
+NOT independently approved or implemented. No fifth review is silently requested:
+user's max4 limit needs owner extension before obtaining required approval.
+
+Only authorized documentation changed in this run. Stopped source/untracked files,
+original five Rust and four Worker commits and protected paths remain preserved.
+No source tests, gates beyond documentation diff check, packaged/web acceptance,
+new source implementation, push, migrations or deployment were performed. Code
+review 0/3. Assets-wt remains at d12077f2/unbuilt at new Rust HEAD. Production remains
+observed version 51bfe4a9-23c8-4634-bb7e-577a0de85291 with 0019 onward unapplied;
+no existing production account or owner's account was deleted. Real Google fresh
+login for both clients also remains an open test-account verification dependency.
+Next authorized step requires design-round limit extension and actual APPROVE;
+then remove custody-only source honestly, implement all host/central/UI/native owners,
+verify/gates/code APPROVE, push both and authorized migration/assets/deploy/smokes.
+Documentation commits use requested coauthor and stay under1000 changed lines.
+Worker documentation commit 913d963d: 107 additions/69 deletions, required coauthor.
+Rust documentation commit is the commit containing this checkpoint; source HEADs
+reviewed above remain the frozen review scope, not approval for this corrected text.
+Post-Worker-commit comparison confirms all eight original tracked stopped source
+diff sections byte-identical to the saved patch (README excluded), and all four
+backed-up untracked custody source/test/migration files byte-identical. Documentation
+diff --check passes in both repositories. No protected path was modified.
+
+
+## Account deletion — design round 3 corrections / final round (2026-10-10)
+
+Round 3 completed REVISE C0/H2/M3/L0; full report read at
+/private/tmp/account-deletion-owner-design-review-3.md. Requested CLI model
+ gpt-daybreak-blue-latest, xhigh/read-only; session
+01a12135-d67f-7812-a8a3-20d203d76b58. No new custody/polling/shared-operator removal
+finding; five remaining authority/publication/storage bounds corrected in contract.
+
+Host-removal grants now require same fresh unused deletion proof at atomic issue
+AND redeem, bound to exact request/session/person/device/proof-source and channel;
+only final central DELETE consumes it. Already-open clients receive one durable
+sequenced participant_anonymized event per room and historical author override,
+without rejoining the removed actor or client ACK. Enumerated replay phases include
+member/session admission JSON and command result snapshots, plus profiles/avatars,
+participants/events/search/pins and publication. Descriptor/patch bytes are the
+128KiB metadata metric; avatar deletion separately one <=10MiB row with yield.
+SQLite existing member_purpose CHECK cannot expand via ALTER; choose additive
+nullable authoritative grant_purpose and proof binding in SAME existing grant table,
+disjoint aadg1. token/exact routes. Old Worker rejects new prefix before lookup;
+new ordinary SQL excludes deletion purpose. No rebuild, purpose masquerading on
+wire, extra retained table/index, new budget or fallback. Round 4 will review this
+smallest expand-only alternative and full design; max four is not bypassed.
+
+Documentation-only corrections; diff checks passed before this round. No source
+implementation/tests/new commits/push/migrations/deploy or production account
+mutation. Design 3/4 completed, code review 0/3; both real Google fresh-auth clients
+remain an open test-account dependency. Protected paths remain unchanged.
+
+
+
+## Account deletion — design round 2, four corrections (2026-10-10)
+
+Round 2 completed REVISE C0/H2/M2/L0, full answer read; report
+/private/tmp/account-deletion-owner-design-review-2.md. Session
+01a12125-5484-7063-8cf9-fe85bf22f0ff. CLI header and two turn_context records explicitly
+show gpt-daybreak-blue-latest, xhigh, read-only, never; task_complete at
+2026-10-09T15:00:45.594Z. Reviewer final says it could not change the session model;
+that self-report conflicts with launcher/session metadata. No model-change operation
+was required/requested inside review; this caveat is retained rather than hidden.
+Round 3 will explicitly use caller-selected model and avoid speculative self-report.
+
+Corrections: member-list targets are central member bindings, never inferred shared
+native operator history; own-server scope remains exact owner session/companion/
+ingress termination, preserving independent local records. Owner clarification
+requested for indistinguishable historical owner/operator authors; no rewrite started.
+Verification-only Google exact routes and native_verify/web_verify handoff kinds are
+rejected by old Workers before creation; legacy new-Worker exchange active login only.
+Single current capped 512-member/512KiB SQLite snapshot replaces unsupported paginated
+change-detection and avoids a new per-person list generation. Existing full-body signed
+endpoint publication alone owns current exact tuple capability; omission/downgrade
+clears it, registration and frontend flags are not capability authority.
+
+Further wipe source evidence: host identity is DB-bound to private files, so raw DB
+unlink is unsafe. Contract now requires persistence-owned offline fresh DB preparation
+retaining only exact identity/epoch/hosting restriction, validated empty product data,
+then atomic replacement under target writer lease after checked process shutdown.
+Permanent restriction survives; default keep and same-installation native capability
+remain. This is design correction only, not implementation/test evidence.
+Round 3 next; source/tests/push/deploy remain gated. Google real-auth test-account
+availability was requested asynchronously; no answer yet. Never use an existing
+production account for deletion. Protected paths remain untouched.
+
+
+## Account deletion — owner redesign, review 1 corrections (2026-10-09)
+
+Binding owner decision replaces stopped central delivery/custody/tombstone/host-ACK
+and cleanup_pending design. Baselines verified: Rust df9b22e9 on
+codex/recovery-and-sonnet (five unpushed stopped-run documentation commits), Worker
+457d48cf on codex/owner-session-renewal (6f829f0a..457d48cf plus stopped dirty work).
+Protected paths untouched; stopped Worker tracked diff saved to
+/private/tmp/account-deletion-worker-stopped.patch and untracked custody source/
+migration/tests copied to /private/tmp/account-owner-stopped-untracked.
+
+Updated owning identity contract and linked invite/guest clauses plus Worker README.
+New sequence: deletion-device secure self-removal/anonymization per reachable host,
+visible skipped/unconfirmed results, then O(1) central disable; no host completion
+wait or central delivery. Keep applicable proof/provisioning/SQL guards/CAS/receipt.
+Own-computer ingress/companions stop; separate default-keep exact local DB/cache wipe.
+
+Design round 1 completed REVISE C0/H5/M1/L0; full answer read. Exact reviewer
+session 01a12116-1dcb-78c2-9ceb-84332c42e1e4, model gpt-daybreak-blue-latest,
+xhigh/read-only via requested packaged codex exec shell. Report:
+/private/tmp/account-deletion-owner-design-review-1.md (full log same prefix .log).
+Corrections: removal-only secure purpose ignoring hidden without granting room
+access; binding-domain durable fence/phase/cursor and existing local lifecycle
+startup/request-wake completion; exact account_deleted 410 and distinct persisted
+own-host demotion/re-registration floor; consumed verified Google handoff and atomic
+explicit registration/retry semantics; direct removal of contradictory ACK clauses;
+native runtime/supervisor-owned fixed DB/WAL/SHM/room-cache wipe with checked shutdown
+and no symlink/recursive deletion. No new central polling, custody or receipt secret.
+Round 2 is next; source implementation remains gated on design APPROVE.
+
+Read-only remote evidence: wrangler 4.98.0 deployments/versions list and exact
+versions view show 100% active 51bfe4a9-23c8-4634-bb7e-577a0de85291.
+Remote migrations list reports 0019,0020,0021,0022 and untracked 0023 unapplied;
+0018 is therefore the applied floor. This permits removing unshipped custody-only
+0022/0023 after approval, without a production DROP. Logs:
+/private/tmp/account-owner-deployments-before.log, account-owner-versions-before.log,
+account-owner-current-version.log, account-owner-migrations-before.log.
+Isolated assets-wt is clean at d12077f2; it is not yet built at new Rust HEAD.
+Current official D1 batch/best-practice references and workers-types 5.20261009.1
+were retrieved; not a production quota or implementation verification claim.
+
+Validation so far: documentation git diff --check passed. No source tests, new
+implementation, packaged/browser acceptance, push, migration application or deployment
+performed. No existing production account or owner's account deleted. Design
+rounds 1/4 complete, code review 0/3; all implementation/test/gate/UI/review/deploy
+acceptance remains open. Historical checkpoints below do not approve this redesign.
+
 ## Account deletion — custody/floor checkpoint (2026-10-09)
 
 Worker `457d48cf` records owner/member custody atomically at existing redeem, with
