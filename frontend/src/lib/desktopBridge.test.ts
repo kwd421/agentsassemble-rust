@@ -14,6 +14,7 @@ import {
   fetchDesktopOperatorRuntime,
   requestDesktopHumanInviteCreateTicket,
   requestDesktopHostProductSurface,
+  requestDesktopHostDeviceInfo,
   requestDesktopMessagePinsReadTicket,
   requestDesktopMessagePinsWriteTicket,
   requestDesktopMessageSearchReadTicket,
@@ -26,6 +27,7 @@ import {
 
 const hostCommands = [
   "choose_local_workspace",
+  "host_device_info",
   "host_product_surface",
   "open_central_owned_server",
   "runtime_agent_avatar_upload_ticket",
@@ -57,6 +59,20 @@ describe("desktop exact-purpose HTTP bridge", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
+
+  it("reads the pre-bootstrap installation fence and rejects missing or malformed native state", async () => {
+    const device = { server_id: managerAuthority.server_id, host_name: "Fixture Mac", host_os: "macos", device_kind: "Mac", profile_name: null };
+    const invoke = vi.fn().mockResolvedValueOnce({ revision: PRODUCT_SURFACE_REVISION, digest: "2".repeat(64), commands: hostCommands })
+      .mockResolvedValueOnce({ device, hosting_state: "account_deleted" });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    await requestDesktopHostProductSurface();
+    expect(await requestDesktopHostDeviceInfo()).toEqual({ ...device, hosting_state: "account_deleted" });
+    invoke.mockResolvedValueOnce(device);
+    await expect(requestDesktopHostDeviceInfo()).rejects.toThrow();
+    invoke.mockResolvedValueOnce({ device, hosting_state: ["account_deleted"] });
+    await expect(requestDesktopHostDeviceInfo()).rejects.toThrow("호스팅 제한");
+    expect(invoke.mock.calls.slice(1).every(call => call[0] === "host_device_info")).toBe(true);
   });
 
   it("opens an owned server only through the registered native navigation command", async () => {

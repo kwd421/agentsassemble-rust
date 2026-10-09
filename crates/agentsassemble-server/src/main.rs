@@ -124,12 +124,20 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     if let Some(database) = &args.inspect_host_device {
-        let (server_id, profile_name) = runtime
+        let (server_id, profile_name, hosting_state) = runtime
             .block_on(agentsassemble_persistence::inspect_host_identity(database))?
-            .map_or((None, None), |(id, name)| (Some(id), name));
+            .map_or((None, None, None), |(id, name, restriction)| {
+                (Some(id), name, restriction)
+            });
         let mut device = runtime.block_on(agentsassemble_server::host_device_info(server_id))?;
         device.profile_name = profile_name;
-        println!("{}", serde_json::to_string(&device)?);
+        println!(
+            "{}",
+            serde_json::to_string(&agentsassemble_protocol::HostInstallationInfo {
+                device,
+                hosting_state
+            })?
+        );
         runtime.shutdown_timeout(Duration::from_secs(1));
         return Ok(());
     }

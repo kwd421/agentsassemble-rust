@@ -26,7 +26,7 @@ const desktopMocks = vi.hoisted(() => ({
   initializeBootstrap: vi.fn(),
   requestBootstrapStatus: vi.fn(),
   requestHostProductSurface: vi.fn(),
-  requestHostDeviceInfo: vi.fn().mockResolvedValue({ server_id: null, host_name: "Test Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: null }),
+  requestHostDeviceInfo: vi.fn().mockResolvedValue({ server_id: null, host_name: "Test Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: null, hosting_state: null }),
 }));
 const SERVER_ID = "30000000-0000-4000-8000-000000000001";
 const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
@@ -102,7 +102,7 @@ afterEach(() => {
   centralMocks.pending = "";
   vi.clearAllMocks();
   centralMocks.hostingState.mockResolvedValue(null);
-  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: null, host_name: "Test Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: null });
+  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: null, host_name: "Test Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: null, hosting_state: null });
   desktopMocks.requestHostProductSurface.mockResolvedValue({
     revision: PRODUCT_SURFACE_REVISION,
     digest: "1".repeat(64),
@@ -459,7 +459,7 @@ function setupOneServer() {
   centralMocks.configured = true;
   centralMocks.session = { person: { person_id: "owner", display_name: "Owner" } };
   centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session.person, servers: [oneServer], server_time: 1 });
-  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: SERVER_ID, host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner" });
+  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: SERVER_ID, host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner", hosting_state: null });
   desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
   desktopMocks.fetchOperatorRuntime.mockImplementation(async () => Response.json(directory()));
   centralMocks.register.mockResolvedValue(undefined);
@@ -477,7 +477,7 @@ it("opens the account's own server immediately without a chooser", async () => {
 
 it("offers device connection for a retired host without registering or opening locally", async () => {
   setupOneServer();
-  centralMocks.hostingState.mockResolvedValue("retired");
+  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: SERVER_ID, host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner", hosting_state: "retired" });
   const complete = vi.fn();
   render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
   expect(await screen.findByText("이 컴퓨터는 더 이상 이 계정의 서버가 아니에요")).toBeTruthy();
@@ -518,7 +518,7 @@ it("shows the duplicate screen when bootstrap removes owner entries from the rai
 });
 
 it("offers default keep and explicit local data choice after account-deleted hosting without reopening it", async () => {
-  setupOneServer(); centralMocks.hostingState.mockResolvedValue("account_deleted");
+  setupOneServer(); desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: SERVER_ID, host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: null, hosting_state: "account_deleted" });
   render(<StartupIdentityGate deviceToken="device" onComplete={vi.fn()} />);
   expect((await screen.findByLabelText("유지 (기본)") as HTMLInputElement).checked).toBe(true);
   expect(screen.queryByRole("button", { name: "이 컴퓨터의 방 데이터 삭제" })).toBeNull();

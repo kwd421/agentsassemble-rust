@@ -1,4 +1,6 @@
-import { fetchDesktopCentralRegistration, isDesktopWebview } from "../desktopBridge";
+import { fetchDesktopCentralRegistration, isDesktopWebview, requestDesktopBootstrapStatus } from "../desktopBridge";
+import { saveLocalProfile } from "../localProfile";
+import { createSecureRequestId } from "../secureRequestId";
 import { loadCentralSession, signedRequest } from "./identity";
 import { assertExactKeys, strictRecord } from "../strictJsonContract";
 import { verifyCentralRegistrationEnvelope, type HostRegistrationEnvelope } from "./registrationProof";
@@ -8,6 +10,13 @@ export async function registerFreshLocalHost(serverId: string, deviceToken: stri
   const session = loadCentralSession();
   if (!session) throw new Error("새 계정으로 로그인해 주세요.");
   const live = () => { if (loadCentralSession()?.token !== session.token) throw new Error("로그인 계정이 바뀌었어요. 다시 확인해 주세요."); };
+  if (isDesktopWebview()) {
+    const bootstrap = await requestDesktopBootstrapStatus();
+    live();
+    if (bootstrap.phase === "empty") await saveLocalProfile(session.person.display_name, createSecureRequestId());
+    else if (bootstrap.phase !== "complete") throw new Error("이 컴퓨터의 로컬 신원을 확인하지 못했어요.");
+    live();
+  }
   async function local(body: Record<string, unknown>) {
     live();
     const init = { method: "POST", cache: "no-store", headers: { "content-type": "application/json", ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }) }, body: JSON.stringify(body) } satisfies RequestInit;

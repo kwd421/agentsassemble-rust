@@ -2,13 +2,13 @@ use sqlx::Row;
 
 use crate::{PersistenceError, SqliteStore};
 
-/// Reads only an existing installation's public ID and saved profile name without creating or migrating it.
+/// Reads an existing installation's public ID, profile and hosting fence without creating or migrating it.
 ///
 /// # Errors
 /// Rejects unsafe paths, unreadable databases and missing or inconsistent identity.
 pub async fn inspect_host_identity(
     path: &std::path::Path,
-) -> Result<Option<(String, Option<String>)>, PersistenceError> {
+) -> Result<Option<(String, Option<String>, Option<String>)>, PersistenceError> {
     use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
     let metadata = match path.symlink_metadata() {
         Ok(metadata) => metadata,
@@ -43,11 +43,19 @@ pub async fn inspect_host_identity(
         .read_only(true)
         .create_if_missing(false);
     let mut connection = SqliteConnection::connect_with(&options).await?;
-    let row = sqlx::query("SELECT host.server_id, metadata.value AS expected_server_id
+    let row = sqlx::query("SELECT host.server_id, metadata.value AS expected_server_id,
+        (SELECT value FROM runtime_metadata WHERE key='hosting_restriction') AS hosting_state
         FROM runtime_host_identity AS host JOIN runtime_metadata AS metadata ON metadata.key = 'server_id'
         WHERE host.singleton = 1").fetch_optional(&mut connection).await?
         .ok_or(PersistenceError::InvalidHostIdentity)?;
     let server_id: String = row.get("server_id");
+    let hosting_state: Option<String> = row.get("hosting_state");
+    if !matches!(
+        hosting_state.as_deref(),
+        None | Some("device" | "retired" | "account_deleted")
+    ) {
+        return Err(PersistenceError::InvalidHostIdentity);
+    }
     if server_id != row.get::<String, _>("expected_server_id")
         || uuid::Uuid::parse_str(&server_id).is_err()
     {
@@ -63,7 +71,7 @@ pub async fn inspect_host_identity(
         .transpose()?
         .map(|profile| profile.display_name);
     connection.close().await?;
-    Ok(Some((server_id, profile_name)))
+    Ok(Some((server_id, profile_name, hosting_state)))
 }
 
 /// Persistent private signing identity bound to one server authority.
@@ -378,7 +386,7 @@ mod tests {
             super::inspect_host_identity(&path)
                 .await
                 .unwrap_or_else(|error| panic!("inspect existing: {error}")),
-            Some((first_server_id.clone(), None))
+            Some((first_server_id.clone(), None, None))
         );
         assert_eq!(
             std::fs::read(&path).unwrap_or_else(|error| panic!("read inspected: {error}")),

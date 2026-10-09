@@ -297,6 +297,14 @@ pub struct HostDeviceInfo {
     pub profile_name: Option<String>,
 }
 
+/// Native-only installation snapshot, readable before local identity bootstrap.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct HostInstallationInfo {
+    pub device: HostDeviceInfo,
+    pub hosting_state: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct HostProductSurface {

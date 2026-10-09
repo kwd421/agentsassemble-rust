@@ -36,7 +36,7 @@ import {
   logoutCentral,
   openCentralOwnedServer, openCentralMemberServer,
   recoverCentralGuest,
-  registerLocalServer, localHostingState,
+  registerLocalServer, retryPendingLocalDemotion,
 } from "../../lib/central/identity";
 import {
   fetchDesktopOperatorRuntime,
@@ -229,9 +229,10 @@ export default function StartupIdentityGate({
   async function refreshLocalHost() {
     if (webEntry) return;
     try {
+      await retryPendingLocalDemotion(deviceToken);
       const device = await requestDesktopHostDeviceInfo();
       setLocalHost(device);
-      const restriction = device.server_id ? await localHostingState(device.server_id, deviceToken) : null;
+      const restriction = device.hosting_state;
       setHostingState(restriction); setHostingChecked(true);
       setLocalHostError("");
       return restriction;
@@ -278,8 +279,9 @@ export default function StartupIdentityGate({
           await requestDesktopHostProductSurface();
           if (centralEnabled) {
             try {
+              await retryPendingLocalDemotion(deviceToken);
               const device = await requestDesktopHostDeviceInfo();
-              const restriction = device.server_id ? await localHostingState(device.server_id, deviceToken) : null;
+              const restriction = device.hosting_state;
               if (active) { setLocalHost(device); setHostingState(restriction); setHostingChecked(true); setLocalHostError(""); }
             } catch (reason) {
               if (active) setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했어요."));

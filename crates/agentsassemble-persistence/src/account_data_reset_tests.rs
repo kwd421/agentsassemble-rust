@@ -50,6 +50,10 @@ async fn offline_reset_refuses_live_writer_then_keeps_exact_keys_and_fence_witho
         .await?;
     assert_eq!(count, 0);
     reopened.close().await?;
+    assert_eq!(
+        crate::inspect_host_identity(&path).await?,
+        Some((id, None, Some("retired".to_owned())))
+    );
     assert!(
         !std::fs::read_dir(root.path())?
             .filter_map(Result::ok)

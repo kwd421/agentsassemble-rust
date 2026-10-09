@@ -1,11 +1,11 @@
 use std::{process::Stdio, time::Duration};
 
-use agentsassemble_protocol::HostDeviceInfo;
+use agentsassemble_protocol::HostInstallationInfo;
 use tauri::{Manager, WebviewWindow};
 use tokio::io::AsyncReadExt;
 
 #[tauri::command]
-pub(crate) async fn host_device_info(window: WebviewWindow) -> Result<HostDeviceInfo, String> {
+pub(crate) async fn host_device_info(window: WebviewWindow) -> Result<HostInstallationInfo, String> {
     crate::caller_is_bundled_ui(&window)?;
     let database = window
         .app_handle()

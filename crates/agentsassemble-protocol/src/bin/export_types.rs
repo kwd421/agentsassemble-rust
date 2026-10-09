@@ -146,6 +146,7 @@ fn export_operational_contracts(
     agentsassemble_protocol::OwnerDeviceDescription::export_all(config)?;
     agentsassemble_protocol::RevokeOwnerDevices::export_all(config)?;
     agentsassemble_protocol::HostDeviceInfo::export_all(config)?;
+    agentsassemble_protocol::HostInstallationInfo::export_all(config)?;
     fs::write(
         output.join("PROVIDER_SETUP.ts"),
         format!(

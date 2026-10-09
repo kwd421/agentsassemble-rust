@@ -60,6 +60,15 @@ a query-only link from a previously opened room is insufficient for roomless use
 Native local-data choice can exist in the retained root result and the ended startup
 tree together: each choice owns a distinct radio group. The visible result's default
 keep selection must remain visibly selected when startup mounts its separate choice.
+Post-reset actual acceptance found an existing server ID plus empty bootstrap cannot
+obtain the operator registration ticket used by startup's hosting-state read. Extend
+the existing bounded native installation inspection to return its persisted hosting
+restriction together with hardware/ID/profile, through a native-only strict envelope.
+Startup reads this owner snapshot before bootstrap, including account_deleted, and
+retains pending-demotion writes through their existing authenticated owner. It does
+not grant an empty bootstrap any operator/registration ticket, discard the fence,
+auto-initialize an identity, or substitute cached/default state. Explicit server-open
+initializes the new local operator, then existing fresh-registration epoch CAS runs.
 Local guest/Google unlink, logout, ordinary leave/kick keep their existing meanings.
 Host-served untrusted JavaScript cannot obtain central credentials or step-up.
 

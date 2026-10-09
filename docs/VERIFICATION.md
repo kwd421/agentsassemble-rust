@@ -1,5 +1,35 @@
 # Verification Contract
 
+## Account deletion — actual offline wipe and post-reset bootstrap correction (2026-10-10)
+
+Latest signed V5 ea75e349 restarted behind account_deleted; native AX default keep1,
+wipe0 confirmed. Explicit wipe selected then invoked existing maintenance owner.
+Both runtime/supervisor processes stopped, bound offline sidecar reset applied and
+UI reported deleted data/server stopped. Exact DB comparison: room/event counts0,
+server ID/public-key digest/old epoch/account_deleted fence all unchanged. Restart
+performed no automatic identity provisioning or registration. User explicitly made
+another disposable Guest: central creation/recovery consent succeeded, no inherited
+servers, but saved server ID plus empty bootstrap caused startup hosting-state read
+through operator ticket to fail bootstrap_required, hiding fresh registration.
+Contract updated before correction: existing bounded native inspection reads validated
+persisted restriction in native-only HostInstallationInfo; public HostDeviceInfo stays
+unchanged. Startup preserves pending-demotion writes through existing owner and never
+mints empty-bootstrap operator tickets. Explicit fresh-host action initializes local
+operator through existing bootstrap owner first, preserving kept independent operator.
+Affected frontend48/0, build, reset persistence2/0, server/persistence clippy -D warnings
+and native all-target/all-feature clippy pass. Initial bridge rerun failed14 because
+new fixture command was not sorted; corrected fixture only, mandatory gate unchanged.
+Full preceding frontend1263/0 in197 files34.73s passed before this focused correction.
+Logs /private/tmp/account-deletion-v3-post-reset-{front-tests,build,persistence,rust-
+clippy,native-clippy}.log. Native check used default target for59s, creating a run-owned
+unused desktop target cache; no active/stale build artifact deleted ad hoc.
+Packaged corrected fresh registration continues. Read-only deployment preflight records
+current production51bfe4a9-23c8-4634-bb7e-577a0de85291. Existing Wrangler4.98 remote D1
+migration-list query failed7403; D1 inventory confirms exact configured DB and OAuth
+D1 write scope is present. No remote migrations/code/credential changes were made;
+current tooling diagnosis continues. Daybreak code review0/3, both pushes/deploy remain.
+Google fresh auth only controlled local/Miniflare; real Google E2E pending owner spare.
+
 ## Account deletion — actual skip list, native own stop and independent data choices (2026-10-10)
 
 Actual latest web0ee9a60c roomless account-settings button opened shared deletion UI.

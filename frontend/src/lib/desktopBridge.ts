@@ -1,5 +1,6 @@
 import { remoteWorkspaceSnapshot } from "./remote/remoteWorkspace";
 import type { HostDeviceInfo } from "../types/generated/HostDeviceInfo";
+import type { HostInstallationInfo } from "../types/generated/HostInstallationInfo";
 import type { HostProductSurface } from "../types/generated/HostProductSurface";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 import {
@@ -199,11 +200,13 @@ export async function requestDesktopHostProductSurface(): Promise<HostProductSur
   return structuredClone(surface);
 }
 
-export async function requestDesktopHostDeviceInfo(): Promise<HostDeviceInfo> {
+export async function requestDesktopHostDeviceInfo(): Promise<HostInstallationInfo["device"] & { hosting_state: "device" | "retired" | "account_deleted" | null }> {
   const tauri = tauriInternals();
   if (!tauri) throw new Error("이 기기의 앱에서 서버 정보를 확인해 주세요.");
   requireDesktopHostCommand("host_device_info");
-  const info = exactObject(await tauri.invoke<unknown>("host_device_info"), ["server_id", "host_name", "host_os", "device_kind", "profile_name"], "이 기기 서버");
+  const snapshot = exactObject(await tauri.invoke<unknown>("host_device_info"), ["device", "hosting_state"], "이 기기 서버 상태");
+  if (snapshot.hosting_state !== null && (typeof snapshot.hosting_state !== "string" || !["device", "retired", "account_deleted"].includes(snapshot.hosting_state))) throw new Error("이 기기의 호스팅 제한을 확인하지 못했어요.");
+  const info = exactObject(snapshot.device, ["server_id", "host_name", "host_os", "device_kind", "profile_name"], "이 기기 서버");
   if ((info.server_id !== null && (typeof info.server_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(info.server_id))) ||
       typeof info.host_name !== "string" || !info.host_name.trim() || info.host_name.length > 80 || /[\x00-\x1f\x7f]/.test(info.host_name) ||
       typeof info.device_kind !== "string" || !info.device_kind.trim() || info.device_kind.length > 80 || /\p{Cc}/u.test(info.device_kind) ||
@@ -211,7 +214,7 @@ export async function requestDesktopHostDeviceInfo(): Promise<HostDeviceInfo> {
       !["macos", "windows", "linux", "other"].includes(String(info.host_os))) {
     throw new Error("이 기기의 서버 정보가 올바르지 않습니다.");
   }
-  return info as unknown as HostDeviceInfo;
+  return { ...info, hosting_state: snapshot.hosting_state } as HostDeviceInfo & { hosting_state: "device" | "retired" | "account_deleted" | null };
 }
 
 export async function openProviderSetupHelp(providerId: string): Promise<void> {
