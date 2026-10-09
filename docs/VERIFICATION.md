@@ -2,6 +2,22 @@
 
 
 
+## Account deletion — reachable local keep/wipe entry correction (2026-10-10)
+
+The optional startup local-data choice was initially inserted in the non-central
+branch, where account-deleted hosting cannot occur. It now mounts in the actual
+central startup branch after persisted account-deleted state is read, including a
+logged-out server computer. The default is keep and it neither registers nor opens
+hosting. Root account-flow lifetime regression also passes: replacing the room/
+startup children after own stop retains final central action and default-keep choice.
+Build and affected startup/flow tests pass; logs /private/tmp/account-deletion-v3-
+{startup-choice-lifetime-tests,settings-surface-build-4}.log. Initial new test typings
+(empty mock call tuple/implicit this) corrected without product or lint exceptions.
+These are React regressions, not native/browser pixels. Package/production disposable
+GUEST acceptance, code review APPROVE0/3, both pushes and deployment remain.
+No owner/existing account use, passwords/2FA, or real Google E2E. Google E2E remains
+pending owner spare account. Protected files and other apps/processes unchanged.
+
 ## Account deletion — native stopped-installation maintenance verified locally (2026-10-10)
 
 Native LocalRuntime now claims the existing maintenance admission, joins both owned

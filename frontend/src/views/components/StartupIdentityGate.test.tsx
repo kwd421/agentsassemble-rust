@@ -515,3 +515,11 @@ it("shows the duplicate screen when bootstrap removes owner entries from the rai
   expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
   expect(centralMocks.register).not.toHaveBeenCalled();
 });
+
+it("offers default keep and explicit local data choice after account-deleted hosting without reopening it", async () => {
+  setupOneServer(); centralMocks.hostingState.mockResolvedValue("account_deleted");
+  render(<StartupIdentityGate deviceToken="device" onComplete={vi.fn()} />);
+  expect((await screen.findByLabelText("유지 (기본)") as HTMLInputElement).checked).toBe(true);
+  expect(screen.queryByRole("button", { name: "이 컴퓨터의 방 데이터 삭제" })).toBeNull();
+  expect(centralMocks.register).not.toHaveBeenCalled(); expect(centralMocks.openServer).not.toHaveBeenCalled();
+});

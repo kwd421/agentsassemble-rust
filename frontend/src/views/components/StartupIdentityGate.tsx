@@ -488,7 +488,6 @@ export default function StartupIdentityGate({
               로그인 서버가 설정되지 않았어요. 이 기기에서 사용할 이름을 입력해 주세요.
             </p>
           </header>
-        {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
           {error && (
             <div
               role="alert"
@@ -545,6 +544,7 @@ export default function StartupIdentityGate({
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용해요. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남아요."}
           </p>
         </header>
+        {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
 
         {screen === "choice" && (
           <div className="grid gap-3">
