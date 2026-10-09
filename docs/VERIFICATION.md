@@ -1,5 +1,34 @@
 # Verification Contract
 
+## Account deletion — bounded central record purge implemented, not shipped (2026-10-10)
+
+Worker 5e442eda: existing daily cleanup drains account/registration dependencies
+in pages <=100; registrations derive retirement from revoked_at or disabled owner's
+deleted_at. No host ACK/floor/inventory. Same reservation owns ready/receipt-clear/
+childless parent deletion in one batch; unknown future FK aborts all three writes.
+Keeps 10,000 indexed writes/day and49 statements: claim1 + max45 deletes + root3;
+crash/failure burns the day. Four conservative root write units/person include the
+view trigger and PK. No admission pool/gate increase. Missing receipt root explicitly
+unknown, never success/automatic registration.
+
+First affected run caught terminal-session single-cutoff/two-bind mismatch; corrected
+at cleanup owner, rerun10/10. New3 tests pass: retention then host-independent purge,
+future FK rollback/failed-day burn,120 roots→100-person bounded closure/20 retained.
+Full suite272 passed/0 failed, exit0 (9.36s); architecture/source-growth, regenerated
+map and staged diff checks pass. Logs /private/tmp/account-deletion-v2-purge-
+{first,new-tests,full,gates}.log. Actual isolated D1 historical-retention fixture
+purges2 disabled accounts and owned registration, unrelated signed bootstrap200;
+observed22 rows_written/28 statements/max2 rows per statement, root metadata[2,2,2],
+same-day retry0 writes/1 claim. Log /private/tmp/account-deletion-v2-purge-d1.log.
+This is real local D1 cleanup execution over controlled historical rows, not31 days
+of production observation or final host/UI/Google acceptance. Source feature under
+1000 lines with required coauthor. Code review0/3; no push/deploy/production account
+delete/protected-path edit. Three new Worker feature commits are now staged in
+history; user's explicit code-APPROVE-before-push overrides routine cadence.
+Remaining: explicit Google check/register, signed own-host capability; Rust host
+termination/anonymization/restart fences, shared UI/native keep-wipe, full gates,
+actual test-account Google/packaged/web flow, code APPROVE and authorized deployment.
+
 ## Account deletion — secure self-removal grants implemented, not shipped (2026-10-10)
 
 Worker 48a732ec: existing member issue/redeem owns secure account_deletion purpose
