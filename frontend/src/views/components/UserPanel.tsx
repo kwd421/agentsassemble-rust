@@ -1,4 +1,5 @@
 import { useResourceImage } from "./ResourceImage";
+import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -74,6 +75,7 @@ export default function UserPanel({
   const [profileSnapshot, setProfileSnapshot] = useState<UserProfileSnapshot | null>(null);
   const profile = profileSnapshot?.profile ?? initialProfile;
   const displayResourceBase = profileSnapshot?.displayResourceBase || "";
+  const profileAvatar = useResourceImage(resolveAttachmentReference(profile.avatarImage, displayResourceBase));
   const [draft, setDraft] = useState<UserProfile>(initialProfile);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -432,7 +434,7 @@ export default function UserPanel({
                 {profileError || "프로필 불러오는 중"}
               </span>
               <span className="block truncate text-[12px] leading-4 text-text-muted">
-                {profileError ? "서버 사용자 정보 확인 실패" : "서버 사용자 정보 확인 중"}
+                {profileError ? "프로필을 불러오지 못했어요" : "프로필을 불러오고 있어요"}
               </span>
             </span>
           </div>
@@ -445,7 +447,7 @@ export default function UserPanel({
     <div
       className="dc-user-panel"
       ref={rootRef}
-      style={profileCssVars(profile, displayResourceBase)}
+      style={profileCssVars(profile, profileAvatar.url)}
     >
       {profileOpen && (
         <section
@@ -456,8 +458,9 @@ export default function UserPanel({
           <div
             className="dc-profile-banner"
             data-preset={profile.bannerPreset}
-            style={profileCssVars(profile, displayResourceBase)}
+            style={profileCssVars(profile, profileAvatar.url)}
           />
+          {profileAvatar.error && <p role="alert">{profileAvatar.error}</p>}
           <button
             type="button"
             className="dc-profile-avatar-wrap"

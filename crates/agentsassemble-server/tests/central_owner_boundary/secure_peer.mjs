@@ -20,8 +20,38 @@ const denied = await remote.fetch('/api/runtime/version'); assert.equal(denied.s
 const owner = await post('/api/central-owner/session', { grant_token:config.grant, generation:config.target.generation,
   device:{device_name:'Encrypted test',browser:'Node WebCrypto',os:'test'} });
 const root = {session_token:owner.session_token,generation:config.target.generation};
-const directory = await post('/api/central-owner/directory', root); assert.equal(directory.rooms.length, 0);
 const personaHeaders = {authorization:`Bearer ${owner.session_token}`, 'x-central-generation':String(config.target.generation), 'x-device-token':config.device};
+// Match the packaged first entry: directory, profile and SSE start together.
+// Consume each response as it arrives so the channel's bounded ACK remains live.
+const initialAbort = new AbortController();
+let initialFrames = '', initialReady;
+let ownerProfile;
+const initialInvalidation = new Promise(resolve => { initialReady = resolve; });
+const initialStream = remote.fetch('/api/central-owner/events', {method:'POST',headers,body:JSON.stringify(root),signal:initialAbort.signal}).then(async response => {
+  assert.equal(response.status,200);
+  const reader=response.body.getReader();
+  try { for (;;) {
+    const part=await reader.read(); if(part.done)break;
+    initialFrames+=new TextDecoder().decode(part.value);
+    if(initialFrames.includes('event: directory_changed'))initialReady();
+  } } catch(error) { if(!initialAbort.signal.aborted)throw error; }
+  finally { reader.releaseLock(); }
+});
+const [directory] = await Promise.all([
+  post('/api/central-owner/directory', root),
+  remote.fetch('/api/user-profile',{headers:personaHeaders}).then(async response => {
+    assert.equal(response.status,200); ownerProfile=(await response.json()).profile; assert.ok(ownerProfile.revision>=1);
+  }), initialInvalidation,
+]);
+assert.equal(directory.rooms.length,0); assert.ok(initialFrames.includes('event: owner_session'));
+initialAbort.abort(); await initialStream;
+const avatar = await post('/api/attachments',{purpose:'profile_avatar',filename:'avatar.png',content_type:'image/png',data_base64:config.persona_png},personaHeaders);
+const {revision,created_at,updated_at,...profileFields}=ownerProfile;
+const savedProfile=await post('/api/user-profile',{...profileFields,avatar_image_url:avatar.attachment.url,expected_revision:revision},personaHeaders);
+assert.equal(savedProfile.profile.avatar_image_url,avatar.attachment.url);
+const avatarResponse=await remote.fetch(avatar.attachment.url);
+assert.equal(avatarResponse.status,200); assert.equal(avatarResponse.headers.get('content-type'),'image/png');
+assert.deepEqual([...new Uint8Array(await avatarResponse.arrayBuffer()).slice(0,8)],[137,80,78,71,13,10,26,10]);
 const imported = await post('/api/central-owner/personas/import', {filename:'Harbor Guide.png',data_base64:config.persona_png}, personaHeaders);
 assert.equal(imported.persona.id, 'Harbor-Guide');
 const personas = await remote.fetch('/api/central-owner/personas', {headers:personaHeaders});

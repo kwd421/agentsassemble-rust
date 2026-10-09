@@ -4,8 +4,9 @@ import type { CentralDirectoryState } from "../../app/useCentralDirectory";
 import type { CentralServerDisplay } from "../../lib/central/directoryCache";
 import { CONNECTION_LABELS } from "../../lib/serverConnectionState";
 
-export default function ServerRailEntries({ directory, localServerIds, connectingId, onOpen, onHide }: {
+export default function ServerRailEntries({ directory, localServerIds, connectingId, connectedServerId, onOpen, onHide }: {
   directory: CentralDirectoryState | null; localServerIds: string[]; connectingId: string;
+  connectedServerId?: string;
   onOpen: (server: CentralServerDisplay) => Promise<void>;
   onHide?: (server: CentralServerDisplay) => Promise<void>;
 }) {
@@ -22,7 +23,7 @@ export default function ServerRailEntries({ directory, localServerIds, connectin
   },[menu]);
   if (!directory) return null;
   return <>{directory.servers.filter(server => !localServerIds.includes(server.server_id)).map(server => {
-    const state = connectingId === server.server_id ? "connecting" : directory.status === "central-unconfirmed" ? "central-unconfirmed" : "disconnected";
+    const state = connectedServerId === server.server_id ? "connected" : connectingId === server.server_id ? "connecting" : directory.status === "central-unconfirmed" ? "central-unconfirmed" : "disconnected";
     const label = `${server.alias || "이름 없는 서버"} · ${CONNECTION_LABELS[state]}`;
     return <Fragment key={server.server_id}><button type="button" className="dc-server-btn" data-connection-state={state}
       onContextMenu={event => { if (server.relation !== "member" || !onHide) return; event.preventDefault(); setMenu({server,x:event.clientX,y:event.clientY,trigger:event.currentTarget}); }}

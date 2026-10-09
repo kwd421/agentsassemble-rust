@@ -21,6 +21,23 @@ owner success plus member/plaintext/cross-channel denial before re-review.
 
 ## Secure admission and event-only publication (owner task, 2026-10-07)
 
+### Packaged admission corrections (2026-10-09)
+
+The two signed desktop entries (UI Check owner host and UI Check 2, same owner)
+must connect on the first attempt, retain committed custody through directory/SSE
+and room socket setup, and load/edit profiles and host avatars through that exact
+encrypted channel. WebSocket control frames must not become application records;
+application schema/AEAD/order checks, admission deadlines and durable late-disconnect
+barriers remain unchanged. Verify concurrent initial directory/SSE/room requests,
+cancellation and plaintext/cross-channel denial. The original intermittent first
+failure must be distinguished from a controlled reproduction if no trace identifies it.
+The rail derives an admitted server's display from live workspace custody, not the
+central list's disconnected default; pending directory authority still blocks room
+actions. Profile failures use plain Korean 해요체. Local AI setup retains the full
+host/port as small muted secondary text, including inside the AI configuration dialog.
+Commit only, no push; .agents/ and scripts/__pycache__/ remain untouched. Packaged
+testing closes external access, quits only its apps/children and leaves no owned tunnel.
+
 Status: Daybreak round 3 APPROVE (C0/H0/M0/L0, 2026-10-07); implementation and
 runtime acceptance pending. Required entries:
 local start/register/claim/retirement; owner startup chooser/rail → remote directory,

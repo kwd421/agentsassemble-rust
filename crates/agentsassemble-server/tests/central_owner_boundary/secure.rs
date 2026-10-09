@@ -112,6 +112,9 @@ fn start_proxy(
                 let _ = write!(forwarded, "host: owner.example.test\r\norigin: https://trusted-entry.test\r\nx-forwarded-proto: https\r\nx-agentsassemble-proxy-token: {SECRET}\r\n\r\n");
                 let Ok(mut outgoing) = tokio::net::TcpStream::connect(address).await else { return; };
                 if outgoing.write_all(forwarded.as_bytes()).await.is_err() { return; }
+                // A legal, empty masked Ping races the first ClientHello. Native
+                // WebSocket control traffic must not terminate secure admission.
+                if outgoing.write_all(&[0x89, 0x80, 0, 0, 0, 0]).await.is_err() { return; }
                 let _ = tokio::io::copy_bidirectional(&mut incoming, &mut outgoing).await;
             });
         }

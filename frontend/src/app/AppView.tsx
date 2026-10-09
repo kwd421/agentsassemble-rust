@@ -168,6 +168,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       <RoomRail
         serverEntries={<ServerRailEntries directory={controller.centralDirectory}
           localServerIds={[controller.localServerId || ""]}
+          connectedServerId={controller.connectedServerId}
           connectingId={controller.connectingServerId} onOpen={controller.openRailServer} onHide={controller.hideRailServer} />}
         rooms={rooms}
         activeRoom={activeRoom}

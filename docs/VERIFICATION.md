@@ -1,5 +1,62 @@
 # Verification Contract
 
+- 2026-10-09 packaged secure-admission corrections from Rust `b07702b5`
+  (user-supplied deployed Worker baseline `9219192c`, UI Check 0.1.24):
+  the original signed desktop profile error was reproduced. Its resource base
+  came from the opaque Tauri document rather than the admitted host's signed
+  origin. Profile read/save now uses the existing credential-origin binding;
+  profile/card/edit-preview CSS uses the existing encrypted resource Blob owner.
+  Local profile transport, strict avatar references, host origin/path restrictions,
+  resource budgets, and closed-channel tombstones remain unchanged.
+  The server rail previously defaulted every non-local entry to disconnected,
+  including an admitted workspace. It now derives that server's display from
+  admitted custody; pending room-directory verification still blocks room actions.
+  The local AI dialog reused the room kicker's bold style for the tunnel hostname;
+  it keeps the complete host/port in 11px regular muted secondary text.
+
+  A controlled first-connect failure was reproduced before the Rust correction:
+  a legal masked WebSocket Ping before ClientHello caused the production Node
+  RemoteTransport/Rust router integration to fail. Ping/Pong are now consumed at
+  the WebSocket layer before application records, both during handshake and after
+  confirmation. Text/binary application schema, AEAD counters, 10s/30s deadlines,
+  custody adoption, and durable late-disconnect barriers are unchanged. A separate
+  post-handshake record-order/Close test passes. The original intermittent packaged
+  failure has no retained diagnostic trace; its identity with this control-frame
+  failure remains unknown. The unmodified 0.1.24 first connection succeeded in this
+  run while its profile error reproduced; do not claim the historical race proven.
+
+  The expanded production Node integration also starts directory/profile/SSE
+  concurrently, uploads and binds a real PNG profile avatar, reads its encrypted
+  bytes, and preserves room messages, member admission/reconnect, plaintext and
+  cross-channel denial, and late committed admission disconnect. It passes after
+  correction (central redemption remains a controlled fixture). Final frontend
+  build and 191 suites / 1,239 tests pass, including Tauri-origin profile/Blob
+  presentation, revocation and stale-directory rail regressions. Full workspace
+  Clippy, architecture/source-growth/19 policy tests, format/diff and read-only
+  artifact gates pass. Final Rust owner-boundary tests (6), control-frame test (1)
+  and socket ownership/cancellation tests (3) pass; the entire Rust test suite
+  was not run. Logs: `/tmp/aa-secure-final-frontend-full.log`,
+  `/tmp/aa-secure-final-owner-tests.log`, `/tmp/aa-secure-final-control-tests.log`,
+  `/tmp/aa-secure-final-socket-owner-tests.log`, `/tmp/aa-secure-final-clippy.log`.
+
+  Both final signed UI Check packages (0.1.25) pass strict/deep codesign validation
+  at `/private/tmp/aa-secure-packaged-fix/`. Computer Use verified two fresh-channel
+  first-attempt owner connections, connected room rail/history, the actual host
+  avatar in the profile panel/card/edit preview, and the full muted hostname in
+  the local AI configuration window. No profile edit or AI execution was submitted.
+  Screenshots are in that run directory. External access was then visibly closed,
+  both apps quit, and process inspection found no UI Check/server/cloudflared left;
+  Computer Use was reset. Existing app identities/data and original 0.1.24 packages
+  were retained; no isolated runtime data was created. Build artifacts were retained
+  through the read-only artifact gate. This verifies the correction's packaged flow,
+  not the unidentified historical first-connect failure's precise cause.
+
+  Packaging note: release proc-macro loading reproducibly failed with macOS
+  `mis-aligned LINKEDIT string pool` in both existing and fresh Cargo targets.
+  An isolated release build with `CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=1`
+  passed that compiler-macro load without product/source/build-gate changes.
+  Native signing uses the existing Developer ID; no push or Worker deployment.
+
 - 2026-10-07 secure-admission code review round 2: Daybreak Blue xhigh reviewed
   full Rust range through `e58058e1` and Worker through `05dcde0c`;
   REVISE C0/H0/M1/L0. Both round-1 findings closed. Worker `79e5c93b`

@@ -3,6 +3,7 @@ import {
   isDesktopWebview,
 } from "../lib/desktopBridge";
 import { profileAvatarReference } from "../lib/attachmentReference";
+import { sessionHostOrigin } from "../lib/remote/remoteWorkspace";
 import {
   fetchJsonWithIdentity,
   fileToBase64,
@@ -77,7 +78,7 @@ function normalizeUserProfile(
     typeof payload.created_at !== "string" ||
     typeof payload.updated_at !== "string"
   ) {
-    throw new Error("서버 사용자 프로필 응답이 현재 계약과 일치하지 않습니다.");
+    throw new Error("프로필을 확인하지 못했어요. 다시 시도해 주세요.");
   }
   return {
     revision: Number(payload.revision),
@@ -113,12 +114,15 @@ function userProfileToApi(profile: UserProfile): ApiUserProfile {
   };
 }
 
-function browserDisplayResourceBase(): string {
-  const endpoint = new URL("/api/user-profile", window.location.href);
-  if (!["http:", "https:"].includes(endpoint.protocol)) {
-    throw new Error("프로필 표시 자원 출처가 안전하지 않습니다.");
+function browserDisplayResourceBase(identity: UserProfileIdentity): string {
+  const token = identity.centralSession?.sessionToken || identity.sessionToken;
+  try {
+    const endpoint = new URL("/api/user-profile", token ? sessionHostOrigin(token) : window.location.href);
+    if (["http:", "https:"].includes(endpoint.protocol)) return endpoint.origin;
+  } catch {
+    // An opaque desktop document cannot stand in for missing host custody.
   }
-  return endpoint.origin;
+  throw new Error("프로필 사진 주소를 확인하지 못했어요. 서버 목록에서 다시 연결해 주세요.");
 }
 
 async function requestDesktopProfile(
@@ -142,7 +146,7 @@ export async function fetchUserProfile(
       displayResourceBase: result.displayResourceBase,
     };
   }
-  const displayResourceBase = browserDisplayResourceBase();
+  const displayResourceBase = browserDisplayResourceBase(identity);
   const payload = await fetchJsonWithIdentity<{ profile: ApiUserProfile }>(
     "/api/user-profile",
     identity
@@ -159,7 +163,7 @@ export async function saveUserProfile(
   identity: UserProfileIdentity = {}
 ): Promise<UserProfileSnapshot> {
   if (!Number.isInteger(expectedRevision) || expectedRevision < 1) {
-    throw new Error("프로필 revision이 현재 계약과 일치하지 않습니다.");
+    throw new Error("프로필이 바뀌었어요. 다시 불러온 뒤 저장해 주세요.");
   }
   const body = {
     ...userProfileToApi(profile),
@@ -177,7 +181,7 @@ export async function saveUserProfile(
       displayResourceBase: result.displayResourceBase,
     };
   }
-  const displayResourceBase = browserDisplayResourceBase();
+  const displayResourceBase = browserDisplayResourceBase(identity);
   const payload = await postJsonWithIdentity<{ profile: ApiUserProfile }>(
     "/api/user-profile",
     body,
@@ -206,7 +210,7 @@ export async function uploadUserProfileAvatar(
   );
   const avatarImage = profileAvatarReference(payload.attachment?.url);
   if (!avatarImage) {
-    throw new Error("서버 프로필 사진 응답이 현재 계약과 일치하지 않습니다.");
+    throw new Error("프로필 사진을 확인하지 못했어요. 다시 시도해 주세요.");
   }
   return avatarImage;
 }

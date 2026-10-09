@@ -105,12 +105,26 @@ enum Frame {
 mod requests;
 use requests::Requests;
 
+// Axum handles Ping/Pong at the WebSocket layer. They are not handshake or
+// encrypted records and must not race admission into a durable disconnect.
+async fn next_record<S>(socket: &mut S) -> Option<Result<Message, axum::Error>>
+where
+    S: futures_util::Stream<Item = Result<Message, axum::Error>> + Unpin,
+{
+    loop {
+        match socket.next().await {
+            Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
+            record => return record,
+        }
+    }
+}
+
 async fn handshake(
     socket: &mut WebSocket,
     state: &AppState,
     origin: &str,
 ) -> Result<crate::central::host_identity::SecureHandshake, ()> {
-    let Some(Ok(Message::Text(text))) = socket.next().await else {
+    let Some(Ok(Message::Text(text))) = next_record(socket).await else {
         return Err(());
     };
     if text.len() > 4096 {
@@ -146,7 +160,7 @@ async fn handshake(
         ))
         .await
         .map_err(|_| ())?;
-    let Some(Ok(Message::Binary(record))) = socket.next().await else {
+    let Some(Ok(Message::Binary(record))) = next_record(socket).await else {
         return Err(());
     };
     let proof = handshake.receive.open(&record).map_err(|_| ())?;
@@ -224,7 +238,7 @@ fn run(
                 () = state.shutdown.cancelled() => break,
                 () = tokio::time::sleep_until(first_admission), if !client.admitted() => { if !client.admitted() { break; } continue; },
                 done = requests.tasks.join_next(), if !requests.tasks.is_empty() => { match done { Some(Ok(id)) => { requests.remove(id); }, _ => break } continue; },
-                incoming = receiver.next() => incoming,
+                incoming = next_record(&mut receiver) => incoming,
             };
             let Some(Ok(Message::Binary(record))) = incoming else {
                 break;
@@ -309,4 +323,33 @@ fn monitor_lifetime(
         }
         lifetime_client.close();
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn control_frames_preserve_application_order_and_close() {
+        let mut frames = futures_util::stream::iter([
+            Ok(Message::Ping(Vec::new().into())),
+            Ok(Message::Text("hello".into())),
+            Ok(Message::Pong(Vec::new().into())),
+            Ok(Message::Binary(vec![1, 2, 3].into())),
+            Ok(Message::Close(None)),
+        ]);
+        assert!(matches!(
+            next_record(&mut frames).await,
+            Some(Ok(Message::Text(_)))
+        ));
+        assert!(matches!(
+            next_record(&mut frames).await,
+            Some(Ok(Message::Binary(_)))
+        ));
+        assert!(matches!(
+            next_record(&mut frames).await,
+            Some(Ok(Message::Close(_)))
+        ));
+        assert!(next_record(&mut frames).await.is_none());
+    }
 }

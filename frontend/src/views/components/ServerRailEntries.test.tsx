@@ -26,6 +26,16 @@ it("keeps server IDs out of unnamed rail labels and tooltips", () => {
   expect(document.body.textContent).not.toContain(server.server_id);
 });
 
+it("uses admitted workspace custody ahead of a stale central list", () => {
+  const directory: CentralDirectoryState = { status: "central-unconfirmed", person: null, live: null,
+    servers: [{ server_id: "host", alias: "Host", relation: "owner" }] };
+  const { rerender } = render(<ServerRailEntries directory={directory} localServerIds={[]}
+    connectedServerId="host" connectingId="" onOpen={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Host · 연결됨" })).toBeTruthy();
+  rerender(<ServerRailEntries directory={directory} localServerIds={[]} connectingId="" onOpen={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Host · 연결 끊김 · 로그인 서버 확인 불가" })).toBeTruthy();
+});
+
 it("offers the same hide action from the member menu without leaving a room",()=>{
   const member={server_id:"friend",registration_epoch:"epoch",alias:"친구의 컴퓨터",relation:"member" as const};
   const hide=vi.fn().mockResolvedValue(undefined);

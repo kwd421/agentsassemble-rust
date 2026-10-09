@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
 import type { UserProfile } from "../api";
-import { resolveAttachmentReference } from "./attachmentReference";
 
 export const DEFAULT_USER_PROFILE: UserProfile = {
   displayName: "SeiNel",
@@ -39,9 +38,8 @@ export function profileStatusLabel(status: UserProfile["status"]) {
 
 export function profileCssVars(
   profile: UserProfile,
-  displayResourceBase: string
+  avatarUrl: string | undefined
 ): CSSProperties {
-  const avatarUrl = resolveAttachmentReference(profile.avatarImage, displayResourceBase);
   return {
     "--profile-accent": profile.accentColor,
     "--profile-avatar-image": avatarUrl ? `url("${avatarUrl}")` : undefined,

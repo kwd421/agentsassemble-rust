@@ -121,7 +121,7 @@ describe("canonical user profile provenance", () => {
         },
         1
       )
-    ).rejects.toThrow("아바타 참조");
+    ).rejects.toThrow("프로필 사진 주소");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

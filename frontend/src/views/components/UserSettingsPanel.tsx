@@ -259,7 +259,7 @@ export default function UserSettingsPanel({
               {/* Discord edits beside a live card; this one follows the unsaved draft. */}
               <aside className="dc-user-settings-preview" aria-label="프로필 미리보기">
                 <span className="dc-user-settings-field-label">미리보기</span>
-                <div className="dc-user-settings-preview-card" style={profileCssVars(draft, displayResourceBase)}>
+                <div className="dc-user-settings-preview-card" style={profileCssVars(draft, draftAvatarUrl)}>
                   <div className="dc-profile-banner" data-preset={draft.bannerPreset} />
                   <span
                     className="dc-user-settings-preview-avatar"

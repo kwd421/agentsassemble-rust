@@ -23,7 +23,7 @@ export function profileAvatarReference(value: unknown): string | undefined {
   if (value === "" || value === undefined) return undefined;
   const reference = parseAttachmentReference(value);
   if (!reference || reference.disposition !== "view") {
-    throw new Error("프로필 아바타 참조가 현재 계약과 일치하지 않습니다.");
+    throw new Error("프로필 사진 주소를 확인하지 못했어요. 다시 시도해 주세요.");
   }
   return reference.value;
 }

@@ -46,6 +46,7 @@ type AgentCreateModalProps = {
   open: boolean;
   meetingId: string;
   roomLabel: string;
+  roomLabelMuted?: boolean;
   providers: NativeCliProviderAvailability[];
   existingSessions?: RoomAgentSession[];
   participants?: RoomMember[];
@@ -64,6 +65,7 @@ export default function AgentCreateModal({
   locationChoice,
   meetingId,
   roomLabel,
+  roomLabelMuted = false,
   providers,
   existingSessions = [],
   participants = [],
@@ -380,7 +382,7 @@ export default function AgentCreateModal({
       >
         <header className="dc-agent-create-head">
           <div>
-            <p className="dc-agent-create-kicker preserve-words">{roomLabel}</p>
+            <p className={`dc-agent-create-kicker preserve-words${roomLabelMuted ? " dc-agent-host-address" : ""}`}>{roomLabel}</p>
             <h2>에이전트 추가</h2>
           </div>
           <div className="dc-agent-head-actions">

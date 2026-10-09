@@ -121,7 +121,10 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
   const rooms = useMemo(() => projectRoomConnections(directoryRooms, startupHostEnabled
     ? roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected"
-    : null, centralDirectory?.status === "central-unconfirmed"), [directoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory]);
+    : null, centralDirectory?.status === "central-unconfirmed", ownerWorkspace.connect ? {
+      serverId: ownerWorkspace.connect.serverId,
+      state: roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected",
+    } : undefined), [directoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory, ownerWorkspace.connect]);
   const [connectingServerId, setConnectingServerId] = useState("");
   const [serverConnectionError, setServerConnectionError] = useState("");
   const serverOpening = useRef(false);
@@ -713,6 +716,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
 
   return {
     localServerId: startupHostEnabled ? currentRoomDirectoryAuthority()?.server_id : undefined,
+    connectedServerId: ownerWorkspace.connect?.serverId || (admittedSessionToken && guestSession && !guestExpired ? guestSession.serverSurface.server_id : undefined),
     centralDirectory, refreshCentralDirectory, openRailServer, hideRailServer, connectingServerId, serverConnectionError, retryRoomConnection,
     roomLifecycle, pairedRoomLifecycle, roomChannels, activeCustomChannel, channelTranscript,
     acceptRecoveredSession, activeAppearance,

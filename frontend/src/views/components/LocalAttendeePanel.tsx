@@ -158,6 +158,7 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     </div>
     {catalog && (editable || submitted.current) && !operation && <div style={{ display: editable && !dismissed ? undefined : "none" }}>
       <AgentCreateModal open meetingId={packet.room_id} roomLabel={roomLabel}
+        roomLabelMuted
         providers={companionProviders} catalogRevision={catalog.catalog_revision}
         openCodeFreePermissionHint="OpenCode 무료 모델은 이 컴퓨터에서 전체 액세스로만 쓸 수 있어요."
         initialSelection={{ providerId: packet.provider, displayName: packet.display_name }} onCatalogChange={setCatalog}

@@ -20,3 +20,12 @@ it("explains central-unconfirmed remote rooms without hiding saved room identity
   expect(screen.getByText(/로그인 서버에 연결하지 못했어요/)).toBeTruthy();
   expect(screen.getByText(offline.label)).toBeTruthy();
 });
+
+it("projects only the admitted server's pending or verified directory and preserves other servers", () => {
+  const saved = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const };
+  const other = { ...saved, serverId: "other" };
+  const pending = projectRoomConnections([saved, other], null, true, { serverId: "host", state: "connecting" });
+  expect(pending.map(room => room.connectionState)).toEqual(["connecting", "central-unconfirmed"]);
+  expect(projectRoomConnections([saved], null, true, { serverId: "host", state: "connected" })[0].connectionState).toBe("connected");
+  expect(projectRoomConnections([saved], null, true, { serverId: "host", state: "disconnected" })[0].connectionState).toBe("disconnected");
+});
