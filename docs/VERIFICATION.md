@@ -1,5 +1,39 @@
 # Verification Contract
 
+## Account deletion — explicit Google check/register implemented, not shipped (2026-10-10)
+
+Worker64eff73a: additive0023 retains verified subject HMAC, bounded defaults and
+terminal mapping in the existing600s handoff; exact native/web verify-only routes
+create zero identity/device/session rows. Old exchange accepts active identities
+only, including ready-response retry; deleted/absent explicitly require registration.
+Separate register consumes exact handoff/PKCE/code/device/key/flow/expiry and expected
+subject mapping in one D1 batch; zero CAS or any child failure rolls back everything.
+Terminal mapping transfers only from that deleted person; a competing active mapping
+wins without losing-registration rows. New random account inherits no relations.
+Exact consumed retry returns registered/login-required without another secret/session.
+OAuth input validation shares its owner with deletion proof; old login fixtures now
+start with existing identities, enrollment uses separate public registration action.
+
+Before-change new HTTP/durable regressions: initial four scenarios all failed at
+missing verify-start401 (log register-before); final six tests pass. Initial full
+run252/24 exposed old auto-provisioning fixtures; updated those fixtures to explicit
+registration or existing identities, retaining their quota/replay/security oracles.
+Full suite278/0 exit0 (5.79s), final shared-input affected27/0; measured heavy-day
+budget unchanged9960. Architecture/source-growth, generated maps, syntax and staged
+diff checks pass. Logs /private/tmp/account-deletion-v2-register-{before,new-tests,
+first-full,affected,budget,full,inputs,check,gates}.log. Actual isolated Miniflare D1
+with frozen provisioning floor6f829f0a: both clients old new-routes/new-flow401 with
+zero creation; repeated absent check zero creation; injected session500 rolls back
+claim/person/identity/device/session; register201, exact retry200 no new rows;
+deleted check zero creation then new unrelated random person, old bootstrap401.
+Log /private/tmp/account-deletion-v2-register-d1.log; run-only old source removed.
+Controlled Google signatures do NOT establish real native/web auth_time support.
+
+Feature under1000 lines, required coauthor; no push/migrations/deploy/production
+account deletion or protected-path edits. Code reviews0/3. Pending signed capability,
+Rust host/removal/restart/native/shared UI, full acceptance incl. new Google test
+account, code APPROVE, push and deployment. Earlier checkpoint requirements remain.
+
 ## Account deletion — bounded central record purge implemented, not shipped (2026-10-10)
 
 Worker 5e442eda: existing daily cleanup drains account/registration dependencies
