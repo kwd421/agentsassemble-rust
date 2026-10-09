@@ -1,5 +1,30 @@
 # Verification Contract
 
+## Account deletion — durable member authority fence implemented, not shipped (2026-10-10)
+
+Rust schema87 adds person-local removal work beside the unchanged frozen central
+binding DDL. A non-deserializable secure deletion principal supplies issuer/person,
+request/epoch/expiry; channel/epoch/schema validation and fence/initial work commit
+atomically. No client-selected target, ordinary room authority, proof or receipt is
+stored. Existing member admission/replay/connect and common human/membership
+revalidation reject committed removal, including both already admitted devices and
+an in-flight first admission. Independent local operator profile stays unchanged.
+Initial phase is owner_sessions; this checkpoint does NOT execute anonymization,
+runtime effects, host owner-root revocation, or a public deletion endpoint.
+
+Three focused durable/public-path tests pass. Initial full396/52 exposed the v87
+projection resume boundary and historical fixtures retaining a newer table; fixed
+the upgrade owner and exact historical fixtures, without CREATE IF NOT EXISTS or
+gate exceptions. Next447/1 exposed a historical fixture dropping the table before
+current-authority validation; moved the drop after validation. Final persistence
+suite448/0 exit0 (16.25s); format/diff and architecture/source-growth/policy gates
+pass. Logs /private/tmp/account-deletion-v2-local-fence-{first,tests,full,
+full-fixed,full-final,format,gates,gates-final}.log. Persistence clippy all-targets
+with -D warnings passes, log /private/tmp/account-deletion-v2-local-fence-clippy.log.
+No push/deploy/production account deletion/protected edits. Code review0/3;
+complete bounded local removal, host terminal state, native wipe, shared UI and
+actual Google/packaged/web acceptance remain required before review and shipping.
+
 ## Account deletion — signed capability storage implemented, not shipped (2026-10-10)
 
 Worker e5191781: existing exact signed endpoint publication alone accepts account_deletion_protocol

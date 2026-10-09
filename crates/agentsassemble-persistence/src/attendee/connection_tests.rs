@@ -206,6 +206,9 @@ async fn v84_upgrade_preserves_attendee_custody_and_adds_only_closed_os_metadata
         .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
         .await?
         .authorization;
+    sqlx::query("DROP TABLE central_member_removals")
+        .execute(&store.pool)
+        .await?;
     sqlx::query("ALTER TABLE attendee_connections DROP COLUMN execution_os")
         .execute(&store.pool)
         .await?;

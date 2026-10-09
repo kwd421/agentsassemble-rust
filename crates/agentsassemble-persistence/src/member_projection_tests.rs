@@ -281,6 +281,7 @@ async fn v83_upgrade_keeps_rooms_and_sender_deadline_survives_reopen() -> TestRe
         .await?;
     for sql in [
         "ALTER TABLE attendee_connections DROP COLUMN execution_os",
+        "DROP TABLE central_member_removals",
         "DROP TABLE member_projection_outbox",
         "DROP TABLE member_projection_sender",
         "UPDATE runtime_metadata SET value='83' WHERE key='schema_version'",

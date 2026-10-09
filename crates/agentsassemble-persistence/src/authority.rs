@@ -124,6 +124,7 @@ pub(crate) async fn load_active_membership(
     {
         return Err(session_revoked());
     }
+    crate::central_member_removal::require_live_actor(transaction, participant_id).await?;
     Ok((room, participant))
 }
 
@@ -167,7 +168,7 @@ fn room_inactive() -> PersistenceError {
     }
 }
 
-fn session_revoked() -> PersistenceError {
+pub(crate) fn session_revoked() -> PersistenceError {
     PersistenceError::CommandRejected {
         code: "session_revoked".into(),
         message: "This room session has ended.".to_owned(),

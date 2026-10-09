@@ -128,6 +128,7 @@ pub(crate) async fn resolve_human_session(
         crate::central_identity_bindings::require_unbound_user(transaction, &user_id).await?;
     }
     let participant_id = row.try_get::<String, _>("participant_id")?;
+    crate::central_member_removal::require_live_actor(transaction, &participant_id).await?;
     let room: Room = decode_required_json(&row, "room_json", "room")?;
     let participant: Participant = decode_required_json(&row, "participant_json", "participant")?;
     let profile = decode_bound_profile(

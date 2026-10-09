@@ -190,6 +190,7 @@ mod tests {
             )
             .await?;
         for ddl in [
+            "DROP TABLE central_member_removals",
             "ALTER TABLE host_owner_sessions DROP COLUMN secure_client_key_fingerprint",
             "ALTER TABLE host_owner_sessions DROP COLUMN secure_channel_id",
             "ALTER TABLE human_room_sessions DROP COLUMN secure_client_key_fingerprint",

@@ -135,6 +135,8 @@ mod room_preferences;
 mod room_random;
 pub use provider_requests::{OpenProviderRequest, ProviderRequestCommit};
 mod central_identity_bindings;
+mod central_member_removal;
+pub use central_member_removal::{MemberRemovalKey, MemberRemovalPrincipal};
 mod member_admission;
 mod member_connect;
 pub use member_connect::MemberConnectRoom;

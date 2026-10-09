@@ -43,7 +43,9 @@ impl MemberAdmission {
         Ok(now < self.challenge_expires_at
             && epoch.as_deref() == Some(self.registration_epoch.as_str())
             && !self.issuer.is_empty()
-            && !self.person_id.is_empty())
+            && !self.person_id.is_empty()
+            && crate::central_member_removal::person_is_live(tx, &self.issuer, &self.person_id)
+                .await?)
     }
 }
 
