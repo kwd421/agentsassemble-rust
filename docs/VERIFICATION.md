@@ -1,5 +1,22 @@
 # Verification Contract
 
+## Account deletion — pushes, atomic floor and remote migrations (2026-10-10)
+
+Approved product unchanged. Rust29e62736 and Worker0e099ce3 pushed to their exact
+preexisting origin branches; local/upstream HEAD equality verified. Fresh remote
+preflight remained51bfe4a9-23c8-4634-bb7e-577a0de85291 at100%.
+Deployed exact reviewed6f829f0a positional entry from isolated floor worktree using
+unchanged wrangler.cleanup-on.toml and specified assets-wt built at old Rustd12077f2.
+Floor version1cbcb536-dc76-42b3-9dd4-562374e228e5; deployment JSON confirms100%
+active at2026-10-09T21:36:50Z BEFORE any0019 application, recorded in run evidence.
+Current Wrangler4.149 first migration apply failed7403 at query preflight; the ONE
+authorized identical retry completed0019–0024. Subsequent remote migration list
+exit0 reports no migrations to apply. No authentication/config/binding changes,
+guard weakening, fallback or extra retry. Logs /private/tmp/account-deletion-v3-
+production-{floor-deploy,floor-running,migrations-apply-1,migrations-apply-2,
+migrations-after}.*. Final exact Rust HEAD assets build/deploy and new production
+Guest/recovery proof/receipt verification follow. No owner/existing account used.
+
 ## Account deletion — code APPROVE and release gate (2026-10-10)
 
 Completed Daybreak Blue xhigh read-only code round2 APPROVE C0/H0/M0/L0;
