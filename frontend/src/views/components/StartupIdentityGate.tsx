@@ -1,4 +1,6 @@
 import LocalAccountDataChoice from "./LocalAccountDataChoice";
+import { GoogleRegistrationRequired } from "../../lib/central/googleRegistration";
+import GoogleRegistrationChoice from "./GoogleRegistrationChoice";
 import { useCentralDirectory } from "../../app/useCentralDirectory";
 import { isCentralTemporaryError } from "../../lib/central/connectionError";
 import type { CentralServerDisplay } from "../../lib/central/directoryCache";
@@ -81,6 +83,7 @@ export default function StartupIdentityGate({
 }) {
   const centralEnabled = centralIdentityConfigured();
   const webEntry = isCentralWebEntry();
+  const [googleRegistration, setGoogleRegistration] = useState<GoogleRegistrationRequired | null>(null);
   const [screen, setScreen] = useState<Screen>("choice");
   const [displayName, setDisplayName] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
@@ -298,6 +301,7 @@ export default function StartupIdentityGate({
         }
       } catch (reason) {
         if (active) {
+          if (reason instanceof GoogleRegistrationRequired) setGoogleRegistration(reason);
           setError(failureMessage(reason, "앱을 시작하지 못했어요."));
           setChecking(false);
         }
@@ -421,6 +425,7 @@ export default function StartupIdentityGate({
       await loginCentralGoogle(setStatus, controller.signal);
       await finishCentralStartup();
     } catch (reason) {
+      if (reason instanceof GoogleRegistrationRequired) setGoogleRegistration(reason);
       setChecking(false);
       setError(
         typeof reason === "object" &&
@@ -546,6 +551,7 @@ export default function StartupIdentityGate({
         </header>
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
 
+        {googleRegistration && <GoogleRegistrationChoice request={googleRegistration} onCancel={() => { setGoogleRegistration(null); setError(""); }} onComplete={async () => { setGoogleRegistration(null); setError(""); await finishCentralStartup(); }} />}
         {screen === "choice" && (
           <div className="grid gap-3">
             <button

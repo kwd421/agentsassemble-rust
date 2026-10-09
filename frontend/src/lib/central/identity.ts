@@ -1,19 +1,20 @@
+import { nativeGoogleAuthorization } from "./nativeGoogleAuthorization";
+import { finishGoogleVerification } from "./googleRegistration";
 import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
 import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
 import { CentralTemporaryError, fetchCentral } from "./connectionError";
 import {
-  controlDesktopCentralLogin,
   fetchDesktopCentralRegistration,
   fetchDesktopOperatorRuntime,
   isDesktopWebview,
-  openDesktopCentralGoogleLogin,
 } from "../desktopBridge";
 import { encodeBase64Url } from "../base64Url";
 import { type HostOs, type HostRegistrationEnvelope, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./registrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
+export const CENTRAL_SESSION_CHANGED_EVENT = "agentsassemble:central-session-changed";
 export const CENTRAL_SESSION_CLEARED_EVENT = "agentsassemble:central-session-cleared";
 const SERVERS_KEY = "agentsassemble.centralServers.v1";
 const PENDING_RECOVERY_KEY = "agentsassemble.pendingRecoveryCode.v1";
@@ -56,6 +57,7 @@ export type CentralServer = {
     status: "likely_online" | "published" | "offline";
     mode?: string;
     protocol?: string;
+    account_deletion_protocol?: "v1" | null;
   };
 };
 
@@ -245,6 +247,7 @@ export function saveSession(
   };
   if (previous?.person.person_id !== result.person.person_id) clearCentralDirectoryCache();
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  window.dispatchEvent(new Event(CENTRAL_SESSION_CHANGED_EVENT));
   return session;
 }
 
@@ -433,31 +436,6 @@ export function parseCentralGoogleHandoff(value: unknown): CentralGoogleHandoff 
   return result;
 }
 
-function throwIfGoogleLoginAborted(signal?: AbortSignal): void {
-  if (!signal?.aborted) return;
-  const error = new Error("Google 로그인이 취소됐어요.");
-  error.name = "AbortError";
-  throw error;
-}
-
-function waitForGoogleReturn(signal?: AbortSignal): Promise<void> {
-  throwIfGoogleLoginAborted(signal);
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      signal?.removeEventListener("abort", abort);
-      resolve();
-    }, 1500);
-    function abort() {
-      window.clearTimeout(timer);
-      signal?.removeEventListener("abort", abort);
-      const error = new Error("Google 로그인이 취소됐어요.");
-      error.name = "AbortError";
-      reject(error);
-    }
-    signal?.addEventListener("abort", abort, { once: true });
-  });
-}
-
 export async function signedRequest<T>(
   session: CentralSession,
   path: string,
@@ -551,91 +529,14 @@ export async function recoverCentralGuest(
   return saveGuestResult(result);
 }
 
-export async function loginCentralGoogle(
-  status?: (message: string) => void,
-  signal?: AbortSignal
-): Promise<CentralSession> {
+export async function loginCentralGoogle(status?: (message: string) => void, signal?: AbortSignal): Promise<CentralSession> {
   localStorage.removeItem(SERVERS_KEY);
-  throwIfGoogleLoginAborted(signal);
-  const state = randomUrlToken(32);
-  const verifier = randomUrlToken(32);
-  const codeChallenge = await sha256(verifier);
-  let retirementAttempted = false;
-  let failure: { reason: unknown } | undefined;
-  try {
-    const callback = await controlDesktopCentralLogin("start", state);
-    throwIfGoogleLoginAborted(signal);
-    if (callback.result.status !== "pending") {
-      throw new Error("Google 로그인을 준비하지 못했어요. 다시 시도해 주세요.");
-    }
-    const started = parseCentralGoogleHandoff(
-      await unsignedPost<unknown>(
-        "/v1/auth/google/native/start",
-        {
-          ...(await authDeviceBody()),
-          code_challenge: codeChallenge,
-          redirect_uri: callback.redirect_uri,
-          state,
-        },
-        signal
-      )
-    );
-    if (started.state !== state) {
-      throw new Error("로그인 서버가 요청 상태를 바꾸었습니다.");
-    }
-    const authorizationUrl = new URL(started.authorization_url);
-    if (
-      authorizationUrl.searchParams.get("redirect_uri") !== callback.redirect_uri ||
-      authorizationUrl.searchParams.get("code_challenge") !== codeChallenge
-    ) {
-      throw new Error("로그인 서버가 현재 앱과 다른 로그인 요청을 만들었습니다.");
-    }
-    status?.("시스템 브라우저에서 Google 계정을 선택해 주세요.");
-    throwIfGoogleLoginAborted(signal);
-    await openDesktopCentralGoogleLogin(started.authorization_url);
-    const expiresAt = Math.min(started.expires_at, callback.result.expires_at);
-    while (Math.floor(Date.now() / 1000) < expiresAt) {
-      await waitForGoogleReturn(signal);
-      const { result: returned } = await controlDesktopCentralLogin("poll", state);
-      throwIfGoogleLoginAborted(signal);
-      if (returned.status === "pending") continue;
-      if (returned.status === "failed" || returned.status === "cancelled") {
-        throw new Error("Google 로그인이 취소됐어요.");
-      }
-      // Retire the transient native return before the central server issues a
-      // session. Once a complete exchange arrives, persist that committed result.
-      retirementAttempted = true;
-      await controlDesktopCentralLogin("cancel", state);
-      throwIfGoogleLoginAborted(signal);
-      const exchanged = await unsignedPost<{
-        status: "complete";
-        person: CentralPerson;
-        session: Omit<CentralSession, "person">;
-      }>(
-        "/v1/auth/google/native/exchange",
-        {
-          handoff_id: started.handoff_id,
-          authorization_code: returned.authorization_code,
-          code_verifier: verifier,
-        },
-        signal
-      );
-      return saveSession(exchanged);
-    }
-    throw new Error("Google 로그인 시간이 만료됐어요. 다시 시도해 주세요.");
-  } catch (reason) {
-    failure = { reason };
-    throw reason;
-  } finally {
-    if (!retirementAttempted) {
-      try { await controlDesktopCentralLogin("cancel", state); }
-      catch (cleanup) {
-        if (!failure) throw cleanup;
-        const describe = (reason: unknown) => reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "원인을 확인하지 못했어요.";
-        throw new AggregateError([failure.reason, cleanup], `${describe(failure.reason)}\n로그인 정리 실패: ${describe(cleanup)}`);
-      }
-    }
-  }
+  const expectedToken = loadCentralSession()?.token ?? null;
+  const {body, expiresAt} = await nativeGoogleAuthorization(async request => unsignedPost<unknown>(
+    "/v1/auth/google/native/verify-start", {...await authDeviceBody(), ...request}, signal
+  ),status,signal);
+  const result=await unsignedPost<unknown>("/v1/auth/google/native/verify-complete",body,signal);
+  return finishGoogleVerification(result,"native",body,expiresAt,expectedToken);
 }
 
 export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBootstrap | null> {
@@ -653,7 +554,7 @@ export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBoo
     registration_epoch: server.registration_epoch, host_key_fingerprint: server.host_key_fingerprint,
     host_public_key_jwk: server.host_public_key_jwk,
     endpoint: server.endpoint ? { origin: server.endpoint.origin, generation: server.endpoint.generation,
-      status: server.endpoint.status, mode: server.endpoint.mode, protocol: server.endpoint.protocol } : null,
+      status: server.endpoint.status, mode: server.endpoint.mode, protocol: server.endpoint.protocol, account_deletion_protocol: server.endpoint.account_deletion_protocol } : null,
   } : server);
   const current = loadCentralSession();
   if (current?.token !== session.token) throw new CentralAuthError("로그인 상태가 바뀌었어요. 다시 로그인해 주세요.");

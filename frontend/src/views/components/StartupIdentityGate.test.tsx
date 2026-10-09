@@ -75,6 +75,7 @@ vi.mock("../../lib/deviceIdentity", () => ({
 }));
 vi.mock("../../lib/central/identity", () => ({
   hasPendingLocalDemotion: vi.fn(() => false), retryPendingLocalDemotion: vi.fn(),
+  CENTRAL_SESSION_CHANGED_EVENT: "agentsassemble:central-session-changed",
   CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => centralMocks.configured,
   isCentralWebEntry: () => false,

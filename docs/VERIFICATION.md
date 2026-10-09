@@ -1,5 +1,21 @@
 # Verification Contract
 
+## Account deletion — explicit Google registration transport committed (2026-10-10)
+
+Native and web Google login now use verify-start/verify-complete, never implicit
+registration. Deleted/absent identities require a separate explicit new-account
+choice; its expiring handoff remains in RAM and never restores old relations.
+Existing native callback owner is shared with deletion fresh-auth, including bounded
+callback cancellation. Web return binds the original session fingerprint before and
+after exchange. Controlled Google registration tests3/0 and affected UI tests pass;
+staged-only frontend build exit0 (/private/tmp/account-deletion-v3-google-index-build.log).
+Actual isolated Miniflare Google paths passed with controlled signatures, including
+fresh auth_time, replay, no provisioning on verification and rollback (logs
+/private/tmp/account-deletion-v3-{google,google-proof}-miniflare.log). These are local
+fixtures; real Google E2E awaits the owner's spare Google account. No passwords/2FA
+or owner/existing production accounts used. Shared UI/host capability and actual
+packaged Guest flows remain; Daybreak code review0/3, pushes/deployment pending.
+
 
 
 ## Account deletion — reachable local keep/wipe entry correction (2026-10-10)

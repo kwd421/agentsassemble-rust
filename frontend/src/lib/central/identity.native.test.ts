@@ -55,7 +55,7 @@ function completedHandoff(controller: AbortController) {
     return { result: { status: "cancelled" } };
   });
   const fetcher = vi.fn(async (input: string, init: RequestInit) => {
-    if (input.endsWith("/start")) {
+    if (input.endsWith("/verify-start")) {
       const body = JSON.parse(String(init.body));
       const query = new URLSearchParams({ ...body, client_id: "fixture-client", response_type: "code", scope: "openid profile", nonce: "fixture-nonce", code_challenge_method: "S256" });
       return Response.json({ handoff_id: "fixture-handoff", authorization_url: `https://accounts.google.com/o/oauth2/v2/auth?${query}`, state: body.state, expires_at: 9_999_999_999 });
