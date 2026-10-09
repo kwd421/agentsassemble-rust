@@ -9,7 +9,33 @@ C0/H0 verdict plus every Medium/Low corrected in the owning contract admits
 implementation; explicit design APPROVE preferred, not required. Code APPROVE
 within three rounds remains mandatory before push/deploy. Earlier four-round
 BLOCKED checkpoint below is historical and superseded by this authorization.
-Contract/Worker README gate updated before source work. Round 5 requested next.
+Contract/Worker README gate updated before source work: Rust 6e69e6c5 and Worker
+16500122, required coauthor, <1000 changed lines each, diff --check passed; no push.
+Round 5 running via exact packaged codex exec, gpt-daybreak-blue-latest / xhigh /
+read-only / never; session 01a1215e-6867-75c1-93fc-b37d1bb0c869. Prompt/report/log:
+/private/tmp/account-deletion-owner-review-5.prompt and
+/private/tmp/account-deletion-owner-design-review-5.{md,log}. Completed round5 REVISE C0/H0/M1/L0, exit0; full answer read. Its sole Medium:
+room-lifecycle-slice.md still promised central ACK before future guest conversion.
+Confirmed at lines53/62 and corrected to preserve binding refusal/fence, require
+separate owner authority design for any future conversion, and test zero guest/
+recovery creation. Prior round4 paired grant-consumption correction explicitly
+resolved; reviewer reports no other findings. Manager gate satisfied after this
+contract correction; explicit APPROVE not claimed. Implementation begins, code0/3;
+remaining two authorized design rounds unused.
+
+Read-only remote refresh: active 100% 51bfe4a9-23c8-4634-bb7e-577a0de85291;
+default-config migrations list succeeds and confirms 0019–0023 unapplied (0018
+floor). First cleanup-on-config list failed Cloudflare 7403; default-config retry
+succeeded; no remote mutation. Logs account-deletion-v2-deployments-before.log,
+account-deletion-v2-deployments-default.log, account-deletion-v2-migrations-before.log,
+account-deletion-v2-migrations-default.log under /private/tmp. Wrangler4.98.0.
+Fresh private backup of eight tracked and four untracked stopped files plus exact
+patch/SHA256 manifest at /private/tmp/account-deletion-v2-stopped-backup; protected
+paths excluded. Latest Workers types registry5.20261009.1 matches retrieved package
+at /private/tmp/account-owner-workers-types. Official D1 batch/Workers/Wrangler
+references fetched; these are API references, not runtime acceptance.
+Google fresh-auth native/web disposable test-account clarification requested;
+no reply yet, no Google flow executed.
 
 Rust tracked work was clean; only protected untracked .agents/ and
 scripts/__pycache__/ existed. Worker retains eight stopped tracked source/test

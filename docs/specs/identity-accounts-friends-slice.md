@@ -14,11 +14,13 @@ existing production account. Protected `.agents/`, `scripts/__pycache__/`,
 `wrangler.cleanup-*.toml` remain untouched. Existing stopped commits are retained
 or explicitly reverted; historical evidence is not new approval.
 
-Current gate: original four rounds ended REVISE; round 4 C0/H0/M1/L0.
-Its tokenless mixed-version grant-consumption correction is documented below.
-Additional round 5 will review that correction and the full binding design against
-both current repositories. The manager's updated gate supersedes the previous
-requirement for explicit design APPROVE; code APPROVE remains required.
+Current gate: additional round 5 completed REVISE C0/H0/M1/L0; complete answer
+read. Its only Medium was contradictory central-ACK guest-conversion wording in
+the linked room-lifecycle contract, now corrected to unchanged bound-identity
+refusal and no guest/recovery creation. Prior round4 consumption finding is resolved.
+All Medium/Low corrected; manager design gate is satisfied. Implementation proceeds;
+code reviews 0/3 and all acceptance/push/deployment remain pending. Two additionally
+authorized design rounds remain unused; no explicit design APPROVE is claimed.
 
 Read routes: existing frontend `lib/central/identity.ts`, `memberConnect.ts`,
 `ownerConnect.ts`, settings owners; Rust `participant_removal.rs`, `member_sessions.rs`,
@@ -114,8 +116,8 @@ NULL. No existing-table rebuild, new row/index, fallback or quota increase. Prov
 old hidden=true fails without consuming grant or partially hiding membership,
 then exact new deletion redeem consumes once; ordinary/prefix-tampered/used-at-only
 paths consume zero. Final central account DELETE consumes the step-up proof only;
-it does not redeem a host grant. This last correction is included in additional round 5; apply the manager
-design gate above to its completed verdict before implementation.
+it does not redeem a host grant. Round 5 independently confirms this correction;
+the manager design gate above is satisfied.
 The fixed UI explanation applies even if listing fails; expose list failure as
 unconfirmed/skipped, offer explicit retry or continuation with that disclosure.
 Host progress is device-local UI state, not central custody or completion authority.

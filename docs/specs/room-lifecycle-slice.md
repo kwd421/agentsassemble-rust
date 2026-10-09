@@ -50,7 +50,7 @@ Parent는 다른 방을 위해 유지할 수 있다. restore/unarchive 후에도
 
 ### 제외한 후속 요구, 순서와 수용 기준
 
-첫 슬라이스에서는 새 로컬 사람·기존 binding 재입장만 제공하며 익명 합치기·scope 변경·reapproval은 제외한다. 일반 invite/re-entry는 Left/Kicked/left/banned를 복구하지 않는다. 후속 reapproval은 person/binding·예상 revision·새 invite·방별 목표·만료에 결합한 **단일 소비 owner 승인**으로 명시된 방만 기존 participant 소유자가 복구한다. 후속 scope 변경은 admission 소유자의 명시적 owner CAS와 해당 방 전 기기 child 폐기가 필요하다. bound guest-discard는 retirement 소유자가 변경 전에 거절하며 후속 guest 전환은 server leave·전체 폐기·중앙 종료 ACK 이후, binding 이동 없이 identity/revision tombstone을 유지한다. ACK가 불확실하면 완료하지 않는다.
+첫 슬라이스에서는 새 로컬 사람·기존 binding 재입장만 제공하며 익명 합치기·scope 변경·reapproval은 제외한다. 일반 invite/re-entry는 Left/Kicked/left/banned를 복구하지 않는다. 후속 reapproval은 person/binding·예상 revision·새 invite·방별 목표·만료에 결합한 **단일 소비 owner 승인**으로 명시된 방만 기존 participant 소유자가 복구한다. 후속 scope 변경은 admission 소유자의 명시적 owner CAS와 해당 방 전 기기 child 폐기가 필요하다. bound guest-discard·guest 전환은 retirement 소유자가 변경 전에 거절한다. 계정 탈퇴도 binding/removal fence를 보존하며 전환을 승인하는 중앙 ACK를 만들지 않는다. 후속 bound-to-guest 전환은 이 슬라이스 밖의 별도 소유자 승인 권위 설계가 필요하다.
 
 Identity C1의 공통 상한과 C2–C6가 적용된다: C2 limiter/owner 격리·grant 재사용·bounded cleanup 완료, C3 중앙 호환 floor와 구 Worker 차단 장벽/내부 경로, C4a 별도 host floor, C4b migration 및 이 소유자 내부 연결, C5 완전 수직 검증 후 앱/웹 함께 노출, C6 혼재·실제 두 기기·구조/실행 게이트·계획 소유자 리뷰다. 과거 host schema 80/member 81 예약·81 인식 floor는 역사적 v80/v81 rollout이며 현재 schema 지시가 아니다. 현재 계정 탈퇴는 identity 계약의 직접 확인한 v86 → 다음 미사용 lifecycle schema upgrade를 따른다. 적용된 migration을 재번호화하지 않고 frozen binding DDL를 보존한다. member migration 후 floor 이전 rollback은 금지하고 floor rollback에서도 member 폐기 권위를 보존한다. native pairing idle 수명/last-use/30일 미사용 만료/단일·전체 revocation을 모든 단계에서 보존한다.
 
@@ -59,7 +59,7 @@ Identity C1의 공통 상한과 C2–C6가 적용된다: C2 limiter/owner 격리
 - 방 moderator의 서버 명령 거절; A방 leave/kick/export가 B방·membership을 보존함; owner 서버 종료가 A/B roster·revision·작업·HTTP/WS/읽기·전 기기를 함께 종료함을 barrier로 검증한다.
 - Archive/close/delete와 child 발급·읽기·송신 경쟁; committed fingerprint/generation·응답 유실·재시작·deletion recovery의 같은 폐기; 다른 방 parent 유지; restore 뒤 옛 child/ticket 비부활을 검증한다.
 - Leave 커밋 직후 응답 유실·중앙 오프라인·재시작에서 정확한 폐기 parent 결과조회 성공, 다른 request/payload/parent 및 새 명령 거절, 24시간 보존/정리, 중복 서버 명령의 단일 효과를 검증한다.
-- Left/Kicked/banned 일반 복귀 금지, 권한 downgrade 경쟁과 추가 작업 적용 차단, server CAS/동시 admission·unban 비복구·room-local 격리, 포화 때 종료/receipt 가능을 검증한다. 후속 reapproval 단일 소비/명시 방 한정, guest 전환 증명/ACK 요구를 보존한다.
+- Left/Kicked/banned 일반 복귀 금지, 권한 downgrade 경쟁과 추가 작업 적용 차단, server CAS/동시 admission·unban 비복구·room-local 격리, 포화 때 종료/receipt 가능을 검증한다. 후속 reapproval 단일 소비/명시 방 한정을 보존한다. bound guest-discard·guest 전환은 무변경 거절되며 guest나 recovery credential을 만들지 않음을 검증한다.
 - Identity의 예약/삭제·unknown/floor 테스트와 invite의 parent 수명/상한 테스트를 함께 통과하고 실제 앱/웹에서 기기 A 초대→기기 B 목록 재입장→owner 서버 kick으로 양쪽 차단을 직접 확인한다. C1은 계약만이며 이 실행 수용을 완료했다고 주장하지 않는다.
 
 ## Contract and dependency order
