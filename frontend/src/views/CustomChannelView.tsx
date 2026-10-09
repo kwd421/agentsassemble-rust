@@ -12,6 +12,7 @@ import MentionInput from "./components/MentionInput";
 import "./CustomChannelView.css";
 import { ReplyDraft } from "./components/MessageReply";
 import { useMessagePins } from "./useMessagePins";
+import { anonymousAuthorRevision } from "../lib/participantAnonymization";
 import type { RoomMessageSearchController } from "./useRoomMessageSearch";
 
 type Transcript = ReturnType<typeof useChannelTranscript>;
@@ -48,7 +49,7 @@ export default function CustomChannelView({
   const restoreScroll = useRef<{ height: number; top: number } | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const focusAfterSend = useRef(false);
-  const pins = useMessagePins({ roomId, roomUid, channelId, authority });
+  const pins = useMessagePins({ roomId, roomUid, channelId, authority, identityRevision: anonymousAuthorRevision(participantProfiles) });
   const pinnedIds = useMemo(() => new Set(pins.pinnedItems.map((pin) => pin.event_id)), [pins.pinnedItems]);
   const mentionLabels = useMemo(() => Object.fromEntries(mentionables.map(({ token, label }) => [token, label])), [mentionables]);
   const value = draft.identity === identity ? draft.value : "";

@@ -1,4 +1,5 @@
 import { providerRequestEventIsValid } from "./providerRequestProjection";
+import { anonymizedParticipant } from "./participantAnonymization";
 import { channelMessageFieldsAreValid } from "./channelMessageContract";
 import { pendingProviderRequestsAreValid } from "./providerRequestContract";
 import { isCustomChannelId } from "./customChannelId";
@@ -166,6 +167,7 @@ function publicRoomSettingsMatch(left: unknown, right: unknown): boolean {
 
 export function eventProjectionIsValid(event: RoomEvent): boolean {
   try {
+    anonymizedParticipant(event);
     if (event.type === CHANNEL_MESSAGE_EVENT_TYPE && !channelMessageFieldsAreValid(event)) return false;
     if (isRoomLifecycleEvent(event)) roomFromLifecycleEvent(event);
     if (

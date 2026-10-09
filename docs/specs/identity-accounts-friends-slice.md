@@ -14,6 +14,14 @@ existing production account. Protected `.agents/`, `scripts/__pycache__/`,
 `wrangler.cleanup-*.toml` remain untouched. Existing stopped commits are retained
 or explicitly reverted; historical evidence is not new approval.
 
+Verification account constraint (owner, 2026-10-10): create a throwaway GUEST
+account for packaged/production deletion acceptance and use its recovery code for
+step-up. Never use or delete the owner's Google account or any existing production
+account, and never type passwords/2FA. Verify fresh Google auth_time and explicit
+registration with local/Miniflare tests only; real Google app/web E2E remains a
+pending owner action until the owner supplies a spare Google account. This changes
+the verification account, not the fail-closed Google implementation requirement.
+
 Current gate: additional round 5 completed REVISE C0/H0/M1/L0; complete answer
 read. Its only Medium was contradictory central-ACK guest-conversion wording in
 the linked room-lifecycle contract, now corrected to unchanged bound-identity
@@ -376,8 +384,9 @@ optional keep/wipe, remote own-server 410 on next existing contact with zero pol
 Shared trusted web and isolated packaged app exercise roomless/owner/member/guest,
 confirmation/cancel, per-host progress/skipped list, partial host success then
 central failure, account switch, lost result and explicit new registration. Unit/
-build evidence does not replace these product flows. Real Google fresh auth_time
-must be observed on both clients; missing auth_time remains fail-closed.
+build evidence does not replace these product flows. Google fresh auth_time is
+verified locally/with Miniflare on both client paths; missing auth_time remains
+fail-closed. Real Google app/web E2E is pending the owner's spare account.
 Record completed reviews, corrections, commits, checks, limits and deployment at
 the top of Rust docs/VERIFICATION.md and commit it with the specified coauthor.
 

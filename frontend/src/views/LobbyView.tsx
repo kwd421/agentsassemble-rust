@@ -3,6 +3,7 @@ import { withPendingProviderRequests } from "./lobby/providerRequestRows";
 import type { PendingProviderRequest } from "../types/generated/PendingProviderRequest";
 import type { RoomAgentSession } from "../api";
 import { useMessagePins } from "./useMessagePins";
+import { anonymousAuthorRevision } from "../lib/participantAnonymization";
 import { useEffect, useMemo, useState } from "react";
 import { Hash } from "lucide-react";
 import {
@@ -165,6 +166,7 @@ export default function LobbyView({
   });
   const { pinnedItems, pinsLoading, pinsError, pinBusyIds, reloadPins, setPinned, setPinsError } = useMessagePins({
     roomId: activeRoom.meetingId, roomUid, channelId: "lobby", authority: messagePinsAuthority,
+    identityRevision: anonymousAuthorRevision(participantProfiles),
   });
   const [pendingMessageTarget, setPendingMessageTarget] = useState("");
   const replyScope = `${roomUid}/${activeRoom.meetingId}/${viewerParticipantId}`;

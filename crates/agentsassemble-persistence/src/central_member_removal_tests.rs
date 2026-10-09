@@ -3,6 +3,9 @@ use crate::human_admission_store::tests::{admitted, fixture, insert_invite, prep
 use crate::{HumanAdmissionDecision, HumanAdmissionRejection, MemberAdmission};
 use sha2::{Digest, Sha256};
 
+#[path = "central_removal_snapshot_tests.rs"]
+mod snapshots;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 fn secure() -> SecureSessionBinding {
     SecureSessionBinding {

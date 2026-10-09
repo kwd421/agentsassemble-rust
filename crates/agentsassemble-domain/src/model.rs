@@ -218,6 +218,9 @@ pub struct Actor {
     pub participant_type: String,
 }
 
+pub const PARTICIPANT_ANONYMIZED_EVENT_TYPE: &str = "participant_anonymized";
+pub const DEPARTED_USER_NAME: &str = "탈퇴한 사용자";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct RoomEvent {
     pub v: u32,

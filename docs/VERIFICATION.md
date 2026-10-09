@@ -1,5 +1,49 @@
 # Verification Contract
 
+## Account deletion — stored author anonymization and shared projection, not shipped (2026-10-10)
+
+Continuation from Rust df17f4f5 / Worker e5191781. Owner verification rule is now
+in the owning contract: create only disposable GUEST accounts for packaged/production
+acceptance, with recovery-code step-up; no existing/owner production account use or
+deletion, passwords or 2FA. Google fresh-auth is local/Miniflare only; real Google
+app/web E2E is pending the owner's spare account.
+
+Person-local work now pages member invitations, profile, one-row avatar deletion,
+stored room-event/admission/session/other-principal command and lifecycle replay
+snapshots, then the existing search/FTS author owner. Exact actor/user identity
+selects snapshots; message/attachment text and independent authors stay. Replay JSON
+is transformed inside SQLite, with stable primary-key cursors committed atomically.
+One room's left/anonymized events and pending publisher sequence share the cursor;
+retry cannot emit a second anonymization, and completion requires the existing
+publisher's durable sequence. Runtime effects phase/driver is still required.
+Shared canonical UI retains historical anonymous-author overrides after participant
+departure/event-window eviction, rewrites loaded history and invalidates/refetches
+an open pin list through existing owners. These are tested projections, not pixels.
+
+Actual SQLite regressions cover >128KiB stored replay without application export,
+injected checkpoint rollback (successful retry total_changes=2), nested snapshots
+inside another principal's result, preserved content/independent name/photo, 10MiB
+avatar deletion, retained pin, FTS old-author removal/content search, pending room
+publication and once-only event retry. Initial direct last-sequence test ACK failed
+the existing publisher guard; corrected oracle to acknowledge every sequence.
+455/0 library tests passed initially; a concurrent domain-constant edit invalidated
+that run's doctest artifacts. Frozen final full455/0 + doctests0/0 exit0 (11.86s).
+Persistence clippy all-targets -D warnings passes; architecture/source-growth/policy
+and format/diff gates pass without exceptions. Bindings and frontend build pass;
+affected16/0 and full1242/0 (192 files, 48.86s) pass. React skill checklist applied.
+Final participant descriptor size check, affected SQLite2/0 (0.05s) and persistence
+clippy all-targets -D warnings pass again; tests-commit/clippy-commit logs retained.
+Logs /private/tmp/account-deletion-v3-{snapshots-full-final,snapshots-clippy-final,
+snapshots-gates,bindings,anonymization-frontend-tests-final,
+anonymization-frontend-build-final,anonymization-frontend-full}.log.
+
+Remaining: runtime startup/request wake and effects completion; secure removal-only
+host route/client; exact account_deleted host demotion/re-registration; optional
+same-installation native wipe; settings/account deletion + explicit Google-registration
+UI; real throwaway guest packaged/web flows and local Google tests; Daybreak code
+review APPROVE (0/3), both pushes and central migration/assets deployment/smoke.
+Nothing is advertised as supported, pushed, deployed or claimed feature-complete.
+
 ## Account deletion — exact companion cleanup request implemented, not shipped (2026-10-10)
 
 Rust after11e0c693 advances the committed companions phase one parent-bound invite

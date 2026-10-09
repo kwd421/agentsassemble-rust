@@ -71,6 +71,36 @@ pub(crate) async fn remove_room_message_index(
     Ok(())
 }
 
+// Account removal changes the index's author prefix, preserving the exact indexed
+// message/attachment suffix inside SQLite. No full message/replay payload is exported.
+pub(crate) async fn anonymize_search_author(
+    transaction: &mut Transaction<'_, Sqlite>,
+    id: i64,
+) -> Result<(), PersistenceError> {
+    use sqlx::Row;
+    let row=sqlx::query("SELECT instr(search_text,char(10)) AS boundary,substr(search_text,1,min(instr(search_text,char(10))-1,512)) AS author FROM room_message_search_records WHERE id=?")
+        .bind(id).fetch_one(&mut **transaction).await?;
+    let boundary: i64 = row.try_get("boundary")?;
+    if !(2..=513).contains(&boundary) {
+        return Err(invalid_search_event());
+    }
+    let prefix = compact_casefolded_message_search_text(row.try_get("author")?);
+    let name = casefold_message_search_text(crate::DEPARTED_USER_NAME);
+    let compact = compact_casefolded_message_search_text(&name);
+    let prefix_chars = i64::try_from(prefix.chars().count()).map_err(|_| invalid_search_event())?;
+    let changed=sqlx::query("UPDATE room_message_search_records SET search_text=?||substr(search_text,?),compact_text=?||substr(compact_text,?) WHERE id=? AND substr(compact_text,1,?)=?")
+        .bind(name).bind(boundary).bind(compact).bind(prefix_chars+1).bind(id).bind(prefix_chars).bind(prefix).execute(&mut **transaction).await?;
+    if changed.rows_affected() != 1 {
+        return Err(invalid_search_event());
+    }
+    sqlx::query("DELETE FROM room_message_search_phrase WHERE rowid=?")
+        .bind(id)
+        .execute(&mut **transaction)
+        .await?;
+    sqlx::query("INSERT INTO room_message_search_phrase(rowid,search_text) SELECT id,search_text FROM room_message_search_records WHERE id=?").bind(id).execute(&mut **transaction).await?;
+    Ok(())
+}
+
 pub(crate) fn searchable_room_message(
     event: &RoomEvent,
 ) -> Result<Option<SearchableRoomMessage>, PersistenceError> {

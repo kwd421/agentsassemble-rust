@@ -1,15 +1,16 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchMessagePins, setMessagePinned, type MessagePin, type MessagePinsAuthority } from "../api";
 
 type Mutation = { eventId: string; pinned: boolean };
 type PinView = { scope: object; items: MessagePin[]; loading: boolean; busyId: string; error: string };
 
 /** One explicit channel's on-demand pin operations; no background refresh or cache. */
-export function useMessagePins({ roomId, roomUid = "", channelId, authority }: {
-  roomId: string; roomUid?: string; channelId: string; authority?: MessagePinsAuthority;
+export function useMessagePins({ roomId, roomUid = "", channelId, authority, identityRevision = "" }: {
+  roomId: string; roomUid?: string; channelId: string; authority?: MessagePinsAuthority; identityRevision?: string;
 }) {
   const authorityKey = JSON.stringify(authority ?? null);
-  const scope = useMemo(() => ({ roomId, roomUid, channelId, authority, active: true }), [roomId, roomUid, channelId, authorityKey]);
+  const scope = useMemo(() => ({ roomId, roomUid, channelId, authority, active: true }), [roomId, roomUid, channelId, authorityKey, identityRevision]);
+  const identityRef = useRef({ roomId, roomUid, channelId, identityRevision });
   const currentScope = useRef(scope); currentScope.current = scope;
   const operationRef = useRef<object | null>(null);
   const [view, setView] = useState<PinView>({ scope, items: [], loading: false, busyId: "", error: "" });
@@ -42,6 +43,12 @@ export function useMessagePins({ roomId, roomUid = "", channelId, authority }: {
     if (scope.active && currentScope.current === scope) setView((previous) => ({ scope, items: [], loading: false, busyId: "", ...(previous.scope === scope ? previous : {}), error }));
   }, [scope]);
   const reloadPins = useCallback(() => operate(), [operate]);
+  useEffect(() => {
+    const previous = identityRef.current;
+    identityRef.current = { roomId, roomUid, channelId, identityRevision };
+    if (previous.roomId === roomId && previous.roomUid === roomUid && previous.channelId === channelId &&
+        previous.identityRevision !== identityRevision && view.items.length) void operate();
+  }, [roomId, roomUid, channelId, identityRevision, operate, view.items.length]);
   const setPinned = useCallback((eventId: string, pinned: boolean) => operate({ eventId, pinned }), [operate]);
   const visible = view.scope === scope ? view : null;
   const pinBusyIds = useMemo(() => new Set(visible?.busyId ? [visible.busyId] : []), [visible?.busyId]);

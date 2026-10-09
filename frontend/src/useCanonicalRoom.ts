@@ -45,6 +45,7 @@ import {
 import type { RoomStream } from "./types/generated/RoomStream";
 import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
 import { useAcceptedRoomProjection } from "./lib/useAcceptedRoomProjection";
+import { scrubHistoricalAuthors, useAnonymousAuthors } from "./lib/participantAnonymization";
 
 export type { CanonicalRoomHistoryState } from "./lib/canonicalRoomProjection";
 
@@ -108,6 +109,8 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   >({});
 
   const eventsRef = useRef<Record<string, RoomEvent[]>>({});
+  const projectionScopeKey = canonicalRoomProjectionScopeKey(roomId, auth, viewerParticipantId);
+  const anonymousAuthors = useAnonymousAuthors(projectionScopeKey);
   const roomSettingsSeqRef = useRef<Record<string, number>>({});
   const roomSettingsRef = useRef<Record<string, RoomGlobalSettings>>({});
   const [eventsByRoom, setEventsByRoom] = useState<Record<string, RoomEvent[]>>({});
@@ -146,7 +149,8 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       projectParticipantState = true,
       projectSessionState = true,
     } = options;
-    const next = mergeRoomEvents(eventsRef.current[targetRoomId] || [], incoming, replace);
+    const overrides = anonymousAuthors.apply(targetRoomId, incoming);
+    const next = scrubHistoricalAuthors(mergeRoomEvents(eventsRef.current[targetRoomId] || [], incoming, replace), overrides);
     eventsRef.current = replace
       ? { [targetRoomId]: next }
       : { ...eventsRef.current, [targetRoomId]: next };
@@ -246,11 +250,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
 
   }, []);
 
-  const projectionScopeKey = canonicalRoomProjectionScopeKey(
-    roomId,
-    auth,
-    viewerParticipantId
-  );
   const {
     accepted: acceptedProjection,
     accept: acceptProjection,
@@ -716,12 +715,12 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   const participants = useMemo(() => normalizeActiveRoomParticipants(participantRecords), [participantRecords]);
   const agentSessions = projectionIsCurrent ? sessionsByRoom[roomId] || [] : [];
   const participantProfiles = useMemo(() => {
-    return canonicalParticipantProfiles(
+    return { ...canonicalParticipantProfiles(
       agentSessions,
       participants,
       acceptedProjection.displayResourceBase,
-    );
-  }, [acceptedProjection.displayResourceBase, agentSessions, participants]);
+    ), ...anonymousAuthors.authors[roomId] };
+  }, [acceptedProjection.displayResourceBase, agentSessions, participants, anonymousAuthors.authors, roomId]);
   const timelineEvents: LobbyEvent[] = useMemo(
     () => projectRoomEventsToTimeline(events, {
       viewerParticipantId,
