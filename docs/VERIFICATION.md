@@ -1,5 +1,24 @@
 # Verification Contract
 
+## Account deletion — final code round3 APPROVE (2026-10-10)
+
+Completed third/final Daybreak Blue xhigh read-only code review APPROVE C0/H0/M0/L0
+at Rust80fd089103fd72e6161c59c2237feb00a8096358 and
+Worker4f8aeee843549079a5b7e19fa33883db74341969. Completed report
+/private/tmp/account-deletion-v3-code-review-3-report.md read in full. Reviewed both
+cumulative baseline ranges, every newly unapproved commit, final integration and
+reused exact unchanged round2 evidence. The shared signed-out entry fix changes
+only existing toggle visibility; unsigned receipt remains explicit and lookup-only,
+with no automatic authentication, registration, deletion, fallback or polling.
+Worker runtime/migrations unchanged from approved0e099ce3. Reviewer found no supported
+remaining defect and ran no new tests/providers/scans/production requests.
+This is approval evidence only; source remains frozen. Push both corrected branch
+heads, build specified assets-wt at resulting Rust HEAD, deploy same reviewed Worker
+with corrected UI (migrations already applied; no repeat), then recheck retained
+production disposable Guest receipt from ordinary root, cleanup exact browser profile,
+and record final source/asset/version/evidence. Real Google E2E remains owner spare
+account action; actual30-day passage and broader mobile UX remain stated limits.
+
 ## Account deletion — final shared receipt entry package evidence (2026-10-10)
 
 Rust correctiona910af3c; full frontend1268/0, build and mandatory gates pass.
