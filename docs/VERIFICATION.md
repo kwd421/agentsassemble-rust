@@ -1,5 +1,34 @@
 # Verification Contract
 
+## Account deletion — frozen integration and corrected connected Guest flow (2026-10-10)
+
+Rust product885e6e15 / Worker240a604a. Full frontend1266/0 in198 files38.41s;
+unchanged architecture/source/policy checks and19 policy/artifact-owner tests pass.
+Corrected Developer ID V5 package rebuilt with separately refreshed Rust sidecar;
+strict deep codesign passes. Native read-only inspection after reset reports exact
+account_deleted fence and empty profile. Explicit new disposable Guest has zero
+inherited server relations; explicit fresh-host action initializes independent local
+operator, then real local central returns server_identity_conflict while old server
+registration remains in30-day terminal retention. Old ID/key/epoch/fence preserved;
+no claim-ownership bypass, early purge, clock/guard change or automatic registration.
+Positive post-cleanup epoch CAS remains covered by controlled persistence/Worker
+fixtures; this packaged run does not claim to have elapsed real30-day retention.
+
+Reopened only isolated signed V6 host, created another new local Guest V7 through
+actual UI/recovery consent, consumed one-use secure invite and confirmed connected
+room. Shared settings > account > deletion, fresh Guest recovery and typed confirmation
+returned host participant removal/anonymization completion. Root result stayed visible
+and actionable over ended/inert member workspace; separate final central disable
+completed and pixels showed completion plus host result. Screenshot:
+/private/tmp/aa-account-deletion-v4-run/web-connected-guest-complete.png.
+Recovery codes stayed in Computer Use RAM; browser save prompt dismissed, no credentials
+saved. No owner Google or existing production account used. Google fresh-auth local/
+Miniflare checks pass; real Google app/web E2E explicitly pending owner's spare account.
+Current Wrangler4.149 remote migration-list query succeeds with unchanged credentials,
+confirming pending0019–0024; earlier4.98 query failure was tooling-specific. No remote
+migrations/deployment/push yet. Daybreak code review0/3 begins from frozen commits;
+production disposable Guest flow and exact run cleanup follow approval/deployment.
+
 ## Account deletion — actual offline wipe and post-reset bootstrap correction (2026-10-10)
 
 Latest signed V5 ea75e349 restarted behind account_deleted; native AX default keep1,
