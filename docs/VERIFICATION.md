@@ -1,5 +1,69 @@
 # Verification Contract
 
+## Account deletion — completed release and disposable Guest verification (2026-10-10)
+
+Binding v2/v3 implementation and final release are complete. Host-local person-scoped
+removal displays “탈퇴한 사용자”, removes name/photo snapshots, preserves messages,
+search and pins, and keeps the independent operator. Shared app/web settings > account
+> deletion show host progress/skipped hosts. Actual isolated packaged Guest flows
+verified reachable-host anonymization, offline skip, immediate own-host stop, default
+keep and explicit local wipe; durable old server identity/key/epoch/fence remain.
+Detailed executed evidence and corrections are retained in the dated entries below.
+
+Daybreak Blue xhigh completed code rounds1 REVISE,2 APPROVE and final3 APPROVE
+C0/H0/M0/L0 within the three-round limit. Final approved integration is
+Rust80fd089103fd72e6161c59c2237feb00a8096358 / Worker4f8aeee843549079a5b7e19fa33883db74341969;
+the completed third report was read in full. Both existing origin branches were pushed
+before final deployment. Runtime Worker stays approved0e099ce3; latest shared UI
+correctiona910af3c only exposes existing settings at signed-out startup. Full frontend
+1268/0, affected33/0, build and unchanged mandatory architecture/source/policy gates
+pass; Worker281/0, syntax and generated-map checks pass. Previously recorded Rust
+persistence458/0, server144/0 lib +5/0 bin +194/0 integration (2 ignored), native49/0
+lib and relevant clippy checks cover unchanged backend/native owners.
+
+Production floor6f829f0a with old Rustd12077f2 assets was confirmed100% as
+1cbcb536-dc76-42b3-9dd4-562374e228e5 BEFORE0019. First remote migration attempt
+failed7403 at preflight; the one authorized identical retry applied0019–0024, and
+remote inspection reports no pending migrations. Initial approved release612a01ec
+was followed only after round3 approval/push by corrected UI build at exact
+Rustcbf26edf in the specified assets-wt, with Worker4f8aeee8 (runtime0e099ce3).
+Final version7e4085a2-f016-4fdd-8d66-515ab47a4e16 was deployed successfully and
+confirmed100% active at2026-10-09T22:00:25.566392Z; cron remains17 3 * * *.
+No migration repeat, authentication/config/binding change or guard weakening.
+Final deploy log /private/tmp/account-deletion-v3-final-approved-deploy.log;
+running-version evidence /private/tmp/account-deletion-v3-final-corrected-running.json.
+
+Actual fresh isolated production Guest creation201, inventory200, existing Guest
+recovery-code proof200 and final DELETE200 occurred exactly once. No owner Google or
+existing production account was used; no password/2FA entered and no recovery code
+logged. The already-deleted disposable Guest's retained opaque receipt was then
+verified against the final corrected deployment: ordinary `/` settings > deletion >
+explicit result lookup200 account_deleted, and reload followed by the same explicit
+lookup200. Both calls carried no Authorization; zero automatic auth or repeated DELETE.
+Browser smoke `/`200, `/v1/bootstrap`401, `/member-join`200, product JS200; actual
+`assets/index-Ac7v50IW.js` SHA256 matches the exact built artifact:
+062a23932804e5989f72bfef430e39288e1b8185a09e7723bd40734b8e3465ff.
+Final screenshot was visually inspected: completion dialog is readable over signed-out
+startup. Evidence /private/tmp/account-deletion-v3-final-production-root-receipt.log
+and /private/tmp/account-deletion-v3-production-guest-complete.png. Anonymous bootstrap
+401 and preexisting favicon401 are recorded browser console responses; no credential,
+fallback or security configuration change was used for smoke verification.
+
+Only the exact named production test browser/session and its children were closed;
+process inspection confirms its daemon/profile users absent. Its run-owned profile
+R5wHYr and earlier local qWZEj6 profile are absent. Exact isolated packaged apps and
+children were already quit, Computer Use reset and only run-owned app data/WebKit/
+cache/local fixture DB/config removed. Public browser artifacts were archived outside
+the repo; screenshots, reports and active build artifacts retained. Other apps,
+providers, user data and protected .agents/, scripts/__pycache__/ and cleanup configs
+remain untouched. Final documentation commits preserve the exact approved/deployed
+frontend/runtime sources and are pushed on both existing branches.
+
+Google fresh-auth native/web paths passed controlled local/Miniflare tests only.
+Real Google app/web E2E remains PENDING OWNER ACTION with a spare Google account;
+owner/existing accounts are never test targets. Actual30-day passage and broader mobile
+UX were not executed and are not claimed. No new automated security scan was run.
+
 ## Account deletion — final code round3 APPROVE (2026-10-10)
 
 Completed third/final Daybreak Blue xhigh read-only code review APPROVE C0/H0/M0/L0
