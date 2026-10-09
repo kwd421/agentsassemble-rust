@@ -58,6 +58,11 @@ Central storage implementation: the independent incarnation row also owns its
 owner custody generation/release/ACK fields; `owner_cleanup_targets` is a logical
 view of these slots. Exact grant replay metadata stays on the existing grant.
 Member custody/ACK/key provenance uses additive existing member projection fields.
+Existing 30-day pending/removed projection replacement remains reachable: preserve
+an unresolved replaced projection in independent archived member custody, with the
+same exact projection ID and saved key, rather than denying fresh consent or losing
+custody. Charge the archive's measured purge entries to the existing creation owner
+in the replacement transaction; old-writer replacement has the same guard.
 This avoids one expiring row per owner entry, without removing the independent
 inventory or its retention/floor barriers. Measure birth/purge costs and charge
 new inventory debt to the existing creation owner; no increased daily limits.

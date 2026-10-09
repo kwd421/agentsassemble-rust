@@ -1,5 +1,34 @@
 # Verification Contract
 
+## Account deletion — custody/floor checkpoint (2026-10-09)
+
+Worker `457d48cf` records owner/member custody atomically at existing redeem, with
+separate owner generation and stable exact replay, and preserves old wire shape.
+Independent exact incarnation inventory captures old/new owner/key/epoch/ingress;
+source high-row snapshot is captured only after preservation guards are installed.
+Existing day-reserved cleanup backfills <=100 source rows before closing its floor;
+proof/final deletion fail closed while pending. Old persons retain legacy_unknown=1.
+Known unacknowledged member custody cannot disappear through expiry/cascade. Existing
+30-day fresh-consent replacement remains reachable by archiving exact old projection;
+archive provenance and measured creation ownership were recorded before source work.
+Inventory reserves three eventual purge entries and replacement archive four within
+unchanged GENERAL ceilings. Actor cap remains 240 and the global fixture adds its
+three inventory entries; no blocking gate, purpose ceiling or heavy-day acceptance
+was changed. Ownership/epoch-race snapshot is taken after the independent concurrent
+source transaction, preserving the rejected request's no-write oracle.
+
+Before source fix, supported owner redeem was 400 (corrected fixture uses an allowed
+public origin); account-deletion-custody-before.log. Full suite **261 passed/0 failed**,
+exit 0 (6.32s), account-deletion-custody-full.log. Three focused tests cover generation
+replay/orderings and a 201-server historical snapshot with cursor churn/three bounded
+days. Local real D1 observes injected custody failure 500 rolling back grant+nonce,
+exact replay retaining endpoint generation 7/custody generation 1, member custody and
+unacknowledged physical-delete rejection. Real three-row legacy D1 backfill measured
+**11 rows_written/17 statements**, closed the floor, under 10,000/49 limits;
+account-deletion-custody-d1.log. Check/map/diff gates passed; 436 additions/25 deletions,
+required coauthor. No host cleanup completion, push, production account deletion,
+migration/deploy or real Google acceptance is claimed. Remaining gates below continue.
+
 ## Account deletion — Google proof checkpoint (2026-10-09)
 
 Worker `4d17af63` adds signed native/web Google proof transport and requires
