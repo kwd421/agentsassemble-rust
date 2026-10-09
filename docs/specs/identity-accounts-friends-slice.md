@@ -271,7 +271,10 @@ provisioning with complete rollback and same-device retry on issuance failure.
 Single receipt is bound to account/request, deletion-status-only, hashed at rest,
 rate-limited, no-store, 24h expiry. No retained device key, second secret, automatic
 polling or auto-registration for result lookup. Lost final response is unknown
-until explicit receipt lookup. Result reports central disabled plus device-local
+until explicit receipt lookup. Shared app/web ordinary signed-out startup exposes
+account settings without a query/deep link, so reload can reach the stored receipt
+without login, registration, automatic lookup or another DELETE. Result reports
+central disabled plus device-local
 per-host confirmed/skipped results, never central host_cleanup/legacy_unknown.
 
 Identity verification returns active/deleted/absent BEFORE person/session creation.

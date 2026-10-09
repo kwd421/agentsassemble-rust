@@ -1,8 +1,9 @@
+import AccountDeletionSurface from "./AccountDeletionSurface";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import StartupIdentityGate from "./StartupIdentityGate";
 
-const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), open: vi.fn(), logout: vi.fn(), prepare: vi.fn(),
+const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), open: vi.fn(), logout: vi.fn(), prepare: vi.fn(), receipt: vi.fn(),
   session: null as object | null, callback: null as ((response: { credential: string }) => void) | null }));
 vi.mock("../../lib/central/identity", () => ({
   hasPendingLocalDemotion: vi.fn(() => false), retryPendingLocalDemotion: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock("../../lib/central/identity", () => ({
   bootstrapCentral: mocks.bootstrap, loadCentralSession: () => mocks.session,
   isCentralAuthenticationError: () => false,
   logoutCentral: mocks.logout, openCentralOwnedServer: mocks.open,
+  unsignedPost: mocks.receipt, clearCentralSession: vi.fn(), clearPendingCentralRecoveryCode: vi.fn(),
 }));
 vi.mock("../../lib/central/webGoogle", () => ({
   startCentralWebGoogle: mocks.prepare, completeCentralWebGoogleReturn: async () => {},
@@ -27,7 +29,7 @@ const account = { person: { display_name: "Existing Google User" }, servers: [
   { server_id: "offline", alias: "My Windows", relation: "owner", endpoint: null },
   { server_id: "bookmark", alias: "Invited server", relation: "bookmark", endpoint: { mode: "event_secure_v1", protocol: "secure_admission_v1", status: "published", lease_expires_at: 9_999_999_999 } },
 ] };
-afterEach(() => { cleanup(); vi.resetAllMocks(); mocks.session = null; mocks.callback = null; });
+afterEach(() => { cleanup(); sessionStorage.clear(); vi.resetAllMocks(); mocks.session = null; mocks.callback = null; });
 
 it("opens shared account deletion settings without first opening a room", async () => {
   mocks.session = { person: { display_name: "Disposable Guest", identity_kind: "guest" } };
@@ -72,4 +74,24 @@ it("keeps cancellation and retry on the common startup screen until Google retur
   await act(async () => { await Promise.resolve(); });
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByText("My Mac")).toBeNull();
+});
+
+it("reaches a retained receipt from ordinary signed-out startup without login or a deep link", async () => {
+  window.history.replaceState({}, "", "/");
+  sessionStorage.setItem("agentsassemble.accountDeletionReceipt.v1", JSON.stringify({
+    person_id: "deleted-fixture", request_id: "r".repeat(43), receipt: "s".repeat(43),
+    expires_at: Math.floor(Date.now() / 1000) + 86400, results: [],
+  }));
+  mocks.receipt.mockResolvedValue({ status: "account_deleted" });
+  vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(function(this: HTMLDialogElement) { this.open = true; });
+  render(<AccountDeletionSurface><StartupIdentityGate deviceToken="" onComplete={completeStartup} /></AccountDeletionSurface>);
+  fireEvent.click(await screen.findByRole("button", { name: "계정 설정" }));
+  fireEvent.click(screen.getByRole("button", { name: "계정 탈퇴" }));
+  expect(mocks.receipt).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "탈퇴 결과 확인" }));
+  expect((await screen.findByRole("status")).textContent).toContain("요청한 계정의 중앙 탈퇴를 완료");
+  expect(mocks.receipt).toHaveBeenCalledExactlyOnceWith("/v1/account-deletions/" + "r".repeat(43) + "/status", { person_id: "deleted-fixture", receipt: "s".repeat(43) }, undefined);
+  expect(mocks.bootstrap).not.toHaveBeenCalled();
+  expect(mocks.prepare).not.toHaveBeenCalled();
+  expect(mocks.open).not.toHaveBeenCalled();
 });

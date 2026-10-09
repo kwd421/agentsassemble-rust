@@ -78,6 +78,7 @@ vi.mock("../../lib/central/identity", () => ({
   CENTRAL_SESSION_CHANGED_EVENT: "agentsassemble:central-session-changed",
   CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => centralMocks.configured,
+  centralAccountEntryUrl: () => "https://central.example/",
   isCentralWebEntry: () => false,
   centralSessionLoggedOut: () => centralMocks.loggedOut,
   bootstrapCentral: centralMocks.bootstrap,
@@ -523,4 +524,18 @@ it("offers default keep and explicit local data choice after account-deleted hos
   expect((await screen.findByLabelText("유지 (기본)") as HTMLInputElement).checked).toBe(true);
   expect(screen.queryByRole("button", { name: "이 컴퓨터의 방 데이터 삭제" })).toBeNull();
   expect(centralMocks.register).not.toHaveBeenCalled(); expect(centralMocks.openServer).not.toHaveBeenCalled();
+});
+
+it("exposes the same account settings from signed-out native startup without registering", async () => {
+  centralMocks.configured = true;
+  desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+  desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
+  const onComplete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+  await userEvent.click(await screen.findByRole("button", { name: "계정 설정" }));
+  expect(screen.getByRole("button", { name: "계정 탈퇴" })).toBeTruthy();
+  expect(centralMocks.bootstrap).not.toHaveBeenCalled();
+  expect(centralMocks.register).not.toHaveBeenCalled();
+  expect(centralMocks.create).not.toHaveBeenCalled();
+  expect(onComplete).not.toHaveBeenCalled();
 });

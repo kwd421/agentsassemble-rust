@@ -1,5 +1,33 @@
 # Verification Contract
 
+## Account deletion — first production Guest and ordinary signed-out receipt entry correction (2026-10-10)
+
+Final reviewed Worker0e099ce3 deployed with exact Rust2ec5f078 assets from specified
+assets-wt: version612a01ec-ec2a-45ef-9527-92452a132223 confirmed100% active.
+Current daily cron remains17 3 * * *. Anonymous Python urllib smoke was denied by
+Cloudflare User-Agent1010/403. Fresh isolated Chrome instead proves root200,
+bootstrap401, member-join200 and exact built product JS bytes SHA256
+67700e074434653a7c207822a62391f912c4cd78135c175420a30ae56e9e1bb5.
+Full HTML comparison initially failed because browser-control instrumentation injects
+its own script, not because product assets differed; no security config changed.
+Actual fresh production Guest UI201, bootstrap200, deletion inventory200, Guest
+recovery step-up200 and final DELETE200; completion and signed-out UI observed.
+Only that newly created Guest was used, no Google/password/2FA/existing account.
+After reload explicit stored receipt lookup via existing ?account=settings returns
+unsigned200 account_deleted, with0 automatic auth calls and no repeated DELETE.
+Screenshot /private/tmp/account-deletion-v3-production-guest-complete.png.
+An initial receipt script timed out only on its second lookup: ordinary root reload
+hid account settings while signed out, so it could not reach its retained receipt
+through UI without the deep link. Contract recorded before correction. Shared
+StartupIdentityGate now exposes existing settings toggle in choice as well as
+server screen; no automatic lookup/auth/registration, transport or authority change.
+Affected33/0 pass (web retained-receipt click plus native signed-out settings).
+Full frontend1268/0 in198 files29.38s, build and unchanged architecture/source/
+policy gates pass. Corrected packaged view verification runs before third review;2/3 reviews completed, new UI is not yet approved/pushed/
+deployed. Current production remains previously approved612a01ec. Worker source
+is unchanged. Real Google app/web E2E remains owner's spare-account action;
+30-day actual passage and deferred mobile UX remain accurately stated limits.
+
 ## Account deletion — pushes, atomic floor and remote migrations (2026-10-10)
 
 Approved product unchanged. Rust29e62736 and Worker0e099ce3 pushed to their exact

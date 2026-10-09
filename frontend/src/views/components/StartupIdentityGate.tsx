@@ -552,7 +552,7 @@ export default function StartupIdentityGate({
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용해요. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남아요."}
           </p>
         </header>
-        {screen === "servers" && <button className="ops-button" disabled={busy} onClick={() => setAccountSettingsOpen(value => !value)}>{accountSettingsOpen ? "계정 설정 닫기" : "계정 설정"}</button>}
+        {(screen === "servers" || screen === "choice") && <button className="ops-button" disabled={busy} onClick={() => setAccountSettingsOpen(value => !value)}>{accountSettingsOpen ? "계정 설정 닫기" : "계정 설정"}</button>}
         {(accountSettingsOpen || (webEntry && new URLSearchParams(window.location.search).get("account") === "settings")) && <CentralAccountSettings disabled={busy} />}
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
 
