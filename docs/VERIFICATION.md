@@ -1,5 +1,22 @@
 # Verification Contract
 
+## Account deletion — final shared receipt entry package evidence (2026-10-10)
+
+Rust correctiona910af3c; full frontend1268/0, build and mandatory gates pass.
+Rebuilt exact isolated V5 Developer ID package with unchanged reviewed885e6e15
+server/native owners and corrected shared frontend. Strict deep codesign passes.
+Fresh isolated signed-out native startup visibly shows account-settings button;
+click opens existing central account section/deletion entry without login or native
+registration. Screenshot /private/tmp/account-deletion-v3-signedout-native-settings.png.
+No account/provider used in this read-only packaged navigation. Only that app and
+children quit, Computer Use reset, only its recreated V5 data/WebKit/cache removed;
+active builds and other apps/providers/data retained. Production Guest is already
+newly created/deleted; its isolated browser retains one opaque receipt for actual
+ordinary-root recheck after approved UI rollout. Review3/3 requested next at frozen
+Rust HEAD and unchanged Worker0e099ce3; previous approvals do not cover this one-line
+startup entry correction. No new UI push or redeployment yet. Google real E2E pending
+owner spare account; local/Miniflare Google checks remain passed.
+
 ## Account deletion — first production Guest and ordinary signed-out receipt entry correction (2026-10-10)
 
 Final reviewed Worker0e099ce3 deployed with exact Rust2ec5f078 assets from specified
