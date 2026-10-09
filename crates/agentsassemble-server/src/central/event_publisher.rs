@@ -122,7 +122,25 @@ pub(super) async fn run(
         });
         if reconcile_demotion(&store, &ingress).await? {
             inner.status.write().registered_origin.clear();
-            return Ok(());
+            abort_delivery(flight.take()).await;
+            if !wait_for_registration_resume(
+                &inner,
+                &store,
+                &ingress,
+                &mut directory_events,
+                &mut endpoints,
+                &cancellation,
+            )
+            .await?
+            {
+                return Ok(());
+            }
+            observed = None;
+            name = NamePublication {
+                due: clock.now(),
+                ..NamePublication::default()
+            };
+            continue;
         }
         let epoch = store.registration_epoch().await?;
         let endpoint = endpoints.borrow().clone();
@@ -170,16 +188,6 @@ pub(super) async fn run(
         inner.publisher_probe.send_modify(|probe| {
             probe.1 = flight.is_none();
         });
-        let wait = async {
-            if let Some(due) = due {
-                tokio::time::sleep(Duration::from_millis(
-                    due.saturating_sub(clock.now()).max(0).cast_unsigned(),
-                ))
-                .await;
-            } else {
-                std::future::pending::<()>().await;
-            }
-        };
         tokio::select! {
             biased;
             () = cancellation.cancelled() => break,
@@ -190,15 +198,60 @@ pub(super) async fn run(
                 let delivered = delivered.map_err(|_| CentralDirectoryError::Unavailable)?;
                 finish_delivery(&inner, &store, &clock, &mut name, delivered).await?;
             },
-            () = wait => {},
+            () = wait_for_delivery(due, &clock) => {},
         }
     }
     // Unknown in-flight network outcomes are fenced by the newer fixed offline generation.
+    abort_delivery(flight).await;
+    publish_offline(&inner, &store, &ingress, &identity, &clock).await
+}
+
+async fn abort_delivery(flight: Option<AbortOnDropHandle<Delivered>>) {
     if let Some(flight) = flight {
         flight.abort();
         let _ = flight.await;
     }
-    publish_offline(&inner, &store, &ingress, &identity, &clock).await
+}
+async fn wait_for_delivery(due: Option<i64>, clock: &Clock) {
+    if let Some(due) = due {
+        tokio::time::sleep(Duration::from_millis(
+            due.saturating_sub(clock.now()).max(0).cast_unsigned(),
+        ))
+        .await;
+    } else {
+        std::future::pending::<()>().await;
+    }
+}
+
+async fn wait_for_registration_resume(
+    inner: &CentralDirectoryInner,
+    store: &SqliteStore,
+    ingress: &PublicIngress,
+    directory: &mut tokio::sync::watch::Receiver<()>,
+    endpoints: &mut tokio::sync::watch::Receiver<(u64, String)>,
+    cancellation: &CancellationToken,
+) -> Result<bool, CentralDirectoryError> {
+    #[cfg(not(test))]
+    let _ = inner;
+    loop {
+        directory.borrow_and_update();
+        endpoints.borrow_and_update();
+        match store.hosting_restriction().await?.as_deref() {
+            Some("account_deleted") => {}
+            None if ingress.restricted() => {} // CAS commits before ingress resume notification
+            None => return Ok(true),
+            Some(_) => return Ok(false),
+        }
+        #[cfg(test)]
+        inner.publisher_probe.send_modify(|probe| {
+            probe.1 = true;
+        });
+        tokio::select! {
+            () = cancellation.cancelled() => return Ok(false),
+            result = directory.changed() => if result.is_err() { return Ok(false); },
+            result = endpoints.changed() => if result.is_err() { return Ok(false); },
+        }
+    }
 }
 
 async fn publish_offline(

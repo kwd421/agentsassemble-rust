@@ -21,30 +21,40 @@ pub(super) async fn stop_account_host(
             "account stop host binding is invalid",
         ));
     }
-    let person = state
+    let issuer = state
         .central_directory
-        .current_host_owner(
-            crate::central::directory::RedeemHost {
-                identity: &state.central_host_identity,
-                store: &state.store,
-            },
+        .issuer()
+        .map_err(|_| RegistrationHttpError::persistence())?;
+    let key = if let Some(key) = state
+        .store
+        .account_deleted_host_job(
+            &issuer,
             &request.expected_owner_person_id,
             &request.registration_epoch,
         )
         .await
-        .map_err(|_| RegistrationHttpError::persistence())?;
-    let key = state
-        .store
-        .account_deleted_host(
-            &state
-                .central_directory
-                .issuer()
-                .map_err(|_| RegistrationHttpError::persistence())?,
-            &person,
-            &request.registration_epoch,
-        )
-        .await
-        .map_err(|_| RegistrationHttpError::persistence())?;
+        .map_err(|_| RegistrationHttpError::persistence())?
+    {
+        key
+    } else {
+        let person = state
+            .central_directory
+            .current_host_owner(
+                crate::central::directory::RedeemHost {
+                    identity: &state.central_host_identity,
+                    store: &state.store,
+                },
+                &request.expected_owner_person_id,
+                &request.registration_epoch,
+            )
+            .await
+            .map_err(|_| RegistrationHttpError::persistence())?;
+        state
+            .store
+            .account_deleted_host(&issuer, &person, &request.registration_epoch)
+            .await
+            .map_err(|_| RegistrationHttpError::persistence())?
+    };
     state
         .public_ingress()
         .demote()

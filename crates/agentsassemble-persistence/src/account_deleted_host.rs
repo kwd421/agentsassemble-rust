@@ -31,6 +31,23 @@ impl SqliteStore {
         tx.commit().await?;
         Ok(())
     }
+    /// Returns only the durable exact owner custody from an already committed local stop.
+    /// # Errors
+    /// Database failures do not authorize a new owner or a central fallback.
+    pub async fn account_deleted_host_job(
+        &self,
+        issuer: &str,
+        person: &str,
+        epoch: &str,
+    ) -> Result<Option<MemberRemovalKey>, PersistenceError> {
+        let custody = serde_json::to_string(&(issuer, person, epoch))?;
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM runtime_metadata m JOIN central_member_removals r ON r.issuer=? AND r.person_id=? WHERE m.key='account_deleted_host_owner' AND m.value=? AND (SELECT value FROM runtime_metadata WHERE key='hosting_restriction')='account_deleted' AND (SELECT value FROM runtime_metadata WHERE key='central_registration_epoch')=?)")
+            .bind(issuer).bind(person).bind(custody).bind(epoch).fetch_one(&self.pool).await?;
+        Ok(exists.then(|| MemberRemovalKey {
+            issuer: issuer.into(),
+            person_id: person.into(),
+        }))
+    }
     /// Applies the pinned central terminal response for this exact current incarnation.
     /// # Errors
     /// A stale tuple, invalid identity or checkpoint error leaves authority unchanged.
@@ -59,6 +76,19 @@ impl SqliteStore {
         if stored.as_deref() != Some(epoch) {
             return Err(invalid());
         }
+        let custody = serde_json::to_string(&(issuer, person, epoch))?;
+        let previous: Option<String> = sqlx::query_scalar(
+            "SELECT value FROM runtime_metadata WHERE key='account_deleted_host_owner'",
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        if previous
+            .as_ref()
+            .is_some_and(|previous| previous != &custody)
+        {
+            return Err(invalid());
+        }
+        sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES ('account_deleted_host_owner',?) ON CONFLICT(key) DO NOTHING").bind(custody).execute(&mut *tx).await?;
         let binding=sqlx::query("SELECT b.user_id,p.participant_id FROM central_identity_bindings b JOIN user_profiles p USING(user_id) WHERE b.issuer=? AND b.person_id=?")
             .bind(issuer).bind(person).fetch_optional(&mut *tx).await?;
         let user: Option<String> = binding.as_ref().map(|r| r.try_get("user_id")).transpose()?;
@@ -114,6 +144,9 @@ impl SqliteStore {
         if removed.rows_affected() != 1 {
             return Err(invalid());
         }
+        sqlx::query("DELETE FROM runtime_metadata WHERE key='account_deleted_host_owner'")
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("UPDATE runtime_metadata SET value=? WHERE key='central_registration_epoch'")
             .bind(new_epoch)
             .execute(&mut *tx)
@@ -168,6 +201,19 @@ mod tests {
                 .await
                 .is_err()
         );
+        for (person, epoch, expected) in [
+            ("deleted-person", "old", true),
+            ("other-person", "old", false),
+            ("deleted-person", "wrong", false),
+        ] {
+            assert_eq!(
+                store
+                    .account_deleted_host_job("https://central.example", person, epoch)
+                    .await?
+                    .is_some(),
+                expected
+            );
+        }
         settle_empty(&store, &key).await?;
         assert_eq!(
             store.local_operator_profile().await?.display_name,
@@ -209,10 +255,14 @@ mod tests {
             store.local_operator_profile().await?.display_name,
             "Independent operator"
         );
+        assert_permanent_restriction(&store).await?;
+        Ok(())
+    }
+    async fn assert_permanent_restriction(store: &SqliteStore) -> Result<(), PersistenceError> {
         let key = store
             .account_deleted_host("https://central.example", "second-deleted", "new")
             .await?;
-        settle_empty(&store, &key).await?;
+        settle_empty(store, &key).await?;
         store.restrict_hosting(true).await?;
         assert_eq!(
             store.hosting_restriction().await?.as_deref(),

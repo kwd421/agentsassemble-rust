@@ -2,6 +2,34 @@
 
 
 
+## Account deletion — exact stop retry and existing sender resume (2026-10-10)
+
+A lost own-stop response can now resume only exact persisted issuer/actual owner/
+registration epoch custody committed with the original stop. No proof/receipt is
+borrowed and no current owner is guessed from local operator or old inventory.
+Fresh registration and offline reset discard that old marker. Wrong owner/epoch
+cannot use it. Actual private local HTTP test passed1/0 (0.04s): unsigned request
+403, signed actual central host custody validated, mismatching person zero fence,
+actual removal completed, repeat returned success with no extra central contact,
+and independent operator preserved. Initial invocation named a non-existent test
+target; rerun under integration. Existing sender now parks on existing directory/
+endpoint observers while account-deleted (zero time/network work), and explicit fresh
+CAS/ingress notification resumes that same owner at the new epoch. Permanent reasons
+still exit. Virtual-time regression passed1/0 (0.12s), including one hour no wake,
+no new requests and fresh-epoch endpoint/name publication. Initial park probe marked
+waiting before SQLite read and virtual advance caused PoolTimedOut; probe and watch
+version consumption now follow the completed current-state read. No added timer,
+scan, fallback, gate exception or task. Clippy all-targets -D warnings passes22.78s;
+final post-probe/HTTP test checks remain to run. Logs /private/tmp/account-deletion-v3-
+{own-stop-http-test-2,publisher-resume-test-3,stop-retry-resume-clippy-3}.log.
+
+Shared deletion UI is being moved above room/native startup authority switches so
+closing the very server being removed cannot discard remaining progress/final action.
+Full frontend1249/0 (194 files44.78s) and added UI/explicit Google choice5/0 pass.
+Actual packaged/production guests, final full affected checks, Daybreak APPROVE
+(review0/3), both pushes and central deployment remain. Google real E2E remains
+pending the owner's spare account; no owner/existing production account was used.
+
 ## Account deletion — offline data reset and shared UI in progress (2026-10-10)
 
 Persistence offline reset retains exclusive target writer custody, validates exact

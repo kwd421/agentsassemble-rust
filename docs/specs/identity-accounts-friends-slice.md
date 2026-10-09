@@ -286,7 +286,13 @@ server/key/epoch), matches the initiating account as a precondition, then commit
 that actual owner's local removal job and account-deleted hosting fence before
 stopping ingress. No fresh proof or receipt goes to the host. This host-authenticated
 owner read stores no cleanup custody at central; central disable still follows the
-local stop and reachable member-host attempts. A failed final disable leaves already
+local stop and reachable member-host attempts. The same transaction retains exact
+issuer/person/epoch stop custody for idempotent local retry after a lost response;
+only that exact stored owner can resume its existing removal job without another
+central contact. Fresh registration/reset removes this old custody. While account-
+deleted, the existing directory owner parks on its current change observers with
+zero timer/network work; explicit fresh registration wakes that same owner and
+publishes the new epoch. Permanent retirement still ends publication. A failed final disable leaves already
 performed host actions visible and cannot silently reopen them. Preserve
 local server AI, rooms/messages/attachments/settings by default. Separately ask
 “이 컴퓨터의 방 데이터도 지울까요?” with default keep. Optional explicit local wipe

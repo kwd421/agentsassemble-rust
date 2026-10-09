@@ -126,3 +126,95 @@ fn capture_requests(
         ),
     )
 }
+
+#[tokio::test]
+async fn account_deleted_publisher_parks_without_time_wakes_and_fresh_epoch_resumes_same_owner()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    store
+        .bootstrap_local_authority("b3cdc3ab-c124-41db-af1c-61a48f19e11f", "Independent")
+        .await?;
+    store.set_registration_epoch(Some("old")).await?;
+    let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
+    let (tx, mut requests) = tokio::sync::mpsc::unbounded_channel();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let origin = format!("http://{}", listener.local_addr()?);
+    let app = capture_requests(tx, false);
+    let http_cancel = CancellationToken::new();
+    let http_stop = http_cancel.clone();
+    let http = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(http_stop.cancelled_owned())
+            .await
+    });
+    let directory = CentralDirectory::configured(&origin)?;
+    let inner = directory.0.as_ref().ok_or("directory")?.clone();
+    let mut probe = inner.publisher_probe.subscribe();
+    let ingress = PublicIngress::configured_manual(
+        "127.0.0.1:41955".parse()?,
+        "https://resume.test",
+        &"s".repeat(32),
+    )?;
+    let cancel = CancellationToken::new();
+    let sender =
+        tokio::spawn(directory.run(store.clone(), ingress.clone(), identity, cancel.clone()));
+    assert_eq!(requests.recv().await.ok_or("endpoint")?.0, "endpoint");
+    assert_eq!(requests.recv().await.ok_or("name")?.0, "name");
+    probe.wait_for(|(_, waiting)| *waiting).await?;
+    let before = probe.borrow().0;
+    store
+        .account_deleted_host(&origin, "old-person", "old")
+        .await?;
+    probe
+        .wait_for(|(round, waiting)| *round > before && *waiting)
+        .await?;
+    let parked = *probe.borrow();
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_hours(1)).await;
+    tokio::task::yield_now().await;
+    assert_eq!(*probe.borrow(), parked);
+    assert!(requests.try_recv().is_err());
+    if sender.is_finished() {
+        return Err(format!(
+            "publisher finished while parked: {:?}, restriction={:?}",
+            sender.await?,
+            store.hosting_restriction().await?
+        )
+        .into());
+    }
+    tokio::time::resume();
+    let state = crate::AppState::local(
+        store.clone(),
+        crate::TicketStore::new(Duration::from_secs(30), 32),
+        agentsassemble_provider::ProviderCatalogService::fixed(
+            agentsassemble_domain::ProviderCatalog::default(),
+        ),
+    )
+    .await?;
+    crate::member_removal_runtime::reconcile(
+        &store,
+        &state.provider_adapter,
+        &state.rooms,
+        &state.owner_sessions,
+        &state.shutdown,
+    )
+    .await?;
+    store
+        .register_after_account_deletion(&origin, "fresh-person", "old", "fresh")
+        .await?;
+    ingress.resume_after_account_deletion().await?;
+    let endpoint = tokio::time::timeout(Duration::from_secs(2), requests.recv())
+        .await?
+        .ok_or("fresh endpoint")?;
+    assert_eq!(endpoint.0, "endpoint");
+    assert_eq!(endpoint.2["registration_epoch"], "fresh");
+    assert_eq!(
+        requests.recv().await.ok_or("fresh name")?.2["registration_epoch"],
+        "fresh"
+    );
+    cancel.cancel();
+    sender.await??;
+    http_cancel.cancel();
+    http.await??;
+    Ok(())
+}
