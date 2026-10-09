@@ -1,5 +1,28 @@
 # Verification Contract
 
+## Account deletion — Google proof checkpoint (2026-10-09)
+
+Worker `4d17af63` adds signed native/web Google proof transport and requires
+same-subject fresh integer auth_time/iat, verified after exchange, fail-closed.
+Pending OAuth and issued proofs occupy separate additive session slots; a session-
+only start/failed fresh-auth attempt cannot erase a valid final proof. Device/person
+join is exact: a session cannot borrow a device now bound to another active person.
+Baseline c66aadf0 reproduced unsupported native proof entry (401 vs 201) and the
+borrowed-device bootstrap bug (200 vs 401), logs account-deletion-google-before.log
+and account-deletion-device-owner-before.log under /private/tmp. Current full suite
+**258 passed/0 failed**, exit 0 (5.83s), account-deletion-google-full.log. Node/diff
+and regenerated-map checks passed; commit totals 281 additions/15 deletions and
+carries the required Claude Opus 5.5 coauthor. Local D1 retains rollback checks,
+final disable rows_written [1,1,1], stale synthetic Google auth 401/fresh 200, no
+identity/session creation by proof; account-deletion-google-d1.log. Provider tokens
+are signed fixtures: this does not establish real Google auth_time support.
+Actual test-account proof-only native/web authentication was requested from manager;
+no account deletion is requested for Google verification. No reply yet at checkpoint.
+No push/deploy/production migration or real account deletion. Remaining implementation
+and full code-review/deployment gates below are still open. Three scoped Worker
+features are committed; push waits for the user's explicit completed-code-review
+sequence, which takes precedence over the repository's routine three-commit cadence.
+
 ## Account deletion — implementation checkpoints, not shipped (2026-10-09)
 
 Design gate completed APPROVE in the fourth additional authorized Blue/xhigh
