@@ -1,5 +1,27 @@
 # Verification Contract
 
+## Account deletion — first actual disposable web Guest and pixel correction (2026-10-10)
+
+Isolated current Worker/local workerd D1 migrations0001–0024 and shared frontend ran
+at127.0.0.1:8886. A new throwaway Guest was created through actual UI; its recovery
+code remained only in browser RAM, never printed/logged/committed. UI Guest step-up,
+typed confirmation and separate final action dispatched actual central DELETE once.
+Response deliberately dropped after central200; failure displayed, no automatic
+repeat. Explicit single receipt lookup confirmed disabled account, cleared old session
+and survived page reload without registration or login. Actual local D1 query confirms
+one disabled person and zero remaining name characters. First screenshot exposed
+inappropriate inherited popover geometry/black text; separate native dialog styling
+corrects centered bounds620x212 at(290,353.5), foregroundRGB242/243/245 over35/36/40.
+Corrected browser capture reviewed at /private/tmp/aa-account-deletion-v4-run/
+web-guest-receipt-corrected.png. Build and affected10/0 tests pass; gates unchanged.
+Full final Rust server144/0 library,5/0 binary,194/0 integration +2 ignored,docs0/0
+passes; integration90.64s. Server+persistence all-targets clippy -D warnings exit0
+12.89s. Logs /private/tmp/account-deletion-v3-{final-server,final-rust-clippy,
+dialog-pixel-fix-build,dialog-pixel-fix-test}.log. This web Guest had no server entries;
+packaged own-server stop/wipe and remote history/search/pin pixels remain to verify.
+Production Guest, Daybreak APPROVE0/3, pushes and deployment pending. Real Google E2E
+pending owner spare account only. No owner/existing production account used.
+
 ## Account deletion — shared settings flow and signed host floor (2026-10-10)
 
 Shared settings account deletion is rooted above startup/room transitions, retaining

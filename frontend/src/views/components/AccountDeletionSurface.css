@@ -1,0 +1,30 @@
+dialog.dc-account-deletion-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 12px;
+  background: #232428;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.dc-account-deletion-dialog::backdrop { background: #0009; }
+.dc-account-deletion-dialog h4 { font-size: 20px; font-weight: 700; }
+.dc-account-deletion-dialog h5 { font-weight: 700; }
+.dc-account-deletion-dialog label { display: grid; gap: 6px; }
+.dc-account-deletion-dialog input:not([type="radio"]) {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #5b5e66;
+  border-radius: 6px;
+  background: #111214;
+  color: var(--color-text-primary);
+}
+.dc-account-deletion-dialog ul { display: grid; gap: 8px; }
+.dc-account-deletion-dialog fieldset { display: grid; gap: 10px; }
+.dc-account-deletion-dialog fieldset label { display: flex; gap: 8px; }
