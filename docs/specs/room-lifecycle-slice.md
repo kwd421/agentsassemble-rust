@@ -52,7 +52,7 @@ Parent는 다른 방을 위해 유지할 수 있다. restore/unarchive 후에도
 
 첫 슬라이스에서는 새 로컬 사람·기존 binding 재입장만 제공하며 익명 합치기·scope 변경·reapproval은 제외한다. 일반 invite/re-entry는 Left/Kicked/left/banned를 복구하지 않는다. 후속 reapproval은 person/binding·예상 revision·새 invite·방별 목표·만료에 결합한 **단일 소비 owner 승인**으로 명시된 방만 기존 participant 소유자가 복구한다. 후속 scope 변경은 admission 소유자의 명시적 owner CAS와 해당 방 전 기기 child 폐기가 필요하다. bound guest-discard는 retirement 소유자가 변경 전에 거절하며 후속 guest 전환은 server leave·전체 폐기·중앙 종료 ACK 이후, binding 이동 없이 identity/revision tombstone을 유지한다. ACK가 불확실하면 완료하지 않는다.
 
-Identity C1의 공통 상한과 C2–C6가 적용된다: C2 limiter/owner 격리·grant 재사용·bounded cleanup 완료, C3 중앙 호환 floor와 구 Worker 차단 장벽/내부 경로, C4a 별도 host floor, C4b migration 및 이 소유자 내부 연결, C5 완전 수직 검증 후 앱/웹 함께 노출, C6 혼재·실제 두 기기·구조/실행 게이트·계획 소유자 리뷰다. 현재 host schema는 80, member는 다음 미사용 81 예정이다. floor는 81 인식만 하며 80 데이터를 그대로 열고 member route는 없다. 다른 작업의 81 선점 시 다음 미사용 번호로 계약을 갱신한다. member migration 후 floor 이전 rollback은 금지하고 floor rollback에서도 member 폐기 권위를 보존한다. native pairing idle 수명/last-use/30일 미사용 만료/단일·전체 revocation을 모든 단계에서 보존한다.
+Identity C1의 공통 상한과 C2–C6가 적용된다: C2 limiter/owner 격리·grant 재사용·bounded cleanup 완료, C3 중앙 호환 floor와 구 Worker 차단 장벽/내부 경로, C4a 별도 host floor, C4b migration 및 이 소유자 내부 연결, C5 완전 수직 검증 후 앱/웹 함께 노출, C6 혼재·실제 두 기기·구조/실행 게이트·계획 소유자 리뷰다. 과거 host schema 80/member 81 예약·81 인식 floor는 역사적 v80/v81 rollout이며 현재 schema 지시가 아니다. 현재 계정 탈퇴는 identity 계약의 직접 확인한 v86 → 다음 미사용 lifecycle schema upgrade를 따른다. 적용된 migration을 재번호화하지 않고 frozen binding DDL를 보존한다. member migration 후 floor 이전 rollback은 금지하고 floor rollback에서도 member 폐기 권위를 보존한다. native pairing idle 수명/last-use/30일 미사용 만료/단일·전체 revocation을 모든 단계에서 보존한다.
 
 필수 테스트/수용 기준:
 

@@ -71,7 +71,7 @@ Invite admission은 `(invite_id, binding_id)` UNIQUE 및 canonical room/scope �
 
 `member_challenges`는 목적·invite/enrollment·입력 fingerprint·browser hash·신뢰 source·incarnation·origin/generation·만료·상태를 저장한다. `member_parents`는 membership/version·device/browser·entry fingerprint·runtime/ingress·연결/폐기 상태를 저장한다. child/ticket은 parent·room incarnation/access generation·participant revision·canonical entitlement revision·scope·만료를 참조한다. room generation은 기존 lifecycle 소유자가 관리한다. 정확한 버전을 참조하는 membership version은 정리하지 않는다.
 
-Member parent는 기존 owner 연결 수명 계약을 따른다. 최초 연결 창 만료, workspace의 모든 인증 transport 종료, ingress 교체, runtime 종료, 호스트 폐기가 parent를 종료한다. endpoint publication 갱신·방 이동·추가 연결·1시간 경과는 중앙 재인증 사유가 아니다. child는 parent보다 오래 살 수 없다. 중앙 logout/기기·계정 폐기는 다음 중앙 입장부터 적용되며 기존 연결을 중앙 장애 때문에 종료하지 않는다.
+Member parent는 기존 owner 연결 수명 계약을 따른다. 최초 연결 창 만료, workspace의 모든 인증 transport 종료, ingress 교체, runtime 종료, 호스트 폐기가 parent를 종료한다. endpoint publication 갱신·방 이동·추가 연결·1시간 경과는 중앙 재인증 사유가 아니다. child는 parent보다 오래 살 수 없다. 중앙 logout/기기 폐기는 다음 중앙 입장부터 적용되며 기존 연결을 중앙 장애 때문에 종료하지 않는다. 계정 탈퇴는 identity 계약의 Account deletion 비동기 tombstone 경로를 따른다. 기존 membership/removal 소유자가 전역 장벽 뒤 모든 membership/participant를 종료하고 parent·child·ticket·idle transport와 동반 권위를 폐기하며, 실제 종속 행/byte 기준 bounded cleanup이 완료된 뒤에만 exact ACK한다. 호스트 확인 전 중앙 결과는 cleanup_pending이며 새 lifecycle task/owner는 추가하지 않는다.
 
 Parent는 저장 행 조회가 필수인 opaque 권위다. child/ticket 재발급은 중앙 호출 없이 현재 active membership·접근 가능한 방·Joined participant·canonical entitlement·각 revision/generation을 검사한다. HTTP mutation/읽기·WS frame·ticket/child 발급은 폐기와 직렬화하여 stale 접근을 막는다. 기존 human/member 권한 변경은 같은 participant revision을 올리고 해당 사람의 해당 방 전 기기 child/ticket을 폐기한다. 종료 revision은 durable 취소 완료 전에도 진행 작업의 추가 적용을 차단한다. 방-local 종료는 다른 방 parent 권위를 보존하며 서버 종료는 모든 방과 전 기기를 종료한다.
 
@@ -99,7 +99,7 @@ Identity 소유의 host binding/membership 10,000, outbox/intent/결과 및 중�
 
 익명 합치기는 기존 사람 소유 증명 없이 허용하지 않는다. reapproval은 후속이며 person/binding·예상 revision·새 invite·방별 목표·만료에 결합한 단일 소비 owner 승인을 요구한다. 명시된 방만 기존 participant 소유자가 복구한다. scope 변경도 위 owner CAS 없이 허용하지 않는다. bound guest retirement 및 독립 recovery/local credential 차단은 identity의 기존 소유 절에 따르며 admission 우회 권위를 만들지 않는다.
 
-공통 순서는 identity C1의 **C2 limiter/owner 격리→grant 재사용→bounded cleanup, C3 중앙 floor/장벽/내부 경로, C4a host floor, C4b migration/내부 연결, C5 앱·웹 동시 노출, C6 혼재/실기기/리뷰**다. 현재 host 80, member 다음 미사용 번호는 81 예정이며 floor는 81 인식만 하고 80을 그대로 연다. C4b에서 member migration을 수행한다. 81 선점 시 다음 미사용 번호로 계약을 갱신한다. floor 이전 rollback·상위 schema 무조건 허용은 금지한다. 각 커밋은 문서/테스트 포함 1,000줄 미만이다.
+공통 순서는 identity C1의 **C2 limiter/owner 격리→grant 재사용→bounded cleanup, C3 중앙 floor/장벽/내부 경로, C4a host floor, C4b migration/내부 연결, C5 앱·웹 동시 노출, C6 혼재/실기기/리뷰**다. 과거 host 80/member 81 예약·81 인식 floor/C4b migration 순서는 역사적 v80/v81 rollout이며 현재 schema 지시가 아니다. 현재 계정 탈퇴는 identity 계약의 직접 확인한 v86 → 다음 미사용 lifecycle schema upgrade를 따른다. 적용된 migration을 재번호화하지 않고 frozen binding DDL를 보존한다. floor 이전 rollback·상위 schema 무조건 허용은 금지한다. 각 커밋은 문서/테스트 포함 1,000줄 미만이다.
 
 필수 테스트/수용 기준:
 

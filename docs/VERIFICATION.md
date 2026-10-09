@@ -1,5 +1,208 @@
 # Verification Contract
 
+## Account deletion — design approved, implementation in progress (2026-10-09)
+
+Manager authorizes four additional Daybreak Blue xhigh design rounds and three
+code rounds, implementation, scoped commits/pushes in both repositories, migrations
+and central deployment after approval. Previous round-3 stop below is historical.
+Source baselines for the design remain Rust d12077f22c235909c6b2e50b438430ba2f8902be and
+Worker 0b19205e18da14e837d31e20e9f4fb3eafe88ece; directly verified this run.
+
+Design/contract now remove mandatory paginated impact and its display revision:
+fixed honest disclosure applies to all account types; any single optional bounded
+summary never gates proof/confirmation/deletion. Existing member next-admission,
+owner authority and icon clauses are edited directly. Permanent duplicate retirement
+still disables all live operations/re-registration, but its existing terminal sender
+drains durable exact release/ACK before exit and after restart. All earlier manager
+security and lifecycle decisions remain. Additional design round 1 completed REVISE C0/H2/M2/L0, exact Blue/xhigh/read-only
+thread 01a1205a-bce1-76e0-aa46-a377fbea21ee, completed without turn error. Full
+answer read: explicit additive custody_generation wire, supersede C3a deletion
+rollout, durable purge_ready owner/CAS, remove leftover impact entry. All four are
+reflected in design/contract before additional round 2. Owner `generation`
+keeps endpoint semantics; member exact custody uses existing projection_id. Person
+purge_ready defaults 0; existing budgeted cleanup atomically checks retention,
+legacy_unknown=0, exact ACK/provenance and child absence, then CAS/removes ledger/
+parent. Historical C3a raw cascade is directly superseded. No implementation claim.
+Report: account-deletion-resumed-review-1.md in the specified scratchpad.
+Current Worker baseline rerun: npm test 237 passed, 0 failed, exit 0 (16.90s),
+/private/tmp/account-deletion-resumed-worker-baseline.log. Not new-feature evidence.
+
+Additional design round 2 completed REVISE C0/H2/M4/L0, exact Blue/xhigh/read-only
+thread 01a12066-ca63-7dd2-b47b-4e92fdbea16f, completed without turn error. Full answer
+read. Corrections now recorded: legacy floor atomically allocates/replays owner
+parent-to-group custody_generation in the same signed page; independent incarnation
+inventory plus one cleanup-owned cursor/closure singleton; local aggregate max
+verified generation/live dependent count and zero-only release across restart;
+actual <=100-row/128KiB per-table host cleanup pages; effective-terminal bookmark/
+alias creation and old-writer guard; historical C4a v80/v81 schema directions directly
+superseded by current v86/next unused lifecycle upgrade. Also preserve old host wire
+shape behind signed account_deletion_protocol v1, and clarify retirement-only
+standalone drain of existing release/ACK. These were submitted to additional round 3.
+Report: account-deletion-resumed-review-2.md in the specified scratchpad.
+
+Additional design round 3 completed REVISE C0/H1/M1/L0, exact Blue/xhigh/read-only
+thread 01a12077-a3dc-7ac0-b95e-0f856e46a21c, completed without turn error. Full answer
+read. Two linked-contract corrections are now directly applied: member-session
+next-admission clause excludes account deletion and routes it to the same existing
+membership/removal tombstone cleanup/ACK owner; invite and room lifecycle v80/v81
+rollout instructions are historical, current work uses verified v86 -> next unused
+lifecycle schema with frozen binding/rollback barriers. Other six round-2 fixes were
+represented. These were submitted to FINAL additional design round 4; its
+completed APPROVE is recorded below.
+Report: account-deletion-resumed-review-3.md in the specified scratchpad.
+
+FINAL additional design round 4: **APPROVE C0/H0/M0/L0**, exact Blue/xhigh/read-only
+thread 01a12084-7448-7532-b549-da1cf5ba21fe, completed without turn error; complete
+answer read. Four authorized additional rounds consumed, design gate passed.
+Report account-deletion-resumed-review-4.md in the specified scratchpad. Approval
+covers current design/owning and linked contracts at frozen source HEADs plus live
+task docs. It is static only. Google freshness, safe outbound target handling,
+indexed D1 cost and host-floor real behavior remain implementation/exposure checks.
+No fifth design round was requested; code review limit remains three rounds.
+
+Current baseline make architecture-check passed architecture/source-growth checks
+and 19 policy/artifact-owner tests, exit 0; existing size warnings are advisory and
+no gate was changed. Log /private/tmp/account-deletion-resumed-architecture-baseline.log.
+D1 batch semantics/best practices and Workers types 5.20261009.1 were retrieved
+from official Cloudflare sources before implementation. Only isolated temporary
+package artifacts were created; protected paths/configs remain unchanged.
+Documentation checkpoint commit is next, then implementation continues. No source
+implementation or new-runtime verification has started at this checkpoint.
+
+No implementation source change, push, migration, deployment or production account
+deletion has occurred at this design checkpoint. Documentation is being committed. Owner/existing
+production accounts are forbidden as deletion targets. Protected .agents/, scripts/__pycache__/ and wrangler.cleanup-*.toml
+remain untouched. Runtime/UI/Google acceptance and deployment remain unverified.
+
+## Account deletion autonomous task — stopped at design gate (2026-10-09)
+
+**End-to-end account deletion is NOT complete.** Final allowed design round 3
+returned **REVISE — C0/H2/M1/L0**. The user's explicit instruction, "max 3 rounds;
+else stop and record why", ends this run before implementation. No fourth review
+or code work was started. Last recorded time: 2026-10-09 05:08:49 UTC.
+
+Final requested Daybreak Blue/xhigh/read-only app-server review:
+thread `01a11f06-4124-7613-a5b5-3a1094e91315`, completed without turn error.
+The complete answer was read and its three findings checked against current source:
+
+1. **H1 — impact-read starvation:** fresh paginated impact is mandatory before
+   proof/final confirmation, but only proof/DELETE have a reserved termination lane.
+   `src/index.js` applies IP limiting before dispatch; `src/abuse.js:requestPurpose`
+   defaults new impact routes to GENERAL. Ordinary signed-device traffic can still
+   block reaching termination. Required correction: permit step-up when preliminary
+   informational impact is quota-blocked, and reserve/return fresh proof-bound
+   impact pages with final DELETE through the termination lane. Still require fresh
+   impact before final confirmation; no cached authority or periodic owner.
+2. **H2 — contradictory owning contract:** the new account-deletion section changes
+   live host termination, but existing "재입장, 목록 동기화와 장애" and "Host-owned
+   owner workspace and devices" still describe account deletion as next-admission
+   only. "Server icon" still promises account-deletion cascade. Required correction:
+   edit those existing clauses directly; retain ordinary logout/device revocation/
+   transfer/outage semantics, route deletion to asynchronous tombstone/ACK, and
+   replace icon cascade with terminal hiding plus bounded cleanup.
+3. **M1 — duplicate retirement strands release:** the revision keeps permanent
+   duplicate retirement's immediate sender exit, so a durable last-custody release
+   has no sender after retirement or restart. `central/event_publisher.rs` and
+   `central/directory.rs:reconcile_demotion` confirm the exit path. Required correction:
+   keep retirement permanent and all live publication/registration disabled, while
+   the same terminal-only sender drains existing exact release/ACK outbox before
+   final exit, including restart. No added task, polling or authority fallback.
+
+Round-2 fixes otherwise remained reflected in the reviewed design. All three final
+findings remain unresolved and unapproved in this run; documentation below records
+proposed requirements, not implemented behavior. Review report:
+`account-deletion-rereview-3.md` in the user-specified scratchpad. This durable
+section preserves its verdict, rationale, fixes and limitations if scratch is wiped.
+
+Final execution inventory: **0 commits, 0 pushes, 0 source changes in either repo,
+0 production migrations/deploys, 0 existing/owner production account deletions**.
+No production throwaway account was created. Deploy version and production migration
+state were not queried and remain unverified. Assets worktree was inspected only,
+clean at baseline Rust HEAD; no checkout change/build. Code review, mandatory
+implementation gates, new regression tests, Google fresh-auth behavior, host
+tombstone/idle-socket/AI cleanup, indexed migration/cleanup costs, shared packaged/
+web UI acceptance and deployment smoke remain unperformed. Existing protected
+files and user data remain unchanged. Only task documentation is modified in Rust.
+
+Source baselines: Rust `d12077f22c235909c6b2e50b438430ba2f8902be` on
+`codex/recovery-and-sonnet`; Worker `0b19205e18da14e837d31e20e9f4fb3eafe88ece`
+on `codex/owner-session-renewal`. Existing `.agents/`, `scripts/__pycache__/`
+and untracked `wrangler.cleanup-*.toml` are preserved.
+
+The prior design verdict was REVISE (C1/H3/M3/L1). Manager decisions are recorded
+in the owning identity slice: existing redeem is the custody linearization point
+(no finalize call), provisional local admission first, exact-generation cleanup
+ACK, guest recovery-code threat limits, fail-closed Google auth_time, expand
+physical-delete trigger, independent termination quota lane, terminal member CAS,
+no-create identity checks/explicit re-registration, host retention disclosure, and
+one opaque 256-bit receipt capability. Speculative pool repartition is removed.
+The scratch design has been revised; durable behavior/entry points and acceptance
+are in `docs/specs/identity-accounts-friends-slice.md`.
+
+Design re-review evidence:
+
+- Shell invocation selected `gpt-daybreak-blue-latest`/`xhigh`, read-only, session
+  `01a11ee2-8384-75d1-b246-828478865b72`, completed REVISE C0/H3/M2/L1. Its answer
+  disclaimed model availability, so it is supplemental static evidence rather
+  than a model-specific gate approval. Findings: legacy host floor, old guest
+  provisioning during migration, permanent local retirement vs UI promise,
+  normal custody release/ACK replay, boolean public hint and unsupported cadence.
+- Requested fallback app-server read-only invocation selected the same model and
+  completed without turn error, thread `01a11eec-8597-7c50-9388-ea0c466917c5`:
+  REVISE C0/H1/M1/L0. Required corrections: durable unknown for every pre-cutover
+  person with proven floor clearance, bounded provisional rows and crash pruning.
+  Caller model-selection inference probe (`01a11ef2-6cff-77f0-8d4c-6a6ddc3ee54b`)
+  also completed successfully using the same model/xhigh/read-only, no tools.
+  Account-level advisory access was not_granted; it explicitly does not determine
+  local CLI model access, and was not used as an authorization/approval gate.
+- Round 2 design now records all these corrections in the owning identity contract.
+  Guest provisioning floor precedes blocking migration; unusable provisional has
+  row/byte/deadline/boot bounds; old-account unknown cannot clear from unrelated
+  ACKs; release is piggybacked and ACK provenance retained; hints are boolean and
+  coalesced. Account deletion has a distinct local demotion from permanent duplicate
+  retirement, with explicit local-admin fresh-person/fresh-epoch registration only
+  after exact old-host cleanup ACK. No implementation has started.
+- Completed design round 2, exact requested Blue/xhigh/read-only app-server thread
+  `01a11ef4-cd83-7ff1-9da2-8a3e20975dae`, turn completed without error:
+  **REVISE C0/H3/M3/L0**. Findings: impact churn could indefinitely block DELETE;
+  owner grant consumption/new generations broke exact retry; retained inventory
+  cannot prove absent historical custody and lacks mixed-writer closure; demotion
+  exits the sole ACK sender; fresh epoch inherits epochless aliases/icons/bookmarks;
+  100-item floor wire exceeds the existing nonce owner's 16-item constraint.
+- Round 3 draft corrections are now in the scratch design and owning identity
+  contract: impact revision is display-only, exact owner replay preserves its
+  generation/session, every pre-cutover person retains legacy_unknown=1 indefinitely
+  in this release, old-writer-safe floor preservation precedes bounded backfill and
+  closure, account_deleted_pending keeps the existing terminal-only sender alive,
+  fresh epoch requires complete bounded epochless-child cleanup, and signed floor
+  requests contain at most 16 items/8KiB (local scan/prune at most 100 rows).
+  These were the draft submitted to final design round 3; see the completed REVISE
+  disposition above. No design APPROVE or implementation is claimed.
+
+Local baseline failure evidence (ephemeral Miniflare, existing source only):
+
+- Signed confirmation-only DELETE returned 200 and removed the person; the new
+  contract requires reauth-required and leaves the active person intact.
+- Literal old `DELETE FROM persons` removed the active parent and device child
+  (logical changes=4, not indexed billing evidence).
+- Controlled temporary active-parent guard plus injected session-write failure:
+  old guest create returned 500, left one device, and same-device retry returned
+  409. This demonstrates the provisioning-floor dependency, not an applied new
+  migration. The future atomic floor must leave zero partial rows and allow 201.
+- Script `/private/tmp/account-deletion-baseline-local.mjs`, log
+  `/private/tmp/account-deletion-baseline-local.log`; process exited 0 and disposed
+  the local DB. No production credentials/accounts/migrations were used. All new
+  regression/acceptance tests remain unimplemented.
+
+No design APPROVE. No implementation, commit, push, production migration/deploy
+or production account deletion has been performed. Baseline Worker npm test passes 237 tests,
+0 failures (11.24s); this does not verify new behavior. Packaged/web deletion,
+Google freshness, host cleanup, indexed migration cost and deploy version remain
+unverified. The isolated assets worktree is clean at Rust baseline HEAD; no build
+or checkout mutation was made. Never test deletion with an existing production
+account. Review source/report files currently live in the specified scratchpad;
+this section preserves the durable verdicts, findings and limitations.
+
 - 2026-10-09 packaged secure-admission corrections from Rust `b07702b5`
   (user-supplied deployed Worker baseline `9219192c`, UI Check 0.1.24):
   the original signed desktop profile error was reproduced. Its resource base

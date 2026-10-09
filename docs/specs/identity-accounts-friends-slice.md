@@ -1,5 +1,333 @@
 # Identity, accounts, friends and human admission
 
+## Account deletion — owner task (2026-10-09)
+
+Status: final additional design round 4 APPROVE C0/H0/M0/L0 (2026-10-09),
+Daybreak Blue xhigh/read-only thread 01a12084-7448-7532-b549-da1cf5ba21fe.
+Completed answer read; requirements below are approved design, not shipped/runtime
+behavior. Implementation and at most three code-review rounds now proceed.
+This task
+authorizes scoped commits/pushes on Rust `codex/recovery-and-sonnet` and Worker
+`codex/owner-session-renewal`, local/Miniflare deletion tests, central migrations
+and deploy after code approval. Never delete the owner's or any existing production
+account; a newly created throwaway guest may be used if necessary. Do not modify
+`.agents/`, `scripts/__pycache__/` or `wrangler.cleanup-*.toml`.
+
+### Required behavior and entries
+
+Shared app/web `UserSettingsPanel` → `CentralAccountSettings`, including the
+roomless startup/server chooser, must offer central account deletion for Google
+and central guests. Local guest/local Google unlink, hide, leave and logout retain
+their current meaning. Trusted packaged/central UI owns central credentials;
+host-served JS cannot perform step-up. Cancellation does not delete anything.
+
+Show the current account and a fixed honest explanation: own server registration
+is retired while local data stays; memberships end when each host next connects;
+messages, attachments and participant history on other servers may remain;
+deletion is irreversible. This explanation is identical for owner/member/guest;
+no owned-server inventory decides which disclosures to show. At most one optional
+bounded summary read is allowed; failure, saturation, omission or stale data never
+blocks proof, confirmation or deletion. No paginated impact read or impact revision
+is required or stored. Google requires fresh same-subject OAuth `auth_time` within
+300 seconds (missing/stale fails closed). Guest requires the existing recovery code,
+without rotation or issuing a new code from the current session. Guest deletion
+cannot resist theft of the whole device or recovery code. Explain this in Korean
+해요체; no autofill. After step-up confirm the same account with the fixed explanation,
+require `탈퇴`, and submit once. Confirmation ends all account-derived relationships;
+no server data is deleted. Current account/session/device/proof must match at final write.
+
+Central termination is one O(1) transaction: recheck current person/session/device,
+proof/request, disable person, set immutable `deleted_at`, clear mutable
+profile PII, consume proof and bind the receipt hash. All devices' central APIs,
+recovery, grant issue/redeem and owner publication become invalid at this commit.
+No child-count-dependent DELETE/UPDATE is allowed here. A 0-row condition must
+abort the entire batch through a constraint, not a later JavaScript exception.
+
+Central disable and host cleanup are distinct. Known custody and legacy unknown
+must remain `cleanup_pending` until the host installs its tombstone, terminates
+every derived authority, and ACKs. Offline/unsupported hosts may remain pending
+indefinitely; never display that all access ended because of timeout or expiry.
+Owned registration/public ingress ends, while local rooms/messages/attachments/
+server AI/settings remain. Members leave every room, and their companion authority
+ends; other people, independent native pairing/local operator and server AI remain.
+Do not terminate user-owned external provider processes.
+
+### Admission and terminal authority
+
+No separate finalize call. For owner/member initial admission and reconnect:
+
+1. Host durably prepares an unusable provisional admission bound to exact issuer,
+   person hint, server/epoch/channel/device/client key. No credential, Joined,
+   entitlement or HTTP/WS/SSE/room access exists before successful redeem.
+2. Existing central host-signed redeem is the linearization point. One D1 batch
+   rechecks active person/session/device/current owner and exact key/epoch/endpoint,
+   records custody (owner_cleanup_targets or member_servers). Member grants keep
+   their existing consumption contract. Owner grants keep exact replay: the first
+   exact grant/host/client tuple allocates a custody generation; an exact replay
+   while all current authority remains valid returns that same generation, never
+   consumes the owner grant or allocates another generation. Different tuples fail.
+   New grants allocate newer generations; exact replay metadata lives through the
+   existing grant replay horizon. Capacity, nonce or write failure rolls back.
+3. Host matches verified response and generation to provisional custody, then
+   activates in one SQLite transaction rechecking terminal/disconnect barriers.
+   Deleted/inactive/error/unknown redeem cannot activate provisional authority.
+   Unknown result may discard the provisional row, but preserves the existing exact
+   owner-grant retry semantics: a new bounded reservation retries the identical
+   tuple and receives the same generation/session while still valid and connected.
+   Centrally successful unknown remains custody until exact host cleanup/no-effect
+   ACK. After deletion, replay is terminal/inactive and never returns authority.
+4. Delete-before-redeem creates no admission/custody. Redeem-before-delete records
+   custody, so a delayed activation remains pending until tombstone and exact
+   generation ACK. A delayed old ACK cannot clear a newer custody generation.
+
+The host-signed request declares `account_deletion_protocol: "v1"` for supported
+redeem/floor/sync. Custody response additions are returned only to that signed
+protocol; preserve old host response shapes, including deny_unknown_fields callers.
+Central still records known custody for old redeem, but never reports host cleanup
+complete without exact supported ACK. Unknown/unsupported remains pending; no
+fallback turns it into authority or re-registration eligibility.
+
+Owner custody uses an additive integer `custody_generation` (1..2^53-1), allocated
+monotonically per person/server/registration_epoch on the first exact owner redeem.
+Existing wire/session `generation` remains endpoint generation, byte-for-byte in
+meaning; it is never reused as custody generation. Owner redeem response and exact
+replay return both fields. Provisional state initially has no custody generation;
+verified redeem fills it before activation and stores it with the owner session.
+Terminal sync/tombstone target, cleanup ACK and release outbox carry the exact
+issuer/person/server/epoch plus `custody_generation`. Release/ACK CAS compares that
+field, never endpoint generation. Member custody uses its existing `projection_id`
+as the exact generation identifier through provisional activation, sync, tombstone,
+ACK and release; do not add a second member counter. Pre-redeem provisional custody
+has no authoritative member projection; fill it only from verified redeem.
+
+Provisional reservation precedes redeem and shares the existing 1,024 challenge
+ceiling: <=1,024 rows/4MiB per host, <=4KiB fixed bounded fields per row, grant
+fingerprint rather than bearer. Store expires_at and boot custody. Startup first
+blocks adoption of previous-boot rows, prunes in <=100-row pages/yields, then opens
+transport. Reservation prunes expired/previous-boot rows before row/byte CAS; local
+capacity failure never redeems centrally. Transport close removes only that exact
+provisional. Reuse existing challenge/grant/opening deadlines (member 300s); narrow
+activation to the verified grant expiry. No new timer/periodic task. Terminal
+tombstones survive provisional pruning and late boot/disconnect responses.
+
+Every person predating custody-writing cutover has durable `legacy_unknown=1`.
+Old writers default new persons to unknown; only the deployed custody-writing floor
+can explicitly create a person with 0. Never infer which pre-cutover person had
+already purged host custody. This release has no historical completeness proof or
+unknown-clearing operation: all pre-cutover persons stay cleanup_pending even after
+every retained host ACK. Result and any optional summary separately expose this unknown, with
+`예전 서버의 연결이 모두 끝났는지는 확인할 수 없어요.`; do not label it an offline
+known server. Time, absent bookmarks and inventory reconciliation cannot clear it.
+
+The minimal durable floor owners are `account_deletion_incarnations`, with one
+exact `(owner_person_id, server_id, registration_epoch, host_key_fingerprint)` tuple,
+public host key and saved ingress origin, plus `account_deletion_floor` singleton
+holding source high rowid, scan cursor, closure revision and pending/closed state.
+No person/server/session cascade can remove this inventory. Preservation triggers
+on server insert, owner/epoch/key change and physical cleanup copy NEW and/or OLD
+exact tuples in the original transaction. Existing bounded cleanup owns backfill,
+closure and eventual removal. Remove an inventory tuple only after exact host
+floor/no-effect/termination ACK, all custody/replay/provenance references ended,
+and >=30 days; a missing host/timeout never authorizes removal. This inventory is
+cleanup authentication/routing provenance, never live admission authority.
+
+Legacy owner floor mapping is in each existing signed <=16-item floor-page
+exchange, not another request. Verify parent fingerprint/person against the exact
+saved/current server/epoch/key/owner inventory tuple. Central allocates once and
+replays the group's `floor_custody_generation` in owner_cleanup_targets, advancing
+its greatest current generation only at first allocation. Each parent fingerprint
+maps to that same group floor generation (multiple legacy parents share the slot).
+Host durably attaches mapping to each parent and its aggregate before reopening
+transport. Failure/ambiguity keeps transport blocked. Later exact floor replays
+return the same mapping and cannot lower a newer current generation. Member floor
+retains existing projection_id; floor must never grant admission or active state.
+
+Before bounded backfill, install old-writer-safe transactional preservation guards:
+registration insertion, epoch/key change, ownership transfer and physical cleanup
+copy each affected exact incarnation into durable floor inventory (old and new
+tuples as relevant), independent of registration cascades. Capture a durable scan
+cursor/high key at that barrier, page <=100 source rows, and close in a transaction
+that proves no remaining snapshot rows and records the current closure revision.
+Writes behind the cursor are already preserved by those guards. No unbounded
+migration snapshot or unchanged revision across the whole scan is required.
+Deletion is exposed only after this bounded snapshot closure. An upgraded host
+first blocks old-parent transport/adoption, reports retained live owner/member
+parents in <=16 items/8KiB per signed request, and completes exact incarnation floor
+CAS after its final page. Floor ACK resolves known targets only, never legacy
+unknown. Routine startup queries server-scoped pending work, not all active
+bindings. Local scan/prune transactions remain <=100 rows. No polling.
+
+Additive host lifecycle state owns `central_owner_custody` per
+issuer/person/server/epoch: greatest verified custody_generation and live dependent
+count. Owner activation/replay, disconnect/revocation and child completion update
+this aggregate inside their existing SQLite authority transaction. Exact replay
+of an existing parent does not increment count; older replies never lower greatest
+generation. Count cannot reach zero while any account-derived authority or relevant
+provisional/adoption still exists. Only zero-after-last-dependent writes release
+for the greatest generation, never the departing session's older generation.
+Known redeemed/no-effect activation also records exact release when no dependent
+exists. Restart disconnect-all and release creation are the same transaction,
+before transport reopens. Pending unknown redeem stays fenced until sync resolves
+it; it is not inferred successful or released by a timeout.
+
+Normal last-custody disconnect records an exact-generation local release outbox in
+the same transaction. Piggyback release on the next existing redeem/sync/startup;
+standalone sync is used only for known pending deletion or permanent-retirement
+drain of an already durable exact release/ACK outbox. CAS exact generation,
+retain last acknowledged generation/time and a compact deletion-ACK tombstone for
+30 days and the existing replay horizon, whichever is later. Lost ACK responses
+get stable ACK. Bounded cleanup owns physical target purge; inactive custody slots
+can be reused with a new generation without erasing prior ACK provenance.
+
+Local additive lifecycle/tombstone storage must not modify frozen binding DDL.
+Tombstone precedes cleanup paged by actual dependent rows and loaded effects
+(<=100 rows/128KiB per SQLite transaction), not room count. Existing lifecycle state
+owns stable per-table cursor/stage; session, each invite type, companion/approval,
+owner-derived authority and participant event stages drain separately and yield
+between pages in the same existing owner, with no new task/cadence. Reuse removal
+semantics but never call its current unbounded bulk/fetch_all form for deletion.
+Cursor, row revocation and idempotent participant event commit together; crash
+resumes the stage. ACK only after every stage and relevant authority/adoption is
+exhausted. Global tombstone blocks all
+human/owner/attendee/child HTTP/WS/SSE and publication transaction paths. Late
+binding/provisional activation cannot bypass it. Reuse participant removal and
+revocation owners, including idle sockets, directory streams and secure channels.
+Keep the existing durable late-disconnect barrier. ACK only after durable cleanup.
+Startup/recovery checks old bindings/owner parents before new transport; authoritative
+terminal/absent installs tombstone, while timeout/5xx/malformed response stays unknown.
+
+Bookmark creation and alias upsert must use the single effective-terminal server
+predicate, including current owner active/deleted state. Old-writer INSERT/UPDATE
+of person_servers is guarded at D1 as well; no new child can join a terminal server
+while cleanup drains it. Bookmark deletion remains allowed. The same predicate
+covers discovery/preview/host auth, publication/name/icon, register/claim, grant
+issue/redeem and results; no endpoint-local alternate authority.
+
+Central late member-result CAS requires live exact registration/key/epoch **and**
+member `persons.status='active' AND deleted_at IS NULL`. Deleted members receive a
+stable terminal ACK without changing state, visibility, revision or capacity refs.
+
+### Step-up, receipt, registration and retention
+
+Proof/final termination has a non-borrowable lane: ordinary IP/actor/GENERAL traffic
+cannot exhaust a valid fresh proof's pre-reserved O(1) disable. Failure attempts use
+separate IP/session limits. Valid final device signature + proof bypasses ordinary
+nonce/admission budgets; atomic request-bound proof consumption owns replay.
+No ordinary mutation inherits this exception. Final write rechecks authority.
+
+Keep `DELETE /v1/account`; old confirmation-only calls fail reauth-required.
+Add the signed proof entry, opaque receipt status, and exact host-signed
+account-deletions sync/ACK. One random 256-bit receipt capability, hash stored,
+request/account binding, deletion-status-only, rate limited, no-store, expires in
+24h. No retained device key, signed receipt-read ceremony or automatic polling.
+Lost response stays unknown until explicit receipt lookup. No automatic account
+creation to confirm deletion. Identity verification first returns active/deleted/
+absent without issuing a person/session. Explicit new registration alone creates
+a fresh person/device; Google deleted-identity transfer uses atomic terminal CAS.
+Guest after verifier purge cannot confirm old deletion and must see unknown.
+New registration never inherits old custody, lists, bindings or hosting incarnation.
+
+Central mutable PII clears at disable; sessions/keys/recovery/external identities
+are bounded child cleanup. Minimum terminal provenance remains through pending
+ACK; 30 days is a minimum, not a promised maximum purge delay. On host, clear
+mutable profile snapshots when authority, accepted-operation and replay references
+end. Replace raw central issuer/person with a domain-separated keyed tombstone
+when continued denial is needed; retain an unbound guard rather than converting
+the user into a recoverable local guest. Unresolved provenance is minimal and
+explicit. Disclose that messages, attachments, participant history/audit records,
+past profile events and server-owned backups may remain.
+
+### Cleanup, deployment and acceptance
+
+First additive migration installs BEFORE DELETE ON persons: only terminal +
+purge_ready + every child absent can physically delete, including active legacy
+persons without an account_deletions row. Test the literal old Worker DELETE.
+Incomplete guest provisioning explicitly removes its exact known children before
+terminal/purge_ready parent purge. Inactive writer and active-restore guards are
+mandatory. Parent session/device/server cascades cannot evade bounded cleanup.
+
+`persons.purge_ready INTEGER NOT NULL DEFAULT 0 CHECK(purge_ready IN (0,1))`
+is durable readiness, owned only by existing bounded cleanup. In one budget-reserved
+D1 batch: CAS terminal person to ready after >=30 days, `legacy_unknown=0`, all
+exact host ACK/replay/provenance dependencies complete, and every non-ledger child
+absent; remove its matching account_deletions ledger only for that ready person;
+then delete that ready parent under the BEFORE DELETE guard, which rechecks every
+child including ledger absence. Any statement failure rolls back the whole batch;
+0-row CAS removes neither ledger nor parent. Unknown/pending never becomes ready.
+Cleanup bounds rows/statements/indexed writes under its existing limits. No separate
+readiness job; unissued guest cleanup may mark only its exact failed provisional
+person ready after explicitly removing its known children, never an issued account.
+
+Before the blocking migration, deploy a schema-independent guest-provisioning
+floor Worker to all traffic: person/device/recovery/session creation is one D1
+batch and a failed session issuance rolls everything back, without deleting an
+active parent. Prove zero partial rows and same-device retry on local D1 before
+rollout. Test this separately from rejection of literal old raw account DELETE.
+Any still-needed internal cleanup explicitly removes only the exact unissued
+person's known children before terminal/purge_ready parent deletion.
+
+Account-deletion demotion differs from permanent duplicate retirement. Keep the
+old person and epoch terminal and shut only that ingress; explicit local-admin
+registration with a fresh person and fresh central epoch may open a new connection
+only after exact old-host tombstone/ACK and the central epochless-child cleanup
+barrier. Bounded cleanup removes all old server_endpoints, person_servers aliases/
+bookmarks, server_icons, old nonce/grant and other presentation/relationship children,
+and resets row-owned label/icon/presentation fields before epoch transition. Signed
+registration CAS proves this barrier in the same transaction; until then return
+cleanup-pending, without exposing old data or inventing an epoch-key migration.
+Do not automatically clear restrictions
+on login; duplicate-retired installations retain their permanent restriction.
+Old grants/membership/custody cannot bind to the new epoch.
+
+Persist `account_deleted_pending` as the existing sender's termination-only mode.
+Closing public ingress cannot return from that sender or disable its terminal-only
+signed transport. Endpoint/name/live member publication stays off; durable cleanup,
+release and ACK continues on actual work wakes and restart. After stable final ACK
+the sender may quiesce; restart with pending outbox resumes without a second task
+or periodic poll. Permanent duplicate retirement keeps ingress, live publication and re-registration
+disabled forever. The same terminal-only sender drains already durable exact
+release/ACK work before exit, including restart with pending outbox. No second task,
+periodic poll or restoration of live authority is allowed.
+
+Reuse daily cleanup and event sender; no polling/heartbeat/new periodic schedule.
+Stay within existing 10,000 indexed writes/day and 49 statements/invocation,
+pages <=100, existing day/crash reservation semantics. Measure new index/trigger
+costs; do not freeze speculative 1,000/4,370 pool repartition. Pending delivery
+has bounded finite retries (1/3/7 days) and explicit startup/ingress/online/retry
+wakes. Empty work sends no requests. Public hint is a coalesced boolean wake,
+never freshness or authority. At most one reserved sync per server/cooldown uses a
+non-borrowable cleanup lane; repeated hints cannot advance timers or consume more
+reservations. No signing-key/wake-token ceremony. Exact saved public ingress,
+no redirect/private-network fetch; retired
+key authenticates sync/ACK only, never live host authority. Provenance survives ACK.
+
+Acceptance observes signed HTTP + real D1 atomic rollback, quota saturation,
+both orderings of redeem/delete/activation and late ACK/result, local SQLite
+upgrade from 86, all devices/all rooms/idle sockets/AI parents, offline restart,
+guest/Google wrong or stale proof, receipt loss and explicit new registration,
+data preservation and idle zero central calls. Include blocked/absent optional summary and custody/ownership churn during
+proof/DELETE, lost owner redeem response/exact same session replay, mixed old-writer
+floor preservation/closure, disappeared pre-cutover custody, crash after demotion
+before ACK, epochless-child re-registration denial, and 16/17 floor-item wire bounds. Also exercise legacy owner floor mapping/replay,
+G1/G2 concurrent owners disconnecting in both orders and restart, a single room
+with many invite/session children with <=100-row/128KiB page evidence, and new
+bookmark/alias writes (including literal old SQL) rejected on effective terminal.
+Shared trusted web and isolated
+packaged app must exercise roomless/owner/member/guest confirmation, cancel,
+pending/complete/error, and cache cleanup. Build/unit results cannot replace UI
+evidence. Real Google step-up remains unknown until actually verified on both
+clients, and missing auth_time never falls back to session-only deletion.
+
+Design requires Daybreak Blue xhigh APPROVE within four additional rounds;
+code requires APPROVE within three rounds.
+If unavailable or rounds exhausted, stop and record why in VERIFICATION.md. Commit
+under 1,000 changed lines with the requested coauthor trailer; mandatory gates
+remain unchanged. After code approval push both branches, record production
+version/migration state, migrate first (one retry), build isolated central assets
+at Rust HEAD, deploy with existing cleanup-on config, and smoke / 200,
+/v1/bootstrap 401 and /member-join 200. Durable evidence belongs at the top of
+VERIFICATION.md. Do not claim unverified product-flow completion.
+
 ### Code-review acceptance correction (2026-10-07)
 
 Duplicate-owner bootstrap and registration `server_exists` projections must show
@@ -560,9 +888,9 @@ Enrollment 생성은 진행·visible/관계·결과·unknown 수용 용량을 �
 
 ### 기존 account/server deletion 및 registration 확장
 
-중앙 `Security model`의 계정 삭제/서버 등록 삭제 및 owner account의 server cascade, `Server icons`의 삭제 계약은 C3에서 다음 요구를 적용한다. 삭제 상태·최소 person/incarnation/key provenance를 물리 삭제와 분리한다. redeemed 결과·예약·검증키를 cascade 삭제하지 않고 삭제 incarnation은 terminal/hidden으로 유지한다.
+중앙 `Security model`의 계정 삭제/서버 등록 삭제 및 owner account의 서버 등록 terminal 전이, `Server icons`의 삭제 계약은 C3에서 다음 요구를 적용한다. 삭제 상태·최소 person/incarnation/key provenance를 물리 삭제와 분리한다. redeemed 결과·예약·검증키를 cascade 삭제하지 않고 삭제 incarnation은 terminal/hidden으로 유지한다.
 
-삭제가 먼저면 pending 취소와 신규 issue/redeem 차단을 원자 수행한다. redeem이 먼저면 provenance·예약을 보존하고 결과/ACK만 처리한다. **member 계정 삭제, owner 계정 server cascade, 명시적 server 삭제** 모두 같은 계약이다. 삭제는 pending만 취소하며 redeemed/unknown 참조를 결과 수용 전까지 보존한다. 삭제·미확정 정리는 redeemed를 실패로 추정하지 않고 늦은 결과 검증 provenance/수용 용량을 보존하며 삭제 계정/incarnation을 부활시키지 않는다.
+삭제가 먼저면 pending 취소와 신규 issue/redeem 차단을 원자 수행한다. redeem이 먼저면 provenance·예약을 보존하고 결과/ACK만 처리한다. **member 계정 삭제, owner 계정의 서버 등록 terminal 전이, 명시적 server 삭제** 모두 같은 계약이다. 삭제는 pending만 취소하며 redeemed/unknown 참조를 결과 수용 전까지 보존한다. 삭제·미확정 정리는 redeemed를 실패로 추정하지 않고 늦은 결과 검증 provenance/수용 용량을 보존하며 삭제 계정/incarnation을 부활시키지 않는다.
 
 결과/ACK 뒤 개인정보·상세 기록은 최소화하되 incarnation 종료 표식·최종 revision·재생 방지 결과 식별자는 유지한다. 미확정 provenance는 시간만으로 삭제하지 않는다. 중앙 삭제를 호스트 탈퇴로 표시하지 않는다. 검증키 보존은 늦은 결과 검증만 허용하며 삭제 호스트의 신규 입장 권위가 아니다.
 
@@ -572,7 +900,7 @@ Enrollment 생성은 진행·visible/관계·결과·unknown 수용 용량을 �
 
 Signed enrollment/incarnation/revision/state/event ID에서 같은 revision/내용은 ACK, 같은 revision의 다른 내용은 conflict, 낮은 revision은 무시한다. hidden·삭제·종료 revision은 부활시키지 않는다. 숨김 해제는 사용자 명령으로 live incarnation/용량을 재검사한다. 숨김·bookmark 삭제·서버 탈퇴는 별개이며 독립 bookmark는 유지해도 삭제 incarnation 입장은 차단한다.
 
-중앙 장애는 기존 연결을 유지하고 신규 중앙 연결 실패를 표시한다. 호스트 커밋 후에는 “입장 성공·목록 동기화 대기”와 durable 재시도를 제공하며 익명 fallback은 없다. 중앙 logout/기기·계정 폐기는 다음 입장부터 적용한다. member는 owner/operator/pairing 생성 권위를 얻지 않는다. 메시지·room bearer·방 역할·ban 사유는 중앙에 저장하지 않는다. 비밀값은 로그·URL query·분석 이벤트에 남기지 않는다.
+중앙 장애는 기존 연결을 유지하고 신규 중앙 연결 실패를 표시한다. 호스트 커밋 후에는 “입장 성공·목록 동기화 대기”와 durable 재시도를 제공하며 익명 fallback은 없다. 중앙 logout/기기 폐기는 다음 입장부터 적용한다. 계정 탈퇴는 위 Account deletion 계약의 비동기 tombstone/ACK를 통해 이미 입장한 권위와 파생 연결도 종료하며, 호스트 확인 전에는 cleanup_pending으로 남긴다. member는 owner/operator/pairing 생성 권위를 얻지 않는다. 메시지·room bearer·방 역할·ban 사유는 중앙에 저장하지 않는다. 비밀값은 로그·URL query·분석 이벤트에 남기지 않는다.
 
 ### 중앙/호스트 예산과 노출 장벽
 
@@ -588,24 +916,23 @@ Signed enrollment/incarnation/revision/state/event ID에서 같은 revision/내�
 
 1. **C1 (이번 변경): 계약만.** 아래 acceptance는 향후 필수이며 코드·migration·테스트 코드나 외부 중앙 저장소 변경은 포함하지 않는다.
 2. **C2군:** 목적별 limiter/owner 격리 → grant 재사용 → bounded cleanup·생성/재시도/결과 보존 예산을 책임별 구현·검증한다. 완료 전 member 기능을 노출하지 않는다. 기존 중앙 C2 기록이 member 예산/격리까지 증명하지는 않는다.
-3. **C3a 중앙 호환 floor:** 중앙 README `79a181cd`의 결정에 따라 서버 ID tombstone·terminal 재등록 거절 대신 C3c에서 등록마다 새 무작위 registration epoch로 incarnation을 구분하여 재등록이 옛 관계·grant·enrollment를 상속하지 않게 한다. member 소유 레코드는 cleanup이 지우는 `sessions`·`server_connect_grants`를 FK로 참조하지 않고 필요한 출처를 값으로 복사한다. C3a는 migration 없이 삭제의 FK RESTRICT 실패를 전체 DELETE/cascade 롤백과 409 `deletion_restricted`로 처리하는 코드만 배포한다.
+3. **C3a 중앙 호환 floor:** 중앙 README `79a181cd`의 결정에 따라 서버 ID tombstone·terminal 재등록 거절 대신 C3c에서 등록마다 새 무작위 registration epoch로 incarnation을 구분하여 재등록이 옛 관계·grant·enrollment를 상속하지 않게 한다. member 소유 레코드는 cleanup이 지우는 `sessions`·`server_connect_grants`를 FK로 참조하지 않고 필요한 출처를 값으로 복사한다. 과거 C3a의 migration 없는 FK RESTRICT/409 `deletion_restricted` 배포는 역사적 기준선이며 현재 계정 탈퇴 장벽으로 대체한다. 현재 순서는 schema-independent atomic guest provisioning floor → blocking additive BEFORE DELETE guard → deletion/host custody writers → 공용 UI다. 옛 physical DELETE/cascade를 FK 실패만으로 보호한다고 가정하지 않는다.
 4. **C3b 중앙 전환 장벽:** 모든 트래픽/배포 경로가 floor 이상이고 구 Worker가 D1을 변경할 수 없음을 확인한 뒤 member migration/경로를 배포한다. 혼재는 floor↔new만 허용하며 floor 이전 rollback은 금지한다. 구 코드가 남으면 장벽 실패로 진행하지 않는다.
 5. **C3c군:** incarnation/삭제 provenance → enrollment·예약/terminal 해제·unknown → 단조 결과/projection을 내부 경로로 구현한다. 중앙 floor/new 양방향 삭제·재등록·결과 경쟁을 검증한다.
-6. **C4a host floor:** 보완 H2가 설계 본문의 v79 기준을 대체한다. 현재 `CURRENT_SCHEMA_VERSION = 80` (native pairing idle 수명 전환)이다. 먼저 실제 다음 미사용 schema/additive 구조를 확인한다. floor release는 **81을 인식만** 하고 member 입장/route 없이 80 데이터를 그대로 열며 member 권위·폐기를 보존한다. 상위 버전 무조건 허용·구조 게이트 완화는 금지한다.
-7. **C4b군:** host floor 확인 후 **81 migration** → binding/profile/membership → canonical entitlement·기존 participant/invite/retirement → lifecycle 폐기·서버 명령/receipt·intent/outbox를 외부 도달 불가로 연결한다. 다른 작업이 먼저 81을 쓰면 member는 다음 미사용 고유 번호로 재배정하고 이 계약을 갱신한다. floor 이전(v79/v80) 코드는 member DB를 열지 못한다. floor는 미지원 입장을 거절하고 독립 익명 권위를 재발급하지 않는다.
+6. **과거 C4a host floor (역사적):** v80 유지·v81 인식 floor는 2026-10-05 당시 배포 순서이며 현재 schema 지시가 아니다. 현재 계정 탈퇴는 직접 확인한 schema 86을 기준으로 다음 미사용 버전(현재 87 후보)을 예약해 additive lifecycle을 구현한다. 이미 적용된 v81–86을 재번호화하지 않고 frozen binding DDL와 구조 게이트를 보존한다.
+7. **과거 C4b군 (역사적 배포 순서):** host floor 확인 후 **81 migration** → binding/profile/membership → canonical entitlement·기존 participant/invite/retirement → lifecycle 폐기·서버 명령/receipt·intent/outbox를 외부 도달 불가로 연결한다. 다른 작업이 먼저 81을 쓰면 member는 다음 미사용 고유 번호로 재배정하고 이 계약을 갱신한다. floor 이전(v79/v80) 코드는 member DB를 열지 못한다. floor는 미지원 입장을 거절하고 독립 익명 권위를 재발급하지 않는다.
 8. **C5:** 초대·재입장·목록·unknown/삭제·방 lifecycle·방-local/서버 종료·전 기기 폐기의 완전 수직 슬라이스 검증 후 앱/웹 공통 UI/route를 함께 노출한다. 플랫폼별 별도 제품 흐름은 허용하지 않는다.
-9. **C6군:** 실제 두 기기 앱/웹, 중앙 floor/new 혼재, `v80 → floor(81 인식) → member schema`, migration 후 각 floor로 허용 rollback·floor 이전 rollback 금지, 필수 구조/실행 게이트와 계획 소유자 리뷰를 완료한다. 모든 단계에서 native pairing `session_expires_at = 0`, last-use, 30일 미사용 만료, 단일/전체 revocation을 보존한다.
+9. **C6군:** 실제 두 기기 앱/웹, 중앙 floor/new 혼재, 현재 계정 탈퇴의 `v86 → 다음 미사용 lifecycle schema` upgrade (과거 `v80 → floor(81 인식) → member schema` 검증은 역사적 증거), migration 후 각 floor로 허용 rollback·floor 이전 rollback 금지, 필수 구조/실행 게이트와 계획 소유자 리뷰를 완료한다. 모든 단계에서 native pairing `session_expires_at = 0`, last-use, 30일 미사용 만료, 단일/전체 revocation을 보존한다.
 
 각 구현 커밋은 문서/테스트 포함 1,000줄 미만으로 독립 빌드·검증·허용 floor rollback이 가능해야 한다. 중앙 floor와 host floor는 별도 장벽이며 구 Worker 잔존이나 미확정 보존 예산 미결정은 기능 노출을 막는다.
 
-### C4a: schema 81 최소 저장 계약 (2026-10-05)
+### C4a: schema 81 최소 저장 계약 (2026-10-05, 역사적 floor)
 
-C1 `e5134655`는 테이블 의미만 정했고 정확한 열/DDL은 정하지 않았다.
-C4a 착수 시 실제 schema owner는 80이며 81 migration은 없다. 81은 member용으로
-예약한다. C4a는 `CURRENT_SCHEMA_VERSION = 80`을 유지하고 정확히 81만 추가로
-인식한다. 82 이상은 거절한다. 새 DB/기존 80 DB에 member DDL이나 migration을
-실행하지 않는다. 다음 정의는 **C4b migration의 필수 최소 정의**이며 그대로
-사용해야 한다 (추가 member 테이블은 각 소유 계약에서 구현 전에 확정한다).
+C1 `e5134655` 당시의 v80 유지/v81 인식·82 이상 거절 및 migration 미실행 지시는
+역사적 floor 동작이며 현재 계정 탈퇴의 schema 지시로 쓰지 않는다. 현재 source가
+86을 소유하므로 다음 미사용 버전을 직접 확인·예약하고 이미 적용된 migration은
+재번호화하지 않는다. 아래 v81 binding DDL의 frozen 구조와 익명 권위 재발급 거절은
+계속 보존한다. 추가 lifecycle/tombstone/custody는 별도 additive 저장으로 구현한다.
 
 ```sql
 CREATE TABLE central_identity_bindings (
@@ -859,9 +1186,12 @@ the current session/person/device, owner relation, server and exact endpoint. Af
 entry, server-owner and directly derived room authority last until host-owned
 revocation, complete workspace disconnection, ingress replacement or runtime end;
 there is no periodic owner renewal, 60-second lease, or central-expiry timer.
-Central logout, account deletion, device revocation and ownership transfer affect
-the next admission. An already connected owner retains administrative power until
-host revocation or disconnection; the user explicitly accepts this security tradeoff.
+Central logout, device revocation and ownership transfer affect the next admission.
+An already connected owner retains administrative power until host revocation or
+disconnection for these events; the user accepts this tradeoff. Account deletion
+instead follows the Account deletion asynchronous tombstone/ACK contract above:
+the host terminates existing owner and derived authority when it confirms the
+terminal identity; central result remains cleanup_pending until exact host ACK.
 Unreachable central identity blocks a new admission, while admitted workspaces
 continue through central outages. Central credentials/private keys stay on the
 selecting device. The unused central `0009_owner_connections.sql` and its routes,
@@ -1842,7 +2172,8 @@ WebKit's real canvas output includes a 68-byte uncompressed eXIf chunk. Permit
 one pre-IDAT eXIf chunk of 8–4096 bytes; the PNG decoder skips this bounded opaque
 metadata and verifies its checksum without parsing or inflating it. Compressed
 ancillary metadata remains rejected. Icon removal leaves no orphan blob;
-registration/account deletion cascades the icon row. Server lists contain only the
+registration/account termination hides the icon immediately; bounded dependency
+cleanup removes its row before physical parent deletion, without cascade. Server lists contain only the
 small image reference, not repeated image data.
 
 Acceptance: real Worker request handler with signature checks and migrated SQLite
