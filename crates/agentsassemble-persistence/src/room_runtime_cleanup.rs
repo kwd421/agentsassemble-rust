@@ -33,6 +33,19 @@ pub(crate) async fn request_runtime_cleanup(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &mut DurableAgentSession,
 ) -> Result<(), PersistenceError> {
+    begin_cleanup_in(transaction, session).await?;
+    session.public.enabled = false;
+    session.public.status = AgentSessionStatus::Detached;
+    session.schedule_requested = false;
+    session.pending_inputs.clear();
+    session.public.updated_at = Utc::now();
+    save_session(transaction, session).await
+}
+
+async fn begin_cleanup_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &mut DurableAgentSession,
+) -> Result<(), PersistenceError> {
     require_valid_turn_authority(session)?;
     let inserted = sqlx::query("INSERT INTO room_runtime_cleanup(room_id, session_id) VALUES (?, ?) ON CONFLICT(room_id, session_id) DO NOTHING")
         .bind(&session.public.room_id)
@@ -45,12 +58,30 @@ pub(crate) async fn request_runtime_cleanup(
     {
         crate::attendee::cleanup::request_in(transaction, session).await?;
     }
-    session.public.enabled = false;
-    session.public.status = AgentSessionStatus::Detached;
-    session.schedule_requested = false;
-    session.pending_inputs.clear();
-    session.public.updated_at = Utc::now();
-    save_session(transaction, session).await
+    Ok(())
+}
+
+// Same custody request, with a bounded SQL patch instead of exporting/replacing retained JSON.
+pub(crate) async fn request_member_runtime_cleanup(
+    transaction: &mut Transaction<'_, Sqlite>,
+    key: &RoomRuntimeCleanupKey,
+) -> Result<(), PersistenceError> {
+    let mut session = load_session(transaction, &key.room_id, &key.session_id).await?;
+    if !session.public.external_owned || session.public.process_ownership != "external" {
+        return Err(PersistenceError::CommandUnresolved {
+            code: "account_removal_companion_custody_changed".into(),
+            message: "An independent provider runtime cannot be removed through companion custody."
+                .into(),
+        });
+    }
+    begin_cleanup_in(transaction, &mut session).await?;
+    let changed = sqlx::query("UPDATE agent_sessions SET session_json=json_set(session_json,'$.enabled',json('false'),'$.status','detached','$.schedule_requested',json('false'),'$.pending_inputs',json('[]'),'$.runtime_status',json(?),'$.updated_at',?) WHERE room_id=? AND session_id=?")
+        .bind(serde_json::to_string(&session.public.runtime_status)?).bind(Utc::now().to_rfc3339())
+        .bind(&key.room_id).bind(&key.session_id).execute(&mut **transaction).await?;
+    if changed.rows_affected() != 1 {
+        return Err(PersistenceError::ParticipantMissing);
+    }
+    Ok(())
 }
 
 pub(crate) async fn load_launch_session(

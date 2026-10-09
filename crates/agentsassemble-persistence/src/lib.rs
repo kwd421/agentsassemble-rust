@@ -141,6 +141,8 @@ mod central_member_removal;
 pub use central_member_removal::{MemberRemovalKey, MemberRemovalPrincipal};
 mod central_removal_authority;
 pub use central_removal_authority::MemberRemovalAuthorityPage;
+mod central_removal_companions;
+pub use central_removal_companions::MemberRemovalCompanionPage;
 mod member_admission;
 mod member_connect;
 pub use member_connect::MemberConnectRoom;

@@ -1,5 +1,50 @@
 # Verification Contract
 
+## Account deletion — exact companion cleanup request implemented, not shipped (2026-10-10)
+
+Rust after11e0c693 advances the committed companions phase one parent-bound invite
+at a time, from actual human-session or owner-derived-pairing custody. Atomic
+invite revocation, participant-left event through the existing leave event owner,
+existing runtime cleanup request/control and cursor checkpoint use <=9 metadata
+rows including one exact pending provider-request cancellation. Pending-session
+index is checked with a capped two-row read; corrupt multiplicity fails closed.
+Other native companion/session/request and independent server runtime remain.
+Changed external-to-server custody rolls back, never stops that provider as if it
+were still the old companion. Shared runtime cleanup marker preserves existing
+moderation behavior; the member path patches retained session JSON inside SQLite
+instead of exporting/replacing it. Encoded keys, cursor, events and patch descriptor
+budget <=128KiB; no avatar BLOB handling or stored replay-size claim here.
+Result remains requested cleanup work, NOT verified physical termination or host
+completion. After this phase member_invites is still unimplemented; nothing is
+advertised/served as the deletion protocol, no new lifecycle task or periodic scan.
+
+Actual isolated SQLite regressions: injected cursor failure leaves zero partial
+invite/cleanup changes; retry emits one left event, queues exact companion cleanup;
+independent native companion stays authorized. Exact targeted provider request
+cancels while native companion request stays open. Changed server custody refuses
+with zero partial cleanup/invite/cursor changes. Full453/0 exit0 (9.03s), then use
+existing leave event constructor, affected2/0; add exact provider cancellation and
+final full453/0 exit0 (9.32s). Existing long-function/default-trait lint failures
+corrected by sharing the canonical event owner, bounded descriptor validation and
+committed phase read; no lint/architecture exceptions. Final clippy all-targets
+-D warnings, architecture/source-growth/policy, format/diff pass. After final
+phase-read extraction the same two affected tests pass; measured successful page
+SQLite total_changes delta9 with two pending request fixtures (affected2/0 exit0,
+0.04s), preserving the independent request and enforcing <=100.
+Logs /private/tmp/account-deletion-v2-companions-{check,full,full-final,tests-final,
+tests-commit,clippy,clippy-final,clippy-final-fixed,clippy-commit,gates,gates-final,
+gates-commit,format,cost,clippy-cost}.log. Private draft recorded below was subsequently integrated
+and corrected here; the archived draft itself is not an acceptance artifact.
+
+Still required: startup/request wake, actual stop/publisher handoff, all bounded
+identity/cache/FTS/avatar phases and historical author override, secure host route
+and visiting client, account_deleted hosting, optional native wipe, shared deletion/
+explicit registration UI, packaged/web and real native/web Google acceptance.
+Design gate unchanged (manager extra rounds1/3 used); code review0/3, APPROVE before
+push/deploy remains mandatory. Google test-account/user authentication request has
+no reply; actual auth_time is unknown. No push/deploy/production or owner-account
+deletion, real provider stop, protected edit, or complete-feature claim.
+
 ## Account deletion — owner/derived authority pages implemented, not shipped (2026-10-10)
 
 Rust extends eb629971's person-local fence to host-owner entry/revalidation and

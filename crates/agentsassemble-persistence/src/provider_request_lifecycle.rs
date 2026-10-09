@@ -70,6 +70,27 @@ pub(crate) async fn cancel_participant_in(
     Ok(())
 }
 
+// The partial pending-session index admits at most one exact companion request.
+pub(crate) async fn cancel_removed_companion_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    session_id: &str,
+) -> Result<Vec<agentsassemble_domain::RoomEvent>, PersistenceError> {
+    let rows = sqlx::query("SELECT * FROM provider_requests WHERE room_id=? AND session_id=? AND state IN ('open','resolving') LIMIT 2")
+        .bind(room_id).bind(session_id).fetch_all(&mut **tx).await?;
+    if rows.len() > 1 {
+        return Err(PersistenceError::CommandUnresolved {
+            code: "account_removal_requests_unconfirmed".into(),
+            message: "The exact companion pending-request invariant is invalid.".into(),
+        });
+    }
+    let mut events = Vec::new();
+    for row in rows {
+        events.push(close_in(tx, &row, "cancelled").await?);
+    }
+    Ok(events)
+}
+
 // Called before the existing canonical session event. Its publication owner catches up all
 // committed events in sequence, so the private close event is published in that same batch.
 // The partial pending-session index bounds this work to at most one request per transition.

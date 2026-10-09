@@ -6,6 +6,137 @@ use crate::{
 use chrono::{Duration, Utc};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+#[tokio::test]
+async fn companion_removal_rolls_back_with_cursor_and_preserves_native_companion() -> TestResult {
+    let OwnerRemovalFixture {
+        store,
+        binding,
+        companion,
+        native,
+        ..
+    } = removal_fixture().await?;
+    let independent = admit_companion(&store, &RoomSessionAuthorization::Operator(native)).await?;
+    for identity in [companion.principal(), independent.authorization.principal()] {
+        sqlx::query("INSERT INTO provider_requests(room_id,request_id,session_id,turn_generation,execution_id,owner_id,request_json,expires_at,state,open_event_id) VALUES ('room',?,?,1,?,'local-operator-user','{}',?,'open',?)")
+            .bind(uuid::Uuid::new_v4().to_string()).bind(&identity.participant_id).bind(uuid::Uuid::new_v4().to_string())
+            .bind((Utc::now()+Duration::seconds(60)).timestamp_millis()).bind(uuid::Uuid::new_v4().to_string()).execute(&store.pool).await?;
+    }
+    let key = commit_removal(&store, &binding).await?;
+    for _ in 0..3 {
+        store.advance_member_removal_authority(&key).await?;
+    }
+    sqlx::query("CREATE TRIGGER reject_companion_cursor BEFORE UPDATE ON central_member_removals BEGIN SELECT RAISE(ABORT,'injected companion cursor failure'); END").execute(&store.pool).await?;
+    assert!(store.advance_member_removal_companions(&key).await.is_err());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_runtime_cleanup")
+            .fetch_one(&store.pool)
+            .await?,
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_attendee_invites WHERE revoked=1")
+            .fetch_one(&store.pool)
+            .await?,
+        0
+    );
+    sqlx::query("DROP TRIGGER reject_companion_cursor")
+        .execute(&store.pool)
+        .await?;
+    let before: i64 = sqlx::query_scalar("SELECT total_changes()")
+        .fetch_one(&store.pool)
+        .await?;
+    let page = store.advance_member_removal_companions(&key).await?;
+    let affected = sqlx::query_scalar::<_, i64>("SELECT total_changes()")
+        .fetch_one(&store.pool)
+        .await?
+        - before;
+    assert!(affected <= 100);
+    println!("person removal companion metadata_rows={affected}");
+    let cleanup = page.cleanup.ok_or("missing exact companion cleanup")?;
+    assert_eq!(cleanup.session_id, companion.principal().participant_id);
+    assert_eq!(
+        page.room_sessions,
+        vec![("room".into(), *companion.session_fingerprint())]
+    );
+    assert_eq!(page.events.len(), 2);
+    assert_eq!(page.events[0].event_type, "participant_left");
+    assert_eq!(page.next_phase, "companions");
+    assert_eq!(page.events[1].event_type, "provider_request_closed");
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT state FROM provider_requests WHERE session_id=?")
+            .bind(&companion.principal().participant_id)
+            .fetch_one(&store.pool)
+            .await?,
+        "cancelled"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT state FROM provider_requests WHERE session_id=?")
+            .bind(&independent.authorization.principal().participant_id)
+            .fetch_one(&store.pool)
+            .await?,
+        "open"
+    );
+    store
+        .revalidate_attendee_session(&independent.authorization, Utc::now())
+        .await?;
+    assert_eq!(
+        store
+            .advance_member_removal_companions(&key)
+            .await?
+            .next_phase,
+        "member_invites"
+    );
+    assert_eq!(sqlx::query_scalar::<_,i64>("SELECT COUNT(*) FROM room_events WHERE json_extract(event_json,'$.type')='participant_left'").fetch_one(&store.pool).await?,1);
+    // Store pages do not confirm a physical process stop; existing cleanup owner remains pending.
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_runtime_cleanup")
+            .fetch_one(&store.pool)
+            .await?,
+        1
+    );
+    assert_eq!(store.local_operator_profile().await?.display_name, "Owner");
+    Ok(())
+}
+
+#[tokio::test]
+async fn companion_removal_refuses_changed_server_custody_without_partial_effects() -> TestResult {
+    let OwnerRemovalFixture {
+        store,
+        binding,
+        companion,
+        ..
+    } = removal_fixture().await?;
+    let key = commit_removal(&store, &binding).await?;
+    for _ in 0..3 {
+        store.advance_member_removal_authority(&key).await?;
+    }
+    sqlx::query("UPDATE agent_sessions SET session_json=json_set(session_json,'$.external_owned',json('false'),'$.process_ownership','server') WHERE session_id=?")
+        .bind(&companion.principal().participant_id).execute(&store.pool).await?;
+    assert!(
+        matches!(store.advance_member_removal_companions(&key).await,Err(crate::PersistenceError::CommandUnresolved{code,..}) if code=="account_removal_companion_custody_changed")
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_runtime_cleanup")
+            .fetch_one(&store.pool)
+            .await?,
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_attendee_invites WHERE revoked=1")
+            .fetch_one(&store.pool)
+            .await?,
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT cursor FROM central_member_removals")
+            .fetch_one(&store.pool)
+            .await?,
+        ""
+    );
+    Ok(())
+}
+
 struct OwnerRemovalFixture {
     store: SqliteStore,
     binding: OwnerAdmissionBinding,
