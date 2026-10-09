@@ -20,7 +20,7 @@ use agentsassemble_server::{
     issue_settings_directory_read_ticket,
 };
 use anyhow::Context;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 mod agent_avatar_control;
@@ -45,6 +45,11 @@ const MAX_CONTROL_MESSAGE_BYTES: usize = 4 * 1024;
 const PUBLIC_URL_ENV: &str = "AGENTSASSEMBLE_PUBLIC_URL";
 const TRUSTED_PROXY_TOKEN_ENV: &str = "AGENTSASSEMBLE_TRUSTED_PROXY_TOKEN";
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum OfflineMaintenance {
+    AccountDeletion,
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "agentsassemble-server")]
 struct Args {
@@ -56,6 +61,8 @@ struct Args {
     central_login_only: bool,
     #[arg(long, hide = true)]
     inspect_host_device: Option<PathBuf>,
+    #[arg(long, hide = true, num_args = 0..=1, default_missing_value = "account-deletion", conflicts_with_all = ["central_login_only", "runtime_preflight", "inspect_host_device", "restart_source"])]
+    reset_account_deleted_data: Option<OfflineMaintenance>,
     #[arg(long, default_value = ".agentsassemble-rust/runtime.sqlite3")]
     database: PathBuf,
     #[arg(long)]
@@ -99,6 +106,14 @@ fn main() -> anyhow::Result<()> {
         }))
         .init();
     let args = Args::parse();
+    if args.reset_account_deleted_data.is_some() {
+        let outcome = runtime.block_on(
+            agentsassemble_persistence::SqliteStore::reset_deleted_account_data(&args.database),
+        )?;
+        println!("{}", serde_json::to_string(&outcome)?);
+        runtime.shutdown_timeout(Duration::from_secs(1));
+        return Ok(());
+    }
     if args.runtime_preflight {
         println!(
             "{}",

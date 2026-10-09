@@ -50,6 +50,24 @@ impl SqliteStore {
         Self::open_prepared(PreparedDatabase::from_path(path)?).await
     }
 
+    pub(crate) fn from_owned_pool(
+        pool: SqlitePool,
+        prepared: PreparedDatabase,
+        host_key: Arc<HostKeyMaterial>,
+        fresh: bool,
+    ) -> Self {
+        Self {
+            pool,
+            writer_lease: prepared.writer_lease,
+            database_identity: prepared.identity,
+            host_key,
+            runtime_generation: format!("runtime-generation-v1-{}", uuid::Uuid::new_v4()).into(),
+            side_chat: Arc::new(crate::side_chat::SideChatRepository::default()),
+            created: fresh,
+            directory_changes: tokio::sync::watch::channel(()).0,
+        }
+    }
+
     async fn open_prepared(prepared: PreparedDatabase) -> Result<Self, PersistenceError> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
@@ -78,16 +96,7 @@ impl SqliteStore {
             host_key_policy,
             &initialization_nonce,
         )?;
-        let store = Self {
-            pool,
-            writer_lease: prepared.writer_lease,
-            _database_identity: prepared.identity,
-            host_key: Arc::new(host_key),
-            runtime_generation: format!("runtime-generation-v1-{}", uuid::Uuid::new_v4()).into(),
-            side_chat: Arc::new(crate::side_chat::SideChatRepository::default()),
-            created: fresh_authority,
-            directory_changes: tokio::sync::watch::channel(()).0,
-        };
+        let store = Self::from_owned_pool(pool, prepared, Arc::new(host_key), fresh_authority);
         if store.created {
             store.initialize().await?;
         } else {
@@ -134,7 +143,7 @@ async fn inspect_database_authority(
         .map(DatabaseAuthority::Initialized)
 }
 
-async fn install_initialization_marker(
+pub(crate) async fn install_initialization_marker(
     pool: &SqlitePool,
     nonce: &str,
 ) -> Result<(), PersistenceError> {

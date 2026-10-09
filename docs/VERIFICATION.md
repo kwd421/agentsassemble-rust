@@ -2,6 +2,40 @@
 
 
 
+## Account deletion — offline data reset and shared UI in progress (2026-10-10)
+
+Persistence offline reset retains exclusive target writer custody, validates exact
+canonical private installation path/single-link files, builds a same-directory DB
+through existing schema/identity/bootstrap owners, and checks empty product rows.
+Only installation ID/key bindings, terminal hosting restriction and old epoch survive.
+Checkpoint/close precedes atomic replacement; directory fsync and exact cache/sidecar
+cleanup failures are reported after applied reset. No recovery copy/recursive deletion.
+CLI maintenance exits before network/provider runtime startup. Target writer refusal,
+exact key/fence preservation, empty bootstrap/product data, unsafe roots/hardlinks,
+and unrelated symlink cache retention with applied-reset error passed2/0 (0.07s).
+Earlier tests failed on macOS temporary-path alias and initialization-marker count;
+canonical fixture path and explicit retained infrastructure marker corrected them.
+Persistence clippy all-targets -D warnings passes10.44s; server clippy all-targets
+passes after replacing added CLI bool with typed offline maintenance option. No
+lint/gate exception. Logs /private/tmp/account-deletion-v3-{local-reset-tests-3,
+local-reset-clippy-3,reset-server-clippy-2}.log.
+
+Native lifecycle and shared settings/controller/Google UI are still uncommitted.
+Affected frontend33/0 and build pass; architecture/source-growth/policy19/0 pass.
+Native clippy passes; initial native test expected old registered command count32,
+being updated to exact added-purpose permissions (34), not weakening authority.
+No packaged/production acceptance or capability exposure yet. Worker240a604a records
+only regenerated source-map LOC count; final codebase-map-check passes. Actual
+isolated Miniflare Google native/web verification/explicit registration, rollback,
+lost-response/no-provision and old-Worker refusal pass; current purpose/capability
+Miniflare tests pass; actual D1 guest/Google proof rollback/freshness tests pass.
+Google signatures are controlled fixtures, never real Google/provider evidence.
+Logs /private/tmp/account-deletion-v3-{google-miniflare,grants-miniflare,
+google-proof-miniflare,settings-build,settings-tests,reset-settings-gates}.log.
+
+Daybreak code review0/3. No push, deployment, existing-account/owner deletion or
+password/2FA entry. Real Google E2E remains pending the owner's spare account.
+
 ## Account deletion — exact host demotion and fresh local registration (2026-10-10)
 
 Rust after80c5bbb1 handles pinned central account_deleted with exact current server

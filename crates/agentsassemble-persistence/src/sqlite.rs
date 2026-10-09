@@ -115,7 +115,7 @@ pub struct AgentLaunchFailureCommit {
 pub struct SqliteStore {
     pub(crate) pool: SqlitePool,
     pub(crate) writer_lease: Option<Arc<File>>,
-    pub(crate) _database_identity: Option<Arc<same_file::Handle>>,
+    pub(crate) database_identity: Option<Arc<same_file::Handle>>,
     pub(crate) host_key: Arc<crate::host_key_file::HostKeyMaterial>,
     pub(crate) runtime_generation: Arc<str>,
     pub(crate) side_chat: Arc<crate::side_chat::SideChatRepository>,

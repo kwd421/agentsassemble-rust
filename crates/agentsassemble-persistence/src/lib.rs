@@ -1,3 +1,5 @@
+mod account_data_reset;
+pub use account_data_reset::AccountDataResetOutcome;
 mod account_deleted_host;
 mod attendee;
 #[cfg(test)]

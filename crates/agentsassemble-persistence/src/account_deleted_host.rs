@@ -180,39 +180,18 @@ mod tests {
             Some("account_deleted")
         );
         assert_eq!(store.host_identity().await?.server_id(), identity);
-        assert!(
-            store
-                .register_after_account_deletion(
-                    "https://central.example",
-                    "deleted-person",
-                    "old",
-                    "new"
-                )
-                .await
-                .is_err()
-        );
-        assert!(
-            store
-                .register_after_account_deletion(
-                    "https://central.example",
-                    "fresh-person",
-                    "wrong",
-                    "new"
-                )
-                .await
-                .is_err()
-        );
-        assert!(
-            store
-                .register_after_account_deletion(
-                    "https://central.example",
-                    "fresh-person",
-                    "old",
-                    "old"
-                )
-                .await
-                .is_err()
-        );
+        for (person, old, new) in [
+            ("deleted-person", "old", "new"),
+            ("fresh-person", "wrong", "new"),
+            ("fresh-person", "old", "old"),
+        ] {
+            assert!(
+                store
+                    .register_after_account_deletion("https://central.example", person, old, new)
+                    .await
+                    .is_err()
+            );
+        }
         store
             .require_fresh_host_registration("https://central.example", "fresh-person")
             .await?;
