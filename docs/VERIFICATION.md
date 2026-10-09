@@ -1,5 +1,26 @@
 # Verification Contract
 
+## Account deletion — roomless settings entry and durable anonymization evidence (2026-10-10)
+
+Actual server chooser exposed account settings only through an already-room-derived
+query URL. Both app/web now expose the same account-settings button before opening
+any room, using existing CentralAccountSettings and root account operation. Required
+entry recorded in contract before fix; affected27/0 and build pass, architecture and
+source gates unchanged. Stable-signed updated V5 restarted with original Guest,
+operator and anonymized history intact. Read-only exact isolated DB inspection:
+all TEXT columns across product tables contain zero prior visitor display names,
+profiles retain independent local operator plus anonymous visitor, avatar tables0,
+message search records2 and pins1. No raw profile rows/credentials exported. A second
+new isolated V6 host/Guest accepted this visitor through actual secure invite, then
+only that app was quit to exercise real offline skip. During address-bar navigation,
+one Computer Use AX diff exposed that run's disposable one-use invite query before
+frontend stripped it; the invite was then consumed by the intended test visitor.
+No owner/production credential or recovery code was exposed; future loading AX is
+redacted before output. No secrets are in repository fixtures/logs/commits.
+Remaining actual corrected receipt/skip and native own stop/wipe verification,
+production Guest, Daybreak APPROVE0/3, pushes and deployment continue. Real Google
+E2E remains pending owner spare account; controlled local Google tests only.
+
 ## Account deletion — actual visitor anonymization and modal authority correction (2026-10-10)
 
 Developer ID signed isolated V5 package at26b0bb94 created a new local-central

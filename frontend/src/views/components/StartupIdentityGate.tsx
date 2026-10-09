@@ -85,6 +85,7 @@ export default function StartupIdentityGate({
   const webEntry = isCentralWebEntry();
   const [googleRegistration, setGoogleRegistration] = useState<GoogleRegistrationRequired | null>(null);
   const [screen, setScreen] = useState<Screen>("choice");
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [issuedRecoveryCode, setIssuedRecoveryCode] = useState("");
@@ -549,7 +550,8 @@ export default function StartupIdentityGate({
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용해요. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남아요."}
           </p>
         </header>
-        {webEntry && new URLSearchParams(window.location.search).get("account") === "settings" && <CentralAccountSettings disabled={busy} />}
+        {screen === "servers" && <button className="ops-button" disabled={busy} onClick={() => setAccountSettingsOpen(value => !value)}>{accountSettingsOpen ? "계정 설정 닫기" : "계정 설정"}</button>}
+        {(accountSettingsOpen || (webEntry && new URLSearchParams(window.location.search).get("account") === "settings")) && <CentralAccountSettings disabled={busy} />}
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
 
         {googleRegistration && <GoogleRegistrationChoice request={googleRegistration} onCancel={() => { setGoogleRegistration(null); setError(""); }} onComplete={async () => { setGoogleRegistration(null); setError(""); await finishCentralStartup(); }} />}

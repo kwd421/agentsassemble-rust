@@ -9,6 +9,7 @@ vi.mock("../../lib/central/identity", () => ({
   CENTRAL_SESSION_CHANGED_EVENT: "agentsassemble:central-session-changed",
   CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => true, isCentralWebEntry: () => true,
+  centralAccountEntryUrl: () => "https://central.example/",
   centralSessionLoggedOut: () => false, loadPendingCentralRecoveryCode: () => "",
   bootstrapCentral: mocks.bootstrap, loadCentralSession: () => mocks.session,
   isCentralAuthenticationError: () => false,
@@ -28,6 +29,15 @@ const account = { person: { display_name: "Existing Google User" }, servers: [
 ] };
 afterEach(() => { cleanup(); vi.resetAllMocks(); mocks.session = null; mocks.callback = null; });
 
+it("opens shared account deletion settings without first opening a room", async () => {
+  mocks.session = { person: { display_name: "Disposable Guest", identity_kind: "guest" } };
+  mocks.bootstrap.mockResolvedValue({ ...account, person: { display_name: "Disposable Guest" } });
+  render(<StartupIdentityGate deviceToken="" onComplete={completeStartup} />);
+  fireEvent.click(await screen.findByRole("button", { name: "계정 설정" }));
+  expect(screen.getByRole("button", { name: "계정 탈퇴" })).toBeTruthy();
+  expect(mocks.open).not.toHaveBeenCalled();
+});
+
 it("requires live validation and exposes an owner grant failure without entering a room", async () => {
   mocks.session = {};
   mocks.bootstrap.mockRejectedValueOnce(new Error("session revoked")).mockResolvedValue(account);
@@ -37,6 +47,7 @@ it("requires live validation and exposes an owner grant failure without entering
   expect(screen.queryByText("My Mac")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "다시 확인" }));
   const open = await screen.findByRole("button", { name: "My Mac 서버 열기" });
+  expect(screen.getByRole("button", { name: "계정 설정" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "My Windows 서버 열기" })).toHaveProperty("disabled", true);
   expect(screen.getByRole("button", { name: "Invited server 서버 열기" })).toHaveProperty("disabled", true);
   fireEvent.click(open);

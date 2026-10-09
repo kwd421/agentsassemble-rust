@@ -55,6 +55,8 @@ replace the other operation or hide its remaining buttons; app/web share this ow
 
 Shared app/web settings → 계정 → 계정 탈퇴, including roomless startup/server chooser,
 uses `UserSettingsPanel` / `CentralAccountSettings` and trusted central credentials.
+The server chooser exposes an explicit account-settings button in both platforms;
+a query-only link from a previously opened room is insufficient for roomless users.
 Local guest/Google unlink, logout, ordinary leave/kick keep their existing meanings.
 Host-served untrusted JavaScript cannot obtain central credentials or step-up.
 
