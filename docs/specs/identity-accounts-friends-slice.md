@@ -3,17 +3,22 @@
 ## Account deletion — owner redesign (2026-10-09)
 
 Status: binding owner decision supersedes the stopped custody/tombstone design and
-its historical approvals. New Daybreak Blue xhigh/read-only design review required
-(max four rounds); implementation follows APPROVE, then tests/gates and code review
-(max three rounds), both branch pushes and central deployment. Never delete the
-owner or any existing production account. Protected `.agents/`,
-`scripts/__pycache__/`, `wrangler.cleanup-*.toml` remain untouched. Existing stopped
-commits are retained or explicitly reverted; historical evidence is not new approval.
+its historical approvals. Continue from Rust b884d6c0 / Worker 913d963d.
+Manager authorization (2026-10-10): up to THREE ADDITIONAL Daybreak Blue xhigh,
+read-only design rounds (rounds 5–7). Proceed to implementation when a completed
+design verdict has no Critical/High findings and every Medium/Low has been corrected
+in this contract; explicit APPROVE is preferred, not additionally required.
+Code review MUST reach APPROVE within max three rounds before either push/deploy.
+Tests/gates and real acceptance remain mandatory. Never delete the owner or any
+existing production account. Protected `.agents/`, `scripts/__pycache__/`,
+`wrangler.cleanup-*.toml` remain untouched. Existing stopped commits are retained
+or explicitly reverted; historical evidence is not new approval.
 
-Current gate (2026-10-10): all four authorized design rounds completed REVISE;
-round 4 C0/H0/M1/L0. Its last grant-consumption constraint correction is recorded
-below but has NOT received APPROVE. No implementation/push/deployment is authorized
-past this gate without owner extension of the review-round limit and actual approval.
+Current gate: original four rounds ended REVISE; round 4 C0/H0/M1/L0.
+Its tokenless mixed-version grant-consumption correction is documented below.
+Additional round 5 will review that correction and the full binding design against
+both current repositories. The manager's updated gate supersedes the previous
+requirement for explicit design APPROVE; code APPROVE remains required.
 
 Read routes: existing frontend `lib/central/identity.ts`, `memberConnect.ts`,
 `ownerConnect.ts`, settings owners; Rust `participant_removal.rs`, `member_sessions.rs`,
@@ -109,8 +114,8 @@ NULL. No existing-table rebuild, new row/index, fallback or quota increase. Prov
 old hidden=true fails without consuming grant or partially hiding membership,
 then exact new deletion redeem consumes once; ordinary/prefix-tampered/used-at-only
 paths consume zero. Final central account DELETE consumes the step-up proof only;
-it does not redeem a host grant. This last correction remains unapproved at the
-four-round gate and must be independently reviewed before implementation.
+it does not redeem a host grant. This last correction is included in additional round 5; apply the manager
+design gate above to its completed verdict before implementation.
 The fixed UI explanation applies even if listing fails; expose list failure as
 unconfirmed/skipped, offer explicit retry or continuation with that disclosure.
 Host progress is device-local UI state, not central custody or completion authority.

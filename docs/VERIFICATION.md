@@ -1,5 +1,24 @@
 # Verification Contract
 
+## Account deletion — manager continuation / additional design round 5 (2026-10-10)
+
+Starting HEADs directly verified: Rust b884d6c0, Worker 913d963d. Binding prompt:
+/private/tmp/claude-501/-Users-seinel-Projects-AgentsAssemble-Rust/f43b6994-3778-4ca2-8834-d04c0c670717/scratchpad/account-deletion-v2-prompt.md.
+Manager permits up to three additional design reviews (rounds 5–7): completed
+C0/H0 verdict plus every Medium/Low corrected in the owning contract admits
+implementation; explicit design APPROVE preferred, not required. Code APPROVE
+within three rounds remains mandatory before push/deploy. Earlier four-round
+BLOCKED checkpoint below is historical and superseded by this authorization.
+Contract/Worker README gate updated before source work. Round 5 requested next.
+
+Rust tracked work was clean; only protected untracked .agents/ and
+scripts/__pycache__/ existed. Worker retains eight stopped tracked source/test
+edits, four custody-only untracked files and protected cleanup configs. Preserve
+these until scoped, backed-up replacement/removal is justified against the binding
+redesign. No implementation, test, push/deploy or production account deletion in
+this continuation yet. Never delete owner or any existing production account.
+
+
 ## Account deletion — four-round design gate BLOCKED (2026-10-10)
 
 Binding owner redesign recorded in identity contract, linked invite clauses and
