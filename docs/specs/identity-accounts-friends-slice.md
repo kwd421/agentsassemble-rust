@@ -54,6 +54,14 @@ Do not terminate user-owned external provider processes.
 
 ### Admission and terminal authority
 
+Central storage implementation: the independent incarnation row also owns its
+owner custody generation/release/ACK fields; `owner_cleanup_targets` is a logical
+view of these slots. Exact grant replay metadata stays on the existing grant.
+Member custody/ACK/key provenance uses additive existing member projection fields.
+This avoids one expiring row per owner entry, without removing the independent
+inventory or its retention/floor barriers. Measure birth/purge costs and charge
+new inventory debt to the existing creation owner; no increased daily limits.
+
 No separate finalize call. For owner/member initial admission and reconnect:
 
 1. Host durably prepares an unusable provisional admission bound to exact issuer,
