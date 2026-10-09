@@ -1,5 +1,26 @@
 # Verification Contract
 
+## Account deletion — actual skip list, native own stop and independent data choices (2026-10-10)
+
+Actual latest web0ee9a60c roomless account-settings button opened shared deletion UI.
+New Guest step-up and typed confirmation retried completed V5 host removal through
+fresh existing secure admission and received confirmed completion. Actual stopped
+V6 server was explicitly skipped as unreachable, with separate skipped list; no
+false cleanup claim. Separate central disable completed with both public results
+retained and visible pixels. V5 native66a973bc own Guest settings used actual recovery
+step-up and explicit confirmation, purpose-specific private ticket and signed custody
+check. It stopped its tunnel/central binding, then explicit final central disable
+completed while root UI persisted. Exact isolated DB shows account_deleted fence,
+two completed removals, one room/nine events and same independent local operator.
+Before-reset public server ID/epoch/public-key digest retained only in run scratch.
+Default keep performed zero wipe: existing room and messages remain after disable.
+Native pixels/AX exposed duplicate radio name in root result plus startup choice:
+visible keep appeared unselected. Contract recorded; React useId owns each distinct
+group, affected4/0 and build pass. Corrected package restart/wipe verification follows.
+Logs /private/tmp/account-deletion-v3-independent-choice-{tests,build}.log.
+Daybreak APPROVE0/3, both pushes/deploy and production disposable Guest remain.
+Real Google E2E remains pending owner spare-account action, no real Google use.
+
 ## Account deletion — roomless settings entry and durable anonymization evidence (2026-10-10)
 
 Actual server chooser exposed account settings only through an already-room-derived

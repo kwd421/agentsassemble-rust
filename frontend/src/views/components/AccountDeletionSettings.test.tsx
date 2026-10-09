@@ -54,6 +54,16 @@ it("keeps local data by default and reports applied reset plus exact cleanup fai
   expect(screen.getByRole("alert").textContent).toContain("캐시 정리에 실패");
 });
 
+it("keeps the separate startup choice when the retained result selects wipe", async () => {
+  const user = userEvent.setup();
+  render(<><LocalAccountDataChoice disabled={false} /><LocalAccountDataChoice disabled={false} /></>);
+  const groups = screen.getAllByRole("group", { name: "이 컴퓨터의 방 데이터도 지울까요?" });
+  await user.click(within(groups[0]).getByRole("radio", { name: "이 컴퓨터의 방 데이터 삭제" }));
+  expect((within(groups[1]).getByRole("radio", { name: "유지 (기본)" }) as HTMLInputElement).checked).toBe(true);
+  expect(within(groups[1]).queryByRole("button", { name: "이 컴퓨터의 방 데이터 삭제" })).toBeNull();
+  expect(wipeDesktopAccountData).not.toHaveBeenCalled();
+});
+
 it("keeps the central account operation and optional local choice when its room/startup tree is replaced", async () => {
   const user = userEvent.setup();
   vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(function(this: HTMLDialogElement) { this.open = true; });

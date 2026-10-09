@@ -57,6 +57,9 @@ Shared app/web settings → 계정 → 계정 탈퇴, including roomless startup
 uses `UserSettingsPanel` / `CentralAccountSettings` and trusted central credentials.
 The server chooser exposes an explicit account-settings button in both platforms;
 a query-only link from a previously opened room is insufficient for roomless users.
+Native local-data choice can exist in the retained root result and the ended startup
+tree together: each choice owns a distinct radio group. The visible result's default
+keep selection must remain visibly selected when startup mounts its separate choice.
 Local guest/Google unlink, logout, ordinary leave/kick keep their existing meanings.
 Host-served untrusted JavaScript cannot obtain central credentials or step-up.
 

@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { wipeDesktopAccountData } from "../../lib/desktopBridge";
 /** Same-installation native capability and persisted terminal fence own actual reset. */
 export default function LocalAccountDataChoice({ disabled }: { disabled: boolean }) {
+  const group = useId();
   const [choice, setChoice] = useState("keep");
   const [busy, setBusy] = useState(false), [done, setDone] = useState(false), [error, setError] = useState("");
   const claimed = useRef(false);
@@ -14,8 +15,8 @@ export default function LocalAccountDataChoice({ disabled }: { disabled: boolean
   }
   return <fieldset aria-busy={busy}><legend>이 컴퓨터의 방 데이터도 지울까요?</legend>
     <p>이 컴퓨터의 방·메시지·첨부파일·AI 기록·설정을 지워요. 서버 키·호스팅 제한과 DB 밖의 중앙 인증 정보·공급자 프로그램·설정·로그·다른 파일은 유지돼요. 다른 서버에는 적용하지 않아요.</p>
-    {!done && <><label><input type="radio" name="account-wipe" checked={choice === "keep"} onChange={() => setChoice("keep")} disabled={busy} />유지 (기본)</label>
-    <label><input type="radio" name="account-wipe" checked={choice === "wipe"} onChange={() => setChoice("wipe")} disabled={busy} />이 컴퓨터의 방 데이터 삭제</label>
+    {!done && <><label><input type="radio" name={group} checked={choice === "keep"} onChange={() => setChoice("keep")} disabled={busy} />유지 (기본)</label>
+    <label><input type="radio" name={group} checked={choice === "wipe"} onChange={() => setChoice("wipe")} disabled={busy} />이 컴퓨터의 방 데이터 삭제</label>
     {choice === "wipe" && <button className="ops-button" disabled={disabled || busy} onClick={() => void wipe()}>이 컴퓨터의 방 데이터 삭제</button>}</>}
     {done && <p role="status">이 컴퓨터의 방 데이터를 삭제했어요. 서버는 중지돼 있어요. 다시 사용하려면 앱을 직접 다시 시작하고 새 계정을 명시적으로 등록해 주세요.</p>}
     {error && <p role="alert">{error}</p>}
