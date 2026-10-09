@@ -1,6 +1,43 @@
 # Verification Contract
 
 
+
+## Account deletion — exact host demotion and fresh local registration (2026-10-10)
+
+Rust after80c5bbb1 handles pinned central account_deleted with exact current server
+and epoch plus actual registration owner person. One immediate local transaction
+commits that person's removal job and account_deleted hosting restriction. The
+existing sender stops ingress, and the existing startup/change-wake removal owner
+settles actual owner-derived sessions/companions independently of the shared local
+operator. Duplicate retirement supersedes this reason permanently; normal login or
+the ordinary epoch setter cannot clear either reason. Explicit local-admin fresh
+registration requires a fresh person/epoch, exact old-epoch CAS and settled effects;
+it alone resumes ingress through the existing ingress lifecycle. Shared startup UI
+has the separate new-account registration action. Central signed owner read has no
+host cleanup ledger/ACK or proof/receipt borrowing. Private installation stop uses
+that actual current owner, and completed local removal before returning success.
+
+Worker712f554e adds host-authenticated owner read and exact owner person in terminal
+responses. Full existing Worker suite280/0 exit0 (5.82s), including key/signature,
+request-body and terminal-owner boundary. Node SQLite tests are not Miniflare or
+real-account evidence. Rust file-store regression1/0 exit0 (0.04s): stale tuple zero
+write, ordinary setter refusal, durable reopen, independent operator preserved,
+removed person/wrong old epoch/same new epoch refusal, fresh CAS, permanent retirement
+never cleared. Sender terminal tests5/0 exit0 (0.25s); actual local HTTP registration
+1/0 exit0 (0.24s) covers one-use/private authority, old setter refusal, no fence
+change for signing proof, stale CAS, fresh epoch and permanent refusal. Clippy
+all-targets -D warnings exit0; architecture/source-growth/policy and diff/format
+pass without exceptions. Isolated index-only frontend build passes (host-staged-build.log),
+excluding the still-uncommitted Google/controller changes. Logs /private/tmp/account-deletion-v3-{deleted-host-
+persistence-test,deleted-host-terminal-tests,fresh-registration-http-test,
+own-stop-clippy-2,own-host-gates,worker-full-own-stop}.log.
+
+No support capability/UI deletion exposure, packaged/production guest acceptance,
+Google E2E, push or deploy is claimed. Visiting controller and explicit Google UI
+remain separate uncommitted work; native optional reset and complete own-computer
+flow remain to finish. Daybreak code review0/3; APPROVE is mandatory before either
+push, overriding the ordinary commit cadence for this task.
+
 ## Account deletion — durable runtime and secure removal flow, not shipped (2026-10-10)
 
 Rust after8ca3056a resumes committed jobs before provider adoption and through the

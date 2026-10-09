@@ -4,6 +4,7 @@ import type { CentralServerDisplay } from "../../lib/central/directoryCache";
 import ConnectionBanner from "./ConnectionBanner";
 import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import CentralServerList from "./CentralServerList";
+import FreshHostRegistrationButton from "./FreshHostRegistrationButton";
 import CentralAccountSettings from "./CentralAccountSettings";
 import { startCentralWebGoogle, completeCentralWebGoogleReturn } from "../../lib/central/webGoogle";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -83,7 +84,7 @@ export default function StartupIdentityGate({
   const [displayName, setDisplayName] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [issuedRecoveryCode, setIssuedRecoveryCode] = useState("");
-  const [hostingState, setHostingState] = useState<"device" | "retired" | null>(null);
+  const [hostingState, setHostingState] = useState<"device" | "retired" | "account_deleted" | null>(null);
   const [hostingChecked, setHostingChecked] = useState(false);
   const [deviceAccount, setDeviceAccount] = useState<string | null>(null);
   const autoOpened = useRef(false);
@@ -601,6 +602,7 @@ export default function StartupIdentityGate({
             </div>
             {!ownerConflict && centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없어요. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
             {localHostError && <div role="alert" className="text-sm text-red-300">{localHostError}<p>서버 목록 새로고침으로 다시 확인해 주세요.</p></div>}
+            {!webEntry && hostingState === "account_deleted" && localHost?.server_id && <FreshHostRegistrationButton serverId={localHost.server_id} deviceToken={deviceToken} disabled={busy} onRegistered={refreshServers} />}
             <CentralServerList deviceToken={deviceToken} deviceConnect={Boolean(ownedServer)} conflict={ownerConflict} key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={!ownedServer && !hostingState && !accountDeviceOnly ? localHost : null} onOpenLocal={!webEntry && !ownedServer && ownedServers.length === 0 && !hostingState && !accountDeviceOnly ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>

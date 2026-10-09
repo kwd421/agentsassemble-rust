@@ -93,33 +93,10 @@ pub(crate) async fn execute(
         )
         .await
         .map_err(|error| redeem_error(&error))?;
-    let mut changes = state.store.subscribe_room_directory();
     let key = state
         .store
         .begin_member_account_removal(&principal, client.binding())
         .await?;
-    let settled = tokio::time::timeout(std::time::Duration::from_secs(20), async {
-        loop {
-            if state.store.member_removal_phase(&key).await? == "complete" {
-                return Ok::<(), agentsassemble_persistence::PersistenceError>(());
-            }
-            tokio::select! {
-                ()=state.shutdown.cancelled()=>return Err(unconfirmed()),
-                result=changes.changed()=>if result.is_err() { return Err(unconfirmed()); },
-            }
-        }
-    })
-    .await;
-    match settled {
-        Ok(Ok(())) => Ok(Json(json!({"status":"account_removed"}))),
-        Ok(Err(error)) => Err(error.into()),
-        Err(_) => Err(unconfirmed().into()),
-    }
-}
-
-fn unconfirmed() -> agentsassemble_persistence::PersistenceError {
-    agentsassemble_persistence::PersistenceError::CommandUnresolved {
-        code: "account_removal_unconfirmed".into(),
-        message: "탈퇴 정리는 서버에 저장됐지만 완료를 확인하지 못했어요.".into(),
-    }
+    crate::member_removal_runtime::wait_for_completion(&state.store, &key, &state.shutdown).await?;
+    Ok(Json(json!({"status":"account_removed"})))
 }

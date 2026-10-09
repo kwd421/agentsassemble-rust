@@ -120,3 +120,31 @@ pub(crate) async fn reconcile_wake(
         );
     }
 }
+
+/// Completion is observed through the committed job and existing event wake, never polling.
+pub(crate) async fn wait_for_completion(
+    store: &SqliteStore,
+    key: &MemberRemovalKey,
+    cancellation: &CancellationToken,
+) -> Result<(), PersistenceError> {
+    let mut changes = store.subscribe_room_directory();
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            if store.member_removal_phase(key).await? == "complete" {
+                return Ok(());
+            }
+            tokio::select! {
+                ()=cancellation.cancelled()=>return Err(unconfirmed()),
+                result=changes.changed()=>if result.is_err() {return Err(unconfirmed());},
+            }
+        }
+    })
+    .await
+    .map_err(|_| unconfirmed())?
+}
+fn unconfirmed() -> PersistenceError {
+    PersistenceError::CommandUnresolved {
+        code: "account_removal_unconfirmed".into(),
+        message: "탈퇴 정리는 서버에 저장됐지만 완료를 확인하지 못했어요.".into(),
+    }
+}

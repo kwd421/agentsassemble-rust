@@ -395,6 +395,26 @@ impl PublicIngress {
         Ok(())
     }
 
+    /// Called only after the local administrator commits fresh registration CAS.
+    pub(crate) async fn resume_after_account_deletion(
+        &self,
+    ) -> Result<(), PublicIngressControlError> {
+        if let PublicIngressKind::Managed(ingress) = self.0.as_ref() {
+            let mut lifecycle = ingress.controller.lifecycle.lock().await;
+            ingress.projection.read().cleanup_result()?;
+            lifecycle.closed = false;
+        }
+        self.1.store(false, std::sync::atomic::Ordering::Release);
+        let origin = self
+            .ready_snapshot()
+            .map_or_else(String::new, |ready| ready.public_url);
+        self.4.send_modify(|event| {
+            event.0 += 1;
+            event.1 = origin;
+        });
+        Ok(())
+    }
+
     pub(crate) async fn shutdown(&self) -> Result<(), PublicIngressControlError> {
         let PublicIngressKind::Managed(ingress) = self.0.as_ref() else {
             return Ok(());

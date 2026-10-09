@@ -279,7 +279,15 @@ Guest after old verifier purge cannot confirm old deletion: report unknown.
 ### Own server computer, cleanup and rollout
 
 On deleting from the own server computer, immediately stop external ingress and
-local companion AIs through existing ingress/provider lifecycle owners. Preserve
+local companion AIs through existing ingress/provider lifecycle owners. The local-admin
+registration-ticket owner performs this explicit stop. It reads the current owner
+through the existing pinned, host-signed central authentication owner (exact
+server/key/epoch), matches the initiating account as a precondition, then commits
+that actual owner's local removal job and account-deleted hosting fence before
+stopping ingress. No fresh proof or receipt goes to the host. This host-authenticated
+owner read stores no cleanup custody at central; central disable still follows the
+local stop and reachable member-host attempts. A failed final disable leaves already
+performed host actions visible and cannot silently reopen them. Preserve
 local server AI, rooms/messages/attachments/settings by default. Separately ask
 “이 컴퓨터의 방 데이터도 지울까요?” with default keep. Optional explicit local wipe
 applies only to this computer's AgentsAssemble server data; do not delete other
@@ -321,7 +329,10 @@ Exact scope and failures must be visible. Account disable does not depend on opt
 Deleting elsewhere stops own server ingress when it next contacts central and gets
 410, through existing directory sender; no new polling/heartbeat/schedule.
 Add exact `account_deleted` variant to directory response parsing, with current
-server_id/registration_epoch checks. Persist account-deleted demotion separately
+server_id/registration_epoch checks. The authenticated terminal host response also
+supplies the exact owner_person_id from that same registration, so the local
+person removal job uses actual central owner custody without inferring it from
+the shared operator or historical root inventory. Persist account-deleted demotion separately
 from permanent duplicate retirement; it stops ingress and all account-derived
 sessions/companions without destroying local data or independent operator/pairing.
 All existing signed host contacts (redeem, endpoint, name/icon, member results)

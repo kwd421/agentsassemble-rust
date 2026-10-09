@@ -5,6 +5,8 @@ use axum::{Router, routing::any};
 async fn terminal_responses_preserve_variants_and_stop_further_publication()
 -> Result<(), Box<dyn std::error::Error>> {
     for (code, epoch, terminal) in [
+        ("account_deleted", Some("stored-epoch"), true),
+        ("account_deleted", None, false),
         ("server_retired", Some("stored-epoch"), true),
         ("server_retired", None, true),
         ("registration_absent", Some("stored-epoch"), true),
@@ -17,7 +19,7 @@ async fn terminal_responses_preserve_variants_and_stop_further_publication()
             .await?;
         store.set_registration_epoch(epoch).await?;
         let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
-        let reply = json!({"error": {"code": code, "server_id": identity.server_id(), "registration_epoch": epoch.unwrap_or("retired-epoch")}});
+        let reply = json!({"error": {"code": code, "server_id": identity.server_id(), "registration_epoch": epoch.unwrap_or("retired-epoch"), "owner_person_id":"deleted-owner"}});
         let (tx, mut requests) = tokio::sync::mpsc::unbounded_channel();
         let app = Router::new().route(
             "/{*path}",
@@ -56,6 +58,9 @@ async fn terminal_responses_preserve_variants_and_stop_further_publication()
         )
         .await;
         match code {
+            "account_deleted" if epoch.is_some() => {
+                assert!(matches!(result, Err(CentralDirectoryError::AccountDeleted)));
+            }
             "server_retired" => {
                 assert!(matches!(result, Err(CentralDirectoryError::ServerRetired)));
             }

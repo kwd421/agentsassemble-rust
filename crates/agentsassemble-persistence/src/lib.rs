@@ -1,3 +1,4 @@
+mod account_deleted_host;
 mod attendee;
 #[cfg(test)]
 mod central_removal_owner_tests;

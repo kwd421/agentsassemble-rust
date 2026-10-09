@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+#[path = "room_directory_boundary/deleted_host.rs"]
+mod deleted_host;
+
 #[path = "room_directory_boundary/friends.rs"]
 mod friends;
 

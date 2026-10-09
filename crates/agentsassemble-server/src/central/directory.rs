@@ -71,6 +71,8 @@ pub enum CentralDirectoryError {
     Rejected,
     #[error("server_retired")]
     ServerRetired,
+    #[error("account_deleted")]
+    AccountDeleted,
     #[error("registration_absent")]
     RegistrationAbsent,
     #[error("public ingress demotion failed")]
@@ -87,7 +89,54 @@ pub enum CentralDirectoryError {
     Persistence(#[from] PersistenceError),
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostCustody {
+    server_id: String,
+    registration_epoch: String,
+    owner_person_id: String,
+}
+
 impl CentralDirectory {
+    pub(crate) async fn current_host_owner(
+        &self,
+        host: RedeemHost<'_>,
+        expected_person: &str,
+        epoch: &str,
+    ) -> Result<String, CentralDirectoryError> {
+        let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
+        let path = format!("/v1/servers/{}/owner", host.identity.server_id());
+        let bytes = send_signed(
+            inner,
+            host.identity,
+            host.store,
+            Method::POST,
+            &path,
+            json!({"registration_epoch":epoch}),
+        )
+        .await?;
+        let response: HostCustody =
+            serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
+        if response.server_id != host.identity.server_id()
+            || response.registration_epoch != epoch
+            || response.owner_person_id != expected_person
+            || host.store.registration_epoch().await?.as_deref() != Some(epoch)
+        {
+            return Err(CentralDirectoryError::InvalidResponse);
+        }
+        Ok(response.owner_person_id)
+    }
+
+    pub(crate) fn issuer(&self) -> Result<String, CentralDirectoryError> {
+        Ok(self
+            .0
+            .as_ref()
+            .ok_or(CentralDirectoryError::Disabled)?
+            .base_url
+            .origin()
+            .ascii_serialization())
+    }
+
     pub(crate) fn disabled() -> Self {
         Self(None)
     }
@@ -274,33 +323,62 @@ async fn send_signed(
         bytes.extend_from_slice(&chunk);
     }
     if status == StatusCode::GONE {
-        let value: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::Rejected)?;
-        let epoch = store.registration_epoch().await?;
-        let code = value["error"]["code"].as_str();
-        let terminal = match code {
-            Some("server_retired") => CentralDirectoryError::ServerRetired,
-            Some("registration_absent") if epoch.is_some() => {
-                CentralDirectoryError::RegistrationAbsent
-            }
-            _ => return Err(CentralDirectoryError::Rejected),
-        };
-        if value["error"]["registration_epoch"]
-            .as_str()
-            .is_none_or(str::is_empty)
-            || value["error"]["server_id"].as_str() != Some(identity.server_id())
-            || epoch
-                .as_deref()
-                .is_some_and(|epoch| value["error"]["registration_epoch"].as_str() != Some(epoch))
-        {
-            return Err(CentralDirectoryError::InvalidResponse);
-        }
-        let ingress = inner.ingress.read().clone();
-        demote_host(store, &ingress, true).await?;
-        inner.status.write().registered_origin.clear();
-        return Err(terminal);
+        return apply_terminal_response(inner, identity, store, &bytes).await;
     }
     Ok(bytes)
+}
+
+async fn apply_terminal_response(
+    inner: &CentralDirectoryInner,
+    identity: &CentralHostIdentity,
+    store: &SqliteStore,
+    bytes: &[u8],
+) -> Result<Vec<u8>, CentralDirectoryError> {
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| CentralDirectoryError::Rejected)?;
+    let epoch = store.registration_epoch().await?;
+    let code = value["error"]["code"].as_str();
+    let terminal = match code {
+        Some("server_retired") => CentralDirectoryError::ServerRetired,
+        Some("account_deleted") if epoch.is_some() => CentralDirectoryError::AccountDeleted,
+        Some("registration_absent") if epoch.is_some() => CentralDirectoryError::RegistrationAbsent,
+        _ => return Err(CentralDirectoryError::Rejected),
+    };
+    if value["error"]["registration_epoch"]
+        .as_str()
+        .is_none_or(str::is_empty)
+        || value["error"]["server_id"].as_str() != Some(identity.server_id())
+        || epoch
+            .as_deref()
+            .is_some_and(|epoch| value["error"]["registration_epoch"].as_str() != Some(epoch))
+    {
+        return Err(CentralDirectoryError::InvalidResponse);
+    }
+    let ingress = inner.ingress.read().clone();
+    if matches!(terminal, CentralDirectoryError::AccountDeleted) {
+        let person = value["error"]["owner_person_id"]
+            .as_str()
+            .ok_or(CentralDirectoryError::InvalidResponse)?;
+        let result = store
+            .account_deleted_host(
+                &inner.base_url.origin().ascii_serialization(),
+                person,
+                epoch
+                    .as_deref()
+                    .ok_or(CentralDirectoryError::InvalidResponse)?,
+            )
+            .await;
+        if result.is_err() {
+            ingress.demotion_failure().cancel();
+        }
+        let stopped = ingress.demote().await;
+        result?;
+        stopped?;
+    } else {
+        demote_host(store, &ingress, true).await?;
+    }
+    inner.status.write().registered_origin.clear();
+    Err(terminal)
 }
 
 async fn reconcile_demotion(

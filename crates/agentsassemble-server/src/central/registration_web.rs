@@ -13,6 +13,9 @@ use crate::{
     http_api::{BodyDecodeError, consume_central_registration, decode_json_body, exact_tauri_cors},
 };
 
+#[path = "registration_after_deletion.rs"]
+mod after_deletion;
+
 const MAX_REGISTRATION_BODY_BYTES: usize = 4 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -21,6 +24,8 @@ struct ProofRequest {
     owner_person_id: String,
     #[serde(default)]
     claim_ownership: bool,
+    #[serde(default)]
+    new_account_registration: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,6 +46,8 @@ struct HostingRequest {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum RegistrationRequest {
+    AccountStop(after_deletion::AccountStopRequest),
+    FreshEpoch(after_deletion::FreshEpochRequest),
     Hosting(HostingRequest),
     Proof(ProofRequest),
     Epoch(EpochRequest),
@@ -67,6 +74,12 @@ async fn issue_registration_proof(
         .await
         .map_err(RegistrationHttpError::from_body)?;
     let payload = match payload {
+        RegistrationRequest::AccountStop(request) => {
+            return after_deletion::stop_account_host(&state, request).await;
+        }
+        RegistrationRequest::FreshEpoch(epoch) => {
+            return after_deletion::commit_epoch(&state, epoch).await;
+        }
         RegistrationRequest::Hosting(HostingRequest {
             server_id,
             hosting_state,
@@ -108,7 +121,11 @@ async fn issue_registration_proof(
                 .hosting_restriction()
                 .await
                 .map_err(|_| RegistrationHttpError::persistence())?;
-            return Ok(Json(json!({"hosting_state": restriction})));
+            return Ok(Json(if restriction.as_deref() == Some("account_deleted") {
+                json!({"hosting_state":restriction,"registration_epoch":state.store.registration_epoch().await.map_err(|_|RegistrationHttpError::persistence())?})
+            } else {
+                json!({"hosting_state":restriction})
+            }));
         }
         RegistrationRequest::Epoch(epoch) => {
             if epoch.server_id != state.central_host_identity.server_id()
@@ -143,11 +160,12 @@ async fn registration_envelope(
             "owner_person_id is invalid",
         ));
     }
-    if let Some(reason) = state
-        .store
-        .hosting_restriction()
-        .await
-        .map_err(|_| RegistrationHttpError::persistence())?
+    if !payload.new_account_registration
+        && let Some(reason) = state
+            .store
+            .hosting_restriction()
+            .await
+            .map_err(|_| RegistrationHttpError::persistence())?
     {
         return Err(RegistrationHttpError {
             status: StatusCode::CONFLICT,
@@ -159,11 +177,31 @@ async fn registration_envelope(
             message: "This computer can only connect as a device.",
         });
     }
-    let epoch = state
-        .store
-        .registration_epoch()
-        .await
-        .map_err(|_| RegistrationHttpError::persistence())?;
+    let epoch = if payload.new_account_registration {
+        if payload.claim_ownership {
+            return Err(RegistrationHttpError::bad_request(
+                "new registration is not an ownership claim",
+            ));
+        }
+        state
+            .store
+            .require_fresh_host_registration(
+                &state
+                    .central_directory
+                    .issuer()
+                    .map_err(|_| RegistrationHttpError::persistence())?,
+                owner_person_id,
+            )
+            .await
+            .map_err(|_| RegistrationHttpError::persistence())?;
+        None
+    } else {
+        state
+            .store
+            .registration_epoch()
+            .await
+            .map_err(|_| RegistrationHttpError::persistence())?
+    };
     let profile = state
         .store
         .local_operator_profile()

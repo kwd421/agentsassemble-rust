@@ -752,7 +752,7 @@ export async function retryPendingLocalDemotion(deviceToken: string): Promise<vo
   if (localStorage.getItem(PENDING_DEMOTION_KEY) === pending) localStorage.removeItem(PENDING_DEMOTION_KEY);
 }
 
-export async function localHostingState(serverId: string, deviceToken: string, state = "status", epoch: string | null = null): Promise<"device" | "retired" | null> {
+export async function localHostingState(serverId: string, deviceToken: string, state = "status", epoch: string | null = null): Promise<"device" | "retired" | "account_deleted" | null> {
   if (state === "status") await retryPendingLocalDemotion(deviceToken);
   const request = { method: "POST", cache: "no-store",
     headers: { "content-type": "application/json", ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }) },
@@ -760,8 +760,8 @@ export async function localHostingState(serverId: string, deviceToken: string, s
   } satisfies RequestInit;
   const response = isDesktopWebview() ? (await fetchDesktopCentralRegistration(request)).response
     : await fetch("/api/central-directory/registration-proof", request);
-  const payload = await responsePayload<{ hosting_state: "device" | "retired" | null }>(response, false);
-  if (payload.hosting_state !== null && payload.hosting_state !== "device" && payload.hosting_state !== "retired") throw new Error("이 컴퓨터의 서버 상태를 확인하지 못했어요.");
+  const payload = await responsePayload<{ hosting_state: "device" | "retired" | "account_deleted" | null }>(response, false);
+  if (payload.hosting_state !== null && payload.hosting_state !== "device" && payload.hosting_state !== "retired" && payload.hosting_state !== "account_deleted") throw new Error("이 컴퓨터의 서버 상태를 확인하지 못했어요.");
   return payload.hosting_state;
 }
 

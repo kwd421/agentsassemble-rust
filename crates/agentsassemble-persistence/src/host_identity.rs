@@ -123,7 +123,7 @@ impl SqliteStore {
     /// Returns database write failures.
     pub async fn restrict_hosting(&self, retired: bool) -> Result<(), PersistenceError> {
         for attempt in 0..3 {
-            let result = sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES ('hosting_restriction',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE runtime_metadata.value='device' AND excluded.value='retired'")
+            let result = sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES ('hosting_restriction',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE runtime_metadata.value IN ('device','account_deleted') AND excluded.value='retired'")
                 .bind(if retired { "retired" } else { "device" }).execute(&self.pool).await;
             match result {
                 Ok(result) => {
