@@ -26,6 +26,8 @@ desktop_commands! {
     runtime_appearance_pending_read_ticket => "allow-runtime-appearance-pending-read-ticket",
     runtime_appearance_bound_read_ticket => "allow-runtime-appearance-bound-read-ticket",
     runtime_settings_directory_read_ticket => "allow-runtime-settings-directory-read-ticket",
+    runtime_account_deletion_ticket => "allow-runtime-account-deletion-ticket",
+    runtime_account_data_wipe => "allow-runtime-account-data-wipe",
     runtime_central_registration_ticket => "allow-runtime-central-registration-ticket",
     cache_selected_room_directory => "allow-cache-selected-room-directory",
     choose_local_workspace => "allow-choose-local-workspace",

@@ -33,6 +33,8 @@
     "allow-runtime-appearance-bound-read-ticket",
     "allow-runtime-settings-directory-read-ticket",
     "allow-runtime-central-registration-ticket",
+    "allow-runtime-account-data-wipe",
+    "allow-runtime-account-deletion-ticket",
     "allow-cache-selected-room-directory",
     "allow-choose-local-workspace",
     "allow-host-device-info",

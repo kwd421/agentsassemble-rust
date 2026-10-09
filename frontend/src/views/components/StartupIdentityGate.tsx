@@ -1,3 +1,4 @@
+import LocalAccountDataChoice from "./LocalAccountDataChoice";
 import { useCentralDirectory } from "../../app/useCentralDirectory";
 import { isCentralTemporaryError } from "../../lib/central/connectionError";
 import type { CentralServerDisplay } from "../../lib/central/directoryCache";
@@ -487,6 +488,7 @@ export default function StartupIdentityGate({
               로그인 서버가 설정되지 않았어요. 이 기기에서 사용할 이름을 입력해 주세요.
             </p>
           </header>
+        {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
           {error && (
             <div
               role="alert"

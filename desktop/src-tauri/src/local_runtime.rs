@@ -18,6 +18,7 @@ use url::Url;
 
 use crate::runtime_supervisor;
 
+mod account_data_reset;
 mod agent_avatar;
 mod appearance;
 mod central_login;
@@ -73,6 +74,7 @@ pub struct LocalRuntime {
     process: Mutex<Option<RuntimeProcess>>,
     login_process: Mutex<Option<RuntimeProcess>>,
     updating: std::sync::atomic::AtomicBool,
+    data_reset_stopped: std::sync::atomic::AtomicBool,
 }
 
 struct RuntimeProcess {
@@ -272,6 +274,13 @@ fn ensure_runtime<'a>(
     app: &AppHandle,
 ) -> Result<&'a mut RuntimeProcess, String> {
     app.state::<LocalRuntime>().ensure_not_updating()?;
+    if app
+        .state::<LocalRuntime>()
+        .data_reset_stopped
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
+        return Err("방 데이터를 지운 뒤에는 앱을 직접 다시 시작해 주세요.".into());
+    }
     let must_start = match process.as_mut() {
         Some(runtime) => runtime
             .child

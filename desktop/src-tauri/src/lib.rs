@@ -95,6 +95,38 @@ fn central_owned_server_url(url: &str) -> Result<url::Url, String> {
 }
 
 #[tauri::command]
+async fn runtime_account_deletion_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<CentralRegistrationTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    if window.label() != "main" {
+        return Err("계정 탈퇴는 이 앱의 계정 설정에서 확인해 주세요.".into());
+    }
+    runtime_central_registration_ticket(window, app).await
+}
+
+#[tauri::command]
+async fn runtime_account_data_wipe(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    confirmation: String,
+) -> Result<serde_json::Value, String> {
+    caller_is_bundled_ui(&window)?;
+    if window.label() != "main" || confirmation != "wipe_local_server" {
+        return Err("방 데이터 삭제를 이 앱의 계정 설정에서 확인해 주세요.".into());
+    }
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .wipe_account_data(&runtime_app)
+    })
+    .await
+    .map_err(|_| "방 데이터 삭제 작업을 확인하지 못했어요.".to_owned())?
+}
+
+#[tauri::command]
 async fn runtime_bootstrap_status(
     window: WebviewWindow,
     app: tauri::AppHandle,
@@ -478,9 +510,11 @@ async fn cache_selected_room_directory(
     rooms: String,
 ) -> Result<(), String> {
     caller_is_bundled_ui(&window)?;
-    tauri::async_runtime::spawn_blocking(move || room_directory_cache::store(&app, &rooms))
-        .await
-        .map_err(|error| format!("room directory cache worker failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<LocalRuntime>().store_room_cache(&app, &rooms)
+    })
+    .await
+    .map_err(|error| format!("room directory cache worker failed: {error}"))?
 }
 
 fn workspace_selection(path: Option<std::path::PathBuf>) -> Result<WorkspaceSelection, String> {
@@ -716,7 +750,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 32);
+        assert_eq!(surface.commands.len(), 34);
         assert!(
             surface
                 .commands
@@ -732,6 +766,8 @@ mod tests {
         for expected in [
             "host_device_info",
             "open_provider_setup_help",
+            "runtime_account_deletion_ticket",
+            "runtime_account_data_wipe",
             "runtime_attendee_invite_create_ticket",
             "runtime_central_login",
             "open_central_google_login",

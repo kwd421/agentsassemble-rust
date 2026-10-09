@@ -2,6 +2,36 @@
 
 
 
+## Account deletion — native stopped-installation maintenance verified locally (2026-10-10)
+
+Native LocalRuntime now claims the existing maintenance admission, joins both owned
+login/runtime supervisors and children, holds installation slot mutexes, canonicalizes
+its app_data_dir and invokes the persistence reset with the existing bound executable
+staging owner. It validates one bounded exact outcome; unknown/failed reset leaves
+runtime stopped. Ordinary runtime/control ticket start and room-cache writes cannot
+recreate wiped data in this app lifetime. Cache writes share the actual process
+lease and maintenance admission. Main bundled UI alone may request explicit wipe;
+purpose-specific deletion ticket permits same-installation stop while visiting another
+server, without borrowing remote authority. Registered permission intersection is34.
+Shared local data choice defaults keep and exposes applied reset/cleanup failure.
+Native check (prepare sidecar, format, clippy all-targets/all-features -D warnings,
+49/0 lib tests plus bins/docs0/0) exit0; actual bound one-shot maintenance fixture and
+oversized-child reaping pass. This is native process boundary evidence, not packaged
+wipe pixels. Full persistence458/0 + docs0/0 exit0 (9.71s) pass after shared constructor,
+reset and exact stop-marker changes. Source/policy gates19/0 pass unchanged.
+Logs /private/tmp/account-deletion-v3-{native-reset-final-check,reset-full-persistence,
+persistent-surface-gates}.log. Earlier native command-count assertion and readable
+Duration lint were corrected without exceptions. Generated purpose permissions are
+produced by the existing command registry/build owner.
+
+Shared account operation is still uncommitted. Its root modal lifetime now survives
+room/hosting authority transitions; final-response loss exposes only explicit single-
+receipt lookup and retained device-local per-server results. Current build and affected
+UI2/0 pass, pending root-lifetime regression/actual packaged flows. Worker Miniflare
+Google freshness uses controlled signatures; real Google E2E remains pending the
+owner's spare account. No existing/owner production account, passwords/2FA, push or
+deploy. Daybreak code review0/3; APPROVE still mandatory before pushes/deployment.
+
 ## Account deletion — exact stop retry and existing sender resume (2026-10-10)
 
 A lost own-stop response can now resume only exact persisted issuer/actual owner/

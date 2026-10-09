@@ -96,6 +96,62 @@ fn command_for_desktop(
     })
 }
 
+/// A single offline maintenance child uses the same executable binding owner.
+/// No normal readiness handshake, runtime restart or control listener is started.
+pub(crate) fn reset_account_data(
+    executable: &std::path::Path,
+    database: &std::path::Path,
+) -> io::Result<Vec<u8>> {
+    use std::io::Read;
+    #[cfg(target_os = "macos")]
+    let binding = BoundSidecar::bind(executable)?;
+    #[cfg(target_os = "macos")]
+    let executable = binding.launch_path();
+    let mut command = Command::new(executable);
+    command
+        .arg("--reset-account-deleted-data")
+        .arg("--database")
+        .arg(database)
+        .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(target_os = "macos")]
+    command.env(STAGED_SERVER_ENV, "v1");
+    #[cfg(unix)]
+    command.process_group(0);
+    let mut child = command.spawn()?;
+    let Some(stdout) = child.stdout.take() else {
+        terminate_owned_supervisor_checked(&mut child)?;
+        return Err(io::Error::other("maintenance output unavailable"));
+    };
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        let result = stdout.take(8193).read_to_end(&mut output).map(|_| output);
+        let _ = sender.send(result);
+    });
+    let result = match receiver.recv_timeout(Duration::from_mins(1)) {
+        Ok(result) => result.and_then(|output| {
+            if output.len() > 8192 {
+                return Err(io::Error::other("maintenance output too large"));
+            }
+            if !wait_for_exit(&mut child, Duration::from_secs(1))? || !child.wait()?.success() {
+                return Err(io::Error::other("maintenance outcome unconfirmed"));
+            }
+            Ok(output)
+        }),
+        Err(_) => Err(io::Error::other("maintenance outcome timed out")),
+    };
+    if result.is_err() {
+        terminate_owned_supervisor_checked(&mut child)?;
+    }
+    reader
+        .join()
+        .map_err(|_| io::Error::other("maintenance output reader failed"))?;
+    result
+}
+
 pub fn run_if_requested() -> Option<i32> {
     let mut arguments = std::env::args_os();
     let _ = arguments.next();
@@ -452,6 +508,31 @@ mod tests {
             let input = [valid.as_slice(), replacement.as_bytes()].concat();
             assert!(forward_owned_output(&mut Cursor::new(input), &mut Vec::new(), 42).is_err());
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn offline_maintenance_runs_once_with_bound_output_and_reaps_oversized_owned_child()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir()?;
+        let script = directory.path().join("maintenance");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nprintf '%s' '{\"reset\":true,\"cleanup_errors\":[]}'\n",
+        )?;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o500))?;
+        let output = super::reset_account_data(&script, &directory.path().join("runtime.sqlite3"))?;
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&output)?,
+            serde_json::json!({"reset":true,"cleanup_errors":[]})
+        );
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700))?;
+        std::fs::write(&script, "#!/bin/sh\n/usr/bin/head -c 8193 /dev/zero\n")?;
+        assert!(
+            super::reset_account_data(&script, &directory.path().join("runtime.sqlite3")).is_err()
+        );
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]

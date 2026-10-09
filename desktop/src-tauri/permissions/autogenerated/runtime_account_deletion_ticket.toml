@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-account-deletion-ticket"
+description = "Enables the runtime_account_deletion_ticket command without any pre-configured scope."
+commands.allow = ["runtime_account_deletion_ticket"]
+
+[[permission]]
+identifier = "deny-runtime-account-deletion-ticket"
+description = "Denies the runtime_account_deletion_ticket command without any pre-configured scope."
+commands.deny = ["runtime_account_deletion_ticket"]

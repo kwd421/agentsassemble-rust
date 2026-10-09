@@ -129,7 +129,7 @@ export interface DesktopWorkspaceSelection {
 let desktopHostSurface: HostProductSurface | null = null;
 
 function requireDesktopHostCommand(command: string) {
-  if (remoteWorkspaceSnapshot() && !["save_message_attachment", "runtime_central_login", "open_central_google_login"].includes(command)) throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
+  if (remoteWorkspaceSnapshot() && !["save_message_attachment", "runtime_central_login", "open_central_google_login", "runtime_account_deletion_ticket", "runtime_account_data_wipe"].includes(command)) throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
   if (!desktopHostSurface) {
     throw new Error("데스크톱 호스트 제품 표면이 아직 고정되지 않았습니다.");
   }
@@ -877,4 +877,20 @@ export async function cacheNativeRoomDirectory(rooms: unknown[]): Promise<void> 
   await tauri.invoke("cache_selected_room_directory", {
     rooms: JSON.stringify(rooms),
   });
+}
+
+/** Central-account maintenance is bound to this installation, even while visiting another server. */
+export async function requestDesktopAccountDeletionTicket(): Promise<DesktopCentralRegistrationTicket> {
+  const tauri = tauriInternals();
+  if (!tauri) throw new Error("이 컴퓨터의 앱에서 계정 탈퇴를 확인해 주세요.");
+  requireDesktopHostCommand("runtime_account_deletion_ticket");
+  return validateDesktopCentralRegistrationTicket(await tauri.invoke<unknown>("runtime_account_deletion_ticket"));
+}
+export async function wipeDesktopAccountData(): Promise<{ reset: true; cleanup_errors: string[] }> {
+  const tauri = tauriInternals();
+  if (!tauri) throw new Error("이 컴퓨터의 앱에서 방 데이터를 지워 주세요.");
+  requireDesktopHostCommand("runtime_account_data_wipe");
+  const result = exactObject(await tauri.invoke<unknown>("runtime_account_data_wipe", { confirmation: "wipe_local_server" }), ["reset", "cleanup_errors"], "방 데이터 삭제");
+  if (result.reset !== true || !Array.isArray(result.cleanup_errors) || result.cleanup_errors.length > 16 || result.cleanup_errors.some(e => typeof e !== "string" || e.length > 256)) throw new Error("방 데이터 삭제 결과를 확인하지 못했어요.");
+  return result as { reset: true; cleanup_errors: string[] };
 }
