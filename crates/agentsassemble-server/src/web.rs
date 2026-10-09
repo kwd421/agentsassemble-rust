@@ -342,6 +342,14 @@ async fn reconcile_before_network_admission(
         .fail_provider_requests_before_admission()
         .await?;
     state.store.disconnect_attendees_before_admission().await?;
+    crate::member_removal_runtime::reconcile(
+        &state.store,
+        &state.provider_adapter,
+        &state.rooms,
+        &state.owner_sessions,
+        cancellation,
+    )
+    .await?;
     crate::room_runtime_cleanup::reconcile_before_admission(
         &state.store,
         &state.provider_adapter,
@@ -443,6 +451,7 @@ async fn serve_runtime(
         state.store.clone(),
         state.provider_adapter.clone(),
         rooms.clone(),
+        state.owner_sessions.clone(),
         connection_shutdown.clone(),
     ));
     let app = router(state.clone());

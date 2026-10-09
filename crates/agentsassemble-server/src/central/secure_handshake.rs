@@ -83,7 +83,7 @@ impl SecureHandshake {
             || client.generation < 1
             || !matches!(
                 client.purpose.as_str(),
-                "owner" | "member_admission" | "member_connect"
+                "owner" | "member_admission" | "member_connect" | "account_deletion"
             )
         {
             return Err(SecureChannelError);

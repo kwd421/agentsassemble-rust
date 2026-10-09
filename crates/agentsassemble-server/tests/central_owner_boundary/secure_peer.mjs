@@ -112,13 +112,38 @@ const memberTicketResponse=await member.fetch('/api/session-tickets/socket',{met
 assert.equal(memberTicketResponse.status,200); const memberTicket=await memberTicketResponse.json();
 const memberSocket=member.openSocket(memberTicket.ticket);
 await new Promise((resolve,reject)=>{memberSocket.onopen=resolve;memberSocket.onerror=reject;});
-memberSocket.close(); member.close();
+const memberFrames=[], memberWaiters=[];
+memberSocket.onmessage=e=>{const f=JSON.parse(e.data),w=memberWaiters.shift();if(w)w(f);else memberFrames.push(f);};
+const memberReceive=()=>memberFrames.length?Promise.resolve(memberFrames.shift()):new Promise(r=>memberWaiters.push(r));
+memberSocket.send(JSON.stringify({op:'subscribe',streams:['room_events'],resume_from_seq:0}));
+for(let i=0;i<10;i++){if((await memberReceive()).op==='snapshot')break;}
+const memberMessage=crypto.randomUUID();
+memberSocket.send(JSON.stringify({op:'command',request_id:memberMessage,action:'message.send',payload:{content:'retained member text'}}));
+for(let i=0;i<10;i++){const f=await memberReceive();if(f.op==='ack'&&f.request_id===memberMessage){assert.ok(f.accepted);break;}}
+memberSocket.close(); // Keep this admitted channel idle while a second device connects.
 const reconnect=await RemoteTransport.connect(config.target,'member_connect');
 const connectChallenge=await memberPost(reconnect,'/api/member-connect/challenge',{});
 const available=await memberPost(reconnect,'/api/member-connect/rooms',{challenge_id:connectChallenge.challenge_id,grant_token:'aamc1.'+'A'.repeat(43)});
 assert.equal(available.rooms[0].room_id,'secure-room');
 const selected=await memberPost(reconnect,'/api/member-connect/select',{challenge_id:connectChallenge.challenge_id,room_id:'secure-room',client_id:'secure-member-client'});
-assert.equal(selected.status,'admitted'); reconnect.close();
+assert.equal(selected.status,'admitted');
+const wrongRemoval=await reconnect.fetch('/api/account-removal/challenge',{method:'POST',headers,body:'{}'});
+assert.equal(wrongRemoval.status,403);await wrongRemoval.text();
+const firstEnded=new Promise(r=>member.onClose(r)),secondEnded=new Promise(r=>reconnect.onClose(r));
+const removal=await RemoteTransport.connect(config.target,'account_deletion');
+const removalChallenge=await memberPost(removal,'/api/account-removal/challenge',{});
+assert.equal(removalChallenge.registration_epoch,config.target.registration_epoch);
+const removalResult=await memberPost(removal,'/api/account-removal/execute',{challenge_id:removalChallenge.challenge_id,grant_token:'aadg1.'+'A'.repeat(43),request_id:'r'.repeat(43)});
+assert.equal(removalResult.status,'account_removed');
+await Promise.all([firstEnded,secondEnded]);
+assert.equal(member.active,false);assert.equal(reconnect.active,false);
+let anonymized;
+for(let i=0;i<30;i++){const f=await receive();if(f.op==='event'){anonymized=f.events.find(e=>e.type==='participant_anonymized');if(anonymized)break;}}
+assert.ok(anonymized);assert.equal(anonymized.display_name,'탈퇴한 사용자');assert.equal(anonymized.avatar_image_url,'');
+assert.equal((await post('/api/central-owner/directory',root)).rooms.length,1,'independent owner remains');
+const keptProfile=await remote.fetch('/api/user-profile',{headers:personaHeaders});
+assert.equal((await keptProfile.json()).profile.avatar_image_url,avatar.attachment.url,'independent local operator avatar stays');
+removal.close();
 const late=await RemoteTransport.connect(config.target,'owner');
 const lateResult=late.fetch('/api/central-owner/session',{method:'POST',headers,body:JSON.stringify({grant_token:config.late_grant,generation:config.target.generation,device:{device_name:'Late admission',browser:'Node',os:'test'}})}).then(()=>{throw new Error('late admission unexpectedly returned');},()=>{});
 console.log(JSON.stringify({owner:owner.session_token,room:joined.session_token,channel:remote.hello.channel_id,late_channel:late.hello.channel_id,late_key:late.hello.client_public_key}));

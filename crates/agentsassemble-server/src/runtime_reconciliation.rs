@@ -140,8 +140,18 @@ pub(crate) async fn watch_runtime_reconciliation(
     store: SqliteStore,
     provider_adapter: ProviderAdapter,
     rooms: RoomRuntime,
+    owners: crate::owner_session_lifetime::OwnerSessionLifetimes,
     cancellation: CancellationToken,
 ) {
+    let mut removal_wake = store.subscribe_room_directory();
+    crate::member_removal_runtime::reconcile_wake(
+        &store,
+        &provider_adapter,
+        &rooms,
+        &owners,
+        &cancellation,
+    )
+    .await;
     let mut cursor: Option<RuntimeReconciliationCursor> = None;
     let mut provider_turn_cursor: Option<ProviderTurnReconciliationCursor> = None;
     let mut cleanup_cursor = None;
@@ -154,6 +164,11 @@ pub(crate) async fn watch_runtime_reconciliation(
     loop {
         tokio::select! {
             () = cancellation.cancelled() => return,
+            result = removal_wake.changed() => {
+                if result.is_err() { return; }
+                crate::member_removal_runtime::reconcile_wake(&store, &provider_adapter, &rooms, &owners, &cancellation).await;
+                continue;
+            }
             _ = interval.tick() => {}
         }
         match crate::room_runtime_cleanup::reconcile_cleanup_page(

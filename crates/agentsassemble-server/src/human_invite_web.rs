@@ -87,6 +87,8 @@ registered_routes! {
         secure_connect "/api/member-connect/challenge" => post(member::connect::start),
         secure_connect "/api/member-connect/rooms" => post(member::connect::redeem),
         secure_connect "/api/member-connect/select" => post(member::connect::select),
+        secure_deletion "/api/account-removal/challenge" => post(member::removal::start),
+        secure_deletion "/api/account-removal/execute" => post(member::removal::execute),
     }
 }
 

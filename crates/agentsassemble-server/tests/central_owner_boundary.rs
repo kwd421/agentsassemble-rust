@@ -775,5 +775,9 @@ fn fixture_worker(worker_state: WorkerState) -> Router {
             "/v1/servers/{server_id}/member-connect-grants/redeem",
             post_route(secure::member_redemption),
         )
+        .route(
+            "/v1/servers/{server_id}/account-deletion-grants/redeem",
+            post_route(secure::removal_redemption),
+        )
         .with_state(worker_state)
 }

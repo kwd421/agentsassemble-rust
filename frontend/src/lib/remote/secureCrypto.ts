@@ -5,7 +5,7 @@ export type SecureTarget = {
   server_id: string; registration_epoch: string; origin: string; generation: number;
   host_public_key_jwk: JsonWebKey; host_key_fingerprint: string;
 };
-export type SecurePurpose = "owner" | "member_admission" | "member_connect";
+export type SecurePurpose = "owner" | "member_admission" | "member_connect" | "account_deletion";
 export type ClientHello = {
   protocol: typeof SECURE_PROTOCOL; server_id: string; registration_epoch: string;
   origin: string; generation: number; purpose: SecurePurpose; client_nonce: string; client_public_key: string;

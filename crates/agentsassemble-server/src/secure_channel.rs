@@ -305,6 +305,10 @@ fn monitor_lifetime(
                     .flatten()
                     .as_deref()
                     != Some(&lifetime_client.hello().registration_epoch)
+                    || custody_store
+                        .secure_channel_member_removed(&lifetime_client.binding().channel_id)
+                        .await
+                        .unwrap_or(true)
                 {
                     return;
                 }

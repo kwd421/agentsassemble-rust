@@ -117,6 +117,7 @@ impl SecureClient {
             "owner" => "owner",
             "member_admission" => "admission",
             "member_connect" => "connect",
+            "account_deletion" => "account_deletion",
             _ => return Err(()),
         };
         if expected != purpose || self.closed().is_cancelled() {

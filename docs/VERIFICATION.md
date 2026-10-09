@@ -1,5 +1,41 @@
 # Verification Contract
 
+
+## Account deletion — durable runtime and secure removal flow, not shipped (2026-10-10)
+
+Rust after8ca3056a resumes committed jobs before provider adoption and through the
+existing runtime reconciliation owner's directory-change notification. No deletion
+polling/task is added. Replay effects use exact stored owner/pairing/human/companion
+custody and one-row stable-key checkpoints; a cleanup marker must disappear through
+the existing physical provider cleanup owner before completion. Canonical room
+publication drains through its existing owner before the pending sequence advances.
+Idle encrypted member channels are cut off through existing registration-change
+notifications. Dedicated deletion-purpose challenge/redeem uses existing secure
+admission, bounded challenge custody and pinned central response; it grants no room,
+owner, pairing, socket or ordinary product authority. The request returns success
+only for a completed durable job; lost/disconnected requests leave replayable work.
+
+Production RemoteTransport/WebCrypto integration against isolated Rust/Worker fixture
+passed: two admitted idle member devices close, owner room socket receives exactly
+sequenced departed-user event, retained message is sent through real room commands,
+and independent local operator/owner access remains. This is encrypted transport
+boundary evidence, not packaged pixels or a real central account/provider result.
+Full server suite exit0: library143/0 (10.06s),
+integration192/0 ignored2 (102.41s), server binary5/0 and doc0/0. Clippy all-targets
+-D warnings exit0 (12.96s), architecture/source-growth/policy19/0 and diff/format
+pass with no gate exceptions. Earlier check used a nonexistent test target and
+make target; corrected to integration and architecture-check. Clippy required a
+cohesive wake-error helper and binding tuple; no lint suppression was introduced.
+Logs /private/tmp/account-deletion-v3-{removal-secure-test,removal-server-full,
+removal-clippy-3,removal-gates-final}.log.
+
+Still required: exact account_deleted host demotion/fresh registration; own-computer
+stop and optional native reset; visiting deletion controller/shared settings UI and
+explicit Google registration; real disposable GUEST app/web acceptance and local
+Google/Miniflare verification; Daybreak code review APPROVE (0/3), both pushes and
+central migration/assets deployment. No v1 capability is advertised and no push,
+deploy or owner/existing-account deletion has occurred.
+
 ## Account deletion — stored author anonymization and shared projection, not shipped (2026-10-10)
 
 Continuation from Rust df17f4f5 / Worker e5191781. Owner verification rule is now

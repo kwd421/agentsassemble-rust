@@ -26,6 +26,27 @@ pub(crate) struct OwnerAdmissionResponse {
 pub(crate) enum MemberGrantPurpose {
     Admission,
     Connect,
+    AccountDeletion,
+}
+
+impl MemberGrantPurpose {
+    fn wire(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::Admission => ("aamg1.", "member-grants", "admission"),
+            Self::Connect => ("aamc1.", "member-connect-grants", "connect"),
+            Self::AccountDeletion => ("aadg1.", "account-deletion-grants", "account_deletion"),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemovalAdmissionResponse {
+    person_id: String,
+    issuer: String,
+    display_name: String,
+    request_id: String,
+    expires_at: i64,
 }
 
 #[derive(Deserialize)]
@@ -47,52 +68,13 @@ impl CentralDirectory {
         purpose: MemberGrantPurpose,
         secure: Option<&crate::secure_client::SecureClient>,
     ) -> Result<MemberAdmissionResponse, CentralDirectoryError> {
-        let RedeemHost { identity, store } = host;
-        let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
-        let (prefix, route) = match purpose {
-            MemberGrantPurpose::Admission => ("aamg1.", "member-grants"),
-            MemberGrantPurpose::Connect => ("aamc1.", "member-connect-grants"),
-        };
-        if !grant.starts_with(prefix)
-            || grant.len() > 256
-            || store.registration_epoch().await?.as_deref() != Some(epoch)
-        {
+        if matches!(purpose, MemberGrantPurpose::AccountDeletion) {
             return Err(CentralDirectoryError::Rejected);
         }
-        let path = format!("/v1/servers/{}/{route}/redeem", identity.server_id());
-        let mut body = json!({"grant_token": grant, "challenge_hash": challenge_hash,
-            "registration_epoch": epoch, "purpose": purpose});
-        if let Some(secure) = secure {
-            secure
-                .add_redeem_fields(
-                    &mut body,
-                    match purpose {
-                        MemberGrantPurpose::Admission => "admission",
-                        MemberGrantPurpose::Connect => "connect",
-                    },
-                )
-                .map_err(|()| CentralDirectoryError::Rejected)?;
-        }
-        let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
-        let mut value: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
-        if let Some(secure) = secure {
-            secure
-                .verify_echo(
-                    &value,
-                    match purpose {
-                        MemberGrantPurpose::Admission => "admission",
-                        MemberGrantPurpose::Connect => "connect",
-                    },
-                )
-                .map_err(|()| CentralDirectoryError::InvalidResponse)?;
-            for field in ["protocol", "client_public_key", "channel_id", "purpose"] {
-                value
-                    .as_object_mut()
-                    .ok_or(CentralDirectoryError::InvalidResponse)?
-                    .remove(field);
-            }
-        }
+        let value = self
+            .redeem_member_grant(host, grant, challenge_hash, epoch, purpose, (secure, None))
+            .await?;
+        let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
         let response: MemberAdmissionResponse =
             serde_json::from_value(value).map_err(|_| CentralDirectoryError::InvalidResponse)?;
         if base64::Engine::decode(
@@ -109,6 +91,102 @@ impl CentralDirectory {
             return Err(CentralDirectoryError::InvalidResponse);
         }
         Ok(response)
+    }
+
+    pub(crate) async fn removal_admission(
+        &self,
+        host: RedeemHost<'_>,
+        grant: &str,
+        challenge_hash: &str,
+        request_id: &str,
+        secure: &crate::secure_client::SecureClient,
+    ) -> Result<agentsassemble_persistence::MemberRemovalPrincipal, CentralDirectoryError> {
+        let epoch = &secure.hello().registration_epoch;
+        let value = self
+            .redeem_member_grant(
+                host,
+                grant,
+                challenge_hash,
+                epoch,
+                MemberGrantPurpose::AccountDeletion,
+                (Some(secure), Some(request_id)),
+            )
+            .await?;
+        let response: RemovalAdmissionResponse =
+            serde_json::from_value(value).map_err(|_| CentralDirectoryError::InvalidResponse)?;
+        if response.issuer
+            != self
+                .0
+                .as_ref()
+                .ok_or(CentralDirectoryError::Disabled)?
+                .base_url
+                .origin()
+                .ascii_serialization()
+            || response.request_id != request_id
+            || response.display_name.chars().count() > 80
+        {
+            return Err(CentralDirectoryError::InvalidResponse);
+        }
+        let expires = chrono::DateTime::from_timestamp(response.expires_at, 0)
+            .ok_or(CentralDirectoryError::InvalidResponse)?;
+        agentsassemble_persistence::MemberRemovalPrincipal::verified(
+            response.issuer,
+            response.person_id,
+            response.request_id,
+            epoch.clone(),
+            expires,
+            secure.binding().clone(),
+        )
+        .map_err(|_| CentralDirectoryError::InvalidResponse)
+    }
+
+    async fn redeem_member_grant(
+        &self,
+        host: RedeemHost<'_>,
+        grant: &str,
+        challenge_hash: &str,
+        epoch: &str,
+        purpose: MemberGrantPurpose,
+        binding: (Option<&crate::secure_client::SecureClient>, Option<&str>),
+    ) -> Result<serde_json::Value, CentralDirectoryError> {
+        let (secure, request_id) = binding;
+        let RedeemHost { identity, store } = host;
+        let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
+        let (prefix, route, wire_purpose) = purpose.wire();
+        if !grant.starts_with(prefix)
+            || grant.len() > 256
+            || (matches!(purpose, MemberGrantPurpose::AccountDeletion) != request_id.is_some())
+            || (request_id.is_some() && secure.is_none())
+            || store.registration_epoch().await?.as_deref() != Some(epoch)
+        {
+            return Err(CentralDirectoryError::Rejected);
+        }
+        let path = format!("/v1/servers/{}/{route}/redeem", identity.server_id());
+        let mut body = json!({"grant_token": grant, "challenge_hash": challenge_hash,
+            "registration_epoch": epoch, "purpose": purpose});
+        if let Some(request_id) = request_id {
+            body["request_id"] = json!(request_id);
+        }
+        if let Some(secure) = secure {
+            secure
+                .add_redeem_fields(&mut body, wire_purpose)
+                .map_err(|()| CentralDirectoryError::Rejected)?;
+        }
+        let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
+        if let Some(secure) = secure {
+            secure
+                .verify_echo(&value, wire_purpose)
+                .map_err(|()| CentralDirectoryError::InvalidResponse)?;
+            for field in ["protocol", "client_public_key", "channel_id", "purpose"] {
+                value
+                    .as_object_mut()
+                    .ok_or(CentralDirectoryError::InvalidResponse)?
+                    .remove(field);
+            }
+        }
+        Ok(value)
     }
 
     pub(crate) async fn owner_admission(

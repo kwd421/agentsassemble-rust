@@ -14,6 +14,8 @@ use std::collections::HashMap;
 
 #[path = "member_connect_web.rs"]
 pub(super) mod connect;
+#[path = "member_removal_web.rs"]
+pub(super) mod removal;
 
 const CHALLENGE_LIMIT: usize = 1024;
 const CHALLENGE_TTL: Duration = Duration::seconds(300);
@@ -36,6 +38,7 @@ struct Challenge {
 enum ChallengePurpose {
     Admission([u8; 32]),
     Connect(std::sync::Arc<tokio::sync::Mutex<connect::ConnectState>>),
+    Deletion(std::sync::Arc<tokio::sync::Mutex<bool>>),
 }
 
 #[derive(Clone, Copy)]

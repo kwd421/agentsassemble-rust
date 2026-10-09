@@ -82,6 +82,21 @@ pub(super) async fn member_redemption(
     Json(result)
 }
 
+pub(super) async fn removal_redemption(
+    State(state): State<WorkerState>,
+    axum::Json(body): axum::Json<Value>,
+) -> Json<Value> {
+    assert_eq!(body["protocol"], "secure_admission_v1");
+    assert_eq!(body["purpose"], "account_deletion");
+    assert_eq!(body["registration_epoch"], "secure-test-epoch");
+    assert!(body.get("proof").is_none() && body.get("receipt").is_none());
+    let mut response = json!({"issuer":state.issuer,"person_id":"secure-member","display_name":"Secure member","request_id":body["request_id"],"expires_at":chrono::Utc::now().timestamp()+120});
+    for field in ["protocol", "client_public_key", "channel_id", "purpose"] {
+        response[field] = body[field].clone();
+    }
+    Json(response)
+}
+
 fn start_proxy(
     proxy: TcpListener,
     address: SocketAddr,

@@ -23,6 +23,9 @@ macro_rules! secure_access {
     (secure_connect) => {
         crate::product_surface::SecureAccess::Admission("member_connect")
     };
+    (secure_deletion) => {
+        crate::product_surface::SecureAccess::Admission("account_deletion")
+    };
     ($other:ident) => {
         crate::product_surface::SecureAccess::Excluded
     };
@@ -39,6 +42,9 @@ macro_rules! route_exposure {
         crate::product_surface::RouteExposure::SameOriginPublic
     };
     (secure_connect) => {
+        crate::product_surface::RouteExposure::SameOriginPublic
+    };
+    (secure_deletion) => {
         crate::product_surface::RouteExposure::SameOriginPublic
     };
     (private) => {
@@ -185,6 +191,7 @@ mod room_recovery_runtime;
 mod room_runtime;
 mod session_revocation;
 pub use session_revocation::SessionRevocation;
+mod member_removal_runtime;
 mod room_runtime_cleanup;
 mod room_session_http_authority;
 mod room_shutdown;

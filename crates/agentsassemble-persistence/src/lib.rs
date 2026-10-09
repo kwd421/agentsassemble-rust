@@ -147,6 +147,8 @@ mod central_removal_snapshots;
 pub use central_removal_snapshots::DEPARTED_USER_NAME;
 mod central_removal_rooms;
 pub use central_removal_rooms::MemberRemovalRoomPage;
+mod central_removal_effects;
+pub use central_removal_effects::MemberRemovalEffectPage;
 mod member_admission;
 mod member_connect;
 pub use member_connect::MemberConnectRoom;
