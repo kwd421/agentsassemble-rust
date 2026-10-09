@@ -1,5 +1,30 @@
 # Verification Contract
 
+## Account deletion — shared settings flow and signed host floor (2026-10-10)
+
+Shared settings account deletion is rooted above startup/room transitions, retaining
+per-server/hidden/skipped results after same-computer ingress stop. Fresh Guest recovery
+or Google step-up plus typed confirmation precedes host removal; central disable is a
+separate explicit action after results. Same-installation local data question defaults
+keep and uses the registered native maintenance owner only after explicit wipe.
+Final response loss retains one opaque receipt for explicit unsigned result lookup;
+no automatic login/provision/disable/receipt polling. Google web fresh-auth return runs
+before ordinary login return and rechecks actual inventory/capability before mutations.
+Existing exact signed endpoint publication now advertises account_deletion_protocol:v1
+at the implemented terminal/fresh-registration host floor; it does not alter signing
+or registration canonical. Full frontend1260/0 in197 files34.69s passes, including
+root lifetime, receipt loss and Google return/account-switch tests. Initial full run
+failed9 assertions: isolated main boundary needed a surface mock and two success-copy
+assertions referenced old wording; corrected, product boundary retained. Build passes;
+source/architecture/policy gates pass unchanged. Logs /private/tmp/account-deletion-v3-
+{final-frontend-corrected,google-return-tests,final-ui-build-2,final-policy}.log.
+A focused publisher command filtered0 tests and is not acceptance evidence; final
+whole server check is running. Native49/0 and persistence458/0 were verified earlier.
+Actual isolated packaged/production throwaway Guest verification, Daybreak code
+review APPROVE0/3, both pushes and central deployment remain. Isolated local config
+contains generated fixture peppers only, no production D1 identity/credential copy.
+Google real E2E remains pending owner spare account; no owner/existing account use.
+
 ## Account deletion — explicit Google registration transport committed (2026-10-10)
 
 Native and web Google login now use verify-start/verify-complete, never implicit

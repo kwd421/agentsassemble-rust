@@ -1,3 +1,4 @@
+import AccountDeletionSurface from "./views/components/AccountDeletionSurface";
 import { consumeSecureMemberEntry } from "./lib/central/secureMemberEntry";
 import { selectRemoteMember } from "./lib/remote/remoteWorkspace";
 import { isMemberLoginPopup } from "./lib/central/memberPopup";
@@ -37,11 +38,13 @@ const setupProvider = isDesktopWebview()
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
+    <AccountDeletionSurface>
     {memberLoginPopup ? <MemberLoginPopup /> : localAttendee ? <LocalAttendeePanel /> : memberRequest || memberEntryError ? <MemberJoinPanel request={memberRequest} entryError={memberEntryError} /> : <StartupIdentityBoundary memberReturn={memberReturn}>
       {({ deviceToken, clientId }) => (
         setupProvider ? <ProviderSetupPanel providerId={setupProvider} />
           : <App deviceToken={deviceToken} clientId={clientId} memberReturn={memberReturn} />
       )}
     </StartupIdentityBoundary>}
+    </AccountDeletionSurface>
   </React.StrictMode>
 );

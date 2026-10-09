@@ -286,7 +286,7 @@ pub(super) async fn publish(
     identity: &CentralHostIdentity,
     event: &CentralEndpointEvent,
 ) -> Result<(), CentralDirectoryError> {
-    let body = json!({"protocol":"secure_admission_v1", "mode":"event_secure_v1", "registration_epoch":event.registration_epoch,
+    let body = json!({"protocol":"secure_admission_v1", "mode":"event_secure_v1", "account_deletion_protocol":"v1", "registration_epoch":event.registration_epoch,
         "origin":event.origin,"generation":event.generation,"issued_at":Utc::now().timestamp()});
     let path = format!("/v1/servers/{}/endpoint", identity.server_id());
     send_signed(

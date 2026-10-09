@@ -37,6 +37,7 @@ async fn idle_directory_has_no_timer_wakes_and_failure_retries_keep_generation()
         assert_eq!(first.0, "endpoint");
         assert_eq!(first.1, Method::PUT);
         assert_eq!(first.2["mode"], "event_secure_v1");
+        assert_eq!(first.2["account_deletion_protocol"], "v1");
         assert!(first.2.get("lease_expires_at").is_none());
         let generation = first.2["generation"].as_i64().ok_or("generation")?;
         assert_eq!(requests.recv().await.ok_or("name")?.0, "name");
@@ -82,6 +83,7 @@ async fn idle_directory_has_no_timer_wakes_and_failure_retries_keep_generation()
         let offline = requests.recv().await.ok_or("offline")?;
         assert_eq!(offline.1, Method::DELETE);
         assert_eq!(offline.2["origin"], "");
+        assert_eq!(offline.2["account_deletion_protocol"], "v1");
         assert!(
             offline.2["generation"]
                 .as_i64()

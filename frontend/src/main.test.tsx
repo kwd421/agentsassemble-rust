@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 const { draw } = vi.hoisted(() => ({ draw: vi.fn() }));
 vi.mock("react-dom/client", () => ({ default: { createRoot: () => ({ render: draw }) } }));
+vi.mock("./views/components/AccountDeletionSurface", () => ({ default: ({ children }: { children: ReactNode }) => children }));
 vi.mock("./App", () => ({ default: () => <p>chat</p> }));
 vi.mock("./views/components/StartupIdentityBoundary", () => ({ default: () => <p>identity gate</p> }));
 vi.mock("./views/components/LocalAttendeePanel", () => ({ default: () => <p>local attendee setup</p> }));

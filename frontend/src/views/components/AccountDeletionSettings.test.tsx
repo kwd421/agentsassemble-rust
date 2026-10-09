@@ -1,0 +1,81 @@
+import AccountDeletionSurface from "./AccountDeletionSurface";
+import { deletionOwnHost, stopDeletionOwnHost } from "../../lib/central/accountDeletionHost";
+import { beforeEach, expect, it, vi } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import Launcher, { AccountDeletionFlow } from "./AccountDeletionSettings";
+import LocalAccountDataChoice from "./LocalAccountDataChoice";
+import { loadCentralSession, signedRequest, unsignedPost } from "../../lib/central/identity";
+import { wipeDesktopAccountData } from "../../lib/desktopBridge";
+vi.mock("../../lib/central/accountDeletionHost", () => ({ deletionOwnHost: vi.fn(async () => ({ host: null, hasOwnServers: false })), stopDeletionOwnHost: vi.fn() }));
+vi.mock("../../lib/central/identity", () => ({ CENTRAL_SESSION_CHANGED_EVENT: "changed", CENTRAL_SESSION_CLEARED_EVENT: "cleared", loadCentralSession: vi.fn(), signedRequest: vi.fn(), unsignedPost: vi.fn(), clearCentralSession: vi.fn(), clearPendingCentralRecoveryCode: vi.fn() }));
+vi.mock("../../lib/desktopBridge", () => ({ wipeDesktopAccountData: vi.fn() }));
+const session = { token: "fixture-session", device_id: "device", expires_at: 2 ** 31, person: { person_id: "person", display_name: "Disposable fixture", identity_kind: "guest" as const } };
+beforeEach(() => { cleanup(); vi.clearAllMocks(); sessionStorage.clear(); vi.mocked(loadCentralSession).mockReturnValue(session); });
+it("shows hidden/skipped servers and requires explicit receipt lookup after a lost final response", async () => {
+  const user = userEvent.setup();
+  let disableCalls = 0;
+  vi.mocked(signedRequest).mockImplementation(async (_session, path, method, body) => {
+    if (path.endsWith("deletion-servers")) return { servers: [{ server_id: "offline", registration_epoch: "epoch", name: "숨긴 오프라인 서버", user_hidden: true, host_state: "active", host_key_fingerprint: "", host_public_key_jwk: null, endpoint: null }] };
+    if (path.endsWith("deletion-proof")) return { request_id: body?.request_id, proof: "p".repeat(43), expires_at: Math.floor(Date.now() / 1000) + 300 };
+    if (method === "DELETE") { disableCalls++; throw new TypeError("최종 응답 연결 끊김"); }
+    throw new Error("unexpected route");
+  });
+  vi.mocked(unsignedPost).mockResolvedValue({ status: "account_deleted" });
+  render(<AccountDeletionFlow disabled={false} />);
+  await user.click(screen.getByRole("button", { name: "계정 탈퇴" }));
+  expect(screen.getByRole("list", { name: "서버별 탈퇴 정리 결과" }).textContent).toContain("숨긴 서버");
+  expect(screen.getByRole("button", { name: "서버별 참가 종료·익명화" }).hasAttribute("disabled")).toBe(true);
+  await user.type(screen.getByLabelText("이 게스트 계정의 복구 코드"), "fixture-input");
+  await user.click(screen.getByRole("button", { name: "탈퇴할 계정 확인" }));
+  await user.type(screen.getByLabelText("계속하려면 ‘탈퇴’를 입력하세요."), "탈퇴");
+  await user.click(screen.getByRole("button", { name: "서버별 참가 종료·익명화" }));
+  expect(screen.getByLabelText("건너뛴 서버").textContent).toContain("지금 연결할 수 없어요");
+  await user.click(screen.getByRole("button", { name: "결과를 확인했고 중앙 계정 탈퇴" }));
+  expect((await screen.findByRole("alert")).textContent).toContain("최종 응답");
+  expect(disableCalls).toBe(1); expect(unsignedPost).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "탈퇴 결과 확인" }));
+  expect((await screen.findByRole("status")).textContent).toContain("요청한 계정의 중앙 탈퇴를 완료");
+  expect(disableCalls).toBe(1); expect(unsignedPost).toHaveBeenCalledOnce();
+  expect(wipeDesktopAccountData).not.toHaveBeenCalled();
+});
+it("keeps local data by default and reports applied reset plus exact cleanup failure", async () => {
+  const user = userEvent.setup();
+  vi.mocked(wipeDesktopAccountData).mockResolvedValue({ reset: true, cleanup_errors: ["방 데이터는 지웠지만 캐시 정리에 실패했어요."] });
+  render(<LocalAccountDataChoice disabled={false} />);
+  expect((screen.getByLabelText("유지 (기본)") as HTMLInputElement).checked).toBe(true);
+  expect(screen.queryByRole("button", { name: "이 컴퓨터의 방 데이터 삭제" })).toBeNull();
+  expect(wipeDesktopAccountData).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("radio", { name: "이 컴퓨터의 방 데이터 삭제" }));
+  await user.click(screen.getByRole("button", { name: "이 컴퓨터의 방 데이터 삭제" }));
+  expect(wipeDesktopAccountData).toHaveBeenCalledOnce();
+  expect((await screen.findByRole("status")).textContent).toContain("서버는 중지");
+  expect(screen.getByRole("alert").textContent).toContain("캐시 정리에 실패");
+});
+
+it("keeps the central account operation and optional local choice when its room/startup tree is replaced", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(function(this: HTMLDialogElement) { this.open = true; });
+  vi.mocked(deletionOwnHost).mockResolvedValue({ host: { server_id: "own", registration_epoch: "epoch", fingerprint: "fingerprint", key: "key" }, hasOwnServers: true });
+  vi.mocked(stopDeletionOwnHost).mockResolvedValue();
+  vi.mocked(signedRequest).mockImplementation(async (_session, path, method, body) => {
+    if (path.endsWith("deletion-servers")) return { servers: [] };
+    if (path.endsWith("deletion-proof")) return { request_id: body?.request_id, proof: "p".repeat(43), expires_at: Math.floor(Date.now() / 1000) + 300 };
+    if (method === "DELETE") return { status: "account_deleted", request_id: body?.request_id, receipt_expires_at: Math.floor(Date.now() / 1000) + 86400 };
+    throw new Error("unexpected route");
+  });
+  const view = render(<AccountDeletionSurface><Launcher disabled={false} /></AccountDeletionSurface>);
+  await user.click(screen.getByRole("button", { name: "계정 탈퇴" }));
+  const dialog = screen.getByRole("dialog", { name: "계정 탈퇴" }), flow = within(dialog);
+  await user.type(await flow.findByLabelText("이 게스트 계정의 복구 코드"), "fixture-input");
+  await user.click(flow.getByRole("button", { name: "탈퇴할 계정 확인" }));
+  await user.type(flow.getByLabelText("계속하려면 ‘탈퇴’를 입력하세요."), "탈퇴");
+  await user.click(flow.getByRole("button", { name: "서버별 참가 종료·익명화" }));
+  expect(stopDeletionOwnHost).toHaveBeenCalledOnce();
+  view.rerender(<AccountDeletionSurface><p>서버 연결이 중지되어 시작 화면으로 전환</p></AccountDeletionSurface>);
+  expect(flow.getByRole("button", { name: "결과를 확인했고 중앙 계정 탈퇴" })).toBeTruthy();
+  await user.click(flow.getByRole("button", { name: "결과를 확인했고 중앙 계정 탈퇴" }));
+  expect((await flow.findByRole("status")).textContent).toContain("요청한 계정의 중앙 탈퇴를 완료");
+  expect((flow.getByLabelText("유지 (기본)") as HTMLInputElement).checked).toBe(true);
+  expect(wipeDesktopAccountData).not.toHaveBeenCalled();
+});

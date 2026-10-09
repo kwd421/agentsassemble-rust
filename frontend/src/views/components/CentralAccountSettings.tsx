@@ -1,8 +1,10 @@
-import { useRef, useState } from "react";
-import { centralAccountEntryUrl, centralIdentityConfigured, loadCentralSession, logoutCentral } from "../../lib/central/identity";
+import AccountDeletionSettings from "./AccountDeletionSettings";
+import { useEffect, useRef, useState } from "react";
+import { CENTRAL_SESSION_CLEARED_EVENT, CENTRAL_SESSION_CHANGED_EVENT, centralAccountEntryUrl, centralIdentityConfigured, loadCentralSession, logoutCentral } from "../../lib/central/identity";
 
 export default function CentralAccountSettings({ disabled }: { disabled: boolean }) {
-  const [session] = useState(loadCentralSession);
+  const [session, setSession] = useState(loadCentralSession);
+  useEffect(() => { const changed = () => setSession(loadCentralSession()); window.addEventListener(CENTRAL_SESSION_CHANGED_EVENT, changed); window.addEventListener(CENTRAL_SESSION_CLEARED_EVENT, changed); window.addEventListener("storage", changed); return () => { window.removeEventListener(CENTRAL_SESSION_CHANGED_EVENT, changed); window.removeEventListener(CENTRAL_SESSION_CLEARED_EVENT, changed); window.removeEventListener("storage", changed); }; }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const operation = useRef(false);
@@ -24,6 +26,7 @@ export default function CentralAccountSettings({ disabled }: { disabled: boolean
 
   if (!centralIdentityConfigured()) return null;
   if (!session) return <section className="dc-guest-recovery-settings" aria-label="앱 계정">
+    <AccountDeletionSettings disabled={disabled || busy} />
     <h4>앱 계정</h4>
     <p>로그인한 계정과 내 서버를 계정 설정에서 확인해요.</p>
     <a className="ops-button" href={`${centralAccountEntryUrl()}?account=settings`} target="_blank" rel="noopener noreferrer">계정 설정</a>
@@ -36,6 +39,7 @@ export default function CentralAccountSettings({ disabled }: { disabled: boolean
     <button type="button" className="ops-button" style={{ minHeight: 44 }} disabled={disabled || busy} onClick={() => void logout()}>
       {busy ? "로그아웃 중…" : "로그아웃"}
     </button>
+    <AccountDeletionSettings disabled={disabled || busy} />
     {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
   </section>;
 }

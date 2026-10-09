@@ -549,6 +549,7 @@ export default function StartupIdentityGate({
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용해요. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남아요."}
           </p>
         </header>
+        {webEntry && new URLSearchParams(window.location.search).get("account") === "settings" && <CentralAccountSettings disabled={busy} />}
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
 
         {googleRegistration && <GoogleRegistrationChoice request={googleRegistration} onCancel={() => { setGoogleRegistration(null); setError(""); }} onComplete={async () => { setGoogleRegistration(null); setError(""); await finishCentralStartup(); }} />}
@@ -603,7 +604,6 @@ export default function StartupIdentityGate({
 
         {screen === "servers" && (
           <section className="grid gap-2">
-            {webEntry && new URLSearchParams(window.location.search).get("account") === "settings" && <CentralAccountSettings disabled={busy} />}
             <div className="flex items-center justify-between gap-3">
               <p className="text-[12px] font-semibold text-text-muted">{centralPerson?.display_name}님의 서버</p>
               <button type="button" className="grid h-11 w-11 place-items-center rounded-lg text-text-muted hover:bg-white/5 hover:text-text-primary disabled:opacity-50" aria-label="서버 목록 새로고침" title="새로고침" disabled={busy} onClick={() => void refreshServers()}><RefreshCw size={16} /></button>
