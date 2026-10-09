@@ -1,8 +1,36 @@
 # Verification Contract
 
+## Account deletion — secure self-removal grants implemented, not shipped (2026-10-10)
+
+Worker 48a732ec: existing member issue/redeem owns secure account_deletion purpose
+and aadg1 namespace, exact fresh same-session/person/device/request/proof source
+rechecks at issue and consuming transaction, proof-bounded expiry. It ignores hidden
+only for verified active self-membership, changes no membership/visibility and mints
+no room credential/projection. Same-row additive0022 paired consumption constraints
+reject old used_at-only writes. Ordinary updates exclude deletion purpose, expiry
+queue/caps/index costs unchanged. Same proof-source SQL now shared with final disable.
+Account-only deletion-servers returns one capped512-row/512KiB membership snapshot
+including hidden/unknown tuples; no retained inventory or generation/pagination.
+
+New focused tests11 passed; full suite269 passed/0 failed, exit0 (19.71s).
+Architecture/source-growth, regenerated-map and syntax checks passed. Staged diff
+check detected two blank EOFs before checkpoint; removed and amended feature, staged
+check then passed. Logs /private/tmp/account-deletion-v2-grants-{new-tests,full,gates}.log.
+Actual Miniflare D1 mixed test runs frozen29b423b1 old HTTP Worker on additive schema:
+ordinary bootstrap200, old hide500 rolls back visibility/grant, active count retained,
+old deletion token401, new exact redeem200, replay401, timestamps paired, proof unused.
+Harness first failed resolving fast-png in isolated source directory; linked existing
+maintained dependency only in that exact temp run, rerun exit0; log
+/private/tmp/account-deletion-v2-grants-d1.log. Its temporary source tree was removed.
+No synthetic result is claimed as host/UI/native/real Google acceptance.
+
+Feature <1000 changed lines and required coauthor. Code review0/3; no push/deploy,
+production account mutation or protected-path edit. Next central cleanup and explicit
+Google check/register, then host/runtime/native/shared UI and required real acceptance.
+
 ## Account deletion — central custody removal implemented, not shipped (2026-10-10)
 
-Worker feature commit explicitly reverses only unshipped custody/floor/ACK portions
+Worker 29b423b1 explicitly reverses only unshipped custody/floor/ACK portions
 of 457d48cf and the inspected/backed-up stopped edits. Removes 0022/0023 custody
 migration, sync/state/floor source and exclusive custody tests. Current remote
 migration refresh confirms these were never applied; no production DROP. Removes
