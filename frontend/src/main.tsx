@@ -1,3 +1,5 @@
+import { isDeletionGooglePopup } from "./lib/central/deletionGooglePopup";
+import DeletionGooglePopup from "./views/components/DeletionGooglePopup";
 import AccountDeletionSurface from "./views/components/AccountDeletionSurface";
 import { consumeSecureMemberEntry } from "./lib/central/secureMemberEntry";
 import { selectRemoteMember } from "./lib/remote/remoteWorkspace";
@@ -15,6 +17,7 @@ import { clearCentralMemberRequest, consumeMemberReturn, consumeCentralMemberReq
 import { isCentralWebEntry } from "./lib/central/identity";
 import MemberJoinPanel from "./views/components/MemberJoinPanel";
 
+const deletionGooglePopup = isDeletionGooglePopup();
 const memberLoginPopup = isMemberLoginPopup();
 const memberReturn = consumeMemberReturn();
 let memberRequest: MemberTargetRequest | undefined;
@@ -39,7 +42,7 @@ const setupProvider = isDesktopWebview()
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <AccountDeletionSurface>
-    {memberLoginPopup ? <MemberLoginPopup /> : localAttendee ? <LocalAttendeePanel /> : memberRequest || memberEntryError ? <MemberJoinPanel request={memberRequest} entryError={memberEntryError} /> : <StartupIdentityBoundary memberReturn={memberReturn}>
+    {deletionGooglePopup ? <DeletionGooglePopup /> : memberLoginPopup ? <MemberLoginPopup /> : localAttendee ? <LocalAttendeePanel /> : memberRequest || memberEntryError ? <MemberJoinPanel request={memberRequest} entryError={memberEntryError} /> : <StartupIdentityBoundary memberReturn={memberReturn}>
       {({ deviceToken, clientId }) => (
         setupProvider ? <ProviderSetupPanel providerId={setupProvider} />
           : <App deviceToken={deviceToken} clientId={clientId} memberReturn={memberReturn} />
