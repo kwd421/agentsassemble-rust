@@ -1,5 +1,107 @@
 # Verification Contract
 
+## Real Google web E2E12 — login fixed, transport correction awaiting review authorization (2026-10-10)
+
+Released source: Rust28f77795a50988187d634252f43e32fcec5286a0 and
+Workered9c123e (Google shared token exchange); UI Check0.1.27 signed/fresh copy.
+Current central deploymentca5bed2f-5c02-4513-98a8-c86bdcd163c5 (100%), supersedes
+frontend-onlyaf992538. Exact assets-wt was checked out at Rust28f77795 and built;
+wrangler.cleanup-on.toml deploy used the unchanged cron/config. Remote DB reports
+no migrations to apply. Curl smoke /200, /member-join200, /v1/bootstrap401 and
+/assets/index-BrFSSmHn.js200; deployed bytes match built SHA256
+fab651d8538c43cfd9686f6bed54f143db448e789f0b1b94ffd5d52f8a91fd2d.
+An initial urllib smoke request received403; curl and actual Firefox confirmed200.
+
+Three completed Daybreak Blue xhigh read-only rounds: REVISE M2, APPROVE C0/H0/M0/L0,
+then APPROVE C0/H0/M0/L0 for the newly exposed shared Worker correction. Reports
+/private/tmp/web-member-review-{1,2,3}-report.md were read fully. No extra round
+has been run: the user's max3 is exhausted. A request for one supplemental review
+of the later Firefox transport fix is pending; it is not implicit authorization.
+
+Root causes, with current owning code:
+- Original actual private callback had opener=false, stored popup+PKCE request and
+  matching state. Old08f4df8e memberPopup.ts:43 refused before URL cleanup. Exact
+  Google/Firefox opener-severing policy remains untraced; COOP separation reproduces
+  the boundary locally. memberPopup.ts:26 opens only from direct click; :48/:124
+  use correlated, live-acknowledged same-origin return without invite/credentials.
+- Actual Google return then reached central verify-complete and threw
+  google_token_exchange_failed. Actual workerd rejects redirect:error before any
+  outbound I/O. Worker google_handoff.js:193 now uses manual, :210 rejects every
+  non-2xx reply without redirect forwarding. Native/web auth/registration/deletion
+  share that owner. No auth/custody/PKCE/fresh-auth-time relaxation or fallback.
+- After real signup/consent succeeded, member-challenge400 exposed a shared Firefox
+  encrypted POST defect: Request.body is undefined. The old remoteTransport.ts
+  optional reader sent an empty body. Safe paused UI inspection showed only path,
+  status400 and field names [invite_token], not credential values. Prepared local
+  remoteTransport.ts:140/:152 uses one Response body/headers encoding for JSON,
+  multipart boundary and streams; body-free Request owns metadata. Chunk/queue,
+  encryption and existing cancellation remain; GET/HEAD body refusal is retained.
+  This latter source and its test remain uncommitted, unpushed and undeployed until
+  the additional review is authorized and completed.
+
+Actual native Firefox157.0.1 private E2E, designated disposable Google account only:
+1. PASS: final0.1.27 owner app, external access enabled only for test, person invite.
+   Actual default/list 게스트 and toast 초대 링크를 만들었어요; URL clears at entry.
+2. PARTIAL: direct-click Google popup, designated account selection and Continue,
+   absent-account notice, separate explicit signup, login and original trusted
+   opener consent all PASS after Worker rollout. Popup retained a truthful success
+   card because its severed WindowProxy could not auto-close; its return action
+   closed it and revealed the ready consent. Google passwords/2FA never entered.
+   Join fails at /api/room-invite/member-challenge400, public Korean error exactly
+   참가를 마치지 못했어요. 다시 시도해 주세요. Underlying ApiError:
+   Request JSON is invalid. Message 탈퇴 테스트 메시지 was NOT sent.
+3. NOT REACHED: deletion notice/Google step-up/host progress/skipped/completion.
+4. NOT REACHED: message author anonymization/no photo/member disappearance.
+5. NOT REACHED: deleted-Google notice and separate signup after deletion.
+   The test Google account was registered but has NOT been deleted. Owner account
+   was never selected, logged out, altered or deleted. No deletion-screen captures
+   exist because those screens were never reached; no synthetic deletion acceptance.
+
+Verification: released frontend199files1279tests/build/gates pass; Worker283/283,
+syntax/architecture/generated maps pass. Actual workerd bundled production exchange
+reproduction: old502/0outbound, fixed200/token and302 rejected401/no forwarding.
+Public deletion-proof regressions fail12 with old unsupported mode; follow mutation
+fails both new redirect-refusal tests and was restored. Later prepared transport:
+JSON/multipart/196KB chunked body cases fail3/3 against unfixed HEAD, pass3/3 fixed;
+full frontend200files1282tests, build and architecture/policy19 pass. Native Firefox
+fixture confirms Response JSON and multipart field/file bytes while Request.body is
+undefined. Chromium/WebKit actual engines with local provider doubles pass2/2 on
+both released and prepared bundles; this is not real Google Chrome/Safari acceptance.
+Patched Playwright Firefox cannot launch on this macOS; sandbox was not weakened.
+Last full make verify remains failed at pre-existing artifact gate (root target23GB
+above18GiB plus obsolete desktop target1GB). No artifact cleanup/gate exception was
+used. Broader mobile and full real-Google deletion remain unverified.
+
+Prepared transport candidate: scratchpad/uicheck-027-transport-candidate.app,
+version0.1.27; built with requested signing identity and strict deep signature
+verified on both bundle and fresh copy. Existing tested uicheck app was retained;
+candidate was not launched/deployed. Build log scratchpad/build-027-transport.log.
+
+Cleanup verified: both test invites revoked, external access visiblyOFF, exact
+UI Check and its runtime children quit; process check found no matching app/runtime
+or cloudflared. Firefox private window and Google session retained, no user appdata
+removed. Only this run's generated .wrangler/cache/cf.json removed after Miniflare
+was disposed; user .agents/, scripts/__pycache__/ and Worker cleanup configs untouched.
+Other active apps/providers/build artifacts were left alone. Computer Use reset
+follows evidence/report closeout, without closing Firefox.
+
+Capture base:
+/private/tmp/claude-501/-Users-seinel-Projects-AgentsAssemble-Rust/f43b6994-3778-4ca2-8834-d04c0c670717/scratchpad/e2e12/
+- 00-uicheck-027-ready.png (initial signed0.1.27 preparation, before final corrections)
+- 01-invite-korean-created.png
+- 02-member-entry-cleared.png
+- 03-google-return-card-error.png (app card and clean callback URL, before Worker fix)
+- 04-external-off-during-correction.png
+- 05-google-explicit-signup.png
+- 06-member-consent.png
+- 07-member-join-retry-error.png
+
+Observed UI limits: callbacks now show centered app cards and Korean actions; popup
+success requires its return action after COOP severing, which worked. The copied-link
+success toast still reads 보안 초대 링크 복사됨 (creation toast requested by user is
+fixed). Generic join failure hides the actionable body defect; its owner correction
+is prepared but awaits review. Do not claim deletion E2E completion.
+
 ## Web member Google popup — approved correction (2026-10-10)
 
 Rust baseline08f4df8e; Worker28b68c0c unchanged. Existing Firefox private callback

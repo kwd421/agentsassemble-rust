@@ -2579,3 +2579,12 @@ participant_joined 이벤트 경로로 즉시 목록을 복구한다. SQLite 세
 표시하지 않고 해요체를 사용한다. 멤버는 일반 사람과 같은 배지, 게스트만 게스트,
 HOST/YOU는 방장/나로 표시한다. 서버·프론트 회귀, 변경 범위 테스트와 푸시 직전
 make verify 1회로 검증하고 서명 빌드·수동 검증·배포는 하지 않는다.
+
+### Real Google runtime correction (2026-10-10)
+
+The authorized real Firefox private flow reached the central code exchange but
+returned `google_token_exchange_failed`. Actual workerd rejects redirect mode
+`error` before network I/O. The shared Worker exchange must use supported manual
+redirect handling and reject non-2xx replies without following Location. This
+also owns native/web login, registration and deletion reauth; preserve all
+nonce/PKCE/state/fresh-subject/auth-time checks and trusted-opener invite custody.
