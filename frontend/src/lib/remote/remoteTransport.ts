@@ -135,8 +135,12 @@ export class RemoteTransport {
   fetch(path: string, init: RequestInit = {}): Promise<Response> {
     if (!path.startsWith("/") || path.startsWith("//")) return Promise.reject(connectionEnded());
     init.signal?.throwIfAborted();
+    // Response owns one streamed encoding and its headers, including multipart boundary.
+    // Request.body is unavailable in Firefox; metadata never owns a second body.
+    const body = new Response(init.body, { headers: init.headers });
+    const request = new Request(new URL(path, this.hello.origin), { ...init, body: undefined, headers: body.headers, credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" });
+    if (init.body != null && ["GET", "HEAD"].includes(request.method)) throw new TypeError("GET/HEAD requests cannot have a body.");
     const id = this.allocate();
-    const request = new Request(new URL(path, this.hello.origin), { ...init, credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" });
     const result = new Promise<Response>((resolve, reject) => {
       const abort = () => { this.cancelHttp(id, init.signal?.reason instanceof Error ? init.signal.reason : connectionEnded()); };
       init.signal?.addEventListener("abort", abort, { once: true });
@@ -145,7 +149,7 @@ export class RemoteTransport {
     });
     void (async () => {
       await this.send({ op: "request", id, method: request.method, path, headers: [...request.headers] });
-      const reader = request.body?.getReader();
+      const reader = body.body?.getReader();
       try {
         if (reader) for (;;) {
           if (!this.http.has(id)) { await reader.cancel(); return; }

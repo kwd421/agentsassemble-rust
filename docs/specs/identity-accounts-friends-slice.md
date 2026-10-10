@@ -2588,3 +2588,15 @@ returned `google_token_exchange_failed`. Actual workerd rejects redirect mode
 redirect handling and reject non-2xx replies without following Location. This
 also owns native/web login, registration and deletion reauth; preserve all
 nonce/PKCE/state/fresh-subject/auth-time checks and trusted-opener invite custody.
+
+### Firefox encrypted request body owner (2026-10-10)
+
+Actual Firefox private Google signup and original-opener consent now succeed, but
+member-challenge returns400 invalid JSON. Native Firefox Request.body is undefined;
+the current optional reader silently sends only end-of-body. The shared encrypted
+HTTP transport must encode JSON, multipart and streaming bodies on all browsers
+through a single supported body/headers owner. Preserve matching multipart boundary,
+chunk/queue limits, streaming cancellation, empty requests and GET/HEAD body refusal;
+no body buffering, plaintext transport, compatibility fallback or custody change.
+Verify public RemoteTransport.fetch through its wire/HTTP outcome with absent
+Request.body, then direct packaged/web Google join/message/deletion acceptance.
