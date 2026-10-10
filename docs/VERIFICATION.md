@@ -1,6 +1,6 @@
 # Verification Contract
 
-## Account deletion — two Medium corrections and scoped confirmation (2026-10-10)
+## Account deletion — two Medium corrections approved and deployed (2026-10-10)
 
 NO COMPUTER USE: no clicks, typing, screenshots, apps or browsers. **Packaged
 captures remain pending**; real Google/owner deletion acceptance is not claimed.
@@ -20,7 +20,28 @@ Remote production reads initially failed with fetch connectivity errors, then
 succeeded on retry: previous 100% version 845cfca7-1657-401e-b23d-2069b6bffcd3;
 no migrations to apply. Evidence: /private/tmp/deletion-ui4-production-before.json
 and /private/tmp/deletion-ui4-migrations-before.log. Commit/push/deploy authorized
-by the completed clean verdict; deployment record follows after smoke.
+by the completed clean verdict.
+
+Rust commits (all pushed): 4c7640fb identity/contract/verification (251 changed
+lines), a66c828b popup transport/entry (172), dbe46fcc shared automatic UI and
+regressions (973). Each staged commit snapshot independently builds; affected
+snapshot tests pass 13, 4 and 74 respectively. Evidence:
+/private/tmp/deletion-ui4-commit{1,2,3}-check.log. Worker 308eafa1 (6 changed lines)
+is committed/pushed. Every commit uses the requested Claude Opus 5.5 co-author.
+Unrelated .agents/, scripts/__pycache__/ and local wrangler.cleanup configs remain.
+
+Clean assets-wt was checked out at exact Rust HEAD dbe46fcc and built successfully;
+no migration pending, so no migration was applied. Central deployed from Worker
+308eafa1 with npx wrangler deploy -c wrangler.cleanup-on.toml. New 100% version:
+a559413a-109e-48e0-a3a5-564fc1be3887 (previous version recorded above).
+Shell/curl smoke: / 200, /v1/bootstrap 401, /member-join 200. Served
+/assets/index-C2qwOYjK.js matches the built SHA256
+96569bd3a3a89346f9580a15c71185593ae5400da19b3d9603ced952efac08bc.
+The initial Python urllib root probe returned 403; curl passed all three paths.
+No app/browser acceptance is inferred from these HTTP checks. Evidence:
+/private/tmp/deletion-ui4-{assets-build,deploy}.log,
+/private/tmp/deletion-ui4-{assets-hashes,smoke,production-after}.json.
+Packaged captures and live Google/owner deletion acceptance remain pending.
 
 ## Account deletion E2E14 — automated corrections verified; approval gate pending (2026-10-10)
 
