@@ -22,12 +22,60 @@ rust-gates,build,frontend,map,miniflare}.log.
 
 Daybreak Blue xhigh scoped shell review round 1/2 completed APPROVE: C0/H0/M0/L0.
 Full report read: owner temporary scratchpad/stepup-review.md. No further review
-round needed. Commits/push/deploy/Firefox E2E follow the clean verdict.
+round needed. Commit/push/deployment completed below; real E2E remains blocked.
 Production before deploy: a559413a-109e-48e0-a3a5-564fc1be3887 at 100%; remote D1
 has no pending migrations, no schema change. Never use owner kwd421@gmail.com,
 never delete Google account or type passwords. Firefox private app session was
 expired at first observation; yaowhang3 sign-in is explicitly authorized.
 
+
+Deployment: Rust cb642592 and Worker 94248134 committed/pushed with requested
+Claude Opus 5.5 coauthor. Clean assets-wt checked out at exact Rust cb642592 and
+built; no migrations applied because none pending. Deployed using
+`npx wrangler deploy -c wrangler.cleanup-on.toml`; 100% version
+18d1e994-f3f4-4ea8-bf69-502b0569a0f9. Smoke / 200, /v1/bootstrap 401,
+/member-join 200. Served /assets/index-Bp4a-NB1.js matches local SHA256
+6745d2beb295043eca09c67ac18242eeda592aef6024241d3436bcf4565cd0d7.
+Evidence: /private/tmp/stepup-{assets-build,deploy}.log, stepup-smoke.json,
+stepup-production-{before,after}.json and stepup-migrations-before.log.
+
+Real Firefox E2E17 blocked BEFORE irreversible deletion. Existing private session
+was expired; reload, root navigation and selecting ONLY yaowhang3 signed in without
+password entry. Account settings and initial deletion dialog are captured. Google
+supplies a generic profile image for this account, so photo-less initials have
+unit-test evidence only. The existing server appeared disconnected despite native
+external access being open. One off/on retry created a new tunnel but publication
+failed after the existing three bounded attempts. Public loopback server-info
+reports `central directory request capacity is temporarily exhausted`. Read-only
+production D1 confirms this server's endpoint counter is 16 for the current UTC
+day, the exact existing 16/day budget, and central endpoint state is offline.
+No budget reset, gate exception, migration, direct state mutation or auth bypass.
+Budget resets at 2026-10-11 00:00 UTC (09:00 KST). Deleting now would permanently
+skip this host, losing this account's full anonymization E2E; user preference was
+requested; no response arrived during this run. The account remains active to
+preserve the full E2E path after the budget resets. Deletion step-up,
+progress/server rows, done, post-deletion anonymized messages and deleted-account
+login/separate-signup notice are NOT verified. No account was deleted/registered;
+no owner authentication action and no Chrome interaction occurred.
+Evidence: /private/tmp/stepup-host-{endpoint,state,budget,publication-error}.json.
+
+Captures (owner temporary scratchpad/e2e17):
+- 00-existing-private-session-expired.png
+- 01-google-login-account-chooser.png
+- 02-signed-in-server-list.png
+- 03-server-external-access-before.png
+- 04-deletion-initial.png
+- 05-server-offline-blocker.png
+- 06-server-message-and-members-before-deletion.png
+- 07-cleanup-external-access-off.png
+
+Cleanup verified: UI reports external access off; exact UI Check app quit through
+its normal Command-Q lifecycle. Previously inspected app/child PIDs 56976, 57118,
+57134 are absent and pgrep -x cloudflared returns none. Computer Use reset;
+Firefox remains running/open. Existing app data and active build artifacts preserved;
+no new isolated app data was created in this run. Budget and account state were
+not changed. Remaining acceptance requires a reachable published endpoint before
+starting the irreversible Google deletion flow.
 
 ## Account deletion — two Medium corrections approved and deployed (2026-10-10)
 
