@@ -100,6 +100,7 @@ type StoredDevice = {
 };
 
 class CentralAuthError extends Error {
+  readonly status = 401;
   constructor(message: string, readonly code?: string) { super(message); }
 }
 
@@ -354,7 +355,7 @@ async function responsePayload<T>(response: Response, central = true, signal?: A
       (central ? payload?.error?.message : typeof payload?.error === "string" ? payload.error : undefined) ||
       `로그인 서버가 HTTP ${response.status}을 반환했습니다.`;
     if (response.status === 401) throw new CentralAuthError(message, code);
-    if (central && (response.status === 429 || response.status >= 500)) throw new CentralTemporaryError(message);
+    if (central && (response.status === 429 || response.status >= 500)) throw Object.assign(new CentralTemporaryError(message), { status: response.status, code });
     throw Object.assign(new Error(message), { status: response.status, code,
       server_id: payload?.error?.server_id, registration_epoch: payload?.error?.registration_epoch });
   }
@@ -497,7 +498,15 @@ async function signedFetch(
     body: body || undefined,
     signal,
   });
-  if (response.status === 401 && loadCentralSession()?.token === session.token) clearCentralSession();
+  if (response.status === 401 && loadCentralSession()?.token === session.token) {
+    const failure = await response.clone().json().catch(() => null);
+    const stepUpFailure = path === "/v1/account/deletion-proof" && [
+      "fresh_google_authentication_required", "account_deletion_identity_mismatch",
+      "account_deletion_reauth_required", "invalid_handoff", "invalid_google_authorization",
+    ].includes(failure?.error?.code);
+    const finalStepUpFailure = path === "/v1/account" && method === "DELETE" && failure?.error?.code === "account_deletion_reauth_required";
+    if (!stepUpFailure && !finalStepUpFailure) clearCentralSession();
+  }
   return response;
 }
 

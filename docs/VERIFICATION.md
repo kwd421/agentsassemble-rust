@@ -1,5 +1,123 @@
 # Verification Contract
 
+## Account deletion — two Medium corrections and scoped confirmation (2026-10-10)
+
+NO COMPUTER USE: no clicks, typing, screenshots, apps or browsers. **Packaged
+captures remain pending**; real Google/owner deletion acceptance is not claimed.
+X/취소 now abort deferred per-server removal through the existing controller;
+the shared dialog retains confirmed results in RAM for fresh-authenticated resume.
+Expired receipts are removed only when they exactly match current storage; active
+accounts then begin a fresh deletion, including receipts expiring while mounted.
+Five regressions pass; restoring both defects makes four behavior cases fail.
+Focused 42 tests pass; full frontend 202 files / 1328 tests and production build
+pass. Rust architecture/source growth, 19 policy tests, format/artifact/diff gates,
+Worker architecture/source growth/codebase-map and 283 Worker tests/check pass.
+Evidence: /private/tmp/deletion-ui4-{unfixed,focused,frontend,build,gates,worker,worker-gates}.log.
+One authorized Daybreak Blue xhigh confirmation review completed: APPROVE —
+C0/H0/M0. Full report read: /private/tmp/claude-501/-Users-seinel-Projects-AgentsAssemble-Rust/f43b6994-3778-4ca2-8834-d04c0c670717/scratchpad/deletion-ui4-review.md.
+Scope was these two fixes and new Critical/High/Medium only; no extra review/scan.
+Remote production reads initially failed with fetch connectivity errors, then
+succeeded on retry: previous 100% version 845cfca7-1657-401e-b23d-2069b6bffcd3;
+no migrations to apply. Evidence: /private/tmp/deletion-ui4-production-before.json
+and /private/tmp/deletion-ui4-migrations-before.log. Commit/push/deploy authorized
+by the completed clean verdict; deployment record follows after smoke.
+
+## Account deletion E2E14 — automated corrections verified; approval gate pending (2026-10-10)
+
+Latest binding owner constraint: NO COMPUTER USE in this run. No apps or browsers
+opened, closed or used; no screenshots or keyboard/mouse automation. UI Check
+0.1.28 rebuild skipped explicitly. **packaged captures: pending** (initial dialog,
+progress/error/retry, completed/skipped servers and separate default-off local-data
+choice). Target remains scratchpad/e2e14; no capture was produced in this run.
+Real Google password/auth_time return and owner deletion remain owner-only pending
+verification. No owner or existing production account was authenticated or deleted.
+
+Shared account deletion now uses X, four short bullets, avatar/name, inline guest
+code, progress chips, one danger action and automatic fresh step-up → reachable
+server removal → central disable. Popup return preserves the originating web room.
+Skipped reasons and the optional local-data choice survive receipt recovery. Local
+wipe retains keys/hosting restriction, external login credentials, AI/provider files,
+settings/logs and unrelated files. All existing server-side same-subject,
+nonce/PKCE, signed-session/device and atomic fresh-proof checks remain fail-closed.
+Deletion-only Google authorization adds max_age=300 with essential auth_time;
+ordinary login is unchanged. Automated signed-token fixtures cannot prove live
+Google password prompting or actual auth_time support.
+
+Google email decision: display-name-only fallback applied. CentralPerson and actual
+person/session/bootstrap responses contain no email; web/native authorization uses
+openid profile. A masked email would need new central data/scope, which this owner
+request explicitly avoids. Google rows show avatar and display name, guest rows
+also show 게스트 계정. No email scope, schema, storage or invented email added.
+
+Prior completed Daybreak Blue xhigh manual reports 1–6 were read in full:
+1 REVISE C0/H1/M1/L0; 2 REVISE C0/H1/M1/L1; 3 REVISE C0/H0/M0/L1;
+4 REVISE C0/H0/M3/L1; 5 REVISE C0/H0/M3/L1; 6 REVISE C0/H0/M1/L0.
+Reports: /private/tmp/deletion-e14-review-{1,2,3,4,5,6}-report.md.
+Prior fixes preserve confirmed own-host/remote results across reauth, bounded and
+cancellable receipt lookup/start request, same-person receipt-only remount,
+operation-owned local follow-up, first member snapshot, guest-code requirement,
+and exact reauth/rate-limited/limiter-unavailable no-commit classification.
+
+This request authorizes up to three NEW manual rounds (overall 7–9) from the
+current working tree. Round 6's final pre-handler invalid_session/authentication_required/
+invalid_signed_request 401 now clears only the exact operation's uncommitted
+receipt and proof, retaining actual session invalidation. Explicit same-person
+login retries with new signed authority and fresh proof, preserves confirmed host
+results and refreshes own-host authority. Unknown final responses retain receipt
+recovery. Three automated UI-flow regression cases fail against the unfixed code and
+pass corrected code; actual identity tests also cover error metadata and clearing.
+Evidence: /private/tmp/deletion-e14-round7-{unfixed,focused}.log (45 focused pass).
+
+New round 1 (overall 7) completed REVISE C0/H0/M1/L0; full report read:
+/private/tmp/deletion-e14-review-7-report.md. Correction detaches a different
+person's cancelled operation from the mounted dialog and requires current person
+match (or explicit signed-out recovery) for receipt lookup. Same-mount A ambiguous
+final → B switch → fresh B proof/DELETE now has no A status/progress/local follow-up.
+This regression fails on unfixed code and passes corrected code (46 focused pass):
+/private/tmp/deletion-e14-round8-{unfixed,focused}.log. New round 2 (overall 8) completed REVISE C0/H0/M1/L0; full report read:
+/private/tmp/deletion-e14-review-8-report.md. Its receipt-only completion variant
+now separates the retained result/skipped list/local choice/error/completion UI
+on different-person login, keeping the persisted receipt unchanged. React's effect
+event reads the current displayed account/receipt state without resubscribing and
+cancelling a live operation. Existing cross-account tests now cover native and web
+receipt-only completion → different-person login → fresh proof/DELETE. Both fail
+on unfixed code, pass corrected; A live-operation switch remains covered. Evidence:
+/private/tmp/deletion-e14-round9-{unfixed,focused-final}.log (48 focused pass).
+Final new round 3 (overall 9) completed REVISE C0/H0/M1/L0; full report read:
+/private/tmp/deletion-e14-review-9-report.md. All three newly authorized rounds
+are consumed; no APPROVE, additional review, commit, push or deploy is claimed.
+
+The last Medium is corrected: a mounted-flow generation changes on different-person
+detachment, close and cleanup. Old post-await success/failure cannot restore its
+completion/receipt/error UI or continue the old workflow. Persisted receipts stay
+unchanged; the in-flight owner's finally still releases busy state. Deferred A final
+DELETE → B login → A resolve/reject regressions both fail against unfixed code,
+then pass corrected code with B's initial danger action, no A result/error/progress/
+follow-up, unchanged A receipt and B session, and B's fresh proof/DELETE.
+Evidence: /private/tmp/deletion-e14-post9-{unfixed,focused}.log (50 focused pass).
+Current corrected code is awaiting one additionally authorized completed Daybreak
+approval review; the user's three-round limit is exhausted. The per-slice execution
+gate requires re-approval before push/deploy. No fourth new review was requested.
+Planned independently buildable units are now contract/identity (122 changed lines),
+complete Google-popup transport/component/tests (167), remaining operation/shared
+UI/tests (864), Worker source/tests (6), then verification-only recording. No gate
+threshold or exception changed.
+
+Full frontend 201 files / 1323 tests, production build, Worker 283 unit tests/check,
+local workerd deletion flow and mandatory architecture/source growth, codebase-map,
+format/artifact/diff gates pass; current
+frontend/build/gate logs /private/tmp/deletion-e14-post9-{frontend,build,gates}.log;
+unchanged Worker evidence /private/tmp/deletion-e14-round7-{worker,workerd,worker-gates}.log.
+Full Rust make verify and real providers are outside this frontend/Worker-only run.
+No commit/push/deploy; review authorization/APPROVE remains pending. Production
+version recorded before deployment preparation: 845cfca7-1657-401e-b23d-2069b6bffcd3
+at 100%; no migrations to apply. Final production status confirmed via CLI:
+/private/tmp/deletion-e14-post9-production-status.json. Current unshipped build
+artifact hashes: /private/tmp/deletion-e14-post9-built-assets.json. Review9
+index-DchyhUbI.js was superseded by this corrected build, never deployed.
+No production HTTP/browser smoke or captures were attempted. Protected .agents/, scripts/__pycache__/ and
+wrangler.cleanup-*.toml remain untouched.
+
 ## Real Google web E2E13 — transport deployed; deletion rejected at fresh Google authentication (2026-10-10)
 
 Transport source Rust746f99ff, committed and pushed after completed Daybreak Blue

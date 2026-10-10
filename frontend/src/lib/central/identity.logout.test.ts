@@ -64,3 +64,32 @@ it.each(["logged-out", "expired-session"])("replaces a %s account slot only afte
   expect(requests[1].device_id).toBe(requests[0].device_id);
   expect(centralSessionLoggedOut()).toBe(true);
 });
+
+it.each([
+  ["/v1/account/deletion-proof", "fresh_google_authentication_required"],
+  ["/v1/account/deletion-proof", "account_deletion_reauth_required"],
+  ["/v1/account/deletion-proof", "invalid_session"],
+  ["/v1/account", "account_deletion_reauth_required"],
+  ["/v1/account", "invalid_session"],
+  ["/v1/account", "authentication_required"],
+  ["/v1/account", "invalid_signed_request"],
+  ["/v1/logout", "account_deletion_reauth_required"],
+  ["/v1/account", "rate_limited", 429],
+  ["/v1/account", "abuse_limiter_unavailable", 503],
+])("keeps exact step-up failures retryable but clears invalid authentication: %s %s", async (path, code, responseStatus = 401) => {
+  vi.resetModules();
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
+  const device = { deviceId: "fixture-device", privateKey: pair.privateKey, publicJwk: await crypto.subtle.exportKey("jwk", pair.publicKey) };
+  vi.stubGlobal("indexedDB", { open: () => {
+    const request = { result: { close() {}, transaction: () => ({ objectStore: () => ({ get: () => {
+      const get = { result: device, onsuccess: () => {} }; queueMicrotask(() => get.onsuccess()); return get;
+    } }) }) }, onsuccess: () => {} };
+    queueMicrotask(() => request.onsuccess()); return request;
+  } });
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: { code, message: "확인하지 못했어요." } }, { status: responseStatus })));
+  localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({ token: "fixture-session", expires_at: 9_999_999_999, device_id: device.deviceId, person: { person_id: "fixture-person", identity_kind: "google", display_name: "Name" } }));
+  const { signedRequest, loadCentralSession } = await import("./identity");
+  const session = loadCentralSession()!;
+  await expect(signedRequest(session, path, path === "/v1/account" ? "DELETE" : "POST", {})).rejects.toMatchObject({ status: responseStatus, code });
+  expect(loadCentralSession()?.token ?? null).toBe(["invalid_session", "authentication_required", "invalid_signed_request"].includes(code) || path === "/v1/logout" ? null : "fixture-session");
+});

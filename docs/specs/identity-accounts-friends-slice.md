@@ -1,5 +1,92 @@
 # Identity, accounts, friends and human admission
 
+## Account deletion — reauthentication and dialog correction (2026-10-10)
+
+Latest two-finding correction (2026-10-10): X/취소 stay available during automatic
+per-server removal and abort the existing operation controller. Closing/reopening
+the shared native/web dialog retains confirmed server results in RAM; resuming
+requires fresh step-up and own-host authority, without repeating confirmed work.
+An expired 24-hour receipt is removed only if it is still the exact stored receipt;
+with an active session continue as a new deletion, never expired-status recovery.
+Regression tests cover both controls during deferred removal, resume, exact receipt
+removal and fresh active-account deletion. One scoped Daybreak confirmation review
+is authorized; no Critical/High/Medium permits commits, both pushes and central
+Worker/assets deployment. Computer Use remains prohibited; captures stay pending.
+
+Owner-required entry points: shared settings → 계정 탈퇴, web room/chooser and
+native. Deletion-only Google authorization requests max_age=300 plus essential
+auth_time; Google documents claims/auth_time but does not list prompt=login.
+Keep verified same-subject, nonce, PKCE, integer fresh auth_time/iat and all final
+person/session/device/proof checks fail-closed. Actual password/auth_time return
+is owner-only verification; never complete yaowhang3 deletion. Ordinary login is
+unchanged. Failed step-up must not clear an otherwise live signed account session;
+invalid session/device authentication still clears it.
+
+One danger action confirms intent: Google popup/native browser or guest code,
+then signed inventory, reachable server leaves and central disable automatically.
+No typed 탈퇴, manual server phase, restart or second disable button. Web popup
+keeps the originating room tree alive; only correlated OAuth code returns to its
+original operation, with no login, registration or credential transfer. Close,
+cancel, expiry and account switch cancel pending work. Retry preserves confirmed
+server results; an exact final 401/account_deletion_reauth_required means no
+commit, keeps the live account, clears only that operation's uncommitted receipt
+and returns to fresh step-up without repeating confirmed host work. An ambiguous
+final response uses the existing receipt before retry. Exact rate_limited/429 and
+abuse_limiter_unavailable/503 responses also precede deletion commit (or follow
+atomic rollback), so release that uncommitted receipt; generic 5xx stay ambiguous.
+Exact final authentication_required, invalid_session and invalid_signed_request 401
+are also pre-handler no-commit: keep session clearing and release only the matching
+uncommitted receipt/proof. After explicit same-person login and fresh proof, a new
+authenticated operation retains in-memory confirmed host results and the first
+member snapshot, rechecking current own-host authority; account switches never
+inherit those results. A different-person session detaches the cancelled operation
+from rendering; receipt lookup requires the current person match or explicit
+signed-out recovery, never just the previous request ID while another person
+is logged in. This includes receipt-only completion with no live operation:
+new-person login separates the retained result, skipped list, optional local-data
+choice, completion/error UI, while preserving the stored receipt. A flow generation invalidated on different-person
+detachment/close prevents old post-await success/failure from restoring completion,
+receipt, error or progress UI; persisted receipts remain unchanged. Receipt lookup has a flow-owned abort signal and 15-second deadline, supports
+X/cancel and account-switch cancellation, and retains the receipt on failure.
+Fresh guest retries still require a code; only matching receipt lookup skips it.
+Keep the first member snapshot for the same operation across reauth retries,
+including confirmed removals after membership/epoch changes; refresh own-host
+authority separately. Live operation follow-up, including none, never inherits
+another account's older receipt disposition. Receipt-only recovery works
+including reopening/reloading with the same live account, and never automatically
+creates an account or repeats an unknown final write. Google popup expiry bounds
+the start request as well as the callback. Web owners are directed to their server
+computer's app for the separate optional local-data choice after completion.
+The device-local receipt retains a validated display-only follow-up disposition;
+no host key/ticket or reset authority is stored. Receipt recovery shows the same
+local-data choice/guidance; the existing native persisted terminal fence still
+owns any actual wipe.
+
+Dialog: standard top-right X, account avatar/name and masked Google email when
+available, or 게스트 계정. Owner decision (2026-10-10 continuation): when email
+requires new central data, show the Google display name only. Current login uses
+openid/profile and the authoritative person/session/bootstrap have no email;
+use that fallback without new scopes, storage or inferred email.
+Four bullets exactly as requested: 모든 기기에서 로그아웃되고, 이 계정으로 다시
+들어올 수 없어요. / 지금 연결되는 서버에서는 바로 나가요. 내가 쓴 메시지는
+'탈퇴한 사용자'로 남아요. / 꺼져 있는 서버에는 이름과 사진이 남을 수 있어요.
+/ 되돌릴 수 없어요. Server list appears only after starting, one row per server,
+chips 대기/나가는 중/완료/건너뜀, with the skipped reason visible in both progress
+and completion (including receipt recovery). Footer 취소 and red Google로 확인하고 탈퇴
+(or 복구 코드로 확인하고 탈퇴 with inline password field); one 다시 시도 on
+failure and one Korean red error below footer. Done 탈퇴했어요, skipped list if
+any, 확인. Native local-data deletion remains separate, optional, default off;
+its exact deletion and preservation scope stays visible in done/startup surfaces.
+Tests cover one-click ordering, retained root/room, failed step-up and retry/receipt,
+OAuth correlation/cancellation and fresh-auth failure modes. Up to three completed
+Daybreak Blue xhigh shell reviews must reach APPROVE before push/deploy. The
+manager authorized up to three more rounds in this continuation after the current
+working tree and overall round 6 report. Deploy assets and the changed Worker.
+Latest binding run constraint: no Computer Use, apps, browsers or screenshots;
+automated tests only. Skip the UI Check rebuild and mark packaged captures pending
+in docs/VERIFICATION.md. Any later authorized web check must use Firefox only;
+never open, close or use Chrome.
+
 ## Account deletion — owner redesign (2026-10-09)
 
 Actual disposable-GUEST verification also exercises the existing configured loopback
@@ -77,8 +164,8 @@ Show current account and this explanation in 해요체 without protocol jargon:
 다시 들어갈 수 없어요. 지금 연결할 수 있는 다른 사람 서버에서는 바로 나가고,
 내가 쓴 메시지는 '탈퇴한 사용자'로 남아요. 꺼져 있는 서버에서는 이름이 남을 수
 있어요.” This concerns the deleted account; explicit re-registration creates a
-new unrelated account. Require fresh step-up and typed `탈퇴` before irreversible
-host work. Cancel before confirmation has no side effects.
+new unrelated account. Require fresh step-up after the single explicit danger action before irreversible
+host work; the 2026-10-10 dialog correction removes typed confirmation. Cancel before confirmation has no side effects.
 
 Google step-up uses verified same-subject fresh integer `auth_time` and `iat`
 within 300 seconds. Missing/stale `auth_time` fails closed; session-only deletion
