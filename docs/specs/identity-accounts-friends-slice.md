@@ -1,5 +1,34 @@
 # Identity, accounts, friends and human admission
 
+## Google deletion policy and real E2E17 (2026-10-11)
+
+Owner accepted the weaker step-up after real Google returned an account chooser
+without fresh auth_time. This decision supersedes earlier auth_time/password and
+no-Computer-Use/spare-account restrictions for this task. Shared native/web settings
+→ account deletion must obtain a fresh Google ID token interactively with
+prompt=select_account, for the SAME Google subject as the signed account. A new
+single-use nonce is bound to this deletion request/session/device; the server checks
+signature, issuer, audience, nonce and safe integer iat within 300 seconds. No
+max_age or essential auth_time request/check remains. Proof expiry is bounded by
+iat + 300 seconds; final person/session/device/request/proof checks and atomic
+consumption remain unchanged. Ordinary login and guest deletion are unchanged.
+A live Google session may satisfy the chooser without password reauthentication;
+the owner explicitly accepts that security tradeoff. Failure copy asks users to
+select the Google account again. A photo-less account row shows the existing human
+initials style rather than an empty circle.
+
+Acceptance: affected tests and mandatory gates; max TWO scoped Daybreak Blue xhigh
+shell review rounds, proceed with no Critical/High; commit with requested coauthor,
+push both repos and deploy central with exact Rust HEAD assets (migrations first
+if pending), smoke. Firefox ONLY: existing private yaowhang3 (ㅏㄴ나나) account is
+explicitly approved for AgentsAssemble deletion, never the Google account. Never
+use kwd421@gmail.com or type passwords; stop if asked. Capture initial, progress
+with server rows, done, UI Check anonymized messages/photo and member list, then
+Google login deleted-account notice and separate signup without registering.
+Capture directory: scratchpad/e2e17 in the owner-specified temporary run folder.
+Cleanup: external access off, quit exact UI Check app/children, no cloudflared left;
+leave Firefox open. Record evidence at top of docs/VERIFICATION.md, commit/push.
+
 ## Account deletion — reauthentication and dialog correction (2026-10-10)
 
 Latest two-finding correction (2026-10-10): X/취소 stay available during automatic
@@ -14,11 +43,10 @@ is authorized; no Critical/High/Medium permits commits, both pushes and central
 Worker/assets deployment. Computer Use remains prohibited; captures stay pending.
 
 Owner-required entry points: shared settings → 계정 탈퇴, web room/chooser and
-native. Deletion-only Google authorization requests max_age=300 plus essential
-auth_time; Google documents claims/auth_time but does not list prompt=login.
-Keep verified same-subject, nonce, PKCE, integer fresh auth_time/iat and all final
-person/session/device/proof checks fail-closed. Actual password/auth_time return
-is owner-only verification; never complete yaowhang3 deletion. Ordinary login is
+native. Deletion-only Google authorization uses prompt=select_account.
+Keep verified same-subject, single-use request nonce, PKCE, fresh integer iat and
+all final person/session/device/proof checks fail-closed. The 2026-10-11 owner
+decision authorizes yaowhang3 deletion and removes auth_time/max_age. Ordinary login is
 unchanged. Failed step-up must not clear an otherwise live signed account session;
 invalid session/device authentication still clears it.
 
@@ -167,8 +195,9 @@ Show current account and this explanation in 해요체 without protocol jargon:
 new unrelated account. Require fresh step-up after the single explicit danger action before irreversible
 host work; the 2026-10-10 dialog correction removes typed confirmation. Cancel before confirmation has no side effects.
 
-Google step-up uses verified same-subject fresh integer `auth_time` and `iat`
-within 300 seconds. Missing/stale `auth_time` fails closed; session-only deletion
+Google step-up uses a verified same-subject ID token with a new single-use
+request-bound nonce and integer `iat` within 300 seconds, obtained interactively
+via `prompt=select_account`. No `auth_time` requirement remains; session-only deletion
 is forbidden. Guest uses existing recovery code, no autofill, rotation or issuance
 from the current session. Honest threat model: recovery-code/device compromise is
 not resisted. Recheck person/session/device/proof/request at final central write.
@@ -521,9 +550,10 @@ optional keep/wipe, remote own-server 410 on next existing contact with zero pol
 Shared trusted web and isolated packaged app exercise roomless/owner/member/guest,
 confirmation/cancel, per-host progress/skipped list, partial host success then
 central failure, account switch, lost result and explicit new registration. Unit/
-build evidence does not replace these product flows. Google fresh auth_time is
-verified locally/with Miniflare on both client paths; missing auth_time remains
-fail-closed. Real Google app/web E2E is pending the owner's spare account.
+build evidence does not replace these product flows. Google fresh-token checks are
+verified locally/with Miniflare on both client paths. Real Firefox Google E2E17
+is authorized for yaowhang3 by the 2026-10-11 decision; native real Google remains
+unverified.
 Record completed reviews, corrections, commits, checks, limits and deployment at
 the top of Rust docs/VERIFICATION.md and commit it with the specified coauthor.
 

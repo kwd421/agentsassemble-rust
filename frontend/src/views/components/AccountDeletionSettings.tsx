@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { AccountDeletion, checkDeletionReceipt, clearExpiredDeletionReceipt, loadDeletionReceipt } from "../../lib/central/accountDeletion";
 import { confirmDeletionGoogle } from "../../lib/central/accountDeletionGoogle";
 import { CENTRAL_SESSION_CLEARED_EVENT, CENTRAL_SESSION_CHANGED_EVENT, loadCentralSession } from "../../lib/central/identity";
+import ParticipantAvatarContent from "./ParticipantAvatarContent";
 import LocalAccountDataChoice from "./LocalAccountDataChoice";
 
 export default function AccountDeletionSettings({ disabled }: { disabled: boolean }) {
@@ -113,7 +114,7 @@ export function AccountDeletionFlow({ disabled, onClose }: { disabled: boolean; 
         <li>되돌릴 수 없어요.</li>
       </ul>
       {session && <div className="dc-account-deletion-account">
-        <span className="dc-member-avatar">{session.person.avatar_url ? <img src={session.person.avatar_url} alt="" referrerPolicy="no-referrer" /> : Array.from(session.person.display_name).slice(0, 2).join("")}</span>
+        <span className="dc-member-avatar">{session.person.avatar_url ? <img src={session.person.avatar_url} alt="" referrerPolicy="no-referrer" /> : <ParticipantAvatarContent participantType="human" displayName={session.person.display_name} size={40} />}</span>
         <div><strong>{session.person.display_name}</strong>{session.person.identity_kind === "guest" && <p className="text-text-muted">게스트 계정</p>}</div>
       </div>}
       {op?.progress && <ul className="dc-account-deletion-servers" aria-label="서버별 탈퇴 정리 결과">{op.progress.map(item => <li key={`${item.server.server_id}:${item.server.registration_epoch}`}>

@@ -100,3 +100,9 @@ it("removes only the exact expired receipt and preserves a replacement and unrel
   clearExpiredDeletionReceipt(replacement); expect(loadDeletionReceipt()).toBeNull();
   expect(sessionStorage.getItem("unrelated")).toBe("keep");
 });
+
+it("shows human initials for a photo-less deletion account", () => {
+  vi.mocked(loadCentralSession).mockReturnValue({ ...session, person: { ...session.person, display_name: "  ab account  ", avatar_url: null } });
+  const { container } = render(<AccountDeletionFlow disabled={false} />);
+  expect(container.querySelector(".dc-account-deletion-account .dc-member-avatar")?.textContent).toBe("AB");
+});

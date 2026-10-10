@@ -1,5 +1,34 @@
 # Verification Contract
 
+## Google deletion step-up policy and E2E17 (2026-10-11)
+
+Owner accepted interactive Google account selection instead of password
+reauthentication: same subject, new single-use deletion-request nonce, verified
+signature/issuer/audience/PKCE, integer iat within five minutes and existing signed
+device session. auth_time/max_age forcing removed; proof expiry uses iat + 300s.
+Shared photo-less deletion account row reuses human initials with visible sizing.
+Ordinary login, guest deletion and atomic final authority are unchanged.
+
+Automated checks: frontend 202 files / 1329 tests and production build pass; focused
+frontend 48; Worker 286 tests/check and focused Google 18 pass. Rust architecture,
+source growth, 19 policy tests, format, artifact and diff gates pass. Worker
+architecture/source growth and regenerated codebase-map check pass. Local real
+Miniflare D1 validates stale iat refusal and fresh token without auth_time,
+wrong session, atomic rollback and receipt; no new identity/session is issued.
+The first cached Miniflare 5 installations rejected this existing test harness API;
+the cached Wrangler 4.98 / Miniflare 4 path passed. No harness shim added.
+Evidence: /private/tmp/stepup-{focused-worker,focused-frontend,worker,worker-gates,
+rust-gates,build,frontend,map,miniflare}.log.
+
+Daybreak Blue xhigh scoped shell review round 1/2 completed APPROVE: C0/H0/M0/L0.
+Full report read: owner temporary scratchpad/stepup-review.md. No further review
+round needed. Commits/push/deploy/Firefox E2E follow the clean verdict.
+Production before deploy: a559413a-109e-48e0-a3a5-564fc1be3887 at 100%; remote D1
+has no pending migrations, no schema change. Never use owner kwd421@gmail.com,
+never delete Google account or type passwords. Firefox private app session was
+expired at first observation; yaowhang3 sign-in is explicitly authorized.
+
+
 ## Account deletion — two Medium corrections approved and deployed (2026-10-10)
 
 NO COMPUTER USE: no clicks, typing, screenshots, apps or browsers. **Packaged
