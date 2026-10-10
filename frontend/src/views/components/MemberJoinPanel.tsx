@@ -47,6 +47,8 @@ function failureMessage(error: unknown): string {
   if (error instanceof TypeError) return "참가를 마치지 못했어요. 다시 시도해 주세요.";
   // Only exact user-facing messages may cross the native/parser error boundary.
   const messages = [
+    "로그인 창이 차단됐어요. 팝업을 허용한 뒤 Google로 다시 시도해 주세요.",
+    "로그인을 마치지 못했어요. 초대 창에서 다시 시도해 주세요.",
     "참가 요청이 만료됐어요. 다시 시도해 주세요.",
     "참가를 마치지 못했어요. 다시 시도해 주세요.",
     "참가 요청이 없어요. 원래 초대 링크를 다시 열어 주세요.",
@@ -222,7 +224,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
     identityLabel={consent && !error ? roomName : undefined}
     serverLabel={consent && !error && !reconnect ? `${consent.target.label}에서 열린 방` : undefined}
     titleContent={consent && !error && !reconnect ? <>{roomName ? <>‘<strong>{roomName}</strong>’에 참가할까요?</> : title}</> : undefined}
-    retryMode={error ? "join" : undefined} onJoin={retry}
+    retryMode={error && !(secureEntry && !loadCentralSession()) ? "join" : undefined} onJoin={retry}
     onDisplayNameChange={() => {}} onAvatarImageChange={() => {}}>
     <section aria-label="방 참가" className="grid gap-3 text-text-primary">
       {rooms.map(room => <button key={room.room_id} className="dc-guest-join-button" disabled={busy} onClick={() => void run(() => selectRoom(room.room_id))}>{room.name || "이름 없는 방"}</button>)}
@@ -233,7 +235,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
         <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>{reconnect ? "다시 연결" : "참가하기"}</button>
       </>}
       {consent && <button type="button" className="dc-join-cancel" disabled={busy} onClick={() => void confirm(true)}>목록에 다시 표시하고 참가</button>}
-      {!host && !busy && !error && !consent && rooms.length === 0 && <button type="button" className="dc-guest-join-button"
+      {!host && !busy && (!error || (secureEntry && !loadCentralSession())) && !consent && rooms.length === 0 && <button type="button" className="dc-guest-join-button"
         onClick={() => void run(async () => {
           loginAbort.current = new AbortController();
           if (secureEntry) {
@@ -241,7 +243,8 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
             else await loginMemberPopup(loginAbort.current.signal);
             await prepare();
           } else await startCentralWebGoogle(loginAbort.current.signal);
-        })}>Google로 계속</button>}
+        })}>{error ? "Google로 다시 시도" : "Google로 계속"}</button>}
+      {busy && secureEntry && loginAbort.current && <button type="button" className="dc-join-cancel" onClick={() => loginAbort.current?.abort()}>로그인 취소</button>}
       {(!host || onCancel) && !busy && <button type="button" className="dc-join-cancel"
         onClick={onCancel || (() => { clearCentralMemberRequest(); window.history.back(); })}>취소</button>}
     </section>

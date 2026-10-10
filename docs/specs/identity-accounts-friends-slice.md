@@ -461,6 +461,30 @@ owner success plus member/plaintext/cross-channel denial before re-review.
 
 ## Secure admission and event-only publication (owner task, 2026-10-07)
 
+### Web member Google return correction (2026-10-10)
+
+Required entry: trusted central person invite → direct Google click → account
+selection/Continue → explicit registration if absent/deleted → consent/join, in
+Firefox private, Chrome and Safari. Popup blocking must leave a Korean direct-click
+retry; callback failure uses the shared centered card and a return/retry action.
+Observed Firefox callback has no opener while popup and PKCE storage exist and
+OAuth state matches. Keep existing COOP/CSP. Before Google navigation correlate
+exact popup/origin/nonce/state; use one nonce-scoped same-origin BroadcastChannel
+for acknowledged return/completion after the browser severs opener. This replaces
+return postMessage, not a navigation/storage fallback. The opener alone retains
+the invitation in memory; channel messages contain no credentials/invite. Bound
+acknowledgements/deadline and abort/unmount/pagehide release the owned wait; no polling.
+Registration disables the return action while its request is in flight, propagates
+cancellation, and preserves created/login-required, expiry/account-switch and unknown
+outcomes. Callback URL state is cleared before waiting for acknowledgement.
+A return without the live correlated opener wait fails closed and clears URL state.
+Absent/deleted is an explicit separate registration choice in the popup, never
+implicit signup. Invite defaults/list use 게스트 and success 초대 링크를 만들었어요.
+Verify spoof/expiry/cancel/block/storage failures and COOP-separated browser return;
+then authorized real Google yaowhang3 join/message/deletion/re-login without signup.
+Owner kwd421 is excluded; no passwords/2FA. Review max three rounds to APPROVE,
+commit/push/deploy matching central assets and record actual results/limits.
+
 ### Packaged admission corrections (2026-10-09)
 
 The two signed desktop entries (UI Check owner host and UI Check 2, same owner)
@@ -499,11 +523,10 @@ removed from history, retained in memory and sent only through the verified encr
 host channel. No invite/input URL logging or asset-query forwarding. Existing opaque
 invite credentials and host invite row/scope/expiry/consumption remain unchanged.
 Web Google login runs in a trusted popup while the opener retains invitation in
-memory. Correlate exact origin/popup/nonce/state; completion message contains no
+memory. Correlate exact origin/popup/nonce/state before navigation and acknowledge the nonce-scoped central channel return; completion message contains no
 credentials. Opener reads existing central session after correlated completion and
 rechecks account. Invitation is never stored in web storage, OAuth state/callback or
-popup; blocked/closed/expired popup or opener reload requires explicit original-link
-retry. Popup expires at min(handoff expiry,300s); cancel/unmount ends its owned wait.
+popup; blocked popup keeps a direct-click retry in the trusted opener; closed/expired popup or opener reload requires explicit retry (original link after reload). Popup expires at min(handoff expiry,300s); cancel/unmount ends its owned wait.
 No navigation/storage fallback or central polling. Legacy host-origin links and
 existing non-central guests stay at their existing owner; no upgrade from that origin to event central admission. The invitation contract
 owner records this affected creation/link/challenge transition before implementation.

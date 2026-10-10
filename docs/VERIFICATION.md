@@ -1,5 +1,48 @@
 # Verification Contract
 
+## Web member Google popup — approved correction (2026-10-10)
+
+Rust baseline08f4df8e; Worker28b68c0c unchanged. Existing Firefox private callback
+was inspected without dumping storage values: opener=false, member-popup request
+and Google PKCE storage present, OAuth state matching. Old memberPopup.ts:43
+rejected the no-opener callback before sanitization. The browser navigation severed
+the opener; storage/state mismatch is not supported by this observation. Deliberate
+COOP separation reproduces the same failure boundary in Chromium/WebKit locally;
+the exact Google/Firefox policy that severed the original reference is not traced.
+
+The initial exact popup/source/origin/nonce/state handshake remains. A primary
+nonce-scoped same-origin BroadcastChannel now acknowledges return before exchange
+or registration and sends no credential/invitation. Opener alone retains invitation
+in memory; callback URL clears before acknowledgement; no polling or fallback.
+Blocked popup leaves a direct-click Korean retry. Shared centered callback card
+provides explicit absent/deleted signup and return action. Pagehide/unmount/cancel
+release the owned wait; signup disables return while pending and cancellation
+rechecks before session persistence. Created/login-required, expiry/account switch
+and uncertain results are reported truthfully. Invite default/list uses 게스트 and
+success toast 초대 링크를 만들었어요.
+
+Daybreak Blue xhigh read-only round1 REVISE M2 (lifetime/outcome handling), corrected;
+round2 APPROVE C0/H0/M0/L0, completed reports read in full:
+/private/tmp/web-member-review-1-report.md and /private/tmp/web-member-review-2-report.md.
+CLI headers/turn_context record gpt-daybreak-blue-latest, xhigh, read-only in both
+sessions; round1's contrary model self-description was corrected in round2.
+Full frontend199/199 files,1279/1279 tests; affected59/59; build; unchanged architecture,
+source-growth and policy19 gates; diff check pass. Chromium/WebKit real-engine local
+provider-double E2E2/2 proves blocked retry, deliberately COOP-severed opener,
+PKCE return, explicit signup/consent, URL clearing and no stored invitation.
+Firefox patched engine cannot launch in this macOS environment (sandbox extension
+error in headless and headed); no sandbox/security relaxation was applied.
+Full make verify stops at existing artifact-check: root target23GB >18GiB and
+obsolete desktop target1GB. No artifact deletion or gate change; unchanged backend/
+Worker evidence remains the prior approved verification, not a new full verify pass.
+
+Production before rollout: version7e4085a2-f016-4fdd-8d66-515ab47a4e16; remote D1
+reports no migrations to apply. Worker/config/schema/security headers unchanged.
+Final UI Check0.1.27 rebuild in progress; first signed package and fresh-copy deep
+strict signature check passed. Source commit/push, exact assets build/deployment,
+production smoke and designated real Google private-window deletion E2E remain
+pending and will be recorded above after execution. Broader mobile is unverified.
+
 ## Account deletion — completed release and disposable Guest verification (2026-10-10)
 
 Binding v2/v3 implementation and final release are complete. Host-local person-scoped

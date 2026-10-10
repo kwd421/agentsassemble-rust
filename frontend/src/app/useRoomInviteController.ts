@@ -419,17 +419,17 @@ export function useRoomInviteController({
     options: HumanInviteOptions = { maxUses: 1, ttlSeconds: 86400 },
     startTunnelIfNeeded = false
   ) {
-    setCopyStatus("보안 초대 링크 생성 중...");
+    setCopyStatus("초대 링크를 만들고 있어요.");
     try {
       await createManagedHumanInviteForRoom({
         room,
-        displayName: options.displayName ?? "Guest",
+        displayName: options.displayName ?? "게스트",
         inviteScope,
         maxUses: options.maxUses,
         ttlSeconds: options.ttlSeconds,
         startTunnelIfNeeded,
       });
-      setCopyStatus("보안 초대 링크 생성됨");
+      setCopyStatus("초대 링크를 만들었어요.");
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(error instanceof Error ? error.message : "보안 초대 링크 생성 실패");

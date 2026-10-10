@@ -124,7 +124,7 @@ export default function RoomInviteModal({
   const selectedHumanInvite = humanInvites.find(
     (invite) =>
       !invite.retired &&
-      invite.displayName === (friendDisplayName ?? "Guest") &&
+      (invite.displayName === "Guest" ? "게스트" : invite.displayName) === (friendDisplayName ?? "게스트") &&
       invite.maxUses === humanMaxUses &&
       invite.ttlSeconds === humanTtlSeconds
   );
@@ -310,7 +310,7 @@ export default function RoomInviteModal({
                       <div className="dc-invite-friend-row" style={{ flexWrap: "wrap" }} role="listitem" key={invite.key}>
                         <span className="min-w-0 flex-1" style={{ flexBasis: 160 }}>
                           <span className="dc-invite-friend-name preserve-words">
-                            {invite.displayName}
+                            {invite.displayName === "Guest" ? "게스트" : invite.displayName}
                           </span>
                           <span className="dc-invite-friend-handle preserve-words">
                             {humanInviteUseLabel(invite.maxUses)} · {inviteExpiryLabel(invite.expiresAt)} ·{" "}

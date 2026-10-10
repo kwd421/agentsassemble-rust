@@ -13,7 +13,7 @@ type PendingLogin = {
   expectedTokenHash: string | null;
 };
 
-export async function startCentralWebGoogle(signal: AbortSignal, onStarted?: (handoff: import("./identity").CentralGoogleHandoff) => void): Promise<void> {
+export async function startCentralWebGoogle(signal: AbortSignal, onStarted?: (handoff: import("./identity").CentralGoogleHandoff) => void | Promise<void>): Promise<void> {
   if (!isCentralWebEntry()) throw new Error("계정 페이지에서 로그인해 주세요.");
   const expectedTokenHash = await centralSessionFingerprint();
   const verifier = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
@@ -32,21 +32,23 @@ export async function startCentralWebGoogle(signal: AbortSignal, onStarted?: (ha
   const pending: PendingLogin = { handoffId: started.handoff_id, verifier, state, expiresAt: started.expires_at, expectedTokenHash };
   // The verifier stays in this tab on the central origin, never in a URL or room host.
   sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
-  onStarted?.(started);
+  await onStarted?.(started);
+  signal.throwIfAborted();
   window.location.assign(url.toString());
 }
 
 let completion: Promise<void> | undefined;
-export function completeCentralWebGoogleReturn(): Promise<void> {
+export function completeCentralWebGoogleReturn(returnUrl?: URL, signal?: AbortSignal): Promise<void> {
   if (!isCentralWebEntry()) return Promise.resolve();
   if (completion) return completion;
-  completion = completeReturn().finally(() => { completion = undefined; });
+  completion = completeReturn(returnUrl, signal).finally(() => { completion = undefined; });
   return completion;
 }
 
-async function completeReturn(): Promise<void> {
+async function completeReturn(returnUrl?: URL, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   if (await completeDeletionGoogleReturn()) return;
-  const url = new URL(window.location.href);
+  const url = returnUrl ?? new URL(window.location.href);
   const returned = url.searchParams.has("code") || url.searchParams.has("error") || url.searchParams.has("state");
   if (returned) window.history.replaceState({}, "", url.pathname);
   const stored = sessionStorage.getItem(PENDING_KEY);
@@ -79,7 +81,8 @@ async function completeReturn(): Promise<void> {
   try {
     const body={ handoff_id: pending.handoffId, code_verifier: pending.verifier, authorization_code: pending.authorizationCode };
     if (await centralSessionFingerprint() !== pending.expectedTokenHash) throw new Error("로그인 계정이 바뀌었어요. 다시 확인해 주세요.");
-    const result=await unsignedPost<unknown>("/v1/auth/google/web/verify-complete",body);
+    const result=await unsignedPost<unknown>("/v1/auth/google/web/verify-complete",body,signal);
+    signal?.throwIfAborted();
     if (await centralSessionFingerprint() !== pending.expectedTokenHash) throw new Error("로그인 계정이 바뀌었어요. Google 계정을 다시 확인해 주세요.");
     finishGoogleVerification(result,"web",body,pending.expiresAt,loadCentralSession()?.token ?? null);
 
@@ -88,3 +91,5 @@ async function completeReturn(): Promise<void> {
     sessionStorage.removeItem(PENDING_KEY);
   }
 }
+
+export function clearCentralWebGooglePending() { sessionStorage.removeItem(PENDING_KEY); }
