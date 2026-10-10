@@ -1,5 +1,104 @@
 # Verification Contract
 
+## Real Google web E2E13 — transport deployed; deletion rejected at fresh Google authentication (2026-10-10)
+
+Transport source Rust746f99ff, committed and pushed after completed Daybreak Blue
+xhigh read-only supplemental round1 APPROVE C0/H0/M0/L0. Full report read:
+/private/tmp/web-member-transport-review-1-report.md. Two preliminary CLI attempts
+produced no verdict (historical authorization-pending wording; recursive CLI setup),
+and were superseded by the direct completed review; no second substantive round
+was needed. No automated security scan or additional provider review was run.
+
+Assets-wt was clean and switched from28f77795 to exact Rust746f99ff, then built.
+Unchanged Workered9c123e/config/cron deployed via wrangler.cleanup-on.toml; no
+migrations to apply. Previous100% versionca5bed2f-5c02-4513-98a8-c86bdcd163c5;
+new version845cfca7-1657-401e-b23d-2069b6bffcd3. Smoke /200, /member-join200,
+/v1/bootstrap401; /assets/index-BDjwAItk.js bytes match the built artifact SHA256
+4d23ce1c8b4a5ddf5b8b053cfecdee0e882141739bb4eb804af4ddddf9fa6d91.
+Smoke script initially looked for an absolute script URL in the root login page;
+corrected to the actual relative asset URL in /member-join and passed.
+No host source changed; existing signed UI Check0.1.27 reused, no extra rebuild.
+
+Actual native Firefox private designated disposable Google account only:
+- Step2 PASS: retained authorized Google session from E2E12, fresh person invite
+  opened in a new private tab; explicit original-entry consent, secure member
+  challenge/connect and room join succeed. Sent exactly 탈퇴 테스트 메시지;
+  server app visibly received it under the test account and listed that member.
+  The earlier failed opener tab retained its old retry state; new invitation/tab
+  completed the current flow. No invite or credentials copied to logs/records.
+- Step3 BLOCKED: settings/account/deletion notice and one-server inventory were
+  visible. Google reauthentication selected only yaowhang3; Google returned
+  directly without a Continue/password/2FA screen. The returned deletion screen
+  rejects the fresh-authentication proof with this exact public error:
+  Google에서 최근 5분 안에 다시 로그인한 뒤 확인해 주세요. 최근 인증 시각을 확인할 수 없으면 탈퇴할 수 없어요.
+  This is the current Worker account_google.js fresh-authentication rejection,
+  not the previous member HTTP400 or token-exchange redirect failure. Underlying
+  absent-versus-stale auth_time/other token-verification cause was not inspected;
+  no credential/token contents read and no authentication policy weakened.
+  The screen preserves server state 대기. No server cleanup, anonymization or
+  central deletion was executed. Post-return UI has no active account-confirmation
+  action and its restart action is disabled; only close/cancel remain available.
+  The underlying page visibly asks for login again (current signedRequest clears
+  the matching local session on HTTP401 at identity.ts:500). This is not account
+  deletion; the designated test account/member/message remain active.
+- Step4 NOT REACHED: server still shows the test account/name and original message;
+  member remains listed, consistent with deletion not running. This is not an
+  anonymization acceptance result.
+- Step5 NOT REACHED: account was not deleted, so deleted-account login/separate
+  signup behavior was not tested. No new signup was performed in this run.
+
+Deletion capture coverage: entry, notice/inventory, Google selection, returned
+screen and fresh-auth rejection captured. Server-progress/skipped/completion
+screens were never reached and have no captures; do not infer their acceptance.
+No unexpected English, overlaps or truncated notice observed in reached deletion
+screens. The current error/restart state above is a real usability limitation.
+Owner kwd421 account was never selected, logged out, modified or deleted. Google
+account itself untouched; passwords/2FA never entered. Test account remains active.
+
+Local verification: full frontend200files1282tests, build, architecture/source
+policy19 and root formatting/check passed after owner artifact maintenance.
+Initial make verify blocked on root23,054,909,440 bytes plus obsolete desktop
+1,035,186,176 bytes; no Cargo/Tauri build was active, so existing make artifact-prune
+removed only its planned repository targets. Re-run make verify passed frontend
+then failed at unchanged desktop/src-tauri/src/host_device.rs:8 formatting. Exact
+HEAD stdin rustfmt probe reproduces the same declaration wrap; unrelated source
+was preserved. Desktop Clippy and49tests passed separately. Workspace Rust tests
+reached provider298pass/4fail, all four OpenCode request cases reporting
+provider_startup_timeout (The OpenCode server did not become ready.). Workspace
+Clippy also fails at unchanged protocol export_types.rs:28 main108/100 lines.
+Affected server verification144unit+5other+194integration tests passed
+(2 explicitly ignored); no failures. These unrelated baseline failures are not
+waived and make verify is NOT reported as passing. Logs:
+/private/tmp/web-member-transport-{verify-after-maintenance,baseline-format,
+desktop-clippy,desktop-tests,rust-tests,remaining-gates}.log.
+
+Cleanup: this run's one person invite revoked; external access visiblyOFF before
+exact UI Check quit. Process inventory confirms no UI Check/runtime/cloudflared
+remained; Computer Use reset after captures. Firefox private window and Google
+session retained. Existing
+owner data and unrelated .agents/, scripts/__pycache__/ and Worker cleanup configs
+preserved. No test membership/message removed after the blocked deletion.
+After all builds/tests ended, the same artifact owner clean_plan/execute_plan
+removed the regenerated obsolete desktop target only (3,314,339,840 bytes),
+preserving the active root target. Final artifact-check passes at10,176,323,584
+active-target bytes. Final make verify re-run again passes200files/1282frontend
+tests, then stops at the same unchanged desktop formatting failure; no gate
+limits/exceptions changed. Final log /private/tmp/web-member-transport-final-verify.log.
+
+Capture base:
+/private/tmp/claude-501/-Users-seinel-Projects-AgentsAssemble-Rust/f43b6994-3778-4ca2-8834-d04c0c670717/scratchpad/e2e13/
+- 00-host-external-off.png
+- 01-member-consent.png
+- 02-member-message.png
+- 03-host-message-before.png
+- 04-deletion-account-entry.png
+- 05-deletion-notice-inventory.png
+- 06-deletion-google-account-select.png
+- 07-deletion-google-return.png
+- 08-deletion-reauth-blocked.png
+- 09-host-deletion-not-performed.png
+- 10-cleanup-invite-revoked-external-off.png
+
 ## Real Google web E2E12 — login fixed, transport correction awaiting review authorization (2026-10-10)
 
 Released source: Rust28f77795a50988187d634252f43e32fcec5286a0 and
