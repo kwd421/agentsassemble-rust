@@ -13,7 +13,8 @@ export type DeletionServer = { server_id: string; registration_epoch: string; na
 export type DeletionProgress = { server: DeletionServer; state: "waiting" | "working" | "removed" | "skipped"; reason?: string };
 export type DeletionProof = { request_id: string; proof: string; expires_at: number };
 export type DeletionResult = { name: string; server_id: string; registration_epoch: string; state: "removed" | "skipped"; reason: string };
-export type DeletionReceipt = { person_id: string; request_id: string; receipt: string; expires_at: number; results: DeletionResult[] };
+export type DeletionReceipt = { person_id: string; request_id: string; receipt: string; expires_at: number; results: DeletionResult[];
+  local_followup?: "none" | "local_stopped" | "server_app" };
 const RECEIPT_KEY = "agentsassemble.accountDeletionReceipt.v1";
 const token = () => encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
 const invalid = () => new Error("탈퇴 응답을 확인하지 못했어요. 다시 확인해 주세요.");
@@ -57,10 +58,11 @@ export function loadDeletionReceipt(): DeletionReceipt | null {
   const raw = sessionStorage.getItem(RECEIPT_KEY);
   if (!raw) return null;
   const r = strictRecord(JSON.parse(raw), "탈퇴 결과 확인");
-  assertExactKeys(r, ["person_id", "request_id", "receipt", "expires_at", "results"], "탈퇴 결과 확인");
+  assertExactKeys(r, ["person_id", "request_id", "receipt", "expires_at", "results"], "탈퇴 결과 확인", ["local_followup"]);
   if (typeof r.person_id !== "string" || !r.person_id || typeof r.request_id !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(r.request_id) ||
     typeof r.receipt !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(r.receipt) || typeof r.expires_at !== "number" || !Number.isSafeInteger(r.expires_at)) throw invalid();
   if (!Array.isArray(r.results) || r.results.length > 512) throw invalid();
+  if (r.local_followup !== undefined && !["none", "local_stopped", "server_app"].includes(r.local_followup as string)) throw invalid();
   for (const value of r.results) {
     const row = strictRecord(value, "기기별 정리 결과");
     assertExactKeys(row, ["name", "server_id", "registration_epoch", "state", "reason"], "기기별 정리 결과");
@@ -69,12 +71,18 @@ export function loadDeletionReceipt(): DeletionReceipt | null {
   return r as DeletionReceipt;
 }
 
+/** Discard only the expired receipt that the caller observed. */
+export function clearExpiredDeletionReceipt(receipt: DeletionReceipt) {
+  if (receipt.expires_at <= Date.now() / 1000 && JSON.stringify(loadDeletionReceipt()) === JSON.stringify(receipt)) sessionStorage.removeItem(RECEIPT_KEY);
+}
+
 /** Explicit result lookup uses only the one receipt; no login, registration or polling. */
 export async function checkDeletionReceipt(signal?: AbortSignal): Promise<"account_deleted" | "unknown"> {
   const receipt = loadDeletionReceipt();
   if (!receipt || receipt.expires_at <= Date.now() / 1000) return "unknown";
   try {
     const r = strictRecord(await unsignedPost<unknown>(`/v1/account-deletions/${receipt.request_id}/status`, { person_id: receipt.person_id, receipt: receipt.receipt }, signal), "탈퇴 결과");
+    signal?.throwIfAborted();
     assertExactKeys(r, ["status"], "탈퇴 결과");
     if (r.status !== "account_deleted") throw invalid();
     if (loadCentralSession()?.person.person_id === receipt.person_id) { clearCentralSession(); clearPendingCentralRecoveryCode(); }
@@ -97,10 +105,21 @@ export class AccountDeletion {
   private proof: DeletionProof | null = null;
   private busy = false;
   private inventoryOk = false;
+  private snapshotCaptured = false;
+  private authenticationRejected = false;
   get inventoryReady() { return this.inventoryOk; }
   private receipt: DeletionReceipt | null = null;
   private controller = new AbortController();
   constructor(session: CentralSession, requestId = token()) { if (!/^[A-Za-z0-9_-]{43}$/.test(requestId)) throw invalid(); this.requestId = requestId; this.session = session; window.addEventListener(CENTRAL_SESSION_CHANGED_EVENT, this.identityChanged); window.addEventListener(CENTRAL_SESSION_CLEARED_EVENT, this.identityChanged); window.addEventListener("storage", this.identityChanged); }
+  canRetryAuthenticated(session: CentralSession) { return (this.authenticationRejected || this.controller.signal.aborted) && session.person.person_id === this.session.person.person_id; }
+  retryAuthenticated(session: CentralSession): AccountDeletion {
+    if (this.busy || !this.canRetryAuthenticated(session) || loadCentralSession()?.token !== session.token) throw invalid();
+    this.cancel();
+    const next = new AccountDeletion(session, this.requestId);
+    next.progress = this.progress; next.snapshotCaptured = this.snapshotCaptured;
+    next.ownHost = this.ownHost; next.ownStopped = this.ownStopped; next.hasOwnServers = this.hasOwnServers;
+    return next;
+  }
   private identityChanged = () => { if (loadCentralSession()?.token !== this.session.token) this.cancel(); };
   cancel() { this.controller.abort(); this.proof = null; window.removeEventListener(CENTRAL_SESSION_CHANGED_EVENT, this.identityChanged); window.removeEventListener(CENTRAL_SESSION_CLEARED_EVENT, this.identityChanged); window.removeEventListener("storage", this.identityChanged); }
   private live() {
@@ -122,15 +141,20 @@ export class AccountDeletion {
     this.inventoryOk = false;
     this.live();
     const own = await deletionOwnHost(this.session, this.controller.signal);
-    const value = await signedRequest<unknown>(this.session, "/v1/account/deletion-servers", "POST", {}, this.controller.signal);
+    const servers = this.snapshotCaptured ? null : parseDeletionServers(await signedRequest<unknown>(this.session, "/v1/account/deletion-servers", "POST", {}, this.controller.signal));
     this.live();
-    const previous = this.progress;
-    this.ownHost = own.host; this.hasOwnServers = own.hasOwnServers;
-    this.progress = parseDeletionServers(value).map(server => previous?.find(item => item.server.server_id === server.server_id && item.server.registration_epoch === server.registration_epoch && item.state === "removed") ?? { server, state: "waiting" });
+    const stoppedHost = this.ownStopped ? this.ownHost : null;
+    if (own.host && stoppedHost && (own.host.server_id !== stoppedHost.server_id ||
+      own.host.registration_epoch !== stoppedHost.registration_epoch || own.host.fingerprint !== stoppedHost.fingerprint || own.host.key !== stoppedHost.key)) this.ownStopped = false;
+    this.ownHost = own.host ?? stoppedHost; this.hasOwnServers = own.hasOwnServers;
+    if (servers) {
+      this.progress = servers.map(server => ({ server, state: "waiting" }));
+      this.snapshotCaptured = true;
+    }
     this.inventoryOk = true;
   }
-  async removeReachable(confirmation: string, changed: () => void) {
-    if (confirmation !== "탈퇴" || this.busy || !this.progress || !this.inventoryOk) throw new Error("‘탈퇴’를 입력하고 서버 목록을 확인해 주세요.");
+  async removeReachable(changed: () => void) {
+    if (this.busy || !this.progress || !this.inventoryOk) throw new Error("서버 목록을 다시 확인해 주세요.");
     this.freshProof(); this.busy = true;
     try {
       if (this.ownHost && !this.ownStopped) { await stopDeletionOwnHost(this.session, this.ownHost, AbortSignal.any([this.controller.signal, AbortSignal.timeout(30_000)])); this.ownStopped = true; changed(); }
@@ -141,12 +165,12 @@ export class AccountDeletion {
         if (!e || e.status !== "published" || item.server.host_state !== "active") {
           item.state = "skipped"; item.reason = "지금 연결할 수 없어요.";
         } else if (e.account_deletion_protocol !== "v1" || e.protocol !== SECURE_PROTOCOL || e.mode !== "event_secure_v1" || !item.server.host_public_key_jwk) {
-          item.state = "skipped"; item.reason = "이 서버는 탈퇴 정리를 지원하지 않아요.";
+          item.state = "skipped"; item.reason = "서버 앱을 업데이트한 뒤 다시 확인해 주세요.";
         } else {
           try { await this.removeOne(item.server); item.state = "removed"; }
           catch (error) {
             this.freshProof(); item.state = "skipped";
-            item.reason = error instanceof Error ? error.message : "서버 정리 완료를 확인하지 못했어요.";
+            item.reason = error instanceof Error && /[가-힣]/.test(error.message) ? error.message : "서버 정리 완료를 확인하지 못했어요.";
           }
         }
         changed();
@@ -184,10 +208,13 @@ export class AccountDeletion {
       if (r.status !== "account_removed") throw invalid();
     } finally { transport.close(); }
   }
-  async disable(confirmation: string): Promise<void> {
-    if (confirmation !== "탈퇴" || this.busy || !this.progress || !this.inventoryOk || this.progress.some(item => item.state === "waiting" || item.state === "working") || (this.ownHost && !this.ownStopped)) throw new Error("서버별 정리 결과를 먼저 확인해 주세요.");
+  async disable(): Promise<void> {
+    if (this.busy || !this.progress || !this.inventoryOk || this.progress.some(item => item.state === "waiting" || item.state === "working") || (this.ownHost && !this.ownStopped)) throw new Error("서버별 정리 결과를 먼저 확인해 주세요.");
     const proof = this.freshProof(); this.busy = true;
-    const receipt = this.receipt ??= { person_id: this.session.person.person_id, request_id: this.requestId, receipt: token(), expires_at: Math.floor(Date.now() / 1000) + 86400, results: this.progress.map(item => ({ name: item.server.name, server_id: item.server.server_id, registration_epoch: item.server.registration_epoch, state: item.state as "removed" | "skipped", reason: (item.reason ?? "").slice(0, 512) })) };
+    // Display-only follow-up; the native persisted terminal fence still owns reset authority.
+    const receipt = this.receipt ??= { person_id: this.session.person.person_id, request_id: this.requestId, receipt: token(), expires_at: Math.floor(Date.now() / 1000) + 86400,
+      local_followup: this.ownStopped ? "local_stopped" : this.hasOwnServers ? "server_app" : "none",
+      results: this.progress.map(item => ({ name: item.server.name, server_id: item.server.server_id, registration_epoch: item.server.registration_epoch, state: item.state as "removed" | "skipped", reason: (item.reason ?? "").slice(0, 512) })) };
     // Persist before dispatch. If durable local receipt storage fails, no disable is sent.
     try {
       sessionStorage.setItem(RECEIPT_KEY, JSON.stringify(receipt));
@@ -199,6 +226,21 @@ export class AccountDeletion {
       if (r.status !== "account_deleted" || r.request_id !== this.requestId || typeof r.receipt_expires_at !== "number" || !Number.isSafeInteger(r.receipt_expires_at) || r.receipt_expires_at <= Date.now() / 1000 || r.receipt_expires_at > Date.now() / 1000 + 86401) throw invalid();
       if (loadCentralSession()?.token === this.session.token) { clearCentralSession(); clearPendingCentralRecoveryCode(); }
       this.proof = null;
+    } catch (error) {
+      // These exact owner responses occur before commit or after atomic rollback.
+      const rejected = error instanceof Error && "status" in error && "code" in error && (
+        error.status === 401 && ["account_deletion_reauth_required", "authentication_required", "invalid_session", "invalid_signed_request"].includes(String(error.code)) ||
+        error.status === 429 && error.code === "rate_limited" ||
+        error.status === 503 && error.code === "abuse_limiter_unavailable");
+      if (rejected) {
+        const stored = loadDeletionReceipt();
+        if (stored?.request_id === receipt.request_id && stored.receipt === receipt.receipt) sessionStorage.removeItem(RECEIPT_KEY);
+        this.receipt = null; this.proof = null;
+        this.authenticationRejected = error.status === 401 && error.code !== "account_deletion_reauth_required";
+        if (this.authenticationRejected) throw new Error("탈퇴할 계정으로 다시 로그인한 뒤 확인해 주세요. 완료한 서버 정리는 다시 하지 않아요.");
+        throw new Error(error.status === 401 ? "확인 시간이 만료됐어요. 같은 계정으로 다시 확인해 주세요. 완료한 서버 정리는 다시 하지 않아요." : "지금은 탈퇴할 수 없어요. 잠시 후 같은 계정으로 다시 확인해 주세요.");
+      }
+      throw error;
     } finally { this.busy = false; }
   }
 }

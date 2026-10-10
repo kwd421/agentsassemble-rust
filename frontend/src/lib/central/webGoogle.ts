@@ -1,4 +1,3 @@
-import { completeDeletionGoogleReturn } from "./accountDeletionGoogle";
 import { finishGoogleVerification, centralSessionFingerprint } from "./googleRegistration";
 import { authDeviceBody, isCentralWebEntry, parseCentralGoogleHandoff, loadCentralSession, unsignedPost, } from "./identity";
 import { encodeBase64Url } from "../base64Url";
@@ -47,7 +46,6 @@ export function completeCentralWebGoogleReturn(returnUrl?: URL, signal?: AbortSi
 
 async function completeReturn(returnUrl?: URL, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted();
-  if (await completeDeletionGoogleReturn()) return;
   const url = returnUrl ?? new URL(window.location.href);
   const returned = url.searchParams.has("code") || url.searchParams.has("error") || url.searchParams.has("state");
   if (returned) window.history.replaceState({}, "", url.pathname);

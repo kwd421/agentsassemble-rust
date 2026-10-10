@@ -88,9 +88,9 @@ it("reaches a retained receipt from ordinary signed-out startup without login or
   fireEvent.click(await screen.findByRole("button", { name: "계정 설정" }));
   fireEvent.click(screen.getByRole("button", { name: "계정 탈퇴" }));
   expect(mocks.receipt).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "탈퇴 결과 확인" }));
-  expect((await screen.findByRole("status")).textContent).toContain("요청한 계정의 중앙 탈퇴를 완료");
-  expect(mocks.receipt).toHaveBeenCalledExactlyOnceWith("/v1/account-deletions/" + "r".repeat(43) + "/status", { person_id: "deleted-fixture", receipt: "s".repeat(43) }, undefined);
+  fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+  expect(await screen.findByRole("heading", { name: "탈퇴했어요" })).toBeTruthy();
+  expect(mocks.receipt).toHaveBeenCalledExactlyOnceWith("/v1/account-deletions/" + "r".repeat(43) + "/status", { person_id: "deleted-fixture", receipt: "s".repeat(43) }, expect.any(AbortSignal));
   expect(mocks.bootstrap).not.toHaveBeenCalled();
   expect(mocks.prepare).not.toHaveBeenCalled();
   expect(mocks.open).not.toHaveBeenCalled();
