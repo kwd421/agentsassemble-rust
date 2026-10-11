@@ -22,7 +22,7 @@ pub(crate) struct PreparedDatabase {
     pub(crate) writer_lease: Option<Arc<File>>,
     pub(crate) identity: Option<Arc<Handle>>,
     pub(crate) host_key_path: Option<PathBuf>,
-    canonical_path: Option<PathBuf>,
+    pub(crate) canonical_path: Option<PathBuf>,
 }
 
 impl PreparedDatabase {

@@ -117,6 +117,7 @@ pub struct AgentLaunchFailureCommit {
 
 #[derive(Clone)]
 pub struct SqliteStore {
+    pub(crate) database_path: Option<std::path::PathBuf>,
     pub(crate) pool: SqlitePool,
     pub(crate) writer_lease: Option<Arc<File>>,
     pub(crate) database_identity: Option<Arc<same_file::Handle>>,

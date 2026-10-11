@@ -261,7 +261,7 @@ async fn v86_expansion_preserves_frozen_binding_and_room_then_rejects_unknown_wo
         1
     );
     store.set_registration_epoch(Some("epoch")).await?;
-    sqlx::query("UPDATE runtime_metadata SET value='88' WHERE key='schema_version'")
+    sqlx::query("UPDATE runtime_metadata SET value='999' WHERE key='schema_version'")
         .execute(&store.pool)
         .await?;
     assert!(matches!(

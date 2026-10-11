@@ -58,6 +58,7 @@ async fn finish_delivery(
     clock: &Clock,
     name: &mut NamePublication,
     delivered: Delivered,
+    identity: &CentralHostIdentity,
 ) -> Result<(), CentralDirectoryError> {
     match delivered {
         Delivered::Endpoint(event, result) => {
@@ -66,7 +67,12 @@ async fn finish_delivery(
                 .await?
             {
                 match result {
-                    Ok(()) => inner.status.write().published(&event.origin),
+                    Ok(()) => {
+                        store
+                            .acknowledge_restored_endpoint(&event, identity.fingerprint())
+                            .await?;
+                        inner.status.write().published(&event.origin);
+                    }
                     Err(error) => inner.status.write().last_error = error.to_string(),
                 }
             }
@@ -196,7 +202,7 @@ pub(super) async fn run(
             delivered = async { match flight.as_mut() { Some(flight) => flight.await, None => std::future::pending().await } } => {
                 flight = None;
                 let delivered = delivered.map_err(|_| CentralDirectoryError::Unavailable)?;
-                finish_delivery(&inner, &store, &clock, &mut name, delivered).await?;
+                finish_delivery(&inner, &store, &clock, &mut name, delivered, &identity).await?;
             },
             () = wait_for_delivery(due, &clock) => {},
         }

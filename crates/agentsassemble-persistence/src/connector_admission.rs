@@ -63,10 +63,13 @@ impl SqliteStore {
             &seed.finalize().into(),
             SessionBearerPurpose::ConnectorInvite,
         );
-        if let Some(row) = sqlx::query("SELECT invite_id, creator_id, scope, expires_at, revoked FROM room_connector_invites WHERE room_id = ? AND request_id = ?")
+        if let Some(row) = sqlx::query("SELECT invite_id, creator_id, scope, expires_at, revoked, token_fingerprint FROM room_connector_invites WHERE room_id = ? AND request_id = ?")
             .bind(&identity.room_id).bind(request_id.to_string()).fetch_optional(&mut *tx).await? {
             if row.get::<String,_>("creator_id") != identity.user_id || row.get::<String,_>("scope") != scope {
                 return Err(PersistenceError::CommandConflict);
+            }
+            if row.get::<Vec<u8>,_>("token_fingerprint") != bearer.fingerprint {
+                return Err(rejected("invite_reissue_required", "The retained invitation remains valid; use a new request to issue another invitation."));
             }
             let expires_at = timestamp(row.get("expires_at"))?;
             if row.get::<i64,_>("revoked") != 0 || expires_at <= now { return Err(rejected("invite_unavailable", "This connector invitation has ended.")); }

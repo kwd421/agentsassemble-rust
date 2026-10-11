@@ -15,6 +15,7 @@ pub enum RestorePhase {
     Cancelling,
     Prepared,
     SwitchUnknown,
+    NotCommitted,
     Committed,
     Activating,
     Activated,
@@ -30,6 +31,7 @@ pub struct RestoreJournal {
     pub new_key_fingerprint: String,
     pub expected_epoch: String,
     pub committed_epoch: String,
+    pub endpoint_generation: Option<i64>,
     pub database_hash: Option<[u8; 32]>,
     pub key_hash: Option<[u8; 32]>,
 }
@@ -134,6 +136,7 @@ impl RestoreJob {
             new_key_fingerprint: String::new(),
             expected_epoch: String::new(),
             committed_epoch: String::new(),
+            endpoint_generation: None,
             database_hash: None,
             key_hash: None,
         };
@@ -200,6 +203,7 @@ impl RestoreJob {
                 | RestorePhase::Cancelling
                 | RestorePhase::Prepared
                 | RestorePhase::SwitchUnknown
+                | RestorePhase::NotCommitted
                 | RestorePhase::Committed
         ) && !installation_absent(&target)?
         {
@@ -230,7 +234,10 @@ impl RestoreJob {
     pub fn cancel(mut self) -> Result<(), PersistenceError> {
         if !matches!(
             self.journal.phase,
-            RestorePhase::Validating | RestorePhase::Prepared | RestorePhase::Cancelling
+            RestorePhase::Validating
+                | RestorePhase::Prepared
+                | RestorePhase::Cancelling
+                | RestorePhase::NotCommitted
         ) {
             return Err(invalid());
         }
@@ -280,23 +287,30 @@ impl RestoreJob {
     }
 
     pub(crate) fn save(&mut self) -> Result<(), PersistenceError> {
-        let parent = self.target.parent().ok_or_else(invalid)?;
-        let mut temporary =
-            tempfile::NamedTempFile::new_in(parent).map_err(PersistenceError::WriterLease)?;
-        crate::private_fs::secure_file(temporary.as_file(), temporary.path())
-            .map_err(PersistenceError::WriterLease)?;
-        serde_json::to_writer(temporary.as_file_mut(), &self.journal)?;
-        temporary
-            .as_file()
-            .sync_all()
-            .map_err(PersistenceError::WriterLease)?;
-        temporary
-            .persist(marker_path(&self.target))
-            .map_err(|error| PersistenceError::WriterLease(error.error))?;
-        #[cfg(unix)]
-        sync_directory(parent)?;
-        Ok(())
+        save_journal(&self.target, &self.journal)
     }
+}
+
+pub(crate) fn save_journal(
+    target: &Path,
+    journal: &RestoreJournal,
+) -> Result<(), PersistenceError> {
+    let parent = target.parent().ok_or_else(invalid)?;
+    let mut temporary =
+        tempfile::NamedTempFile::new_in(parent).map_err(PersistenceError::WriterLease)?;
+    crate::private_fs::secure_file(temporary.as_file(), temporary.path())
+        .map_err(PersistenceError::WriterLease)?;
+    serde_json::to_writer(temporary.as_file_mut(), journal)?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(PersistenceError::WriterLease)?;
+    temporary
+        .persist(marker_path(target))
+        .map_err(|error| PersistenceError::WriterLease(error.error))?;
+    #[cfg(unix)]
+    sync_directory(parent)?;
+    Ok(())
 }
 
 #[cfg(unix)]

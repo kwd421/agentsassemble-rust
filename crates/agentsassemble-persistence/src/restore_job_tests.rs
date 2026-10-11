@@ -113,6 +113,7 @@ async fn prepared_move_resumes_exact_commit_and_opens_only_with_new_keys()
     let mut resumed = RestoreJob::resume(&target, operation)?;
     assert!(resumed.activate().await.is_err());
     let mut receipt = RestoreReceipt {
+        endpoint_generation: 4_000_000_000_000,
         operation_id: operation.to_string(),
         expected_epoch: "confirmed-current-epoch".into(),
         new_key_fingerprint: "n".repeat(43),
@@ -144,6 +145,36 @@ async fn prepared_move_resumes_exact_commit_and_opens_only_with_new_keys()
     assert_eq!(
         restored.registration_epoch().await?,
         Some("committed-epoch".into())
+    );
+    assert!(restored.next_central_endpoint_generation().await? > receipt.endpoint_generation);
+    let endpoint = restored
+        .reserve_central_endpoint_event("committed-epoch", "https://new.example", 1)
+        .await?;
+    assert!(
+        restored
+            .acknowledge_restored_endpoint(&endpoint, "wrong-key")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        RestoreJob::inspect(&target)?.ok_or("missing job")?.phase,
+        RestorePhase::Activated
+    );
+    restored
+        .finish_central_endpoint_event(&endpoint, true)
+        .await?;
+    restored
+        .acknowledge_restored_endpoint(&endpoint, &receipt.new_key_fingerprint)
+        .await?;
+    assert_eq!(
+        RestoreJob::inspect(&target)?.ok_or("missing job")?.phase,
+        RestorePhase::Ready
+    );
+    assert!(
+        !target_dir
+            .path()
+            .join(format!(".server-move-{operation}"))
+            .exists()
     );
     restored.close().await?;
     assert!(RestoreJob::begin(&target).is_err());

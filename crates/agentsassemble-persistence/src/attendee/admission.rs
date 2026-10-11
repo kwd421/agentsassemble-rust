@@ -100,7 +100,7 @@ impl SqliteStore {
             ));
         }
         let mut expires_at = now + Duration::hours(1);
-        if let Some(parent) = row.get::<Option<Vec<u8>>, _>("parent_fingerprint")
+        if let Some(parent) = super::restore_parent::restore_parent(&mut tx, &row, now).await?
             && let Some(parent_expiry) = require_parent(&mut tx, &room_id, &parent, now).await?
         {
             expires_at = expires_at.min(parent_expiry);

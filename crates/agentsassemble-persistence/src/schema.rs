@@ -98,6 +98,7 @@ pub(crate) const TABLES: &[TableDefinition] = &[
             "client_fingerprint BLOB CHECK(client_fingerprint IS NULL OR length(client_fingerprint)=32), ",
             "join_request_id TEXT, participant_id TEXT UNIQUE, event_id TEXT, ",
             "session_fingerprint BLOB UNIQUE CHECK(session_fingerprint IS NULL OR length(session_fingerprint)=32), session_expires_at INTEGER, ",
+            "restore_parent_kind TEXT CHECK(restore_parent_kind IN ('human','operator')), ",
             "UNIQUE(room_id,creator_id,request_id), ",
             "CHECK((client_fingerprint IS NULL AND join_request_id IS NULL AND participant_id IS NULL AND event_id IS NULL AND session_fingerprint IS NULL AND session_expires_at IS NULL) OR ",
             "(client_fingerprint IS NOT NULL AND join_request_id IS NOT NULL AND participant_id IS NOT NULL AND event_id IS NOT NULL AND session_fingerprint IS NOT NULL AND session_expires_at IS NOT NULL)), ",

@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 87;
+pub const CURRENT_SCHEMA_VERSION: i64 = 88;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -187,7 +187,20 @@ async fn upgrade_member_schema(pool: &SqlitePool, version: &str) -> Result<(), P
         tx.commit().await?;
     }
     crate::secure_session::upgrade(pool, version).await?;
-    crate::central_member_removal::upgrade(pool).await
+    crate::central_member_removal::upgrade(pool).await?;
+    let current: String =
+        sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key='schema_version'")
+            .fetch_one(pool)
+            .await?;
+    if current.parse::<i64>().is_ok_and(|v| v < 88) {
+        let mut tx = pool.begin().await?;
+        sqlx::query("ALTER TABLE room_attendee_invites ADD COLUMN restore_parent_kind TEXT CHECK(restore_parent_kind IN ('human','operator'))").execute(&mut *tx).await?;
+        sqlx::query("UPDATE runtime_metadata SET value='88' WHERE key='schema_version'")
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+    }
+    Ok(())
 }
 
 // Turn custody upgrades share the receipt and immutable-input routing boundary.

@@ -2,6 +2,13 @@
 
 ## Backup-based server move (2026-10-11)
 
+- Preserved invite links resolve their recorded incarnation through central's
+  immutable restore receipts to the same live owner/server before consent. The
+  resulting key/epoch is pinned for fresh admission; ordinary member reconnect
+  remains exact-incarnation. Unknown lineage rejects, and invite secrets stay on
+  the host transport. Publication completion persists only after the restored
+  runtime's current online endpoint is accepted by central.
+
 The owner authorizes implementation of export and restore of the same logical
 server on a new computer. Central stores no backup bytes. Direct transfer,
 server cloning, ownership transfer and replacing existing installations are out
@@ -34,6 +41,14 @@ of scope. The design review C0/H2/M2/L1 is binding with these corrections:
   the stored invite; the old session-HMAC key is never retained to verify invites.
   Apply this single authority to guest/member preflight and admission, without
   a signature-failure fallback. Tampering must fail the stored fingerprint check.
+- Unredeemed companion invitations retain their original expiry, exact invite
+  token and creator/participant identity. Remove the old parent-session fingerprint
+  and retain only its human/operator provenance as pending restoration. Admission
+  rebinds to a fresh live session of that same creator in that same room and checks
+  current posting authority; no session, changed membership or expired invite
+  denies admission. Redeemed companion sessions are discarded. Restored invite
+  issuance retries must not return a new-key-derived bearer that disagrees with
+  the retained token fingerprint; require a new issuance request instead.
 - Native pre-runtime preparation owns the installation lock and import journal,
   using host_device.rs's bounded no-runtime sidecar pattern. Empty means total
   absence or an EXACT matching import-job marker. An ordinarily initialized DB

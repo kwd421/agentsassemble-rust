@@ -154,7 +154,7 @@ impl SqliteStore {
             tx.commit().await?;
             return Ok(invite);
         }
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM room_attendee_invites WHERE room_id=? AND creator_id=? AND parent_fingerprint IS NOT NULL AND revoked=0 AND ((session_fingerprint IS NULL AND expires_at>?) OR session_expires_at>?)")
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM room_attendee_invites WHERE room_id=? AND creator_id=? AND (parent_fingerprint IS NOT NULL OR restore_parent_kind IS NOT NULL) AND revoked=0 AND ((session_fingerprint IS NULL AND expires_at>?) OR session_expires_at>?)")
             .bind(&owner.identity.room_id).bind(&owner.identity.user_id).bind(now.timestamp_micros()).bind(now.timestamp_micros()).fetch_one(&mut *tx).await?;
         if count >= 8 {
             return Err(rejected(
@@ -216,6 +216,13 @@ impl SqliteStore {
             ));
         }
         let bearer = self.attendee_invite_bearer(room.room_uid, &identity.user_id, request_id);
+        if row.get::<Vec<u8>, _>("token_fingerprint") != bearer.fingerprint {
+            return Err(rejected(
+                "invite_reissue_required",
+                "The retained invitation remains valid; use a new request to issue another invitation.",
+            ));
+        }
+
         Ok(Some(AttendeeInvite {
             invite_id: parse_uuid(row.get("invite_id"))?,
             invite_bearer: bearer.bearer,

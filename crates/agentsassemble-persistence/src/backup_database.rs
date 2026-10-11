@@ -156,10 +156,15 @@ fn sanitize(table: &str, values: &mut BTreeMap<String, Cell>) -> Result<bool, Pe
     if table == "room_attendee_invites"
         && !matches!(values.get("parent_fingerprint"), Some(Cell::Null))
     {
-        // Session-bound companion tickets require a separate logical-parent policy.
-        // Until that policy is implemented, fail the whole export, never drop a valid invite.
-        return Err(invalid());
+        if !matches!(
+            values.get("restore_parent_kind").and_then(Cell::text),
+            Some("human" | "operator")
+        ) {
+            return Err(invalid());
+        }
+        values.insert("parent_fingerprint".into(), Cell::Null);
     }
+
     if table == "member_admissions" {
         use ring::rand::{SecureRandom, SystemRandom};
         let mut seed = vec![0; 32];
@@ -222,6 +227,11 @@ pub(crate) async fn reconstruct(
         {
             return Err(invalid());
         }
+        let fields = if table.name == "room_attendee_invites" && !hostile {
+            fields.replace("\"restore_parent_kind\"", "CASE WHEN parent_fingerprint IS NULL THEN restore_parent_kind ELSE (SELECT group_concat(kind) FROM (SELECT 'human' AS kind FROM human_room_sessions WHERE session_fingerprint=room_attendee_invites.parent_fingerprint UNION ALL SELECT 'operator' FROM operator_pairings WHERE session_fingerprint=room_attendee_invites.parent_fingerprint)) END AS restore_parent_kind")
+        } else {
+            fields
+        };
         let query = format!("SELECT {fields} FROM \"{}\"", table.name);
         let mut rows = sqlx::query(sqlx::AssertSqlSafe(query)).fetch(&mut *source);
         while let Some(row) = rows.try_next().await? {

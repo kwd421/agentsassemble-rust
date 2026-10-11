@@ -58,6 +58,7 @@ impl SqliteStore {
     ) -> Self {
         Self {
             pool,
+            database_path: prepared.canonical_path,
             writer_lease: prepared.writer_lease,
             database_identity: prepared.identity,
             host_key,

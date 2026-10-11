@@ -21,6 +21,7 @@ pub(crate) mod ready;
 #[cfg(test)]
 pub(crate) mod ready_tests;
 pub(crate) mod records;
+mod restore_parent;
 pub(crate) mod session;
 pub(crate) mod stop;
 #[cfg(test)]

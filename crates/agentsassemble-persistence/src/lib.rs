@@ -6,6 +6,7 @@ mod backup_policy;
 pub mod restore_activation;
 pub mod restore_job;
 mod restore_preparation;
+mod restore_ready;
 pub use account_data_reset::AccountDataResetOutcome;
 mod account_deleted_host;
 mod attendee;
@@ -297,3 +298,6 @@ mod member_floor_tests;
 
 mod secure_session;
 pub use secure_session::SecureSessionBinding;
+
+#[cfg(test)]
+mod backup_authority_tests;

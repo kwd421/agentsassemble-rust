@@ -18,6 +18,7 @@ pub struct RestoreReceipt {
     pub new_key_fingerprint: String,
     pub registration_epoch: String,
     pub status: String,
+    pub endpoint_generation: i64,
 }
 
 impl RestoreJob {
@@ -66,6 +67,25 @@ impl RestoreJob {
         self.save()
     }
 
+    /// A single authenticated central read proved both no receipt and a changed
+    /// incarnation, so no in-flight old-epoch request can still commit.
+    /// # Errors
+    /// Rejects a result for another operation or expected epoch.
+    pub fn record_not_committed(
+        &mut self,
+        operation: &str,
+        expected_epoch: &str,
+    ) -> Result<(), PersistenceError> {
+        if self.journal.phase != RestorePhase::SwitchUnknown
+            || operation != self.journal.operation_id.to_string()
+            || expected_epoch != self.journal.expected_epoch
+        {
+            return Err(invalid());
+        }
+        self.journal.phase = RestorePhase::NotCommitted;
+        self.save()
+    }
+
     /// Consume an authenticated response for this exact operation and key.
     /// The native central transport owns origin/session/response authentication.
     /// # Errors
@@ -75,6 +95,11 @@ impl RestoreJob {
             self.journal.phase,
             RestorePhase::SwitchUnknown | RestorePhase::Committed
         ) || receipt.status != "committed"
+            || !(1..=9_007_199_254_740_991).contains(&receipt.endpoint_generation)
+            || self
+                .journal
+                .endpoint_generation
+                .is_some_and(|floor| floor != receipt.endpoint_generation)
             || receipt.operation_id != self.journal.operation_id.to_string()
             || receipt.expected_epoch != self.journal.expected_epoch
             || receipt.new_key_fingerprint != self.journal.new_key_fingerprint
@@ -89,6 +114,7 @@ impl RestoreJob {
         self.journal
             .committed_epoch
             .clone_from(&receipt.registration_epoch);
+        self.journal.endpoint_generation = Some(receipt.endpoint_generation);
         self.journal.phase = RestorePhase::Committed;
         self.save()
     }
@@ -115,6 +141,9 @@ impl RestoreJob {
             if changed.rows_affected() != 1 {
                 return Err(invalid());
             }
+            sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES('central_endpoint_generation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+                .bind(self.journal.endpoint_generation.ok_or_else(invalid)?.to_string())
+                .execute(&mut connection).await?;
             connection.close().await?;
             self.journal.database_hash = Some(file_hash(&database)?);
             self.journal.key_hash = Some(file_hash(&key)?);

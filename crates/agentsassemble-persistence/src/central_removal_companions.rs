@@ -22,8 +22,8 @@ impl SqliteStore {
     ) -> Result<MemberRemovalCompanionPage, PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let (phase, cursor, user) = committed_companion_job(&mut tx, key).await?;
-        let row=sqlx::query("SELECT invite_id,room_id,participant_id,session_fingerprint FROM room_attendee_invites i WHERE invite_id>? AND (EXISTS(SELECT 1 FROM human_room_sessions h WHERE h.session_fingerprint=i.parent_fingerprint AND h.user_id=?) OR EXISTS(SELECT 1 FROM operator_pairings p JOIN host_owner_sessions h ON h.fingerprint=p.host_owner_session_fingerprint WHERE p.session_fingerprint=i.parent_fingerprint AND h.person_id=?)) ORDER BY invite_id LIMIT 1")
-            .bind(&cursor).bind(user).bind(key.person_id()).fetch_optional(&mut *tx).await?;
+        let row=sqlx::query("SELECT invite_id,room_id,participant_id,session_fingerprint FROM room_attendee_invites i WHERE invite_id>? AND ((i.restore_parent_kind='human' AND i.creator_id=?) OR (i.restore_parent_kind='operator' AND EXISTS(SELECT 1 FROM operator_pairings p JOIN host_owner_sessions h ON h.fingerprint=p.host_owner_session_fingerprint WHERE p.user_id=i.creator_id AND p.participant_id=i.owner_participant_id AND p.room_id=i.room_id AND h.person_id=?)) OR EXISTS(SELECT 1 FROM human_room_sessions h WHERE h.session_fingerprint=i.parent_fingerprint AND h.user_id=?) OR EXISTS(SELECT 1 FROM operator_pairings p JOIN host_owner_sessions h ON h.fingerprint=p.host_owner_session_fingerprint WHERE p.session_fingerprint=i.parent_fingerprint AND h.person_id=?)) ORDER BY invite_id LIMIT 1")
+            .bind(&cursor).bind(user.as_deref()).bind(key.person_id()).bind(user).bind(key.person_id()).fetch_optional(&mut *tx).await?;
         let mut result = MemberRemovalCompanionPage {
             room_sessions: Vec::new(),
             cleanup: None,
