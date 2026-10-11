@@ -1,5 +1,34 @@
 # Verification Contract
 
+## 탈퇴 후 UI 정리와 Firefox E2E19 (2026-10-11)
+
+Rust `5043656b`: 완료 본문/건너뛴 서버 안내, 완료 즉시 방 트리 해제와 원격 연결
+종료, 확인/X의 로그인 시작 화면 이동. Google 탈퇴 계정은 기존 카드/버튼으로
+독립 표시하고 일반 시작 오류·계정 설정·일반 로그인 버튼을 함께 표시하지 않는다.
+전체 frontend 203 files / 1,335 tests 통과, 마지막 테스트 수정 후 관련 30 tests
+재통과. frontend build, architecture/source-growth(기존 크기 경고), policy/artifact
+19 tests, cargo fmt, diff check 통과. 새 timer/polling 없음. 완료 모달/연결 종료는
+회귀 테스트로 확인했으며 실제 재탈퇴나 패키지 앱 검증은 이번에 수행하지 않았다.
+
+지정 assets-wt를 `5043656bd8b405c7e70ed1060283b9f6bc489733`로 detach/build 후
+owner-session의 `wrangler.cleanup-on.toml`로 assets 갱신 배포. Worker 코드/DB 변경 없음.
+이전 버전 `18d1e994-f3f4-4ea8-bf69-502b0569a0f9`, 새 버전
+`ef09a00b-ccd1-49d2-9af5-d60244a8520d`. 원격 migrations 없음.
+Wrangler IPv4 timeout 후 NODE_OPTIONS=--dns-result-order=ipv6first로 성공.
+스모크 `/` 200, `/v1/bootstrap` 401, `/member-join` 200; 운영 HTML의
+`index-wdptf-zL.js`가 빌드 산출물과 일치했다.
+
+기존 Firefox 사생활 보호 창 새로고침 → Google로 계속 → yaowhang3 선택으로
+`탈퇴한 계정이에요`와 요청한 본문, 넓은 두 버튼을 실제 확인했다. 일반 오류/계정
+설정/Google·게스트·복구 버튼이 없는 독립 카드이며, `다른 계정으로 로그인`은
+오류 없이 일반 로그인 카드로 돌아왔다. 새 계정 만들기는 누르지 않았다.
+Chrome 조작 없음. Firefox는 열어 두었고 Computer Use reset 완료; 새 앱/격리 데이터 없음.
+
+캡처: `/private/tmp/claude-501/-Users-seinel-Projects-AgentsAssemble-Rust/f43b6994-3778-4ca2-8834-d04c0c670717/scratchpad/e2e19/`
+
+- `01-deleted-account-notice.png`
+- `02-back-to-sign-in.png`
+
 ## yaowhang3 실제 계정 탈퇴 E2E18 (2026-10-11)
 
 화면 제어로 지정된 UI Check 0.1.28과 기존 Firefox 사생활 보호 창만 검증했다.
