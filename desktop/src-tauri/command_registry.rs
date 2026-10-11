@@ -1,4 +1,5 @@
 desktop_commands! {
+    server_backup => "allow-server-backup",
     server_restore => "allow-server-restore",
     runtime_provider_discovery => "allow-runtime-provider-discovery",
     open_provider_setup_help => "allow-open-provider-setup-help",

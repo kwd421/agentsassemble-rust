@@ -292,7 +292,7 @@ impl crate::SqliteStore {
         authority: &crate::ServerOwnerAuthority,
         snapshot: &Path,
         output: &Path,
-    ) -> Result<(), PersistenceError> {
+    ) -> Result<chrono::DateTime<chrono::Utc>, PersistenceError> {
         if self.database_identity.is_none() {
             return Err(invalid());
         }
@@ -309,6 +309,7 @@ impl crate::SqliteStore {
             .map_err(PersistenceError::HostIdentityFile)?;
         drop(file);
         let path = snapshot.to_str().ok_or_else(invalid)?;
+        let snapshot_at = chrono::Utc::now();
         sqlx::query("VACUUM INTO ?")
             .bind(path)
             .execute(&mut *connection)
@@ -319,10 +320,20 @@ impl crate::SqliteStore {
         reconstruct(&mut source, &mut target, false).await?;
         source.close().await?;
         target.close().await?;
-        Ok(())
+        Ok(snapshot_at)
     }
 }
 
 #[cfg(test)]
 #[path = "backup_database_tests.rs"]
 mod tests;
+
+/// Read counts from this module's freshly reconstructed payload.
+/// # Errors
+/// Rejects unreadable payload metadata; no runtime or migrations are opened.
+pub async fn payload_counts(path: &Path) -> Result<(u64, u64, u64), PersistenceError> {
+    let mut connection = open_input(path).await?;
+    let counts = crate::restore_preparation::counts(&mut connection).await?;
+    connection.close().await?;
+    Ok(counts)
+}

@@ -30,6 +30,7 @@ pub enum AppStateBuildError {
 #[derive(Clone)]
 pub struct AppState {
     pub store: SqliteStore,
+    pub(crate) server_backup: crate::server_backup::BackupControl,
     pub google_accounts: crate::GoogleAccountService,
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
@@ -199,6 +200,7 @@ impl AppState {
                 crate::guest_recovery_attempts::GuestRecoveryAttempts::default(),
             ),
             public_ingress: PublicIngress::disabled(),
+            server_backup: crate::server_backup::BackupControl::default(),
             server_product_surface: Arc::new(crate::product_surface::server_product_surface(
                 false, false,
             )),

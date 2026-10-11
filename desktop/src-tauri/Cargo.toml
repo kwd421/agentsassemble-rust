@@ -20,6 +20,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.7.1", features = [] }
 
 [dependencies]
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
 agentsassemble-domain = { path = "../../crates/agentsassemble-domain" }
 agentsassemble-protocol = { path = "../../crates/agentsassemble-protocol" }
 cap-fs-ext = "4.0.3"

@@ -1,5 +1,5 @@
 mod server_move;
-use server_move::server_restore;
+use server_move::{server_backup, server_restore};
 mod app_updates;
 mod host_device;
 use host_device::host_device_info;

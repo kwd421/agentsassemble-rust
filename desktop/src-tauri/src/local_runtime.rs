@@ -54,9 +54,9 @@ pub struct TicketGrant {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct HttpTicketGrant {
-    ticket: String,
+    pub(crate) ticket: String,
     ttl_seconds: u64,
-    http_base_url: String,
+    pub(crate) http_base_url: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

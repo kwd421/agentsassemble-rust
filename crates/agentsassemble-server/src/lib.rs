@@ -174,6 +174,7 @@ mod secure_client;
 mod secure_http;
 mod secure_queue;
 mod secure_socket;
+mod server_backup;
 pub use attendee::client::{AttendeeClientError, AttendeeJoined, RoomAttendeeClient};
 pub use attendee::client_run::run_attendee_session;
 pub use attendee::client_runtime::{AttendeeExecution, AttendeeInterrupt, AttendeeRuntime};

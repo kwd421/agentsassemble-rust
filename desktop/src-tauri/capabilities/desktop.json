@@ -39,6 +39,7 @@
     "allow-choose-local-workspace",
     "allow-host-device-info",
     "allow-server-restore",
+    "allow-server-backup",
     "allow-host-product-surface"
   ]
 }

@@ -180,6 +180,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::central::owner_web::routes())
         .merge(crate::owner_devices_web::routes())
         .merge(crate::public_ingress_web::routes())
+        .merge(crate::server_backup::routes())
         .merge(crate::human_session_exchange_web::routes())
         .merge(crate::human_invite_manager_web::routes())
         .merge(crate::connector::invite_manager_web::routes())
