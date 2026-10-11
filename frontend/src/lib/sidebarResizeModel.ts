@@ -1,5 +1,5 @@
 export const SIDEBAR_WIDTH_STORAGE_KEY = "agentsassemble.sidebar.width.v1";
-export const SIDEBAR_WIDTH_DEFAULT = 312;
+export const SIDEBAR_WIDTH_DEFAULT = 256;
 export const SIDEBAR_WIDTH_MIN = 220;
 export const SIDEBAR_WIDTH_MAX = 420;
 

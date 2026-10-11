@@ -27,9 +27,9 @@
 
 /* Channel sidebar. */
 .dc-sidebar {
-  width: var(--dc-sidebar-width, 312px);
-  min-width: var(--dc-sidebar-width, 312px);
-  max-width: var(--dc-sidebar-width, 312px);
+  width: var(--dc-sidebar-width, 256px);
+  min-width: var(--dc-sidebar-width, 256px);
+  max-width: var(--dc-sidebar-width, 256px);
   background: var(--color-sidebar);
 }
 
@@ -63,7 +63,11 @@
   background: var(--color-panel-separator);
 }
 
-.dc-sidebar-resizer:hover::after,
+/* Hover only hints at the handle; the accent line is reserved for an actual drag or keyboard focus. */
+.dc-sidebar-resizer:hover::after {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .dc-sidebar-resizer:focus-visible::after,
 body[data-sidebar-resizing="true"] .dc-sidebar-resizer::after {
   background: var(--color-accent);

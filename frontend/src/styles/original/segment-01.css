@@ -102,7 +102,7 @@ button:disabled,
 /* ---------------------------------------------------------------- shell ---- */
 
 .dc-shell {
-  --dc-sidebar-width: 312px;
+  --dc-sidebar-width: 256px;
   background: var(--color-server-rail);
 }
 

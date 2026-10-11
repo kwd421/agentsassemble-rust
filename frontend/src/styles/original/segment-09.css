@@ -1,8 +1,8 @@
 @media (max-width: 760px) {
   .dc-sidebar {
-    width: min(var(--dc-sidebar-width, 312px), 76vw);
-    min-width: min(var(--dc-sidebar-width, 312px), 76vw);
-    max-width: min(var(--dc-sidebar-width, 312px), 76vw);
+    width: min(var(--dc-sidebar-width, 256px), 76vw);
+    min-width: min(var(--dc-sidebar-width, 256px), 76vw);
+    max-width: min(var(--dc-sidebar-width, 256px), 76vw);
   }
 
   .dc-mafia-composer {
