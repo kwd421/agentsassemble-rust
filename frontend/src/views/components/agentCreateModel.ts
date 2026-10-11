@@ -56,10 +56,10 @@ export function defaultAgentDisplayName(
   const providerName = provider.display_name.trim();
   const modelControl = provider.controls.find((control) => control.key === "model");
   const modelOption = modelControl?.options.find((option) => option.value === settings.model);
-  const modelName = String(modelOption?.label || "").trim();
-  return modelName && !/^[^\s/]+\/[^\s]+$/.test(modelName)
-    ? modelName
-    : providerName;
+  const modelName = String(modelOption?.label || settings.model || "").trim();
+  // Catalogs without human labels expose ids like "qwen/qwen3-8b"; keep the readable last segment.
+  const readable = modelName.includes("/") ? modelName.slice(modelName.lastIndexOf("/") + 1) : modelName;
+  return readable || providerName;
 }
 
 /** Explains a provider that cannot start, naming a missing CLI instead of the raw probe text. */

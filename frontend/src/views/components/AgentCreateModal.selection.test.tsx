@@ -121,7 +121,7 @@ it.each([false, true])("defaults to the catalog label and preserves typed names 
     { value: "opencode/mimo-v2.6-flash-free", label: "opencode/mimo-v2.6-flash-free" },
   ] }] };
   rerender(<AgentCreateModal {...props} providers={[refreshed, codexProvider()]} />);
-  expect(name.value).toBe("OpenCode");
+  expect(name.value).toBe("mimo-v2.6-flash-free");
   fireEvent.change(name, { target: { value: "My agent" } });
   rerender(<AgentCreateModal {...props} />);
   expect(name.value).toBe("My agent");
@@ -130,9 +130,9 @@ it.each([false, true])("defaults to the catalog label and preserves typed names 
 });
 
 
-it.each(["", "opencode/mimo-v2.6-flash-free"])("uses the provider name for a non-human catalog label: %s", label => {
+it.each(["", "opencode/mimo-v2.6-flash-free"])("uses the readable model id segment for a non-human catalog label: %s", label => {
   const provider = openCodeProvider();
   provider.controls[0].options = [{ value: "opencode/mimo-v2.6-flash-free", label }];
-  expect(defaultAgentDisplayName(provider, { model: "opencode/mimo-v2.6-flash-free" })).toBe("OpenCode");
-  expect(defaultAgentDisplayName(provider, { model: "missing" })).toBe("OpenCode");
+  expect(defaultAgentDisplayName(provider, { model: "opencode/mimo-v2.6-flash-free" })).toBe("mimo-v2.6-flash-free");
+  expect(defaultAgentDisplayName(provider, { model: "" })).toBe("OpenCode");
 });
