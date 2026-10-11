@@ -378,6 +378,10 @@
   background: var(--color-sidebar-hover);
 }
 
+.dc-member:hover .dc-member-name {
+  color: var(--color-text-primary);
+}
+
 .dc-role-group + .dc-role-group {
   margin-top: 10px;
 }
@@ -465,7 +469,7 @@
 }
 
 .dc-member-name {
-  color: var(--color-text-secondary);
+  color: var(--color-sidebar-text);
   font-size: 16px;
   font-weight: 500;
   line-height: 20px;

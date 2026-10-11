@@ -243,6 +243,7 @@ body[data-sidebar-resizing="true"] {
   gap: 8px;
   width: 100%;
   min-height: 32px;
+  margin: 1px 0;
   padding: 5px 8px;
   border-radius: 8px;
   color: var(--color-sidebar-text);

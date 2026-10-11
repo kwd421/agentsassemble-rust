@@ -298,8 +298,8 @@ export default function AppView({ controller }: { controller: AppController }) {
                   aria-expanded={!sectionCollapsed}
                   onClick={() => toggleChannelSection(section.id)}
                 >
-                  <ChevronDown size={12} />
                   {section.label}
+                  <ChevronDown size={12} />
                 </button>
                 {canManageActiveRoom && <button type="button" aria-label="텍스트 채널 만들기"
                   disabled={!canCreateChannel} style={{ minWidth: 44, minHeight: 44 }}
@@ -319,7 +319,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                         onContextMenu={(event) => openChannelMenu(event, id)}
                         className="dc-channel"
                       >
-                        <Icon size={18} className="shrink-0 opacity-70" />
+                        <Icon size={20} className="shrink-0" />
                         <span className="truncate">{label}</span>
                       </button>
                     </div>
