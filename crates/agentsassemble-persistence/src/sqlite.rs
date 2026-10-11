@@ -15,6 +15,8 @@ pub(crate) const MAX_AGENT_SESSIONS_PER_ROOM: i64 = 64;
 
 #[derive(Debug, Error)]
 pub enum PersistenceError {
+    #[error("a server import must be resumed before the runtime can start")]
+    RestorePending,
     #[error("unsupported or invalid server backup")]
     InvalidBackup,
     #[error("database operation failed: {0}")]

@@ -694,6 +694,7 @@ pub(crate) fn persistence_error(error: &PersistenceError) -> (String, String) {
         ),
         PersistenceError::Database(_)
         | PersistenceError::InvalidBackup
+        | PersistenceError::RestorePending
         | PersistenceError::Json(_)
         | PersistenceError::PersonaAssetMissing
         | PersistenceError::InvalidPersonaAsset

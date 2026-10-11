@@ -101,13 +101,14 @@ fn prepare_file(options: SqliteConnectOptions) -> Result<PreparedDatabase, Persi
     {
         return Err(PersistenceError::InvalidHostIdentity);
     }
+    let lease = Arc::new(acquire_writer_lease(&resolved)?);
+    crate::restore_job::require_no_import(&resolved)?;
     let (file, created) = open_database_identity(&resolved)?;
     validate_database_file(&file, &resolved, created)?;
     let canonical = resolved
         .canonicalize()
         .map_err(PersistenceError::WriterLease)?;
     let identity = Arc::new(Handle::from_file(file).map_err(PersistenceError::WriterLease)?);
-    let lease = Arc::new(acquire_writer_lease(&canonical)?);
     let prepared = PreparedDatabase {
         options: options
             .filename(&canonical)
@@ -177,7 +178,7 @@ fn validate_database_file(file: &File, path: &Path, created: bool) -> Result<(),
     Ok(())
 }
 
-fn acquire_writer_lease(database_path: &Path) -> Result<File, PersistenceError> {
+pub(crate) fn acquire_writer_lease(database_path: &Path) -> Result<File, PersistenceError> {
     let mut lock_name = OsString::from(database_path.as_os_str());
     lock_name.push(".writer.lock");
     let lock_path = PathBuf::from(lock_name);
