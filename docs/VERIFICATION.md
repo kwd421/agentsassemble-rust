@@ -16675,3 +16675,15 @@ architecture/source-growth gates, 19 policy/maintenance regressions and diff che
 passed. Test version preparation and workflow YAML parsed. No Computer Use, provider
 execution, physical install/restart, or packaged visual verification was performed.
 No macOS release workflow exists. Windows dispatch/release evidence follows the run.
+
+Windows source `bbd34817` completed successfully in
+[run 38145301959](https://github.com/kwd421/agentsassemble-rust/actions/runs/38145301959):
+39 Windows regressions passed and signed `0.1.5-test.15.1` was published to
+[desktop-test](https://github.com/kwd421/agentsassemble-rust/releases/tag/desktop-test).
+Downloaded the public manifest and 22,120,148-byte installer; the official
+`minisign-verify` library verified its bytes with the unchanged production pubkey
+and its signed version matched the manifest. The rolling tag resolves to the exact
+build source, and stable latest remains `desktop-v0.1.4`. Initial dispatch
+38145183938 failed before building because checkout requires a full commit SHA;
+the successful dispatch used the full SHA. Rolling replacement of an already
+published test release and physical update/restart remain unverified.
