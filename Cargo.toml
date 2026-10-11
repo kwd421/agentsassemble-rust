@@ -36,6 +36,8 @@ hmac = "0.12.1"
 image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 ip_network = "0.4.1"
 keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
+libsodium-rs = "0.2.5"
+zeroize = "1.8.2"
 mime_guess = "2.0.5"
 parking_lot = "0.12.5"
 png = "0.18.1"
@@ -73,6 +75,14 @@ toml = "0.9.12"
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 which = "8.0.6"
 zip = { version = "8.0.0", default-features = false, features = ["bzip2", "deflate-flate2-zlib-rs", "lzma"] }
+
+# The C KDF at dev optimization took ~8 s for 256 MiB/3 on this M5.
+# Match release C optimization for meaningful local latency and bounded tests.
+[profile.dev.package.libsodium-sys-stable]
+opt-level = 3
+
+[profile.test.package.libsodium-sys-stable]
+opt-level = 3
 
 # Full executable identities must hash 100+ MiB CLIs inside the validation deadline.
 [profile.dev.package.sha2]

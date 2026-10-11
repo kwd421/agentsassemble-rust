@@ -1,4 +1,5 @@
 mod account_data_reset;
+pub mod backup_codec;
 pub use account_data_reset::AccountDataResetOutcome;
 mod account_deleted_host;
 mod attendee;
