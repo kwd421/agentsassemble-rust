@@ -145,6 +145,8 @@ async fn authorize_create_start(
 }
 
 fn assert_completed_create_start(commit: &crate::AgentCreateStartCommit) {
+    crate::backup_json::receipt(commit.outcome.result.clone())
+        .unwrap_or_else(|error| panic!("canonical create/start backup: {error}"));
     assert_eq!(commit.outcome.result["status"], "created");
     assert_eq!(
         commit.outcome.result["agent_session"]["runtime_status"],

@@ -171,7 +171,15 @@ pub(crate) async fn server_backup(
         .await
         .map_err(|_| "백업 요청 결과를 확인하지 못했어요.")?;
     if !response.status().is_success() {
-        return Err("백업을 진행하지 못했어요. 서버 소유 계정과 저장 위치를 확인해 주세요.".into());
+        let status = response.status();
+        eprintln!("server backup control rejected: status={}", status.as_u16());
+        return Err(match status.as_u16() {
+            403 => "서버 소유 권한을 확인하지 못했어요. 소유 계정의 연결 상태를 확인해 주세요.",
+            409 => "진행 중인 백업이나 서버 등록 상태를 확인해 주세요.",
+            400 => "백업 요청이 올바르지 않아요. 비밀번호와 저장 위치를 다시 확인해 주세요.",
+            _ => "백업 작업을 시작하지 못했어요. 서버 로그를 확인하고 다시 시도해 주세요.",
+        }
+        .into());
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response

@@ -421,3 +421,44 @@ async fn companion_invite(
         )
         .await
 }
+
+#[tokio::test]
+async fn export_ignores_expired_companions_but_never_guesses_live_parent_authority() -> ResultTest {
+    let (source, now) = fixture().await;
+    source.set_registration_epoch(Some("epoch")).await?;
+    let old = credentials(&source, now).await?;
+    sqlx::query(
+        "UPDATE room_attendee_invites SET parent_fingerprint=?,expires_at=0 WHERE invite_id=?",
+    )
+    .bind([99_u8; 32].as_slice())
+    .bind(old.pending.invite_id.to_string())
+    .execute(&source.pool)
+    .await?;
+    let directory = tempfile::tempdir()?;
+    let target = restored(&source, directory.path()).await?;
+    assert!(
+        target
+            .admit_attendee(old.pending_request(), now)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM room_attendee_invites WHERE invite_id=?"
+        )
+        .bind(old.pending.invite_id.to_string())
+        .fetch_one(&target.pool)
+        .await?,
+        0
+    );
+    target.close().await?;
+    sqlx::query("UPDATE room_attendee_invites SET expires_at=? WHERE invite_id=?")
+        .bind((now + Duration::hours(1)).timestamp_micros())
+        .bind(old.pending.invite_id.to_string())
+        .execute(&source.pool)
+        .await?;
+    let directory = tempfile::tempdir()?;
+    assert!(restored(&source, directory.path()).await.is_err());
+    source.close().await?;
+    Ok(())
+}

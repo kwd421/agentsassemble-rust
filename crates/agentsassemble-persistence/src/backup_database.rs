@@ -61,8 +61,10 @@ async fn columns(
     connection: &mut SqliteConnection,
     table: &str,
 ) -> Result<Vec<(String, String, i64)>, PersistenceError> {
+    // Migrations append columns; rows are copied by name, never physical ordinal.
+    // Keep the exact name/type/hidden set and the separate hostile DDL check.
     Ok(
-        sqlx::query("SELECT name,type,hidden FROM pragma_table_xinfo(?) ORDER BY cid")
+        sqlx::query("SELECT name,type,hidden FROM pragma_table_xinfo(?) ORDER BY name")
             .bind(table)
             .fetch_all(connection)
             .await?
@@ -267,8 +269,18 @@ pub(crate) async fn reconstruct(
         } else {
             fields
         };
-        let query = format!("SELECT {fields} FROM \"{}\"", table.name);
-        let mut rows = sqlx::query(sqlx::AssertSqlSafe(query)).fetch(&mut *source);
+        let mut query = format!("SELECT {fields} FROM \"{}\"", table.name);
+        let live_companions = table.name == "room_attendee_invites" && !hostile;
+        if live_companions {
+            // Expired/revoked invitations cannot be redeemed and their parent
+            // sessions may already be purged. Never invent replacement provenance.
+            query.push_str(" WHERE revoked=0 AND expires_at>?");
+        }
+        let mut query = sqlx::query(sqlx::AssertSqlSafe(query));
+        if live_companions {
+            query = query.bind(chrono::Utc::now().timestamp_micros());
+        }
+        let mut rows = query.fetch(&mut *source);
         while let Some(row) = rows.try_next().await? {
             let mut values = row_values(&row)?;
             if !sanitize(table.name, &mut values)? {

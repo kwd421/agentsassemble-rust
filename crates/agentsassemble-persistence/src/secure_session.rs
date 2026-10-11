@@ -213,6 +213,21 @@ mod tests {
                 .fetch_one(&reopened.pool)
                 .await?;
         assert_eq!(version, crate::CURRENT_SCHEMA_VERSION.to_string());
+        // A migrated store has a different physical column order from fresh DDL.
+        // Export by named columns and retain strict import reconstruction.
+        let payload = directory.path().join("backup.sqlite");
+        reopened
+            .export_backup_payload(
+                &crate::ServerOwnerAuthority::LocalOperator,
+                &directory.path().join("snapshot.sqlite"),
+                &payload,
+            )
+            .await?;
+        crate::backup_database::reconstruct_payload(
+            &payload,
+            &directory.path().join("restored.sqlite"),
+        )
+        .await?;
         reopened.close().await?;
         Ok(())
     }

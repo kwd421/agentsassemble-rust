@@ -177,6 +177,7 @@ mod tests {
                 phase: "publishing".into(),
                 snapshot_at: None,
                 bytes: None,
+                failure_reason: None,
             },
             cancel: CancellationToken::new(),
             root: root.path().into(),

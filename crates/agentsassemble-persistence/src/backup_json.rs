@@ -174,14 +174,18 @@ pub(crate) fn admission(mut value: Value) -> Result<Value, PersistenceError> {
     {
         return Err(invalid());
     }
-    for field in ["how_to", "etiquette"] {
-        strict::<Vec<String>>(guide.get(field).cloned().ok_or_else(invalid)?)?;
+    // Account removal deliberately erases identifying usage guidance to {}.
+    // That exact redacted shape is product data; partial/unknown guides still fail.
+    if !guide.is_empty() {
+        for field in ["how_to", "etiquette"] {
+            strict::<Vec<String>>(guide.get(field).cloned().ok_or_else(invalid)?)?;
+        }
+        strict::<String>(guide.get("welcome").cloned().ok_or_else(invalid)?)?;
+        exact_scalar_object(
+            guide.get("session").ok_or_else(invalid)?,
+            &["expires_in_seconds", "rejoin"],
+        )?;
     }
-    strict::<String>(guide.get("welcome").cloned().ok_or_else(invalid)?)?;
-    exact_scalar_object(
-        guide.get("session").ok_or_else(invalid)?,
-        &["expires_in_seconds", "rejoin"],
-    )?;
     result.request_id.clear();
     result.client_id.clear();
     result.expires_at = chrono::DateTime::UNIX_EPOCH;
@@ -194,6 +198,39 @@ pub(crate) fn receipt(mut value: Value) -> Result<Value, PersistenceError> {
     let object = value.as_object_mut().ok_or_else(invalid)?;
     for (field, value) in object {
         match field.as_str() {
+            "start" => {
+                // Creation stores one canonical launch receipt, not another creation.
+                if value.get("start").is_some() {
+                    return Err(invalid());
+                }
+                *value = receipt(value.take())?;
+            }
+            "process" => {
+                exact_scalar_object(
+                    value,
+                    &[
+                        "stopped",
+                        "alive",
+                        "ownership",
+                        "already_stopped",
+                        "confirmed",
+                    ],
+                )?;
+                strict::<bool>(value.get("stopped").cloned().ok_or_else(invalid)?)?;
+                strict::<bool>(value.get("alive").cloned().ok_or_else(invalid)?)?;
+                strict::<String>(value.get("ownership").cloned().ok_or_else(invalid)?)?;
+                for field in ["already_stopped", "confirmed"] {
+                    if let Some(value) = value.get(field) {
+                        strict::<bool>(value.clone())?;
+                    }
+                }
+            }
+            "cleanup_pending" | "runtime_reused" => {
+                strict::<bool>(value.clone())?;
+            }
+            "revoked_sessions" => {
+                strict::<u64>(value.clone())?;
+            }
             "event" => *value = serde_json::to_value(event(value.take())?)?,
             "events" => {
                 let items = value.as_array_mut().ok_or_else(invalid)?;
@@ -222,4 +259,28 @@ pub(crate) fn receipt(mut value: Value) -> Result<Value, PersistenceError> {
         }
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn lifecycle_receipts_retain_outcomes_without_admitting_private_extensions()
+    -> Result<(), PersistenceError> {
+        let stopped = json!({"process":{"stopped":true,"alive":false,"ownership":"server","confirmed":true},"revoked_sessions":0});
+        assert_eq!(receipt(stopped.clone())?, stopped);
+        for value in [
+            json!({"process":{"stopped":true,"alive":false,"ownership":"server","secret":"no"}}),
+            json!({"process":{"stopped":[],"alive":false,"ownership":"server"}}),
+            json!({"start":{"start":{}}}),
+            json!({"start":{"secret":"no"}}),
+            json!({"revoked_sessions":"credential"}),
+            json!({"cleanup_pending":{"secret":"no"}}),
+        ] {
+            assert!(receipt(value).is_err());
+        }
+        Ok(())
+    }
 }

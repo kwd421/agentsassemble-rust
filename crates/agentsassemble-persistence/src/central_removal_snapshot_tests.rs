@@ -195,3 +195,28 @@ async fn snapshot_patch_and_cursor_rollback_together_without_exporting_large_rep
     println!("snapshot metadata_rows={rows}; stored replay exceeds 128KiB");
     Ok(())
 }
+
+#[tokio::test]
+async fn backup_preserves_redacted_admission_but_rejects_unknown_or_partial_guides() -> TestResult {
+    let (store, key, _) = snapshot_fixture().await?;
+    scrub_until_rooms(&store, &key).await?;
+    let raw: String = sqlx::query_scalar("SELECT result_json FROM member_admissions")
+        .fetch_one(&store.pool)
+        .await?;
+    let original: Value = serde_json::from_str(&raw)?;
+    assert_eq!(original["guide"], json!({}));
+    let sanitized = crate::backup_json::admission(original.clone())?;
+    assert_eq!(sanitized["guide"], json!({}));
+    assert_eq!(sanitized["client_id"], "");
+    assert_eq!(sanitized["request_id"], "");
+    for guide in [
+        json!({"secret":"must reject"}),
+        json!({"welcome":"partial"}),
+        json!([]),
+    ] {
+        let mut hostile = original.clone();
+        hostile["guide"] = guide;
+        assert!(crate::backup_json::admission(hostile).is_err());
+    }
+    Ok(())
+}

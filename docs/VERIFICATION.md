@@ -1,5 +1,62 @@
 # Verification Contract
 
+## Packaged server backup export correction (2026-10-11)
+
+Baseline `481abb7b`, UI Check 0.1.30. Read-only reconstruction of its actual
+SQLite data reproduced failure before encryption/publication. Sequentially
+correcting the first rejection exposed the shared incomplete export contract:
+
+- Five migrated tables have the same named columns/types/hidden flags in a
+  different physical order. Compare that exact set by name; hostile import's
+  exact schema-object DDL comparison remains unchanged.
+- Account removal produces an empty admission usage guide. Preserve that exact
+  redacted form while rejecting partial guides, unknown fields and wrong types.
+- Expired unredeemed companion invitations outlive purged parent sessions.
+  Exclude expired/revoked local invitations before provenance reconstruction;
+  never guess provenance for a live invitation. Existing valid-invite restore
+  and old-session-denial tests still pass.
+- Canonical agent creation includes a nested launch receipt; stop/removal receipts
+  contain process outcomes, revocation counts and cleanup flags. Validate those
+  known fields and nested domain projections; private/unknown extensions still
+  fail. Reconstruction of the actual app data then completed successfully.
+
+Export failures now persist a closed reason code and emit only operation ID,
+phase and that code at ERROR level (visible with the default runtime filter).
+No error-chain text, paths, SQL, passphrase or payload content is logged. Native
+control failures report bounded HTTP status and Korean guidance. Shared settings
+uses standard password inputs, shows loading during owner/status lookup, and
+renders specific Korean failure guidance. Publication, encryption and authority
+mechanisms are unchanged.
+
+Verification: 15 backup/authority regressions passed (existing optional KDF
+benchmark ignored), v85 upgraded-store export/import passed, six agent-create/start
+tests passed, three runtime export/journal/diagnostic tests passed, two backup-card
+tests passed. Affected persistence/server and native library Clippy passed with warnings denied;
+frontend production build passed. Architecture/source-growth and 19 policy tests
+passed; formatting and diff checks passed. Existing ts-rs and bundle-size warnings
+remain. No real-provider verification, account change or broader phase closure is claimed.
+
+Packaged acceptance: rebuilt and signature-verified UI Check 0.1.31 at the
+requested scratchpad/uicheck path, preserving the previous bundle separately.
+Only UI Check was operated; its existing owner account/data stayed in place.
+Native save-dialog export with the requested test passphrase completed at
+2026-10-11 19:11:54 KST. The UI reported success and 1,123,577 bytes; the real
+0600 file has the AASERVER header with encryption enabled:
+`/private/tmp/claude-501/-Users-seinel-Projects-AgentsAssemble-Rust/f43b6994-3778-4ca2-8834-d04c0c670717/scratchpad/move-test/server-backup-2026-10-11-0.1.31.aaserver`.
+The export owner authenticates/decodes the complete file before publication.
+
+A separate 44-byte test fixture was selected through the same save dialog.
+Even after the dialog's Replace choice, runtime no-clobber publication refused:
+the fixture SHA-256 stayed unchanged, UI displayed the specific existing-file
+Korean reason, and runtime.stderr.log recorded publishing/DestinationExists
+without the passphrase or destination path. The original successful backup
+remained intact. Test fixture removed after verification. Password input
+background/border and focus ring were observed in the packaged screenshot;
+pending-loading behavior is covered by the controlled frontend regression
+(the real lookup completed before the UI observation). UI Check and its
+children were quit; Computer Use was reset. No Chrome interaction occurred.
+
+
 ## Server move: four Medium review corrections (2026-10-11)
 
 Baseline Rust `c7fd3b7f`, Worker `087d4261`; Worker correction `2707b1eb`.

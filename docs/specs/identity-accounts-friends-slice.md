@@ -22,6 +22,25 @@ invariants, not constant values. Record reproduction, fixes and remaining unknow
 
 ## Backup-based server move (2026-10-11)
 
+Packaged export correction (0.1.30 -> 0.1.31): reproduce the owner/native save
+dialog failure with the live UI Check data, then preserve snapshot consistency,
+strict schema/JSON reconstruction, authority stripping, authenticated encryption,
+verification before atomic no-clobber publication and cancellation uncertainty.
+Export failures must expose bounded, secret-free stage/reason diagnostics in the
+runtime/native log and a specific Korean recovery message in shared settings.
+The backup card must show loading while owner/status checks run and use standard
+password inputs. Acceptance includes a real encrypted file in the requested
+move-test directory with the supplied test passphrase, affected regressions and
+mandatory gates; no owner-account changes or unrelated application manipulation.
+Observed shared causes: migrated physical column order, account-removal redacted
+usage guides, expired companion invites whose parent sessions were purged, and
+canonical agent create/start/stop/removal receipts. Export must preserve these
+reachable product histories. Expired/revoked companion invitations are no longer
+valid capabilities and are excluded from local export before parent provenance
+lookup; valid invitations still require exact provenance. Import keeps exact DDL
+and strict JSON validation, including nested lifecycle receipts.
+
+
 Review corrections (four Medium findings): `backup_codec::decode` rejects a
 plaintext envelope with any supplied passphrase as Authentication. The shared
 `ServerRestoreCard` starts new preparations only after central `/v1/config`

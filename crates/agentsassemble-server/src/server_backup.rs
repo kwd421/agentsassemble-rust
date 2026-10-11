@@ -25,8 +25,11 @@ use std::{
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
+#[path = "server_backup_failure.rs"]
+mod failure;
 #[path = "server_backup_journal.rs"]
 mod journal;
+use failure::FailureReason;
 
 #[derive(Clone, Default)]
 pub(crate) struct BackupControl(Arc<Mutex<Option<Job>>>);
@@ -43,6 +46,8 @@ struct Progress {
     phase: String,
     snapshot_at: Option<chrono::DateTime<chrono::Utc>>,
     bytes: Option<u64>,
+    #[serde(default)]
+    failure_reason: Option<FailureReason>,
 }
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
@@ -72,6 +77,7 @@ pub(crate) fn routes() -> Router<AppState> {
 struct Failure(StatusCode);
 impl IntoResponse for Failure {
     fn into_response(self) -> Response {
+        tracing::error!(status = self.0.as_u16(), "server backup control rejected");
         (self.0,Json(serde_json::json!({"error":{"code":"server_backup_failed","message":"Server backup failed; existing files were not replaced."}}))).into_response()
     }
 }
@@ -163,6 +169,7 @@ async fn start(
         phase: "snapshot".into(),
         snapshot_at: None,
         bytes: None,
+        failure_reason: None,
     };
     let cancel = state.shutdown.child_token();
     {
@@ -204,8 +211,9 @@ async fn start(
             &cancel,
         )
         .await;
-        if result.is_err()
-            && next
+        if let Err(error) = result {
+            next.server_backup.report_failure(id, &error);
+            if next
                 .server_backup
                 .phase(
                     id,
@@ -216,8 +224,9 @@ async fn start(
                     },
                 )
                 .is_err()
-        {
-            tracing::warn!("backup failure status could not be persisted");
+            {
+                tracing::error!("backup failure status could not be persisted");
+            }
         }
     });
     Ok(Json(progress))
@@ -355,13 +364,13 @@ fn finish_export(
     let snapshot_at = manifest.snapshot_at;
     let database_bytes = manifest.database_bytes;
     let parent = destination.parent().context("save directory missing")?;
-    ensure!(
-        fs2::available_space(parent)?
-            > database_bytes
-                .saturating_add(database_bytes / 100)
-                .saturating_add(8192),
-        "insufficient space"
-    );
+    if fs2::available_space(parent)?
+        <= database_bytes
+            .saturating_add(database_bytes / 100)
+            .saturating_add(8192)
+    {
+        return Err(std::io::Error::from(std::io::ErrorKind::StorageFull).into());
+    }
     let mut partial = tempfile::Builder::new()
         .prefix(&format!(".aa-backup-{id}-"))
         .suffix(".partial")
@@ -413,6 +422,7 @@ fn finish_export(
         phase: "complete".into(),
         snapshot_at: Some(snapshot_at),
         bytes: Some(bytes),
+        failure_reason: None,
     };
     journal::save(job)?;
     drop(staging);
@@ -464,6 +474,7 @@ mod tests {
                     phase: "snapshot".into(),
                     snapshot_at: None,
                     bytes: None,
+                    failure_reason: None,
                 },
                 cancel: cancel.clone(),
                 record: journal::Record::default(),
