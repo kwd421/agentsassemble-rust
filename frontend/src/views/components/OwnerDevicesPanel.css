@@ -13,7 +13,7 @@
 .owner-devices-revoke-all { justify-self: start; min-height: 44px; padding: 8px 16px; border: 1px solid #ff858566; color: #ffaaa9; border-radius: 5px; }
 .owner-devices button:disabled, .owner-device-confirm button:disabled { opacity: .5; cursor: default; }
 .owner-devices-error { color: #ffb4b5; overflow-wrap: anywhere; }
-.owner-device-confirm { margin: auto; width: min(440px, calc(100vw - 32px)); border-radius: 12px; padding: 24px; color: var(--color-text-primary); background: #232428; }
+.owner-device-confirm { margin: auto; width: min(440px, calc(100vw - 32px)); border-radius: 12px; padding: 24px; color: var(--color-text-primary); background: #202024; }
 .owner-device-confirm::backdrop { background: #0009; }
 .owner-device-confirm h3 { font-size: 19px; font-weight: 700; margin-bottom: 16px; }
 .owner-device-confirm p { line-height: 1.6; color: var(--color-text-muted); }

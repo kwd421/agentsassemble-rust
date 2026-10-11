@@ -164,7 +164,7 @@
 
 .dc-setup-button[data-variant="ghost"]:hover:not(:disabled) {
   color: var(--color-text-primary);
-  background: #32343a;
+  background: #2c2c30;
 }
 
 .dc-setup-term {

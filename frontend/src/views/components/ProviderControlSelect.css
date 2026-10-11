@@ -9,7 +9,7 @@
   overflow: hidden;
   border: 1px solid var(--color-panel-separator);
   border-radius: 8px;
-  background: #1b1c20;
+  background: #24242a;
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.48);
 }
 
@@ -33,7 +33,7 @@
   overscroll-behavior: contain;
   border: 1px solid var(--color-panel-separator);
   border-radius: 8px;
-  background: #1b1c20;
+  background: #24242a;
   scrollbar-gutter: auto;
   padding: 4px;
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.48);

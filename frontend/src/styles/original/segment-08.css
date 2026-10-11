@@ -221,7 +221,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #4e5058;
+  background: #474851;
   overflow: hidden;
 }
 
@@ -232,7 +232,7 @@
 }
 
 .dc-message-avatar.system {
-  background: #3f4147;
+  background: #323237;
   color: #c7cad1;
 }
 
@@ -279,7 +279,7 @@
   align-items: center;
   gap: 8px;
   border-radius: 8px;
-  background: #383a40;
+  background: #2c2c30;
   padding: 6px;
 }
 
@@ -289,7 +289,7 @@
   min-width: 0;
   border: 0;
   border-radius: 5px;
-  background: #1e1f22;
+  background: #121214;
   color: var(--color-text-primary);
   outline: none;
 }

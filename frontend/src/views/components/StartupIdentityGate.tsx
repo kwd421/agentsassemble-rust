@@ -426,7 +426,7 @@ export default function StartupIdentityGate({
               autoFocus
               maxLength={80}
               value={displayName}
-              className="min-h-10 rounded-md bg-[#2b2d31] px-3 text-[13px] text-text-primary outline-none"
+              className="min-h-10 rounded-md bg-[#202024] px-3 text-[13px] text-text-primary outline-none"
               onChange={(event) => setDisplayName(event.currentTarget.value)}
             />
           </label>

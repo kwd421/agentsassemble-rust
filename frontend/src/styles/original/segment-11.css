@@ -13,7 +13,7 @@
   background-image:
     var(--room-banner-image),
     linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.42)),
-    linear-gradient(135deg, #5865f2, #2b2d31);
+    linear-gradient(135deg, #5865f2, #202024);
   background-position: center;
   background-size: cover;
   padding: 16px;
@@ -25,7 +25,7 @@
   height: 52px;
   place-items: center;
   border-radius: 16px;
-  background: #1e1f22;
+  background: #121214;
   color: var(--color-text-primary);
   font-weight: 900;
 }
@@ -75,7 +75,7 @@
   display: inline-flex;
   min-height: 44px;
   border-radius: 8px;
-  background: #4e5058;
+  background: #474851;
   padding: 0 14px;
   color: #fff;
   font-size: 14px;
@@ -83,7 +83,7 @@
 }
 
 .dc-settings-section label.dc-upload-button:hover {
-  background: #6d6f78;
+  background: #5d5e67;
 }
 
 .dc-channel-settings-list {
@@ -91,7 +91,7 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
-  background: #1e1f22;
+  background: #121214;
 }
 
 .dc-channel-settings-row {
@@ -124,7 +124,7 @@
   min-height: 34px;
   min-width: 0;
   border-radius: 4px;
-  background: #111214;
+  background: #121214;
   padding: 0 9px;
   color: var(--color-text-secondary);
   font-size: 12px;

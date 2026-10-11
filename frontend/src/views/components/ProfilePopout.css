@@ -3,8 +3,8 @@
    Escape, so it carries no close buttons. Presentation lives here so the popout can
    diverge from Discord later without touching UserPanel's state handling. */
 .dc-profile-card {
-  --dc-popout-surface: #232428;
-  --dc-popout-card: #2b2d31;
+  --dc-popout-surface: #202024;
+  --dc-popout-card: #202024;
   --dc-popout-row-hover: rgba(78, 80, 88, 0.4);
 }
 

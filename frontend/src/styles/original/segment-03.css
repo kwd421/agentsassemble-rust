@@ -278,7 +278,7 @@
   gap: 14px;
   margin-top: 12px;
   border-radius: 8px;
-  background: #1e1f22;
+  background: #121214;
   padding: 0 18px;
   color: var(--color-text-muted);
 }
@@ -372,7 +372,7 @@
 
 .dc-invite-friend-button:hover,
 .dc-invite-friend-button:focus-visible {
-  background: #4e5058;
+  background: #474851;
   outline: none;
 }
 
@@ -383,7 +383,7 @@
 
 .dc-invite-friend-button[data-state="attention"] {
   background: #faa61a;
-  color: #111214;
+  color: #121214;
 }
 
 .dc-invite-friend-button:disabled {
@@ -416,7 +416,7 @@
   height: 40px;
   border: 1px solid transparent;
   border-radius: 4px;
-  background: #1e1f22;
+  background: #121214;
   padding: 0 12px;
   color: var(--color-text-primary);
   font-size: 13px;
@@ -435,7 +435,7 @@
   resize: vertical;
   border: 1px solid transparent;
   border-radius: 4px;
-  background: #1e1f22;
+  background: #121214;
   padding: 12px;
   color: var(--color-text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -471,7 +471,7 @@
 
 .dc-invite-copy-button:disabled {
   cursor: not-allowed;
-  background: #404249;
+  background: #323237;
   color: var(--color-text-muted);
   opacity: 0.72;
 }

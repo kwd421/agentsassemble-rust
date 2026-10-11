@@ -142,7 +142,7 @@
 }
 
 .dc-provider-control-toggle:hover:not(:disabled) {
-  background: #32343a;
+  background: #2c2c30;
 }
 
 .dc-provider-control-toggle:disabled {

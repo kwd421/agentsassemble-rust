@@ -511,7 +511,7 @@
     gap: 16px;
     margin: 28px 24px 22px;
     border-radius: 14px;
-    background: #24252e;
+    background: #242429;
     padding: 0 20px;
     color: #f2f3f5;
     font-size: 18px;
@@ -545,7 +545,7 @@
     height: 14px;
     place-items: center;
     overflow: hidden;
-    border: 3px solid #24252e;
+    border: 3px solid #242429;
     border-radius: 50%;
     color: transparent;
     font-size: 0;
@@ -617,7 +617,7 @@
 
 .chat-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #1e1f22 transparent;
+  scrollbar-color: #121214 transparent;
 }
 
 .chat-scroll::-webkit-scrollbar {
@@ -626,7 +626,7 @@
 }
 
 .chat-scroll::-webkit-scrollbar-thumb {
-  background: #1e1f22;
+  background: #121214;
   border-radius: 999px;
 }
 

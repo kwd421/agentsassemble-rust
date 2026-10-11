@@ -77,14 +77,14 @@
   padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 11px;
-  background: color-mix(in srgb, var(--dc-input, #1e1f22) 89%, white 3%);
+  background: color-mix(in srgb, var(--dc-input, #121214) 89%, white 3%);
   color: inherit;
   text-align: left;
 }
 
 .dc-persona-current:hover:not(:disabled),
 .dc-persona-current[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--dc-input, #1e1f22) 82%, white 7%);
+  background: color-mix(in srgb, var(--dc-input, #121214) 82%, white 7%);
 }
 
 .dc-persona-current[aria-expanded="true"] {
@@ -136,7 +136,7 @@
   min-height: 38px;
   padding: 0 11px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--dc-input, #1e1f22) 91%, white 3%);
+  background: color-mix(in srgb, var(--dc-input, #121214) 91%, white 3%);
   color: var(--dc-text-muted, #a5a9b3);
 }
 
@@ -179,18 +179,18 @@
   padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 11px;
-  background: color-mix(in srgb, var(--dc-input, #1e1f22) 92%, white 2%);
+  background: color-mix(in srgb, var(--dc-input, #121214) 92%, white 2%);
   color: inherit;
   text-align: left;
 }
 
 .dc-persona-grid > button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--dc-input, #1e1f22) 84%, white 6%);
+  background: color-mix(in srgb, var(--dc-input, #121214) 84%, white 6%);
 }
 
 .dc-persona-grid > button[data-selected="true"] {
   border-color: color-mix(in srgb, #5865f2 70%, transparent);
-  background: color-mix(in srgb, #5865f2 16%, var(--dc-input, #1e1f22));
+  background: color-mix(in srgb, #5865f2 16%, var(--dc-input, #121214));
 }
 
 .dc-persona-grid > button:disabled {
@@ -215,7 +215,7 @@
 
 .dc-persona-symbol[data-kind="none"] {
   color: var(--dc-text-muted, #a5a9b3);
-  background: color-mix(in srgb, var(--dc-input, #1e1f22) 78%, white 5%);
+  background: color-mix(in srgb, var(--dc-input, #121214) 78%, white 5%);
 }
 
 .dc-persona-symbol img {

@@ -185,7 +185,7 @@
   overscroll-behavior: contain;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  background: #313338;
+  background: #242429;
   padding: 22px;
   box-shadow: 0 24px 90px rgba(0, 0, 0, 0.5);
 }
@@ -404,7 +404,7 @@
 
 .dc-agent-field select option,
 .dc-agent-runtime-settings select option {
-  background: #1e1f22;
+  background: #121214;
   color: var(--color-text-primary);
 }
 

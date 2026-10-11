@@ -114,7 +114,7 @@ body[data-sidebar-resizing="true"] {
   padding: 12px 10px;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.4)),
-    #2b2d31;
+    #202024;
   box-shadow:
     inset 0 -42px 48px rgba(0, 0, 0, 0.34),
     0 1px 0 rgba(0, 0, 0, 0.24);
@@ -150,21 +150,21 @@ body[data-sidebar-resizing="true"] {
   background-image:
     var(--room-banner-image),
     linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.42)),
-    linear-gradient(135deg, #315c46, #2b2d31);
+    linear-gradient(135deg, #315c46, #202024);
 }
 
 [data-banner-preset="midnight"] .dc-sidebar-banner {
   background-image:
     var(--room-banner-image),
     linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.42)),
-    linear-gradient(135deg, #343663, #2b2d31);
+    linear-gradient(135deg, #343663, #202024);
 }
 
 [data-banner-preset="ember"] .dc-sidebar-banner {
   background-image:
     var(--room-banner-image),
     linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.42)),
-    linear-gradient(135deg, #6f4935, #2b2d31);
+    linear-gradient(135deg, #6f4935, #202024);
 }
 
 .dc-sidebar-server-icon,
@@ -416,7 +416,7 @@ body[data-sidebar-resizing="true"] {
   overflow-x: hidden;
   overflow-y: auto;
   border-radius: 10px;
-  background: #232428;
+  background: #202024;
   box-shadow:
     0 18px 50px rgba(0, 0, 0, 0.48),
     0 0 0 1px rgba(0, 0, 0, 0.32);
@@ -473,7 +473,7 @@ body[data-sidebar-resizing="true"] {
   place-items: center;
   border-radius: 50%;
   cursor: pointer;
-  background: #232428;
+  background: #202024;
 }
 
 .dc-profile-avatar {
@@ -524,7 +524,7 @@ body[data-sidebar-resizing="true"] {
   bottom: 7px;
   width: 20px;
   height: 20px;
-  border: 5px solid #232428;
+  border: 5px solid #202024;
   border-radius: 50%;
 }
 

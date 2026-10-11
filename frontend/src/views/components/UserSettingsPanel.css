@@ -2,7 +2,7 @@
 dialog.dc-user-settings-dialog {
   display: block;
   overflow: hidden;
-  background: #313338;
+  background: #242429;
 }
 
 .dc-user-settings-layout {
@@ -19,7 +19,7 @@ dialog.dc-user-settings-dialog {
   gap: 12px;
   overflow-y: auto;
   padding: 24px 12px;
-  background: #2b2d31;
+  background: #202024;
 }
 
 .dc-user-settings-me {
@@ -154,7 +154,7 @@ dialog.dc-user-settings-dialog {
 .dc-user-settings-grid select {
   min-width: 0;
   border-radius: 8px;
-  background: #1e1f22;
+  background: #121214;
   padding: 10px 12px;
   color: var(--color-text-primary);
   font-size: 15px;
@@ -183,7 +183,7 @@ dialog.dc-user-settings-dialog {
   align-items: center;
   gap: 9px;
   border-radius: 6px;
-  background: #1e1f22;
+  background: #121214;
   padding: 9px;
   color: var(--color-text-secondary);
   font-size: 13px;
@@ -193,7 +193,7 @@ dialog.dc-user-settings-dialog {
 
 .dc-user-settings-toggles button:hover,
 .dc-user-settings-toggles button:focus-visible {
-  background: #2b2d31;
+  background: #202024;
   color: #fff;
   outline: none;
 }
@@ -208,7 +208,7 @@ dialog.dc-user-settings-dialog {
   gap: 12px;
   margin: 0 20px 20px;
   border-radius: 8px;
-  background: #111214;
+  background: #121214;
   padding: 10px 12px 10px 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
@@ -398,7 +398,7 @@ dialog.dc-user-settings-dialog {
   position: relative;
   overflow: hidden;
   border-radius: 10px;
-  background: #232428;
+  background: #202024;
 }
 
 .dc-user-settings-preview-card .dc-profile-banner {
@@ -413,7 +413,7 @@ dialog.dc-user-settings-dialog {
   width: 72px;
   height: 72px;
   place-items: center;
-  border: 6px solid #232428;
+  border: 6px solid #202024;
   border-radius: 50%;
   background: var(--profile-accent, var(--color-accent));
   background-position: center;
@@ -443,7 +443,7 @@ dialog.dc-user-settings-dialog {
 .dc-user-settings-preview-body p {
   margin-top: 10px;
   border-radius: 8px;
-  background: #2b2d31;
+  background: #202024;
   padding: 8px 10px;
   color: var(--color-text-secondary);
   font-size: 13px;

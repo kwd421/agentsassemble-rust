@@ -198,7 +198,7 @@
   height: 48px;
   place-items: center;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--color-accent) 20%, #1e1f22);
+  background: color-mix(in srgb, var(--color-accent) 20%, #121214);
   color: #c9cdfb;
 }
 
@@ -215,7 +215,7 @@
 .dc-guest-recovery-result input {
   min-width: 0;
   border-radius: 6px;
-  background: #1e1f22;
+  background: #121214;
   padding: 10px;
   color: var(--color-text-primary);
   font-family: var(--font-mono);
@@ -239,7 +239,7 @@
   justify-content: center;
   gap: 7px;
   border-radius: 6px;
-  background: #2b2d31;
+  background: #202024;
   padding: 0 12px;
   color: var(--color-text-primary);
   font-size: 12px;

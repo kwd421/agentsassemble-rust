@@ -52,7 +52,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
     {screen === "choice" && <div className="grid gap-3">
             <button
               type="button"
-              className="flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#2b2d31] px-4 text-[14px] font-black text-text-primary"
+              className="flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#202024] px-4 text-[14px] font-black text-text-primary"
               disabled={busy}
               onClick={() => {
                 setError("");
@@ -74,7 +74,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </button>
     </div>}
         {screen === "guest" && (
-          <section className="grid gap-3 rounded-lg bg-[#1b1c20] p-4">
+          <section className="grid gap-3 rounded-lg bg-[#24242a] p-4">
             <button
               type="button"
               className="flex w-fit items-center gap-1 text-[11px] font-black text-text-muted"
@@ -90,7 +90,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 maxLength={80}
                 value={displayName}
                 placeholder="다른 참가자에게 보일 이름"
-                className="min-h-10 rounded-md border border-transparent bg-[#2b2d31] px-3 text-[13px] font-semibold text-text-primary outline-none focus:border-[#5865f2]"
+                className="min-h-10 rounded-md border border-transparent bg-[#202024] px-3 text-[13px] font-semibold text-text-primary outline-none focus:border-[#5865f2]"
                 onChange={(event) => setDisplayName(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void createGuest();
@@ -114,7 +114,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
         )}
 
         {screen === "recover" && (
-          <section className="grid gap-3 rounded-lg bg-[#1b1c20] p-4">
+          <section className="grid gap-3 rounded-lg bg-[#24242a] p-4">
             <button
               type="button"
               className="flex w-fit items-center gap-1 text-[11px] font-black text-text-muted"
@@ -130,7 +130,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 spellCheck={false}
                 value={recoveryInput}
                 placeholder="XXXX-XXXX-…"
-                className="min-h-10 rounded-md bg-[#2b2d31] px-3 font-mono text-[13px] text-text-primary outline-none"
+                className="min-h-10 rounded-md bg-[#202024] px-3 font-mono text-[13px] text-text-primary outline-none"
                 onChange={(event) =>
                   setRecoveryInput(event.currentTarget.value.toUpperCase())
                 }
@@ -153,19 +153,19 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
         )}
 
         {screen === "recovery-code" && (
-          <section className="grid gap-4 rounded-lg bg-[#1b1c20] p-4">
+          <section className="grid gap-4 rounded-lg bg-[#24242a] p-4">
             <label className="grid gap-2 text-[11px] font-black text-text-secondary">
               새 복구 코드
               <input
                 readOnly
                 value={issuedRecoveryCode}
                 onFocus={(event) => event.currentTarget.select()}
-                className="min-h-12 rounded-md bg-[#2b2d31] px-3 font-mono text-[13px] font-black tracking-wide text-text-primary outline-none"
+                className="min-h-12 rounded-md bg-[#202024] px-3 font-mono text-[13px] font-black tracking-wide text-text-primary outline-none"
               />
             </label>
             <button
               type="button"
-              className="flex min-h-10 items-center justify-center gap-2 rounded-md bg-[#3a3c42] px-4 text-[12px] font-black text-text-primary"
+              className="flex min-h-10 items-center justify-center gap-2 rounded-md bg-[#323237] px-4 text-[12px] font-black text-text-primary"
               onClick={() => void copyRecoveryCode()}
             >
               {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "복사됨" : "복구 코드 복사"}

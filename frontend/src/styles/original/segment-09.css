@@ -191,7 +191,7 @@
   max-height: min(420px, 54vh);
   border-radius: 4px;
   object-fit: contain;
-  background: #111214;
+  background: #121214;
 }
 
 .dc-file-attachment {
@@ -201,7 +201,7 @@
   gap: 8px;
   border: 1px solid var(--color-line);
   border-radius: 4px;
-  background: #2b2d31;
+  background: #202024;
   padding: 8px 10px;
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -216,7 +216,7 @@
 .dc-file-attachment:hover,
 .dc-file-attachment:focus-visible {
   border-color: rgba(88, 101, 242, 0.55);
-  background: #313338;
+  background: #242429;
   color: var(--color-text-primary);
   outline: none;
 }
@@ -270,9 +270,9 @@
   display: grid;
   gap: 5px;
   overflow: hidden;
-  border-left: 4px solid #4e5058;
+  border-left: 4px solid #474851;
   border-radius: 4px;
-  background: #2b2d31;
+  background: #202024;
   padding: 10px 12px;
   color: var(--color-text-primary);
   text-decoration: none;
@@ -280,7 +280,7 @@
 
 .dc-link-preview:hover,
 .dc-link-preview:focus-visible {
-  background: #313338;
+  background: #242429;
   outline: 2px solid rgba(88, 101, 242, 0.45);
   outline-offset: 2px;
 }
@@ -308,7 +308,7 @@
 
 .dc-inline-code {
   border-radius: 3px;
-  background: #1e1f22;
+  background: #121214;
   padding: 1px 4px;
   color: #dbdee1;
   font-family: var(--font-mono);
@@ -350,7 +350,7 @@
 }
 
 .dc-markdown blockquote {
-  border-left: 3px solid #4e5058;
+  border-left: 3px solid #474851;
   padding-left: 10px;
   color: var(--color-text-muted);
 }
@@ -359,7 +359,7 @@
   max-width: 100%;
   overflow-x: auto;
   border-radius: 4px;
-  background: #1e1f22;
+  background: #121214;
   padding: 10px 12px;
   font-family: var(--font-mono);
   font-size: 0.92em;
@@ -380,14 +380,14 @@
 
 .dc-markdown th,
 .dc-markdown td {
-  border: 1px solid #3f4147;
+  border: 1px solid #323237;
   padding: 6px 10px;
   text-align: left;
   vertical-align: top;
 }
 
 .dc-markdown th {
-  background: #2b2d31;
+  background: #202024;
   color: var(--color-text-primary);
   font-weight: 800;
 }

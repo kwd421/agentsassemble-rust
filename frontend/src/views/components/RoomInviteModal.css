@@ -68,7 +68,7 @@ dialog.dc-invite-modal {
   align-items: center;
   gap: 8px;
   padding: 4px 4px 4px 0;
-  background: #1e1f22;
+  background: #121214;
   border: 1px solid var(--color-panel-border);
   border-radius: 8px;
 }
@@ -128,7 +128,7 @@ dialog.dc-invite-modal {
   justify-content: center;
   padding: 0 14px;
   color: var(--color-text-primary);
-  background: #4e5058;
+  background: #474851;
   border: 0;
   border-radius: 6px;
   font: inherit;
@@ -138,7 +138,7 @@ dialog.dc-invite-modal {
 }
 
 .dc-invite-row-button:hover:not(:disabled) {
-  background: #6d6f78;
+  background: #5d5e67;
 }
 
 .dc-invite-row-button[data-tone="danger"]:hover:not(:disabled) {
@@ -175,7 +175,7 @@ dialog.dc-invite-modal {
   align-items: center;
   gap: 12px;
   padding: 14px 24px;
-  background: #2b2d31;
+  background: #202024;
   border-top: 1px solid var(--color-panel-border);
   border-radius: 0 0 12px 12px;
 }
