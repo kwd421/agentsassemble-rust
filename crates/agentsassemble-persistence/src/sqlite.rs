@@ -15,6 +15,8 @@ pub(crate) const MAX_AGENT_SESSIONS_PER_ROOM: i64 = 64;
 
 #[derive(Debug, Error)]
 pub enum PersistenceError {
+    #[error("unsupported or invalid server backup")]
+    InvalidBackup,
     #[error("database operation failed: {0}")]
     Database(#[from] sqlx::Error),
     #[error("stored JSON is invalid: {0}")]

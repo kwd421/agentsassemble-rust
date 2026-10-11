@@ -693,6 +693,7 @@ pub(crate) fn persistence_error(error: &PersistenceError) -> (String, String) {
             "Room cursor is invalid.".to_owned(),
         ),
         PersistenceError::Database(_)
+        | PersistenceError::InvalidBackup
         | PersistenceError::Json(_)
         | PersistenceError::PersonaAssetMissing
         | PersistenceError::InvalidPersonaAsset
