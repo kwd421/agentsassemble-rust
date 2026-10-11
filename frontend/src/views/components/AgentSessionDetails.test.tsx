@@ -60,7 +60,7 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(screen.queryByRole("button", { name: "시작" })).toBeNull();
     expect(screen.queryByRole("button", { name: "재개" })).toBeNull();
     expect(screen.queryByText("실행 설정")).toBeNull();
-    expect(screen.queryByRole("button", { name: "런타임 설정 저장" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "실행 설정 저장" })).toBeNull();
     expect(screen.getByText(/시작과 실행 설정은 연결한 앱에서/)).toBeTruthy();
     expect(personaApi.fetchPersonaAssets).not.toHaveBeenCalled();
   });
@@ -105,7 +105,7 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(screen.queryByRole("button", { name: "시작" })).toBeNull();
     expect(screen.queryByRole("button", { name: "재개" })).toBeNull();
     fireEvent.click(screen.getByText("실행 설정"));
-    expect((screen.getByRole("button", { name: "런타임 설정 저장" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "실행 설정 저장" }) as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "중지" }));
     expect(onControl).toHaveBeenCalledWith(session, "stop");
     rerender(<AgentSessionDetails session={{ ...session, runtime_status: "stopped", recovery_required: false }}

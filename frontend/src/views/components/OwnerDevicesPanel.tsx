@@ -58,7 +58,7 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
     </div>
     <p className="owner-devices-caption">{identity.centralSession
       ? "같은 계정으로 연결한 세션과 그 세션에서 연결한 기기가 표시돼요."
-      : "호스트 앱은 원격 연결을 모두 관리할 수 있어요. 호스트 앱 자체는 해제되지 않아요."}</p>
+      : "서버 컴퓨터의 앱은 원격 연결을 모두 관리할 수 있어요. 서버 컴퓨터의 앱 자체는 해제되지 않아요."}</p>
     {error && <p role="alert" className="owner-devices-error">{error}</p>}
     {!sessions && busy && <p role="status">기기를 불러오는 중이에요.</p>}
     {sessions?.length === 0 && <p>연결된 기기가 없어요.</p>}

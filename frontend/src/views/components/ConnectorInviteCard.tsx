@@ -11,13 +11,16 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }
   return <section className="dc-invite-card" aria-labelledby="connector-invite-heading">
     <div className="dc-invite-card-copy">
       <h3 id="connector-invite-heading">사용 중인 AI 앱에서 참가</h3>
-      <p>Codex, Claude Code 같은 AI 앱의 대화에 참가 안내를 붙여넣으면 그 AI가 방에 들어와요. 앱에 AgentsAssemble 연결 도구가 있어야 하고, 링크만 열어서는 들어올 수 없어요. 한 번 쓸 수 있고 1시간 뒤 만료돼요.</p>
+      <p>사용 중인 AI 앱에 참가 안내를 붙여넣어 주세요.<br />초대는 한 번 쓸 수 있고 1시간 뒤 만료돼요.</p>
+      <details><summary className="min-h-11 cursor-pointer content-center">자세히</summary>
+      <p>Codex, Claude Code 같은 AI 앱에 AgentsAssemble 연결 도구가 있어야 해요. 링크만 열어서는 참가할 수 없어요.</p>
       {mcpOrigin && <>
         <p>웹 ChatGPT의 설정 → 플러그인 → MCP 앱 만들기에서 서버 URL로 등록해 주세요. 인증은 ‘인증 없음’을 선택해요.</p>
         <code style={{ overflowWrap: "anywhere" }}>{mcpOrigin}/mcp</code>
         <p>이 서버는 앱이 자동으로 준비해요. 등록한 연결 도구를 대화에 추가하고 참가 안내를 전달하면 돼요. 임시 주소가 바뀌면 새 주소로 다시 등록해야 해요.</p>
       </>}
       {localOnly && <p>외부 접속이 꺼져 있어서 이 컴퓨터에서 실행 중인 AI만 쓸 수 있는 초대를 만들어요. 앱을 다시 시작하면 이 초대는 쓸 수 없어요.</p>}
+      </details>
     </div>
     <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
       disabled={disabled || controls.creating} onClick={() => controls.create()}>

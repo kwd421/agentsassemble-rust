@@ -1,3 +1,4 @@
+import { resolveProviderPresentation } from "../providerBranding";
 import ResourceImage from "../ResourceImage";
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
@@ -73,7 +74,7 @@ export default function MemberDetailModal({
           key={`${entry.agentSession.room_id}:${entry.agentSession.session_id}`}
           session={entry.agentSession}
           avatarImage={entry.avatarImage}
-          detail={entry.fullDetail || entry.detail}
+          detail={[resolveProviderPresentation({ providerKind: entry.agentSession.provider_kind }).providerName, usageProvider?.controls.find(control => control.key === "model")?.options.find(option => option.value === entry.agentSession?.model)?.label].filter(Boolean).join(" · ")}
           onClose={onClose}
           onSave={onAgentProfileUpdate}
           onAvatarUpdate={onAgentAvatarUpdate}

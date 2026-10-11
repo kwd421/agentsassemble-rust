@@ -8,6 +8,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [resources, setResources] = useState<LocalResourceStatus | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let active = true;
@@ -23,6 +24,18 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const refresh = () => {
     setResources(null); setError(false); setLoading(true); setRevision((value) => value + 1);
   };
+  const groups = new Map<string, { name: string; count: number; cpu: number | null; memory: number | null }>();
+  for (const process of resources?.processes || []) {
+    const name = toolName(process.label);
+    const group = groups.get(name);
+    if (!group) groups.set(name, { name, count: 1, cpu: process.cpu_percent, memory: process.memory_bytes });
+    else {
+      group.count += 1;
+      group.cpu = group.cpu === null || process.cpu_percent === null ? null : group.cpu + process.cpu_percent;
+      group.memory = group.memory === null || process.memory_bytes === null ? null : group.memory + process.memory_bytes;
+    }
+  }
+  const rows = [...groups.values()];
   return (
     <section className="ops-panel mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden" aria-label="내 컴퓨터">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-accent/14 px-5 py-4" style={{ padding: 24 }}>
@@ -37,11 +50,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         {error && <p role="alert">자원 정보를 불러오지 못했어요. 새로고침해 주세요.</p>}
         {resources && <>
           <p className="text-[12px] text-text-muted">{new Date(resources.observed_at).toLocaleString()} 기준 · 수동 새로고침</p>
-          <div className="grid gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-3">
             <Metric label="CPU 코어" value={resources.cpu_count?.toString() ?? "확인 불가"} />
             <Metric label="전체 메모리" value={memory(resources.total_memory_bytes)} />
             <Metric label="사용 가능한 메모리" value={memory(resources.available_memory_bytes)} />
-            <Metric label="부하 평균 (1·5·15분)" value={resources.load_average?.map((value) => value.toFixed(2)).join(" · ") ?? "확인 불가"} />
           </div>
           <section className="flex flex-col gap-3" aria-label="앱과 관련 도구">
             <h2 className="mb-4 font-bold">앱과 관련 도구 · {resources.matching_process_count}개</h2>
@@ -49,10 +61,14 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             <p className="text-[12px] text-text-muted">{resources.cpu_sample_seconds === null
               ? "CPU 사용량을 확인 중이에요. 잠시 후 새로고침해 주세요."
               : `CPU는 최근 ${resources.cpu_sample_seconds.toFixed(1)}초 평균이며 코어 하나가 100%예요.`}</p>
-            {resources.processes.map((process) => <article key={process.pid} className="ops-inner rounded-lg p-4 text-[13px]">
-              <strong>{toolName(process.label)}</strong>
-              <p>CPU {process.cpu_percent === null ? "확인 중" : `${process.cpu_percent.toFixed(1)}%`} · 메모리 {memory(process.memory_bytes)}</p>
-            </article>)}
+            <table className="w-full text-left text-[13px]" aria-label="프로세스 사용량">
+              <thead className="text-text-muted"><tr><th className="py-2">이름</th><th>CPU</th><th>메모리</th></tr></thead>
+              <tbody>{(expanded ? rows : rows.slice(0, 5)).map(row => <tr key={row.name} className="border-t border-panel-border">
+                <td className="py-2">{row.name}{row.count > 1 && <span className="text-text-muted"> × {row.count}</span>}</td>
+                <td>{row.cpu === null ? "확인 중" : `${row.cpu.toFixed(1)}%`}</td><td>{memory(row.memory)}</td>
+              </tr>)}</tbody>
+            </table>
+            {rows.length > 5 && <button type="button" className="ops-button min-h-11 self-start" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? "접기" : "더 보기"}</button>}
           </section>
         </>}
         <RuntimeRestartPanel />

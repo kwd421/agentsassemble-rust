@@ -714,3 +714,28 @@ Unmeasured CPU reads `확인 중`; unavailable memory remains explicitly unknown
 Release checks use user-facing Korean labels without Rust, gates or other
 implementation vocabulary. No new sampling, persistence or protocol changes.
 Verify only affected screen tests, then run make verify once before commit/push.
+
+## UI audit polish (2026-10-11)
+
+User acceptance covers StartupIdentityGate/CentralAccountSettings (compact top-right
+account entry, back sub-view, one secondary logout and bottom red deletion link;
+owner-without-server installation guidance and member/guest invite guidance), agent
+details (provider/model subtitle, shared Korean effort labels, compact usage action),
+AdminPanel (name/CPU/memory table, same-name counts and bounded expandable rows; no
+load-average card), both room-create entry points (name dialog, default 새 방), new
+rooms' default channel 일반 with persisted old rooms unchanged, full-access warning
+word wrapping and unobscured workspace hint, AI invites (two short introductory
+lines, connector instructions behind 자세히), and device copy without 호스트 앱.
+Reuse existing tokens/components; Korean 해요체; no internal implementation labels.
+
+Central identity/directory, session controls and provider effort values retain their
+existing owners. Room creation retains request-id replay, continuity checks and
+server-confirmed navigation; cancellation creates nothing, failure preserves the
+name and retry intent, submission is single-flight. Only new room settings change;
+no migrations, credential changes, provider execution or background tasks. Existing
+process observations are grouped in memory with unknown metrics kept unknown.
+Verify affected behavioral regressions, builds and unchanged mandatory gates; no
+constant-pinning tests. User explicitly prohibits Computer Use for this bundle, so
+post-change pixel/packaged interaction evidence remains unverified. Commit/push and
+central assets-only deployment plus /, /v1/bootstrap, /member-join smoke are authorized.
+This bundle does not close the broader Phase 9 review/real-client acceptance.

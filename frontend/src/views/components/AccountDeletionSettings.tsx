@@ -9,7 +9,7 @@ import LocalAccountDataChoice from "./LocalAccountDataChoice";
 
 export default function AccountDeletionSettings({ disabled }: { disabled: boolean }) {
   const open = useContext(AccountDeletionContext);
-  return <button type="button" className="ops-button" disabled={disabled} onClick={() => {
+  return <button type="button" className="min-h-11 w-fit text-[13px] text-danger hover:underline disabled:opacity-50" disabled={disabled} onClick={() => {
     if (!open) throw new Error("계정 탈퇴 화면을 열지 못했어요.");
     open();
   }}>계정 탈퇴</button>;

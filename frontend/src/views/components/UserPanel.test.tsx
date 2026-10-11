@@ -136,7 +136,7 @@ describe("UserPanel", () => {
         profileIdentity={{ sessionToken: "paired-session", deviceToken: "paired-device" }} />
     );
     expect(within(view.container).getByLabelText("운영자 방 접속 프로필")).toBeTruthy();
-    expect(within(view.container).getByTitle("계정과 프로필은 호스트 앱에서 변경해요.")).toBeTruthy();
+    expect(within(view.container).getByTitle("계정과 프로필은 서버 컴퓨터의 앱에서 변경해요.")).toBeTruthy();
     expect(within(view.container).queryByRole("button", { name: "사용자 설정" })).toBeNull();
     expect(apiMocks.fetchUserProfile).not.toHaveBeenCalled();
     view.rerender(

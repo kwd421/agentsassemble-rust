@@ -70,16 +70,16 @@ function sessionErrorMessage(session: RoomAgentSession) {
     return "앱이 갑자기 종료돼 이 세션이 실제로 끝났는지 확인하지 못했어요. 복구를 누르면 확인 후 정리해요.";
   }
   if (session.last_error_code === "provider_turn_recovery_required") {
-    return "Provider 응답 결과가 불확실해 런타임 복구가 필요해요.";
+    return "AI 응답이 완료됐는지 확인하지 못했어요. 복구를 눌러 실행 상태를 확인해 주세요.";
   }
   if (session.last_error_code === "quota_exhausted") {
-    return "Provider 할당량 또는 사용 가능 잔액이 소진됐어요.";
+    return "AI 서비스의 사용 한도나 잔액을 모두 썼어요.";
   }
   if (session.last_error_code === "provider_rate_limited") {
-    return "Provider 요청 속도 제한에 걸렸어요. 할당량 소진으로 단정할 수는 없어요.";
+    return "AI 서비스에 요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
   }
   if (session.last_error_code === "runtime_profile_unsupported") {
-    return "저장된 실행 프로필은 현재 runtime에서 지원하지 않아요. 현재 provider 설정으로 다시 구성하세요.";
+    return "저장된 실행 설정을 지금은 사용할 수 없어요. 실행 설정에서 다시 선택해 주세요.";
   }
   if (session.provider_kind === "opencode_server" && session.last_error && !/[가-힣]/.test(session.last_error)) {
     return `OpenCode 요청을 처리하지 못했어요. · ${session.last_error}`;
@@ -143,7 +143,7 @@ export default function AgentSessionDetails({
     serverOwned && !session.enabled && !session.recovery_required &&
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
   const runtimeSettingLabels =
-    (provider?.controls || []).map((control) => control.label).join("·") || "런타임 설정";
+    (provider?.controls || []).map((control) => control.label).join("·") || "실행 설정";
   const invalidRuntimeControl = provider?.controls.find((control) =>
     !effectiveProviderControlOptions(provider, control, settings).some(
       (option) => option.value === (settings[control.key] ?? "")
@@ -216,9 +216,9 @@ export default function AgentSessionDetails({
     try {
       if (settings.permission_mode === "full_access") await onConfigure(session, settings, true);
       else await onConfigure(session, settings);
-      setActionStatus("런타임 설정 저장 완료 · 다음 시작부터 적용");
+      setActionStatus("실행 설정을 저장했어요. 다음 시작부터 적용돼요.");
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : "런타임 설정 저장 실패");
+      setActionStatus(error instanceof Error ? error.message : "실행 설정을 저장하지 못했어요.");
     } finally {
       setSettingsBusy(false);
     }
@@ -278,7 +278,7 @@ export default function AgentSessionDetails({
             type="button"
             className="dc-member-session-button"
             data-variant={strandedRuntime ? undefined : "danger"}
-            title={strandedRuntime ? "남은 런타임이 정말 끝났는지 확인하고 세션을 정리해요" : "세션 중지"}
+            title={strandedRuntime ? "남은 실행이 끝났는지 확인하고 정리해요" : "세션 중지"}
             disabled={!canStop || Boolean(pendingAction)}
             onClick={() => void runControl("stop")}
           >
@@ -311,7 +311,7 @@ export default function AgentSessionDetails({
         <p className="preserve-words">외부에서 실행하는 에이전트예요. 시작과 실행 설정은 연결한 앱에서 관리해 주세요.</p>
       )}
       {serverOwned && provider && onConfigure && (
-        <details aria-label={`${session.display_name} 런타임 설정`}
+        <details aria-label={`${session.display_name} 실행 설정`}
           onToggle={(event) => setSettingsOpen(event.currentTarget.open)}>
           <summary>실행 설정</summary>
           <div className="dc-agent-runtime-settings">
@@ -357,11 +357,11 @@ export default function AgentSessionDetails({
             onClick={() => void saveSettings()}
           >
             <Save size={15} />
-            런타임 설정 저장
+            실행 설정 저장
           </button>
           <p className="preserve-words">
             {!canConfigure
-              ? "현재 세션이 실행 중이라 시작 프로필을 표시하고 있어요. 변경하려면 세션을 중지하세요."
+              ? "현재 실행 설정이에요. 변경하려면 에이전트를 중지해 주세요."
               : invalidRuntimeControl
                 ? invalidRuntimeValue
                   ? `저장값: “${invalidRuntimeValue}”. 현재 선택 가능한 ${invalidRuntimeControl.label} 목록에 없어요.`

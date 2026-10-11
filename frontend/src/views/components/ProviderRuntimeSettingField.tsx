@@ -1,3 +1,4 @@
+import { reasoningEffortLabel } from "../../lib/agentLabels";
 import type { ProviderControl } from "../../roomSocketClient";
 import ProviderControlSelect from "./ProviderControlSelect";
 import ProviderControlToggle from "./ProviderControlToggle";
@@ -29,7 +30,7 @@ export default function ProviderRuntimeSettingField({
       ) : (
         <ProviderControlSelect
           label={control.label}
-          options={options}
+          options={control.key === "reasoning_effort" ? options.map(option => ({ ...option, label: reasoningEffortLabel(option.value) })) : options}
           value={value}
           disabled={disabled}
           onChange={onChange}

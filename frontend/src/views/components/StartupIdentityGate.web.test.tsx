@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest";
 import StartupIdentityGate from "./StartupIdentityGate";
 
-const mocks = vi.hoisted(() => ({ googleReturn: vi.fn(), bootstrap: vi.fn(), open: vi.fn(), logout: vi.fn(), prepare: vi.fn(), receipt: vi.fn(),
+const mocks = vi.hoisted(() => ({ googleReturn: vi.fn(), bootstrap: vi.fn(), open: vi.fn(), openMember: vi.fn(), logout: vi.fn(), prepare: vi.fn(), receipt: vi.fn(),
   session: null as object | null, callback: null as ((response: { credential: string }) => void) | null }));
 vi.mock("../../lib/central/identity", () => ({
   hasPendingLocalDemotion: vi.fn(() => false), retryPendingLocalDemotion: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock("../../lib/central/identity", () => ({
   centralSessionLoggedOut: () => false, loadPendingCentralRecoveryCode: () => "",
   bootstrapCentral: mocks.bootstrap, loadCentralSession: () => mocks.session,
   isCentralAuthenticationError: () => false,
-  logoutCentral: mocks.logout, openCentralOwnedServer: mocks.open,
+  logoutCentral: mocks.logout, openCentralOwnedServer: mocks.open, openCentralMemberServer: mocks.openMember,
   unsignedPost: mocks.receipt, clearCentralSession: vi.fn(), clearPendingCentralRecoveryCode: vi.fn(),
 }));
 vi.mock("../../lib/central/webGoogle", () => ({
@@ -40,6 +40,11 @@ it("opens shared account deletion settings without first opening a room", async 
   render(<StartupIdentityGate deviceToken="" onComplete={completeStartup} />);
   fireEvent.click(await screen.findByRole("button", { name: "계정 설정" }));
   expect(screen.getByRole("button", { name: "계정 탈퇴" })).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: "로그아웃" })).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "My Mac 서버 열기" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "← 돌아가기" }));
+  expect(await screen.findByRole("button", { name: "My Mac 서버 열기" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "계정 탈퇴" })).toBeNull();
   expect(mocks.open).not.toHaveBeenCalled();
 });
 
@@ -116,4 +121,30 @@ it.each(["return", "login"])("shows a dedicated deleted-account card from Google
   expect(await screen.findByRole("button", { name: "Google로 계속" })).toBeTruthy();
   expect(screen.queryByRole("heading", { name: "탈퇴한 계정이에요" })).toBeNull();
   expect(register).not.toHaveBeenCalled();
+});
+
+
+it.each(["guest", "google"])("offers the appropriate empty directory guidance for %s", async identity_kind => {
+  const person = { person_id: `empty-${identity_kind}`, display_name: "테스트", identity_kind };
+  mocks.session = { person };
+  mocks.bootstrap.mockResolvedValue({ person, servers: [] });
+  render(<StartupIdentityGate deviceToken="" onComplete={completeStartup} />);
+  expect(await screen.findByText(identity_kind === "guest"
+    ? "초대 링크를 받으면 여기에서 바로 들어갈 수 있어요."
+    : "아직 내 서버가 없어요. AgentsAssemble 앱을 설치한 컴퓨터에서 같은 계정으로 로그인하면 서버가 생겨요.")).toBeTruthy();
+  expect(mocks.open).not.toHaveBeenCalled();
+});
+
+
+it("shows a guest's member servers and opens them through member admission", async () => {
+  const person = { person_id: "member-guest", display_name: "참가자", identity_kind: "guest" };
+  const server = { ...account.servers[0], relation: "member", alias: "초대받은 서버" };
+  mocks.session = { person };
+  mocks.bootstrap.mockResolvedValue({ person, servers: [server] });
+  render(<StartupIdentityGate deviceToken="" onComplete={completeStartup} />);
+  fireEvent.click(await screen.findByRole("button", { name: "초대받은 서버 서버 열기" }));
+  await act(async () => { await Promise.resolve(); });
+  expect(mocks.openMember).toHaveBeenCalledWith(server);
+  expect(mocks.open).not.toHaveBeenCalled();
+  expect(screen.queryByText(/아직 내 서버가 없어요/)).toBeNull();
 });

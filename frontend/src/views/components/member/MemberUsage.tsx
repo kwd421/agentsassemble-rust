@@ -26,11 +26,11 @@ export default function MemberUsage({ displayName, provider }: {
     <section className="dc-member-detail-section" aria-label={`${displayName} 사용량`}>
       <h3>사용량</h3>
       {!supported ? <p className="dc-member-detail-note preserve-words">
-        이 Provider는 확인 가능한 정확한 잔여량을 제공하지 않아요.
+        이 AI 서비스는 확인 가능한 정확한 잔여량을 제공하지 않아요.
       </p> : !local ? <p className="dc-member-detail-note preserve-words">
         계정 사용량은 서버 운영자의 데스크톱 앱에서 확인할 수 있어요.
       </p> : <>
-        <button type="button" className="ops-button" style={{ minHeight: 44, padding: "0 12px" }} disabled={busy} onClick={() => void read()}>
+        <button type="button" className="ops-button" style={{ minHeight: 44, padding: "0 12px", width: "fit-content", alignSelf: "start", fontSize: 13 }} disabled={busy} onClick={() => void read()}>
           {busy ? "조회 중…" : "계정 사용량 조회"}
         </button>
         {error && <p role="alert" className="dc-member-detail-note preserve-words">{error}</p>}

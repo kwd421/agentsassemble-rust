@@ -371,7 +371,7 @@ export default function UserPanel({
           <div
             className="dc-user-identity"
             aria-label={pairedRoomSession ? "운영자 방 접속 프로필" : "게스트 프로필"}
-            title={pairedRoomSession ? "계정과 프로필은 호스트 앱에서 변경해요." : undefined}
+            title={pairedRoomSession ? "계정과 프로필은 서버 컴퓨터의 앱에서 변경해요." : undefined}
           >
             <span className="relative shrink-0">
               <span

@@ -257,7 +257,7 @@ describe("StartupIdentityGate", () => {
       await userEvent.click(await screen.findByRole("checkbox"));
       await userEvent.click(screen.getByRole("button", { name: "계속" }));
     }
-    await screen.findByText(/등록된 서버가 없어요/);
+    await screen.findByText(/아직 내 서버가 없어요/);
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
     expect(desktopMocks.initializeBootstrap).not.toHaveBeenCalled();
     expect(centralMocks.register).not.toHaveBeenCalled();
@@ -515,7 +515,7 @@ it("shows the duplicate screen when bootstrap removes owner entries from the rai
   render(<StartupIdentityGate deviceToken="device" onComplete={vi.fn()} />);
   expect(await screen.findByRole("heading", { name: "남길 서버를 선택해 주세요" })).toBeTruthy();
   expect(screen.getAllByRole("radio")).toHaveLength(2);
-  expect(screen.queryByText(/등록된 서버가 없어요/)).toBeNull();
+  expect(screen.queryByText(/아직 내 서버가 없어요/)).toBeNull();
   expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
   expect(centralMocks.register).not.toHaveBeenCalled();
 });

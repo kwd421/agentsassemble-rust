@@ -1,5 +1,41 @@
 # Verification Contract
 
+## UI design audit polish (2026-10-11)
+
+Baseline `d7704362`; audit captures 02/13/16/22/23/30/34/36/37/41/42.
+Central startup now uses a compact account entry and a back sub-view; account
+logout is singular and deletion is a bottom text action. Empty guest/member
+guidance and existing member-server admission remain separate from owner setup.
+Agent detail uses brand/catalog labels and shared Korean effort labels. Resource
+rows group matching display names without turning unknown CPU/memory into zero.
+New-room creation reuses the name dialog and exact-intent retry owner; only new
+Rust room settings carry the Korean lobby name. Old serialized settings/revision
+hashes stay unchanged. AI instructions remain available under 자세히. Permission
+copy keeps whole words, and creation-body children no longer shrink under the
+footer. Device/account copy avoids implementation terminology.
+
+Validation: affected frontend regression tests passed (central startup/account
+back/guest/member entry, agent settings/create/profile/usage, resources, room
+creation/settings, invitations and device settings). Added regressions cover
+cancel and unconfirmed creation drafts, custom-name replay and changed-intent
+rejection, grouped/unknown/expandable process rows, and optional lobby metadata
+coherence. Domain settings 9, persistence directory 3 and server preference 1
+tests passed. Frontend production build, Rust server build, workspace all-target
+check, all-target/all-feature Clippy with warnings denied, architecture/source
+structure plus 19 policy tests, formatting, diff and artifact gates passed.
+Existing ts-rs attribute notices and Vite large-chunk warning remain. Process
+grouping uses the existing at-most-30 observations; no fetch/timer/poll was added.
+
+User explicitly prohibited Computer Use. Audit PNGs were read from disk; no
+post-change pixels, packaged interaction or mobile-device acceptance is claimed.
+This scoped bundle does not close Phase 9 or its external reviews. Native app
+installation/provider execution and Worker logic/D1 changes are outside this
+deployment. Central assets deployment uses the specified clean assets worktree
+at the final Rust code HEAD and the owner-session cleanup-on configuration.
+Pre-deploy active Worker: `0a821f33-8b50-4604-b284-3e44b5d3499f`; remote D1 reports
+no migrations to apply. Deployment receipt and the required anonymous / (200),
+/v1/bootstrap (401), /member-join (200) smoke are recorded in the task result.
+
 ## Packaged server backup export correction (2026-10-11)
 
 Baseline `481abb7b`, UI Check 0.1.30. Read-only reconstruction of its actual

@@ -475,7 +475,7 @@ describe("RoomConnectionPanel", () => {
       (screen.getByRole("combobox", { name: "추론 강도" }) as HTMLButtonElement).disabled
     ).toBe(true);
     expect((screen.getByRole("combobox", { name: "권한" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "런타임 설정 저장" }) as HTMLButtonElement).disabled).toBe(
+    expect((screen.getByRole("button", { name: "실행 설정 저장" }) as HTMLButtonElement).disabled).toBe(
       true
     );
     expect(
@@ -517,12 +517,12 @@ describe("RoomConnectionPanel", () => {
     );
     await chooseProviderControl("모델", "Next");
     expectProviderControlValue("추론 강도", "선택 필요");
-    expect(screen.queryByRole("option", { name: "low" })).toBeNull();
-    await chooseProviderControl("추론 강도", "high");
+    expect(screen.queryByRole("option", { name: "낮음" })).toBeNull();
+    await chooseProviderControl("추론 강도", "높음");
     await chooseProviderControl("응답 속도", "Fast");
     await chooseProviderControl("권한", "작업 폴더 쓰기");
     await chooseProviderControl("최대 응답 길이", "8,192 토큰");
-    fireEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
+    fireEvent.click(screen.getByRole("button", { name: "실행 설정 저장" }));
 
     await waitFor(() =>
       expect(onAgentConfigure).toHaveBeenCalledWith(session, {
@@ -587,7 +587,7 @@ describe("RoomConnectionPanel", () => {
     await waitFor(() =>
       expectProviderControlValue("모델", "Next")
     );
-    expectProviderControlValue("추론 강도", "high");
+    expectProviderControlValue("추론 강도", "높음");
     expectProviderControlValue("응답 속도", "Fast");
     expectProviderControlValue("권한", "작업 폴더 쓰기");
   });
@@ -617,7 +617,7 @@ describe("RoomConnectionPanel", () => {
 
     await waitFor(() =>
       expect(
-        (screen.getByRole("button", { name: "런타임 설정 저장" }) as HTMLButtonElement).disabled
+        (screen.getByRole("button", { name: "실행 설정 저장" }) as HTMLButtonElement).disabled
       ).toBe(true)
     );
     expect(
@@ -666,7 +666,7 @@ describe("RoomConnectionPanel", () => {
       expectProviderControlValue("모델", "Claude Opus 4.6 Thinking")
     );
     expect(
-      (screen.getByRole("button", { name: "런타임 설정 저장" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "실행 설정 저장" }) as HTMLButtonElement)
         .disabled
     ).toBe(true);
     expect(screen.queryByText(/현재 선택 가능한 모델 목록에 없습니다/)).toBeNull();
@@ -697,7 +697,7 @@ describe("RoomConnectionPanel", () => {
 
     await waitFor(() =>
       expect(
-        (screen.getByRole("button", { name: "런타임 설정 저장" }) as HTMLButtonElement)
+        (screen.getByRole("button", { name: "실행 설정 저장" }) as HTMLButtonElement)
           .disabled
       ).toBe(true)
     );
@@ -740,7 +740,7 @@ it("requires approval when saving a legacy free OpenCode conversation-only sessi
   await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
   expect((screen.getByRole("option", { name: "대화 전용" }) as HTMLButtonElement).disabled).toBe(true);
   await userEvent.keyboard("{Escape}");
-  await userEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
+  await userEvent.click(screen.getByRole("button", { name: "실행 설정 저장" }));
   expect(onAgentConfigure).toHaveBeenCalledWith(session, expect.objectContaining({ permission_mode: "workspace_write" }));
 });
 
@@ -765,11 +765,11 @@ it("preserves stored full access for free OpenCode settings and submits a downgr
   expect(screen.getAllByText("방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.")).toHaveLength(1);
   await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
   await userEvent.click(screen.getByRole("option", { name: "작업 폴더 쓰기" }));
-  await userEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
+  await userEvent.click(screen.getByRole("button", { name: "실행 설정 저장" }));
   expect(onAgentConfigure).toHaveBeenCalledWith(session, expect.objectContaining({ permission_mode: "workspace_write" }));
   await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
   await userEvent.click(screen.getByRole("option", { name: "전체 액세스" }));
-  await chooseProviderControl("추론 강도", "high");
-  await userEvent.click(screen.getByRole("button", { name: "런타임 설정 저장" }));
+  await chooseProviderControl("추론 강도", "높음");
+  await userEvent.click(screen.getByRole("button", { name: "실행 설정 저장" }));
   expect(onAgentConfigure).toHaveBeenLastCalledWith(session, expect.objectContaining({ permission_mode: "full_access" }), true);
 });

@@ -23,7 +23,7 @@ Grok (현재 작업 폴더): grok mcp add --scope project --transport http agent
 웹에서는 MCP 앱 만들기에서 서버 URL을 등록하고 인증 없음을 선택한 뒤 대화에 추가하세요.
 http://127.0.0.1 또는 localhost 주소는 같은 PC의 CLI에서만 사용할 수 있습니다.
 다른 기기/웹 AI를 초대하려면 호스트가 앱의 외부 접속을 열고 새 초대를 만들어야 합니다.
-서버 주소가 바뀌면 등록 주소도 갱신해야 하며, 호스트 앱은 실행 중이어야 합니다.
+서버 주소가 바뀌면 등록 주소도 갱신해야 하며, 서버 컴퓨터의 앱은 켜져 있어야 해요.
 
 초대 URL (MCP의 invite_url 인수):
 {{INVITE_URL}}

@@ -10,7 +10,7 @@ export function AttendeeFriendInviteCard({ controls, disabled, directory }: { co
   const selected = friends.find((friend) => friend.friend_id === selectedId);
   return <section className="dc-invite-card" aria-labelledby="attendee-friend-heading">
     <div className="dc-invite-card-copy"><h3 id="attendee-friend-heading">AI 친구 초대</h3>
-      <p>친구의 컴퓨터에서 참가 명령을 실행해요. 초대는 한 번 사용할 수 있고 1시간 뒤 만료돼요.</p></div>
+      <p>저장한 AI 친구에게 참가 안내를 보내 주세요.</p></div>
     {directory.loaded && !friends.length ? <p>친구 화면에서 AI 친구를 저장하면 여기서 초대할 수 있어요.</p> : <div className="dc-invite-options" style={{ gridTemplateColumns: "1fr" }}><label><span>저장된 AI 친구</span>
       <select style={{ minHeight: 44, maxWidth: "100%", appearance: "none" }} value={selectedId}
         disabled={directory.busy || controls.creating} onChange={(event) => setSelectedId(event.target.value)}>

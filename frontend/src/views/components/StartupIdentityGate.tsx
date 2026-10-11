@@ -78,7 +78,7 @@ export default function StartupIdentityGate({
   const webEntry = isCentralWebEntry();
   const [googleRegistration, setGoogleRegistration] = useState<GoogleRegistrationRequired | null>(null);
   const [screen, setScreen] = useState<Screen>("choice");
-  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(() => webEntry && new URLSearchParams(window.location.search).get("account") === "settings");
   const [displayName, setDisplayName] = useState("");
   const [hostingState, setHostingState] = useState<"device" | "retired" | "account_deleted" | null>(null);
   const [hostingChecked, setHostingChecked] = useState(false);
@@ -460,12 +460,20 @@ export default function StartupIdentityGate({
         className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
         aria-label="시작 로그인"
       >
+        {(screen === "servers" || screen === "choice") && !accountSettingsOpen && <button type="button" className="ops-button flex min-h-11 max-w-full items-center gap-2 justify-self-end" aria-label="계정 설정" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>
+          <span className="dc-member-avatar" style={{ width: 28, height: 28 }} aria-hidden="true">{centralPerson?.avatar_url ? <img src={centralPerson?.avatar_url} alt="" referrerPolicy="no-referrer" /> : centralPerson?.display_name.slice(0, 1) || "•"}</span>
+          <span className="truncate">{centralPerson?.display_name || "계정"}</span>
+        </button>}
+        {accountSettingsOpen ? <>
+          <button type="button" className="ops-button min-h-11 justify-self-start" disabled={busy} onClick={() => setAccountSettingsOpen(false)}>← 돌아가기</button>
+          <CentralAccountSettings disabled={busy} showEntryLink={false} />
+        </> : <>
         <header className="grid gap-2">
           <h1 className="text-2xl font-black text-text-primary">
             {screen === "recovery-code"
               ? "복구 코드를 보관하세요"
               : screen === "servers"
-                ? hostingState === "retired" ? "이 컴퓨터는 더 이상 이 계정의 서버가 아니에요" : ownerConflict ? "남길 서버를 선택해 주세요" : ownedServer ? `이 계정의 서버는 ‘${ownedServer.alias}’예요` : "서버를 열어 주세요"
+                ? hostingState === "retired" ? "이 컴퓨터는 더 이상 이 계정의 서버가 아니에요" : ownerConflict ? "남길 서버를 선택해 주세요" : ownedServer ? `이 계정의 서버는 ‘${ownedServer.alias}’예요` : "서버 목록"
                 : "먼저 로그인해 주세요"}
           </h1>
           <p className="text-[13px] font-semibold leading-5 text-text-muted">
@@ -476,8 +484,6 @@ export default function StartupIdentityGate({
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용해요. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남아요."}
           </p>
         </header>
-        {(screen === "servers" || screen === "choice") && <button className="ops-button" disabled={busy} onClick={() => setAccountSettingsOpen(value => !value)}>{accountSettingsOpen ? "계정 설정 닫기" : "계정 설정"}</button>}
-        {(accountSettingsOpen || (webEntry && new URLSearchParams(window.location.search).get("account") === "settings")) && <CentralAccountSettings disabled={busy} />}
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
 
 
@@ -515,7 +521,7 @@ export default function StartupIdentityGate({
               <p className="text-[12px] font-semibold text-text-muted">{centralPerson?.display_name}님의 서버</p>
               <button type="button" className="grid h-11 w-11 place-items-center rounded-lg text-text-muted hover:bg-white/5 hover:text-text-primary disabled:opacity-50" aria-label="서버 목록 새로고침" title="새로고침" disabled={busy} onClick={() => void refreshServers()}><RefreshCw size={16} /></button>
             </div>
-            {!ownerConflict && centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없어요. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
+            {!ownerConflict && centralServers.length === 0 && <p className="text-[12px] text-text-muted">{centralPerson?.identity_kind === "guest" || accountDeviceOnly ? "초대 링크를 받으면 여기에서 바로 들어갈 수 있어요." : "아직 내 서버가 없어요. AgentsAssemble 앱을 설치한 컴퓨터에서 같은 계정으로 로그인하면 서버가 생겨요."}</p>}
             {localHostError && <div role="alert" className="text-sm text-red-300">{localHostError}<p>서버 목록 새로고침으로 다시 확인해 주세요.</p></div>}
             {!webEntry && hostingState === "account_deleted" && localHost?.server_id && <FreshHostRegistrationButton serverId={localHost.server_id} deviceToken={deviceToken} disabled={busy} onRegistered={refreshServers} />}
             <ServerRestoreCard onOpen={() => enterApplication()} />
@@ -533,6 +539,7 @@ export default function StartupIdentityGate({
             {status}
           </p>
         )}
+        </>}
         {error && (
           <div
             role="alert"
