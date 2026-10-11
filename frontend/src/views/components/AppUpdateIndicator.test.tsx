@@ -51,7 +51,7 @@ it("keeps a ready event when the initial snapshot resolves late, dismisses witho
   expect(native.invoke).not.toHaveBeenCalledWith("app_update_install");
   await user.click(screen.getByRole("button", { name: "새 버전 0.1.5-test.3.1" }));
   native.invoke.mockImplementationOnce(async () => { emit({ status: "installing", version: "0.1.5-test.3.1" }); });
-  await user.click(screen.getByRole("button", { name: "다시 시작해서 업데이트" }));
+  await user.click(screen.getByRole("button", { name: "다시 시작" }));
   expect(native.invoke).toHaveBeenCalledWith("app_update_install");
   expect((screen.getByRole("button", { name: "업데이트하는 중…" }) as HTMLButtonElement).disabled).toBe(true);
   view.unmount();
@@ -64,7 +64,7 @@ it("shows install rejection and permits retry", async () => {
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: "새 버전 1.0.0" }));
   native.invoke.mockRejectedValueOnce(new Error("busy"));
-  await user.click(screen.getByRole("button", { name: "다시 시작해서 업데이트" }));
+  await user.click(screen.getByRole("button", { name: "다시 시작" }));
   expect(await screen.findByRole("alert")).toBeTruthy();
-  expect((screen.getByRole("button", { name: "다시 시작해서 업데이트" }) as HTMLButtonElement).disabled).toBe(false);
+  expect((screen.getByRole("button", { name: "다시 시작" }) as HTMLButtonElement).disabled).toBe(false);
 });

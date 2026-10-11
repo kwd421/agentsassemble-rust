@@ -66,14 +66,15 @@ export default function AppUpdateIndicator() {
       <span aria-hidden="true" className="dc-head-badge" />
     </button>
     {open && <div role="dialog" aria-label="앱 업데이트" className="dc-head-popover">
-      <p className="dc-head-popover-title">새 버전 {version}이 준비됐어요</p>
-      {error && <p role="alert" className="dc-head-popover-copy">{error}</p>}
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button ref={installButton} type="button" className="ops-cta px-3 py-2 text-sm"
+      <p className="dc-head-popover-title">업데이트가 준비됐어요</p>
+      <p className="dc-head-popover-copy">버전 {version} · 다시 시작하면 적용돼요.</p>
+      {error && <p role="alert" className="dc-head-popover-copy text-danger">{error}</p>}
+      <div className="mt-3 flex justify-end gap-2">
+        <button type="button" className="dc-quiet-button" onClick={close}>나중에</button>
+        <button ref={installButton} type="button" className="dc-accent-button"
           disabled={installing} onClick={() => void install()}>
-          {installing ? "업데이트하는 중…" : "다시 시작해서 업데이트"}
+          {installing ? "업데이트하는 중…" : "다시 시작"}
         </button>
-        <button type="button" className="ops-button px-3 py-2 text-sm" onClick={close}>나중에</button>
       </div>
     </div>}
   </div>;

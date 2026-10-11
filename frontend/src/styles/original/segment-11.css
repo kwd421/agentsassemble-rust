@@ -485,9 +485,29 @@
   background: rgba(151, 151, 159, 0.2);
 }
 
-.dc-quiet-button:disabled {
+.dc-quiet-button:disabled,
+.dc-accent-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* The one action a small surface wants taken. */
+.dc-accent-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--color-accent);
+  padding: 0 12px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 120ms ease;
+}
+
+.dc-accent-button:hover:not(:disabled) {
+  background: var(--color-accent-hover);
 }
 
 .ops-panel {

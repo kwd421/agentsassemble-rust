@@ -458,24 +458,25 @@
   right: 0;
   z-index: 40;
   width: min(300px, calc(100vw - 32px));
-  border: 1px solid rgba(78, 80, 88, 0.92);
+  border: 1px solid #35353b;
   border-radius: 8px;
-  background: #232428;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
-  padding: 12px;
+  background: #27282c;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+  padding: 16px;
 }
 
 .dc-head-popover-title {
   color: var(--color-text-primary);
-  font-size: 13px;
-  font-weight: 900;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
 }
 
 .dc-head-popover-copy {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--color-text-muted);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .dc-head-popover-actions {
@@ -486,17 +487,19 @@
 }
 
 .dc-head-popover-actions button {
-  border-radius: 4px;
-  background: var(--color-sidebar-hover);
-  padding: 7px 10px;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 800;
+  min-height: 32px;
+  border: 1px solid rgba(151, 151, 159, 0.2);
+  border-radius: 8px;
+  background: rgba(151, 151, 159, 0.12);
+  padding: 0 12px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .dc-head-popover-actions button:hover,
 .dc-head-popover-actions button:focus-visible {
-  background: #3a3c42;
+  background: rgba(151, 151, 159, 0.2);
   color: var(--color-text-primary);
   outline: none;
 }
