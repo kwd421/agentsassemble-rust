@@ -8,7 +8,7 @@ use agentsassemble_domain::{
 };
 use sqlx::{Row, Sqlite, Transaction};
 
-use super::support::{load_event, rejected, validate_provider_cursor};
+use super::support::{load_event, load_participant, rejected, validate_provider_cursor};
 use crate::{
     PersistenceError,
     message_attachments::{
@@ -39,7 +39,7 @@ pub(super) async fn prepare_room_input(
     tabletop_tools: bool,
 ) -> Result<PreparedRoomInput, PersistenceError> {
     validate_provider_cursor(transaction, session).await?;
-    let room_agent_ids = load_room_agent_ids(transaction, room, session).await?;
+    let roster = load_room_roster(transaction, room, session).await?;
     let pending = load_pending_events(transaction, session, pending_inputs).await?;
     let mut reply_previews = BTreeMap::new();
     for pending in pending.iter().take(MAX_CONTEXT_MESSAGES) {
@@ -51,8 +51,7 @@ pub(super) async fn prepare_room_input(
         )
         .await?;
     }
-    let inflight =
-        bounded_pending_prefix(room, session, &room_agent_ids, &pending, &reply_previews)?;
+    let inflight = bounded_pending_prefix(room, session, &roster, &pending, &reply_previews)?;
     let Some(source) = inflight.last() else {
         return Err(rejected(
             "queued_room_event_invalid",
@@ -65,13 +64,13 @@ pub(super) async fn prepare_room_input(
         session,
         source.event.seq,
         &inflight,
-        &room_agent_ids,
+        &roster,
         &mut reply_previews,
     )
     .await?;
     let delivery_kind = inflight[0].input.delivery_kind;
     let attachment_ids = readable_attachment_ids(&inflight, &context)?;
-    let room_view = render_room_view(room, session, &room_agent_ids, &context, &reply_previews)?;
+    let room_view = render_room_view(room, session, &roster, &context, &reply_previews)?;
     let persistent = session.public.runtime_kind == "api"
         || matches!(
             session.public.provider_kind.as_str(),
@@ -127,7 +126,7 @@ pub(super) async fn prepare_room_input(
             .collect(),
         source_event_id: source.event.id.clone(),
         input_up_to_seq: source.event.seq,
-        room_agent_ids,
+        room_agent_ids: roster.agent_ids,
     })
 }
 
@@ -151,11 +150,18 @@ fn readable_attachment_ids(
     Ok(ids)
 }
 
-async fn load_room_agent_ids(
+struct RoomRoster {
+    own_role: agentsassemble_domain::ParticipantRole,
+    agent_ids: Vec<String>,
+    handles: Vec<String>,
+    names: Vec<(String, String)>,
+}
+
+async fn load_room_roster(
     transaction: &mut Transaction<'_, Sqlite>,
     room: &Room,
     session: &DurableAgentSession,
-) -> Result<Vec<String>, PersistenceError> {
+) -> Result<RoomRoster, PersistenceError> {
     let query_limit = i64::try_from(MAX_ROOM_OBSERVATION_AGENT_IDS + 1).map_err(|_| {
         rejected(
             "agent_session_capacity",
@@ -163,7 +169,7 @@ async fn load_room_agent_ids(
         )
     })?;
     let rows = sqlx::query(
-        "SELECT sessions.session_id, participants.participant_json FROM agent_sessions AS sessions JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = json_extract(sessions.session_json, '$.participant_id') WHERE sessions.room_id = ? AND sessions.session_id != ? ORDER BY sessions.session_id LIMIT ?",
+        "SELECT sessions.session_id, json_extract(sessions.session_json, '$.display_name') AS display_name, participants.participant_json FROM agent_sessions AS sessions JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = json_extract(sessions.session_json, '$.participant_id') WHERE sessions.room_id = ? AND sessions.session_id != ? ORDER BY sessions.session_id LIMIT ?",
     )
     .bind(&room.room_id)
     .bind(&session.public.session_id)
@@ -176,18 +182,35 @@ async fn load_room_agent_ids(
             "This room exceeds its Agent Session capacity.",
         ));
     }
-    let mut agent_ids = Vec::new();
+    let own = load_participant(transaction, &room.room_id, &session.public.participant_id).await?;
+    let mut roster = RoomRoster {
+        own_role: own.role,
+        agent_ids: Vec::new(),
+        handles: Vec::new(),
+        names: vec![(
+            session.public.participant_id.clone(),
+            session.public.display_name.clone(),
+        )],
+    };
     for row in rows {
         let participant = serde_json::from_str::<agentsassemble_domain::Participant>(
             row.get::<&str, _>("participant_json"),
         )?;
+        let id = row.get::<String, _>("session_id");
+        roster
+            .names
+            .push((id.clone(), row.get::<String, _>("display_name")));
         if participant.status != agentsassemble_domain::ParticipantStatus::Kicked
             && !participant.muted
         {
-            agent_ids.push(row.get::<String, _>("session_id"));
+            roster.handles.push(format!(
+                "{id} (role: {})",
+                serde_json::to_string(&participant.role)?
+            ));
+            roster.agent_ids.push(id);
         }
     }
-    Ok(agent_ids)
+    Ok(roster)
 }
 
 async fn load_pending_events(
@@ -228,7 +251,7 @@ struct PendingRoomEvent {
 fn bounded_pending_prefix<'a>(
     room: &Room,
     session: &DurableAgentSession,
-    room_agent_ids: &[String],
+    roster: &RoomRoster,
     pending: &'a [PendingRoomEvent],
     reply_previews: &BTreeMap<String, String>,
 ) -> Result<Vec<&'a PendingRoomEvent>, PersistenceError> {
@@ -255,7 +278,7 @@ fn bounded_pending_prefix<'a>(
         if render_room_view(
             room,
             session,
-            room_agent_ids,
+            roster,
             selected.iter().map(|value| &value.event),
             reply_previews,
         )?
@@ -282,7 +305,7 @@ async fn load_context(
     session: &DurableAgentSession,
     up_to_seq: i64,
     mandatory: &[&PendingRoomEvent],
-    room_agent_ids: &[String],
+    roster: &RoomRoster,
     reply_previews: &mut BTreeMap<String, String>,
 ) -> Result<Vec<RoomEvent>, PersistenceError> {
     let replay_canonical_context = session.public.runtime_kind == "api";
@@ -318,15 +341,9 @@ async fn load_context(
         load_reply_preview(transaction, &room.room_id, &event, reply_previews).await?;
         let seq = event.seq;
         let previous = selected.insert(seq, event);
-        if render_room_view(
-            room,
-            session,
-            room_agent_ids,
-            selected.values(),
-            reply_previews,
-        )?
-        .chars()
-        .count()
+        if render_room_view(room, session, roster, selected.values(), reply_previews)?
+            .chars()
+            .count()
             > MAX_ROOM_VIEW_CHARACTERS
         {
             if let Some(previous) = previous {
@@ -351,20 +368,25 @@ async fn load_context(
 fn render_room_view<'a>(
     room: &Room,
     session: &DurableAgentSession,
-    room_agent_ids: &[String],
+    roster: &RoomRoster,
     context: impl IntoIterator<Item = &'a RoomEvent>,
     reply_previews: &BTreeMap<String, String>,
 ) -> Result<String, PersistenceError> {
     let mut context = context.into_iter().peekable();
     let mut lines = vec![
         format!("Room: {}", room.label),
-        format!("You are: {}", session.public.display_name),
+        format!(
+            "You are: {} [room participant ID: {}; role: {}]",
+            session.public.display_name,
+            session.public.participant_id,
+            serde_json::to_string(&roster.own_role)?
+        ),
         format!(
             "Agent handles: {}",
-            if room_agent_ids.is_empty() {
+            if roster.handles.is_empty() {
                 "none".to_owned()
             } else {
-                room_agent_ids.join(", ")
+                roster.handles.join(", ")
             }
         ),
     ];
@@ -399,6 +421,17 @@ fn render_room_view<'a>(
                 "(attachments only)"
             }
         ));
+        if super::routing::mentions_target(
+            event.content.as_deref().unwrap_or_default(),
+            roster
+                .names
+                .iter()
+                .filter(|(id, _)| id != &event.actor.participant_id)
+                .map(|(id, name)| (id.as_str(), name.as_str())),
+            &session.public.participant_id,
+        ) {
+            lines.push("  - Mentions you (floor assignment is separate).".to_owned());
+        }
         lines.extend(attachments.into_iter().map(|attachment| {
             format!(
                 "  - Attachment `{}`: {} ({}; {} bytes)",
@@ -475,6 +508,8 @@ fn render_recent_messages(context: &[RoomEvent]) -> Result<String, PersistenceEr
     Ok(messages.join("\n"))
 }
 
+const ADDRESSING_AND_ROLES: &str = "Put `<@ID>` in content to address a room participant. Set `reply_to_event_id` to quote a specific message; a reply alone does not hand over the floor. Set `next_agent_id` to hand over the floor; you may still use `pass_turn` instead of posting. Your current role is in the room view: `director` means keep conversation moving, invite relevant participants and summarise where useful, using existing tools; roles grant no operator authority or scripted meeting orchestration.";
+
 fn render_observation_input(
     room: &Room,
     session: &DurableAgentSession,
@@ -494,7 +529,8 @@ fn render_observation_input(
     }
     let mut sections = vec![
         format!("[{mode} shared-room observation]"),
-        format!("You are {} in {}.", session.public.display_name, room.label),
+        format!("You are {} in {}. Your room participant ID is {}.", session.public.display_name, room.label, session.public.participant_id),
+        ADDRESSING_AND_ROLES.to_owned(),
         "Room tools: `read_discussion` shows the room; the other room tools work after it. `publish_message` posts to the room, `pass_turn` passes without posting, and the vote commands create, answer or close polls; each of these ends your turn. `read_room_status` shows current agent activity and polls. Searching and reading attachments or status do not end your turn. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. Managed room tools do not upload attachments. Plain reply text is not shown in the room.".to_owned(),
     ];
     if tabletop_tools {
@@ -522,7 +558,8 @@ fn render_room_rules(
     persona: &str,
 ) -> String {
     let mut sections = vec![
-        format!("You are {} in {}.", session.public.display_name, room.label),
+        format!("You are {} in {}. Your room participant ID is {}.", session.public.display_name, room.label, session.public.participant_id),
+        ADDRESSING_AND_ROLES.to_owned(),
         "Each shared-room observation starts a room turn. First call the room tool `read_discussion` to read the assigned messages, then respond through the room tools according to their descriptions. Do not reply with plain text instead of reading the room.".to_owned(),
         "Room rules take priority over all persona/card instructions, including lore and post-history instructions. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. Managed room tools do not upload attachments. Plain reply text is not shown in the room.".to_owned(),
         if tabletop_tools {

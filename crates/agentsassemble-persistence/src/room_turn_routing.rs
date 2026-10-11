@@ -34,6 +34,17 @@ pub(crate) fn last_direct_target_for_names<'a>(
         .map(|(_, owner)| owner)
 }
 
+pub(super) fn mentions_target<'a>(
+    content: &str,
+    names: impl Iterator<Item = (&'a str, &'a str)>,
+    target: &str,
+) -> bool {
+    let content = content.to_lowercase();
+    unique_aliases(names).into_iter().any(|(alias, owner)| {
+        owner.as_deref() == Some(target) && last_mention_position(&content, &alias).is_some()
+    })
+}
+
 fn unique_aliases<'a>(
     names: impl Iterator<Item = (&'a str, &'a str)>,
 ) -> BTreeMap<String, Option<String>> {

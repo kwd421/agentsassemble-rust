@@ -1,4 +1,4 @@
-use crate::{AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, VoteSummary};
+use crate::{AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, ParticipantRole, VoteSummary};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct AgentActivity {
     pub participant_id: String,
     pub display_name: String,
+    pub role: ParticipantRole,
     pub status: AgentSessionStatus,
     pub runtime_status: AgentRuntimeStatus,
     pub turn_phase: AgentTurnPhase,

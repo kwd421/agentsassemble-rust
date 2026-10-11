@@ -50,18 +50,24 @@ pub(crate) async fn read_in(
 ) -> Result<ConversationStatus, PersistenceError> {
     let (open_votes, next_before_seq) =
         crate::room_votes::open_vote_page(tx, principal, before_seq).await?;
-    let agents = crate::sqlite::load_agent_sessions(tx, &principal.room_id)
-        .await?
-        .into_iter()
-        .map(|session| AgentActivity {
+    let mut agents = Vec::new();
+    for session in crate::sqlite::load_agent_sessions(tx, &principal.room_id).await? {
+        let participant = crate::room_turns::support::load_participant(
+            tx,
+            &principal.room_id,
+            &session.participant_id,
+        )
+        .await?;
+        agents.push(AgentActivity {
+            role: participant.role,
             participant_id: session.participant_id,
             display_name: session.display_name,
             status: session.status,
             runtime_status: session.runtime_status,
             turn_phase: session.turn_phase,
             recovery_required: session.recovery_required,
-        })
-        .collect();
+        });
+    }
     Ok(ConversationStatus {
         observed_at: chrono::Utc::now().to_rfc3339(),
         agents,

@@ -96,3 +96,35 @@ search IDs match canonical attachments; reply previews reflect edits/deletions a
 remain bounded, including old sources outside incremental context. Verify affected
 Rust and frontend contract tests plus mandatory gates. No provider call, new retry,
 database migration or frontend redesign is required by these changes.
+
+## Agent identity, roles and addressing (Task AB, 2026-10-12)
+
+The server-built next-turn `read_discussion` view identifies the caller's canonical
+room participant ID and current participant role, and shows roles beside other
+agent handles. `read_room_status` projects current participant roles even during
+an active turn. Promotion, role replacement and removal of director status use
+the canonical participant record; assigned observations/retries remain immutable.
+Director means facilitating conversation, inviting relevant participants and
+summarising when useful with existing tools; it grants no operator authority or
+scripted meeting orchestration. Role changes do not start provider turns.
+
+Messages matching the existing routing mention parser are marked as mentioning
+the caller independently of ordered-floor selection. Room identity is independent
+of provider-session identity. Instructions distinguish content `<@ID>` addressing,
+`reply_to_event_id` quoting (no floor handoff by itself), and `next_agent_id` floor
+handoff in three plain sentences. Passing remains available. No ID migration,
+new alias fallback, routing changes, capabilities changes or provider calls.
+
+Owners: `room_turn_context.rs`, `room_turn_routing.rs`, `conversation_status.rs`
+and its domain projection. All additions share the existing observation budget.
+Acceptance: two regression invariants exercise promotion/demotion through next
+API context and live status with unchanged capabilities, and picker self-mention
+delivery with a different provider identity, including multiple mentions. Run
+affected crate tests and mandatory architecture/structure/format gates.
+
+Verification: `cargo test -p agentsassemble-domain -p agentsassemble-persistence`
+passed (66 domain, 478 persistence; one existing ignored test). `cargo fmt --all`
+and its check, `make architecture-check`, and scoped `git diff --check` passed.
+Affected-crate all-target Clippy remains blocked only by existing `similar_names`
+and `too_many_lines` violations in `restore_job_tests.rs` (273 and 61); unchanged.
+No generated TypeScript changes, live provider calls or packaged UI verification.
