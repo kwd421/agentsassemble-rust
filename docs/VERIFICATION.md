@@ -1,5 +1,72 @@
 # Verification Contract
 
+## UI audit: guest entry corrected; join/offline failures not reproduced (2026-10-11)
+
+Baseline Rust `aa44a435`. Audit captures 26/29/31/34/35 were supplied under
+`/private/tmp/claude-501/-Users-seinel-Projects-AgentsAssemble-Rust/f43b6994-3778-4ca2-8834-d04c0c670717/scratchpad/ui-audit/`.
+This entry does **not** close all three reported defects.
+
+- **Guest entry (2), confirmed cause and correction:** `MemberJoinPanel.tsx`'s
+  signed-out branch rendered only Google login; the guest creation/recovery and
+  recovery-code acknowledgement existed only in `StartupIdentityGate.tsx`.
+  Both now use `CentralGuestEntry.tsx`. The invite stays in the trusted opener's
+  memory while the existing central identity APIs create/recover the guest.
+  Code acknowledgement precedes the original invite's explicit consent; no grant,
+  channel, membership or credential-custody rule was relaxed. Failed recovery keeps
+  the input and permits an explicit retry; a pending code cannot be skipped merely
+  because a central session already exists. Legacy central consent also uses this
+  shared entry; host-origin authority remains unchanged.
+- **Guest join failure (1), root cause unknown:** before applying the correction,
+  the supplied 0.1.29 UI Check host and deployed central web admitted the existing
+  audit guest through a newly issued invite in Firefox: consent → joined room,
+  channel/history and member UI. No provider was started and no message was sent.
+  The original capture shows only a generic pre-consent error, with no failing HTTP
+  response/code. A current successful run cannot identify that historical failure.
+- **Second desktop offline (3), root cause unknown:** the same supplied apps were
+  exercised with external access open, closed, then reopened. The host's durable
+  endpoint queue cleared after publication; the second app refreshed to connection
+  available → disconnected → available and then connected to the remote room.
+  Traced `public_ingress.rs::ready_managed` → `central/event_publisher.rs` → central
+  `event_endpoint.js::endpointRepresentation` → `CentralServerList.tsx`. Neither
+  failed online publication nor a bootstrap projection error reproduced in this
+  run. The final offline row after shutdown does not establish the earlier state.
+  No speculative publisher/Worker change, polling or admission fallback was added.
+
+Verification:
+
+- New workflow regressions: all four fail against the unmodified `MemberJoinPanel`
+  and pass after the correction (creation/recovery → code acknowledgement → same
+  invite consent, failed recovery/retry, interrupted code acknowledgement).
+- Frontend full suite: 207 files / 1,350 tests passed. Final affected-suite rerun,
+  TypeScript/production build, architecture/source-growth gates and 19 policy tests
+  pass. Existing build chunk-size and ts-rs attribute warnings remain.
+- Existing event-publisher lifecycle/backoff/idle invariants: 2 passed. Existing
+  WebCrypto/Rust encrypted owner/member HTTP/SSE/socket integration: 1 passed,
+  including channel custody and wrong-channel denial. Existing Worker endpoint/
+  member-grant tests: 53 passed; Worker code was not changed.
+- Firefox local integration used actual Worker route code and in-memory SQLite,
+  with a production build pointed only at loopback. Guest creation returned 201;
+  device-signed member preview returned 200. The UI showed both guest options,
+  required code acknowledgement, and resumed the same invite's consent. The local
+  fixture stopped at consent (no real host behind its synthetic endpoint).
+- The supplied packaged apps and deployed web were used only for the separate
+  baseline join/desktop observations above, not as proof that the new bundle was
+  deployed. No Worker deployment or migration occurred. A separate unauthenticated
+  Python GET of the public root returned 403 although Firefox loaded it; that probe
+  is not used to infer either reported failure.
+
+Cleanup: revoked the one test invite, closed external access in the host UI, quit
+both exact UI Check apps, closed only the two Firefox tabs opened by this run,
+reset Computer Use, and confirmed no UI Check/cloudflared process remained. The
+existing Firefox window and owner account were preserved. Local fixture state was
+in-memory and its server was stopped. Existing `docs/VERIFICATION.md` work and
+unrelated untracked files were preserved.
+
+Remaining: reproduce (1)/(3) with a contemporaneous failing response or publisher
+error, then fix the evidenced owner. Current successful observations are not a
+root-cause fix or closure of those two items. The new frontend requires the manager's
+normal reviewed deployment; no full Phase 9 closure/review is claimed here.
+
 ## Backup-based server move — 구현·로컬 검증, 미배포 (2026-10-11)
 
 Rust `6bd7d878`–`83c07cd4`, Worker `1e65c808`–`087d4261`에 구현했다.
@@ -58,6 +125,36 @@ KDF는 Apple M5 / 24 GiB에서 libsodium C opt-level 3 테스트 프로필로 �
 Computer Use, 실제 provider, 새 보안 스캔, artifact maintenance/cleanup 명령은 실행하지
 않았다. 기존 사용자 변경은 보존했다. 잘못된 테스트 실행 위치가 만든 루트
 `node_modules/.vite/vitest` 결과 캐시는 정리 금지 요청에 따라 삭제하지 않았다.
+
+## Cleanup capacity stage 1 — 리뷰 차단, 미배포 (2026-10-11)
+
+Worker `codex/owner-session-renewal`, 기준 `94248134`에 최소 슬롯 구현을 준비했다.
+0025는 D1의 미래 UTC day 일회성 활성화, 구버전 daily claim 차단, admission
+pause를 추가한다. 슬롯별 3,750 writes(claim 1 + child 3,349 + root 400),
+45 child DELETE + root 3개로 active 49 / 혼합 배포 50문장 이하다.
+풀 합계 9,990은 그대로이며 `last_completed_slot`과 인덱스는 추가하지 않았다.
+cleanup-on 설정은 허용된 cron만 `17 */3 * * *`로 바꿨다.
+
+Worker 290 tests 통과. 로컬 D1 슬롯/기존 cleanup/account cleanup/분할 migration,
+architecture, Wrangler dry-run 통과. 활성화/legacy fence/monotonic claim/child
+clock/root clock/pause 제거 변이 6개는 회귀 테스트를 실패시켰고 모두 복원했다.
+보존 persons 10,000 + 만료 rate 행 40,000에서 실제 로컬 D1 EXPLAIN은
+`SCAN persons`, 단독 terminal 조회 10,000 reads, 슬롯과 중복 호출 114,571 reads,
+root 슬롯 88,717 reads였다. 인덱스 비용은 그대로다. README에 인구 10,000명,
+DB 350MB, 슬롯 250k reads, 계정 4M reads/day·95k writes/day·CPU 8ms의
+운영 pause 기준과 증설 전 측정 조건을 기록했다. 로컬 D1은 indexed writes를
+과소보고하므로 스키마 비용 하한을 적용한다. 실운영 CPU/슬롯 비용 증거는 없다.
+
+설계 리뷰: REVISE C/H/M/L=0/1/1/2. 요청한 Daybreak shell 코드 리뷰는 실행
+정책이 `Codex exec mode is forbidden; use the canonical app-server Agent Session`
+사유로 시작 전에 차단했다. 코드 리뷰 판정 없음. 다른 모델/보안 스캔/셸 래퍼로
+대체하지 않았다. 리뷰 통과 전 커밋·푸시·원격 migration·배포·활성화를 보류한다.
+사전 확인 운영 버전 `ef09a00b-ccd1-49d2-9af5-d60244a8520d`, 0024까지 원격
+migration 대기 없음. 0025는 로컬 파일뿐이며 활성화 날짜 미설정, Stage 2 보류.
+재개 시 허용된 리뷰 경로부터 해결하고, 통과 후 migration → 배포 → 스모크
+(`/` 200, `/v1/bootstrap` 401, `/member-join` 200) → D1 기준 다음 UTC 자정
+활성화 순서로 진행한다. 최소 한 번의 실제 슬롯 CPU/쓰기량 측정 없이는
+24,000 풀 증설을 하지 않는다. 기존 Rust 미커밋 변경은 건드리지 않았다.
 
 ## Agent display-name defaults and disabled options (2026-10-11)
 

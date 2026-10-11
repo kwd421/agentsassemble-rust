@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../api/invites", () => ({ challengeRoomMember: mocks.challenge, joinRoomMember: mocks.join, challengeMemberConnect:mocks.connectChallenge,redeemMemberConnect:mocks.rooms,selectMemberConnect:mocks.select }));
 vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: mocks.desktop }));
 vi.mock("../../lib/central/identity", () => ({
+  loadPendingCentralRecoveryCode: () => null,
   setCentralMemberHidden: mocks.unhide, centralAccountEntryUrl: () => "https://central.test/", loadCentralSession: mocks.session,
   issueCentralMemberGrant: mocks.issue, previewCentralMember: mocks.preview, loginCentralGoogle: mocks.nativeLogin,
 }));

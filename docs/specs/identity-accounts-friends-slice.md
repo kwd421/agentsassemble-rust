@@ -1,5 +1,25 @@
 # Identity, accounts, friends and human admission
 
+## UI audit functional corrections (2026-10-11)
+
+Entry points: trusted central `/member-join`, central start guest creation/recovery,
+and a same-owner second desktop's startup server chooser after managed ingress opens.
+A valid guest person invite must reach explicit consent and encrypted host admission;
+signed-out invite entry must offer both new guest and recovery, retain the invitation
+only in the trusted opener's memory, require recovery-code acknowledgement, and resume
+that same consent without navigation or storing the invite. Existing central identity,
+secure channel, grant binding and host membership/custody owners remain authoritative.
+Failures retain explicit retry; no anonymous fallback or relaxed admission is allowed.
+
+Trace online publication through durable host event/central ACK and current bootstrap
+projection before changing the responsible owner. Opening, stopping and reopening ingress
+must produce current online/offline discovery and usable same-owner connection; stale
+or offline authority remains denied. Verify through local integration or the authorized
+packaged apps and Firefox; preserve the owner account. Worker changes are commit/push
+only, with deployment left to the manager. Regression tests assert workflow/authority
+invariants, not constant values. Record reproduction, fixes and remaining unknowns in
+`docs/VERIFICATION.md`.
+
 ## Backup-based server move (2026-10-11)
 
 - Preserved invite links resolve their recorded incarnation through central's
