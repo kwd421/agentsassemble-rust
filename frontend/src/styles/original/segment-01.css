@@ -578,10 +578,9 @@ button:disabled,
 .dc-agent-section-title {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .dc-agent-provider-grid {
@@ -663,8 +662,8 @@ button:disabled,
 
 .dc-agent-field > span {
   color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .dc-agent-create-modal[data-provider-selected="false"] { height: auto; max-height: calc(100dvh - 28px); }

@@ -11,8 +11,7 @@
 
 .dc-agent-field input:focus,
 .dc-agent-field select:focus {
-  border-color: transparent;
-  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.55);
+  border-color: var(--color-accent);
 }
 
 .dc-agent-field input:disabled,
@@ -38,15 +37,42 @@
   flex: 1 1 auto;
 }
 
-.dc-agent-folder-field button {
-  min-height: 38px;
+.dc-agent-folder-field button,
+.dc-provider-secret-row button {
+  min-height: 40px;
   flex: 0 0 auto;
-  border-radius: 6px;
-  background: var(--color-panel-soft);
-  padding: 0 11px;
+  border: 1px solid rgba(151, 151, 159, 0.2);
+  border-radius: 8px;
+  background: rgba(151, 151, 159, 0.12);
+  padding: 0 14px;
   color: var(--color-text-primary);
-  font-size: 12px;
-  font-weight: 850;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dc-agent-folder-field button:hover:not(:disabled),
+.dc-provider-secret-row button:hover:not(:disabled) {
+  background: rgba(151, 151, 159, 0.2);
+}
+
+.dc-provider-secret-row {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+}
+
+.dc-provider-secret-row input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dc-provider-secret-row button[data-variant="danger"] {
+  color: #ff6b6d;
+}
+
+.dc-provider-secret-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .dc-agent-folder-field button:disabled {
@@ -57,22 +83,6 @@
 .dc-provider-secret-field {
   display: grid;
   gap: 8px;
-}
-
-.dc-provider-secret-field > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.dc-provider-secret-field button {
-  min-height: 34px;
-  border-radius: 6px;
-  background: var(--color-panel-soft);
-  padding: 0 10px;
-  color: var(--color-text-primary);
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .dc-provider-secret-field p {
@@ -215,9 +225,9 @@
   justify-content: center;
   gap: 7px;
   padding: 0 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 900;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .dc-agent-create-secondary {

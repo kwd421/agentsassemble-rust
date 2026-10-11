@@ -4,13 +4,13 @@
 .dc-agent-field .dc-agent-static-control {
   color-scheme: dark;
   min-width: 0;
-  height: 38px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: var(--color-panel-soft);
-  padding: 0 11px;
+  height: 40px;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  background: var(--color-server-rail);
+  padding: 0 12px;
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
   transition: border-color 120ms ease;
 }
@@ -29,16 +29,16 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  height: 38px;
+  height: 40px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: var(--color-panel-soft);
-  padding: 0 11px;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  background: var(--color-server-rail);
+  padding: 0 12px;
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: 14px;
   text-align: left;
   outline: none;
 }
@@ -50,15 +50,12 @@
 }
 
 .dc-agent-select-trigger:hover:not(:disabled) {
-  background: #32343a;
+  border-color: #474851;
 }
 
-.dc-agent-select-trigger:focus-visible {
-  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.55);
-}
-
+.dc-agent-select-trigger:focus-visible,
 .dc-agent-select-trigger[aria-expanded="true"] {
-  background: #32343a;
+  border-color: var(--color-accent);
 }
 
 .dc-agent-select-trigger:focus-visible > svg,

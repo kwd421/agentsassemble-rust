@@ -422,6 +422,96 @@ export default function AgentCreateModal({
               else next.delete(selectedProvider.id);
               return next;
             })} />}
+          {selectedProvider?.custom_endpoint && !existingSessionId && (
+            <section className="dc-agent-section">
+              <p className="dc-agent-section-title">API 연결</p>
+              <div className="dc-agent-field-grid dc-agent-field-grid--dual">
+                <label className="dc-agent-field">
+                  <span>API 주소</span>
+                  <input
+                    type="url"
+                    value={customEndpoint}
+                    placeholder="https://example.com/v1 또는 …/chat/completions"
+                    onChange={(event) => setCustomEndpoint(event.currentTarget.value)}
+                  />
+                </label>
+                <label className="dc-agent-field">
+                  <span>모델 ID</span>
+                  <input
+                    value={customModel}
+                    placeholder="사용할 AI의 정확한 모델 ID"
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setCustomModel(value);
+                      if (!displayNameEdited) {
+                        setDisplayName(value.trim() ? `Custom ${value.trim()}` : "Custom API");
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="preserve-words">
+                Base URL과 /chat/completions 전체 주소를 모두 받을 수 있어요.
+              </p>
+            </section>
+          )}
+
+          {localProviderActions && selectedProvider?.credential_available && (
+            <ProviderCredentialField
+              provider={selectedProvider}
+              status={credentialStatus}
+              value={providerApiKey}
+              busy={credentialBusy}
+              onValueChange={setProviderApiKey}
+              onSave={() => void saveProviderApiKey()}
+              onDelete={() => void deleteProviderApiKey()}
+            />
+          )}
+
+          {selectedProvider && (selectedProvider.controls.length > 0 || localProviderActions) && (
+            <section className="dc-agent-section">
+              <p className="dc-agent-section-title">모델 · 실행 설정</p>
+
+              <div className="dc-agent-field-grid dc-agent-field-grid--dual">
+                {requiresOpenCodeApproval(selectedProvider, settings) && (
+                  <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{openCodeFreePermissionHint}</p>
+                )}
+                {selectedProvider.controls.length > 0 && displayProviderControls(selectedProvider).map((control) => {
+                  const providerSupportsControl = selectedProvider.controls.some(
+                    (candidate) => candidate.key === control.key
+                  );
+                  const options = providerSupportsControl
+                    ? effectiveProviderControlOptions(
+                        selectedProvider,
+                        control,
+                        settings
+                      )
+                    : control.options;
+                  return (
+                    <ProviderControlField
+                      key={`${selectedProvider.id}:${control.key}`}
+                      control={control}
+                      options={existingSessionId
+                        ? [{ value: settings[control.key] ?? "", label: settings[control.key] || "미설정" }]
+                        : control.key === "model" && new Set(options.map((option) =>
+                            providerCatalogGroup(selectedProvider, option.value))).size > 1
+                          ? options.map((option) => ({ ...option,
+                              label: `${option.label} · ${providerGroupLabel(providerCatalogGroup(selectedProvider, option.value))}` }))
+                          : options}
+                      value={
+                        existingSessionId ? settings[control.key] ?? "" : providerSupportsControl
+                          ? settings[control.key] ?? control.default_value
+                          : control.default_value
+                      }
+                      disabled={Boolean(existingSessionId) || !providerSupportsControl}
+                      onChange={(value) => updateProviderControl(control.key, value)}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {selectedProvider && (
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">기본 정보</p>
@@ -469,96 +559,6 @@ export default function AgentCreateModal({
               )}
               </div>
             </section>
-          )}
-
-          {selectedProvider?.custom_endpoint && !existingSessionId && (
-            <section className="dc-agent-section">
-              <p className="dc-agent-section-title">API 연결</p>
-              <div className="dc-agent-field-grid dc-agent-field-grid--dual">
-                <label className="dc-agent-field">
-                  <span>API 주소</span>
-                  <input
-                    type="url"
-                    value={customEndpoint}
-                    placeholder="https://example.com/v1 또는 …/chat/completions"
-                    onChange={(event) => setCustomEndpoint(event.currentTarget.value)}
-                  />
-                </label>
-                <label className="dc-agent-field">
-                  <span>모델 ID</span>
-                  <input
-                    value={customModel}
-                    placeholder="사용할 AI의 정확한 모델 ID"
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      setCustomModel(value);
-                      if (!displayNameEdited) {
-                        setDisplayName(value.trim() ? `Custom ${value.trim()}` : "Custom API");
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-              <p className="preserve-words">
-                Base URL과 /chat/completions 전체 주소를 모두 받을 수 있어요.
-              </p>
-            </section>
-          )}
-
-          {selectedProvider && (selectedProvider.controls.length > 0 || localProviderActions) && (
-            <section className="dc-agent-section">
-              <p className="dc-agent-section-title">모델 · 실행 설정</p>
-
-              <div className="dc-agent-field-grid dc-agent-field-grid--dual">
-                {requiresOpenCodeApproval(selectedProvider, settings) && (
-                  <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{openCodeFreePermissionHint}</p>
-                )}
-                {selectedProvider.controls.length > 0 && displayProviderControls(selectedProvider).map((control) => {
-                  const providerSupportsControl = selectedProvider.controls.some(
-                    (candidate) => candidate.key === control.key
-                  );
-                  const options = providerSupportsControl
-                    ? effectiveProviderControlOptions(
-                        selectedProvider,
-                        control,
-                        settings
-                      )
-                    : control.options;
-                  return (
-                    <ProviderControlField
-                      key={`${selectedProvider.id}:${control.key}`}
-                      control={control}
-                      options={existingSessionId
-                        ? [{ value: settings[control.key] ?? "", label: settings[control.key] || "미설정" }]
-                        : control.key === "model" && new Set(options.map((option) =>
-                            providerCatalogGroup(selectedProvider, option.value))).size > 1
-                          ? options.map((option) => ({ ...option,
-                              label: `${option.label} · ${providerGroupLabel(providerCatalogGroup(selectedProvider, option.value))}` }))
-                          : options}
-                      value={
-                        existingSessionId ? settings[control.key] ?? "" : providerSupportsControl
-                          ? settings[control.key] ?? control.default_value
-                          : control.default_value
-                      }
-                      disabled={Boolean(existingSessionId) || !providerSupportsControl}
-                      onChange={(value) => updateProviderControl(control.key, value)}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {localProviderActions && selectedProvider?.credential_available && (
-            <ProviderCredentialField
-              provider={selectedProvider}
-              status={credentialStatus}
-              value={providerApiKey}
-              busy={credentialBusy}
-              onValueChange={setProviderApiKey}
-              onSave={() => void saveProviderApiKey()}
-              onDelete={() => void deleteProviderApiKey()}
-            />
           )}
 
           {selectedProvider && !existingSessionId &&

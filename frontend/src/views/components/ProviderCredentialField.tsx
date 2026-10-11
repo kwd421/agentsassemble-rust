@@ -26,30 +26,30 @@ export default function ProviderCredentialField({
       <div className="dc-provider-secret-field">
         <label className="dc-agent-field">
           <span>API 키</span>
-          <input
-            type="password"
-            autoComplete="off"
-            value={value}
-            placeholder={
-              status?.configured ? "설정됨" : `${provider.display_name} API key`
-            }
-            onChange={(event) => onValueChange(event.currentTarget.value)}
-          />
-        </label>
-        <div>
-          <button
-            type="button"
-            disabled={!value.trim() || busy}
-            onClick={onSave}
-          >
-            저장
-          </button>
-          {status?.source === "keyring" && (
-            <button type="button" disabled={busy} onClick={onDelete}>
-              키 삭제
+          <div className="dc-provider-secret-row">
+            <input
+              type="password"
+              autoComplete="off"
+              value={value}
+              placeholder={
+                status?.configured ? "저장된 키 사용 중" : `${provider.display_name} API 키`
+              }
+              onChange={(event) => onValueChange(event.currentTarget.value)}
+            />
+            <button
+              type="button"
+              disabled={!value.trim() || busy}
+              onClick={onSave}
+            >
+              저장
             </button>
-          )}
-        </div>
+            {status?.source === "keyring" && (
+              <button type="button" data-variant="danger" disabled={busy} onClick={onDelete}>
+                키 삭제
+              </button>
+            )}
+          </div>
+        </label>
       </div>
     </section>
   );

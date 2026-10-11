@@ -814,6 +814,6 @@ describe("AgentCreateModal", () => {
     );
     expect(screen.getByRole("dialog", { name: "에이전트 추가" })).toBeTruthy();
     expect((deleteButton as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.getByPlaceholderText("설정됨")).toBeTruthy();
+    expect(screen.getByPlaceholderText("저장된 키 사용 중")).toBeTruthy();
   });
 });
