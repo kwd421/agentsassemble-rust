@@ -227,6 +227,8 @@ export function LobbyThinkingGroup({
 }
 
 
+/// The live row for a participant who is still writing: only their thoughts and work so far.
+/// Who is writing is announced by the line above the composer.
 export function LobbyTypingRow({
   indicator,
   thinkingEvents,
@@ -254,26 +256,11 @@ export function LobbyTypingRow({
             {indicator.displayName}
           </span>
         </p>
-        <div
-          className="flex items-center gap-2 text-[13px] text-text-muted"
-          aria-live="polite"
-        >
-          <span className="dc-typing-dots" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-          </span>
-          <span>{indicator.activity === "compacting" ? "압축 중..." : "입력중..."}</span>
-        </div>
-        {thinkingEvents.length > 0 && (
-          <div className="mt-1">
-            <ThinkingDetails
-              events={thinkingEvents}
-              label={`💭 ${indicator.displayName}의 생각과 작업`}
-              mentionLabels={mentionLabels}
-            />
-          </div>
-        )}
+        <ThinkingDetails
+          events={thinkingEvents}
+          label={`💭 ${indicator.displayName}의 생각과 작업`}
+          mentionLabels={mentionLabels}
+        />
       </div>
     </div>
   );

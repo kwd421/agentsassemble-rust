@@ -333,17 +333,15 @@ describe("LobbyView active provider turn", () => {
     expect(screen.queryByRole("region", { name: "안 읽은 메시지" })).toBeNull();
   });
 
-  it("keeps input status above expandable live thought activity", async () => {
+  it("announces who is writing above the composer and keeps live thought activity collapsed in the feed", async () => {
     renderLobby([thought("Bash로 테스트를 실행 중")], [indicator]);
 
-    const typing = await screen.findByText("입력중...");
+    const typing = await screen.findByText(/입력하고 있어요/);
     const details = screen.getByRole("button", { name: /Agent A의 생각과 작업/ });
-    const typingRow = typing.closest(".dc-message");
 
-    expect(typingRow?.contains(details)).toBe(true);
-    expect(
-      Boolean(typing.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING)
-    ).toBe(true);
+    expect(typing.closest(".dc-message")).toBeNull();
+    expect(typing.textContent).toContain("Agent A");
+    expect(details.closest(".dc-message")).not.toBeNull();
     expect(screen.queryByText("Bash로 테스트를 실행 중")).toBeNull();
     expect(details.textContent).not.toContain("단계");
 
@@ -355,7 +353,7 @@ describe("LobbyView active provider turn", () => {
   it("shows only input status when thought activity is filtered out", async () => {
     renderLobby([], [indicator]);
 
-    expect(await screen.findByText("입력중...")).toBeTruthy();
+    expect(await screen.findByText(/입력하고 있어요/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /생각과 작업/ })).toBeNull();
   });
 
@@ -485,7 +483,7 @@ describe("LobbyView active provider turn", () => {
   it("holds partial answer text until the active turn publishes its final answer", async () => {
     renderLobby([activeDelta("아직 스트리밍 중인 답변")], [indicator]);
 
-    expect(await screen.findByText("입력중...")).toBeTruthy();
+    expect(await screen.findByText(/입력하고 있어요/)).toBeTruthy();
     expect(screen.queryByText("아직 스트리밍 중인 답변")).toBeNull();
   });
 
@@ -541,7 +539,7 @@ describe("LobbyView active provider turn", () => {
     const finalAnswer = await screen.findByText("최종 답변");
     const details = screen.getByRole("button", { name: /Agent A의 생각과 작업/ });
 
-    expect(screen.queryByText("입력중...")).toBeNull();
+    expect(screen.queryByText(/입력하고 있어요/)).toBeNull();
     expect(
       Boolean(details.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING)
     ).toBe(true);
@@ -553,8 +551,8 @@ describe("LobbyView provider state and role styling", () => {
   it("shows compaction in the active provider row instead of generic typing", async () => {
     renderLobby([], [{ ...indicator, activity: "compacting" }]);
 
-    expect(await screen.findByText("압축 중...")).toBeTruthy();
-    expect(screen.queryByText("입력중...")).toBeNull();
+    expect(await screen.findByText(/압축하고 있어요/)).toBeTruthy();
+    expect(screen.queryByText(/입력하고 있어요/)).toBeNull();
   });
 
   it("carries the canonical director role onto the main chat message row", async () => {

@@ -312,6 +312,45 @@
   align-items: center;
 }
 
+.dc-typing-line {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  height: 24px;
+  align-items: center;
+  gap: 16px;
+  background: var(--color-chat-bg);
+  padding: 0 16px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.dc-typing-line .dc-typing-dots {
+  width: 40px;
+  flex-shrink: 0;
+  justify-content: center;
+  gap: 4px;
+  color: var(--color-text-normal);
+}
+
+.dc-typing-line .dc-typing-dots span {
+  width: 7px;
+  height: 7px;
+}
+
+.dc-typing-line strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.dc-typing-line ~ .dc-old-history-notice {
+  margin-bottom: 32px;
+}
+
 .dc-typing-dots span {
   width: 6px;
   height: 6px;

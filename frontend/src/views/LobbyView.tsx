@@ -7,6 +7,7 @@ import { anonymousAuthorRevision } from "../lib/participantAnonymization";
 import { useEffect, useMemo, useState } from "react";
 import { Hash } from "lucide-react";
 import { useReplyBarScroll } from "./components/useReplyBarScroll";
+import TypingLine from "./components/TypingLine";
 import {
   type LiveAgent,
   type LobbyEvent,
@@ -500,7 +501,7 @@ export default function LobbyView({
       <div
         ref={scrollRef}
         onScroll={handleLobbyScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto py-4 chat-scroll"
+        className="relative min-h-0 flex-1 overflow-y-auto pb-6 pt-4 chat-scroll"
         style={{ overflowAnchor: "none" }}
       >
         {historyLoadError && (
@@ -665,10 +666,10 @@ export default function LobbyView({
             );
           })
         )}
-        {/* Typing indicators render in the message body, where each reply will
-            actually appear — one placeholder row per participant generating. */}
+        {/* Thoughts and work in progress stay in the message body, where the reply will appear. */}
         {typingIndicators.map((indicator) => {
           const key = indicator.participantId || indicator.displayName;
+          if (!activeThinking.eventsByParticipant.get(key)?.length) return null;
           return (
             <LobbyTypingRow
               key={`typing-${key}`}
@@ -682,6 +683,7 @@ export default function LobbyView({
 
       {/* Composer */}
       <div className="relative shrink-0 px-2 pb-2">
+        <TypingLine indicators={typingIndicators} />
         {!pinnedToLatest && visibleEvents.length > 0 && (
           <div className="dc-old-history-notice" role="status">
             <span>오래된 메시지를 보고 있어요</span>
