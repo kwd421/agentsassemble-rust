@@ -141,10 +141,9 @@ pub(crate) fn install(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
                     let _ = check(&handle, &item, &mut ready, true).await;
                 }
                 Ok(None) => break,
-                Err(_) if ready.is_none() => {
+                Err(_) => {
                     let _ = check(&handle, &item, &mut ready, false).await;
                 }
-                Err(_) => {}
             }
         }
     });
@@ -189,41 +188,42 @@ async fn check(
         return Err("업데이트 창을 열 수 없어요.".to_owned());
     };
     status(item, "업데이트 확인 중…", false);
-    if ready.is_none() {
-        match download(app, item).await {
-            Ok(Some(update)) => {
-                publish(
-                    app,
-                    UpdateState::Ready {
-                        version: update.update.version.clone(),
-                    },
-                );
-                *ready = Some(update);
-            }
-            Ok(None) => {
-                status(item, CHECK_LABEL, true);
-                if manual {
-                    notice(
-                        &window,
-                        &format!(
-                            "현재 최신 버전({})을 사용하고 있어요.",
-                            app.package_info().version
-                        ),
-                        false,
-                    )
-                    .await;
-                }
-                return Ok(None);
-            }
-            Err(message) => {
-                publish(app, UpdateState::None);
-                status(item, "업데이트 확인 실패 · 다시 시도…", true);
-                if manual {
-                    notice(&window, message, true).await;
-                }
-                return Err(message.to_owned());
-            }
+    let held = ready.as_ref().map(|pending| pending.update.version.clone());
+    match download(app, item, held.as_deref()).await {
+        Ok(Some(update)) => {
+            publish(
+                app,
+                UpdateState::Ready {
+                    version: update.update.version.clone(),
+                },
+            );
+            *ready = Some(update);
         }
+        Ok(None) if held.is_none() => {
+            status(item, CHECK_LABEL, true);
+            if manual {
+                notice(
+                    &window,
+                    &format!(
+                        "현재 최신 버전({})을 사용하고 있어요.",
+                        app.package_info().version
+                    ),
+                    false,
+                )
+                .await;
+            }
+            return Ok(None);
+        }
+        Err(message) if held.is_none() => {
+            publish(app, UpdateState::None);
+            status(item, "업데이트 확인 실패 · 다시 시도…", true);
+            if manual {
+                notice(&window, message, true).await;
+            }
+            return Err(message.to_owned());
+        }
+        // A downloaded update stays installable when nothing newer is found or the check fails.
+        Ok(None) | Err(_) => {}
     }
     let version = ready.as_ref().map(|pending| pending.update.version.clone());
     if let Some(version) = &version {
@@ -240,16 +240,28 @@ async fn install_ready(
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
-    let Some(pending) = ready.take() else { return };
-    app.state::<AppUpdates>()
-        .installing
-        .store(true, Ordering::SeqCst);
+    let Some(mut pending) = ready.take() else {
+        return;
+    };
     publish(
         app,
         UpdateState::Installing {
             version: pending.update.version.clone(),
         },
     );
+    // A release can land while a download waits; install the newest in this one restart.
+    if let Ok(Some(newer)) = download(app, item, Some(&pending.update.version)).await {
+        publish(
+            app,
+            UpdateState::Installing {
+                version: newer.update.version.clone(),
+            },
+        );
+        pending = newer;
+    }
+    app.state::<AppUpdates>()
+        .installing
+        .store(true, Ordering::SeqCst);
     status(item, "서버 종료 및 업데이트 설치 중…", false);
     let handle = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -289,9 +301,12 @@ async fn install_ready(
     }
 }
 
+/// Downloads the latest release unless it is the already downloaded `held` version.
+/// With a held update the visible state is left alone, so its install offer stays up.
 async fn download(
     app: &AppHandle,
     item: &MenuItem<tauri::Wry>,
+    held: Option<&str>,
 ) -> Result<Option<ReadyUpdate>, &'static str> {
     let mut builder = app.updater_builder().timeout(Duration::from_mins(15));
     if env!("AGENTSASSEMBLE_UPDATE_CHANNEL") == "test" {
@@ -312,16 +327,21 @@ async fn download(
     let Some(update) = update else {
         return Ok(None);
     };
+    if held == Some(update.version.as_str()) {
+        return Ok(None);
+    }
     if update.download_url.scheme() != "https" {
         return Err("업데이트 다운로드 주소가 안전한 HTTPS 주소가 아니어서 중단했어요.");
     }
-    publish(
-        app,
-        UpdateState::Available {
-            version: update.version.clone(),
-        },
-    );
-    status(item, "업데이트 다운로드 중…", false);
+    if held.is_none() {
+        publish(
+            app,
+            UpdateState::Available {
+                version: update.version.clone(),
+            },
+        );
+        status(item, "업데이트 다운로드 중…", false);
+    }
     let bytes = update.download(|_, _| {}, || {}).await.map_err(
         |_| "업데이트 다운로드 또는 서명 확인에 실패했어요. 설치하지 않았으니 다시 시도해 주세요.",
     )?;
