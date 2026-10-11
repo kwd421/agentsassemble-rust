@@ -24,7 +24,7 @@ it("offers new restore only after capability and recovers an existing journal ev
   mocks.inspect.mockResolvedValue({operation_id:"operation",phase:"validating",manifest:null});
   mocks.cancel.mockResolvedValue(undefined);
   render(<ServerRestoreCard onOpen={async()=>{}}/>);
-  fireEvent.click(await screen.findByRole("button",{name:"복원 취소"}));
-  await waitFor(()=>expect(screen.queryByRole("button",{name:"복원 취소"})).toBeNull());
+  fireEvent.click(await screen.findByRole("button",{name:"취소"}));
+  await waitFor(()=>expect(screen.queryByRole("button",{name:"취소"})).toBeNull());
   expect(screen.queryByRole("button",{name:"백업 파일 선택"})).toBeNull();
 });

@@ -20,6 +20,7 @@ pub(crate) async fn server_restore(
     if request.get("file").is_some() {
         return Err("백업 파일은 파일 선택 창에서 선택해 주세요.".into());
     }
+    let mut selected_name = None;
     if action == "select" {
         let selected = rfd::AsyncFileDialog::new()
             .add_filter("AgentsAssemble 서버 백업", &["aaserver"])
@@ -29,6 +30,7 @@ pub(crate) async fn server_restore(
             return Ok(json!({"cancelled":true}));
         };
         let path = selected.path().to_owned();
+        selected_name = Some(selected.file_name());
         *window
             .state::<SelectedBackup>()
             .0
@@ -95,7 +97,12 @@ pub(crate) async fn server_restore(
             if response.get("ok").and_then(Value::as_bool) != Some(true) {
                 return Err(restore_error(&response).into());
             }
-            Ok(response["result"].clone())
+            let mut result = response["result"].clone();
+            // The dialog-owned file name is shown so the owner can confirm the chosen backup.
+            if let (Some(name), Some(fields)) = (selected_name, result.as_object_mut()) {
+                fields.insert("file_name".into(), json!(name));
+            }
+            Ok(result)
         }
         _ => {
             let _ = child.kill().await;

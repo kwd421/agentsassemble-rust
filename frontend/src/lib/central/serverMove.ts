@@ -36,11 +36,11 @@ export async function serverRestoreAvailable(): Promise<boolean> {
   return (await response.json()).server_restore_v1 === true;
 }
 export async function inspectServerRestore() { return parseRestoreJournal(await requestDesktopServerRestore({action:"inspect"})); }
-export async function selectServerRestore(): Promise<boolean|null> {
+export async function selectServerRestore(): Promise<{encrypted:boolean;fileName:string}|null> {
   const result=strictRecord(await requestDesktopServerRestore({action:"select"}),"백업 파일 선택");
   if(result.cancelled===true)return null;
   if(typeof result.encrypted!=="boolean")throw new Error("백업 파일 형식을 확인하지 못했어요.");
-  return result.encrypted;
+  return {encrypted:result.encrypted,fileName:typeof result.file_name==="string"?result.file_name:""};
 }
 export async function prepareServerRestore(passphrase:string|null) {
   if (!await serverRestoreAvailable()) throw new Error("현재 서버 복원을 시작할 수 없어요.");
