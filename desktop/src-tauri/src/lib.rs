@@ -527,8 +527,8 @@ fn workspace_selection(path: Option<std::path::PathBuf>) -> Result<WorkspaceSele
             path: String::new(),
         });
     };
-    let path = path
-        .canonicalize()
+    // The folder is shown to the person who picked it, so Windows' `\\?\` form is avoided.
+    let path = dunce::canonicalize(path)
         .map_err(|error| format!("workspace_picker_invalid_selection: {error}"))?;
     if !path.is_dir() {
         return Err("workspace_picker_invalid_selection: selection is not a directory".to_owned());
@@ -743,11 +743,10 @@ mod tests {
         let selected = workspace_selection(Some(directory.path().to_path_buf()))
             .unwrap_or_else(|error| panic!("select workspace fixture: {error}"));
         assert!(selected.selected);
-        let canonical = directory
-            .path()
-            .canonicalize()
+        let canonical = dunce::canonicalize(directory.path())
             .unwrap_or_else(|error| panic!("canonicalize workspace fixture: {error}"));
         assert_eq!(selected.path, canonical.to_string_lossy());
+        assert!(!selected.path.starts_with(r"\\?\"));
 
         let cancelled = workspace_selection(None)
             .unwrap_or_else(|error| panic!("cancel workspace fixture: {error}"));

@@ -414,6 +414,14 @@ export default function AgentCreateModal({
             selectedProvider.discovery_error_code === "authentication_required" &&
             <ProviderLogin key={selectedProvider.id} providerId={selectedProvider.id}
               displayName={selectedProvider.display_name} automatic onAuthenticated={() => void readUpdatedCatalog()} />}
+          {localProviderActions && selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id}
+            provider={selectedProvider} localAvailable={localProviderActions} onUpdated={() => void readUpdatedCatalog()}
+            onUpdating={(updating) => setUpdatingProviders((current) => {
+              const next = new Set(current);
+              if (updating) next.add(selectedProvider.id);
+              else next.delete(selectedProvider.id);
+              return next;
+            })} />}
           {selectedProvider && (
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">기본 정보</p>
@@ -500,14 +508,6 @@ export default function AgentCreateModal({
           {selectedProvider && (selectedProvider.controls.length > 0 || localProviderActions) && (
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">모델 · 실행 설정</p>
-              {localProviderActions && selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id}
-                provider={selectedProvider} localAvailable={localProviderActions} onUpdated={() => void readUpdatedCatalog()}
-                onUpdating={(updating) => setUpdatingProviders((current) => {
-                  const next = new Set(current);
-                  if (updating) next.add(selectedProvider.id);
-                  else next.delete(selectedProvider.id);
-                  return next;
-                })} />}
 
               <div className="dc-agent-field-grid dc-agent-field-grid--dual">
                 {requiresOpenCodeApproval(selectedProvider, settings) && (

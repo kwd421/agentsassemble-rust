@@ -29,3 +29,11 @@ it("stays out of the way of touch and of presses", () => {
   expect(screen.queryByRole("tooltip")).toBeNull();
   expect(reply.getAttribute("title")).toBe("답장");
 });
+
+it("adds nothing to a control that already shows the same words", () => {
+  render(<><TooltipLayer /><button title="Codex"><span>Codex</span><small>구독 에이전트</small></button></>);
+  const tile = screen.getByRole("button");
+  fireEvent.pointerOver(tile);
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  expect(tile.hasAttribute("title")).toBe(false);
+});

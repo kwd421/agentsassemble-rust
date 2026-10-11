@@ -3,6 +3,11 @@ import { createPortal } from "react-dom";
 
 const EDGE = 8;
 
+function clipped(element: HTMLElement) {
+  return [element, ...element.querySelectorAll<HTMLElement>("*")].slice(0, 24)
+    .some((node) => node.scrollWidth > node.clientWidth + 1);
+}
+
 // One styled hint for every control that names itself with `title` (or `data-tip`).
 // The native title is parked while the hint is up, so the system tooltip does not appear as well.
 export default function TooltipLayer() {
@@ -25,7 +30,8 @@ export default function TooltipLayer() {
       current = element;
       parked = element.getAttribute("title");
       element.removeAttribute("title");
-      setTip({ text, rect: element.getBoundingClientRect() });
+      // A control that already shows this text in full needs no hint.
+      if (!(element.textContent || "").includes(text) || clipped(element)) setTip({ text, rect: element.getBoundingClientRect() });
     };
     const over = (event: PointerEvent) => { if (event.pointerType !== "touch") show(event.target); };
     const focus = (event: FocusEvent) => {

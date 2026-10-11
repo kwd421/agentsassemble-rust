@@ -17,6 +17,7 @@ dependencies = [
  "cap-fs-ext",
  "cap-std",
  "chrono",
+ "dunce",
  "fs2",
  "nix",
  "open",

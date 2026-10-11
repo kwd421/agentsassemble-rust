@@ -25,7 +25,8 @@ it("preserves the creation draft and prevents creation during the selected CLI u
     onClose={vi.fn()} onCreate={vi.fn()} providers={[{ ...codexProvider(), update_supported: true }]} />);
   fireEvent.click(screen.getByRole("listitem", { name: /Codex/ }));
   const update = await screen.findByRole("button", { name: "업데이트" });
-  expect(screen.getByText("모델 · 실행 설정").closest("section")?.contains(update)).toBe(true);
+  // The offer belongs to the harness choice, so it comes before the fields it gates.
+  expect(Boolean(update.compareDocumentPosition(screen.getByText("기본 정보")) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "Update draft" } });
   let complete!: (value: typeof offer) => void;
   vi.mocked(providerUpdateOperation).mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
