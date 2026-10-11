@@ -1,5 +1,50 @@
 # Verification Contract
 
+## yaowhang3 실제 계정 탈퇴 E2E18 (2026-10-11)
+
+화면 제어로 지정된 UI Check 0.1.28과 기존 Firefox 사생활 보호 창만 검증했다.
+새로고침 후 ㅏㄴ나나 세션 유지, 외부 접속 공개 성공, 서버 목록 `연결 가능`,
+기존 멤버 `다시 연결` 성공. 탈퇴 전 메시지와 멤버 목록 캡처 후 설정 → 계정 →
+계정 탈퇴 → Google로 확인하고 탈퇴 → yaowhang3 선택 → `탈퇴했어요` 확인.
+비밀번호 요구 없음. 서버 앱에서 기존 `탈퇴 테스트 메시지`는 보존되고 작성자는
+`탈퇴한 사용자`, 사진/이니셜 없는 원으로 변경됐으며 멤버 목록에서 제거됐다.
+같은 Google 계정 재로그인은 탈퇴 안내와 별도 `새 계정 만들기` 버튼을 표시했다.
+가입 버튼은 누르지 않았다. Google 계정과 소유자 kwd421@gmail.com에는 변경,
+탈퇴, 로그아웃을 하지 않았고 Chrome을 조작하지 않았다. 코드/빌드 변경 없음.
+
+한계/이상 UI: AX에서 `탈퇴하는 중…`을 관찰했으나 첫 진행 캡처 시 이미 완료로
+전환됐다. **서버별 진행 상태 캡처는 미확보이며 전체 캡처 acceptance 완료로
+주장하지 않는다.** 완료 모달 배경에 이전 이름/멤버/메시지와 연결 재시도 배너가
+남았다. 확인 후에는 `서버 연결이 종료됐어요` 화면으로 이동했다. 재로그인 안내에는
+Google 계정 자체가 탈퇴한 것처럼 읽히는 문구와 일반 앱 시작 실패 오류가 함께 나온다.
+관찰한 오류/안내 전문:
+
+- `방 서버에 연결하지 못했어요. 연결을 다시 시도하고 있어요.`
+- `서버 연결이 종료됐어요` / `호스트와의 연결이 끊겼어요. 내 서버 목록에서 다시 연결해 주세요.`
+- `탈퇴한 Google 계정이에요. 새 계정을 만들면 이전 연결 관계를 이어받지 않아요.`
+- `앱을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.` (자세히: 위 탈퇴 안내 전문 반복)
+
+정리: 외부 접속 `꺼짐` 캡처, 지정 앱 정상 Command-Q 종료, 앱/자식 PID
+99935/3087/3113/7431 모두 없음, `pgrep -x cloudflared` exit 1(없음).
+Computer Use reset 완료, Firefox 그대로 실행 중. 기존 데이터/빌드 산출물 보존;
+새 isolated app data 생성 없음. 기록 문서만 커밋/푸시 대상으로 한다.
+
+캡처 경로: `/private/tmp/claude-501/-Users-seinel-Projects-AgentsAssemble-Rust/f43b6994-3778-4ca2-8834-d04c0c670717/scratchpad/e2e18/`
+
+- `00-server-external-access-open.png`
+- `01-firefox-server-connectable.png`
+- `02-server-message-and-members-before-deletion.png`
+- `03-deletion-initial.png`
+- `04-deletion-google-account-chooser.png`
+- `05-progress-capture-already-complete.png` (진행 캡처 시도이나 실제 이미지는 완료)
+- `06-deletion-complete.png`
+- `07-server-message-and-members-after-deletion.png`
+- `08-after-completion-connection-ended.png`
+- `09-deleted-account-google-login-chooser.png`
+- `10-deleted-account-notice-separate-signup.png`
+- `11-deleted-account-notice-error-details.png`
+- `12-cleanup-external-access-off.png`
+
 ## Google deletion step-up policy and E2E17 (2026-10-11)
 
 Owner accepted interactive Google account selection instead of password
