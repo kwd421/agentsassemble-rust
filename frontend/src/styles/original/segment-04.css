@@ -63,11 +63,7 @@
   background: var(--color-panel-separator);
 }
 
-/* Hover only hints at the handle; the accent line is reserved for an actual drag or keyboard focus. */
-.dc-sidebar-resizer:hover::after {
-  background: rgba(255, 255, 255, 0.12);
-}
-
+.dc-sidebar-resizer:hover::after,
 .dc-sidebar-resizer:focus-visible::after,
 body[data-sidebar-resizing="true"] .dc-sidebar-resizer::after {
   background: var(--color-accent);
