@@ -12,6 +12,7 @@ name = "integration"
 path = "tests/integration/main.rs"
 
 [dependencies]
+zeroize.workspace = true
 hex.workspace = true
 agentsassemble-domain = { path = "../agentsassemble-domain" }
 agentsassemble-persistence = { path = "../agentsassemble-persistence" }

@@ -29,8 +29,10 @@ impl RestoreJob {
         expected_epoch: &str,
         new_key_fingerprint: &str,
     ) -> Result<(), PersistenceError> {
-        if self.journal.phase != RestorePhase::Prepared
-            || expected_epoch.is_empty()
+        if !matches!(
+            self.journal.phase,
+            RestorePhase::Prepared | RestorePhase::SwitchUnknown
+        ) || expected_epoch.is_empty()
             || expected_epoch.len() > 128
             || new_key_fingerprint.len() != 43
         {

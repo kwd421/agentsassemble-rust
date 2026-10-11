@@ -1,3 +1,4 @@
+pub mod server_restore;
 macro_rules! http_method {
     (get) => {
         agentsassemble_protocol::HttpMethod::Get

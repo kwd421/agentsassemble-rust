@@ -38,6 +38,7 @@
     "allow-cache-selected-room-directory",
     "allow-choose-local-workspace",
     "allow-host-device-info",
+    "allow-server-restore",
     "allow-host-product-surface"
   ]
 }

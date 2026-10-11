@@ -248,6 +248,7 @@ dependencies = [
  "uuid",
  "which",
  "whoami",
+ "zeroize",
 ]
 
 [[package]]

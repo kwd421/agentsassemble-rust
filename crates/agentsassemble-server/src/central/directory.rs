@@ -413,7 +413,7 @@ pub(crate) async fn demote_host(
     stopped.map_err(CentralDirectoryError::Demotion)
 }
 
-fn normalize_base_url(value: &str) -> Result<Url, CentralDirectoryError> {
+pub(crate) fn normalize_base_url(value: &str) -> Result<Url, CentralDirectoryError> {
     let mut url = Url::parse(value.trim()).map_err(|_| CentralDirectoryError::InvalidUrl)?;
     let loopback = url.host_str().is_some_and(|host| {
         host.eq_ignore_ascii_case("localhost")

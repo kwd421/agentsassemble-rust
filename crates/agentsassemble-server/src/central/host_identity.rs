@@ -233,6 +233,25 @@ impl CentralHostIdentity {
         })
     }
 
+    pub(crate) fn restore_key(&self) -> Result<Value, HostIdentityError> {
+        serde_json::to_value(&self.public_jwk).map_err(HostIdentityError::Json)
+    }
+
+    pub(crate) fn sign_restore(&self, canonical: &[u8]) -> String {
+        URL_SAFE_NO_PAD.encode(self.key_pair.sign(canonical).as_ref())
+    }
+
+    pub(crate) fn verify_restore(&self, canonical: &[u8], signature: &str) -> bool {
+        URL_SAFE_NO_PAD.decode(signature).is_ok_and(|bytes| {
+            ring::signature::UnparsedPublicKey::new(
+                &ring::signature::ED25519,
+                self.key_pair.public_key().as_ref(),
+            )
+            .verify(canonical, &bytes)
+            .is_ok()
+        })
+    }
+
     pub(crate) fn server_id(&self) -> &str {
         &self.server_id
     }

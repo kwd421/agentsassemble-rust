@@ -61,6 +61,8 @@ struct Args {
     central_login_only: bool,
     #[arg(long, hide = true)]
     inspect_host_device: Option<PathBuf>,
+    #[arg(long, hide = true, conflicts_with_all = ["central_login_only", "runtime_preflight", "inspect_host_device", "reset_account_deleted_data", "restart_source"])]
+    server_restore: Option<PathBuf>,
     #[arg(long, hide = true, num_args = 0..=1, default_missing_value = "account-deletion", conflicts_with_all = ["central_login_only", "runtime_preflight", "inspect_host_device", "restart_source"])]
     reset_account_deleted_data: Option<OfflineMaintenance>,
     #[arg(long, default_value = ".agentsassemble-rust/runtime.sqlite3")]
@@ -106,6 +108,11 @@ fn main() -> anyhow::Result<()> {
         }))
         .init();
     let args = Args::parse();
+    if let Some(database) = &args.server_restore {
+        let result = runtime.block_on(agentsassemble_server::server_restore::run(database));
+        runtime.shutdown_timeout(Duration::from_secs(1));
+        return result;
+    }
     if args.reset_account_deleted_data.is_some() {
         let outcome = runtime.block_on(
             agentsassemble_persistence::SqliteStore::reset_deleted_account_data(&args.database),
