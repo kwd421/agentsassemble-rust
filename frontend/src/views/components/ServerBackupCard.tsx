@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
-import {isDesktopWebview,requestDesktopHostDeviceInfo,requestDesktopServerBackup} from "../../lib/desktopBridge";
-import {bootstrapCentral,fetchLocalServerInfo,loadCentralSession,type CentralServer} from "../../lib/central/identity";
+import {isDesktopWebview,requestDesktopServerBackup} from "../../lib/desktopBridge";
+import {bootstrapCentral,fetchLocalServerInfo,loadCentralSession,localHostingState,type CentralServer} from "../../lib/central/identity";
 import {strictRecord} from "../../lib/strictJsonContract";
 
 type Progress={operation_id:string;phase:string;snapshot_at:string|null;bytes:number|null;failure_reason?:string|null};
@@ -33,14 +33,14 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
   const [statusRetry,setStatusRetry]=useState(0);
   useEffect(()=>{let live=true;void (async()=>{try{
     const central=await bootstrapCentral();
-    const local=isDesktopWebview()?await requestDesktopHostDeviceInfo():null;
-    if(!local||local.hosting_state!==null||!local.server_id)return;
-    const identity=local?await fetchLocalServerInfo():null;
-    const owned=central?.servers.find(server=>server.relation==="owner"&&(!local||
-      (server.server_id===local.server_id&&identity?.server_id===local.server_id&&
-       Boolean(identity.host_key_fingerprint)&&server.host_key_fingerprint===identity.host_key_fingerprint)));
+    // Ask the running server about itself; a second reader on its open database is not reliable on Windows.
+    if(!isDesktopWebview())return;
+    const identity=await fetchLocalServerInfo();
+    if(!identity.server_id||await localHostingState(identity.server_id,"")!==null)return;
+    const owned=central?.servers.find(server=>server.relation==="owner"&&server.server_id===identity.server_id&&
+      Boolean(identity.host_key_fingerprint)&&server.host_key_fingerprint===identity.host_key_fingerprint);
     if(live)setOwner(owned||null);
-    if(local&&owned){const latest=await requestDesktopServerBackup({action:"latest"});if(live&&latest!==null)setProgress(parse(latest));}
+    if(owned){const latest=await requestDesktopServerBackup({action:"latest"});if(live&&latest!==null)setProgress(parse(latest));}
   }catch(reason){if(live)setError(reason instanceof Error?reason.message:String(reason));}finally{if(live)setChecked(true);}})();return()=>{live=false;};},[]);
   const running=Boolean(progress&&!['complete','failed','cancelled','interrupted'].includes(progress.phase));
   useEffect(()=>{
@@ -69,7 +69,7 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
   }
   const primary="min-h-10 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50";
   const quiet="min-h-10 px-2 text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50";
-  const field="mt-1 min-h-10 w-full rounded-md border border-white/10 bg-[#1e1f22] px-3 text-[13px] text-text-primary outline-none focus:border-[#5865f2]";
+  const field="mt-1 min-h-10 w-full rounded-md border border-white/10 bg-[#121214] px-3 text-[13px] text-text-primary outline-none focus:border-[#5865f2]";
   const label="grid text-[12px] font-bold text-text-muted";
   const check="flex min-h-8 items-center gap-2 text-[13px] text-text-primary";
   const hint="text-[12px] text-text-muted";

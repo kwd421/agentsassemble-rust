@@ -5,12 +5,12 @@ const native=vi.hoisted(()=>vi.fn());
 const local=vi.hoisted(()=>({server_id:"server",hosting_state:null as string|null,host_key_fingerprint:"current-key"}));
 vi.mock("../../lib/desktopBridge",()=>({
   isDesktopWebview:()=>true,
-  requestDesktopHostDeviceInfo:async()=>local,
   requestDesktopServerBackup:native,
 }));
 vi.mock("../../lib/central/identity",()=>({
   bootstrapCentral:async()=>({servers:[{server_id:"server",relation:"owner",alias:"Owner server",host_key_fingerprint:"current-key"}]}),
   fetchLocalServerInfo:async()=>local,
+  localHostingState:async()=>local.hosting_state,
   loadCentralSession:()=>({person:{person_id:"owner"}}),
 }));
 afterEach(()=>{cleanup();vi.useRealTimers();native.mockReset();local.hosting_state=null;local.host_key_fingerprint="current-key";});
