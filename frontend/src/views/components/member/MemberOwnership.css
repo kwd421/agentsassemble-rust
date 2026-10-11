@@ -9,53 +9,82 @@
   font-weight: 800;
 }
 
+/* A person's agents hang off that person's avatar with elbow connectors. */
 .dc-owner-agent-group {
+  position: relative;
   margin-bottom: 8px;
-  margin-left: 18px;
-  padding-left: 7px;
-  border-left: 1px solid rgba(148, 155, 164, 0.2);
+  margin-left: 24px;
+  padding-left: 12px;
 }
 
-.dc-owner-agent-heading {
-  display: flex;
-  width: fit-content;
-  align-items: center;
-  gap: 5px;
-  margin: 1px 0 2px;
-  padding: 3px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 800;
-  list-style: none;
+.dc-owner-agent-item {
+  position: relative;
 }
 
-.dc-owner-agent-heading::-webkit-details-marker {
-  display: none;
-}
-
-.dc-owner-agent-heading::before {
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
-  border-left: 4px solid currentColor;
+.dc-owner-agent-item::before {
+  position: absolute;
+  top: 0;
+  left: -12px;
+  width: 10px;
+  height: 50%;
+  border-bottom: 2px solid #474851;
+  border-left: 2px solid #474851;
+  border-bottom-left-radius: 6px;
   content: "";
-  transform: rotate(90deg);
 }
 
-.dc-owner-agent-group:not([open]) .dc-owner-agent-heading::before {
-  transform: rotate(0deg);
+.dc-owner-agent-item:not(:last-child)::after {
+  position: absolute;
+  top: 50%;
+  bottom: 0;
+  left: -12px;
+  border-left: 2px solid #474851;
+  content: "";
 }
 
-.dc-owner-agent-heading:hover,
-.dc-owner-agent-heading:focus-visible {
+/* The connector line doubles as the fold control. */
+.dc-owner-agent-spine {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 21px;
+  left: -5px;
+  width: 12px;
+  cursor: pointer;
+}
+
+.dc-owner-agent-group:has(.dc-owner-agent-spine:hover) .dc-owner-agent-item::before,
+.dc-owner-agent-group:has(.dc-owner-agent-spine:hover) .dc-owner-agent-item::after,
+.dc-owner-agent-group:has(.dc-owner-agent-spine:focus-visible) .dc-owner-agent-item::before,
+.dc-owner-agent-group:has(.dc-owner-agent-spine:focus-visible) .dc-owner-agent-item::after {
+  border-color: var(--color-text-muted);
+}
+
+.dc-owner-agent-spine:focus-visible {
+  outline: none;
+}
+
+.dc-owner-agent-more {
+  display: flex;
+  min-height: 32px;
+  width: 100%;
+  align-items: center;
+  border-radius: 8px;
+  padding: 0 8px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  text-align: left;
+}
+
+.dc-owner-agent-more:hover,
+.dc-owner-agent-more:focus-visible {
   background: var(--color-sidebar-hover);
   color: var(--color-text-secondary);
   outline: none;
 }
 
 .dc-owner-agent-list .dc-member {
-  padding-left: 6px;
+  padding-left: 8px;
 }
 
 @media (max-width: 760px) {

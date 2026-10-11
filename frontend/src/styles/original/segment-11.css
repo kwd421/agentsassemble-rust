@@ -360,7 +360,7 @@
   width: 100%;
   max-width: 760px;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -372,58 +372,62 @@
   line-height: 20px;
 }
 
-.dc-computer-metric {
+/* One quiet line of totals above the list, the way a task manager shows them. */
+.dc-computer-summary-line {
   display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-  border: 1px solid var(--color-panel-border);
-  border-radius: 8px;
-  background: var(--color-panel);
-  padding: 12px 16px;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  color: var(--color-text-normal);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
-.dc-computer-metric strong {
-  color: var(--color-text-primary);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 28px;
+.dc-computer-summary-line > div {
+  display: flex;
+  gap: 8px;
 }
 
-.dc-computer-meter {
-  height: 4px;
-  overflow: hidden;
-  margin-top: 8px;
-  border-radius: 999px;
-  background: var(--color-chat-hover);
-}
-
-.dc-computer-meter span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--color-accent);
+.dc-computer-summary-line dt,
+.dc-computer-summary-line dd span {
+  color: var(--color-text-muted);
 }
 
 .dc-computer-table {
   width: 100%;
-  margin-top: 8px;
-  font-size: 14px;
+  margin-top: 12px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   text-align: left;
 }
 
 .dc-computer-table th {
-  padding: 8px 0;
+  padding: 6px 0;
   color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 600;
 }
 
+.dc-computer-table th {
+  border-bottom: 1px solid var(--color-panel-separator);
+}
+
 .dc-computer-table td {
-  border-top: 1px solid var(--color-panel-separator);
-  padding: 10px 0;
+  padding: 5px 0;
   color: var(--color-text-normal);
+}
+
+.dc-computer-table th:first-child,
+.dc-computer-table td:first-child {
+  padding-left: 8px;
+}
+
+.dc-computer-table th:last-child,
+.dc-computer-table td:last-child {
+  padding-right: 8px;
+}
+
+.dc-computer-table tbody tr:hover {
+  background: var(--color-chat-hover);
 }
 
 .dc-computer-table th:not(:first-child),
@@ -433,10 +437,8 @@
 }
 
 .dc-computer-card {
-  border: 1px solid var(--color-panel-border);
-  border-radius: 8px;
-  background: var(--color-panel);
-  padding: 16px;
+  border-top: 1px solid var(--color-panel-separator);
+  padding-top: 20px;
 }
 
 .dc-computer-summary {

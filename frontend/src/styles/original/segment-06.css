@@ -5,7 +5,8 @@
   z-index: auto;
   display: flex;
   flex-direction: column;
-  width: clamp(220px, 24%, 264px);
+  width: var(--dc-members-width, 300px);
+  max-width: 60%;
   min-width: 0;
   border-left: 1px solid var(--color-panel-separator);
   background: var(--color-chat-bg);
@@ -13,6 +14,32 @@
 
 .dc-compact-panel-close {
   display: none;
+}
+
+/* Drag handle on the panel's left edge; the same look as the sidebar handle. */
+.dc-members-resizer {
+  position: absolute;
+  z-index: 61;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.dc-members-resizer::after {
+  position: absolute;
+  inset: 0 3px;
+  content: "";
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.dc-members-resizer:hover::after,
+.dc-members-resizer:focus-visible::after {
+  background: var(--color-accent);
 }
 
 .dc-right-panel-tabs {

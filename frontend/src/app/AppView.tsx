@@ -5,7 +5,7 @@ import CreateChannelModal from "../views/components/CreateChannelModal";
 import CustomChannelView from "../views/CustomChannelView";
 import { isCustomChannelId } from "../lib/customChannelId";
 import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
-import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Bell,
   CalendarDays,
@@ -31,12 +31,14 @@ import RoomRail, { MOBILE_ROOM_RAIL_WIDTH } from "../views/components/RoomRail";
 import RoomSyncNotice from "../views/components/RoomSyncNotice";
 import UserPanel from "../views/components/UserPanel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel";
+import { RIGHT_PANEL_WIDTH_MAX, RIGHT_PANEL_WIDTH_MIN, useRightPanelResize } from "./useRightPanelResize";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
 const FriendsView = lazy(() => import("../views/FriendsView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
+  const rightPanel = useRightPanelResize();
   const [createRoomOpen, setCreateRoomOpen] = useState(false);
   const [roomName, setRoomName] = useState("새 방");
   const [friendsOpen, setFriendsOpen] = useState(false);
@@ -526,9 +528,12 @@ export default function AppView({ controller }: { controller: AppController }) {
         <aside
           className="dc-members hidden shrink-0 xl:flex xl:flex-col"
           aria-label="방 연결 정보"
-          style={{ marginTop: persistentRail ? 48 : 0 }}
+          style={{ marginTop: persistentRail ? 48 : 0, "--dc-members-width": `${rightPanel.width}px` } as CSSProperties}
           data-testid="room-right-panel"
         >
+          <div className="dc-members-resizer" role="separator" tabIndex={0} aria-label="우측 패널 너비 조절"
+            aria-orientation="vertical" aria-valuemin={RIGHT_PANEL_WIDTH_MIN} aria-valuemax={RIGHT_PANEL_WIDTH_MAX}
+            aria-valuenow={rightPanel.width} onPointerDown={rightPanel.start} onKeyDown={rightPanel.adjustWithKeyboard} />
           <button type="button" className="dc-compact-panel-close" aria-label="멤버 목록 닫기" onClick={toggleRoomInfo}><X size={18} /></button>
           <section
             id="room-info-panel"
@@ -563,7 +568,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           </section>
         </aside>
       )}
-      {sideChatOpen && !friendsVisible && <aside className="dc-members shrink-0" aria-label="사이드챗 패널" style={{ marginTop: persistentRail ? 48 : 0, borderLeft: "1px solid var(--color-panel-separator)" }}>
+      {sideChatOpen && !friendsVisible && <aside className="dc-members shrink-0" aria-label="사이드챗 패널" style={{ marginTop: persistentRail ? 48 : 0, "--dc-members-width": `${rightPanel.width}px` } as CSSProperties}>
         <SideChatDock open onOpenChange={setSideChatOpen}
           chat={controller.sideChat} socket={roomSocket} canPost={canPostHumanMessage} mentionables={scopedMentionables} />
       </aside>}

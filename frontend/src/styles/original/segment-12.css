@@ -15,6 +15,10 @@
     box-shadow: -18px 0 30px rgba(0, 0, 0, 0.36);
   }
 
+  .dc-members-resizer {
+    display: none;
+  }
+
   .dc-compact-panel-close {
     display: grid;
     width: 44px;
