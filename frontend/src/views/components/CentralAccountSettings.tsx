@@ -1,3 +1,4 @@
+import ServerBackupCard from "./ServerBackupCard";
 import AccountDeletionSettings from "./AccountDeletionSettings";
 import { useEffect, useRef, useState } from "react";
 import { CENTRAL_SESSION_CLEARED_EVENT, CENTRAL_SESSION_CHANGED_EVENT, centralAccountEntryUrl, centralIdentityConfigured, loadCentralSession, logoutCentral } from "../../lib/central/identity";
@@ -39,6 +40,7 @@ export default function CentralAccountSettings({ disabled }: { disabled: boolean
     <button type="button" className="ops-button" style={{ minHeight: 44 }} disabled={disabled || busy} onClick={() => void logout()}>
       {busy ? "로그아웃 중…" : "로그아웃"}
     </button>
+    <ServerBackupCard disabled={disabled || busy} />
     <AccountDeletionSettings disabled={disabled || busy} />
     {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
   </section>;

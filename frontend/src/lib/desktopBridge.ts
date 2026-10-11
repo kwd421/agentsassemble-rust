@@ -200,6 +200,20 @@ export async function requestDesktopHostProductSurface(): Promise<HostProductSur
   return structuredClone(surface);
 }
 
+export async function requestDesktopServerBackup(request: Record<string,unknown>): Promise<unknown> {
+  const tauri = tauriInternals();
+  if (!tauri) throw new Error("서버 백업은 이 기기의 앱에서 저장해 주세요.");
+  requireDesktopHostCommand("server_backup");
+  return tauri.invoke("server_backup", {request});
+}
+
+export async function requestDesktopServerRestore(request: Record<string,unknown>): Promise<unknown> {
+  const tauri = tauriInternals();
+  if (!tauri) throw new Error("서버 백업을 복원하려면 이 기기의 앱을 열어 주세요.");
+  requireDesktopHostCommand("server_restore");
+  return tauri.invoke("server_restore", {request});
+}
+
 export async function requestDesktopHostDeviceInfo(): Promise<HostInstallationInfo["device"] & { hosting_state: "device" | "retired" | "account_deleted" | null }> {
   const tauri = tauriInternals();
   if (!tauri) throw new Error("이 기기의 앱에서 서버 정보를 확인해 주세요.");

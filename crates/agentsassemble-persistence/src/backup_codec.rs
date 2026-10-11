@@ -260,16 +260,7 @@ pub fn encode(
     Ok(())
 }
 
-/// Decode only into private staging. The output is untrusted until this returns;
-/// even afterwards import must domain-decode it into a newly created database.
-/// # Errors
-/// Rejects unknown header/manifest fields, excessive KDF/record lengths, bad tags,
-/// truncation, reordering, wrong passwords, missing final tag and trailing data.
-pub fn decode(
-    input: &mut impl Read,
-    output: &mut impl Write,
-    passphrase: Option<&[u8]>,
-) -> Result<BackupManifest, BackupError> {
+fn read_header(input: &mut impl Read) -> Result<(Header, Vec<u8>), BackupError> {
     let mut magic = [0; 8];
     input.read_exact(&mut magic)?;
     if &magic != MAGIC {
@@ -282,6 +273,30 @@ pub fn decode(
     }
     let mut associated = magic.to_vec();
     write_record(&mut associated, &header_bytes)?;
+    if let Some(encryption) = &header.encryption {
+        encryption.kdf.validate()?;
+    }
+    Ok((header, associated))
+}
+
+/// Inspect the bounded untrusted header solely to ask for a passphrase.
+/// # Errors
+/// Rejects unsupported versions, unknown fields and excessive KDF parameters.
+pub fn encryption_required(input: &mut impl Read) -> Result<bool, BackupError> {
+    Ok(read_header(input)?.0.encryption.is_some())
+}
+
+/// Decode only into private staging. The output is untrusted until this returns;
+/// even afterwards import must domain-decode it into a newly created database.
+/// # Errors
+/// Rejects unknown header/manifest fields, excessive KDF/record lengths, bad tags,
+/// truncation, reordering, wrong passwords, missing final tag and trailing data.
+pub fn decode(
+    input: &mut impl Read,
+    output: &mut impl Write,
+    passphrase: Option<&[u8]>,
+) -> Result<BackupManifest, BackupError> {
+    let (header, associated) = read_header(input)?;
     let mut cipher = match header.encryption {
         Some(encryption) => {
             encryption.kdf.validate()?;

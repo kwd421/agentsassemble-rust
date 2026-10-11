@@ -4,6 +4,9 @@ use std::{process::Stdio, time::Duration};
 use tauri::{Manager, WebviewWindow};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+#[derive(Default)]
+pub(crate) struct SelectedBackup(std::sync::Mutex<Option<std::path::PathBuf>>);
+
 #[tauri::command]
 pub(crate) async fn server_restore(
     window: WebviewWindow,
@@ -14,10 +17,10 @@ pub(crate) async fn server_restore(
         .get("action")
         .and_then(Value::as_str)
         .ok_or("복원 요청이 올바르지 않아요.")?;
-    if action == "prepare" {
-        if request.get("file").is_some() {
-            return Err("백업 파일은 파일 선택 창에서 선택해 주세요.".into());
-        }
+    if request.get("file").is_some() {
+        return Err("백업 파일은 파일 선택 창에서 선택해 주세요.".into());
+    }
+    if action == "select" {
         let selected = rfd::AsyncFileDialog::new()
             .add_filter("AgentsAssemble 서버 백업", &["aaserver"])
             .pick_file()
@@ -25,7 +28,22 @@ pub(crate) async fn server_restore(
         let Some(selected) = selected else {
             return Ok(json!({"cancelled":true}));
         };
-        request["file"] = json!(selected.path());
+        let path = selected.path().to_owned();
+        *window
+            .state::<SelectedBackup>()
+            .0
+            .lock()
+            .map_err(|_| "파일 선택 상태를 확인하지 못했어요.")? = Some(path.clone());
+        request = json!({"action":"probe","file":path});
+    } else if action == "prepare" {
+        let path = window
+            .state::<SelectedBackup>()
+            .0
+            .lock()
+            .map_err(|_| "파일 선택 상태를 확인하지 못했어요.")?
+            .clone()
+            .ok_or("백업 파일을 먼저 선택해 주세요.")?;
+        request["file"] = json!(path);
     }
     let app_data = window
         .app_handle()
@@ -75,7 +93,7 @@ pub(crate) async fn server_restore(
             let response: Value =
                 serde_json::from_slice(&output).map_err(|_| "복원 응답이 올바르지 않아요.")?;
             if response.get("ok").and_then(Value::as_bool) != Some(true) {
-                return Err("복원 작업을 완료하지 못했어요. 백업 파일·암호·로그인 상태를 확인하고 작업 상태를 다시 확인해 주세요.".into());
+                return Err(restore_error(&response).into());
             }
             Ok(response["result"].clone())
         }
@@ -83,6 +101,29 @@ pub(crate) async fn server_restore(
             let _ = child.kill().await;
             let _ = child.wait().await;
             Err("복원 응답을 확인하지 못했어요. 작업 상태를 다시 확인해 주세요.".into())
+        }
+    }
+}
+
+fn restore_error(response: &Value) -> &'static str {
+    match response.get("error").and_then(Value::as_str) {
+        Some("restore_target_not_empty") => {
+            "이 기기에 이미 서버 데이터가 있어요. 데이터가 없는 새 기기에서 가져와 주세요."
+        }
+        Some("restore_pending") => {
+            "진행 중인 복원 작업이 있어요. 작업 상태를 확인하고 재개해 주세요."
+        }
+        Some("backup_authentication_failed") => {
+            "비밀번호가 맞지 않거나 백업 파일이 손상됐어요. 비밀번호를 확인해 주세요."
+        }
+        Some("backup_invalid") => {
+            "지원하지 않는 형식이거나 손상된 백업이에요. 최신 앱과 원본 파일을 확인해 주세요."
+        }
+        Some("backup_io_failed") => {
+            "백업 파일을 읽거나 저장하지 못했어요. 파일 접근 권한과 남은 공간을 확인해 주세요."
+        }
+        _ => {
+            "복원 작업을 완료하지 못했어요. 백업 파일·암호·로그인 상태를 확인하고 작업 상태를 다시 확인해 주세요."
         }
     }
 }
@@ -99,7 +140,10 @@ pub(crate) async fn server_backup(
         }
         let selected = rfd::AsyncFileDialog::new()
             .add_filter("AgentsAssemble 서버 백업", &["aaserver"])
-            .set_file_name("server-backup.aaserver")
+            .set_file_name(format!(
+                "server-backup-{}.aaserver",
+                chrono::Utc::now().format("%Y-%m-%d")
+            ))
             .save_file()
             .await;
         let Some(selected) = selected else {

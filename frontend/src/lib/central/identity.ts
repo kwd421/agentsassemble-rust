@@ -447,13 +447,7 @@ export async function signedRequest<T>(
   return responsePayload<T>(await signedFetch(session, path, method, bodyValue, signal), true, signal);
 }
 
-async function signedFetch(
-  session: CentralSession,
-  path: string,
-  method: "GET" | "POST" | "DELETE",
-  bodyValue?: Record<string, unknown>,
-  signal?: AbortSignal
-): Promise<Response> {
+export async function signCentralNativeRequest(session: CentralSession, path: string, method: "GET" | "POST" | "DELETE", body = ""): Promise<Record<string,string>> {
   const device = await storedDevice();
   if (device.deviceId !== session.device_id) {
     if (loadCentralSession()?.token === session.token) clearCentralSession();
@@ -461,7 +455,6 @@ async function signedFetch(
       "이 기기의 로그인 키가 바뀌었어요. 다시 로그인해 주세요."
     );
   }
-  const body = bodyValue ? JSON.stringify(bodyValue) : "";
   const timestamp = Math.floor(Date.now() / 1000);
   const nonce = randomUrlToken(18);
   const canonical = [
@@ -479,14 +472,7 @@ async function signedFetch(
     device.privateKey,
     new TextEncoder().encode(canonical)
   );
-  const response = await fetchCentral(`${configuredUrl()}${path}`, {
-    method,
-    mode: "cors",
-    cache: "no-store",
-    credentials: "omit",
-    redirect: "error",
-    referrerPolicy: "no-referrer",
-    headers: {
+  return {
       authorization: `Bearer ${session.token}`,
       "content-type": "application/json",
       "x-aa-admission-protocol": "secure_admission_v1",
@@ -494,13 +480,32 @@ async function signedFetch(
       "x-aa-timestamp": String(timestamp),
       "x-aa-nonce": nonce,
       "x-aa-signature": encodeBase64Url(signature),
-    },
+    };
+}
+
+async function signedFetch(
+  session: CentralSession,
+  path: string,
+  method: "GET" | "POST" | "DELETE",
+  bodyValue?: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<Response> {
+  const body = bodyValue ? JSON.stringify(bodyValue) : "";
+  const headers = await signCentralNativeRequest(session,path,method,body);
+  const response = await fetchCentral(`${configuredUrl()}${path}`, {
+    method,
+    mode: "cors",
+    cache: "no-store",
+    credentials: "omit",
+    redirect: "error",
+    referrerPolicy: "no-referrer",
+    headers,
     body: body || undefined,
     signal,
   });
   if (response.status === 401 && loadCentralSession()?.token === session.token) {
     const failure = await response.clone().json().catch(() => null);
-    const stepUpFailure = path === "/v1/account/deletion-proof" && [
+    const stepUpFailure = (path === "/v1/account/deletion-proof" || path.endsWith("/restore-proof")) && [
       "fresh_google_authentication_required", "account_deletion_identity_mismatch",
       "account_deletion_reauth_required", "invalid_handoff", "invalid_google_authorization",
     ].includes(failure?.error?.code);

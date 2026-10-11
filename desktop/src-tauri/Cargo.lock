@@ -16,6 +16,7 @@ dependencies = [
  "agentsassemble-protocol",
  "cap-fs-ext",
  "cap-std",
+ "chrono",
  "fs2",
  "nix",
  "open",

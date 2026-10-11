@@ -22,6 +22,9 @@ use zeroize::Zeroizing;
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 enum Request {
     Inspect,
+    Probe {
+        file: PathBuf,
+    },
     Prepare {
         file: PathBuf,
         passphrase: Option<String>,
@@ -39,6 +42,9 @@ enum Request {
         operation_id: uuid::Uuid,
         body: String,
         headers: BTreeMap<String, String>,
+    },
+    StatusDraft {
+        operation_id: uuid::Uuid,
     },
     Status {
         operation_id: uuid::Uuid,
@@ -65,7 +71,7 @@ pub async fn run(target: &Path) -> anyhow::Result<()> {
         Ok(value) => json!({"ok":true,"result":value}),
         // Neither provider content nor credential-bearing request/response bytes
         // are emitted by the private control protocol.
-        Err(_) => json!({"ok":false,"error":"server_restore_failed"}),
+        Err(error) => json!({"ok":false,"error":error_code(&error)}),
     };
     let encoded = serde_json::to_vec(&output)?;
     ensure!(encoded.len() <= 32768, "restore response too large");
@@ -73,9 +79,31 @@ pub async fn run(target: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn error_code(error: &anyhow::Error) -> &'static str {
+    use agentsassemble_persistence::PersistenceError;
+    use backup_codec::BackupError;
+    if let Some(error) = error.downcast_ref::<PersistenceError>() {
+        return match error {
+            PersistenceError::InitializationNotAllowed => "restore_target_not_empty",
+            PersistenceError::RestorePending => "restore_pending",
+            PersistenceError::InvalidBackup => "backup_invalid",
+            _ => "server_restore_failed",
+        };
+    }
+    match error.downcast_ref::<BackupError>() {
+        Some(BackupError::Authentication) => "backup_authentication_failed",
+        Some(BackupError::Invalid | BackupError::Manifest) => "backup_invalid",
+        Some(BackupError::Io(_)) => "backup_io_failed",
+        _ => "server_restore_failed",
+    }
+}
+
 async fn execute(target: &Path, request: Request) -> anyhow::Result<Value> {
     match request {
         Request::Inspect => Ok(serde_json::to_value(RestoreJob::inspect(target)?)?),
+        Request::Probe { file } => Ok(
+            json!({"encrypted": backup_codec::encryption_required(&mut std::fs::File::open(file)?)?}),
+        ),
         Request::Prepare { file, passphrase } => prepare(target, file, passphrase).await,
         Request::Bind {
             operation_id,
@@ -129,22 +157,16 @@ async fn execute(target: &Path, request: Request) -> anyhow::Result<Value> {
             accept_receipt(&mut job, &response).await?;
             Ok(response)
         }
+        Request::StatusDraft { operation_id } => {
+            let job = RestoreJob::resume(target, operation_id)?;
+            Ok(
+                json!({"path":path(&job,&format!("restore-operations/{operation_id}"))?,"body":status_body(&job)?}),
+            )
+        }
         Request::Status {
             operation_id,
             headers,
-        } => {
-            let mut job = RestoreJob::resume(target, operation_id)?;
-            let response = send(
-                &path(&job, &format!("restore-operations/{operation_id}"))?,
-                None,
-                headers,
-            )
-            .await?;
-            if response.get("status").and_then(Value::as_str) == Some("committed") {
-                accept_receipt(&mut job, &response).await?;
-            }
-            Ok(response)
-        }
+        } => recover_status(target, operation_id, headers).await,
         Request::Activate { operation_id } => {
             let mut job = RestoreJob::resume(target, operation_id)?;
             job.activate().await?;
@@ -155,6 +177,33 @@ async fn execute(target: &Path, request: Request) -> anyhow::Result<Value> {
             Ok(Value::Null)
         }
     }
+}
+
+async fn recover_status(
+    target: &Path,
+    operation_id: uuid::Uuid,
+    headers: std::collections::BTreeMap<String, String>,
+) -> anyhow::Result<Value> {
+    let mut job = RestoreJob::resume(target, operation_id)?;
+    let response = send(
+        &path(&job, &format!("restore-operations/{operation_id}"))?,
+        Some(&status_body(&job)?),
+        headers,
+    )
+    .await?;
+    if response.get("status").and_then(Value::as_str) == Some("not_committed") {
+        job.record_not_committed(
+            response["operation_id"]
+                .as_str()
+                .context("missing operation")?,
+            response["expected_epoch"]
+                .as_str()
+                .context("missing epoch")?,
+        )?;
+    } else {
+        accept_receipt(&mut job, &response).await?;
+    }
+    Ok(response)
 }
 
 async fn prepare(
@@ -201,6 +250,15 @@ async fn prepare(
 fn central() -> anyhow::Result<url::Url> {
     Ok(crate::central::directory::normalize_base_url(
         &std::env::var("AGENTSASSEMBLE_CENTRAL_URL")?,
+    )?)
+}
+fn status_body(job: &RestoreJob) -> anyhow::Result<String> {
+    ensure!(
+        job.journal().phase == RestorePhase::SwitchUnknown,
+        "invalid status phase"
+    );
+    Ok(serde_json::to_string(
+        &json!({"expected_epoch":job.journal().expected_epoch}),
     )?)
 }
 async fn identity(job: &RestoreJob) -> anyhow::Result<CentralHostIdentity> {

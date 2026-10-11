@@ -635,6 +635,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(LocalRuntime::default())
+        .manage(server_move::SelectedBackup::default())
         .manage(registered_host_product_surface())
         .invoke_handler(registered_invoke_handler!())
         .setup(|app| {
