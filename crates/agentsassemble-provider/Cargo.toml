@@ -53,6 +53,7 @@ sysinfo.workspace = true
 sysctl.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+windows.workspace = true
 interprocess = { version = "2.4.4", features = ["tokio"] }
 processkit = { version = "3.3.4", default-features = false, features = ["process-control"] }
 windows-sys.workspace = true

@@ -59,6 +59,9 @@ const WINDOWS_SCRIPT: &str = "$ErrorActionPreference = 'Stop'; Start-Process -Fi
 
 fn private_command(program: &str) -> Command {
     let mut command = Command::new(program);
+    // Hide only the launcher; Start-Process still opens the requested login terminal.
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     sanitize_environment(&mut command);
     command
         .stdin(Stdio::null())

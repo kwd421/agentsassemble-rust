@@ -108,7 +108,10 @@ impl RuntimeImage {
     }
 
     async fn preflight(&self) -> anyhow::Result<()> {
-        let mut child = tokio::process::Command::new(&self.path)
+        let mut command = tokio::process::Command::new(&self.path);
+        #[cfg(windows)]
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        let mut child = command
             .arg(format!("--{PREFLIGHT_ARGUMENT}"))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())

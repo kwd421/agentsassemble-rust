@@ -125,7 +125,11 @@ impl ClaudeSdkRuntime {
         });
         sanitize_environment(command.command_mut());
         command.wrap(KillOnDrop);
-        command.wrap(JobObject);
+        command
+            .wrap(process_wrap::tokio::CreationFlags(
+                windows::Win32::System::Threading::CREATE_NO_WINDOW,
+            ))
+            .wrap(JobObject);
         let Ok(mut child) = command.spawn() else {
             let failure = DriverLaunchError::safe(spawn_error());
             return Err(launch_cleanup::portal(&mut room_portal, failure).await);

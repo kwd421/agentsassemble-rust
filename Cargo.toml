@@ -41,7 +41,7 @@ zeroize = "1.8.2"
 mime_guess = "2.0.5"
 parking_lot = "0.12.5"
 png = "0.18.1"
-process-wrap = { version = "9.1.0", default-features = false, features = ["job-object", "kill-on-drop", "process-group", "tokio1"] }
+process-wrap = { version = "9.1.0", default-features = false, features = ["creation-flags", "job-object", "kill-on-drop", "process-group", "tokio1"] }
 security-framework = { git = "https://github.com/kwd421/rust-security-framework", rev = "85407d113b978b27728e162c8485c11e233c3e3e" }
 security-framework-sys = { git = "https://github.com/kwd421/rust-security-framework", rev = "85407d113b978b27728e162c8485c11e233c3e3e" }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -73,6 +73,7 @@ uuid = { version = "1.24.1", features = ["serde", "v4", "v5"] }
 url = "2.5.7"
 tempfile = "3.27.0"
 toml = "0.9.12"
+windows = { version = "0.62.2", features = ["Win32_System_Threading"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 which = "8.0.6"
 zip = { version = "8.0.0", default-features = false, features = ["bzip2", "deflate-flate2-zlib-rs", "lzma"] }

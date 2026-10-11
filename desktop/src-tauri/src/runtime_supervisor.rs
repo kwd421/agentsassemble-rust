@@ -1,3 +1,6 @@
+//! Packaged runtime contract: Google login, normal startup and account maintenance
+//! run console helpers without allocating a Windows console. Preserve private pipes,
+//! process custody, retries and shutdown; macOS/Linux launch behavior is unchanged.
 use std::{
     io::{self, BufRead, BufReader, Write},
     path::PathBuf,
@@ -18,6 +21,8 @@ use executable_staging::RuntimeExecutableStaging;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 const SUPERVISOR_FLAG: &str = "--agentsassemble-runtime-supervisor";
 #[cfg(target_os = "macos")]
@@ -63,6 +68,8 @@ fn command_for_desktop(
         std::env::consts::EXE_SUFFIX
     ));
     let mut command = Command::new(helper);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     command.arg(SUPERVISOR_FLAG).arg(executable);
     #[cfg(unix)]
     command.process_group(0);
@@ -108,6 +115,8 @@ pub(crate) fn reset_account_data(
     #[cfg(target_os = "macos")]
     let executable = binding.launch_path();
     let mut command = Command::new(executable);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     command
         .arg("--reset-account-deleted-data")
         .arg("--database")
@@ -180,6 +189,8 @@ fn supervise(executable: &std::path::Path, arguments: &[std::ffi::OsString]) -> 
     #[cfg(target_os = "macos")]
     let executable = bound_executable.launch_path();
     let mut command = Command::new(executable);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     command
         .args(arguments)
         .arg("--restart-source")

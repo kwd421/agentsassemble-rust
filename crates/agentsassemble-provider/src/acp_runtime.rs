@@ -111,7 +111,11 @@ impl AcpRuntime {
         command.command_mut().envs(environment.iter().cloned());
         command.wrap(KillOnDrop);
         #[cfg(windows)]
-        command.wrap(JobObject);
+        command
+            .wrap(process_wrap::tokio::CreationFlags(
+                windows::Win32::System::Threading::CREATE_NO_WINDOW,
+            ))
+            .wrap(JobObject);
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(error) => {

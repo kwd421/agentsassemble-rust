@@ -167,7 +167,11 @@ fn spawn_probe(
     #[cfg(unix)]
     command.wrap(ProcessGroup::leader());
     #[cfg(windows)]
-    command.wrap(JobObject);
+    command
+        .wrap(process_wrap::tokio::CreationFlags(
+            windows::Win32::System::Threading::CREATE_NO_WINDOW,
+        ))
+        .wrap(JobObject);
     match command.spawn() {
         Ok(child) => Ok(child),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Err(ProbeFailure::Missing),

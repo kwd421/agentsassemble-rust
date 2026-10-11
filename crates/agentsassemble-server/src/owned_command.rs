@@ -86,7 +86,11 @@ pub(crate) fn owned_command(executable: &Path) -> CommandWrap {
     #[cfg(unix)]
     command.wrap(ProcessGroup::leader());
     #[cfg(windows)]
-    command.wrap(JobObject);
+    command
+        .wrap(process_wrap::tokio::CreationFlags(
+            windows::Win32::System::Threading::CREATE_NO_WINDOW,
+        ))
+        .wrap(JobObject);
     command
 }
 
