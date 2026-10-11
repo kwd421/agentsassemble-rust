@@ -22,21 +22,19 @@ it("recovers the runtime job on remount and restarts status observation after tr
   expect(screen.getByRole("status").textContent).toContain("백업 파일을 만들고 있어요");
   await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
   expect(screen.getByRole("alert").textContent).toContain("connection lost");
-  await act(async()=>{fireEvent.click(screen.getByText("진행 상태 다시 확인"));});
+  await act(async()=>{fireEvent.click(screen.getByText("다시 확인"));});
   await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
-  expect(screen.getByRole("status").textContent).toContain("백업 파일을 저장했어요");
+  expect(screen.getByRole("status").textContent).toContain("저장했어요");
   expect(native.mock.calls.map(([request])=>request.action)).toEqual(["latest","status","latest","status"]);
-  expect(screen.queryByText("백업 취소")).toBeNull();
+  expect(screen.queryByText("취소")).toBeNull();
 });
 
 it("shows loading until backup status arrives, then explains a bounded failure",async()=>{
   let resolve!:(value:unknown)=>void;
   native.mockReturnValueOnce(new Promise(done=>{resolve=done;}));
   render(<ServerBackupCard disabled={false}/>);
-  expect(screen.getByRole("status").textContent).toContain("불러오고 있어요");
+  expect(screen.getByRole("status").textContent).toContain("불러오는 중이에요");
   await act(async()=>{await Promise.resolve();});
   await act(async()=>{resolve({operation_id:"abcdefab-1234-1234-1234-123456789abc",phase:"failed",snapshot_at:null,bytes:null,failure_reason:"storage_full"});});
   expect(screen.getByRole("status").textContent).toContain("저장 공간이 부족해요");
-  expect(screen.getByLabelText("비밀번호").className).toContain("ops-input");
-  expect(screen.getByLabelText("비밀번호 확인").className).toContain("ops-input");
 });

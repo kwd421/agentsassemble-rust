@@ -476,12 +476,12 @@ export default function StartupIdentityGate({
                 ? hostingState === "retired" ? "이 컴퓨터는 더 이상 이 계정의 서버가 아니에요" : ownerConflict ? "남길 서버를 선택해 주세요" : ownedServer ? `이 계정의 서버는 ‘${ownedServer.alias}’예요` : "서버 목록"
                 : "먼저 로그인해 주세요"}
           </h1>
-          <p className="text-[13px] font-semibold leading-5 text-text-muted">
+          <p className="text-[13px] font-semibold leading-5 text-text-muted empty:hidden">
             {screen === "recovery-code"
-              ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요해요. 로그인 서버에는 코드 원문을 저장하지 않아요."
+              ? "다른 기기에서 이 게스트 계정을 되찾을 때 필요해요."
               : screen === "servers"
-                ? "서버 컴퓨터가 켜져 있고 외부 접속이 열려 있어야 다른 컴퓨터에서 열 수 있어요."
-              : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용해요. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남아요."}
+                ? ""
+              : "대화는 방을 여는 컴퓨터에만 저장돼요."}
           </p>
         </header>
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}

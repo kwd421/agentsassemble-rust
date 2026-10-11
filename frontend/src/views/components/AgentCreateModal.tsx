@@ -591,8 +591,8 @@ export default function AgentCreateModal({
               <strong>{startNow ? "추가하고 바로 실행" : "목록에만 추가"}</strong>
               <em>
                 {startNow
-                  ? "추가와 동시에 세션이 켜져요."
-                  : "카드에서 언제든 켤 수 있어요."}
+                  ? ""
+                  : "나중에 카드에서 켜요."}
               </em>
             </span>
           </button>

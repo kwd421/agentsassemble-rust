@@ -35,8 +35,6 @@ export default function CentralAccountSettings({ disabled, showEntryLink = true 
   return <section className="dc-guest-recovery-settings" style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid var(--color-panel-border)" }} aria-label="앱 계정" aria-busy={busy}>
     <h4>{session?.person.identity_kind === "google" ? "Google 계정" : session ? "게스트 계정" : "앱 계정"}</h4>
     {session && <p>로그인한 계정: <strong>{session.person.display_name}</strong></p>}
-    <p>방에서 사용하는 이름과 사진은 해당 서버의 프로필이에요. 로그인 계정을 바꿔도 직접 수정한 프로필은 유지돼요.</p>
-    <p>이 기기에서 로그아웃해요. 방과 프로필은 그대로 남아요.</p>
     <button type="button" className="ops-button" style={{ minHeight: 44, width: "fit-content", fontSize: 13, padding: "0 16px" }} disabled={disabled || busy} onClick={() => void logout()}>
       {busy ? "로그아웃 중…" : "로그아웃"}
     </button>

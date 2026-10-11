@@ -488,7 +488,7 @@ export default function LobbyView({
             </span>
             <span className="min-w-0 truncate text-text-muted preserve-words">
               {canPostMessages
-                ? "초대받은 방의 대화에 참여하고 있어요."
+                ? ""
                 : composerDisabledReason || "이 링크에서는 메시지를 보낼 수 없어요"}
             </span>
           </div>

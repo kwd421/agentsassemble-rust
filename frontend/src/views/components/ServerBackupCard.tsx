@@ -63,24 +63,33 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
     }
     finally{operation.current=false;setBusy(false);setPassphrase("");setConfirm("");}
   }
-  if(!checked)return <section className="dc-guest-recovery-settings" aria-label="서버 백업" aria-busy="true"><h4>서버 백업 파일 내보내기</h4><p role="status">백업 정보를 불러오고 있어요…</p></section>;
-  if(!owner)return error?<section className="dc-guest-recovery-settings" aria-label="서버 백업"><p role="alert">{error}</p></section>:null;
-  return <section className="dc-guest-recovery-settings" aria-label="서버 백업">
-    <h4>서버 백업 파일 내보내기</h4>
-    {!isDesktopWebview()?<p>서버를 실행하는 기기의 앱에서 백업 파일을 저장해 주세요.</p>:<>
-      <p>{owner.alias}의 방, 대화, 첨부파일, 멤버와 역할을 저장해요. 실행 중인 서버는 계속 사용할 수 있어요.</p>
-      <label><input type="checkbox" checked={encrypted} disabled={disabled||busy||running} onChange={event=>setEncrypted(event.target.checked)}/> 비밀번호로 보호하기 (권장)</label>
+  const primary="min-h-10 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50";
+  const quiet="min-h-10 px-2 text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50";
+  const field="mt-1 min-h-10 w-full rounded-md border border-white/10 bg-[#1e1f22] px-3 text-[13px] text-text-primary outline-none focus:border-[#5865f2]";
+  const label="grid text-[12px] font-bold text-text-muted";
+  const check="flex min-h-8 items-center gap-2 text-[13px] text-text-primary";
+  const hint="text-[12px] text-text-muted";
+  const mismatch=encrypted&&Boolean(confirm)&&passphrase!==confirm;
+  if(!checked)return <section className="dc-guest-recovery-settings" aria-label="서버 백업" aria-busy="true"><h4>서버 백업</h4><p role="status" className={hint}>불러오는 중이에요…</p></section>;
+  if(!owner)return error?<section className="dc-guest-recovery-settings" aria-label="서버 백업"><p role="alert" className="text-[12px] text-[#f38b8b]">{error}</p></section>:null;
+  return <section className="dc-guest-recovery-settings grid gap-3" aria-label="서버 백업">
+    <h4>서버 백업</h4>
+    {!isDesktopWebview()?<p className={hint}>서버 컴퓨터의 앱에서 저장할 수 있어요.</p>:<>
+      <p className={hint}>방, 대화, 첨부파일, 멤버를 파일 하나로 저장해요.</p>
+      <label className={check}><input type="checkbox" checked={encrypted} disabled={disabled||busy||running} onChange={event=>setEncrypted(event.target.checked)}/>비밀번호로 잠그기</label>
       {encrypted?<>
-        <label>비밀번호<input className="ops-input" type={visible?"text":"password"} autoComplete="new-password" value={passphrase} disabled={busy||running} onChange={event=>setPassphrase(event.target.value)}/></label>
-        <label>비밀번호 확인<input className="ops-input" type={visible?"text":"password"} autoComplete="new-password" value={confirm} disabled={busy||running} onChange={event=>setConfirm(event.target.value)}/></label>
-        <label><input type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/>비밀번호 표시</label>
-        <p>비밀번호를 잊으면 백업을 열 수 없어요. 앱에는 저장하지 않아요.</p>
-      </>:<p>이 파일을 가진 사람은 대화와 첨부파일을 읽을 수 있어요.</p>}
-      <button className="ops-button" type="button" disabled={disabled||busy||running||(encrypted&&(!passphrase||passphrase!==confirm))} onClick={()=>void start()}>저장 위치 선택</button>
-      {running&&<button type="button" className="ops-button" onClick={()=>void requestDesktopServerBackup({action:"cancel",operation_id:progress?.operation_id}).then(value=>setProgress(parse(value))).catch(reason=>setError(String(reason)))}>백업 취소</button>}
-      {progress&&<p role="status">{phases[progress.phase]}{progress.failure_reason&&<> {failureReasons[progress.failure_reason]}</>}</p>}
-      {progress?.phase==="complete"&&<p>{new Date(progress.snapshot_at!).toLocaleString()} · {progress.bytes?.toLocaleString()}바이트<br/>이 시각 이후의 변경은 들어 있지 않아요. 동기화 폴더를 골랐다면 업로드 완료도 확인해 주세요.</p>}
-      {error&&<><p role="alert">{error}</p><button type="button" className="ops-button" onClick={()=>void refresh()}>진행 상태 다시 확인</button></>}
+        <label className={label}>비밀번호<input className={field} type={visible?"text":"password"} autoComplete="new-password" value={passphrase} disabled={busy||running} onChange={event=>setPassphrase(event.target.value)}/></label>
+        <label className={label}>비밀번호 확인<input className={field} type={visible?"text":"password"} autoComplete="new-password" value={confirm} disabled={busy||running} onChange={event=>setConfirm(event.target.value)}/></label>
+        <label className={check}><input type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/>비밀번호 표시</label>
+        <p className={mismatch?"text-[12px] text-[#f38b8b]":hint}>{mismatch?"비밀번호가 서로 달라요.":"잊으면 백업을 열 수 없어요."}</p>
+      </>:<p className="text-[12px] text-[#f0b232]">잠그지 않으면 이 파일을 가진 누구나 대화를 볼 수 있어요.</p>}
+      <div className="flex items-center justify-end gap-2">
+        {running&&<button type="button" className={quiet} onClick={()=>void requestDesktopServerBackup({action:"cancel",operation_id:progress?.operation_id}).then(value=>setProgress(parse(value))).catch(reason=>setError(String(reason)))}>취소</button>}
+        <button className={primary} type="button" disabled={disabled||busy||running||(encrypted&&(!passphrase||passphrase!==confirm))} onClick={()=>void start()}>백업 파일 저장</button>
+      </div>
+      {progress&&progress.phase!=="complete"&&<p role="status" className={hint}>{phases[progress.phase]}{progress.failure_reason&&<> {failureReasons[progress.failure_reason]}</>}</p>}
+      {progress?.phase==="complete"&&<p role="status" className={hint}>저장했어요 · {new Date(progress.snapshot_at!).toLocaleString()} · {((progress.bytes||0)/1048576).toFixed(1)}MB</p>}
+      {error&&<div className="flex items-center gap-2"><p role="alert" className="text-[12px] text-[#f38b8b]">{error}</p><button type="button" className={quiet} onClick={()=>void refresh()}>다시 확인</button></div>}
     </>}
   </section>;
 }

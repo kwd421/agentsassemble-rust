@@ -336,7 +336,7 @@ describe("RoomConnectionPanel", () => {
 
     expect(screen.queryByTitle("현재 응답 중단")).toBeNull();
     expect(
-      screen.getByText(/Provider 응답 결과가 불확실해 런타임 복구가 필요해요\./)
+      screen.getByText(/AI 응답이 완료됐는지 확인하지 못했어요/)
     ).toBeTruthy();
   });
 
@@ -480,7 +480,7 @@ describe("RoomConnectionPanel", () => {
     );
     expect(
       screen.getByText(
-        "현재 세션이 실행 중이라 시작 프로필을 표시하고 있어요. 변경하려면 세션을 중지하세요."
+        "현재 실행 설정이에요. 변경하려면 에이전트를 중지해 주세요."
       )
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "권한 / 속도" })).toBeNull();
@@ -701,7 +701,7 @@ describe("RoomConnectionPanel", () => {
           .disabled
       ).toBe(true)
     );
-    expect(screen.getByText(/변경하려면 세션을 중지하세요/)).toBeTruthy();
+    expect(screen.getByText(/변경하려면 에이전트를 중지해 주세요/)).toBeTruthy();
   });
 
   it("exposes Agent identity editing only with room agent control", async () => {

@@ -44,7 +44,7 @@ export function deriveAgentCreateStatus({
     workspaceRequired &&
     !workspacePath.trim()
   ) {
-    return "작업 폴더를 선택하세요. 이 폴더에서 세션이 실행돼요.";
+    return "작업 폴더를 선택해 주세요.";
   }
   return "";
 }
