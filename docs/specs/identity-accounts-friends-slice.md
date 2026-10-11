@@ -537,8 +537,14 @@ icons or old grants. No terminal-only ACK sender survives this redesign.
 
 Central existing bounded daily cleanup explicitly deletes disabled-account children
 in dependency order before parent, with pages <=100 and unchanged 10,000 indexed
-writes/day / 49 statements/invocation, day/crash reservation semantics. 30-day
-terminal/identity provenance retention does not depend on host confirmation. Only
+writes/day / 49 statements/invocation, day/crash reservation semantics. 7-day
+deleted-account/identity provenance retention does not depend on host confirmation.
+Account-child queues and root eligibility use this separate 7-day cutoff; retired
+servers remain at 30 days and member-relation retention is unchanged. Root purge
+still waits for every child, including owned server registrations. The deleted-account
+notice and explicit re-registration apply during the retained Google identity window;
+after bounded cleanup removes that identity, Google login is treated as new. Cleanup
+may lag the 7-day cutoff under the existing budget. Only
 cleanup sets purge_ready after retention and every child is absent, clears ledger
 and physically deletes parent in one reserved batch. BEFORE DELETE ON persons
 requires disabled/deleted + purge_ready + all children absent even for old raw
