@@ -6,9 +6,9 @@ use std::{
     time::Duration,
 };
 
-use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult, MessageLevel};
+use rfd::{AsyncMessageDialog, MessageButtons, MessageLevel};
 use tauri::{
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager, WebviewWindow,
     menu::{Menu, MenuItem, Submenu},
 };
 use tauri_plugin_updater::{Update, UpdaterExt};
@@ -19,9 +19,76 @@ const MENU_ID: &str = "application-update";
 const CHECK_LABEL: &str = "업데이트 확인…";
 
 pub(crate) struct AppUpdates {
-    requests: mpsc::Sender<()>,
+    requests: mpsc::Sender<Request>,
+    state: Mutex<UpdateState>,
     task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     installing: AtomicBool,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub(crate) enum UpdateState {
+    None,
+    Available { version: String },
+    Ready { version: String },
+    Installing { version: String },
+}
+
+enum Request {
+    Check,
+    Install,
+    Menu,
+}
+
+#[tauri::command]
+pub(crate) async fn app_update_state(window: WebviewWindow) -> Result<UpdateState, String> {
+    crate::caller_is_bundled_ui(&window)?;
+    window
+        .state::<AppUpdates>()
+        .state
+        .lock()
+        .map(|state| state.clone())
+        .map_err(|_| "업데이트 상태를 읽지 못했어요.".to_owned())
+}
+
+#[tauri::command]
+pub(crate) async fn app_update_check(window: WebviewWindow) -> Result<(), String> {
+    crate::caller_is_bundled_ui(&window)?;
+    request(window.app_handle(), Request::Check)
+}
+
+#[tauri::command]
+pub(crate) async fn app_update_install(window: WebviewWindow) -> Result<(), String> {
+    crate::caller_is_bundled_ui(&window)?;
+    if !matches!(
+        app_update_state(window.clone()).await?,
+        UpdateState::Ready { .. }
+    ) {
+        return Err("설치할 업데이트가 준비되지 않았어요.".to_owned());
+    }
+    request(window.app_handle(), Request::Install)
+}
+
+fn request(app: &AppHandle, request: Request) -> Result<(), String> {
+    app.state::<AppUpdates>()
+        .requests
+        .try_send(request)
+        .map_err(|_| "업데이트 작업이 진행 중이에요. 잠시 후 다시 시도해 주세요.".to_owned())
+}
+
+fn publish(app: &AppHandle, next: UpdateState) {
+    let owner = app.state::<AppUpdates>();
+    let mut state = owner
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *state = next;
+    if let Some(window) = app.get_webview_window("main")
+        && crate::caller_is_bundled_ui(&window).is_ok()
+        && window.emit("application-update-state", &*state).is_err()
+    {
+        eprintln!("application_update_state_unavailable");
+    }
 }
 
 struct ReadyUpdate {
@@ -39,13 +106,14 @@ pub(crate) fn install(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
     let (requests, mut receiver) = mpsc::channel(1);
     app.manage(AppUpdates {
         requests,
+        state: Mutex::new(UpdateState::None),
         task: Mutex::new(None),
         installing: AtomicBool::new(false),
     });
     app.on_menu_event(|app, event| {
         if event.id.as_ref() == MENU_ID {
             // Coalesce clicks while the single native update owner is busy.
-            let _ = app.state::<AppUpdates>().requests.try_send(());
+            let _ = request(app, Request::Menu);
         }
     });
     let handle = app.clone();
@@ -53,13 +121,17 @@ pub(crate) fn install(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
         let mut ready = None;
         check(&handle, &item, &mut ready, false).await;
         loop {
-            let manual = match tokio::time::timeout(CHECK_INTERVAL, receiver.recv()).await {
-                Ok(Some(())) => true,
+            match tokio::time::timeout(CHECK_INTERVAL, receiver.recv()).await {
+                Ok(Some(Request::Install)) => install_ready(&handle, &item, &mut ready).await,
+                Ok(Some(Request::Menu)) if ready.is_some() => {
+                    install_ready(&handle, &item, &mut ready).await;
+                }
+                Ok(Some(Request::Check | Request::Menu)) => {
+                    check(&handle, &item, &mut ready, true).await;
+                }
                 Ok(None) => break,
-                Err(_) => false,
-            };
-            if ready.is_none() || manual {
-                check(&handle, &item, &mut ready, manual).await;
+                Err(_) if ready.is_none() => check(&handle, &item, &mut ready, false).await,
+                Err(_) => {}
             }
         }
     });
@@ -106,7 +178,15 @@ async fn check(
     status(item, "업데이트 확인 중…", false);
     if ready.is_none() {
         match download(app, item).await {
-            Ok(Some(update)) => *ready = Some(update),
+            Ok(Some(update)) => {
+                publish(
+                    app,
+                    UpdateState::Ready {
+                        version: update.update.version.clone(),
+                    },
+                );
+                *ready = Some(update);
+            }
             Ok(None) => {
                 status(item, CHECK_LABEL, true);
                 if manual {
@@ -123,6 +203,7 @@ async fn check(
                 return;
             }
             Err(message) => {
+                publish(app, UpdateState::None);
                 status(item, "업데이트 확인 실패 · 다시 시도…", true);
                 if manual {
                     notice(&window, message, true).await;
@@ -135,21 +216,27 @@ async fn check(
         return;
     };
     let label = format!("{} 설치 후 재시작…", pending.update.version);
-    status(item, &label, false);
-    let choice = AsyncMessageDialog::new()
-        .set_parent(&window)
-        .set_title("AgentsAssemble 업데이트")
-        .set_description(format!("새 버전 {} 다운로드와 서명 확인이 끝났어요.\n\n지금 설치하고 다시 시작할까요? 이 기기의 방 서버와 에이전트 작업이 종료되며, 연결된 참가자는 재접속해야 해요. 진행 중인 작업이 있다면 나중에 업데이트 메뉴에서 설치하세요.", pending.update.version))
-        .set_buttons(MessageButtons::YesNo)
-        .show().await;
-    if choice != MessageDialogResult::Yes {
-        status(item, &label, true);
+    status(item, &label, true);
+}
+
+async fn install_ready(
+    app: &AppHandle,
+    item: &MenuItem<tauri::Wry>,
+    ready: &mut Option<ReadyUpdate>,
+) {
+    let Some(window) = app.get_webview_window("main") else {
         return;
-    }
+    };
     let Some(pending) = ready.take() else { return };
     app.state::<AppUpdates>()
         .installing
         .store(true, Ordering::SeqCst);
+    publish(
+        app,
+        UpdateState::Installing {
+            version: pending.update.version.clone(),
+        },
+    );
     status(item, "서버 종료 및 업데이트 설치 중…", false);
     let handle = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -172,10 +259,12 @@ async fn check(
     match result {
         Ok(Ok(())) => app.request_restart(),
         Ok(Err(message)) => {
+            publish(app, UpdateState::None);
             status(item, "업데이트 설치 실패 · 다시 시도…", true);
             notice(&window, &message, true).await;
         }
         Err(_) => {
+            publish(app, UpdateState::None);
             status(item, "업데이트 상태 확인 필요", false);
             notice(
                 &window,
@@ -191,9 +280,14 @@ async fn download(
     app: &AppHandle,
     item: &MenuItem<tauri::Wry>,
 ) -> Result<Option<ReadyUpdate>, &'static str> {
-    let updater = app
-        .updater_builder()
-        .timeout(Duration::from_mins(15))
+    let mut builder = app.updater_builder().timeout(Duration::from_mins(15));
+    if env!("AGENTSASSEMBLE_UPDATE_CHANNEL") == "test" {
+        builder = builder.endpoints(vec![
+            "https://github.com/kwd421/agentsassemble-rust/releases/download/desktop-test/latest.json"
+                .parse().map_err(|_| "업데이트 주소를 읽지 못했어요.")?
+        ]).map_err(|_| "업데이트 주소를 읽지 못했어요.")?;
+    }
+    let updater = builder
         .build()
         .map_err(|_| "업데이트 설정을 읽지 못했어요.")?;
     let update = tokio::time::timeout(Duration::from_secs(30), updater.check())
@@ -208,6 +302,12 @@ async fn download(
     if update.download_url.scheme() != "https" {
         return Err("업데이트 다운로드 주소가 안전한 HTTPS 주소가 아니어서 중단했어요.");
     }
+    publish(
+        app,
+        UpdateState::Available {
+            version: update.version.clone(),
+        },
+    );
     status(item, "업데이트 다운로드 중…", false);
     let bytes = update.download(|_, _| {}, || {}).await.map_err(
         |_| "업데이트 다운로드 또는 서명 확인에 실패했어요. 설치하지 않았으니 다시 시도해 주세요.",

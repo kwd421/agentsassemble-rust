@@ -1,3 +1,4 @@
+import AppUpdateIndicator from "./AppUpdateIndicator";
 import ResourceImage from "./ResourceImage";
 import {
   useEffect,
@@ -257,6 +258,7 @@ export default function ChannelHeader({
         >
           <Bell size={17} />
         </button>
+        <AppUpdateIndicator />
         <button
           type="button"
           className="dc-head-icon"

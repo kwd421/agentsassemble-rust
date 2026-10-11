@@ -1,4 +1,7 @@
 desktop_commands! {
+    app_update_state => "allow-app-update-state",
+    app_update_check => "allow-app-update-check",
+    app_update_install => "allow-app-update-install",
     server_backup => "allow-server-backup",
     server_restore => "allow-server-restore",
     runtime_provider_discovery => "allow-runtime-provider-discovery",

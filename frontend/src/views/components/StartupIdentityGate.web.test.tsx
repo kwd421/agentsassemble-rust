@@ -22,6 +22,7 @@ vi.mock("../../lib/central/webGoogle", () => ({
   startCentralWebGoogle: mocks.prepare, completeCentralWebGoogleReturn: mocks.googleReturn,
 }));
 vi.mock("../../lib/desktopBridge", () => ({
+  isBundledDesktopWebview: () => false,
   isDesktopWebview: () => false,
   requestDesktopServerRestore: vi.fn().mockResolvedValue(null),
   requestDesktopHostProductSurface: () => { throw new Error("browser called native host"); },

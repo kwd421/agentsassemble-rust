@@ -1,6 +1,7 @@
 mod server_move;
 use server_move::{server_backup, server_restore};
 mod app_updates;
+use app_updates::{app_update_check, app_update_install, app_update_state};
 mod host_device;
 use host_device::host_device_info;
 mod attendee_handoff;

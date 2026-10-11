@@ -7,6 +7,14 @@ macro_rules! desktop_commands {
 include!("command_registry.rs");
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=AGENTSASSEMBLE_UPDATE_CHANNEL");
+    let channel =
+        std::env::var("AGENTSASSEMBLE_UPDATE_CHANNEL").unwrap_or_else(|_| "stable".into());
+    assert!(
+        matches!(channel.as_str(), "stable" | "test"),
+        "unsupported update channel"
+    );
+    println!("cargo:rustc-env=AGENTSASSEMBLE_UPDATE_CHANNEL={channel}");
     let central_environment = std::fs::read_to_string("../../frontend/.env.production")
         .unwrap_or_else(|error| panic!("failed to read central environment: {error}"));
     let central_url = central_environment

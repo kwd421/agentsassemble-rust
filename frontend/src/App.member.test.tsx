@@ -10,7 +10,8 @@ vi.mock("./app/useAppController", () => ({ useAppController: () => ({
 vi.mock("./app/AppView", () => ({ default: () => <p>초대 입장 오류와 재시도</p> }));
 vi.mock("./views/components/StartupIdentityGate", () => ({ default: () => <p>서버 시작 로그인</p> }));
 vi.mock("./views/components/FrontendUpdateNotice", () => ({ default: () => null }));
-vi.mock("./lib/desktopBridge", () => ({ isDesktopWebview: () => true }));
+vi.mock("./lib/desktopBridge", () => ({ isBundledDesktopWebview: () => false,
+  isDesktopWebview: () => true }));
 afterEach(cleanup);
 
 it("retains the invite retry screen after the central client clears a rejected session", () => {

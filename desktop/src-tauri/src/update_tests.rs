@@ -86,3 +86,53 @@ fn official_updater_verifies_bytes_and_the_announced_version()
     }
     Ok(())
 }
+
+#[test]
+fn test_channel_uses_official_semver_order_and_never_downgrades()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+    context.package_info_mut().version = "0.1.5-test.9.1".parse()?;
+    context.config_mut().plugins.0.insert(
+        "updater".into(),
+        serde_json::json!({"pubkey": "unused", "dangerousInsecureTransportProtocol": true}),
+    );
+    let app = tauri::test::mock_builder()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .build(context)?;
+    for (version, newer) in [
+        ("0.1.5-test.10.1", true),
+        ("0.1.5-test.9.2", true),
+        ("0.1.5-test.9.1", false),
+        ("0.1.5-test.8.2", false),
+        ("0.1.4", false),
+        ("0.1.5", true),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let base = format!("http://{}", listener.local_addr()?);
+        let manifest = serde_json::to_vec(&serde_json::json!({
+            "version": version, "url": format!("{base}/artifact"), "signature": "unused"
+        }))?;
+        let server = std::thread::spawn(move || -> std::io::Result<()> {
+            let (mut stream, _) = listener.accept()?;
+            stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+            let mut request = [0; 4096];
+            let _ = stream.read(&mut request)?;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                manifest.len()
+            )?;
+            stream.write_all(&manifest)
+        });
+        let updater = app
+            .updater_builder()
+            .endpoints(vec![base.parse()?])?
+            .timeout(Duration::from_secs(5))
+            .no_proxy()
+            .build()?;
+        let result = tauri::async_runtime::block_on(updater.check());
+        server.join().map_err(|_| "fixture server panicked")??;
+        assert_eq!(result?.is_some(), newer, "{version}");
+    }
+    Ok(())
+}

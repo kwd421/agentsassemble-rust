@@ -1,3 +1,4 @@
+import AppUpdateIndicator from "./AppUpdateIndicator";
 import CentralGuestEntry, { type CentralGuestScreen } from "./CentralGuestEntry";
 import ServerRestoreCard from "./ServerRestoreCard";
 import LocalAccountDataChoice from "./LocalAccountDataChoice";
@@ -404,6 +405,7 @@ export default function StartupIdentityGate({
     return (
       <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
         <main className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl">
+          <div className="flex justify-end empty:hidden"><AppUpdateIndicator /></div>
           <header className="grid gap-2">
             <h1 className="text-2xl font-black text-text-primary">어떻게 사용할까요?</h1>
             <p className="text-[13px] font-semibold leading-5 text-text-muted">
@@ -460,10 +462,13 @@ export default function StartupIdentityGate({
         className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
         aria-label="시작 로그인"
       >
+        <div className="flex items-center justify-end gap-2 empty:hidden">
+        <AppUpdateIndicator />
         {(screen === "servers" || screen === "choice") && !accountSettingsOpen && <button type="button" className="ops-button flex min-h-11 max-w-full items-center gap-2 justify-self-end" aria-label="계정 설정" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>
           <span className="dc-member-avatar" style={{ width: 28, height: 28 }} aria-hidden="true">{centralPerson?.avatar_url ? <img src={centralPerson?.avatar_url} alt="" referrerPolicy="no-referrer" /> : centralPerson?.display_name.slice(0, 1) || "•"}</span>
           <span className="truncate">{centralPerson?.display_name || "계정"}</span>
         </button>}
+        </div>
         {accountSettingsOpen ? <>
           <button type="button" className="ops-button min-h-11 justify-self-start" disabled={busy} onClick={() => setAccountSettingsOpen(false)}>← 돌아가기</button>
           <CentralAccountSettings disabled={busy} showEntryLink={false} />

@@ -64,6 +64,7 @@ const completedBootstrap = {
 };
 
 vi.mock("../../lib/desktopBridge", () => ({
+  isBundledDesktopWebview: () => false,
   isDesktopWebview: () => true,
   requestDesktopServerRestore: vi.fn().mockResolvedValue(null),
   fetchDesktopOperatorRuntime: desktopMocks.fetchOperatorRuntime,

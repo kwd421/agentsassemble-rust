@@ -3,6 +3,12 @@ name: Windows desktop release artifact
 "on":
   workflow_dispatch:
     inputs:
+      channel:
+        description: Update channel
+        required: true
+        default: stable
+        type: choice
+        options: [stable, test]
       source_ref:
         description: Exact release source tag or commit
         required: false
@@ -16,9 +22,15 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: desktop-windows-${{ inputs.channel || 'stable' }}
+      cancel-in-progress: false
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
+      AGENTSASSEMBLE_UPDATE_CHANNEL: ${{ inputs.channel || 'stable' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -43,6 +55,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm --prefix provider-runtime ci --omit=optional --ignore-scripts
           exit $LASTEXITCODE
+      - name: Prepare test version
+        if: inputs.channel == 'test'
+        run: node desktop/scripts/test_update_release.mjs prepare
       - name: Build signed updater artifact
         working-directory: desktop
         shell: pwsh
@@ -56,7 +71,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run prepare:sidecar:release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npx tauri build --bundles nsis
+          if ($env:AGENTSASSEMBLE_UPDATE_CHANNEL -eq "test") {
+            npx tauri build --bundles nsis --config "$env:RUNNER_TEMP/desktop-test-config.json"
+          } else {
+            npx tauri build --bundles nsis
+          }
           exit $LASTEXITCODE
       - name: Verify desktop contracts
         shell: pwsh
@@ -80,6 +99,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $tests[0].executable
           exit $LASTEXITCODE
+      - name: Publish rolling test prerelease
+        if: inputs.channel == 'test'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node desktop/scripts/test_update_release.mjs publish
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-x86_64-updater

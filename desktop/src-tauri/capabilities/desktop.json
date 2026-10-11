@@ -5,6 +5,11 @@
   "windows": ["main", "provider-setup-*", "local-attendee-*"],
   "local": true,
   "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-app-update-state",
+    "allow-app-update-check",
+    "allow-app-update-install",
     "allow-runtime-provider-discovery",
     "allow-open-provider-setup-help",
     "allow-runtime-central-login",

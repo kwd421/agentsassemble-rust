@@ -1400,3 +1400,34 @@ restart fixtures use the same boundary; tests retaining a store for post-stop
 inspection close that final owner before reopening. Deterministic duplicate-fd
 coverage models the inherited description and preserves exclusion for live clones
 and replacement writers. This adds no timer, retry, background task or gate change.
+
+## Desktop application update indicator and test channel (2026-10-11)
+
+The native updater retains startup and six-hour checks, HTTPS, verified in-memory
+bytes, signed-version enforcement, the existing public key, and runtime shutdown /
+installation / restart ownership. Startup never opens an update modal. Bundled-origin
+commands expose none, available(version), ready(version), installing, check-now and
+restart-and-install; remote WebViews cannot read or invoke these commands. A single
+native queue serializes checks and installation. Download failure clears availability;
+installation failure is reported and permits the existing check/retry path.
+
+Both the room header beside notifications and startup/server-list account area use
+the same desktop-only indicator: ready-only icon, accent dot, version tooltip and
+shared styled popover with restart/update and later actions. Installing disables
+the action. Events and an initial snapshot cover already-ready startup and remounts;
+no polling, automatic installation, or browser update flow is added.
+
+Build-time AGENTSASSEMBLE_UPDATE_CHANNEL=test selects the desktop-test latest.json
+endpoint; stable remains the default. Windows dispatch builds signed installers and
+publishes a rolling prerelease, without changing stable release selection. Test
+versions use the next patch of the configured base with -test.RUN_NUMBER.RUN_ATTEMPT;
+SemVer prerelease numeric ordering increases across builds and reruns, unlike build
+metadata. Publishing refuses a non-increasing version. The official updater keeps
+its strict greater-than comparison, so older artifacts never install. There is no
+macOS release workflow to extend. No provider changes or Computer Use are in scope.
+
+Acceptance: regressions for event/snapshot races, web exclusion, dismissal and install
+actions; official updater comparisons (newer, equal, older test builds), existing
+signature regressions, frontend build, desktop checks and architecture/structure
+gates; one Windows test dispatch and resulting signed prerelease. Physical update
+installation and rendered packaged UI remain unverified without Computer Use.

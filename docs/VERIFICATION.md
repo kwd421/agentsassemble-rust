@@ -16662,3 +16662,16 @@ unit-test invocation. After all Cargo/Tauri work exited, the prescribed
 (15.3 GiB); final `make artifact-check` passes. These generated caches will rebuild
 on the next Rust build. User data and the excluded untracked directories were left
 untouched.
+
+## Desktop update indicator and test channel (2026-10-11)
+
+Added one native updater state feed and bundled-only commands, shared ready-only
+room/startup indicator, and opt-in Windows rolling signed test releases. Existing
+updater pubkey, signed-version enforcement and strict version comparison remain.
+Frontend affected regressions: 39 passed; production build passed. Desktop updater
+regressions: 3 passed in stable and test builds (signature tampering/version binding,
+newer/equal/older test versions); command-surface regression passed. Desktop Clippy,
+architecture/source-growth gates, 19 policy/maintenance regressions and diff check
+passed. Test version preparation and workflow YAML parsed. No Computer Use, provider
+execution, physical install/restart, or packaged visual verification was performed.
+No macOS release workflow exists. Windows dispatch/release evidence follows the run.
