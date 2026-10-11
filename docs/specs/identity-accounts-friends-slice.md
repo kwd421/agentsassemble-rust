@@ -28,6 +28,12 @@ of scope. The design review C0/H2/M2/L1 is binding with these corrections:
   against the restored host. Rotate host and session keys; omit provider secrets,
   resume credentials, workspace paths and ingress/device credentials. Stop AI
   execution and require explicit restart and workspace/authentication setup.
+- Human invite verification is the exact persisted complete-token SHA-256
+  fingerprint plus persisted scope/use/expiry/revocation, across ordinary and
+  restored hosts. Token claims remain bounded routing assertions and must match
+  the stored invite; the old session-HMAC key is never retained to verify invites.
+  Apply this single authority to guest/member preflight and admission, without
+  a signature-failure fallback. Tampering must fail the stored fingerprint check.
 - Native pre-runtime preparation owns the installation lock and import journal,
   using host_device.rs's bounded no-runtime sidecar pattern. Empty means total
   absence or an EXACT matching import-job marker. An ordinarily initialized DB

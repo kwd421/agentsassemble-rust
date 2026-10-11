@@ -12,7 +12,6 @@ use hmac::{Hmac, Mac};
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use subtle::ConstantTimeEq;
 use thiserror::Error;
 use url::{Host, Url};
 
@@ -27,8 +26,6 @@ pub enum HumanInviteCredentialError {
     Missing,
     #[error("human invite credential is malformed")]
     Malformed,
-    #[error("human invite credential signature is invalid")]
-    InvalidSignature,
     #[error("human invite credential claims are unsupported")]
     UnsupportedClaims,
     #[error("human invite credential policy is invalid")]
@@ -113,27 +110,22 @@ impl HumanInviteCredentialAuthority {
         self.issue_with_material(draft, signed_nonce, join_code)
     }
 
-    /// Authenticates one signed token or canonical join code without persistence access.
-    ///
-    /// Signed-token expiry is deliberately exposed in the authenticated claims instead
-    /// of being enforced here. Admission must bind those claims to the durable invite
-    /// and resolve an exact one-use retry before applying current-invite expiry.
-    ///
+    /// Decode a presented token without granting authority. Persistence must match
+    /// its complete SHA-256 fingerprint and claims against the stored invitation.
+    /// This deliberately does not depend on the current host/session signing key.
     /// # Errors
-    ///
-    /// Rejects missing, malformed, invalidly signed, or unsupported credentials.
-    pub fn authenticate(
-        &self,
+    /// Rejects missing, malformed or unsupported credentials.
+    pub fn decode(
         credential: &str,
-    ) -> Result<VerifiedHumanInviteCredential, HumanInviteCredentialError> {
+    ) -> Result<PresentedHumanInviteCredential, HumanInviteCredentialError> {
         let credential = credential.trim();
         if credential.is_empty() {
             return Err(HumanInviteCredentialError::Missing);
         }
         if credential.starts_with(HUMAN_INVITE_JOIN_CODE_PREFIX) {
-            return verify_join_code(credential);
+            return decode_join_code(credential);
         }
-        self.authenticate_signed_token(credential)
+        Self::decode_signed_token(credential)
     }
 
     fn issue_with_material(
@@ -160,10 +152,9 @@ impl HumanInviteCredentialAuthority {
         })
     }
 
-    fn authenticate_signed_token(
-        &self,
+    fn decode_signed_token(
         credential: &str,
-    ) -> Result<VerifiedHumanInviteCredential, HumanInviteCredentialError> {
+    ) -> Result<PresentedHumanInviteCredential, HumanInviteCredentialError> {
         if credential.len() > HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES || !credential.is_ascii() {
             return Err(HumanInviteCredentialError::Malformed);
         }
@@ -181,36 +172,31 @@ impl HumanInviteCredentialAuthority {
             return Err(HumanInviteCredentialError::Malformed);
         }
         let signature = decode_canonical(encoded_signature)?;
-        let signature: [u8; HUMAN_INVITE_SIGNATURE_BYTES] = signature
+        let _signature: [u8; HUMAN_INVITE_SIGNATURE_BYTES] = signature
             .try_into()
             .map_err(|_| HumanInviteCredentialError::Malformed)?;
-        let signing_input = format!("{prefix}.{encoded_payload}");
-        let expected = sign(&self.key, signing_input.as_bytes());
-        if !bool::from(expected.ct_eq(&signature)) {
-            return Err(HumanInviteCredentialError::InvalidSignature);
-        }
         let payload = decode_canonical(encoded_payload)?;
         let claims: InviteClaims = serde_json::from_slice(&payload)
             .map_err(|_| HumanInviteCredentialError::UnsupportedClaims)?;
-        let verified = claims.authenticate()?;
-        Ok(VerifiedHumanInviteCredential::Signed {
+        let presented = claims.decode()?;
+        Ok(PresentedHumanInviteCredential::Signed {
             fingerprint: fingerprint(credential.as_bytes()),
-            claims: verified,
+            claims: presented,
         })
     }
 }
 
-pub enum VerifiedHumanInviteCredential {
+pub enum PresentedHumanInviteCredential {
     Signed {
         fingerprint: [u8; 32],
-        claims: VerifiedHumanInviteClaims,
+        claims: PresentedHumanInviteClaims,
     },
     JoinCode {
         fingerprint: [u8; 32],
     },
 }
 
-impl VerifiedHumanInviteCredential {
+impl PresentedHumanInviteCredential {
     #[must_use]
     pub const fn fingerprint(&self) -> &[u8; 32] {
         match self {
@@ -219,7 +205,7 @@ impl VerifiedHumanInviteCredential {
     }
 
     #[must_use]
-    pub const fn signed_claims(&self) -> Option<&VerifiedHumanInviteClaims> {
+    pub const fn signed_claims(&self) -> Option<&PresentedHumanInviteClaims> {
         match self {
             Self::Signed { claims, .. } => Some(claims),
             Self::JoinCode { .. } => None,
@@ -227,7 +213,7 @@ impl VerifiedHumanInviteCredential {
     }
 }
 
-pub struct VerifiedHumanInviteClaims {
+pub struct PresentedHumanInviteClaims {
     pub room_url: String,
     pub public_room_url: String,
     pub room_id: String,
@@ -238,7 +224,7 @@ pub struct VerifiedHumanInviteClaims {
     pub expires_at: DateTime<Utc>,
 }
 
-impl VerifiedHumanInviteClaims {
+impl PresentedHumanInviteClaims {
     #[must_use]
     pub fn is_expired_at(&self, now: DateTime<Utc>) -> bool {
         self.expires_at <= now
@@ -305,7 +291,7 @@ impl InviteClaims {
         })
     }
 
-    fn authenticate(self) -> Result<VerifiedHumanInviteClaims, HumanInviteCredentialError> {
+    fn decode(self) -> Result<PresentedHumanInviteClaims, HumanInviteCredentialError> {
         if !canonical_text(&self.meeting_id, 128)
             || !canonical_text(&self.agent.agent_id, 64)
             || !canonical_text(&self.agent.display_name, 128)
@@ -331,7 +317,7 @@ impl InviteClaims {
             "meeting_read_only" => InviteScope::ReadOnly,
             _ => return Err(HumanInviteCredentialError::UnsupportedClaims),
         };
-        Ok(VerifiedHumanInviteClaims {
+        Ok(PresentedHumanInviteClaims {
             room_url,
             public_room_url: self.public_room_url.unwrap_or_default(),
             room_id: self.meeting_id,
@@ -344,9 +330,9 @@ impl InviteClaims {
     }
 }
 
-fn verify_join_code(
+fn decode_join_code(
     credential: &str,
-) -> Result<VerifiedHumanInviteCredential, HumanInviteCredentialError> {
+) -> Result<PresentedHumanInviteCredential, HumanInviteCredentialError> {
     if credential.len()
         != HUMAN_INVITE_JOIN_CODE_PREFIX.len() + HUMAN_INVITE_JOIN_CODE_BYTES * 4 / 3
     {
@@ -357,7 +343,7 @@ fn verify_join_code(
     if material.len() != HUMAN_INVITE_JOIN_CODE_BYTES {
         return Err(HumanInviteCredentialError::Malformed);
     }
-    Ok(VerifiedHumanInviteCredential::JoinCode {
+    Ok(PresentedHumanInviteCredential::JoinCode {
         fingerprint: fingerprint(credential.as_bytes()),
     })
 }
@@ -497,7 +483,7 @@ mod tests {
 
     use super::{
         HumanInviteCredentialAuthority, HumanInviteCredentialDraft, HumanInviteCredentialError,
-        VerifiedHumanInviteCredential,
+        PresentedHumanInviteCredential,
     };
     use agentsassemble_domain::InviteScope;
     use agentsassemble_protocol::{
@@ -554,57 +540,44 @@ mod tests {
             )
         );
         assert_eq!(
-            authority()
-                .authenticate(issued.invite_token())
-                .unwrap_or_else(|error| panic!("authenticate signed credential: {error}"))
+            HumanInviteCredentialAuthority::decode(issued.invite_token())
+                .unwrap_or_else(|error| panic!("decode signed credential: {error}"))
                 .fingerprint(),
             issued.signed_token_fingerprint()
         );
         assert_eq!(
-            authority()
-                .authenticate(issued.join_code())
-                .unwrap_or_else(|error| panic!("authenticate join credential: {error}"))
+            HumanInviteCredentialAuthority::decode(issued.join_code())
+                .unwrap_or_else(|error| panic!("decode join credential: {error}"))
                 .fingerprint(),
             issued.join_code_fingerprint()
         );
     }
 
     #[test]
-    fn authentication_separates_expiry_from_credential_integrity() {
+    fn decoding_preserves_expiry_and_rejects_malformed_credentials() {
         let issued = authority()
             .issue_with_material(&draft(), [0x22; 18], [0x33; 24])
             .unwrap_or_else(|error| panic!("issue fixed credentials: {error}"));
-        let mut tampered = issued.invite_token().as_bytes().to_vec();
-        let last = tampered.len() - 1;
-        tampered[last] = if tampered[last] == b'A' { b'B' } else { b'A' };
-        let tampered = String::from_utf8(tampered)
-            .unwrap_or_else(|error| panic!("tampered credential remains UTF-8: {error}"));
-        assert!(matches!(
-            authority().authenticate(&tampered),
-            Err(HumanInviteCredentialError::InvalidSignature)
-        ));
-        let authenticated = authority()
-            .authenticate(issued.invite_token())
-            .unwrap_or_else(|error| panic!("authenticate expired signed credential: {error}"));
+        let authenticated = HumanInviteCredentialAuthority::decode(issued.invite_token())
+            .unwrap_or_else(|error| panic!("decode expired signed credential: {error}"));
         let claims = authenticated
             .signed_claims()
             .unwrap_or_else(|| panic!("signed credential claims"));
         assert!(!claims.is_expired_at(draft().expires_at - chrono::Duration::microseconds(1)));
         assert!(claims.is_expired_at(draft().expires_at));
         assert!(matches!(
-            authority().authenticate("aaj1_AA=="),
+            HumanInviteCredentialAuthority::decode("aaj1_AA=="),
             Err(HumanInviteCredentialError::Malformed)
         ));
         let oversized = "aai1.a.".to_owned() + &"a".repeat(5_000);
         assert!(matches!(
-            authority().authenticate(&oversized),
+            HumanInviteCredentialAuthority::decode(&oversized),
             Err(HumanInviteCredentialError::Malformed)
         ));
         assert!(matches!(
-            authority()
-                .authenticate(issued.join_code())
+            HumanInviteCredentialAuthority::decode(issued.join_code())
                 .unwrap_or_else(|error| panic!("authenticate join code: {error}")),
-            VerifiedHumanInviteCredential::JoinCode { .. }
+            PresentedHumanInviteCredential::JoinCode { .. }
         ));
     }
 

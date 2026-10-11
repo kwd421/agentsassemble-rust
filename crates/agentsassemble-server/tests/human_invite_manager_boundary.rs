@@ -6,7 +6,7 @@ use agentsassemble_domain::{
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{
-    AppState, HumanInviteCredentialAuthority, TicketStore, VerifiedHumanInviteCredential, serve,
+    AppState, HumanInviteCredentialAuthority, PresentedHumanInviteCredential, TicketStore, serve,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -20,7 +20,6 @@ struct RunningServer {
     base_url: String,
     tickets: TicketStore,
     store: SqliteStore,
-    credentials: HumanInviteCredentialAuthority,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
     _state_root: Option<tempfile::TempDir>,
@@ -86,10 +85,9 @@ async fn manager_create_and_revoke_use_one_ready_ingress_and_current_room_author
     let token = created["invite_token"]
         .as_str()
         .unwrap_or_else(|| panic!("created invite has no signed token"));
-    let VerifiedHumanInviteCredential::Signed { claims, .. } = server
-        .credentials
-        .authenticate(token)
-        .unwrap_or_else(|error| panic!("authenticate created invite: {error}"))
+    let PresentedHumanInviteCredential::Signed { claims, .. } =
+        HumanInviteCredentialAuthority::decode(token)
+            .unwrap_or_else(|error| panic!("authenticate created invite: {error}"))
     else {
         panic!("created invite token was not signed");
     };
@@ -312,7 +310,6 @@ async fn start_with(ingress: Ingress) -> RunningServer {
             state_root = Some(root);
         }
     }
-    let credentials = state.human_invite_credentials.clone();
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
     let task = tokio::spawn(async move {
@@ -324,7 +321,6 @@ async fn start_with(ingress: Ingress) -> RunningServer {
         base_url: format!("http://{address}"),
         tickets,
         store,
-        credentials,
         cancellation,
         task,
         _state_root: state_root,

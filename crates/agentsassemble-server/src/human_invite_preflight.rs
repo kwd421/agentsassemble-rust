@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::{
-    HumanInviteCredentialAuthority, HumanInviteCredentialError, VerifiedHumanInviteCredential,
+    HumanInviteCredentialAuthority, HumanInviteCredentialError, PresentedHumanInviteCredential,
     human_browser_credential::fingerprint_browser_credential,
 };
 
@@ -22,7 +22,7 @@ pub enum HumanInvitePreflightError {
     Persistence(#[from] PersistenceError),
 }
 
-/// Authenticates every raw browser credential before entering persistence.
+/// Decodes presented credentials; persistence authenticates exact stored invites.
 ///
 /// Raw values remain server-local and only complete SHA-256 fingerprints cross the
 /// durable boundary. The caller must not log this function's string arguments.
@@ -33,13 +33,12 @@ pub enum HumanInvitePreflightError {
 /// credential is noncanonical, or the durable snapshot cannot be read.
 pub async fn preflight_human_invite(
     store: &SqliteStore,
-    authority: &HumanInviteCredentialAuthority,
     invite_credential: &str,
     browser_credential: &str,
     session_bearer: Option<&str>,
     now: DateTime<Utc>,
 ) -> Result<HumanInvitePreflight, HumanInvitePreflightError> {
-    let credential = authenticated_invite_evidence(authority, invite_credential)?;
+    let credential = presented_invite_evidence(invite_credential)?;
     let browser_credential_fingerprint = fingerprint_browser_credential(browser_credential)
         .ok_or(HumanInvitePreflightError::BrowserCredential)?;
     let session_fingerprint = session_bearer
@@ -58,12 +57,11 @@ pub async fn preflight_human_invite(
         .await?)
 }
 
-pub(crate) fn authenticated_invite_evidence(
-    authority: &HumanInviteCredentialAuthority,
+pub(crate) fn presented_invite_evidence(
     credential: &str,
 ) -> Result<HumanInviteCredentialEvidence, HumanInviteCredentialError> {
-    Ok(match authority.authenticate(credential)? {
-        VerifiedHumanInviteCredential::Signed {
+    Ok(match HumanInviteCredentialAuthority::decode(credential)? {
+        PresentedHumanInviteCredential::Signed {
             fingerprint,
             claims,
         } => HumanInviteCredentialEvidence::Signed {
@@ -75,7 +73,7 @@ pub(crate) fn authenticated_invite_evidence(
             issued_at: claims.issued_at,
             expires_at: claims.expires_at,
         },
-        VerifiedHumanInviteCredential::JoinCode { fingerprint } => {
+        PresentedHumanInviteCredential::JoinCode { fingerprint } => {
             HumanInviteCredentialEvidence::JoinCode { fingerprint }
         }
     })
@@ -137,9 +135,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn raw_preflight_authenticates_and_binds_current_invite() {
+    async fn stored_invite_survives_host_key_rotation_but_tampered_token_fails() {
         let store = fixture().await;
-        let identity = store
+        let old_host = fixture().await;
+        let identity = old_host
             .host_identity()
             .await
             .unwrap_or_else(|error| panic!("load host identity: {error}"));
@@ -189,22 +188,30 @@ mod tests {
             URL_SAFE_NO_PAD.encode([0xB6; 32])
         );
         for credential in [issued.invite_token(), issued.join_code()] {
-            let decision = preflight_human_invite(
-                &store,
-                &authority,
-                credential,
-                &browser,
-                None,
-                micros(2_000_000),
-            )
-            .await
-            .unwrap_or_else(|error| panic!("preflight current credential: {error}"));
+            let decision =
+                preflight_human_invite(&store, credential, &browser, None, micros(2_000_000))
+                    .await
+                    .unwrap_or_else(|error| panic!("preflight current credential: {error}"));
             assert!(matches!(decision, HumanInvitePreflight::ProfileRequired(_)));
         }
+        let prefix = issued
+            .invite_token()
+            .rsplit_once('.')
+            .unwrap_or_else(|| panic!("issued signed token"))
+            .0;
+        let tampered = format!("{prefix}.{}", URL_SAFE_NO_PAD.encode([0xC7; 32]));
+        let rejected = preflight_human_invite(&store, &tampered, &browser, None, micros(2_000_000))
+            .await
+            .unwrap_or_else(|error| panic!("resolve altered credential: {error}"));
+        assert!(matches!(
+            rejected,
+            HumanInvitePreflight::Rejected(
+                agentsassemble_persistence::HumanInvitePreflightRejection::InviteNotFound
+            )
+        ));
         assert!(matches!(
             preflight_human_invite(
                 &store,
-                &authority,
                 issued.invite_token(),
                 "legacy-device-token",
                 None,
@@ -216,7 +223,6 @@ mod tests {
         assert!(matches!(
             preflight_human_invite(
                 &store,
-                &authority,
                 issued.invite_token(),
                 &browser,
                 Some("legacy-session-token"),

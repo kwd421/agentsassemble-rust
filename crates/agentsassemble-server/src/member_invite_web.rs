@@ -2,8 +2,8 @@ use super::{
     AppState, DEVICE_CREDENTIAL_HEADER, Deserialize, HeaderMap, HumanAdmissionDecision,
     HumanAdmissionInput, HumanInviteHttpError, HumanInvitePreflight, HumanInvitePreflightRejection,
     JoinResponse, Json, MAX_ADMISSION_BODY_BYTES, PreflightRequest, PreparedHumanAdmission,
-    Request, State, StatusCode, Value, authenticated_invite_evidence, decode_json_body,
-    fingerprint_browser_credential, json, required_header,
+    Request, State, StatusCode, Value, decode_json_body, fingerprint_browser_credential, json,
+    presented_invite_evidence, required_header,
 };
 use agentsassemble_persistence::{HumanInvitePreflightRequest, MemberAdmission};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -171,8 +171,7 @@ pub(super) async fn start(
         .await
         .map_err(HumanInviteHttpError::from_body)?;
     let credential =
-        authenticated_invite_evidence(&state.human_invite_credentials, body.invite_token.trim())
-            .map_err(|_| invalid_challenge())?;
+        presented_invite_evidence(body.invite_token.trim()).map_err(|_| invalid_challenge())?;
     let now = Utc::now();
     let preflight = state
         .store
@@ -221,8 +220,7 @@ pub(super) async fn join(
         .await
         .map_err(HumanInviteHttpError::from_body)?;
     let credential =
-        authenticated_invite_evidence(&state.human_invite_credentials, body.invite_token.trim())
-            .map_err(|_| invalid_challenge())?;
+        presented_invite_evidence(body.invite_token.trim()).map_err(|_| invalid_challenge())?;
     let prepared = PreparedHumanAdmission::prepare(
         credential,
         browser,

@@ -158,8 +158,9 @@ pub(crate) struct InlineHumanAvatar {
 
 /// Bounded browser inputs accepted by the current direct HTTP admission contract.
 ///
-/// The transport must authenticate raw invite/browser credentials separately. This
-/// value contains no credential or bearer and deliberately is not serializable.
+/// The transport bounds and fingerprints raw invite/browser credentials. Storage
+/// authenticates the complete invite fingerprint and its claimed fields. This value
+/// contains no credential or bearer and deliberately is not serializable.
 pub struct HumanAdmissionInput {
     pub request_id: String,
     pub meeting_id_assertion: String,

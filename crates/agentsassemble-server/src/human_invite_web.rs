@@ -24,7 +24,7 @@ use crate::{
     },
     human_browser_credential::fingerprint_browser_credential,
     human_invite_preflight::{
-        HumanInvitePreflightError, authenticated_invite_evidence, preflight_human_invite,
+        HumanInvitePreflightError, preflight_human_invite, presented_invite_evidence,
     },
     ingress_trust::single_header,
 };
@@ -127,7 +127,6 @@ async fn preflight(
         .map_err(HumanInviteHttpError::from_body)?;
     let decision = match preflight_human_invite(
         &state.store,
-        &state.human_invite_credentials,
         &payload.invite_token,
         &browser_credential,
         session_bearer.as_deref(),
@@ -175,9 +174,8 @@ async fn join(
             "request_id is required.",
         ));
     }
-    let credential =
-        authenticated_invite_evidence(&state.human_invite_credentials, payload.invite_token.trim())
-            .map_err(|_| HumanInviteHttpError::forbidden("invite_invalid", "Invite is invalid."))?;
+    let credential = presented_invite_evidence(payload.invite_token.trim())
+        .map_err(|_| HumanInviteHttpError::forbidden("invite_invalid", "Invite is invalid."))?;
     let browser_credential_fingerprint = fingerprint_browser_credential(&payload.device_token)
         .ok_or_else(|| {
             HumanInviteHttpError::bad_request(

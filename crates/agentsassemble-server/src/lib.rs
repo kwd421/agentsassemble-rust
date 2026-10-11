@@ -220,7 +220,7 @@ pub use central::directory::CentralDirectoryError;
 pub use central::host_identity::{CentralHostIdentity, HostIdentityError, host_device_info};
 pub use human_invite_credentials::{
     HumanInviteCredentialAuthority, HumanInviteCredentialDraft, HumanInviteCredentialError,
-    IssuedHumanInviteCredentials, VerifiedHumanInviteClaims, VerifiedHumanInviteCredential,
+    IssuedHumanInviteCredentials, PresentedHumanInviteClaims, PresentedHumanInviteCredential,
 };
 pub use human_invite_preflight::{HumanInvitePreflightError, preflight_human_invite};
 pub use ingress_trust::local_bind_is_supported;
