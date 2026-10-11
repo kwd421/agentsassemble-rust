@@ -7,12 +7,11 @@ use std::{
 };
 
 use rfd::{AsyncMessageDialog, MessageButtons, MessageLevel};
-use tauri::{
-    AppHandle, Emitter, Manager, WebviewWindow,
-    menu::{Menu, MenuItem, Submenu},
-};
+#[cfg(not(windows))]
+use tauri::menu::{Menu, Submenu};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow, menu::MenuItem};
 use tauri_plugin_updater::{Update, UpdaterExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 const CHECK_INTERVAL: Duration = Duration::from_hours(6);
 const MENU_ID: &str = "application-update";
@@ -35,7 +34,7 @@ pub(crate) enum UpdateState {
 }
 
 enum Request {
-    Check,
+    Check(oneshot::Sender<Result<Option<String>, String>>),
     Install,
     Menu,
 }
@@ -52,9 +51,13 @@ pub(crate) async fn app_update_state(window: WebviewWindow) -> Result<UpdateStat
 }
 
 #[tauri::command]
-pub(crate) async fn app_update_check(window: WebviewWindow) -> Result<(), String> {
+pub(crate) async fn app_update_check(window: WebviewWindow) -> Result<Option<String>, String> {
     crate::caller_is_bundled_ui(&window)?;
-    request(window.app_handle(), Request::Check)
+    let (reply, result) = oneshot::channel();
+    request(window.app_handle(), Request::Check(reply))?;
+    result
+        .await
+        .map_err(|_| "업데이트 확인이 중단됐어요. 다시 시도해 주세요.".to_owned())?
 }
 
 #[tauri::command]
@@ -100,9 +103,13 @@ struct ReadyUpdate {
 
 pub(crate) fn install(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let item = MenuItem::with_id(app, MENU_ID, CHECK_LABEL, true, None::<&str>)?;
-    let menu = Menu::default(app)?;
-    menu.append(&Submenu::with_items(app, "업데이트", true, &[&item])?)?;
-    app.set_menu(menu)?;
+    // The item only presents status; the native queue owns updates even without a menu.
+    #[cfg(not(windows))]
+    {
+        let menu = Menu::default(app)?;
+        menu.append(&Submenu::with_items(app, "업데이트", true, &[&item])?)?;
+        app.set_menu(menu)?;
+    }
     let (requests, mut receiver) = mpsc::channel(1);
     app.manage(AppUpdates {
         requests,
@@ -119,18 +126,24 @@ pub(crate) fn install(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
     let handle = app.clone();
     let task = tauri::async_runtime::spawn(async move {
         let mut ready = None;
-        check(&handle, &item, &mut ready, false).await;
+        let _ = check(&handle, &item, &mut ready, false).await;
         loop {
             match tokio::time::timeout(CHECK_INTERVAL, receiver.recv()).await {
                 Ok(Some(Request::Install)) => install_ready(&handle, &item, &mut ready).await,
                 Ok(Some(Request::Menu)) if ready.is_some() => {
                     install_ready(&handle, &item, &mut ready).await;
                 }
-                Ok(Some(Request::Check | Request::Menu)) => {
-                    check(&handle, &item, &mut ready, true).await;
+                Ok(Some(Request::Check(reply))) => {
+                    let result = check(&handle, &item, &mut ready, false).await;
+                    let _ = reply.send(result);
+                }
+                Ok(Some(Request::Menu)) => {
+                    let _ = check(&handle, &item, &mut ready, true).await;
                 }
                 Ok(None) => break,
-                Err(_) if ready.is_none() => check(&handle, &item, &mut ready, false).await,
+                Err(_) if ready.is_none() => {
+                    let _ = check(&handle, &item, &mut ready, false).await;
+                }
                 Err(_) => {}
             }
         }
@@ -170,10 +183,10 @@ async fn check(
     item: &MenuItem<tauri::Wry>,
     ready: &mut Option<ReadyUpdate>,
     manual: bool,
-) {
+) -> Result<Option<String>, String> {
     let Some(window) = app.get_webview_window("main") else {
         status(item, "업데이트 창을 열 수 없음", false);
-        return;
+        return Err("업데이트 창을 열 수 없어요.".to_owned());
     };
     status(item, "업데이트 확인 중…", false);
     if ready.is_none() {
@@ -200,7 +213,7 @@ async fn check(
                     )
                     .await;
                 }
-                return;
+                return Ok(None);
             }
             Err(message) => {
                 publish(app, UpdateState::None);
@@ -208,15 +221,15 @@ async fn check(
                 if manual {
                     notice(&window, message, true).await;
                 }
-                return;
+                return Err(message.to_owned());
             }
         }
     }
-    let Some(pending) = ready.as_ref() else {
-        return;
-    };
-    let label = format!("{} 설치 후 재시작…", pending.update.version);
-    status(item, &label, true);
+    let version = ready.as_ref().map(|pending| pending.update.version.clone());
+    if let Some(version) = &version {
+        status(item, &format!("{version} 설치 후 재시작…"), true);
+    }
+    Ok(version)
 }
 
 async fn install_ready(

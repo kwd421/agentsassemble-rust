@@ -16715,3 +16715,23 @@ build source, and stable latest remains `desktop-v0.1.4`. Initial dispatch
 38145183938 failed before building because checkout requires a full commit SHA;
 the successful dispatch used the full SHA. Rolling replacement of an already
 published test release and physical update/restart remain unverified.
+
+## Windows window chrome and settings update check (2026-10-11)
+
+- Windows no longer attaches the application menu; its retained status MenuItem
+  does not own update state. The existing native queue, verified downloads and
+  in-app installation indicator remain the updater owners. macOS keeps its menu.
+- Windows main window uses the dark native theme; title remains AgentsAssemble
+  and native decorations/resizing remain configured as before. No editing shortcut
+  interception or custom caption is added.
+- Bundled desktop user settings offers a shared-style manual update check with
+  inline current/new-version/error results. The IPC awaits the native queue's
+  completed result instead of treating enqueue success as a completed check.
+- Passed: desktop cargo check (all targets), Clippy (all targets/features, warnings
+  denied), 3 native updater regressions; 17 frontend regressions across update check,
+  indicator and UserPanel; frontend TypeScript/Vite build; architecture/structure
+  gates and their 19 policy regressions; desktop formatting and diff whitespace.
+- No Computer Use, real provider work or physical Windows verification was run.
+  Title-bar appearance, editing shortcuts, caption buttons and snap remain unknown
+  on a real device. Windows test release dispatch follows the scoped commit/push;
+  its run URL is reported in the task result, without claiming build completion.

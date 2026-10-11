@@ -640,6 +640,10 @@ pub fn run() {
         .manage(registered_host_product_surface())
         .invoke_handler(registered_invoke_handler!())
         .setup(|app| {
+            #[cfg(windows)]
+            app.get_webview_window("main")
+                .ok_or_else(|| std::io::Error::other("main window is missing"))?
+                .set_theme(Some(tauri::Theme::Dark))?;
             provider_setup::install(app.handle())?;
             app_updates::install(app.handle())
         })

@@ -5,6 +5,7 @@ import { X, Camera, Headphones, Mic, MicOff } from "lucide-react";
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import { profileCssVars } from "../../lib/userProfileModel";
+import AppUpdateCheck from "./AppUpdateCheck";
 import GoogleAccountSettings from "./GoogleAccountSettings";
 import CentralAccountSettings from "./CentralAccountSettings";
 import { centralIdentityConfigured } from "../../lib/central/identity";
@@ -100,6 +101,7 @@ export default function UserSettingsPanel({
             </button>
           ))}
         </nav>
+        <AppUpdateCheck />
       </aside>
       <div className="dc-user-settings-main">
         <header className="dc-user-settings-main-head">
