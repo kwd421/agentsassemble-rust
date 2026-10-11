@@ -1,5 +1,64 @@
 # Verification Contract
 
+## Backup-based server move — 구현·로컬 검증, 미배포 (2026-10-11)
+
+Rust `6bd7d878`–`83c07cd4`, Worker `1e65c808`–`087d4261`에 구현했다.
+각 커밋은 변경 합계 1,000줄 미만이며 요청한 공동 작성자 표기를 포함한다.
+Worker 원격 migration·배포·기능 활성화는 하지 않았다. 관리자의 Daybreak 코드
+리뷰 후 0027–0028 → restore-aware Worker 전 트래픽 → 새 호스트 순서로 진행한다.
+`SERVER_RESTORE_ENABLED`는 배포 소유자가 명시적으로 열어야 한다.
+
+공용 설정의 native 저장 창과 시작/서버 선택 화면의 pre-runtime 가져오기를
+연결했다. v1은 manifest + 새로 재구성한 SQLite 하나이며 암호화가 기본이다.
+H1 세션·기기·challenge·secure-channel 정제와 새 키/새 admission, H2 정확한
+스키마/JSON allowlist와 읽기 전용 입력 및 별도 DB 재구성, M1 작업·epoch·새 키에
+묶인 별도 guest/Google step-up, M2 설치 lease·빈 대상·정확한 journal 검증을 적용했다.
+자산은 기존 도메인 메타데이터 검사와 제한된 이미지 디코더를 거친다.
+
+중앙 CAS·영구 old-key fence·member projection·receipt를 원자적으로 변경한다.
+응답 유실은 같은 작업으로 조회/재개하며, 확정되지 않은 작업은 취소하지 않는다.
+새 endpoint는 receipt에 고정한 generation보다 커야 하며 현재 online ACK 이후에만
+Ready가 된다. 내보내기는 검증 후 덮어쓰기 없이 게시하고, 진행 journal을 재시작에
+복구하며 기록된 임시 파일만 정리한다. 게시 결과가 불확실하면 성공으로 바꾸지 않는다.
+논리 서버 초대 링크는 중앙 restore lineage로 새 epoch를 확인한다. 예전 origin-only
+링크는 새 호스트 링크가 필요하며, 일반 member entry의 epoch 검사는 유지한다.
+
+검증 결과:
+
+- Persistence 467 passed / KDF 수동 측정 1 ignored; 서버 단위 147 passed.
+  실제 기존 human/owner/operator/attendee/connector 권한 거절, 같은 멤버·역할로
+  fresh re-entry, 미사용 초대 보존 및 사용된 초대 거절을 확인했다.
+- Worker 전체 303 passed. guest/Google 삭제·복원 proof 및 nonce 분리, 타 계정 거절,
+  두 기기의 CAS, 응답 유실 재조회, epoch 없는 old-key 차단, terminal membership,
+  기존 quota 내 208개 projection 전환과 실패 rollback을 검증했다.
+- 별도 Rust 네이티브 프로세스 + 실제 loopback HTTP fixture에서 암호화 파일 준비,
+  전환 후 응답 유실, 새 프로세스의 동일 작업 재조회/activation을 확인했다.
+  복원 DB에서 동일 서버 ID, 새 키/epoch, 메시지와 10 MiB 첨부 bytes를 대조했다.
+  중앙은 HTTP fixture이며 실제 배포 Worker와 연결한 E2E는 아니다.
+- 이 과정에서 ACP의 `serde_json/preserve_order`가 드러낸 서명 순서 불일치를 수정했다.
+  Worker canonical JSON과 동일하게 명시적인 정렬 map을 서명한다.
+- Frontend 전체 205 files / 1,345 tests + 새 export 상태 복구 테스트 1개, build 통과.
+  Desktop 전체 실행의 48개 통과 후 새 명령으로 실패한 숫자 고정 검증을 등록 명령/
+  권한 일치 불변식으로 바꾸고 해당 1개를 재검증했다. Desktop Clippy 통과.
+  Workspace all-target/all-feature Clippy, format, architecture/source-growth,
+  19개 정책 테스트, Worker architecture/codebase-map, diff 검사 통과.
+
+KDF는 Apple M5 / 24 GiB에서 libsodium C opt-level 3 테스트 프로필로 각 5회 측정했다.
+기본 Argon2id 64 MiB / operations 2: 1,657 / 1,488 / 1,533 / 1,629 / 1,587 ms
+(중앙값 1,587 ms). 256 MiB / 3은 7,978–9,890 ms, 허용 상한 256 MiB / 4는
+10,576–10,636 ms였다. maintained `libsodium-rs 0.2.5`(MIT)와 libsodium secretstream을
+사용하며 header 인증, bounded KDF/chunk, final tag·정확한 EOF를 요구한다.
+10 MiB 첨부 process fixture의 별도 측정은 3.36초, `/usr/bin/time -l` maximum RSS
+97,828,864 bytes, peak memory footprint 83,690,024 bytes, swaps 0이었다.
+이는 테스트 하네스 관측이며 각 child의 독립 peak·대규모 운영 corpus 보장은 아니다.
+
+미검증: 패키지 앱의 실제 파일 선택/저장 및 UI 동작, Windows 빌드·KDF·파일 게시,
+실제 Google 재인증/원격 D1/새 공개 endpoint·옛 기기 강등을 잇는 운영 E2E,
+대규모 corpus의 WAL·최대 디스크 점유·취소 지연 및 모든 crash 지점의 강제 종료.
+Computer Use, 실제 provider, 새 보안 스캔, artifact maintenance/cleanup 명령은 실행하지
+않았다. 기존 사용자 변경은 보존했다. 잘못된 테스트 실행 위치가 만든 루트
+`node_modules/.vite/vitest` 결과 캐시는 정리 금지 요청에 따라 삭제하지 않았다.
+
 ## Agent display-name defaults and disabled options (2026-10-11)
 
 Server/local setup defaults use the catalog human label or provider display name;
