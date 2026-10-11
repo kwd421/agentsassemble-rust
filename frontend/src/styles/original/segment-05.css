@@ -394,6 +394,7 @@
 }
 
 .dc-head-icon {
+  position: relative;
   display: grid;
   width: 32px;
   height: 32px;
@@ -403,6 +404,18 @@
   transition:
     background-color 120ms ease,
     color 120ms ease;
+}
+
+/* Corner dot on a header icon; it sits outside the icon's own centering. */
+.dc-head-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-chat-bg);
 }
 
 .dc-head-icon:hover,

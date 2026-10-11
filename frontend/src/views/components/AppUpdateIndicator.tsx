@@ -59,11 +59,11 @@ export default function AppUpdateIndicator() {
   return <div className="relative" ref={root} onKeyDown={(event) => {
     if (event.key === "Escape") { event.stopPropagation(); close(); }
   }}>
-    <button ref={trigger} type="button" className="dc-head-icon relative"
+    <button ref={trigger} type="button" className="dc-head-icon"
       title={`새 버전 ${version}`} aria-label={`새 버전 ${version}`}
       aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
-      <Download size={17} />
-      <span aria-hidden="true" className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent" />
+      <Download size={20} />
+      <span aria-hidden="true" className="dc-head-badge" />
     </button>
     {open && <div role="dialog" aria-label="앱 업데이트" className="dc-head-popover">
       <p className="dc-head-popover-title">새 버전 {version}이 준비됐어요</p>

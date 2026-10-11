@@ -249,6 +249,7 @@ export default function ChannelHeader({
         >
           <Search size={20} />
         </button>
+        <AppUpdateIndicator />
         <button
           type="button"
           className="dc-head-icon"
@@ -258,7 +259,6 @@ export default function ChannelHeader({
         >
           <Bell size={20} />
         </button>
-        <AppUpdateIndicator />
         <button
           type="button"
           className="dc-head-icon"
