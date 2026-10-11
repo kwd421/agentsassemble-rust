@@ -1,9 +1,10 @@
+import { GoogleRegistrationRequired } from "../../lib/central/googleRegistration";
 import AccountDeletionSurface from "./AccountDeletionSurface";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import StartupIdentityGate from "./StartupIdentityGate";
 
-const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), open: vi.fn(), logout: vi.fn(), prepare: vi.fn(), receipt: vi.fn(),
+const mocks = vi.hoisted(() => ({ googleReturn: vi.fn(), bootstrap: vi.fn(), open: vi.fn(), logout: vi.fn(), prepare: vi.fn(), receipt: vi.fn(),
   session: null as object | null, callback: null as ((response: { credential: string }) => void) | null }));
 vi.mock("../../lib/central/identity", () => ({
   hasPendingLocalDemotion: vi.fn(() => false), retryPendingLocalDemotion: vi.fn(),
@@ -18,7 +19,7 @@ vi.mock("../../lib/central/identity", () => ({
   unsignedPost: mocks.receipt, clearCentralSession: vi.fn(), clearPendingCentralRecoveryCode: vi.fn(),
 }));
 vi.mock("../../lib/central/webGoogle", () => ({
-  startCentralWebGoogle: mocks.prepare, completeCentralWebGoogleReturn: async () => {},
+  startCentralWebGoogle: mocks.prepare, completeCentralWebGoogleReturn: mocks.googleReturn,
 }));
 vi.mock("../../lib/desktopBridge", () => ({
   requestDesktopHostProductSurface: () => { throw new Error("browser called native host"); },
@@ -94,4 +95,23 @@ it("reaches a retained receipt from ordinary signed-out startup without login or
   expect(mocks.bootstrap).not.toHaveBeenCalled();
   expect(mocks.prepare).not.toHaveBeenCalled();
   expect(mocks.open).not.toHaveBeenCalled();
+});
+
+it.each(["return", "login"])("shows a dedicated deleted-account card from Google %s without startup failure or implicit signup", async source => {
+  const request = new GoogleRegistrationRequired("deleted", "web", {} as never, 9999999999, null);
+  const register = vi.spyOn(request, "register");
+  if (source === "return") mocks.googleReturn.mockRejectedValueOnce(request);
+  else mocks.prepare.mockRejectedValueOnce(request);
+  render(<StartupIdentityGate deviceToken="" onComplete={completeStartup} />);
+  if (source === "login") fireEvent.click(await screen.findByRole("button", { name: "Google로 계속" }));
+  expect(await screen.findByRole("heading", { name: "탈퇴한 계정이에요" })).toBeTruthy();
+  expect(screen.getByText("이 Google 계정으로 새로 가입하면 예전 서버와 방은 이어지지 않아요.")).toBeTruthy();
+  expect(screen.getAllByRole("button").map(button => button.textContent)).toEqual(["새 계정 만들기", "다른 계정으로 로그인"]);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText("앱을 시작하지 못했어요.")).toBeNull();
+  expect(register).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "다른 계정으로 로그인" }));
+  expect(await screen.findByRole("button", { name: "Google로 계속" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "탈퇴한 계정이에요" })).toBeNull();
+  expect(register).not.toHaveBeenCalled();
 });

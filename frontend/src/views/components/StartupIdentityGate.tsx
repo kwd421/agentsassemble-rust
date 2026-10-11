@@ -304,7 +304,7 @@ export default function StartupIdentityGate({
         }
       } catch (reason) {
         if (active) {
-          if (reason instanceof GoogleRegistrationRequired) setGoogleRegistration(reason);
+          if (reason instanceof GoogleRegistrationRequired) { setGoogleRegistration(reason); setError(""); setChecking(false); return; }
           setError(failureMessage(reason, "앱을 시작하지 못했어요."));
           setChecking(false);
         }
@@ -428,7 +428,7 @@ export default function StartupIdentityGate({
       await loginCentralGoogle(setStatus, controller.signal);
       await finishCentralStartup();
     } catch (reason) {
-      if (reason instanceof GoogleRegistrationRequired) setGoogleRegistration(reason);
+      if (reason instanceof GoogleRegistrationRequired) { setGoogleRegistration(reason); setError(""); setChecking(false); return; }
       setChecking(false);
       setError(
         typeof reason === "object" &&
@@ -527,6 +527,16 @@ export default function StartupIdentityGate({
     );
   }
 
+  if (googleRegistration) return (
+    <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
+      <main className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl" aria-label="시작 로그인">
+        <GoogleRegistrationChoice request={googleRegistration}
+          onCancel={() => { setGoogleRegistration(null); setError(""); setScreen("choice"); setAccountSettingsOpen(false); }}
+          onComplete={async () => { await finishCentralStartup(); setGoogleRegistration(null); setError(""); }} />
+      </main>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
       {centralUnavailable && <ConnectionBanner message={directory?.status === "error" ? "로그인 정보를 확인하지 못했어요. 다시 시도해 주세요."
@@ -556,7 +566,7 @@ export default function StartupIdentityGate({
         {(accountSettingsOpen || (webEntry && new URLSearchParams(window.location.search).get("account") === "settings")) && <CentralAccountSettings disabled={busy} />}
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
 
-        {googleRegistration && <GoogleRegistrationChoice request={googleRegistration} onCancel={() => { setGoogleRegistration(null); setError(""); }} onComplete={async () => { setGoogleRegistration(null); setError(""); await finishCentralStartup(); }} />}
+
         {screen === "choice" && (
           <div className="grid gap-3">
             <button

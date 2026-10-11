@@ -1,5 +1,24 @@
 # Identity, accounts, friends and human admission
 
+## Account deletion UI polish (2026-10-11)
+
+Shared native/web deletion completion immediately unmounts the room UI and closes
+its remote connection while retaining the existing completion modal. Show
+`모든 기기에서 로그아웃했어요.` and skipped server results (offline copy:
+`꺼져 있어서 정리하지 못한 서버: …`); preserve optional local-data choices.
+확인/X return directly to signed-out startup, never the ended-room screen.
+The Google deleted-account return is a dedicated existing-style card:
+`탈퇴한 계정이에요`, `이 Google 계정으로 새로 가입하면 예전 서버와 방은 이어지지 않아요.`,
+primary `새 계정 만들기`, secondary `다른 계정으로 로그인` returning to normal
+sign-in. No account-settings, ordinary login controls or generic startup failure
+in this state. Registration stays explicit; authentication, receipt recovery,
+cancellation, persistence and server-owned deletion semantics remain unchanged.
+Verify affected tests, frontend build and mandatory architecture/structure gates;
+commit/push, redeploy central assets from the exact Rust HEAD, smoke /, bootstrap,
+member-join. Firefox existing private window only: choose deleted yaowhang3,
+capture notice and normal-card return without registering. No new deletion or
+new account is authorized. Record direct evidence and verification limits.
+
 ## Google deletion policy and real E2E17 (2026-10-11)
 
 Owner accepted the weaker step-up after real Google returned an account chooser

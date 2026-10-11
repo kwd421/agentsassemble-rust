@@ -11,7 +11,7 @@ import { loadDeletionReceipt } from "../../lib/central/accountDeletion";
 import { wipeDesktopAccountData } from "../../lib/desktopBridge";
 vi.mock("../../lib/central/accountDeletionHost", () => ({ deletionOwnHost: vi.fn(async () => ({ host: null, hasOwnServers: false })), stopDeletionOwnHost: vi.fn() }));
 vi.mock("../../lib/central/identity", () => ({ CENTRAL_SESSION_CHANGED_EVENT: "changed", CENTRAL_SESSION_CLEARED_EVENT: "cleared", centralAccountEntryUrl: () => "https://central.example/", loadCentralSession: vi.fn(), signedRequest: vi.fn(), unsignedPost: vi.fn(), clearCentralSession: vi.fn(), clearPendingCentralRecoveryCode: vi.fn() }));
-vi.mock("../../lib/desktopBridge", () => ({ wipeDesktopAccountData: vi.fn() }));
+vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: () => false, wipeDesktopAccountData: vi.fn() }));
 const session = { token: "fixture-session", device_id: "device", expires_at: 2 ** 31, person: { person_id: "person", display_name: "Disposable fixture", identity_kind: "guest" as const } };
 beforeEach(() => { cleanup(); vi.clearAllMocks(); sessionStorage.clear(); vi.mocked(loadCentralSession).mockReturnValue(session); });
 it("shows hidden/skipped servers and requires explicit receipt lookup after a lost final response", async () => {
@@ -33,6 +33,7 @@ it("shows hidden/skipped servers and requires explicit receipt lookup after a lo
   expect(disableCalls).toBe(1); expect(unsignedPost).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "다시 시도" }));
   expect(await screen.findByRole("heading", { name: "탈퇴했어요" })).toBeTruthy();
+  expect(screen.getByText("모든 기기에서 로그아웃했어요.")).toBeTruthy();
   expect(screen.getByLabelText("건너뛴 서버").textContent).toContain("숨긴 오프라인 서버");
   expect(screen.getByLabelText("건너뛴 서버").textContent).toContain("지금 연결할 수 없어요.");
   expect(disableCalls).toBe(1); expect(unsignedPost).toHaveBeenCalledOnce();
@@ -89,7 +90,7 @@ it("keeps the central account operation and optional local choice when its room/
   expect((flow.getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
   expect(wipeDesktopAccountData).not.toHaveBeenCalled();
   await user.click(flow.getByRole("button", { name: "확인" }));
-  expect(screen.getByRole("dialog", { name: "서버 연결 종료" })).toBeTruthy();
+  expect(screen.queryByRole("dialog", { name: "서버 연결 종료" })).toBeNull();
 });
 
 it("refreshes expired proof without repeating a confirmed own-host stop", async () => {

@@ -14,7 +14,7 @@ export default function AccountDeletionSettings({ disabled }: { disabled: boolea
     open();
   }}>계정 탈퇴</button>;
 }
-export function AccountDeletionFlow({ disabled, onClose }: { disabled: boolean; onClose?: () => void }) {
+export function AccountDeletionFlow({ disabled, onClose, onDeleted }: { disabled: boolean; onClose?: () => void; onDeleted?: () => void }) {
   const operation = useRef<AccountDeletion | null>(null);
   const cancel = useRef(new AbortController());
   const generation = useRef(0);
@@ -74,7 +74,7 @@ export function AccountDeletionFlow({ disabled, onClose }: { disabled: boolean; 
       if (receipt && (current ? receipt.person_id === current.person.person_id : receipt.request_id === previous?.requestId || receipt.request_id === retainedReceipt?.request_id)) {
         finishing.current = true; setChecking(true);
         if (await checkDeletionReceipt(AbortSignal.any([cancel.current.signal, AbortSignal.timeout(15_000)])) !== "account_deleted") throw new Error("탈퇴 결과를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.");
-        if (ownsUi()) setDeleted(true); return;
+        if (ownsUi()) { setDeleted(true); onDeleted?.(); } return;
       }
       if (!current || current.token !== session?.token) throw new Error("탈퇴할 계정으로 다시 로그인해 주세요.");
       const next = previous?.canRetryAuthenticated(current) ? previous.retryAuthenticated(current) : previous?.session.token === current.token ? previous : new AccountDeletion(current);
@@ -88,7 +88,7 @@ export function AccountDeletionFlow({ disabled, onClose }: { disabled: boolean; 
       await next.inventory(); if (!ownsUi()) return; update();
       await next.removeReachable(update); if (!ownsUi()) return;
       finishing.current = true;
-      await next.disable(); if (ownsUi()) setDeleted(true);
+      await next.disable(); if (ownsUi()) { setDeleted(true); onDeleted?.(); }
     } catch (reason) {
       if (!ownsUi()) return;
       try { setRetainedReceipt(loadDeletionReceipt()); } catch { /* The original storage/parse failure stays visible below. */ }
@@ -128,7 +128,8 @@ export function AccountDeletionFlow({ disabled, onClose }: { disabled: boolean; 
       </footer>
     </>}
     {deleted && <>
-      {skipped.length > 0 && <div aria-label="건너뛴 서버"><p>이 서버에는 이름과 사진이 남을 수 있어요.</p><ul className="dc-account-deletion-servers">{skipped.map(item => <li key={item.key}><span>{item.name}{item.reason && <small className="text-text-muted block">{item.reason}</small>}</span><span className="dc-member-status-chip" data-state="attention">건너뜀</span></li>)}</ul></div>}
+      <p>모든 기기에서 로그아웃했어요.</p>
+      {skipped.length > 0 && <div aria-label="건너뛴 서버"><p>정리하지 못한 서버에는 이름과 사진이 남을 수 있어요.</p><ul className="dc-account-deletion-servers">{skipped.map(item => <li key={item.key}><span>{item.reason === "지금 연결할 수 없어요." ? `꺼져 있어서 정리하지 못한 서버: ${item.name}` : item.name}{item.reason && <small className="text-text-muted block">{item.reason}</small>}</span><span className="dc-member-status-chip" data-state="attention">건너뜀</span></li>)}</ul></div>}
       {localFollowup === "local_stopped" && <LocalAccountDataChoice disabled={disabled || busy} />}
       {localFollowup === "server_app" && <p>방 데이터를 지우려면 서버 컴퓨터의 앱에서 선택해 주세요. 그대로 두어도 돼요.</p>}
       <footer><button type="button" className="ops-cta min-h-11 px-4" onClick={close}>확인</button></footer>

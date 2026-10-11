@@ -10,7 +10,7 @@ export class GoogleRegistrationRequired extends Error {
   #expiresAt: number;
   #expectedToken: string | null;
   constructor(readonly identityStatus: "deleted" | "absent", flow: "native" | "web", body: GoogleCodeExchange, expiresAt: number, expectedToken: string | null) {
-    super(identityStatus === "deleted" ? "탈퇴한 Google 계정이에요. 새 계정을 만들면 이전 연결 관계를 이어받지 않아요." : "아직 가입하지 않은 Google 계정이에요. 새 계정을 만들려면 따로 선택해 주세요.");
+    super(identityStatus === "deleted" ? "이 Google 계정으로 새로 가입하면 예전 서버와 방은 이어지지 않아요." : "아직 가입하지 않은 Google 계정이에요. 새 계정을 만들려면 따로 선택해 주세요.");
     this.#body = body; this.#flow = flow; this.#expiresAt = expiresAt; this.#expectedToken = expectedToken;
   }
   async register(signal?: AbortSignal): Promise<CentralSession> {

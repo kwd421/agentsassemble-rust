@@ -11,10 +11,11 @@ export default function GoogleRegistrationChoice({ request, onComplete, onCancel
     catch (reason) { setError(reason instanceof Error ? reason.message : "새 계정을 만들지 못했어요."); }
     finally { operation.current = false; setBusy(false); }
   }
-  return <section aria-label="Google 새 계정 만들기" aria-busy={busy}>
-    <p>{request.message}</p>
-    <button type="button" className="ops-button" disabled={busy} onClick={() => void register()}>새 계정 만들기</button>
-    <button type="button" className="ops-button" disabled={busy} onClick={onCancel}>취소</button>
+  return <section aria-label="Google 새 계정 만들기" aria-busy={busy} className="grid gap-5">
+    <h1 className="text-2xl font-black text-text-primary">{request.identityStatus === "deleted" ? "탈퇴한 계정이에요" : "새 계정을 만들어 주세요"}</h1>
+    <p className="text-[13px] font-semibold leading-5 text-text-muted">{request.message}</p>
+    <button type="button" className="ops-cta min-h-12 px-4" disabled={busy} onClick={() => void register()}>새 계정 만들기</button>
+    <button type="button" className="ops-button min-h-12 px-4" disabled={busy} onClick={onCancel}>다른 계정으로 로그인</button>
     {error && <p role="alert">{error}</p>}
   </section>;
 }
