@@ -414,12 +414,13 @@
 }
 
 .dc-head-search {
-  width: 180px;
-  height: 28px;
+  width: 200px;
+  height: 32px;
   align-items: center;
   gap: 6px;
-  border-radius: 4px;
-  background: #1e1f22;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  background: var(--color-server-rail);
   padding: 0 7px 0 9px;
   color: var(--color-text-muted);
 }

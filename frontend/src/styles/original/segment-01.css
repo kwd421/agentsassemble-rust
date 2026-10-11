@@ -8,18 +8,18 @@
  */
 
 @theme {
-  --color-server-rail: #0f1014;
-  --color-sidebar: #111214;
+  --color-server-rail: #121214;
+  --color-sidebar: #121214;
   --color-sidebar-hover: #24252b;
   --color-sidebar-active: #2b2d33;
   --color-sidebar-text: #949ba4;
   --color-sidebar-text-active: #f2f3f5;
-  --color-chat-bg: #1a1b20;
-  --color-chat-hover: #202127;
-  --color-panel: #202127;
-  --color-panel-bg: #202127;
-  --color-panel-soft: #2a2b31;
-  --color-panel-border: rgba(255, 255, 255, 0.08);
+  --color-chat-bg: #1a1a1e;
+  --color-chat-hover: #202024;
+  --color-panel: #202024;
+  --color-panel-bg: #202024;
+  --color-panel-soft: #222327;
+  --color-panel-border: #303137;
   --color-panel-separator: rgba(255, 255, 255, 0.095);
   --color-line: rgba(255, 255, 255, 0.08);
   --color-text-primary: #f2f3f5;

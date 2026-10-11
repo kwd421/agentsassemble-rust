@@ -300,13 +300,13 @@ body[data-sidebar-resizing="true"] {
   align-items: center;
   gap: 6px;
   border-radius: 8px;
-  background: #232428;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel);
   padding: 8px 10px;
 }
 
 .dc-current-user:hover {
-  background: #292b2f;
+  background: #26272c;
 }
 
 .dc-user-identity {
