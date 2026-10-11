@@ -120,3 +120,5 @@ mod member_invite_boundary;
 
 #[path = "../local_attendee_turn.rs"]
 mod local_attendee_turn;
+#[path = "../server_move_process.rs"]
+mod server_move_process;

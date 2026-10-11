@@ -753,7 +753,21 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 34);
+        let registered: std::collections::BTreeSet<_> = super::REGISTERED_COMMANDS
+            .iter()
+            .map(|command| command.name)
+            .collect();
+        let exposed: std::collections::BTreeSet<_> =
+            surface.commands.iter().map(String::as_str).collect();
+        assert_eq!(
+            exposed, registered,
+            "every bundled command must have its desktop permission"
+        );
+        assert_eq!(
+            exposed.len(),
+            surface.commands.len(),
+            "surface commands must be unique"
+        );
         assert!(
             surface
                 .commands
@@ -767,6 +781,8 @@ mod tests {
                 .any(|command| command == "host_product_surface")
         );
         for expected in [
+            "server_backup",
+            "server_restore",
             "host_device_info",
             "open_provider_setup_help",
             "runtime_account_deletion_ticket",

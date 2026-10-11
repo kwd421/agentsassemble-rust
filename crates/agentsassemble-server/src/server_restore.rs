@@ -310,7 +310,10 @@ fn host_canonical(
     value["owner_person_id"] = json!(owner);
     value["issued_at"] = json!(issued_at);
     value["nonce"] = json!(nonce);
-    Ok(serde_json::to_vec(&value)?)
+    // ACP enables serde_json/preserve_order transitively. Worker canonicalJson
+    // sorts keys; a Value's insertion order must never define this signed wire form.
+    let canonical: BTreeMap<String, Value> = serde_json::from_value(value)?;
+    Ok(serde_json::to_vec(&canonical)?)
 }
 async fn validate_switch(job: &RestoreJob, bytes: &str) -> anyhow::Result<()> {
     let body: Value = serde_json::from_str(bytes)?;
@@ -495,6 +498,7 @@ mod tests {
             .await
             .is_err()
         );
+        assert_fenced_cancellation(&target, operation)?;
         execute(
             &target,
             Request::Cancel {
@@ -505,6 +509,23 @@ mod tests {
         assert!(execute(&target, Request::Inspect).await?.is_null());
         assert!(!target.exists());
         source.close().await?;
+        Ok(())
+    }
+    fn assert_fenced_cancellation(target: &Path, operation: uuid::Uuid) -> anyhow::Result<()> {
+        let mut job = RestoreJob::resume(target, operation)?;
+        job.mark_switch_unknown()?;
+        assert!(
+            job.record_not_committed(&uuid::Uuid::new_v4().to_string(), "current-epoch")
+                .is_err()
+        );
+        assert!(
+            job.record_not_committed(&operation.to_string(), "different-epoch")
+                .is_err()
+        );
+        drop(job);
+        assert!(RestoreJob::resume(target, operation)?.cancel().is_err());
+        RestoreJob::resume(target, operation)?
+            .record_not_committed(&operation.to_string(), "current-epoch")?;
         Ok(())
     }
 }
