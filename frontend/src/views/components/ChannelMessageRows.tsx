@@ -7,11 +7,11 @@ import { MessageReply, type ReplySource } from "./MessageReply";
 import MessageRow, { MessageActions } from "./MessageRow";
 
 export default function ChannelMessageRows({ events, profiles, mentionLabels, selectedId, pinnedIds,
-  canReply, replyDisabled, canPin, pinDisabled, onReply, onTogglePin, replySource, onNavigate }: {
+  canReply, replyDisabled, canPin, pinDisabled, onReply, onTogglePin, replyTargetId, replySource, onNavigate }: {
   events: RoomEvent[]; profiles: Record<string, CanonicalParticipantProfile>; mentionLabels: MentionLabels;
   selectedId?: string; pinnedIds: Set<string>; canReply: boolean; replyDisabled: boolean;
   canPin: boolean; pinDisabled: boolean; onReply: (eventId: string) => void;
-  onTogglePin: (eventId: string) => void; replySource: (eventId: string) => ReplySource;
+  onTogglePin: (eventId: string) => void; replyTargetId?: string; replySource: (eventId: string) => ReplySource;
   onNavigate: (eventId: string) => void;
 }) {
   const byId = new Map(events.map((event) => [event.id, event]));
@@ -31,7 +31,7 @@ export default function ChannelMessageRows({ events, profiles, mentionLabels, se
     return <MessageRow key={row.key} eventId={event.id} author={row.event.name} createdAt={event.created_at}
         participantType={event.actor.participant_type} avatarLabel={profile?.avatarLabel}
         avatarImage={profile?.avatarImageUrl} providerKind={profile?.providerKind} role={profile?.role}
-        showHeader={row.showHeader} selected={selectedId === event.id}
+        showHeader={row.showHeader} selected={selectedId === event.id} replyTarget={replyTargetId === event.id}
         actions={<MessageActions onReply={canReply && !deleted ? () => onReply(event.id) : undefined}
           replyDisabled={replyDisabled} pinned={pinnedIds.has(event.id)} pinDisabled={pinDisabled}
           onTogglePin={canPin && !deleted ? () => onTogglePin(event.id) : undefined} />}

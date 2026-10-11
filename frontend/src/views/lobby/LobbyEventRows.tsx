@@ -392,6 +392,7 @@ export function LobbyMessageRow({
   onEdit,
   onDelete,
   onReply,
+  replyTarget = false,
   replySource,
   onOpenReply,
 }: {
@@ -410,6 +411,7 @@ export function LobbyMessageRow({
   onEdit?: (content: string) => Promise<void>;
   onDelete?: () => Promise<void>;
   onReply?: () => void;
+  replyTarget?: boolean;
   replySource?: ReplySource;
   onOpenReply?: () => void;
 }) {
@@ -421,7 +423,7 @@ export function LobbyMessageRow({
     <MessageRow eventId={event.id} author={event.name} createdAt={event.created_at}
       avatarImage={event.avatar_image_url} providerKind={providerKind || event.provider_kind}
       participantType={event.actor_type} avatarLabel={event.avatar_label}
-      role={event.role} showHeader={showHeader} system={systemLike}
+      role={event.role} showHeader={showHeader} system={systemLike} replyTarget={replyTarget}
       actions={<MessageActions onReply={onReply} pinned={pinned} onTogglePin={canPin ? onTogglePin : undefined}>
         {onEdit && onDelete && <MessageMutationControls event={event} canEdit={canEdit} canDelete={canDelete}
           onEdit={onEdit} onDelete={onDelete} />}

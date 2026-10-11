@@ -6,6 +6,7 @@ import { useMessagePins } from "./useMessagePins";
 import { anonymousAuthorRevision } from "../lib/participantAnonymization";
 import { useEffect, useMemo, useState } from "react";
 import { Hash } from "lucide-react";
+import { useReplyBarScroll } from "./components/useReplyBarScroll";
 import {
   type LiveAgent,
   type LobbyEvent,
@@ -172,6 +173,7 @@ export default function LobbyView({
   const replyScope = `${roomUid}/${activeRoom.meetingId}/${viewerParticipantId}`;
   const [replyTarget, setReplyTarget] = useState({ scope: "", id: "" });
   const replyId = replyTarget.scope === replyScope ? replyTarget.id : "";
+  useReplyBarScroll(scrollRef, replyId);
   const replySource = (id: string) => {
     const source = visibleEvents.find((event) => (event.record_id || event.id) === id);
     return { eventId: id, author: source?.name, text: source?.message || source?.vote_question ||
@@ -591,6 +593,7 @@ export default function LobbyView({
                 mentionLabels={mentionLabels}
                 onReply={canPostMessages && !event.message_deleted && ["message", "vote"].includes(event.kind) && event.flow_action !== "message_delta"
                   ? () => setReplyTarget({ scope: replyScope, id: event.record_id || event.id }) : undefined}
+                replyTarget={Boolean(replyId) && replyId === (event.record_id || event.id)}
                 replySource={event.reply_to_event_id ? replySource(event.reply_to_event_id) : undefined}
                 onOpenReply={() => {
                   const id = event.reply_to_event_id;

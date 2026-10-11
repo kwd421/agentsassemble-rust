@@ -25,15 +25,33 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--color-panel-border);
-  border-bottom: 0;
+  border-bottom-color: #35353b;
   border-radius: 8px 8px 0 0;
-  background: var(--color-panel);
-  padding: 0 4px 0 16px;
+  background: #27282c;
+  padding: 0 16px;
   color: var(--color-text-secondary);
   font-size: 14px;
 }
 
+.dc-reply-draft-close {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  color: #27282c;
+}
+
+.dc-reply-draft-close:hover,
+.dc-reply-draft-close:focus-visible {
+  background: var(--color-text-primary);
+  outline: none;
+}
+
 .dc-reply-draft + .dc-composer-bar {
+  border-top: 0;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Hash, Send } from "lucide-react";
+import { useReplyBarScroll } from "./components/useReplyBarScroll";
 import { RoomSocketSayError } from "../roomSocketTypes";
 import type { MessagePinsAuthority, RoomChannel, RoomSearchResult } from "../api";
 import type { useChannelTranscript } from "../app/useChannelTranscript";
@@ -54,6 +55,7 @@ export default function CustomChannelView({
   const mentionLabels = useMemo(() => Object.fromEntries(mentionables.map(({ token, label }) => [token, label])), [mentionables]);
   const value = draft.identity === identity ? draft.value : "";
   const replyTo = draft.identity === identity ? draft.replyTo : undefined;
+  useReplyBarScroll(scrollRef, replyTo);
   function replySource(eventId: string) {
     const source = transcript.events.find((event) => event.id === eventId);
     return { eventId, author: source ? participantProfiles[source.actor.participant_id]?.displayName || source.display_name || undefined : undefined,
@@ -165,7 +167,7 @@ export default function CustomChannelView({
         pinDisabled={pins.pinsLoading || pins.pinBusyIds.size > 0}
         onReply={(id) => { setDraft({ identity, value, replyTo: id }); inputRef.current?.focus(); }}
         onTogglePin={(id) => void pins.setPinned(id, !pinnedIds.has(id))}
-        replySource={replySource} onNavigate={(id) => void navigate(id)} />
+        replyTargetId={replyTo} replySource={replySource} onNavigate={(id) => void navigate(id)} />
     </div>
     <div className="relative shrink-0 px-2 pb-2">
       {(!transcript.following || !atBottom) && <div className="dc-old-history-notice" role="status">

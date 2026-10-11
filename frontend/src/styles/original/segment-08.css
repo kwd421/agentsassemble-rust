@@ -109,6 +109,12 @@
   position: relative;
 }
 
+.dc-message[data-reply-target="true"],
+.dc-message[data-reply-target="true"]:hover {
+  background: #252641;
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
 .dc-message-body {
   color: var(--color-text-normal);
   font-size: 16px;

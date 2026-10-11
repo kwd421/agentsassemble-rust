@@ -41,14 +41,14 @@ export function MessageActions({ onReply, replyDisabled, onTogglePin, pinned, pi
 }
 
 export default function MessageRow({ eventId, author, createdAt, avatarImage, providerKind, participantType, avatarLabel, role,
-  showHeader = true, system = false, selected, actions, reply, children }: {
+  showHeader = true, system = false, selected, replyTarget, actions, reply, children }: {
   eventId: string; author: string; createdAt: string; avatarImage?: string; providerKind?: string;
   participantType?: string; avatarLabel?: string;
-  role?: string; showHeader?: boolean; system?: boolean; selected?: boolean;
+  role?: string; showHeader?: boolean; system?: boolean; selected?: boolean; replyTarget?: boolean;
   actions?: ReactNode; reply?: ReactNode; children: ReactNode;
 }) {
   return <div className={`dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-4 px-4 py-0.5 ${showHeader ? "mt-[17px]" : ""}`}
-    data-has-reply={reply ? true : undefined}
+    data-has-reply={reply ? true : undefined} data-reply-target={replyTarget || undefined}
     data-room-event-id={eventId} data-role={role || undefined} data-search-target={selected} tabIndex={0}>
     <MessageAvatar participantType={participantType} avatarLabel={avatarLabel} displayName={author} avatarImage={avatarImage} providerKind={providerKind} show={showHeader} system={system} />
     {actions}
