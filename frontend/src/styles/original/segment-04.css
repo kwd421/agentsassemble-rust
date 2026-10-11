@@ -35,7 +35,8 @@
 
 .dc-sidebar-resizer {
   position: relative;
-  z-index: 20;
+  /* Above the pinned channel header (z-index 60) so the handle line is not clipped at the top. */
+  z-index: 61;
   width: 8px;
   min-width: 8px;
   margin-left: -4px;
