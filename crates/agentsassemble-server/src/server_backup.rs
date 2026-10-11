@@ -25,16 +25,22 @@ use std::{
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
+#[path = "server_backup_journal.rs"]
+mod journal;
+
 #[derive(Clone, Default)]
 pub(crate) struct BackupControl(Arc<Mutex<Option<Job>>>);
 struct Job {
     progress: Progress,
     cancel: CancellationToken,
+    record: journal::Record,
+    root: PathBuf,
 }
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Progress {
     operation_id: uuid::Uuid,
-    phase: &'static str,
+    phase: String,
     snapshot_at: Option<chrono::DateTime<chrono::Utc>>,
     bytes: Option<u64>,
 }
@@ -47,6 +53,7 @@ enum Control {
         owner_person_id: String,
         server_name: String,
     },
+    Latest,
     Status {
         operation_id: uuid::Uuid,
     },
@@ -71,7 +78,7 @@ impl IntoResponse for Failure {
 async fn control(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<Progress>, Failure> {
+) -> Result<Json<Option<Progress>>, Failure> {
     consume_local_operator(&state, request.headers())
         .await
         .ok_or(Failure(StatusCode::FORBIDDEN))?;
@@ -84,16 +91,23 @@ async fn control(
             passphrase,
             owner_person_id,
             server_name,
-        } => {
-            start(
-                &state,
-                destination,
-                passphrase,
-                owner_person_id,
-                server_name,
-            )
-            .await
-        }
+        } => start(
+            &state,
+            destination,
+            passphrase,
+            owner_person_id,
+            server_name,
+        )
+        .await
+        .map(|Json(progress)| Json(Some(progress))),
+        Control::Latest => Ok(Json(
+            state
+                .server_backup
+                .0
+                .lock()
+                .as_ref()
+                .map(|job| job.progress.clone()),
+        )),
         Control::Status { operation_id } | Control::Cancel { operation_id } => {
             let mut current = state.server_backup.0.lock();
             let job = current
@@ -101,11 +115,11 @@ async fn control(
                 .filter(|j| j.progress.operation_id == operation_id)
                 .ok_or(Failure(StatusCode::NOT_FOUND))?;
             if matches!(input, Control::Cancel { .. })
-                && !matches!(job.progress.phase, "complete" | "publishing")
+                && !matches!(job.progress.phase.as_str(), "complete" | "publishing")
             {
                 job.cancel.cancel();
             }
-            Ok(Json(job.progress.clone()))
+            Ok(Json(Some(job.progress.clone())))
         }
     }
 }
@@ -146,23 +160,33 @@ async fn start(
         .map_err(|_| Failure(StatusCode::FORBIDDEN))?;
     let progress = Progress {
         operation_id: uuid::Uuid::new_v4(),
-        phase: "snapshot",
+        phase: "snapshot".into(),
         snapshot_at: None,
         bytes: None,
     };
     let cancel = state.shutdown.child_token();
     {
         let mut current = state.server_backup.0.lock();
-        if current
-            .as_ref()
-            .is_some_and(|j| !matches!(j.progress.phase, "complete" | "failed" | "cancelled"))
-        {
+        if current.as_ref().is_some_and(|j| {
+            !matches!(
+                j.progress.phase.as_str(),
+                "complete" | "failed" | "cancelled" | "interrupted"
+            )
+        }) {
             return Err(Failure(StatusCode::CONFLICT));
         }
-        *current = Some(Job {
+        let root = state
+            .runtime_state_root
+            .clone()
+            .ok_or(Failure(StatusCode::CONFLICT))?;
+        let job = Job {
             progress: progress.clone(),
             cancel: cancel.clone(),
-        });
+            record: journal::Record::default(),
+            root,
+        };
+        journal::save(&job).map_err(|_| Failure(StatusCode::INTERNAL_SERVER_ERROR))?;
+        *current = Some(job);
     }
     let next = state.clone();
     let id = progress.operation_id;
@@ -180,30 +204,44 @@ async fn start(
             &cancel,
         )
         .await;
-        if result.is_err() {
-            next.server_backup.phase(
-                id,
-                if cancel.is_cancelled() {
-                    "cancelled"
-                } else {
-                    "failed"
-                },
-            );
+        if result.is_err()
+            && next
+                .server_backup
+                .phase(
+                    id,
+                    if cancel.is_cancelled() {
+                        "cancelled"
+                    } else {
+                        "failed"
+                    },
+                )
+                .is_err()
+        {
+            tracing::warn!("backup failure status could not be persisted");
         }
     });
     Ok(Json(progress))
 }
 
 impl BackupControl {
-    fn phase(&self, id: uuid::Uuid, phase: &'static str) {
+    fn phase(&self, id: uuid::Uuid, phase: &'static str) -> anyhow::Result<()> {
         if let Some(job) = self
             .0
             .lock()
             .as_mut()
             .filter(|job| job.progress.operation_id == id)
         {
-            job.progress.phase = phase;
+            job.progress.phase = if matches!(phase, "failed" | "cancelled")
+                && matches!(job.progress.phase.as_str(), "publishing" | "complete")
+            {
+                "interrupted"
+            } else {
+                phase
+            }
+            .into();
+            journal::save(job)?;
         }
+        Ok(())
     }
 }
 struct Cancellable<R> {
@@ -243,8 +281,10 @@ async fn export(
         .as_ref()
         .context("runtime state directory missing")?;
     let staging = tempfile::Builder::new()
-        .prefix("server-backup-")
+        .prefix(&format!("server-backup-{id}-"))
         .tempdir_in(root)?;
+    agentsassemble_persistence::secure_private_directory(staging.path())?;
+    state.server_backup.record_path(id, staging.path(), false)?;
     let payload = staging.path().join("payload.sqlite");
     let snapshot_at = state
         .store
@@ -326,7 +366,8 @@ fn finish_export(
         .prefix(&format!(".aa-backup-{id}-"))
         .suffix(".partial")
         .tempfile_in(parent)?;
-    control.phase(id, "encoding");
+    control.record_path(id, partial.path(), true)?;
+    control.phase(id, "encoding")?;
     let mut input = Cancellable {
         inner: std::fs::File::open(&payload)?,
         cancel: cancel.clone(),
@@ -340,7 +381,7 @@ fn finish_export(
     )?;
     partial.flush()?;
     partial.as_file().sync_all()?;
-    control.phase(id, "verifying");
+    control.phase(id, "verifying")?;
     let mut input = Cancellable {
         inner: std::fs::File::open(partial.path())?,
         cancel: cancel.clone(),
@@ -361,17 +402,19 @@ fn finish_export(
         .filter(|j| j.progress.operation_id == id)
         .context("job changed")?;
     ensure!(!cancel.is_cancelled(), "cancelled");
-    job.progress.phase = "publishing";
+    job.progress.phase = "publishing".into();
+    journal::save(job)?;
     let bytes = partial.as_file().metadata()?.len();
     partial.persist_noclobber(&destination)?;
     #[cfg(unix)]
     std::fs::File::open(parent)?.sync_all()?;
     job.progress = Progress {
         operation_id: id,
-        phase: "complete",
+        phase: "complete".into(),
         snapshot_at: Some(snapshot_at),
         bytes: Some(bytes),
     };
+    journal::save(job)?;
     drop(staging);
     Ok::<_, anyhow::Error>(())
 }
@@ -418,11 +461,13 @@ mod tests {
             *control.0.lock() = Some(Job {
                 progress: Progress {
                     operation_id: id,
-                    phase: "snapshot",
+                    phase: "snapshot".into(),
                     snapshot_at: None,
                     bytes: None,
                 },
                 cancel: cancel.clone(),
+                record: journal::Record::default(),
+                root: directory.path().to_owned(),
             });
             let result = finish_export(
                 id,

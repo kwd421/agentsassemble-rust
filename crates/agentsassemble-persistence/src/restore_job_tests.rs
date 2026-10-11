@@ -146,30 +146,7 @@ async fn prepared_move_resumes_exact_commit_and_opens_only_with_new_keys()
         restored.registration_epoch().await?,
         Some("committed-epoch".into())
     );
-    assert!(restored.next_central_endpoint_generation().await? > receipt.endpoint_generation);
-    let endpoint = restored
-        .reserve_central_endpoint_event("committed-epoch", "https://new.example", 1)
-        .await?;
-    assert!(
-        restored
-            .acknowledge_restored_endpoint(&endpoint, "wrong-key")
-            .await
-            .is_err()
-    );
-    assert_eq!(
-        RestoreJob::inspect(&target)?.ok_or("missing job")?.phase,
-        RestorePhase::Activated
-    );
-    restored
-        .finish_central_endpoint_event(&endpoint, true)
-        .await?;
-    restored
-        .acknowledge_restored_endpoint(&endpoint, &receipt.new_key_fingerprint)
-        .await?;
-    assert_eq!(
-        RestoreJob::inspect(&target)?.ok_or("missing job")?.phase,
-        RestorePhase::Ready
-    );
+    assert_ready_after_current_ack(&restored, &target, &receipt).await?;
     assert!(
         !target_dir
             .path()
@@ -183,5 +160,48 @@ async fn prepared_move_resumes_exact_commit_and_opens_only_with_new_keys()
         old.private_key_pkcs8()
     );
     source.close().await?;
+    Ok(())
+}
+
+async fn assert_ready_after_current_ack(
+    restored: &SqliteStore,
+    target: &std::path::Path,
+    receipt: &RestoreReceipt,
+) -> Result<(), Box<dyn std::error::Error>> {
+    assert!(restored.next_central_endpoint_generation().await? > receipt.endpoint_generation);
+    let endpoint = restored
+        .reserve_central_endpoint_event("committed-epoch", "https://new.example", 1)
+        .await?;
+    assert!(
+        restored
+            .acknowledge_restored_endpoint(&endpoint, "wrong-key")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
+        RestorePhase::Activated
+    );
+    let stale = endpoint;
+    let endpoint = restored
+        .reserve_central_endpoint_event("committed-epoch", "https://newer.example", 1)
+        .await?;
+    restored
+        .acknowledge_restored_endpoint(&stale, &receipt.new_key_fingerprint)
+        .await?;
+    assert_eq!(
+        RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
+        RestorePhase::Activated
+    );
+    restored
+        .finish_central_endpoint_event(&endpoint, true)
+        .await?;
+    restored
+        .acknowledge_restored_endpoint(&endpoint, &receipt.new_key_fingerprint)
+        .await?;
+    assert_eq!(
+        RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
+        RestorePhase::Ready
+    );
     Ok(())
 }

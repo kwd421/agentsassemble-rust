@@ -4,7 +4,7 @@ import {bootstrapCentral,loadCentralSession,type CentralServer} from "../../lib/
 import {strictRecord} from "../../lib/strictJsonContract";
 
 type Progress={operation_id:string;phase:string;snapshot_at:string|null;bytes:number|null};
-const phases:Record<string,string>={snapshot:"서버 내용을 준비하고 있어요",encoding:"백업 파일을 만들고 있어요",verifying:"파일을 확인하고 있어요",publishing:"백업 파일을 저장하고 있어요",complete:"백업 파일을 저장했어요",failed:"백업 파일을 만들지 못했어요. 기존 파일은 덮어쓰지 않았어요.",cancelled:"백업을 취소했어요"};
+const phases:Record<string,string>={snapshot:"서버 내용을 준비하고 있어요",encoding:"백업 파일을 만들고 있어요",verifying:"파일을 확인하고 있어요",publishing:"백업 파일을 저장하고 있어요",complete:"백업 파일을 저장했어요",failed:"백업 파일을 만들지 못했어요. 기존 파일은 덮어쓰지 않았어요.",cancelled:"백업을 취소했어요",interrupted:"앱이 종료되어 백업 완료를 확인하지 못했어요. 저장 위치를 확인한 뒤 새 백업을 만들어 주세요."};
 function parse(value:unknown):Progress {
   const row=strictRecord(value,"백업 진행 상태");
   if(typeof row.operation_id!=="string" || !/^[0-9a-f-]{36}$/.test(row.operation_id) || typeof row.phase!=="string" || !Object.hasOwn(phases,row.phase) ||
@@ -16,29 +16,37 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
   const [encrypted,setEncrypted]=useState(true),[passphrase,setPassphrase]=useState(""),[confirm,setConfirm]=useState("");
   const [visible,setVisible]=useState(false),[progress,setProgress]=useState<Progress|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState("");
   const operation=useRef(false);
+  const [statusRetry,setStatusRetry]=useState(0);
   useEffect(()=>{let live=true;void (async()=>{try{
     const central=await bootstrapCentral();
     const local=isDesktopWebview()?await requestDesktopHostDeviceInfo():null;
     const owned=central?.servers.find(server=>server.relation==="owner"&&(!local||server.server_id===local.server_id));
     if(live)setOwner(owned||null);
-  }catch{/* The server rechecks current ownership before export. */}finally{if(live)setChecked(true);}})();return()=>{live=false;};},[]);
-  const running=Boolean(progress&&!['complete','failed','cancelled'].includes(progress.phase));
+    if(local){const latest=await requestDesktopServerBackup({action:"latest"});if(live&&latest!==null)setProgress(parse(latest));}
+  }catch(reason){if(live)setError(reason instanceof Error?reason.message:String(reason));}finally{if(live)setChecked(true);}})();return()=>{live=false;};},[]);
+  const running=Boolean(progress&&!['complete','failed','cancelled','interrupted'].includes(progress.phase));
   useEffect(()=>{
     if(!running||!progress)return;
     let stopped=false;let timer:ReturnType<typeof setTimeout>|undefined;
     const poll=async()=>{try{const value=parse(await requestDesktopServerBackup({action:"status",operation_id:progress.operation_id}));if(!stopped)setProgress(value);
-      if(!stopped&&!['complete','failed','cancelled'].includes(value.phase))timer=setTimeout(()=>void poll(),1000);
+      if(!stopped&&!['complete','failed','cancelled','interrupted'].includes(value.phase))timer=setTimeout(()=>void poll(),1000);
     }catch(reason){if(!stopped)setError(reason instanceof Error?reason.message:String(reason));}};
     timer=setTimeout(()=>void poll(),1000);
     return()=>{stopped=true;clearTimeout(timer);};
-  },[running,progress?.operation_id]);
+  },[running,progress?.operation_id,statusRetry]);
+  async function refresh(){
+    try{const latest=await requestDesktopServerBackup({action:"latest"});setProgress(latest===null?null:parse(latest));setError("");setStatusRetry(value=>value+1);}
+    catch(reason){setError(reason instanceof Error?reason.message:String(reason));}
+  }
   async function start(){
     if(operation.current||!owner)return;operation.current=true;setBusy(true);setError("");
     try{const session=loadCentralSession();if(!session)throw new Error("소유 계정으로 로그인해 주세요.");
       const result=await requestDesktopServerBackup({action:"start",owner_person_id:session.person.person_id,server_name:owner.alias,passphrase:encrypted?passphrase:null});
       if(result&&typeof result==="object"&&"cancelled"in result&&result.cancelled===true)return;
       setProgress(parse(result));
-    }catch(reason){setError(reason instanceof Error?reason.message:String(reason));}
+    }catch(reason){setError(reason instanceof Error?reason.message:String(reason));
+      try{const latest=await requestDesktopServerBackup({action:"latest"});if(latest!==null)setProgress(parse(latest));}catch{/* Keep the original failure and expose explicit status retry. */}
+    }
     finally{operation.current=false;setBusy(false);setPassphrase("");setConfirm("");}
   }
   if(!checked||!owner)return null;
@@ -57,7 +65,7 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
       {running&&<button type="button" className="ops-button" onClick={()=>void requestDesktopServerBackup({action:"cancel",operation_id:progress?.operation_id}).then(value=>setProgress(parse(value))).catch(reason=>setError(String(reason)))}>백업 취소</button>}
       {progress&&<p role="status">{phases[progress.phase]}</p>}
       {progress?.phase==="complete"&&<p>{new Date(progress.snapshot_at!).toLocaleString()} · {progress.bytes?.toLocaleString()}바이트<br/>이 시각 이후의 변경은 들어 있지 않아요. 동기화 폴더를 골랐다면 업로드 완료도 확인해 주세요.</p>}
-      {error&&<p role="alert">{error}</p>}
+      {error&&<><p role="alert">{error}</p><button type="button" className="ops-button" onClick={()=>void refresh()}>진행 상태 다시 확인</button></>}
     </>}
   </section>;
 }

@@ -21,14 +21,14 @@ impl SqliteStore {
         let Some(mut journal) = RestoreJob::inspect(target)? else {
             return Ok(());
         };
-        if !event.online() {
+        if !event.online() || self.current_central_endpoint_generation().await? != event.generation
+        {
             return Ok(());
         }
         if !matches!(journal.phase, RestorePhase::Activated | RestorePhase::Ready)
             || journal.new_key_fingerprint != fingerprint
             || journal.committed_epoch != event.registration_epoch
             || self.registration_epoch().await?.as_deref() != Some(&event.registration_epoch)
-            || self.current_central_endpoint_generation().await? != event.generation
             || event.generation <= journal.endpoint_generation.ok_or_else(invalid)?
             || journal.manifest.as_ref().ok_or_else(invalid)?.server_id
                 != self.host_identity().await?.server_id()

@@ -61,89 +61,122 @@ async fn restored_host_denies_old_sessions_and_reconnects_exact_membership_and_p
 -> ResultTest {
     let (source, now) = fixture().await;
     source.set_registration_epoch(Some("epoch")).await?;
-    insert_invite(&source, [1; 32], [2; 32], "member", 1, now).await;
-    let member = MemberAdmission {
-        secure: None,
-        projection_id: "old-projection".into(),
-        issuer: "https://central.example".into(),
-        person_id: "member-person".into(),
-        display_name: "Member".into(),
-        registration_epoch: "epoch".into(),
-        challenge_fingerprint: [4; 32],
-        challenge_expires_at: now + Duration::minutes(5),
+    let old = credentials(&source, now).await?;
+    let roles_before: Vec<(String, String)> =
+        sqlx::query_as("SELECT participant_id,json_extract(participant_json,'$.role') FROM participants WHERE json_extract(participant_json,'$.participant_type')='human' ORDER BY participant_id")
+            .fetch_all(&source.pool)
+            .await?;
+    let directory = tempfile::tempdir()?;
+    let target = restored(&source, directory.path()).await?;
+    assert_retired(&target, &old, now, &directory.path().join("payload.sqlite")).await?;
+    let fresh = MemberAdmission {
+        registration_epoch: "new-epoch".into(),
+        projection_id: "new-projection".into(),
+        challenge_fingerprint: [31; 32],
+        ..old.member.clone()
     };
-    let old = admitted(
-        source
-            .admit_human(
-                &prepared(
-                    [2; 32],
-                    [3; 32],
-                    &uuid::Uuid::new_v4().to_string(),
-                    "Member",
-                )
-                .with_member(member.clone()),
+    let rooms = target.member_connect_rooms(&fresh, now).await?;
+    assert_eq!(rooms.len(), 1);
+    let joined = admitted(
+        target
+            .select_member_connect_room(
+                &fresh,
+                "general",
+                &[32; 32],
+                &uuid::Uuid::new_v4().to_string(),
+                "fresh-browser",
                 now,
             )
             .await?,
     );
-    let old_fingerprint: [u8; 32] = Sha256::digest(old.session_bearer().as_bytes()).into();
-    let human = source.authorize_human_session(&old_fingerprint).await?;
-    let owner = RoomSessionAuthorization::Human(human.clone());
-    let pending = source
-        .create_companion_attendee_invite(
-            &owner,
-            CompanionInviteRequest {
-                request_id: uuid::Uuid::new_v4(),
-                provider_kind: "codex_live_session",
-                display_name: "Pending AI",
-            },
-            now,
-        )
-        .await?;
-    let used = source
-        .create_companion_attendee_invite(
-            &owner,
-            CompanionInviteRequest {
-                request_id: uuid::Uuid::new_v4(),
-                provider_kind: "codex_live_session",
-                display_name: "Used AI",
-            },
-            now,
-        )
-        .await?;
-    let pending_fingerprint = Sha256::digest(pending.invite_bearer.as_bytes()).into();
-    let used_fingerprint = Sha256::digest(used.invite_bearer.as_bytes()).into();
-    let attendee = source
-        .admit_attendee(
-            AttendeeAdmissionRequest {
-                invite_fingerprint: &used_fingerprint,
-                client_fingerprint: &[11; 32],
-                request_id: uuid::Uuid::new_v4(),
-                provider_kind: "codex_live_session",
-                display_name: "Used AI",
-            },
-            now,
-        )
-        .await?;
-    let manager =
-        RoomManagerAuthority::Local(crate::room_user_identity::test_authority(&source).await);
-    let connector_invite = source
-        .create_connector_invite(&manager, uuid::Uuid::new_v4(), InviteScope::ReadWrite, now)
-        .await?;
-    let connector_fp = Sha256::digest(connector_invite.invite_bearer.as_bytes()).into();
-    let connector = source
+    assert_eq!(joined.result().agent_id, old.old.result().agent_id);
+    let new_fingerprint: [u8; 32] = Sha256::digest(joined.session_bearer().as_bytes()).into();
+    assert_ne!(new_fingerprint, old.old_fingerprint);
+    target.authorize_human_session(&new_fingerprint).await?;
+    let pending_admitted = target.admit_attendee(old.pending_request(), now).await?;
+    assert_eq!(
+        pending_admitted.authorization.principal().invite_scope,
+        InviteScope::ReadWrite
+    );
+    assert!(
+        target
+            .admit_attendee(
+                AttendeeAdmissionRequest {
+                    invite_fingerprint: &old.used_fingerprint,
+                    ..old.pending_request()
+                },
+                now
+            )
+            .await
+            .is_err()
+    );
+    let retained_connector = target
         .admit_connector(
-            &connector_fp,
-            &[12; 32],
+            &old.unredeemed_fp,
+            &[40; 32],
             uuid::Uuid::new_v4(),
-            "Connector",
+            "Retained connector",
             now,
         )
         .await?;
-    let unredeemed = source
-        .create_connector_invite(&manager, uuid::Uuid::new_v4(), InviteScope::ReadOnly, now)
-        .await?;
-    let unredeemed_fp = Sha256::digest(unredeemed.invite_bearer.as_bytes()).into();
+    assert_eq!(
+        retained_connector.authorization.principal().invite_scope,
+        InviteScope::ReadOnly
+    );
+    let roles_after: Vec<(String, String)> =
+        sqlx::query_as("SELECT participant_id,json_extract(participant_json,'$.role') FROM participants WHERE json_extract(participant_json,'$.participant_type')='human' ORDER BY participant_id")
+            .fetch_all(&target.pool)
+            .await?;
+    assert_eq!(roles_before, roles_after);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT use_count FROM room_invites")
+            .fetch_one(&target.pool)
+            .await?,
+        1
+    );
+    let row=sqlx::query("SELECT parent_fingerprint,restore_parent_kind,expires_at FROM room_attendee_invites WHERE invite_id=?").bind(old.pending.invite_id.to_string()).fetch_one(&target.pool).await?;
+    assert_eq!(row.get::<Vec<u8>, _>("parent_fingerprint"), new_fingerprint);
+    assert!(
+        row.get::<Option<String>, _>("restore_parent_kind")
+            .is_none()
+    );
+    assert_eq!(
+        row.get::<i64, _>("expires_at"),
+        old.pending.expires_at.timestamp_micros()
+    );
+    target.close().await?;
+    source.close().await?;
+    Ok(())
+}
+
+struct Credentials {
+    member: MemberAdmission,
+    old: Box<HumanAdmissionCommit>,
+    old_fingerprint: [u8; 32],
+    human: HumanSessionAuthorization,
+    pending: AttendeeInvite,
+    pending_fingerprint: [u8; 32],
+    used_fingerprint: [u8; 32],
+    attendee: AttendeeAdmission,
+    connector_fp: [u8; 32],
+    connector: ConnectorAdmission,
+    unredeemed_fp: [u8; 32],
+    binding: OwnerAdmissionBinding,
+    host_owner: OwnerSessionRedemption,
+    operator: OperatorPairingRedemption,
+}
+
+async fn owner_credentials(
+    source: &SqliteStore,
+    now: chrono::DateTime<Utc>,
+) -> Result<
+    (
+        OwnerAdmissionBinding,
+        OwnerSessionRedemption,
+        OperatorPairingRedemption,
+    ),
+    Box<dyn std::error::Error>,
+> {
     let binding = OwnerAdmissionBinding {
         secure: None,
         entry_fingerprint: [20; 32],
@@ -174,42 +207,143 @@ async fn restored_host_denies_old_sessions_and_reconnects_exact_membership_and_p
             ),
         )
         .await?;
-    let roles_before: Vec<(String, String)> =
-        sqlx::query_as("SELECT participant_id,json_extract(participant_json,'$.role') FROM participants WHERE json_extract(participant_json,'$.participant_type')='human' ORDER BY participant_id")
-            .fetch_all(&source.pool)
-            .await?;
-    let directory = tempfile::tempdir()?;
-    let target = restored(&source, directory.path()).await?;
+    Ok((binding, host_owner, operator))
+}
+
+async fn credentials(
+    source: &SqliteStore,
+    now: chrono::DateTime<Utc>,
+) -> Result<Credentials, Box<dyn std::error::Error>> {
+    insert_invite(source, [1; 32], [2; 32], "member", 1, now).await;
+    let member = MemberAdmission {
+        secure: None,
+        projection_id: "old-projection".into(),
+        issuer: "https://central.example".into(),
+        person_id: "member-person".into(),
+        display_name: "Member".into(),
+        registration_epoch: "epoch".into(),
+        challenge_fingerprint: [4; 32],
+        challenge_expires_at: now + Duration::minutes(5),
+    };
+    let old = admitted(
+        source
+            .admit_human(
+                &prepared(
+                    [2; 32],
+                    [3; 32],
+                    &uuid::Uuid::new_v4().to_string(),
+                    "Member",
+                )
+                .with_member(member.clone()),
+                now,
+            )
+            .await?,
+    );
+    let old_fingerprint: [u8; 32] = Sha256::digest(old.session_bearer().as_bytes()).into();
+    let human = source.authorize_human_session(&old_fingerprint).await?;
+    let owner = RoomSessionAuthorization::Human(human.clone());
+    let pending = companion_invite(source, &owner, "Pending AI", now).await?;
+    let used = companion_invite(source, &owner, "Used AI", now).await?;
+    let pending_fingerprint = Sha256::digest(pending.invite_bearer.as_bytes()).into();
+    let used_fingerprint = Sha256::digest(used.invite_bearer.as_bytes()).into();
+    let attendee = source
+        .admit_attendee(
+            AttendeeAdmissionRequest {
+                invite_fingerprint: &used_fingerprint,
+                client_fingerprint: &[11; 32],
+                request_id: uuid::Uuid::new_v4(),
+                provider_kind: "codex_live_session",
+                display_name: "Used AI",
+            },
+            now,
+        )
+        .await?;
+    let manager =
+        RoomManagerAuthority::Local(crate::room_user_identity::test_authority(source).await);
+    let connector_invite = source
+        .create_connector_invite(&manager, uuid::Uuid::new_v4(), InviteScope::ReadWrite, now)
+        .await?;
+    let connector_fp = Sha256::digest(connector_invite.invite_bearer.as_bytes()).into();
+    let connector = source
+        .admit_connector(
+            &connector_fp,
+            &[12; 32],
+            uuid::Uuid::new_v4(),
+            "Connector",
+            now,
+        )
+        .await?;
+    let unredeemed = source
+        .create_connector_invite(&manager, uuid::Uuid::new_v4(), InviteScope::ReadOnly, now)
+        .await?;
+    let unredeemed_fp = Sha256::digest(unredeemed.invite_bearer.as_bytes()).into();
+    let (binding, host_owner, operator) = owner_credentials(source, now).await?;
+    Ok(Credentials {
+        member,
+        old,
+        old_fingerprint,
+        human,
+        pending,
+        pending_fingerprint,
+        used_fingerprint,
+        attendee,
+        connector_fp,
+        connector,
+        unredeemed_fp,
+        binding,
+        host_owner,
+        operator,
+    })
+}
+
+impl Credentials {
+    fn pending_request(&self) -> AttendeeAdmissionRequest<'_> {
+        AttendeeAdmissionRequest {
+            invite_fingerprint: &self.pending_fingerprint,
+            client_fingerprint: &[30; 32],
+            request_id: uuid::Uuid::new_v4(),
+            provider_kind: "codex_live_session",
+            display_name: "Pending AI",
+        }
+    }
+}
+
+async fn assert_retired(
+    target: &SqliteStore,
+    old: &Credentials,
+    now: chrono::DateTime<Utc>,
+    payload: &std::path::Path,
+) -> ResultTest {
     assert!(
         target
-            .authorize_human_session(&old_fingerprint)
+            .authorize_human_session(&old.old_fingerprint)
             .await
             .is_err()
     );
     assert!(
         target
-            .revalidate_human_session_authorization(&human)
+            .revalidate_human_session_authorization(&old.human)
             .await
             .is_err()
     );
     assert!(
         target
-            .revalidate_attendee_session(&attendee.authorization, now)
+            .revalidate_attendee_session(&old.attendee.authorization, now)
             .await
             .is_err()
     );
     assert!(
         target
-            .revalidate_connector_session(&connector.authorization, now)
+            .revalidate_connector_session(&old.connector.authorization, now)
             .await
             .is_err()
     );
     assert!(
         target
             .authorize_owner_session(
-                host_owner.authorization.fingerprint(),
-                &binding.browser_fingerprint,
-                &binding.origin
+                old.host_owner.authorization.fingerprint(),
+                &old.binding.browser_fingerprint,
+                &old.binding.origin
             )
             .await
             .is_err()
@@ -217,7 +351,7 @@ async fn restored_host_denies_old_sessions_and_reconnects_exact_membership_and_p
     assert!(
         target
             .revalidate_room_session_authorization(&RoomSessionAuthorization::Operator(
-                operator.authorization
+                old.operator.authorization.clone()
             ))
             .await
             .is_err()
@@ -225,7 +359,7 @@ async fn restored_host_denies_old_sessions_and_reconnects_exact_membership_and_p
     assert!(
         target
             .admit_connector(
-                &connector_fp,
+                &old.connector_fp,
                 &[12; 32],
                 uuid::Uuid::new_v4(),
                 "Connector",
@@ -234,19 +368,17 @@ async fn restored_host_denies_old_sessions_and_reconnects_exact_membership_and_p
             .await
             .is_err()
     );
-    let make = || AttendeeAdmissionRequest {
-        invite_fingerprint: &pending_fingerprint,
-        client_fingerprint: &[30; 32],
-        request_id: uuid::Uuid::new_v4(),
-        provider_kind: "codex_live_session",
-        display_name: "Pending AI",
-    };
-    assert!(target.admit_attendee(make(), now).await.is_err());
-    assert!(target.member_connect_rooms(&member, now).await.is_err());
+    assert!(
+        target
+            .admit_attendee(old.pending_request(), now)
+            .await
+            .is_err()
+    );
+    assert!(target.member_connect_rooms(&old.member, now).await.is_err());
     let stranger = MemberAdmission {
         registration_epoch: "new-epoch".into(),
         person_id: "snapshot-missing-person".into(),
-        ..member.clone()
+        ..old.member.clone()
     };
     assert!(
         target
@@ -254,12 +386,12 @@ async fn restored_host_denies_old_sessions_and_reconnects_exact_membership_and_p
             .await?
             .is_empty()
     );
-    let payload_bytes = std::fs::read(directory.path().join("payload.sqlite"))?;
+    let payload_bytes = std::fs::read(payload)?;
     for retired in [
-        old_fingerprint.as_slice(),
-        host_owner.authorization.fingerprint().as_slice(),
-        attendee.authorization.session_fingerprint().as_slice(),
-        connector.authorization.session_fingerprint().as_slice(),
+        old.old_fingerprint.as_slice(),
+        old.host_owner.authorization.fingerprint().as_slice(),
+        old.attendee.authorization.session_fingerprint().as_slice(),
+        old.connector.authorization.session_fingerprint().as_slice(),
     ] {
         assert!(
             !payload_bytes
@@ -268,82 +400,24 @@ async fn restored_host_denies_old_sessions_and_reconnects_exact_membership_and_p
         );
     }
 
-    let fresh = MemberAdmission {
-        registration_epoch: "new-epoch".into(),
-        projection_id: "new-projection".into(),
-        challenge_fingerprint: [31; 32],
-        ..member
-    };
-    let rooms = target.member_connect_rooms(&fresh, now).await?;
-    assert_eq!(rooms.len(), 1);
-    let joined = admitted(
-        target
-            .select_member_connect_room(
-                &fresh,
-                "general",
-                &[32; 32],
-                &uuid::Uuid::new_v4().to_string(),
-                "fresh-browser",
-                now,
-            )
-            .await?,
-    );
-    assert_eq!(joined.result().agent_id, old.result().agent_id);
-    let new_fingerprint: [u8; 32] = Sha256::digest(joined.session_bearer().as_bytes()).into();
-    assert_ne!(new_fingerprint, old_fingerprint);
-    target.authorize_human_session(&new_fingerprint).await?;
-    let pending_admitted = target.admit_attendee(make(), now).await?;
-    assert_eq!(
-        pending_admitted.authorization.principal().invite_scope,
-        InviteScope::ReadWrite
-    );
-    assert!(
-        target
-            .admit_attendee(
-                AttendeeAdmissionRequest {
-                    invite_fingerprint: &used_fingerprint,
-                    ..make()
-                },
-                now
-            )
-            .await
-            .is_err()
-    );
-    let retained_connector = target
-        .admit_connector(
-            &unredeemed_fp,
-            &[40; 32],
-            uuid::Uuid::new_v4(),
-            "Retained connector",
+    Ok(())
+}
+
+async fn companion_invite(
+    source: &SqliteStore,
+    owner: &RoomSessionAuthorization,
+    name: &str,
+    now: chrono::DateTime<Utc>,
+) -> Result<AttendeeInvite, PersistenceError> {
+    source
+        .create_companion_attendee_invite(
+            owner,
+            CompanionInviteRequest {
+                request_id: uuid::Uuid::new_v4(),
+                provider_kind: "codex_live_session",
+                display_name: name,
+            },
             now,
         )
-        .await?;
-    assert_eq!(
-        retained_connector.authorization.principal().invite_scope,
-        InviteScope::ReadOnly
-    );
-    let roles_after: Vec<(String, String)> =
-        sqlx::query_as("SELECT participant_id,json_extract(participant_json,'$.role') FROM participants WHERE json_extract(participant_json,'$.participant_type')='human' ORDER BY participant_id")
-            .fetch_all(&target.pool)
-            .await?;
-    assert_eq!(roles_before, roles_after);
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT use_count FROM room_invites")
-            .fetch_one(&target.pool)
-            .await?,
-        1
-    );
-    let row=sqlx::query("SELECT parent_fingerprint,restore_parent_kind,expires_at FROM room_attendee_invites WHERE invite_id=?").bind(pending.invite_id.to_string()).fetch_one(&target.pool).await?;
-    assert_eq!(row.get::<Vec<u8>, _>("parent_fingerprint"), new_fingerprint);
-    assert!(
-        row.get::<Option<String>, _>("restore_parent_kind")
-            .is_none()
-    );
-    assert_eq!(
-        row.get::<i64, _>("expires_at"),
-        pending.expires_at.timestamp_micros()
-    );
-    target.close().await?;
-    source.close().await?;
-    Ok(())
+        .await
 }

@@ -21,6 +21,8 @@ use crate::{
 
 #[derive(Debug, Error)]
 pub enum AppStateBuildError {
+    #[error("backup recovery failed")]
+    Backup(#[source] anyhow::Error),
     #[error("host identity persistence failed")]
     Persistence(#[from] PersistenceError),
     #[error("host identity projection failed")]
@@ -112,6 +114,8 @@ impl AppState {
             provider_credentials,
         )
         .await?;
+        state.server_backup = crate::server_backup::BackupControl::recover(state_root)
+            .map_err(AppStateBuildError::Backup)?;
         state.runtime_state_root = Some(state_root.to_owned());
         Ok(state)
     }
