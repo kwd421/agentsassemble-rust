@@ -3,7 +3,7 @@ import { isDesktopWebview } from "../../lib/desktopBridge";
 import { bootstrapCentral,loadCentralSession } from "../../lib/central/identity";
 import { serverRestoreAvailable,cancelServerRestore,inspectServerRestore,prepareServerRestore,selectServerRestore,resumeServerRestore,switchServerRestore,type RestoreJournal } from "../../lib/central/serverMove";
 
-export default function ServerRestoreCard({onOpen}:{onOpen:()=>Promise<void>}) {
+export default function ServerRestoreCard({onOpen,liveHost=false}:{onOpen:()=>Promise<void>;liveHost?:boolean}) {
   const [open,setOpen]=useState(false),[available,setAvailable]=useState(false);
   const [currentServer,setCurrentServer]=useState<{name:string;epoch:string}|null>(null);
   const [job,setJob]=useState<RestoreJournal|null>(null),[passphrase,setPassphrase]=useState("");
@@ -32,6 +32,8 @@ export default function ServerRestoreCard({onOpen}:{onOpen:()=>Promise<void>}) {
   const canCancel=job && ["validating","prepared","cancelling","not_committed"].includes(job.phase);
   const canSwitch=job && ["prepared","switch_unknown"].includes(job.phase);
   if(!job&&!available) return error?<p role="alert">{error}</p>:null;
+  // A finished move on the computer that now hosts the server needs no card.
+  if(ready&&liveHost) return null;
   const primary="min-h-10 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50";
   const secondary="min-h-10 rounded-md border border-white/10 px-4 text-[13px] font-bold text-text-primary hover:bg-white/5 disabled:opacity-50";
   const quiet="min-h-10 px-2 text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50";
@@ -52,7 +54,7 @@ export default function ServerRestoreCard({onOpen}:{onOpen:()=>Promise<void>}) {
           <button type="button" className={`${primary} justify-self-end`} disabled={busy || (encrypted&&!passphrase)} onClick={()=>void run(async()=>{setStatus("백업을 확인하고 있어요.");setJob(await prepareServerRestore(encrypted?passphrase:null));})}>백업 확인</button>
         </>}
       </>:<>
-        {job.manifest&&<div className="rounded-md bg-white/5 px-3 py-2">
+        {job.manifest&&!ready&&<div className="rounded-md bg-white/5 px-3 py-2">
           <div className="truncate text-[13px] font-bold text-text-primary">{job.manifest.server_name}</div>
           <div className="text-[12px] text-text-muted">방 {job.manifest.rooms}개 · 메시지 {job.manifest.messages}개 · {new Date(job.manifest.snapshot_at).toLocaleString()} 백업</div>
         </div>}
