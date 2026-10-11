@@ -479,6 +479,21 @@ it("opens the account's own server immediately without a chooser", async () => {
   expect(screen.queryByText("열 서버를 선택하세요")).toBeNull();
 });
 
+it("keeps a restored Windows host local while automatic opening awaits registration", async () => {
+  setupOneServer();
+  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: SERVER_ID, host_name: "PC", host_os: "windows", device_kind: "컴퓨터", profile_name: "Owner", hosting_state: null });
+  let registered!: () => void;
+  centralMocks.register.mockImplementationOnce(() => new Promise<void>(resolve => { registered = resolve; }));
+  const complete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
+  await vi.waitFor(() => expect(centralMocks.register).toHaveBeenCalledOnce());
+  expect(screen.getByRole("button", { name: "내 Mac 서버 열기" }).textContent).toBe("열기");
+  expect(screen.queryByRole("button", { name: "이 기기로 연결" })).toBeNull();
+  registered();
+  await vi.waitFor(() => expect(complete).toHaveBeenCalledOnce());
+  expect(centralMocks.openServer).not.toHaveBeenCalled();
+});
+
 it("offers device connection for a retired host without registering or opening locally", async () => {
   setupOneServer();
   desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: SERVER_ID, host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner", hosting_state: "retired" });

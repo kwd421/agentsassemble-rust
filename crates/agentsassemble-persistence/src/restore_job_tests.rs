@@ -137,6 +137,14 @@ async fn prepared_move_resumes_exact_commit_and_opens_only_with_new_keys()
     let mut resumed = RestoreJob::resume(&target, operation)?;
     resumed.activate().await?;
     drop(resumed);
+    let legacy_journal = RestoreJob::inspect(&target)?.ok_or("missing job")?;
+    assert_eq!(
+        crate::inspect_host_identity(&target)
+            .await?
+            .ok_or("missing host")?
+            .0,
+        old.server_id()
+    );
     let restored = SqliteStore::open_path(&target).await?;
     assert!(restored.room_exists("general").await?);
     assert_eq!(
@@ -155,6 +163,31 @@ async fn prepared_move_resumes_exact_commit_and_opens_only_with_new_keys()
             .exists()
     );
     restored.close().await?;
+    // Previous versions kept Ready forever after removing staging. A crash can
+    // also leave Activated: neither may need another manual restore/open action.
+    for phase in [RestorePhase::Ready, RestorePhase::Activated] {
+        let mut journal = legacy_journal.clone();
+        journal.phase = phase;
+        save_journal(&target, &journal)?;
+        assert_eq!(
+            crate::inspect_host_identity(&target)
+                .await?
+                .ok_or("missing host")?
+                .0,
+            old.server_id()
+        );
+        let reopened = SqliteStore::open_path(&target).await?;
+        assert_ready_after_current_ack(&reopened, &target, &receipt).await?;
+        reopened.close().await?;
+        assert!(RestoreJob::inspect(&target)?.is_none());
+    }
+    let ordinary = SqliteStore::open_path(&target).await?;
+    assert!(ordinary.room_exists("general").await?);
+    assert_eq!(
+        ordinary.host_identity().await?.private_key_pkcs8(),
+        new_identity.private_key_pkcs8()
+    );
+    ordinary.close().await?;
     assert!(RestoreJob::begin(&target).is_err());
     assert_eq!(
         source.host_identity().await?.private_key_pkcs8(),
@@ -191,6 +224,7 @@ async fn assert_ready_after_current_ack(
     target: &std::path::Path,
     receipt: &RestoreReceipt,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let initial = RestoreJob::inspect(target)?.ok_or("missing job")?;
     assert!(restored.next_central_endpoint_generation().await? > receipt.endpoint_generation);
     let endpoint = restored
         .reserve_central_endpoint_event("committed-epoch", "https://new.example", 1)
@@ -203,7 +237,24 @@ async fn assert_ready_after_current_ack(
     );
     assert_eq!(
         RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
-        RestorePhase::Activated
+        initial.phase
+    );
+    let mut wrong_epoch = endpoint.clone();
+    wrong_epoch.registration_epoch = "other-epoch".into();
+    assert!(
+        restored
+            .acknowledge_restored_endpoint(&wrong_epoch, &receipt.new_key_fingerprint)
+            .await
+            .is_err()
+    );
+    let mut offline = endpoint.clone();
+    offline.origin.clear();
+    restored
+        .acknowledge_restored_endpoint(&offline, &receipt.new_key_fingerprint)
+        .await?;
+    assert_eq!(
+        RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
+        initial.phase
     );
     let stale = endpoint;
     let endpoint = restored
@@ -214,18 +265,39 @@ async fn assert_ready_after_current_ack(
         .await?;
     assert_eq!(
         RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
-        RestorePhase::Activated
+        initial.phase
     );
     restored
         .finish_central_endpoint_event(&endpoint, true)
         .await?;
+    let stage = target
+        .parent()
+        .ok_or("missing parent")?
+        .join(format!(".server-move-{}", initial.operation_id));
+    if stage.exists() {
+        let unexpected = stage.join("unrelated");
+        std::fs::write(&unexpected, b"keep")?;
+        assert!(
+            restored
+                .acknowledge_restored_endpoint(&endpoint, &receipt.new_key_fingerprint)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
+            RestorePhase::Ready
+        );
+        assert_eq!(std::fs::read(&unexpected)?, b"keep");
+        std::fs::remove_file(unexpected)?;
+    }
     restored
         .acknowledge_restored_endpoint(&endpoint, &receipt.new_key_fingerprint)
         .await?;
-    assert_eq!(
-        RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
-        RestorePhase::Ready
-    );
+    assert!(RestoreJob::inspect(target)?.is_none());
+    // Duplicate completion is harmless after the marker is removed.
+    restored
+        .acknowledge_restored_endpoint(&endpoint, &receipt.new_key_fingerprint)
+        .await?;
     Ok(())
 }
 

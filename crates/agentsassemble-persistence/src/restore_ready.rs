@@ -3,7 +3,7 @@
 use crate::{
     CentralEndpointEvent, PersistenceError, SqliteStore,
     backup_json::invalid,
-    restore_job::{RestoreJob, RestorePhase, save_journal},
+    restore_job::{RestoreJob, RestorePhase, marker_path, save_journal},
 };
 
 impl SqliteStore {
@@ -42,7 +42,9 @@ impl SqliteStore {
             .ok_or_else(invalid)?
             .join(format!(".server-move-{}", journal.operation_id));
         match std::fs::symlink_metadata(&stage) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return finish_cleanup(target);
+            }
             Err(error) => return Err(PersistenceError::WriterLease(error)),
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
                 return Err(invalid());
@@ -70,8 +72,15 @@ impl SqliteStore {
             Err(error) => return Err(PersistenceError::WriterLease(error)),
         }
         std::fs::remove_dir(stage).map_err(PersistenceError::WriterLease)?;
-        #[cfg(unix)]
-        crate::restore_job::sync_directory(target.parent().ok_or_else(invalid)?)?;
-        Ok(())
+        finish_cleanup(target)
     }
+}
+
+fn finish_cleanup(target: &std::path::Path) -> Result<(), PersistenceError> {
+    // Ready is durable before cleanup. Remove the recovery fence last, including
+    // older Ready installations and crashes after staging was already removed.
+    std::fs::remove_file(marker_path(target)).map_err(PersistenceError::WriterLease)?;
+    #[cfg(unix)]
+    crate::restore_job::sync_directory(target.parent().ok_or_else(invalid)?)?;
+    Ok(())
 }

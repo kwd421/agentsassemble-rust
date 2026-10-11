@@ -1,5 +1,33 @@
 # Verification Contract
 
+## Restored-host completion and relaunch (2026-10-11)
+
+`restore_ready.rs::acknowledge_restored_endpoint` persisted Ready and removed
+staging but never removed the journal; missing staging returned success early.
+It now removes the marker last after the same current-online-ACK, server, key,
+epoch and receipt-generation checks, with the existing parent sync contract.
+Old Ready/Activated markers, including absent staging, finish on the next runtime
+publication ACK. Unexpected staging entries preserve the journal and surface errors.
+No receipt, epoch fence, writer lease or unfinished-phase startup rule changed.
+
+Current HEAD's no-runtime host inspection already reads Activated/Ready identity;
+these markers do not themselves suppress server_id. The chooser independently
+withheld localHost/onOpenLocal whenever central returned an owned server, and the
+row chose the remote label even for a local match. Eligible installed hosts now
+retain the local action while auto-open runs. The restore card hides both completed
+jobs and an absent job on that host, keeping unfinished recovery visible.
+
+Regression evidence: persistence restore tests 3 passed, including legacy
+Ready/Activated restart without staging, read-only identity inspection before
+runtime startup, ordinary reopen with preserved room/key, stale/offline/wrong-key/
+wrong-epoch ACK rejection and unexpected-file cleanup failure. Frontend chooser,
+server list and restore card regressions: 47 passed. TypeScript noEmit and
+architecture/source-growth gates passed; policy gate regressions 10 passed.
+Existing source-size and ts-rs warnings remain. No Computer Use, full suite,
+real-provider calls or physical Windows test; the photographed startup stall is
+not independently reproduced on the owner's device. Cleanup adds one marker unlink
+and no background task, protocol, schema or network operation.
+
 ## Restored device metadata and retired backup card (2026-10-11)
 
 Root causes: `central/directory.rs::publish_default_name` sent no host OS;

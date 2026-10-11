@@ -33,7 +33,7 @@ export default function ServerRestoreCard({onOpen,liveHost=false}:{onOpen:()=>Pr
   const canSwitch=job && ["prepared","switch_unknown"].includes(job.phase);
   if(!job&&!available) return error?<p role="alert">{error}</p>:null;
   // A finished move on the computer that now hosts the server needs no card.
-  if(ready&&liveHost) return null;
+  if(liveHost&&!error&&(!job||ready)) return null;
   const primary="min-h-10 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50";
   const secondary="min-h-10 rounded-md border border-white/10 px-4 text-[13px] font-bold text-text-primary hover:bg-white/5 disabled:opacity-50";
   const quiet="min-h-10 px-2 text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50";

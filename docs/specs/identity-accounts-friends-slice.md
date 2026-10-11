@@ -98,6 +98,24 @@ invariant tests cover these boundaries; no constant-pinning tests.
   the host transport. Publication completion persists only after the restored
   runtime's current online endpoint is accepted by central.
 
+Restore completion/relaunch correction (2026-10-11): after the restored runtime
+opens and central ACKs its current later online generation, the persistence
+publication owner saves Ready, removes only owned staging, then removes the import
+journal/marker last and syncs the parent using the existing filesystem contract.
+Missing staging is resumable cleanup, not a reason to retain the marker forever.
+Existing Activated/Ready installations start through the ordinary host path and
+self-heal on that same authenticated ACK; read-only host inspection must recognize
+their installed identity without declaring publication complete. Wrong key, epoch,
+server, stale/offline ACK and unfinished import phases retain their recovery fences.
+Entry points: restore_ready.rs, restore_job.rs, host_identity.rs (desktop
+host_device_info sidecar), central/event_publisher.rs, StartupIdentityGate and
+CentralServerList. The chooser must retain eligible local-host identity even when
+central lists its owned server, auto-open that host and show local “열기”. Remote,
+retired/device/account-deleted hosts retain their existing connection behavior.
+Regression scope: ACK cleanup/restart including legacy Ready without staging,
+Activated replay, rejected ACKs, unfinished phases and local chooser behavior.
+No Computer Use or physical Windows acceptance in this correction.
+
 The owner authorizes implementation of export and restore of the same logical
 server on a new computer. Central stores no backup bytes. Direct transfer,
 server cloning, ownership transfer and replacing existing installations are out

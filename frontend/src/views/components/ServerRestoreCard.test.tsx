@@ -28,3 +28,17 @@ it("offers new restore only after capability and recovers an existing journal ev
   await waitFor(()=>expect(screen.queryByRole("button",{name:"취소"})).toBeNull());
   expect(screen.queryByRole("button",{name:"백업 파일 선택"})).toBeNull();
 });
+
+it.each([null, "activated", "ready"])("hides completed restore on the installed host: %s", async phase=>{
+  mocks.capability.mockResolvedValue(true);
+  mocks.inspect.mockResolvedValue(phase ? {operation_id:"operation",phase,manifest:null} : null);
+  const {container}=render(<ServerRestoreCard liveHost onOpen={async()=>{}}/>);
+  await waitFor(()=>expect(mocks.inspect).toHaveBeenCalled());
+  expect(container.querySelector("section")).toBeNull();
+});
+it("keeps unfinished recovery visible even when a host identity is present", async()=>{
+  mocks.capability.mockResolvedValue(true);
+  mocks.inspect.mockResolvedValue({operation_id:"operation",phase:"activating",manifest:null});
+  render(<ServerRestoreCard liveHost onOpen={async()=>{}}/>);
+  expect(await screen.findByRole("button",{name:"이어서 진행"})).toBeTruthy();
+});

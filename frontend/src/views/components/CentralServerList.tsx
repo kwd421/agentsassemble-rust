@@ -235,7 +235,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         </div>
         {editingId !== server.server_id && <div className="dc-server-row-actions">
           {server.relation === "owner" && <button type="button" className="dc-server-row-icon-button" aria-label={`${name} 이름 변경`} title="이름 변경" disabled={busy || saving || centralUnavailable} onClick={() => { setEditingId(server.server_id); setName(server.alias); setError(""); }}><Pencil size={16} /></button>}
-          <button type="button" className={openable ? "ops-cta dc-server-row-open" : "ops-button dc-server-row-open"} aria-label={deviceConnect && server.relation === "owner" ? "이 기기로 연결" : `${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>{deviceConnect && server.relation === "owner" ? "이 기기로 연결" : "열기"}</button>
+          <button type="button" className={openable ? "ops-cta dc-server-row-open" : "ops-button dc-server-row-open"} aria-label={!isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : `${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>{!isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : "열기"}</button>
         </div>}
       </div>;
     })}
