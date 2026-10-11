@@ -87,19 +87,22 @@ export default function RuntimeRestartPanel() {
   };
   const receipt = status?.operation;
   const pending = observing || (receipt ? inProgress(receipt.phase) : false);
-  return <section className="ops-inner rounded-xl p-5" aria-label="서버 재시작">
-    <h2 className="font-bold">서버 재시작</h2>
-    <p className="mt-2 text-[12px] text-text-muted">실행 중인 대화가 끝난 뒤 재시작할 수 있어요. 연결이 잠시 끊기며 일시 정지한 세션은 그대로 유지해요.</p>
-    <div className="mt-3 flex flex-wrap gap-3">
-      <button type="button" className="ops-button rounded-lg px-4" style={{ minHeight: 44 }} disabled={!status?.supported || preparing || pending} onClick={() => { void restart(); }}>{preparing ? "요청 중" : query.id && !receipt ? "같은 요청 다시 보내기" : "서버 재시작"}</button>
-      <button type="button" className="ops-button rounded-lg px-4" style={{ minHeight: 44 }} disabled={preparing || observing} onClick={() => {
+  return <section className="dc-computer-card" aria-label="서버 재시작">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="dc-computer-heading">서버 재시작</h2>
+        <p className="mt-1 text-[13px] text-text-muted">진행 중인 대화가 끝난 뒤 시작해요. 연결이 잠시 끊겨요.</p>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+      <button type="button" className="dc-quiet-button" disabled={!status?.supported || preparing || pending} onClick={() => { void restart(); }}>{preparing ? "요청 중" : query.id && !receipt ? "같은 요청 다시 보내기" : "서버 재시작"}</button>
+      {(query.id || error) && <button type="button" className="dc-quiet-button" disabled={preparing || observing} onClick={() => {
         setError(""); setQuery((current) => ({ ...current, revision: current.revision + 1 }));
-      }}>결과 확인</button>
+      }}>결과 확인</button>}
+      </div>
     </div>
-    {status && !status.supported && <p className="mt-2 text-sm">이 환경에서는 서버 재시작을 지원하지 않아요.</p>}
-    {receipt && <p role="status" className="mt-2 text-sm">{LABELS[receipt.phase]}</p>}
-    {observing && <p className="mt-2 text-sm">재시작 상태를 확인하고 있어요.</p>}
-    {error && <p role="alert" className="mt-2 text-sm">{error} 결과 확인으로 다시 조회할 수 있어요.</p>}
-    {query.id && <p className="mt-2 text-[12px] text-text-muted" style={{ overflowWrap: "anywhere" }}>작업 ID: {query.id}</p>}
+    {status && !status.supported && <p className="mt-3 text-[13px] text-text-muted">이 환경에서는 서버 재시작을 지원하지 않아요.</p>}
+    {receipt && <p role="status" className="mt-3 text-[13px]">{LABELS[receipt.phase]}</p>}
+    {observing && query.id && <p className="mt-3 text-[13px] text-text-muted">재시작 상태를 확인하고 있어요.</p>}
+    {error && <p role="alert" className="mt-3 text-[13px] text-danger">{error} 결과 확인으로 다시 조회할 수 있어요.</p>}
   </section>;
 }

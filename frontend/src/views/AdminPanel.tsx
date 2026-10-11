@@ -1,6 +1,6 @@
 import RuntimeRestartPanel from "./components/RuntimeRestartPanel";
 import ReleaseHealthPanel from "./components/ReleaseHealthPanel";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Activity, RefreshCw, X } from "lucide-react";
 import { fetchLocalResources, type LocalResourceStatus } from "../api/localResources";
 
@@ -36,43 +36,52 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     }
   }
   const rows = [...groups.values()];
+  const used = resources && resources.total_memory_bytes !== null && resources.available_memory_bytes !== null
+    ? Math.min(1, Math.max(0, 1 - resources.available_memory_bytes / resources.total_memory_bytes)) : null;
   return (
-    <section className="ops-panel mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden" aria-label="내 컴퓨터">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-accent/14 px-5 py-4" style={{ padding: 24 }}>
-        <h1 className="flex items-center gap-3 text-[20px] font-black"><Activity size={20} />내 컴퓨터</h1>
-        <div className="flex gap-2">
-          <button type="button" onClick={refresh} disabled={loading} className="ops-button grid h-10 w-10 place-items-center rounded-lg p-0" style={{ width: 44, height: 44 }} aria-label="상태 새로고침"><RefreshCw size={18} /></button>
-          <button type="button" onClick={onClose} className="ops-button grid h-10 w-10 place-items-center rounded-lg p-0" style={{ width: 44, height: 44 }} aria-label="내 컴퓨터 닫기"><X size={18} /></button>
+    <section className="flex h-full min-h-0 w-full flex-col" aria-label="내 컴퓨터">
+      <header className="dc-chat-head flex h-12 shrink-0 items-center gap-2 px-4">
+        <Activity size={20} className="text-text-muted" aria-hidden />
+        <h1 className="text-[16px] font-semibold text-text-primary">내 컴퓨터</h1>
+        <div className="dc-head-actions ml-auto flex items-center gap-1.5">
+          <button type="button" onClick={refresh} disabled={loading} className="dc-head-icon" aria-label="상태 새로고침" title="새로고침"><RefreshCw size={20} /></button>
+          <button type="button" onClick={onClose} className="dc-head-icon" aria-label="내 컴퓨터 닫기" title="닫기"><X size={20} /></button>
         </div>
       </header>
-      <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 chat-scroll" style={{ padding: 24 }}>
-        {loading && <p role="status">자원 사용량을 확인하고 있어요.</p>}
-        {error && <p role="alert">자원 정보를 불러오지 못했어요. 새로고침해 주세요.</p>}
-        {resources && <>
-          <p className="text-[12px] text-text-muted">{new Date(resources.observed_at).toLocaleString()} 기준 · 수동 새로고침</p>
-          <div className="grid gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-3">
-            <Metric label="CPU 코어" value={resources.cpu_count?.toString() ?? "확인 불가"} />
-            <Metric label="전체 메모리" value={memory(resources.total_memory_bytes)} />
-            <Metric label="사용 가능한 메모리" value={memory(resources.available_memory_bytes)} />
-          </div>
-          <section className="flex flex-col gap-3" aria-label="앱과 관련 도구">
-            <h2 className="mb-4 font-bold">앱과 관련 도구 · {resources.matching_process_count}개</h2>
-            <p className="text-[12px] text-text-muted">최대 30개를 표시해요. 다른 앱에서 실행한 같은 도구도 포함돼요.</p>
-            <p className="text-[12px] text-text-muted">{resources.cpu_sample_seconds === null
-              ? "CPU 사용량을 확인 중이에요. 잠시 후 새로고침해 주세요."
-              : `CPU는 최근 ${resources.cpu_sample_seconds.toFixed(1)}초 평균이며 코어 하나가 100%예요.`}</p>
-            <table className="w-full text-left text-[13px]" aria-label="프로세스 사용량">
-              <thead className="text-text-muted"><tr><th className="py-2">이름</th><th>CPU</th><th>메모리</th></tr></thead>
-              <tbody>{(expanded ? rows : rows.slice(0, 5)).map(row => <tr key={row.name} className="border-t border-panel-border">
-                <td className="py-2">{row.name}{row.count > 1 && <span className="text-text-muted"> × {row.count}</span>}</td>
-                <td>{row.cpu === null ? "확인 중" : `${row.cpu.toFixed(1)}%`}</td><td>{memory(row.memory)}</td>
-              </tr>)}</tbody>
-            </table>
-            {rows.length > 5 && <button type="button" className="ops-button min-h-11 self-start" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? "접기" : "더 보기"}</button>}
-          </section>
-        </>}
-        <RuntimeRestartPanel />
-        <ReleaseHealthPanel />
+      <div className="min-h-0 flex-1 overflow-y-auto chat-scroll" data-shot-scroll>
+        <div className="dc-computer-page">
+          {loading && <p role="status" className="text-[14px] text-text-muted">사용량을 확인하고 있어요…</p>}
+          {error && <p role="alert" className="text-[14px] text-danger">사용량을 불러오지 못했어요. 새로고침해 주세요.</p>}
+          {resources && <>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Metric label="메모리" value={resources.available_memory_bytes === null ? "확인 불가" : `${memory(resources.available_memory_bytes)} 남음`}
+                detail={<>전체 <span>{memory(resources.total_memory_bytes)}</span></>} meter={used} />
+              <Metric label="CPU 코어" value={resources.cpu_count === null ? "확인 불가" : `${resources.cpu_count}개`} />
+              <Metric label="실행 중인 도구" value={`${resources.matching_process_count}개`} />
+            </div>
+            <section aria-label="앱과 관련 도구">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 className="dc-computer-heading">실행 중인 도구</h2>
+                <time className="text-[12px] text-text-muted" dateTime={resources.observed_at}>
+                  {new Date(resources.observed_at).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" })} 기준
+                </time>
+              </div>
+              <table className="dc-computer-table" aria-label="프로세스 사용량">
+                <thead><tr><th>이름</th><th title="코어 하나를 다 쓰면 100%예요">CPU</th><th>메모리</th></tr></thead>
+                <tbody>{(expanded ? rows : rows.slice(0, 5)).map(row => <tr key={row.name}>
+                  <td>{row.name}{row.count > 1 && <span className="text-text-muted"> × {row.count}</span>}</td>
+                  <td>{row.cpu === null ? "확인 중" : `${row.cpu.toFixed(1)}%`}</td><td>{memory(row.memory)}</td>
+                </tr>)}</tbody>
+              </table>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-[12px] text-text-muted">다른 앱에서 실행한 같은 도구도 함께 보여요.</p>
+                {rows.length > 5 && <button type="button" className="dc-quiet-button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? "접기" : "더 보기"}</button>}
+              </div>
+            </section>
+          </>}
+          <RuntimeRestartPanel />
+          <ReleaseHealthPanel />
+        </div>
       </div>
     </section>
   );
@@ -93,6 +102,11 @@ function toolName(label: string) {
   };
   return names[label] ?? "앱 관련 도구";
 }
-function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="ops-inner rounded-lg p-4"><span className="text-text-muted">{label}</span> <strong>{value}</strong></div>;
+function Metric({ label, value, detail, meter }: { label: string; value: string; detail?: ReactNode; meter?: number | null }) {
+  return <div className="dc-computer-metric">
+    <span className="text-[12px] text-text-muted">{label}</span>
+    <strong>{value}</strong>
+    {detail && <span className="text-[12px] text-text-muted">{detail}</span>}
+    {meter !== undefined && meter !== null && <span className="dc-computer-meter" aria-hidden><span style={{ width: `${Math.round(meter * 100)}%` }} /></span>}
+  </div>;
 }

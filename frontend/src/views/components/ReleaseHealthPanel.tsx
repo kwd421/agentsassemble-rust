@@ -25,22 +25,20 @@ export default function ReleaseHealthPanel() {
     return () => { active = false; };
   }, [revision]);
   const latest = new Map(result?.report?.results.map((entry) => [entry.check_id, entry]));
-  return <section className="ops-inner rounded-xl p-5" aria-label="앱 점검">
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="font-bold">앱 점검</h2>
-      <button type="button" className="ops-button rounded-lg px-4" style={{ minHeight: 44 }} disabled={loading} onClick={() => {
-        setResult(null); setError(false); setLoading(true); setRevision((value) => value + 1);
-      }}>결과 새로고침</button>
-    </div>
-    <p className="mt-2 text-[12px] text-text-muted">마지막으로 저장된 점검 결과예요. 현재 앱 상태와 다를 수 있어요.</p>
-    {loading && <p role="status">점검 결과를 읽고 있어요.</p>}
-    {error && <p role="alert">저장된 점검 결과를 읽지 못했어요. 보고서를 확인하고 새로고침해 주세요.</p>}
-    {result && <>
-      <p className="mt-2 text-[12px] text-text-muted">{result.report ? `${new Date(result.report.completed_at).toLocaleString()} 완료` : "저장된 점검 결과가 없어요."}</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">{result.checks.map((check) => <article key={check.id} className="ops-inner rounded-lg px-4 py-3">
-        <strong className="text-[13px]">{checkLabels[check.id] ?? "앱 점검"}</strong>
-        <p className="text-[12px] text-text-muted">{releaseHealthStatusLabel(latest.get(check.id)?.status ?? "not_run")}</p>
-      </article>)}</div>
-    </>}
-  </section>;
+  return <details className="dc-computer-card" aria-label="앱 점검">
+    <summary className="dc-computer-summary">
+      <span className="dc-computer-heading">앱 점검</span>
+      <span className="text-[12px] text-text-muted">{loading ? "읽는 중…" : error ? "읽지 못했어요" : result?.report
+        ? `${new Date(result.report.completed_at).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })} 점검`
+        : "저장된 결과 없음"}</span>
+    </summary>
+    {error && <p role="alert" className="mt-3 text-[13px] text-danger">저장된 점검 결과를 읽지 못했어요.</p>}
+    {result && <ul className="dc-computer-checks">{result.checks.map((check) => <li key={check.id}>
+      <span>{checkLabels[check.id] ?? "앱 점검"}</span>
+      <span className="text-text-muted">{releaseHealthStatusLabel(latest.get(check.id)?.status ?? "not_run")}</span>
+    </li>)}</ul>}
+    <button type="button" className="dc-quiet-button mt-3" disabled={loading} onClick={() => {
+      setResult(null); setError(false); setLoading(true); setRevision((value) => value + 1);
+    }}>결과 새로고침</button>
+  </details>;
 }
