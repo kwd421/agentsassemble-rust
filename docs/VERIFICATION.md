@@ -1,5 +1,44 @@
 # Verification Contract
 
+## Restored device metadata and retired backup card (2026-10-11)
+
+Root causes: `central/directory.rs::publish_default_name` sent no host OS;
+Worker `server_restore.js` carried its predecessor's `name_revision` into the
+new key/epoch, so `server_names.js` rejected a changed device default at the same
+or older snapshot revision. Publication starts dirty in process memory; there is
+no restored durable "already published" flag to clear. Settings matched only the
+logical server ID, while `server_backup.rs::control` returned any journal as latest.
+
+Host: startup/profile publication includes OS from `host_device_info`; existing
+retry and terminal parking remain. Settings checks hosting restriction and exact
+local/central host key before fetching progress. Backup journals persist their
+registration epoch; latest/status omit or reject unbound/old-incarnation jobs,
+while restart scratch cleanup and current-incarnation interrupted recovery remain.
+
+Worker review scope: two existing owners only. Restore CAS resets name_revision
+in the same transaction as key/epoch replacement. Signed name PUT validates and
+updates optional host_os; revision guards and person-server aliases are unchanged.
+Migration 0029 resets only live rows whose current key/epoch matches a durable
+restore receipt, repairing already-restored installations without manual edits.
+It preserves label/OS/alias until the host publishes. Deploy migration + Worker
+before the fixed Windows host starts; if it was already running, restart after
+rollout. No schema columns, polling, new routes, fallback or authority relaxation.
+The migration is a one-time revision reset, not a script to replay after rollout.
+
+Regression evidence: unfixed Worker same/older-revision publications returned 409;
+unfixed settings exposed the card in all four retired/device/deleted/old-key
+scenarios. Omitting migration 0029 also reproduced 409 for an already-restored
+server. Worker names/restore suite: 23 passed. Frontend backup card: 6 passed;
+TypeScript noEmit passed. Rust signed startup/profile publication: 1 passed;
+backup controls/journal/export/failure regressions: 4 passed. Architecture/source
+structure gates passed in both repositories; Worker generated map check and diff
+checks passed. Existing ts-rs attribute warnings remain. No full suite, Computer
+Use, real-provider calls, production DB writes, Worker deployment, or Windows
+physical verification. Manager owns Daybreak review and rollout. Per publication
+cost is one existing name PUT with one OS field; eligibility adds one local
+server-info read; journal control adds bounded metadata reads, no timers.
+
+
 ## Windows restore step-up request identity (2026-10-11)
 
 Root cause: native `Request::Bind` hashed a `serde_json::Value` with insertion

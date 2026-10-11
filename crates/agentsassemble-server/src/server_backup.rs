@@ -34,6 +34,7 @@ use failure::FailureReason;
 #[derive(Clone, Default)]
 pub(crate) struct BackupControl(Arc<Mutex<Option<Job>>>);
 struct Job {
+    registration_epoch: Option<String>,
     progress: Progress,
     cancel: CancellationToken,
     record: journal::Record,
@@ -91,6 +92,17 @@ async fn control(
     let input: Control = decode_json_body(request, 16384)
         .await
         .map_err(|_| Failure(StatusCode::BAD_REQUEST))?;
+    let epoch = state
+        .store
+        .registration_epoch()
+        .await
+        .map_err(|_| Failure(StatusCode::CONFLICT))?;
+    let restricted = state
+        .store
+        .hosting_restriction()
+        .await
+        .map_err(|_| Failure(StatusCode::CONFLICT))?
+        .is_some();
     match input {
         Control::Start {
             destination,
@@ -112,13 +124,19 @@ async fn control(
                 .0
                 .lock()
                 .as_ref()
+                .filter(|job| !restricted && epoch.is_some() && job.registration_epoch == epoch)
                 .map(|job| job.progress.clone()),
         )),
         Control::Status { operation_id } | Control::Cancel { operation_id } => {
             let mut current = state.server_backup.0.lock();
             let job = current
                 .as_mut()
-                .filter(|j| j.progress.operation_id == operation_id)
+                .filter(|j| {
+                    !restricted
+                        && epoch.is_some()
+                        && j.registration_epoch == epoch
+                        && j.progress.operation_id == operation_id
+                })
                 .ok_or(Failure(StatusCode::NOT_FOUND))?;
             if matches!(input, Control::Cancel { .. })
                 && !matches!(job.progress.phase.as_str(), "complete" | "publishing")
@@ -187,6 +205,7 @@ async fn start(
             .clone()
             .ok_or(Failure(StatusCode::CONFLICT))?;
         let job = Job {
+            registration_epoch: Some(epoch.clone()),
             progress: progress.clone(),
             cancel: cancel.clone(),
             record: journal::Record::default(),
@@ -469,6 +488,7 @@ mod tests {
             }
             let control = BackupControl::default();
             *control.0.lock() = Some(Job {
+                registration_epoch: Some("test-epoch".into()),
                 progress: Progress {
                     operation_id: id,
                     phase: "snapshot".into(),

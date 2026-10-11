@@ -2,16 +2,18 @@ import {act,cleanup,fireEvent,render,screen} from "@testing-library/react";
 import {afterEach,expect,it,vi} from "vitest";
 import ServerBackupCard from "./ServerBackupCard";
 const native=vi.hoisted(()=>vi.fn());
+const local=vi.hoisted(()=>({server_id:"server",hosting_state:null as string|null,host_key_fingerprint:"current-key"}));
 vi.mock("../../lib/desktopBridge",()=>({
   isDesktopWebview:()=>true,
-  requestDesktopHostDeviceInfo:async()=>({server_id:"server"}),
+  requestDesktopHostDeviceInfo:async()=>local,
   requestDesktopServerBackup:native,
 }));
 vi.mock("../../lib/central/identity",()=>({
-  bootstrapCentral:async()=>({servers:[{server_id:"server",relation:"owner",alias:"Owner server"}]}),
+  bootstrapCentral:async()=>({servers:[{server_id:"server",relation:"owner",alias:"Owner server",host_key_fingerprint:"current-key"}]}),
+  fetchLocalServerInfo:async()=>local,
   loadCentralSession:()=>({person:{person_id:"owner"}}),
 }));
-afterEach(()=>{cleanup();vi.useRealTimers();native.mockReset();});
+afterEach(()=>{cleanup();vi.useRealTimers();native.mockReset();local.hosting_state=null;local.host_key_fingerprint="current-key";});
 // A lost status response must not strand a recovered running export after retry.
 it("recovers the runtime job on remount and restarts status observation after transport failure",async()=>{
   vi.useFakeTimers();
@@ -38,3 +40,15 @@ it("shows loading until backup status arrives, then explains a bounded failure",
   await act(async()=>{resolve({operation_id:"abcdefab-1234-1234-1234-123456789abc",phase:"failed",snapshot_at:null,bytes:null,failure_reason:"storage_full"});});
   expect(screen.getByRole("status").textContent).toContain("저장 공간이 부족해요");
 });
+
+for(const scenario of ["retired","device","account_deleted","replaced-key"]) {
+  it(`hides backup and old export failure on ${scenario} computer`,async()=>{
+    if(scenario==="replaced-key")local.host_key_fingerprint="old-key";
+    else local.hosting_state=scenario;
+    native.mockResolvedValue({operation_id:"abcdefab-1234-1234-1234-123456789abc",phase:"failed",snapshot_at:null,bytes:null,failure_reason:"storage_full"});
+    await act(async()=>{render(<ServerBackupCard disabled={false}/>);});
+    expect(screen.queryByRole("region",{name:"서버 백업"})).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(native).not.toHaveBeenCalled();
+  });
+}

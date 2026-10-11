@@ -20,6 +20,29 @@ only, with deployment left to the manager. Regression tests assert workflow/auth
 invariants, not constant values. Record reproduction, fixes and remaining unknowns in
 `docs/VERIFICATION.md`.
 
+## Restored host metadata and retired backup UI correction (2026-10-11)
+
+On every host start, the existing signed default-name publisher must publish this
+computer's device-derived default and host OS. A restore receipt owns a fresh name
+revision namespace: the first publication for its exact new key/epoch supersedes
+the old computer's revision, including already-committed restores. Subsequent
+publications retain revision/conflict protection. Explicit person-server aliases
+are preserved. No manual production row edits, new polling, or registration fallback.
+The restore switch resets the old revision atomically; a one-time migration resets
+only already-restored live key/epoch matches. Failed publications retain existing
+retry/parking semantics. OS comes from host_device_info.
+
+Settings account backup eligibility must compare the local host key to the live
+central owner entry and reject local device/retired/account-deleted states, even
+when a restored server retains the same logical ID. Only eligible hosts request
+latest progress. Runtime backup journals bind progress to their registration epoch;
+unknown legacy or previous-incarnation jobs cannot surface as latest/status.
+Preserve interrupted-job scratch cleanup and current-incarnation recovery.
+Regression-only validation covers signed publication/retry, same/lower snapshot
+revisions, alias preservation, stale-key denial, UI eligibility and journal recovery.
+Mandatory structure gates remain; no Computer Use or Worker deployment. Manager
+owns Daybreak review. Changes are scoped commits and pushes in both repositories.
+
 ## Backup-based server move (2026-10-11)
 
 Urgent Windows step-up correction: native `bind` and Worker `restoreIdentity`

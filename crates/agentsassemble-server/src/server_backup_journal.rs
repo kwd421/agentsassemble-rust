@@ -17,6 +17,8 @@ pub(super) struct Record {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Journal {
+    #[serde(default)]
+    registration_epoch: Option<String>,
     progress: Progress,
     record: Record,
 }
@@ -27,7 +29,7 @@ pub(super) fn save(job: &Job) -> anyhow::Result<()> {
         .tempfile_in(&job.root)?;
     serde_json::to_writer(
         &mut file,
-        &serde_json::json!({"progress":job.progress,"record":job.record}),
+        &serde_json::json!({"registration_epoch":job.registration_epoch,"progress":job.progress,"record":job.record}),
     )?;
     file.flush()?;
     file.as_file().sync_all()?;
@@ -51,6 +53,7 @@ impl BackupControl {
             ),
         }
         let Journal {
+            registration_epoch,
             mut progress,
             record,
         } = serde_json::from_slice(&std::fs::read(path)?)?;
@@ -64,6 +67,7 @@ impl BackupControl {
             progress.phase = "interrupted".into();
         }
         let job = Job {
+            registration_epoch,
             progress,
             record: Record::default(),
             root: root.to_owned(),
@@ -150,6 +154,92 @@ fn cleanup(root: &Path, id: uuid::Uuid, record: &Record) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
+    // Observe the authenticated control boundary after journal recovery. Removing
+    // incarnation filtering exposes an old failure after restore/account reset.
+    #[tokio::test]
+    async fn latest_and_status_only_expose_current_incarnation() -> anyhow::Result<()> {
+        use agentsassemble_domain::{LOCAL_OPERATOR_USER_ID, ProviderCatalog};
+        use agentsassemble_persistence::SqliteStore;
+        use agentsassemble_provider::ProviderCatalogService;
+        use axum::{body::Body, extract::State, http::Request};
+        let root = tempfile::tempdir()?;
+        let store = SqliteStore::open("sqlite::memory:").await?;
+        store
+            .bootstrap_local_authority("55555555-5555-4555-8555-555555555555", "Host")
+            .await?;
+        store.set_registration_epoch(Some("current-epoch")).await?;
+        let mut state = crate::AppState::local(
+            store.clone(),
+            crate::TicketStore::new(std::time::Duration::from_secs(30), 32),
+            ProviderCatalogService::fixed(ProviderCatalog::default()),
+        )
+        .await?;
+        let id = uuid::Uuid::new_v4();
+        for epoch in [None, Some("old-epoch"), Some("current-epoch")] {
+            // Missing epoch represents the pre-fix journal format.
+            std::fs::write(
+                root.path().join("server-backup.json"),
+                serde_json::to_vec(&serde_json::json!({
+                    "registration_epoch":epoch,
+                    "progress":{"operation_id":id,"phase":"failed","snapshot_at":null,"bytes":null,"failure_reason":"storage_full"},
+                    "record":{"staging":null,"partial":null}
+                }))?,
+            )?;
+            state.server_backup = BackupControl::recover(root.path())?;
+            for action in ["latest", "status"] {
+                let ticket = state
+                    .tickets
+                    .issue_server_operator(LOCAL_OPERATOR_USER_ID.into())
+                    .await?;
+                let body = if action == "latest" {
+                    serde_json::json!({"action":action})
+                } else {
+                    serde_json::json!({"action":action,"operation_id":id})
+                };
+                let request = Request::builder()
+                    .header("authorization", format!("Bearer {}", ticket.ticket))
+                    .body(Body::from(serde_json::to_vec(&body)?))?;
+                let response = super::super::control(State(state.clone()), request).await;
+                if epoch == Some("current-epoch") {
+                    let progress = response
+                        .map_err(|e| anyhow::anyhow!("control: {}", e.0))?
+                        .0
+                        .context("missing progress")?;
+                    assert_eq!(progress.operation_id, id);
+                    assert_eq!(progress.phase, "failed");
+                } else if action == "latest" {
+                    assert!(
+                        response
+                            .map_err(|e| anyhow::anyhow!("control: {}", e.0))?
+                            .0
+                            .is_none()
+                    );
+                } else {
+                    assert!(matches!(
+                        response,
+                        Err(super::super::Failure(axum::http::StatusCode::NOT_FOUND))
+                    ));
+                }
+            }
+        }
+        store.restrict_hosting(true).await?;
+        let ticket = state
+            .tickets
+            .issue_server_operator(LOCAL_OPERATOR_USER_ID.into())
+            .await?;
+        let request = Request::builder()
+            .header("authorization", format!("Bearer {}", ticket.ticket))
+            .body(Body::from(r#"{"action":"latest"}"#))?;
+        assert!(
+            super::super::control(State(state), request)
+                .await
+                .map_err(|e| anyhow::anyhow!("control: {}", e.0))?
+                .0
+                .is_none()
+        );
+        Ok(())
+    }
+
     #[test]
     fn restart_cleans_only_recorded_scratch_and_keeps_publication_uncertain() -> anyhow::Result<()>
     {
@@ -172,6 +262,7 @@ mod tests {
         let unrelated = root.path().join("user-data");
         std::fs::write(&unrelated, b"preserve")?;
         save(&Job {
+            registration_epoch: Some("test-epoch".into()),
             progress: Progress {
                 operation_id: id,
                 phase: "publishing".into(),

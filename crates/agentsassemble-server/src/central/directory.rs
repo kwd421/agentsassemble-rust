@@ -237,6 +237,8 @@ async fn publish_default_name(
     if parked.as_ref() == Some(&revision) {
         return Err(CentralDirectoryError::Rejected);
     }
+    let device =
+        super::host_identity::host_device_info(Some(identity.server_id().to_owned())).await?;
     let name = super::host_identity::default_server_name(&profile.display_name).await;
     let version = (epoch, name.clone());
     if published != Some(&version) {
@@ -247,7 +249,7 @@ async fn publish_default_name(
             store,
             Method::PUT,
             &path,
-            json!({"name": name, "name_revision": profile.revision}),
+            json!({"name": name, "name_revision": profile.revision, "host_os": device.host_os}),
         )
         .await
         .inspect_err(|error| {
@@ -600,6 +602,10 @@ mod tests {
             .await?
             .ok_or("capture closed")?;
         assert_eq!(first["name_revision"], 1);
+        assert_eq!(
+            first["host_os"],
+            crate::host_device_info(None).await?.host_os
+        );
         assert!(
             first["name"]
                 .as_str()

@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import {isDesktopWebview,requestDesktopHostDeviceInfo,requestDesktopServerBackup} from "../../lib/desktopBridge";
-import {bootstrapCentral,loadCentralSession,type CentralServer} from "../../lib/central/identity";
+import {bootstrapCentral,fetchLocalServerInfo,loadCentralSession,type CentralServer} from "../../lib/central/identity";
 import {strictRecord} from "../../lib/strictJsonContract";
 
 type Progress={operation_id:string;phase:string;snapshot_at:string|null;bytes:number|null;failure_reason?:string|null};
@@ -34,9 +34,13 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
   useEffect(()=>{let live=true;void (async()=>{try{
     const central=await bootstrapCentral();
     const local=isDesktopWebview()?await requestDesktopHostDeviceInfo():null;
-    const owned=central?.servers.find(server=>server.relation==="owner"&&(!local||server.server_id===local.server_id));
+    if(local&&(local.hosting_state!==null||!local.server_id))return;
+    const identity=local?await fetchLocalServerInfo():null;
+    const owned=central?.servers.find(server=>server.relation==="owner"&&(!local||
+      (server.server_id===local.server_id&&identity?.server_id===local.server_id&&
+       Boolean(identity.host_key_fingerprint)&&server.host_key_fingerprint===identity.host_key_fingerprint)));
     if(live)setOwner(owned||null);
-    if(local){const latest=await requestDesktopServerBackup({action:"latest"});if(live&&latest!==null)setProgress(parse(latest));}
+    if(local&&owned){const latest=await requestDesktopServerBackup({action:"latest"});if(live&&latest!==null)setProgress(parse(latest));}
   }catch(reason){if(live)setError(reason instanceof Error?reason.message:String(reason));}finally{if(live)setChecked(true);}})();return()=>{live=false;};},[]);
   const running=Boolean(progress&&!['complete','failed','cancelled','interrupted'].includes(progress.phase));
   useEffect(()=>{
