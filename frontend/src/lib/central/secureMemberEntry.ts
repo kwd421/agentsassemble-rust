@@ -27,12 +27,12 @@ export function consumeSecureMemberEntry(): SecureMemberEntry | undefined {
 
 export async function previewSecureMember(entry: SecureMemberEntry) {
   const session = loadCentralSession(); if (!session) throw new Error("로그인이 필요해요.");
-  const value = strictRecord(await signedRequest(session, `/v1/servers/${encodeURIComponent(entry.server_id)}/member-preview`, "POST", { protocol: SECURE_PROTOCOL, registration_epoch: entry.registration_epoch }), "입장할 서버");
+  const value = strictRecord(await signedRequest(session, `/v1/servers/${encodeURIComponent(entry.server_id)}/member-preview`, "POST", { protocol: SECURE_PROTOCOL, registration_epoch: entry.registration_epoch, ...(entry.inviteToken ? {resolve_invite:true} : {}) }), "입장할 서버");
   assertExactKeys(value, ["server_id", "label", "endpoint_origin", "endpoint_generation", "protocol", "mode", "registration_epoch", "host_key_fingerprint", "host_public_key_jwk"], "입장할 서버");
-  if (value.server_id !== entry.server_id || value.registration_epoch !== entry.registration_epoch || value.protocol !== SECURE_PROTOCOL || value.mode !== "event_secure_v1" ||
+  if (value.server_id !== entry.server_id || (!entry.inviteToken && value.registration_epoch !== entry.registration_epoch) || typeof value.registration_epoch!=="string" || !/^[A-Za-z0-9._:-]{1,200}$/.test(value.registration_epoch) || value.protocol !== SECURE_PROTOCOL || value.mode !== "event_secure_v1" ||
       typeof value.label !== "string" || typeof value.endpoint_origin !== "string" || typeof value.host_key_fingerprint !== "string" || !Number.isSafeInteger(value.endpoint_generation) ||
       loadCentralSession()?.token !== session.token) throw new Error("입장할 서버를 확인하지 못했어요.");
-  const target: SecureTarget = { server_id: entry.server_id, registration_epoch: entry.registration_epoch, origin: value.endpoint_origin,
+  const target: SecureTarget = { server_id: entry.server_id, registration_epoch: value.registration_epoch, origin: value.endpoint_origin,
     generation: Number(value.endpoint_generation), host_key_fingerprint: value.host_key_fingerprint, host_public_key_jwk: value.host_public_key_jwk as JsonWebKey };
   return { target, label: value.label, endpoint_origin: target.origin, endpoint_generation: target.generation, server_id: entry.server_id };
 }
@@ -51,7 +51,8 @@ export class SecureMemberAdmission {
   }
   static async open(entry: SecureMemberEntry, target: SecureTarget, sessionToken: string, signal: AbortSignal) {
     const session = loadCentralSession(); if (!session || session.token !== sessionToken) throw new Error("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
-    return new SecureMemberAdmission(await RemoteTransport.connect(target, entry.inviteToken ? "member_admission" : "member_connect", signal), session, entry);
+    if(target.server_id!==entry.server_id || (!entry.inviteToken && target.registration_epoch!==entry.registration_epoch))throw new Error("입장할 서버를 확인하지 못했어요.");
+    return new SecureMemberAdmission(await RemoteTransport.connect(target, entry.inviteToken ? "member_admission" : "member_connect", signal), session, {...entry,registration_epoch:target.registration_epoch});
   }
   close() { if (!this.adopted) this.transport.close(); }
   private async post(path: string, body: object) {
