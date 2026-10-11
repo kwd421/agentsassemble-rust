@@ -167,7 +167,7 @@ export default function CustomChannelView({
         onTogglePin={(id) => void pins.setPinned(id, !pinnedIds.has(id))}
         replySource={replySource} onNavigate={(id) => void navigate(id)} />
     </div>
-    <div className="relative shrink-0 px-4 pb-5">
+    <div className="relative shrink-0 px-2 pb-2">
       {(!transcript.following || !atBottom) && <div className="dc-old-history-notice" role="status">
         <span>{transcript.newMessages ? "새 메시지가 있어요" : "오래된 메시지를 보고 있어요"}</span>
         <button type="button" disabled={transcript.sending} onClick={() => {

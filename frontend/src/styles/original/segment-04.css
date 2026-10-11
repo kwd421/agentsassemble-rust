@@ -91,8 +91,8 @@ body[data-sidebar-resizing="true"] {
   gap: 4px;
   padding: 0 56px 0 16px;
   color: var(--color-text-primary);
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 600;
   text-align: left;
   transition: background-color 120ms ease;
 }
@@ -210,13 +210,12 @@ body[data-sidebar-resizing="true"] {
   align-items: center;
   gap: 3px;
   width: calc(100% - 4px);
-  margin: 10px 0 4px;
+  margin: 16px 0 4px;
   padding: 0 6px;
   border-radius: 4px;
   color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.03em;
+  font-size: 14px;
+  font-weight: 500;
   text-align: left;
 }
 
@@ -243,10 +242,13 @@ body[data-sidebar-resizing="true"] {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 8px;
-  border-radius: 4px;
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: 8px;
   color: var(--color-sidebar-text);
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 20px;
   transition:
     background-color 120ms ease,
     color 120ms ease;
@@ -296,13 +298,13 @@ body[data-sidebar-resizing="true"] {
 
 .dc-current-user {
   display: flex;
-  min-height: 68px;
+  min-height: 56px;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   border-radius: 8px;
   border: 1px solid var(--color-panel-border);
   background: var(--color-panel);
-  padding: 8px 10px;
+  padding: 0 8px;
 }
 
 .dc-current-user:hover {
@@ -315,8 +317,8 @@ body[data-sidebar-resizing="true"] {
   flex: 1 1 auto;
   align-items: center;
   gap: 8px;
-  border-radius: 6px;
-  padding: 5px 4px;
+  border-radius: 8px;
+  padding: 4px;
 }
 
 .dc-user-identity:hover,
@@ -327,14 +329,14 @@ body[data-sidebar-resizing="true"] {
 
 .dc-self-avatar {
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border-radius: 50%;
   background: var(--profile-accent, var(--color-accent));
   color: #fff;
-  font-size: 14px;
-  font-weight: 900;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .dc-self-avatar[data-has-image="true"],
@@ -351,7 +353,7 @@ body[data-sidebar-resizing="true"] {
   bottom: -2px;
   width: 13px;
   height: 13px;
-  border: 3px solid #232428;
+  border: 3px solid var(--color-panel);
   border-radius: 999px;
 }
 
@@ -381,11 +383,11 @@ body[data-sidebar-resizing="true"] {
 
 .dc-user-actions button {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border-radius: 4px;
-  color: var(--color-text-muted);
+  border-radius: 8px;
+  color: var(--color-text-secondary);
 }
 
 .dc-user-actions .dc-user-action-caret {

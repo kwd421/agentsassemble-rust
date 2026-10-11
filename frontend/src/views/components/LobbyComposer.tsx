@@ -697,7 +697,7 @@ export default function LobbyComposer({
             data-role={tool.id === "apps" ? undefined : tool.id} data-accessory={tool.id === "apps" ? tool.id : undefined}
             aria-label={tool.label} title={tool.title}
             aria-expanded={tool.id === "emoji" ? emojiOpen : undefined} aria-controls={tool.id === "emoji" ? emojiListId : undefined}>
-            {Icon ? <Icon size={17} /> : <span className="dc-composer-button-label">{tool.title}</span>}
+            {Icon ? <Icon size={20} /> : <span className="dc-composer-button-label">{tool.title}</span>}
           </button>;
         })}
         {emojiOpen && (
@@ -733,7 +733,7 @@ export default function LobbyComposer({
           aria-label={activeDraft.retry ? "같은 요청 다시 보내기" : "채팅 메시지 보내기"}
           title={activeDraft.retry ? "같은 요청 다시 보내기" : "채팅 메시지 보내기"}
         >
-          <Send size={17} />
+          <Send size={20} />
         </button>
       </div>
       </section>

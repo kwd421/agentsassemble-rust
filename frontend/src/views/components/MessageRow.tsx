@@ -47,15 +47,16 @@ export default function MessageRow({ eventId, author, createdAt, avatarImage, pr
   role?: string; showHeader?: boolean; system?: boolean; selected?: boolean;
   actions?: ReactNode; reply?: ReactNode; children: ReactNode;
 }) {
-  return <div className={`dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 ${showHeader ? "py-1.5" : "py-0.5"}`}
+  return <div className={`dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-4 px-4 py-0.5 ${showHeader ? "mt-[17px]" : ""}`}
+    data-has-reply={reply ? true : undefined}
     data-room-event-id={eventId} data-role={role || undefined} data-search-target={selected} tabIndex={0}>
     <MessageAvatar participantType={participantType} avatarLabel={avatarLabel} displayName={author} avatarImage={avatarImage} providerKind={providerKind} show={showHeader} system={system} />
     {actions}
     <div className="min-w-0">
       {reply}
       {showHeader && <p className="flex items-baseline gap-2">
-        <span className="dc-message-author truncate text-[15px] font-semibold text-text-primary preserve-words">{author || "Room"}</span>
-        <time dateTime={createdAt} className="shrink-0 text-[11px] text-text-muted">{messageTimeLabel(createdAt)}</time>
+        <span className="dc-message-author truncate text-[16px] font-medium leading-[22px] text-text-primary preserve-words">{author || "Room"}</span>
+        <time dateTime={createdAt} className="shrink-0 text-[12px] text-text-muted">{messageTimeLabel(createdAt)}</time>
       </p>}
       {children}
     </div>

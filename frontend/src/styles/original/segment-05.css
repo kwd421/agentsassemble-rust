@@ -398,8 +398,8 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  border-radius: 4px;
-  color: var(--color-text-muted);
+  border-radius: 8px;
+  color: var(--color-text-secondary);
   transition:
     background-color 120ms ease,
     color 120ms ease;
@@ -536,10 +536,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 10px 0 8px;
+  margin: 24px 0 8px;
   color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .dc-date-divider::before,
@@ -547,7 +547,7 @@
   content: "";
   height: 1px;
   flex: 1;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-chat-hover);
 }
 
 .dc-date-divider span {
@@ -570,7 +570,7 @@
   content: "";
   height: 1px;
   flex: 1;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-chat-hover);
 }
 
 .dc-system-divider > span {

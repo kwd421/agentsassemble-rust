@@ -1,5 +1,5 @@
 .dc-person-member-group + .dc-person-member-group {
-  margin-top: 10px;
+  margin-top: 2px;
 }
 
 .dc-person-owner-label {
@@ -10,6 +10,7 @@
 }
 
 .dc-owner-agent-group {
+  margin-bottom: 8px;
   margin-left: 18px;
   padding-left: 7px;
   border-left: 1px solid rgba(148, 155, 164, 0.2);

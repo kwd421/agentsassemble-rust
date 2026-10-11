@@ -256,7 +256,7 @@ export default function ChannelHeader({
           aria-pressed={activePanel === "notifications"}
           onClick={() => togglePanel("notifications")}
         >
-          <Bell size={17} />
+          <Bell size={20} />
         </button>
         <AppUpdateIndicator />
         <button
@@ -270,11 +270,11 @@ export default function ChannelHeader({
             togglePanel("pins");
           }}
         >
-          <Pin size={17} />
+          <Pin size={20} />
         </button>
         {headerActions?.onToggleSideChat && <button type="button" className="dc-head-icon"
           aria-label="사이드챗 열기" aria-pressed={headerActions.sideChatOpen}
-          onClick={headerActions.onToggleSideChat}><MessageSquare size={18} /></button>}
+          onClick={headerActions.onToggleSideChat}><MessageSquare size={20} /></button>}
         {onToggleMembers && (
           <button
             type="button"
@@ -285,7 +285,7 @@ export default function ChannelHeader({
               membersOpen ? "text-text-primary" : "text-text-muted"
             }`}
           >
-            <Users size={18} />
+            <Users size={20} />
           </button>
         )}
         <label className="dc-head-search hidden md:flex">

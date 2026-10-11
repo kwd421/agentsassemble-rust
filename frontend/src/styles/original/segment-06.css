@@ -5,9 +5,10 @@
   z-index: auto;
   display: flex;
   flex-direction: column;
-  width: clamp(220px, 32%, 300px);
+  width: clamp(220px, 24%, 264px);
   min-width: 0;
-  background: var(--color-sidebar);
+  border-left: 1px solid var(--color-panel-separator);
+  background: var(--color-chat-bg);
 }
 
 .dc-compact-panel-close {
@@ -317,11 +318,11 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  min-height: 44px;
-  padding: 5px 8px;
-  border-radius: 4px;
+  min-height: 42px;
+  padding: 1px 8px;
+  border-radius: 8px;
   text-align: left;
   transition: background-color 120ms ease;
 }
@@ -391,9 +392,8 @@
   cursor: pointer;
   user-select: none;
   color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-size: 14px;
+  font-weight: 500;
   transition:
     background-color 120ms ease,
     color 120ms ease;
@@ -466,8 +466,9 @@
 
 .dc-member-name {
   color: var(--color-text-secondary);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 20px;
 }
 
 .dc-member-name-row {

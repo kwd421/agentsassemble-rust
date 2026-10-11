@@ -10,21 +10,22 @@
 @theme {
   --color-server-rail: #121214;
   --color-sidebar: #121214;
-  --color-sidebar-hover: #24252b;
-  --color-sidebar-active: #2b2d33;
-  --color-sidebar-text: #949ba4;
-  --color-sidebar-text-active: #f2f3f5;
+  --color-sidebar-hover: #1f1f23;
+  --color-sidebar-active: #2c2c30;
+  --color-sidebar-text: #94959c;
+  --color-sidebar-text-active: #fbfbfb;
   --color-chat-bg: #1a1a1e;
-  --color-chat-hover: #202024;
+  --color-chat-hover: #29292d;
   --color-panel: #202024;
   --color-panel-bg: #202024;
   --color-panel-soft: #222327;
   --color-panel-border: #303137;
-  --color-panel-separator: rgba(255, 255, 255, 0.095);
-  --color-line: rgba(255, 255, 255, 0.08);
-  --color-text-primary: #f2f3f5;
-  --color-text-secondary: #b5bac1;
-  --color-text-muted: #949ba4;
+  --color-panel-separator: rgba(255, 255, 255, 0.065);
+  --color-line: rgba(255, 255, 255, 0.065);
+  --color-text-primary: #fbfbfb;
+  --color-text-normal: #efeff1;
+  --color-text-secondary: #b4b5bb;
+  --color-text-muted: #94959c;
   --color-accent: #5865f2;
   --color-accent-hover: #4752c4;
   --color-accent-soft: #404bb5;
@@ -128,10 +129,10 @@ button:disabled,
   position: relative;
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 16px;
-  background: var(--color-sidebar);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--color-panel);
   color: var(--color-text-secondary);
   transition:
     border-radius 160ms ease,
@@ -207,12 +208,12 @@ button:disabled,
 .dc-server-btn {
   position: relative;
   display: grid;
-  flex: 0 0 48px;
+  flex: 0 0 40px;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--color-sidebar);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--color-panel);
   color: var(--color-text-secondary);
   transition:
     border-radius 160ms ease,
@@ -237,7 +238,7 @@ button:disabled,
 .dc-server-btn[data-active="true"]::before {
   content: "";
   position: absolute;
-  left: -12px;
+  left: -16px;
   height: 40px;
   width: 4px;
   border-radius: 0 4px 4px 0;
@@ -247,7 +248,7 @@ button:disabled,
 .dc-server-btn[data-active="false"]:hover::before {
   content: "";
   position: absolute;
-  left: -12px;
+  left: -16px;
   height: 20px;
   width: 4px;
   border-radius: 0 4px 4px 0;

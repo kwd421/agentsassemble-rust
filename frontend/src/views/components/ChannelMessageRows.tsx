@@ -36,7 +36,7 @@ export default function ChannelMessageRows({ events, profiles, mentionLabels, se
           replyDisabled={replyDisabled} pinned={pinnedIds.has(event.id)} pinDisabled={pinDisabled}
           onTogglePin={canPin && !deleted ? () => onTogglePin(event.id) : undefined} />}
         reply={!deleted && replyId ? <MessageReply source={replySource(replyId)} onOpen={() => onNavigate(replyId)} /> : undefined}>
-        <div className={`text-[14px] leading-relaxed preserve-words ${deleted ? "italic text-text-muted" : "text-text-secondary"}`}>
+        <div className={`dc-message-body preserve-words ${deleted ? "italic text-text-muted" : ""}`}>
           {deleted ? "삭제된 메시지예요" : <DiscordText text={event.content || ""} mentionLabels={mentionLabels} />}
         </div>
       </MessageRow>;

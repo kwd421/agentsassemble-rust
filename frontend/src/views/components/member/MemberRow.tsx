@@ -103,7 +103,7 @@ export default function MemberRow({
           )}
         </span>
         <span
-          className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar ${
+          className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-chat-bg ${
             statusDotClass(
               entry.agentSession
                 ? agentSessionPresenceStatus(

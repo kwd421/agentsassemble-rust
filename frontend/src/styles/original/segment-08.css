@@ -107,7 +107,54 @@
 /* Message row hover, like a chat client. */
 .dc-message {
   position: relative;
-  transition: background-color 80ms ease;
+}
+
+.dc-message-body {
+  color: var(--color-text-normal);
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.dc-message[data-has-reply="true"] .dc-message-avatar {
+  margin-top: 24px;
+}
+
+/* Reply preview with the spine that bends from the avatar up to the quoted line. */
+.dc-reply-preview {
+  position: relative;
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 18px;
+  text-align: left;
+}
+
+.dc-reply-preview::before {
+  position: absolute;
+  top: 50%;
+  bottom: -2px;
+  left: -37px;
+  width: 31px;
+  border-top: 2px solid #474851;
+  border-left: 2px solid #474851;
+  border-top-left-radius: 6px;
+  content: "";
+  margin-top: -1px;
+}
+
+.dc-reply-preview-author {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.dc-reply-preview:hover:not(:disabled) .dc-reply-preview-text,
+.dc-reply-preview:focus-visible .dc-reply-preview-text {
+  color: var(--color-text-primary);
 }
 
 .dc-message:hover {

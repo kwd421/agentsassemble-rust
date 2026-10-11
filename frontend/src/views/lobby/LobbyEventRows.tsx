@@ -196,7 +196,7 @@ export function LobbyThinkingGroup({
   const name = header?.name || "agent";
   return (
     <div
-      className="dc-thinking-group grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 py-0.5"
+      className="dc-thinking-group grid grid-cols-[40px_minmax(0,1fr)] gap-4 px-4 py-0.5"
       data-room-event-id={header?.id}
       data-role={header?.role || undefined}
     >
@@ -208,10 +208,10 @@ export function LobbyThinkingGroup({
       <div className="min-w-0">
         {showHeader && (
           <p className="flex items-baseline gap-2">
-            <span className="dc-message-author truncate text-[15px] font-semibold text-text-primary preserve-words">
+            <span className="dc-message-author truncate text-[16px] font-medium leading-[22px] text-text-primary preserve-words">
               {name}
             </span>
-            <span className="shrink-0 text-[11px] text-text-muted">
+            <span className="shrink-0 text-[12px] text-text-muted">
               {messageTimeLabel(header?.created_at || "")}
             </span>
           </p>
@@ -238,7 +238,7 @@ export function LobbyTypingRow({
 }) {
   return (
     <div
-      className="dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 py-1.5"
+      className="dc-message mt-[17px] grid grid-cols-[40px_minmax(0,1fr)] gap-4 px-4 py-0.5"
       data-role={indicator.role || undefined}
     >
       <span className="dc-message-avatar mt-0.5 agent">
@@ -250,7 +250,7 @@ export function LobbyTypingRow({
       </span>
       <div className="min-w-0">
         <p className="flex items-baseline gap-2">
-          <span className="dc-message-author truncate text-[15px] font-semibold text-text-primary preserve-words">
+          <span className="dc-message-author truncate text-[16px] font-medium leading-[22px] text-text-primary preserve-words">
             {indicator.displayName}
           </span>
         </p>
@@ -430,11 +430,11 @@ export function LobbyMessageRow({
         {requestCard ? requestCard : voteCard ? (
           voteCard
         ) : event.message_deleted ? (
-          <div className="text-[14px] italic leading-relaxed text-text-muted">
+          <div className="dc-message-body italic text-text-muted">
             삭제된 메시지예요
           </div>
         ) : (
-          <div className="text-[14px] leading-relaxed text-text-secondary preserve-words">
+          <div className="dc-message-body preserve-words">
             <DiscordText text={event.message || ""} mentionLabels={mentionLabels} />
             {event.edited_at && <span className="ml-1 text-[10px] text-text-muted">(수정됨)</span>}
           </div>
