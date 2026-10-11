@@ -1,5 +1,5 @@
 import { requestDesktopServerRestore } from "../desktopBridge";
-import { bootstrapCentral, loadCentralSession, signedRequest, signCentralNativeRequest, parseCentralGoogleHandoff, type CentralSession } from "./identity";
+import { centralAccountEntryUrl, bootstrapCentral, loadCentralSession, signedRequest, signCentralNativeRequest, parseCentralGoogleHandoff, type CentralSession } from "./identity";
 import { nativeGoogleAuthorization } from "./nativeGoogleAuthorization";
 import { parseDeletionProof } from "./accountDeletion";
 import { assertExactKeys, strictRecord } from "../strictJsonContract";
@@ -26,6 +26,15 @@ export function parseRestoreJournal(value: unknown): RestoreJournal | null {
   }
   return row as unknown as RestoreJournal;
 }
+export async function serverRestoreAvailable(): Promise<boolean> {
+  const base = centralAccountEntryUrl();
+  if (!base) return false;
+  const response = await fetch(new URL("v1/config", base), {
+    cache:"no-store", credentials:"omit", redirect:"error", referrerPolicy:"no-referrer",
+  });
+  if (!response.ok) throw new Error("서버 복원 지원 여부를 확인하지 못했어요.");
+  return (await response.json()).server_restore_v1 === true;
+}
 export async function inspectServerRestore() { return parseRestoreJournal(await requestDesktopServerRestore({action:"inspect"})); }
 export async function selectServerRestore(): Promise<boolean|null> {
   const result=strictRecord(await requestDesktopServerRestore({action:"select"}),"백업 파일 선택");
@@ -34,6 +43,7 @@ export async function selectServerRestore(): Promise<boolean|null> {
   return result.encrypted;
 }
 export async function prepareServerRestore(passphrase:string|null) {
+  if (!await serverRestoreAvailable()) throw new Error("현재 서버 복원을 시작할 수 없어요.");
   const result=await requestDesktopServerRestore({action:"prepare",passphrase});
   if (result && typeof result==="object" && "cancelled" in result && result.cancelled===true) return null;
   return parseRestoreJournal(result);

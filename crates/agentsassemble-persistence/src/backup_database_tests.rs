@@ -161,3 +161,71 @@ async fn assets_roundtrip_exact_bytes_and_reject_corrupt_image_payload()
     );
     Ok(())
 }
+
+// Budget the SQLite VM, not elapsed time or a pinned SQL string. Replacing the
+// bounded readers with full result collection hits the budget before rejection.
+#[tokio::test]
+async fn hostile_schema_rejection_does_not_scan_all_objects()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = SqliteConnection::connect("sqlite::memory:").await?;
+    sqlx::raw_sql("PRAGMA writable_schema=ON; CREATE TABLE seed(value TEXT);
+        WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
+        INSERT INTO sqlite_schema(type,name,tbl_name,rootpage,sql)
+        SELECT 'table','hostile_'||i,'hostile_'||i,0,'CREATE TABLE hostile_'||i||'(value TEXT)' FROM n;")
+        .execute(&mut source).await?;
+    let directory = tempfile::tempdir()?;
+    let mut target = create_payload(&directory.path().join("owned.sqlite")).await?;
+    let expected = objects(&mut target, None).await?;
+    let budget = i32::try_from((expected.len() + 1) * 100)?;
+    source
+        .lock_handle()
+        .await?
+        .set_progress_handler(budget, || false);
+    assert!(matches!(
+        require_schema(&mut source, &mut target, true).await,
+        Err(PersistenceError::InvalidBackup)
+    ));
+    source.lock_handle().await?.remove_progress_handler();
+    Ok(())
+}
+
+#[tokio::test]
+async fn hostile_schema_lengths_and_fk_results_are_bounded()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = SqliteConnection::connect("sqlite::memory:").await?;
+    sqlx::raw_sql(
+        "PRAGMA writable_schema=ON; CREATE TABLE seed(value TEXT);
+        INSERT INTO sqlite_schema(type,name,tbl_name,rootpage,sql)
+        VALUES('table',printf('%.*c',1000000,'x'),'seed',0,'CREATE TABLE x(value TEXT)');",
+    )
+    .execute(&mut source)
+    .await?;
+    assert!(matches!(
+        objects(&mut source, Some(10)).await,
+        Err(PersistenceError::InvalidBackup)
+    ));
+    sqlx::query("UPDATE sqlite_schema SET name='oversized_sql',sql=printf('%.*c',1000000,'x') WHERE name!='seed'").execute(&mut source).await?;
+    assert!(matches!(
+        objects(&mut source, Some(10)).await,
+        Err(PersistenceError::InvalidBackup)
+    ));
+    let mut source = SqliteConnection::connect("sqlite::memory:").await?;
+    sqlx::raw_sql(
+        "PRAGMA foreign_keys=OFF; CREATE TABLE parent(id INTEGER PRIMARY KEY);
+        CREATE TABLE child(id INTEGER REFERENCES parent(id));
+        WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10000)
+        INSERT INTO child SELECT i FROM n;",
+    )
+    .execute(&mut source)
+    .await?;
+    source
+        .lock_handle()
+        .await?
+        .set_progress_handler(1000, || false);
+    assert!(matches!(
+        require_foreign_keys(&mut source).await,
+        Err(PersistenceError::InvalidBackup)
+    ));
+    source.lock_handle().await?.remove_progress_handler();
+    Ok(())
+}

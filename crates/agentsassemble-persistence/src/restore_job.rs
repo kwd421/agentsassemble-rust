@@ -178,8 +178,13 @@ impl RestoreJob {
             return Err(invalid());
         }
         let stage = parent.join(format!(".server-move-{operation}"));
-        if journal.phase == RestorePhase::Cancelling
-            && absent(&stage)?
+        if matches!(
+            journal.phase,
+            RestorePhase::Validating
+                | RestorePhase::Prepared
+                | RestorePhase::NotCommitted
+                | RestorePhase::Cancelling
+        ) && absent(&stage)?
             && installation_absent(&target)?
         {
             return Ok(Self {
@@ -231,7 +236,7 @@ impl RestoreJob {
     /// Cancel only before any switch request could have reached central.
     /// # Errors
     /// Rejects uncertain/committed moves and unexpected staging entries.
-    pub fn cancel(mut self) -> Result<(), PersistenceError> {
+    pub fn cancel(self) -> Result<(), PersistenceError> {
         if !matches!(
             self.journal.phase,
             RestorePhase::Validating
@@ -244,8 +249,9 @@ impl RestoreJob {
         if read_journal(&self.target)?.operation_id != self.journal.operation_id {
             return Err(invalid());
         }
-        self.journal.phase = RestorePhase::Cancelling;
-        self.save()?;
+        // No new journal allocation: ENOSPC must not strand the payload. All
+        // cancellable phases can resume missing/partially removed staging; the
+        // existing marker fences ordinary startup until the last deletion.
         for name in [
             "decoded.sqlite",
             "decoded.sqlite-wal",

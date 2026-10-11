@@ -105,6 +105,7 @@ async fn prepared_move_resumes_exact_commit_and_opens_only_with_new_keys()
     assert_eq!(new_identity.server_id(), old.server_id());
     assert_ne!(new_identity.private_key_pkcs8(), old.private_key_pkcs8());
     assert_ne!(new_identity.session_hmac_key(), old.session_hmac_key());
+    assert_cancelled_staging_is_not_recreated(&job, target_dir.path()).await?;
     job.bind_switch("confirmed-current-epoch", &"n".repeat(43))?;
     assert!(job.bind_switch("another-epoch", &"n".repeat(43)).is_err());
     job.mark_switch_unknown()?;
@@ -163,6 +164,28 @@ async fn prepared_move_resumes_exact_commit_and_opens_only_with_new_keys()
     Ok(())
 }
 
+async fn assert_cancelled_staging_is_not_recreated(
+    job: &RestoreJob,
+    directory: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Interrupted allocation-free cancellation must not recreate a missing DB
+    // when another native action reads the still-present Prepared journal.
+    let staged_database = job.stage().join("runtime.sqlite3");
+    let held_database = directory.join("held.sqlite");
+    let staged_key = job.stage().join("central-directory/host-ed25519.pk8");
+    let held_key = directory.join("held-key");
+    std::fs::rename(&staged_database, &held_database)?;
+    std::fs::rename(&staged_key, &held_key)?;
+    assert!(job.host_identity().await.is_err());
+    assert!(
+        !staged_database.exists(),
+        "identity lookup recreated cancelled data"
+    );
+    std::fs::rename(&held_database, &staged_database)?;
+    std::fs::rename(&held_key, &staged_key)?;
+    Ok(())
+}
+
 async fn assert_ready_after_current_ack(
     restored: &SqliteStore,
     target: &std::path::Path,
@@ -203,5 +226,35 @@ async fn assert_ready_after_current_ack(
         RestoreJob::inspect(target)?.ok_or("missing job")?.phase,
         RestorePhase::Ready
     );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn cleanup_releases_owned_payload_without_allocating_a_new_journal()
+-> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir()?;
+    let target = directory.path().join("runtime.sqlite3");
+    let job = RestoreJob::begin(&target)?;
+    let operation = job.journal().operation_id;
+    let payload = job.stage().join("decoded.sqlite");
+    std::fs::write(&payload, b"owned payload")?;
+    let unrelated = directory.path().join("keep.sqlite");
+    std::fs::write(&unrelated, b"user data")?;
+    // Model an allocation failure in the journal's parent without filling the
+    // user's disk. Staging remains writable, so payload deletion can proceed.
+    std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o500))?;
+    let result = job.cancel();
+    std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
+    assert!(result.is_err());
+    assert!(
+        !payload.exists(),
+        "cleanup tried to allocate a journal before releasing payload"
+    );
+    RestoreJob::resume(&target, operation)?.cancel()?;
+    assert!(RestoreJob::inspect(&target)?.is_none());
+    assert_eq!(std::fs::read(unrelated)?, b"user data");
+    assert!(!target.exists());
     Ok(())
 }

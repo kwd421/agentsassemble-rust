@@ -1,5 +1,55 @@
 # Verification Contract
 
+## Server move: four Medium review corrections (2026-10-11)
+
+Baseline Rust `c7fd3b7f`, Worker `087d4261`; Worker correction `2707b1eb`.
+Scope is the four findings in `server-move-code-review.md`, with requirements
+recorded before implementation in the identity/accounts/friends contract.
+
+- Codec rejects plaintext plus any supplied passphrase as `Authentication`,
+  before writing payload bytes. Native capacity preflight consumes the validated
+  manifest from the same open decoder stream (authenticated when encrypted).
+- Shared startup restore starts only with explicit central `server_restore_v1`
+  capability, rechecked before native preparation. Existing journal recovery and
+  cancellation controls stay visible when capability is absent or offline;
+  uncertain/committed jobs still cannot be cancelled.
+- Worker feature-off rejection proves only **this request** did not commit.
+  Native durably records `NotCommitted` only for a first switch from `Prepared`;
+  an already uncertain retry, generic 5xx or transport error remains uncertain.
+  Completed-operation recovery remains available with the feature disabled.
+- Capacity allowance includes decoded + reconstructed DB, rollback journal, WAL,
+  two DB equivalents for FTS/index rebuilding, and a small-DB metadata margin.
+  This is a free-space preflight, not an exclusive volume reservation; concurrent
+  writers can still exhaust space. Cancellation needs no new journal allocation,
+  deletes only exact job-owned paths, and resumes after partial staging removal.
+  Key lookup refuses missing staging data instead of recreating an installation;
+  reconstruction closes SQLite handles before failure cleanup.
+- Hostile schema rows stop at owned count + one, with SQL/type/name byte limits
+  enforced before values cross the SQLite driver. FK checking returns at its
+  first violation. VM-budget regressions exercise large hostile result sets.
+
+Verification: affected backup/authority tests (12 passed, one existing opt-in KDF
+benchmark ignored), restore tests (6 passed), native binding/uncertainty test
+(1 passed); frontend startup/card/protocol tests (33 passed), TypeScript/Vite
+production build; Worker restore/Google tests (13 passed) and syntax check.
+Rust architecture/source-growth and 19 policy gate tests pass; Worker architecture
+and regenerated codebase-map checks pass. Formatting and diff checks pass.
+Regression failures were observed before correction for plaintext/password, UI
+capability visibility and Worker rejection evidence. Controlled regressions also
+check preparation revalidation, payload preflight ordering, headroom, schema
+collection bounds and allocation-free cleanup; all mutations are removed.
+The interrupted-cancellation regression also failed before the missing-DB read
+check (DB and key both removed); it now preserves absence and the prepared data
+roundtrip. Clippy initially rejected the expanded test's function length; the
+interrupted-cancellation scenario was extracted into a test helper without a gate
+exception. Affected persistence/server Clippy checks pass with warnings denied.
+
+No deployment, Computer Use, provider calls or artifact maintenance was performed.
+No packaged macOS/Windows acceptance or physical full-disk test is claimed; cleanup
+allocation failure uses a temporary unwritable journal parent while staging remains
+writable. Existing ts-rs attribute and frontend chunk-size warnings remain.
+
+
 ## UI audit: guest entry corrected; join/offline failures not reproduced (2026-10-11)
 
 Baseline Rust `aa44a435`. Audit captures 26/29/31/34/35 were supplied under

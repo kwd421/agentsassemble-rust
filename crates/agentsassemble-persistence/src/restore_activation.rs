@@ -67,8 +67,9 @@ impl RestoreJob {
         self.save()
     }
 
-    /// A single authenticated central read proved both no receipt and a changed
-    /// incarnation, so no in-flight old-epoch request can still commit.
+    /// Native proved no request can still commit: an authenticated status read
+    /// fenced the old epoch, or the first switch was explicitly rejected before
+    /// mutation. Rejection of an uncertain retry is not sufficient.
     /// # Errors
     /// Rejects a result for another operation or expected epoch.
     pub fn record_not_committed(

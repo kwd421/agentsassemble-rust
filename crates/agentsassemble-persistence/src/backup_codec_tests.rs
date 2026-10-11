@@ -158,3 +158,56 @@ fn measure_kdf() -> Result<(), BackupError> {
     }
     Ok(())
 }
+
+#[test]
+fn plaintext_replacement_cannot_bypass_supplied_passphrase() -> Result<(), BackupError> {
+    let (data, manifest) = fixture();
+    let mut encoded = Vec::new();
+    encode(
+        &mut data.as_slice(),
+        &mut encoded,
+        &manifest,
+        None,
+        parameters(),
+    )?;
+    let mut output = Vec::new();
+    assert!(matches!(
+        decode(
+            &mut encoded.as_slice(),
+            &mut output,
+            Some(b"selected encrypted backup")
+        ),
+        Err(BackupError::Authentication)
+    ));
+    assert!(output.is_empty());
+    Ok(())
+}
+
+// A rejected capacity check must consume only the manifest, never payload bytes.
+#[test]
+fn capacity_preflight_precedes_payload_on_the_same_stream() -> Result<(), BackupError> {
+    let (data, manifest) = fixture();
+    for password in [None, Some(b"secret".as_slice())] {
+        let mut encoded = Vec::new();
+        encode(
+            &mut data.as_slice(),
+            &mut encoded,
+            &manifest,
+            password,
+            parameters(),
+        )?;
+        let mut input = Cursor::new(encoded);
+        let mut output = Vec::new();
+        let result = decode_with_preflight(&mut input, &mut output, password, |seen| {
+            assert_eq!(seen.database_bytes, data.len() as u64);
+            assert_eq!(seen.database_sha256, manifest.database_sha256);
+            Err(BackupError::Io(std::io::ErrorKind::StorageFull.into()))
+        });
+        assert!(
+            matches!(result, Err(BackupError::Io(error)) if error.kind() == std::io::ErrorKind::StorageFull)
+        );
+        assert!(output.is_empty());
+        assert!(input.position() < input.get_ref().len() as u64);
+    }
+    Ok(())
+}

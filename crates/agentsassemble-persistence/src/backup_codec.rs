@@ -296,6 +296,19 @@ pub fn decode(
     output: &mut impl Write,
     passphrase: Option<&[u8]>,
 ) -> Result<BackupManifest, BackupError> {
+    decode_with_preflight(input, output, passphrase, |_| Ok(()))
+}
+
+/// Decode from one stream, checking capacity after the validated manifest
+/// (authenticated when encrypted), before any payload bytes are written.
+/// # Errors
+/// Propagates preflight failure and all envelope authentication/validation errors.
+pub fn decode_with_preflight(
+    input: &mut impl Read,
+    output: &mut impl Write,
+    passphrase: Option<&[u8]>,
+    preflight: impl FnOnce(&BackupManifest) -> Result<(), BackupError>,
+) -> Result<BackupManifest, BackupError> {
     let (header, associated) = read_header(input)?;
     let mut cipher = match header.encryption {
         Some(encryption) => {
@@ -310,6 +323,7 @@ pub fn decode(
                     .map_err(|_| BackupError::Authentication)?,
             )
         }
+        None if passphrase.is_some() => return Err(BackupError::Authentication),
         None => None,
     };
     let mut pull = |input: &mut dyn Read| -> Result<(Zeroizing<Vec<u8>>, bool), BackupError> {
@@ -334,6 +348,7 @@ pub fn decode(
     let manifest: BackupManifest =
         serde_json::from_slice(&manifest_bytes).map_err(|_| BackupError::Manifest)?;
     manifest.validate()?;
+    preflight(&manifest)?;
     let mut hash = Sha256::new();
     let mut size = 0_u64;
     loop {

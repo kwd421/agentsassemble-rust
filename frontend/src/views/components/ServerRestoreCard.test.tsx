@@ -1,0 +1,30 @@
+import {cleanup, fireEvent, render, screen, waitFor} from "@testing-library/react";
+import {afterEach, expect, it, vi} from "vitest";
+import ServerRestoreCard from "./ServerRestoreCard";
+const mocks = vi.hoisted(() => ({inspect:vi.fn(), capability:vi.fn(), cancel:vi.fn()}));
+vi.mock("../../lib/desktopBridge", () => ({isDesktopWebview:()=>true}));
+vi.mock("../../lib/central/identity", () => ({bootstrapCentral:vi.fn(),loadCentralSession:()=>null}));
+vi.mock("../../lib/central/serverMove", () => ({inspectServerRestore:mocks.inspect,serverRestoreAvailable:mocks.capability,cancelServerRestore:mocks.cancel}));
+afterEach(()=>{cleanup();vi.resetAllMocks();});
+it.each([false, undefined, "unavailable"])("hides new restore start without positive capability: %s", async value=>{
+  mocks.inspect.mockResolvedValue(null);
+  if(value==="unavailable")mocks.capability.mockRejectedValue(new Error("offline"));
+  else mocks.capability.mockResolvedValue(value);
+  const {container}=render(<ServerRestoreCard onOpen={async()=>{}}/>);
+  await waitFor(()=>expect(mocks.inspect).toHaveBeenCalled());
+  expect(container.querySelector("button")).toBeNull();
+});
+it("offers new restore only after capability and recovers an existing journal even when disabled", async()=>{
+  mocks.capability.mockResolvedValue(true);mocks.inspect.mockResolvedValue(null);
+  render(<ServerRestoreCard onOpen={async()=>{}}/>);
+  fireEvent.click(await screen.findByRole("button"));
+  expect(await screen.findByRole("button",{name:"백업 파일 선택"})).toBeTruthy();
+  cleanup();
+  mocks.capability.mockResolvedValue(false);
+  mocks.inspect.mockResolvedValue({operation_id:"operation",phase:"validating",manifest:null});
+  mocks.cancel.mockResolvedValue(undefined);
+  render(<ServerRestoreCard onOpen={async()=>{}}/>);
+  fireEvent.click(await screen.findByRole("button",{name:"복원 취소"}));
+  await waitFor(()=>expect(screen.queryByRole("button",{name:"복원 취소"})).toBeNull());
+  expect(screen.queryByRole("button",{name:"백업 파일 선택"})).toBeNull();
+});

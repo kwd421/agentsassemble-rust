@@ -1,12 +1,12 @@
 import {afterEach,expect,it,vi} from "vitest";
-import {switchServerRestore,resumeServerRestore,type RestoreJournal} from "./serverMove";
+import {prepareServerRestore,switchServerRestore,resumeServerRestore,type RestoreJournal} from "./serverMove";
 const mocks=vi.hoisted(()=>({native:vi.fn(),bootstrap:vi.fn(),signed:vi.fn(),sign:vi.fn(),session:{token:"session",person:{person_id:"owner",identity_kind:"guest"}} as object|null}));
 vi.mock("../desktopBridge",()=>({requestDesktopServerRestore:mocks.native}));
-vi.mock("./identity",()=>({bootstrapCentral:mocks.bootstrap,loadCentralSession:()=>mocks.session,signedRequest:mocks.signed,signCentralNativeRequest:mocks.sign}));
+vi.mock("./identity",()=>({centralAccountEntryUrl:()=>"https://central.example/",bootstrapCentral:mocks.bootstrap,loadCentralSession:()=>mocks.session,signedRequest:mocks.signed,signCentralNativeRequest:mocks.sign}));
 vi.mock("./accountDeletion",()=>({parseDeletionProof:(value:unknown,id:string)=>{const proof=value as {request_id:string;proof:string};if(proof.request_id!==id)throw new Error("wrong proof purpose");return proof;}}));
 const id="30000000-0000-4000-8000-000000000001",operation="30000000-0000-4000-8000-000000000002";
 const job:RestoreJournal={operation_id:operation,phase:"prepared",expected_epoch:"",new_key_fingerprint:"",committed_epoch:"",manifest:{server_id:id,server_name:"Server",rooms:2,messages:3,assets:1,snapshot_at:new Date().toISOString()}};
-afterEach(()=>{vi.resetAllMocks();mocks.session={token:"session",person:{person_id:"owner",identity_kind:"guest"}};});
+afterEach(()=>{vi.unstubAllGlobals();vi.resetAllMocks();mocks.session={token:"session",person:{person_id:"owner",identity_kind:"guest"}};});
 it("requires live ownership before asking native to bind or switching",async()=>{
   mocks.bootstrap.mockResolvedValue({servers:[{server_id:id,relation:"member",registration_epoch:"epoch"}]});
   await expect(switchServerRestore(job,"recovery",()=>{},new AbortController().signal,"epoch")).rejects.toThrow(/소유권/);
@@ -36,4 +36,20 @@ it("does not turn unknown or superseded central receipts into cancellation or su
     await expect(resumeServerRestore({...job,phase:"switch_unknown"})).rejects.toThrow();
     expect(mocks.native.mock.calls.at(-1)?.[0].action).toBe("status");
   }
+});
+
+it("rechecks central capability before creating a native preparation",async()=>{
+  let created=false;
+  mocks.native.mockImplementation(async()=>{created=true;return null;});
+  for(const payload of [{}, {server_restore_v1:false}, {server_restore_v1:"true"}]) {
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response(JSON.stringify(payload))));
+    await expect(prepareServerRestore(null)).rejects.toThrow();
+    expect(created).toBe(false);
+  }
+  vi.stubGlobal("fetch",vi.fn().mockRejectedValue(new Error("network")));
+  await expect(prepareServerRestore(null)).rejects.toThrow();
+  expect(created).toBe(false);
+  vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response(JSON.stringify({server_restore_v1:true}))));
+  await expect(prepareServerRestore(null)).resolves.toBeNull();
+  expect(created).toBe(true);
 });

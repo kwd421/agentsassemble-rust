@@ -22,6 +22,22 @@ invariants, not constant values. Record reproduction, fixes and remaining unknow
 
 ## Backup-based server move (2026-10-11)
 
+Review corrections (four Medium findings): `backup_codec::decode` rejects a
+plaintext envelope with any supplied passphrase as Authentication. The shared
+`ServerRestoreCard` starts new preparations only after central `/v1/config`
+explicitly advertises `server_restore_v1=true`; existing journal recovery is
+always available. Worker feature-disabled rejection proves only that this
+request did not commit; native may cancel a first switch from Prepared, but a
+previously uncertain switch remains uncertain until authoritative status.
+Generic 5xx/network failures never prove non-commitment. Native preparation
+checks free space for decoded and reconstructed databases plus SQLite journal,
+WAL and FTS headroom before payload writes, using the manifest consumed from
+that same open stream. Cancellation deletes only exact job-owned files without
+allocating another journal; interrupted cleanup remains resumable. Hostile
+schema reads are limited to owned object count plus one with bounded SQL/name
+bytes, and foreign-key checking stops at the first violation. Regression and
+invariant tests cover these boundaries; no constant-pinning tests.
+
 - Preserved invite links resolve their recorded incarnation through central's
   immutable restore receipts to the same live owner/server before consent. The
   resulting key/epoch is pinned for fresh admission; ordinary member reconnect

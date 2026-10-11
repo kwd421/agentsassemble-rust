@@ -17,12 +17,44 @@ mod assets;
 
 type Object = (String, String, String, Option<String>);
 
-async fn objects(connection: &mut SqliteConnection) -> Result<Vec<Object>, PersistenceError> {
-    Ok(
-        sqlx::query_as("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name")
-            .fetch_all(connection)
-            .await?,
+async fn objects(
+    connection: &mut SqliteConnection,
+    expected_count: Option<usize>,
+) -> Result<Vec<Object>, PersistenceError> {
+    // The local DDL is trusted. Bound hostile rows before copying SQLite values
+    // across the driver boundary; do not sort an attacker-sized result in SQL.
+    let Some(count) = expected_count else {
+        return Ok(sqlx::query_as(
+            "SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name",
+        )
+        .fetch_all(connection)
+        .await?);
+    };
+    let mut rows = sqlx::query(
+        "SELECT CASE WHEN length(CAST(type AS BLOB))<=32 THEN type END AS type,
+         CASE WHEN length(CAST(name AS BLOB))<=1024 THEN name END AS name,
+         CASE WHEN length(CAST(tbl_name AS BLOB))<=1024 THEN tbl_name END AS tbl_name,
+         CASE WHEN length(CAST(sql AS BLOB))<=65536 THEN sql END AS sql,
+         coalesce(length(CAST(sql AS BLOB)),0)>65536 AS oversized_sql
+         FROM sqlite_schema LIMIT ?",
     )
+    .bind(i64::try_from(count + 1).map_err(|_| invalid())?)
+    .fetch(connection);
+    let mut objects = Vec::new();
+    while let Some(row) = rows.try_next().await? {
+        if objects.len() == count || row.get::<bool, _>("oversized_sql") {
+            return Err(invalid());
+        }
+        objects.push((
+            row.get::<Option<String>, _>("type").ok_or_else(invalid)?,
+            row.get::<Option<String>, _>("name").ok_or_else(invalid)?,
+            row.get::<Option<String>, _>("tbl_name")
+                .ok_or_else(invalid)?,
+            row.get("sql"),
+        ));
+    }
+    objects.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+    Ok(objects)
 }
 
 async fn columns(
@@ -81,8 +113,8 @@ pub(crate) async fn require_schema(
     output: &mut SqliteConnection,
     hostile: bool,
 ) -> Result<(), PersistenceError> {
-    let supplied = objects(source).await?;
-    let expected = objects(output).await?;
+    let expected = objects(output, None).await?;
+    let supplied = objects(source, Some(expected.len())).await?;
     if hostile {
         if supplied != expected {
             return Err(invalid());
@@ -266,13 +298,7 @@ pub(crate) async fn reconstruct(
             insert.execute(&mut *tx).await?;
         }
     }
-    if !sqlx::query("PRAGMA foreign_key_check")
-        .fetch_all(&mut *tx)
-        .await?
-        .is_empty()
-    {
-        return Err(invalid());
-    }
+    require_foreign_keys(&mut tx).await?;
     let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
         .fetch_one(&mut *tx)
         .await?;
@@ -283,6 +309,17 @@ pub(crate) async fn reconstruct(
     Ok(())
 }
 
+async fn require_foreign_keys(connection: &mut SqliteConnection) -> Result<(), PersistenceError> {
+    if sqlx::query("SELECT * FROM pragma_foreign_key_check LIMIT 1")
+        .fetch_optional(connection)
+        .await?
+        .is_some()
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 /// Reconstruct a validated payload into an exclusive, newly created staging DB.
 /// The caller owns private staging and must not activate either path on failure.
 /// # Errors
@@ -290,9 +327,14 @@ pub(crate) async fn reconstruct(
 pub async fn reconstruct_payload(input: &Path, output: &Path) -> Result<(), PersistenceError> {
     let mut source = open_input(input).await?;
     let mut target = create_payload(output).await?;
-    reconstruct(&mut source, &mut target, true).await?;
-    source.close().await?;
-    target.close().await?;
+    let result = reconstruct(&mut source, &mut target, true).await;
+    // Await handle release even on ENOSPC/validation failure before the native
+    // owner removes staging (Windows cannot unlink a still-open SQLite file).
+    let source_closed = source.close().await;
+    let target_closed = target.close().await;
+    result?;
+    source_closed?;
+    target_closed?;
     Ok(())
 }
 

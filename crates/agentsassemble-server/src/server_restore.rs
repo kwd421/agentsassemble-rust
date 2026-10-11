@@ -152,8 +152,10 @@ async fn execute(target: &Path, request: Request) -> anyhow::Result<Value> {
             let body = Zeroizing::new(body);
             let mut job = RestoreJob::resume(target, operation_id)?;
             validate_switch(&job, &body).await?;
+            let first_attempt = job.journal().phase == RestorePhase::Prepared;
             job.mark_switch_unknown()?;
             let response = send(&path(&job, "restore")?, Some(&body), headers).await?;
+            record_disabled_request(&mut job, first_attempt, &response)?;
             accept_receipt(&mut job, &response).await?;
             Ok(response)
         }
@@ -225,10 +227,14 @@ async fn prepare(
             options.mode(0o600);
         }
         let mut output = options.open(&decoded)?;
-        let manifest = backup_codec::decode(
+        let manifest = backup_codec::decode_with_preflight(
             &mut std::io::BufReader::new(input),
             &mut output,
             passphrase.as_ref().map(|value| value.as_bytes()),
+            |manifest| {
+                job.check_decode_space(manifest)
+                    .map_err(backup_codec::BackupError::Io)
+            },
         )?;
         output.sync_all()?;
         drop(output);
@@ -407,10 +413,41 @@ async fn send(
         );
         bytes.extend_from_slice(&chunk);
     }
-    if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
+    decode_response(response.status(), &bytes)
+}
+
+fn record_disabled_request(
+    job: &mut RestoreJob,
+    first_attempt: bool,
+    response: &Value,
+) -> anyhow::Result<()> {
+    // A rejected retry cannot disprove a previous request's uncertain outcome.
+    if first_attempt && disabled_request(response) {
+        let epoch = job.journal().expected_epoch.clone();
+        let operation = job.journal().operation_id.to_string();
+        job.record_not_committed(&operation, &epoch)?;
+    }
+    Ok(())
+}
+
+fn disabled_request(response: &Value) -> bool {
+    response["error"]["code"] == "server_restore_not_available"
+        && response["error"]["request_not_committed"] == true
+}
+
+fn decode_response(status: reqwest::StatusCode, bytes: &[u8]) -> anyhow::Result<Value> {
+    let value: Value = serde_json::from_slice(bytes)?;
+    ensure!(
+        !disabled_request(&value) || status == reqwest::StatusCode::SERVICE_UNAVAILABLE,
+        "invalid feature-disabled response"
+    );
+    if !status.is_success()
+        && status != reqwest::StatusCode::NOT_FOUND
+        && !(status == reqwest::StatusCode::SERVICE_UNAVAILABLE && disabled_request(&value))
+    {
         bail!("central restore rejected");
     }
-    Ok(serde_json::from_slice(&bytes)?)
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -524,8 +561,34 @@ mod tests {
         );
         drop(job);
         assert!(RestoreJob::resume(target, operation)?.cancel().is_err());
-        RestoreJob::resume(target, operation)?
-            .record_not_committed(&operation.to_string(), "current-epoch")?;
+        let mut job = RestoreJob::resume(target, operation)?;
+        for body in [
+            json!({"error":{"code":"temporary_unavailable"}}),
+            json!({"error":{"code":"server_restore_not_available"}}),
+        ] {
+            assert!(
+                decode_response(
+                    reqwest::StatusCode::SERVICE_UNAVAILABLE,
+                    &serde_json::to_vec(&body)?
+                )
+                .is_err()
+            );
+        }
+        let response = decode_response(
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            br#"{"error":{"code":"server_restore_not_available","request_not_committed":true}}"#,
+        )?;
+        record_disabled_request(&mut job, false, &response)?;
+        drop(job);
+        assert!(RestoreJob::resume(target, operation)?.cancel().is_err());
+        let mut job = RestoreJob::resume(target, operation)?;
+        record_disabled_request(&mut job, true, &response)?;
+        assert_eq!(
+            RestoreJob::inspect(target)?
+                .ok_or_else(|| anyhow::anyhow!("missing job"))?
+                .phase,
+            RestorePhase::NotCommitted
+        );
         Ok(())
     }
 }

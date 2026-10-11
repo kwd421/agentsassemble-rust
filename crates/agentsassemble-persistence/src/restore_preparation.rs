@@ -11,6 +11,17 @@ use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::Path;
 
 impl RestoreJob {
+    /// Check the destination volume before decoding any payload from the same
+    /// stream whose manifest is supplied here. Headroom covers decoded + rebuilt
+    /// DBs, rollback journal, WAL and two DB equivalents for rebuilt FTS/indexes;
+    /// a fixed margin covers small DBs and journal/key metadata. Concurrent volume
+    /// use can still fail writes, so cancellation must require no new allocation.
+    /// # Errors
+    /// Rejects insufficient capacity or a failed filesystem capacity query.
+    pub fn check_decode_space(&self, manifest: &BackupManifest) -> std::io::Result<()> {
+        require_decode_space(manifest.database_bytes, fs2::available_space(&self.stage)?)
+    }
+
     /// Validate the complete payload and provision a fresh host/session identity.
     /// # Errors
     /// Refuses changed bytes, inconsistent manifest/data, or any existing stage DB.
@@ -27,12 +38,6 @@ impl RestoreJob {
             crate::backup_codec::measure_payload(&mut input_file).map_err(|_| invalid())?;
         if size != manifest.database_bytes || hash != manifest.database_sha256 {
             return Err(invalid());
-        }
-        let free = fs2::available_space(&self.stage).map_err(PersistenceError::WriterLease)?;
-        if free < size.saturating_mul(2) {
-            return Err(PersistenceError::WriterLease(std::io::Error::from(
-                std::io::ErrorKind::StorageFull,
-            )));
         }
         let database = self.stage.join("runtime.sqlite3");
         crate::backup_database::reconstruct_payload(input, &database).await?;
@@ -132,6 +137,14 @@ impl RestoreJob {
             return Err(invalid());
         }
         let database = self.stage.join("runtime.sqlite3");
+        // Cancellation can remove data while the original journal still exists.
+        // A key read must not initialize a replacement installation in staging.
+        if !database
+            .try_exists()
+            .map_err(PersistenceError::WriterLease)?
+        {
+            return Err(invalid());
+        }
         let store = crate::SqliteStore::open_path(&database).await?;
         let identity = store.host_identity().await?;
         store.close().await?;
@@ -167,4 +180,29 @@ pub(crate) async fn counts(
         u64::try_from(messages).map_err(|_| invalid())?,
         u64::try_from(assets).map_err(|_| invalid())?,
     ))
+}
+
+fn require_decode_space(database_bytes: u64, available: u64) -> std::io::Result<()> {
+    let required = database_bytes
+        .saturating_mul(6)
+        .saturating_add(64 * 1024 * 1024);
+    if available < required {
+        return Err(std::io::ErrorKind::StorageFull.into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn capacity_includes_reconstruction_and_sqlite_headroom() {
+        let database = 1024 * 1024 * 1024;
+        for available in [0, database, database * 2, database * 3] {
+            assert!(matches!(require_decode_space(database, available),
+                Err(error) if error.kind() == std::io::ErrorKind::StorageFull));
+        }
+        assert!(require_decode_space(database, database * 16).is_ok());
+        assert!(require_decode_space(u64::MAX, 0).is_err());
+    }
 }
