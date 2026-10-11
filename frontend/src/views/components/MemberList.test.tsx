@@ -40,12 +40,12 @@ afterEach(() => {
 });
 
 describe("MemberList component wiring", () => {
-  it.each([true, false])("uses Korean self badges and no guest badge for ordinary members (host=%s)", (host) => {
+  it.each([true, false])("marks the host as HOST, the viewer as 나, and ordinary members with no badge (host=%s)", (host) => {
     render(<MemberList agents={[]} members={[participantFixture(), participantFixture({ participant_id: "central-member", display_name: "Hihi" })]}
       viewerParticipantId={host ? "operator-local" : "central-member"} canEditRoles={host} roomId="general" roomName="General" />);
-    expect(screen.getByText(host ? "방장" : "나")).toBeTruthy();
+    expect(screen.getByText(host ? "HOST" : "나")).toBeTruthy();
     expect(screen.getByText("Hihi")).toBeTruthy();
-    for (const label of ["Guest", "게스트", "HOST", "YOU"]) expect(screen.queryByText(label)).toBeNull();
+    for (const label of ["Guest", "게스트", "방장", "YOU"]) expect(screen.queryByText(label)).toBeNull();
   });
 
   it("opens only moderation from the row's context menu, without an overflow button", () => {
@@ -180,8 +180,8 @@ describe("MemberList component wiring", () => {
   });
 
   it.each([
-    ["minimal", "최소"], ["low", "낮음"], ["medium", "보통"], ["high", "높음"], ["xhigh", "매우 높음"],
-  ])("localizes %s effort in visible and accessible member labels", (effort, label) => {
+    ["minimal", "minimal"], ["low", "low"], ["medium", "medium"], ["high", "high"], ["xhigh", "xhigh"],
+  ])("shows %s effort as the provider names it in visible and accessible member labels", (effort, label) => {
     render(<MemberList agents={[AGENT]} agentSessions={[{ ...SESSION, model: "gpt-5.6-sol", reasoning_effort: effort }]}
       roomId="room-1" roomName="Room One" />);
     expect(screen.getByLabelText(`gpt-5.6-sol, 추론 ${label}`).textContent).toContain(label);

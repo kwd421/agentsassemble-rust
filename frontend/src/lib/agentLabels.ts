@@ -395,17 +395,8 @@ export function executionLocationLabel(session?: RoomAgentSession): string {
   }
 }
 
+// Providers name these levels in English; they are shown as the provider writes them.
 export function reasoningEffortLabel(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  const labels: Record<string, string> = {
-    minimal: "최소",
-    low: "낮음",
-    medium: "보통",
-    high: "높음",
-    xhigh: "매우 높음",
-    max: "Max",
-    ultra: "Ultra",
-    ultracode: "UltraCode",
-  };
-  return labels[normalized] || value;
+  const brands: Record<string, string> = { max: "Max", ultra: "Ultra", ultracode: "UltraCode" };
+  return brands[value.trim().toLowerCase()] || value.trim();
 }

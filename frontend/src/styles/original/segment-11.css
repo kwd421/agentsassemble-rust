@@ -679,6 +679,12 @@
   transform: translateX(-50%) rotate(45deg);
 }
 
+.dc-tooltip[data-placement="right"]::after {
+  top: var(--dc-tooltip-arrow, 50%);
+  left: -6px;
+  transform: translateY(-50%) rotate(135deg);
+}
+
 .dc-tooltip[data-placement="bottom"]::after {
   top: -6px;
   transform: translateX(-50%) rotate(225deg);

@@ -37,3 +37,13 @@ it("adds nothing to a control that already shows the same words", () => {
   expect(screen.queryByRole("tooltip")).toBeNull();
   expect(tile.hasAttribute("title")).toBe(false);
 });
+
+it("keeps the hint up when the hovered control is swapped for an identical one", () => {
+  const view = render(<><TooltipLayer /><button key="a" title="답장">a</button></>);
+  fireEvent.pointerOver(screen.getByRole("button"));
+  const hint = screen.getByRole("tooltip");
+  view.rerender(<><TooltipLayer /><button key="b" title="답장">a</button></>);
+  fireEvent.pointerMove(document.body);
+  fireEvent.pointerOver(screen.getByRole("button"));
+  expect(screen.getByRole("tooltip")).toBe(hint);
+});

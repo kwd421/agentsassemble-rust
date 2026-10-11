@@ -517,8 +517,8 @@ describe("RoomConnectionPanel", () => {
     );
     await chooseProviderControl("모델", "Next");
     expectProviderControlValue("추론 강도", "선택 필요");
-    expect(screen.queryByRole("option", { name: "낮음" })).toBeNull();
-    await chooseProviderControl("추론 강도", "높음");
+    expect(screen.queryByRole("option", { name: "low" })).toBeNull();
+    await chooseProviderControl("추론 강도", "high");
     await chooseProviderControl("응답 속도", "Fast");
     await chooseProviderControl("권한", "작업 폴더 쓰기");
     await chooseProviderControl("최대 응답 길이", "8,192 토큰");
@@ -587,7 +587,7 @@ describe("RoomConnectionPanel", () => {
     await waitFor(() =>
       expectProviderControlValue("모델", "Next")
     );
-    expectProviderControlValue("추론 강도", "높음");
+    expectProviderControlValue("추론 강도", "high");
     expectProviderControlValue("응답 속도", "Fast");
     expectProviderControlValue("권한", "작업 폴더 쓰기");
   });
@@ -769,7 +769,7 @@ it("preserves stored full access for free OpenCode settings and submits a downgr
   expect(onAgentConfigure).toHaveBeenCalledWith(session, expect.objectContaining({ permission_mode: "workspace_write" }));
   await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
   await userEvent.click(screen.getByRole("option", { name: "전체 액세스" }));
-  await chooseProviderControl("추론 강도", "높음");
+  await chooseProviderControl("추론 강도", "high");
   await userEvent.click(screen.getByRole("button", { name: "실행 설정 저장" }));
   expect(onAgentConfigure).toHaveBeenLastCalledWith(session, expect.objectContaining({ permission_mode: "full_access" }), true);
 });

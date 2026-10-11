@@ -82,7 +82,7 @@ export default function RoomRail({
   const buttonStyle = mobileViewport ? { width: 44, height: 44, flexBasis: 44 } : undefined;
   return (
     <nav
-      className="dc-rail flex shrink-0 flex-col items-center gap-2 py-3"
+      className="dc-rail flex shrink-0 flex-col items-center gap-2 py-3" data-tip-side="right"
       aria-label="룸 레일"
       inert={inert}
       style={mobileViewport ? { width: MOBILE_ROOM_RAIL_WIDTH } : undefined}
