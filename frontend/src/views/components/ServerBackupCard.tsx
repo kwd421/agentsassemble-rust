@@ -34,7 +34,7 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
   useEffect(()=>{let live=true;void (async()=>{try{
     const central=await bootstrapCentral();
     const local=isDesktopWebview()?await requestDesktopHostDeviceInfo():null;
-    if(local&&(local.hosting_state!==null||!local.server_id))return;
+    if(!local||local.hosting_state!==null||!local.server_id)return;
     const identity=local?await fetchLocalServerInfo():null;
     const owned=central?.servers.find(server=>server.relation==="owner"&&(!local||
       (server.server_id===local.server_id&&identity?.server_id===local.server_id&&
