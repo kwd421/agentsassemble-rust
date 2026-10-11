@@ -56,6 +56,9 @@ pub struct RoomSettings {
     pub conversation_mode: String,
     pub tool_mode: String,
     pub ordered_exclude_previous_speaker: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub lobby_name: Option<String>,
     pub channels: Vec<RoomChannel>,
 }
 
@@ -69,6 +72,9 @@ pub struct PublicRoomSettings {
     pub conversation_mode: String,
     pub tool_mode: String,
     pub ordered_exclude_previous_speaker: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub lobby_name: Option<String>,
     pub channels: Vec<RoomChannel>,
 }
 
@@ -134,6 +140,8 @@ struct RawRoomSettings {
     conversation_mode: String,
     tool_mode: String,
     ordered_exclude_previous_speaker: bool,
+    #[serde(default)]
+    lobby_name: Option<String>,
     channels: Vec<RoomChannel>,
 }
 
@@ -173,6 +181,7 @@ impl RoomSettings {
             conversation_mode: "ordered".to_owned(),
             tool_mode: "chat".to_owned(),
             ordered_exclude_previous_speaker: true,
+            lobby_name: Some("일반".to_owned()),
             channels: Vec::new(),
         }
     }
@@ -278,6 +287,7 @@ impl RoomSettingsPatch {
             ordered_exclude_previous_speaker: self
                 .ordered_exclude_previous_speaker
                 .unwrap_or(current.ordered_exclude_previous_speaker),
+            lobby_name: current.lobby_name.clone(),
             channels: self
                 .channels
                 .clone()
@@ -366,6 +376,7 @@ impl From<RoomSettings> for RawRoomSettings {
             conversation_mode: value.conversation_mode,
             tool_mode: value.tool_mode,
             ordered_exclude_previous_speaker: value.ordered_exclude_previous_speaker,
+            lobby_name: value.lobby_name,
             channels: value.channels,
         }
     }
@@ -411,6 +422,14 @@ fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsE
         }
         require_canonical_text(&channel.created_at, "channel created_at", 64)?;
     }
+    if let Some(name) = &raw.lobby_name {
+        require_canonical_text(name, "lobby name", CHANNEL_NAME_LIMIT)?;
+        if name.is_empty() {
+            return Err(RoomSettingsError::bad_request(
+                "Lobby name must not be empty.",
+            ));
+        }
+    }
     Ok(RoomSettings {
         label: raw.label,
         topic: raw.topic,
@@ -418,6 +437,7 @@ fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsE
         conversation_mode: raw.conversation_mode,
         tool_mode: raw.tool_mode,
         ordered_exclude_previous_speaker: raw.ordered_exclude_previous_speaker,
+        lobby_name: raw.lobby_name,
         channels: raw.channels,
     })
 }
@@ -585,6 +605,7 @@ pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, se
         conversation_mode: settings.conversation_mode.clone(),
         tool_mode: settings.tool_mode.clone(),
         ordered_exclude_previous_speaker: settings.ordered_exclude_previous_speaker,
+        lobby_name: settings.lobby_name.clone(),
         channels: settings.channels.clone(),
     })
 }
@@ -599,6 +620,33 @@ mod tests {
     };
 
     #[test]
+    fn lobby_name_preserves_legacy_rooms_and_survives_settings_changes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let fresh = RoomSettings::defaults("New room");
+        let mut legacy_json = serde_json::to_value(&fresh)?;
+        legacy_json
+            .as_object_mut()
+            .ok_or("settings fixture must be an object")?
+            .remove("lobby_name");
+        let legacy: RoomSettings = serde_json::from_value(legacy_json.clone())?;
+        assert_eq!(serde_json::to_value(&legacy)?, legacy_json);
+        assert!(
+            serde_json::to_value(public_settings(&legacy)?)?
+                .get("lobby_name")
+                .is_none()
+        );
+        for settings in [legacy, fresh] {
+            let revision = public_settings(&settings)?.settings_revision;
+            let (_, updated) = settings.strict_update(&json!({
+                "expected_revision": revision, "label": "Renamed"
+            }))?;
+            assert_eq!(updated.lobby_name, settings.lobby_name);
+            assert_eq!(public_settings(&updated)?.lobby_name, settings.lobby_name);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn room_appearance_reference_query_and_suffix_are_one_contract() {
         assert_eq!(
             ROOM_APPEARANCE_REFERENCE_SUFFIX,
@@ -608,7 +656,9 @@ mod tests {
 
     #[test]
     fn room_settings_revision_matches_current_sorted_json_contract() {
-        let settings = RoomSettings::defaults("General");
+        let mut settings = RoomSettings::defaults("General");
+        // Existing rooms keep their exact serialized settings and revision.
+        settings.lobby_name = None;
         let public = public_settings(&settings)
             .unwrap_or_else(|error| panic!("serialize canonical settings: {error}"));
         assert_eq!(

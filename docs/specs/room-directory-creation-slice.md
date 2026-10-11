@@ -109,3 +109,16 @@ Room-global settings mutation, per-user room preferences, room close/archive/
 delete cleanup, invites/admission, remote/mobile server selection, custom
 channel streams, PostgreSQL, RimWorld, and new console/profile-management UI
 are outside this slice and remain explicitly incomplete rather than simulated.
+
+## Name-entry polish (2026-10-11)
+
+Both rail plus and empty-directory creation open a small name dialog, initially
+새 방. Cancel/Escape makes no request; confirmed trimmed name uses the existing
+exact-intent retry and authority verification. Keep the draft on failure and block
+duplicate submission. New rooms store 일반 as their lobby channel display name;
+existing persisted rooms and channel identifiers remain unchanged.
+
+The optional persisted/public `lobby_name` is set by the Rust settings owner for
+new rooms. Absence keeps the existing built-in label and is omitted on reserialization
+to preserve old rooms' revision hashes. Global settings edits retain this metadata;
+no client rename, new channel ID, data rewrite or database migration is involved.

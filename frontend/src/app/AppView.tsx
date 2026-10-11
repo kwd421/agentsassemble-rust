@@ -37,6 +37,8 @@ const AdminPanel = lazy(() => import("../views/AdminPanel"));
 const FriendsView = lazy(() => import("../views/FriendsView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
+  const [createRoomOpen, setCreateRoomOpen] = useState(false);
+  const [roomName, setRoomName] = useState("새 방");
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [sideChatScope, setSideChatScope] = useState("");
   const [createChannelScope, setCreateChannelScope] = useState("");
@@ -185,7 +187,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         friendsOpen={friendsOpen && canManageFriends}
         onOpenAdmin={!guestLocked && isDesktopWebview() ? () => { setAdminOpen(true); setFriendsOpen(false); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onOpenFriends={canManageFriends ? () => { setAdminOpen(false); setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
-        onAddRoom={addFreshRoom}
+        onAddRoom={() => setCreateRoomOpen(true)}
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
         readReady={roomReadReady}
@@ -397,7 +399,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               <h1 id="empty-room-title">열려 있는 방이 없어요</h1>
               <p>새 방을 만들어 대화를 시작할 수 있어요.</p>
               <div className="flex flex-wrap gap-3" style={{ justifyContent: "center", marginTop: 20 }}>
-                {canCreateRoom && <button type="button" className="dc-agent-create-primary" onClick={addFreshRoom}>새 방 만들기</button>}
+                {canCreateRoom && <button type="button" className="dc-agent-create-primary" onClick={() => setCreateRoomOpen(true)}>새 방 만들기</button>}
               </div>
             </section>
           ) : channel === "lobby" ? (
@@ -503,6 +505,13 @@ export default function AppView({ controller }: { controller: AppController }) {
         />
       )}
 
+      {createRoomOpen && <CreateChannelModal room initialName={roomName} onClose={() => setCreateRoomOpen(false)}
+        onCreate={async ({ name }) => {
+          setRoomName(name);
+          const created = await addFreshRoom(name);
+          if (created) setRoomName("새 방");
+          return created;
+        }} />}
       {createChannelScope === channelScope && <CreateChannelModal
         key={channelScope} onClose={() => setCreateChannelScope("")}
         onCreate={async (params) => {

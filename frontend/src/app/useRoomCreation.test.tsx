@@ -17,7 +17,7 @@ vi.mock("../api", async () => ({
   createRoom: apiMocks.createRoom,
 }));
 
-function response(roomId: string) {
+function response(roomId: string, label = "새 방") {
   return {
     status: "ready",
     server_id: "10000000-0000-4000-8000-000000000001",
@@ -25,18 +25,18 @@ function response(roomId: string) {
     room: {
       room_id: roomId,
       room_uid: "30000000-0000-4000-8000-000000000003",
-      label: "새 회의실",
+      label,
     },
     deduplicated: true,
   };
 }
 
-function canonical(roomId: string): RoomDockItem {
+function canonical(roomId: string, label = "새 방"): RoomDockItem {
   return {
     id: `server-${roomId}`,
-    label: "새 회의실",
+    label,
     meetingId: roomId,
-    topic: "새 회의실",
+    topic: label,
     shortLabel: "새",
     icon: Sparkles,
     createdAt: "2026-08-25T00:00:00Z",
@@ -68,11 +68,11 @@ describe("useRoomCreation", () => {
     const continuity = {} as RoomDirectoryContinuity;
     apiMocks.createRoom
       .mockRejectedValueOnce(new TypeError("response lost"))
-      .mockImplementationOnce(async (_requestId: string, roomId: string) => response(roomId));
+      .mockImplementationOnce(async (_requestId: string, roomId: string) => response(roomId, "디자인 검토"));
     const refreshRoomDirectory = vi.fn(async () => ({
       ok: true as const,
       continuity,
-      rooms: [canonical(apiMocks.createRoom.mock.calls[0][1])],
+      rooms: [canonical(apiMocks.createRoom.mock.calls[0][1], "디자인 검토")],
     }));
     const verifyRoomDirectoryAuthority = vi.fn(async () => ({
       ok: true as const,
@@ -90,8 +90,9 @@ describe("useRoomCreation", () => {
       })
     );
 
-    await act(result.current.addFreshRoom);
+    await act(() => result.current.addFreshRoom("디자인 검토"));
 
+    expect(apiMocks.createRoom.mock.calls[0][2]).toBe("디자인 검토");
     expect(apiMocks.createRoom).toHaveBeenCalledTimes(2);
     expect(apiMocks.createRoom.mock.calls[1].slice(0, 3)).toEqual(
       apiMocks.createRoom.mock.calls[0].slice(0, 3)
@@ -132,6 +133,8 @@ describe("useRoomCreation", () => {
     await act(result.current.addFreshRoom);
     const firstIntent = apiMocks.createRoom.mock.calls[0];
     expect(window.alert).toHaveBeenCalledOnce();
+    await act(() => result.current.addFreshRoom("다른 이름"));
+    expect(apiMocks.createRoom).toHaveBeenCalledTimes(2);
     await act(result.current.addFreshRoom);
 
     expect(apiMocks.createRoom).toHaveBeenCalledTimes(3);
@@ -226,7 +229,7 @@ describe("useRoomCreation", () => {
       })
     );
 
-    let staleAttempt!: Promise<void>;
+    let staleAttempt!: Promise<boolean>;
     await act(async () => {
       staleAttempt = result.current.addFreshRoom();
       await Promise.resolve();
@@ -286,7 +289,7 @@ describe("useRoomCreation", () => {
     const terminalIntent = apiMocks.createRoom.mock.calls[0];
     expect(window.alert).toHaveBeenCalledWith("invalid room");
 
-    let staleAttempt!: Promise<void>;
+    let staleAttempt!: Promise<boolean>;
     await act(async () => {
       staleAttempt = result.current.addFreshRoom();
       await Promise.resolve();

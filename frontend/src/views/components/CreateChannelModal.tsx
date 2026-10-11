@@ -1,20 +1,23 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 
-export default function CreateChannelModal({ onClose, onCreate }: {
+export default function CreateChannelModal({ onClose, onCreate, room = false, initialName = "" }: {
+  room?: boolean;
+  initialName?: string;
   onClose: () => void;
-  onCreate: (params: { name: string; type: "text" }) => Promise<void>;
+  onCreate: (params: { name: string; type: "text" }) => Promise<void | boolean>;
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [opener] = useState(() => document.activeElement);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const active = useRef(false);
   const submitting = useRef(false);
-  const validName = Boolean(name.trim()) && [...name.trim()].length <= 60;
+  const nameLimit = room ? 128 : 60;
+  const validName = Boolean(name.trim()) && [...name.trim()].length <= nameLimit;
   useEffect(() => {
     active.current = true;
     const dialog = dialogRef.current;
@@ -34,11 +37,14 @@ export default function CreateChannelModal({ onClose, onCreate }: {
     submitting.current = true;
     setBusy(true); setError("");
     try {
-      await onCreate({ name: name.trim(), type: "text" });
-      if (active.current) onClose();
+      const created = await onCreate({ name: name.trim(), type: "text" });
+      if (active.current) {
+        if (created !== false) onClose();
+        else setBusy(false);
+      }
     } catch (err) {
       if (active.current) {
-        setError(err instanceof Error ? err.message : "채널을 만들지 못했어요.");
+        setError(err instanceof Error ? err.message : room ? "방을 만들지 못했어요." : "채널을 만들지 못했어요.");
         setBusy(false);
       }
     } finally { submitting.current = false; }
@@ -53,14 +59,14 @@ export default function CreateChannelModal({ onClose, onCreate }: {
         if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
       }}>
       <header className="dc-create-channel-head">
-        <h2 id={titleId}>텍스트 채널 만들기</h2>
+        <h2 id={titleId}>{room ? "새 방 만들기" : "텍스트 채널 만들기"}</h2>
         <button type="button" className="dc-settings-close" disabled={busy} onClick={onClose}
           aria-label="닫기" style={{ minWidth: 44, minHeight: 44 }}><X size={18} /></button>
       </header>
       <label className="dc-create-channel-name">
-        채널 이름
-        <input ref={inputRef} className="ops-input" autoFocus value={name} maxLength={120}
-          disabled={busy} placeholder="구현방" style={{ minHeight: 44 }}
+        {room ? "방 이름" : "채널 이름"}
+        <input ref={inputRef} className="ops-input" autoFocus value={name} maxLength={nameLimit * 2}
+          disabled={busy} placeholder={room ? "새 방" : "구현방"} style={{ minHeight: 44 }}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.nativeEvent.isComposing) {
@@ -68,7 +74,7 @@ export default function CreateChannelModal({ onClose, onCreate }: {
             }
           }} />
       </label>
-      {[...name.trim()].length > 60 && <p role="alert">채널 이름은 60자까지 입력할 수 있어요.</p>}
+      {[...name.trim()].length > nameLimit && <p role="alert">이름은 {nameLimit}자까지 입력할 수 있어요.</p>}
       {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
       <div className="dc-create-channel-actions">
         <button type="button" className="ops-button" disabled={busy} onClick={onClose} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>취소</button>

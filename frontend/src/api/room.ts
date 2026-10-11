@@ -45,6 +45,7 @@ export type RoomToolMode = "chat" | "tabletop";
 export type RoomGlobalAppearance = Omit<RoomAppearance, "notifications">;
 
 export interface RoomGlobalSettings {
+  lobbyName?: string;
   roomId: string;
   revision: string;
   label: string;
@@ -122,6 +123,7 @@ type ApiRoomAppearance = {
 };
 
 type ApiRoomSettings = {
+  lobby_name?: string;
   room_id?: string;
   settings_revision?: string;
   label?: string;
@@ -240,7 +242,8 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
       "ordered_exclude_previous_speaker",
       "channels",
     ],
-    "방 preference.settings"
+    "방 preference.settings",
+    ["lobby_name"]
   );
   if (stringField(payload, "room_id", "방 preference.settings") !== expectedRoomId) {
     throw new Error("방 preference settings의 방 권위가 일치하지 않습니다.");
@@ -290,6 +293,7 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
     !new Set(["room", "read_only"]).has(inviteScope) ||
     !new Set(["ordered", "ambient"]).has(conversationMode) ||
     !new Set(["chat", "tabletop"]).has(toolMode) ||
+    (payload.lobby_name !== undefined && (typeof payload.lobby_name !== "string" || !payload.lobby_name.trim())) ||
     typeof payload.ordered_exclude_previous_speaker !== "boolean"
   ) {
     throw new Error("방 preference settings 값이 올바르지 않습니다.");
@@ -331,6 +335,7 @@ export function normalizeRoomGlobalSettings(
   const payload = value as ApiRoomSettings;
   const appearance = payload.appearance;
   if (
+    (payload.lobby_name !== undefined && (typeof payload.lobby_name !== "string" || !payload.lobby_name.trim())) ||
     typeof payload.settings_revision !== "string" ||
     !payload.settings_revision ||
     typeof payload.label !== "string" ||
@@ -350,6 +355,7 @@ export function normalizeRoomGlobalSettings(
     return null;
   }
   return {
+    lobbyName: payload.lobby_name,
     roomId: String(payload.room_id || fallbackRoomId || ""),
     revision: payload.settings_revision,
     label: payload.label,

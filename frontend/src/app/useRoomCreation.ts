@@ -108,15 +108,18 @@ export function useRoomCreation({
     [create, validateRoomDirectoryContinuity, verifyRoomDirectoryAuthority]
   );
 
-  const addFreshRoom = useCallback(async () => {
-    if (guestLocked || inFlightRef.current) return;
+  const addFreshRoom = useCallback(async (name = "새 방") => {
+    if (guestLocked || inFlightRef.current) return false;
     inFlightRef.current = true;
     let continuity: RoomDirectoryContinuity | null = null;
     try {
       continuity = captureRoomDirectoryContinuity();
+      if (pendingRef.current && pendingRef.current.room.label !== name.trim()) {
+        throw new Error(`‘${pendingRef.current.room.label}’ 방 생성 결과를 먼저 확인해야 해요. 같은 이름으로 다시 시도해 주세요.`);
+      }
       const intent = pendingRef.current || {
         requestId: createSecureRequestId(),
-        room: createFreshRoom(),
+        room: { ...createFreshRoom(), label: name.trim() },
       };
       pendingRef.current = intent;
 
@@ -125,7 +128,7 @@ export function useRoomCreation({
       continuity = submitted.continuity;
       if (!submitted.ok) {
         window.alert(errorMessage(submitted.error));
-        return;
+        return false;
       }
 
       const refreshed = await refreshRoomDirectory(continuity);
@@ -133,30 +136,32 @@ export function useRoomCreation({
       continuity = refreshed.continuity;
       if (!refreshed.ok) {
         window.alert(errorMessage(refreshed.error));
-        return;
+        return false;
       }
       const canonicalRoom = refreshed.rooms.find(
         (room) => room.meetingId === intent.room.meetingId
       );
       if (!canonicalRoom) {
         validateRoomDirectoryContinuity(continuity);
-        window.alert("생성된 방이 권위 있는 방 목록에 없습니다.");
-        return;
+        window.alert("만든 방을 목록에서 아직 확인하지 못했어요. 다시 시도해 주세요.");
+        return false;
       }
       validateRoomDirectoryContinuity(continuity);
       pendingRef.current = null;
       await onCreated(canonicalRoom);
+      return true;
     } catch (error) {
-      if (error instanceof RoomDirectoryOperationSuperseded) return;
+      if (error instanceof RoomDirectoryOperationSuperseded) return false;
       if (continuity) {
         try {
           validateRoomDirectoryContinuity(continuity);
         } catch (validationError) {
-          if (validationError instanceof RoomDirectoryOperationSuperseded) return;
+          if (validationError instanceof RoomDirectoryOperationSuperseded) return false;
           throw validationError;
         }
       }
       window.alert(errorMessage(error));
+      return false;
     } finally {
       inFlightRef.current = false;
     }

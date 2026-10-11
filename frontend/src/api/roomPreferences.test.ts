@@ -22,6 +22,7 @@ function response(
     room_id: roomId,
     settings: {
       room_id: roomId,
+      lobby_name: "팀 대화",
       settings_revision: `room-settings-v1-${"a".repeat(64)}`,
       label: "General",
       topic: "",

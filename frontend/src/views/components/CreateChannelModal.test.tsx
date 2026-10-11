@@ -38,3 +38,25 @@ describe("CreateChannelModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+
+it("asks for a room name before creation, cancels without a request and retains an unconfirmed draft", async () => {
+  const onCreate = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const onClose = vi.fn();
+  const view = render(<CreateChannelModal room initialName="새 방" onCreate={onCreate} onClose={onClose} />);
+  expect(onCreate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "취소" }));
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(onCreate).not.toHaveBeenCalled();
+  view.unmount(); onClose.mockClear();
+  render(<CreateChannelModal room initialName="새 방" onCreate={onCreate} onClose={onClose} />);
+  const input = screen.getByLabelText("방 이름") as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "  디자인 검토  " } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(input.disabled).toBe(false));
+  expect(onClose).not.toHaveBeenCalled();
+  expect(input.value).toBe("  디자인 검토  ");
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  expect(onCreate.mock.calls.map(([value]) => value.name)).toEqual(["디자인 검토", "디자인 검토"]);
+});

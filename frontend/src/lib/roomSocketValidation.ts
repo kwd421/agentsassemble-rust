@@ -51,6 +51,7 @@ const GENERATED_ROOM_SETTINGS_KEYS = [
   "tool_mode",
   "ordered_exclude_previous_speaker",
   "channels",
+  "lobby_name",
 ] as const;
 const ROOM_SETTINGS_KEYS: ExactGeneratedKeys<
   PublicRoomSettings,
@@ -112,12 +113,13 @@ export { isSequence } from "./roomSequence";
 function publicRoomSettingsIsValid(value: unknown): value is PublicRoomSettings {
   try {
     const settings = strictRecord(value, "room settings");
-    assertExactKeys(settings, ROOM_SETTINGS_KEYS, "room settings");
+    assertExactKeys(settings, ROOM_SETTINGS_KEYS.filter(key => key !== "lobby_name"), "room settings", ["lobby_name"]);
     const appearance = strictRecord(settings.appearance, "room settings appearance");
     assertExactKeys(appearance, APPEARANCE_KEYS, "room settings appearance");
     if (
       ["settings_revision", "label", "topic", "conversation_mode", "tool_mode"]
         .some((key) => typeof settings[key] !== "string") ||
+      (settings.lobby_name !== undefined && (typeof settings.lobby_name !== "string" || !settings.lobby_name.trim())) ||
       typeof settings.ordered_exclude_previous_speaker !== "boolean" ||
       APPEARANCE_KEYS.some((key) => typeof appearance[key] !== "string") ||
       !Array.isArray(settings.channels)

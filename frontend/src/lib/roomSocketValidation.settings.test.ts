@@ -1,3 +1,4 @@
+import { normalizeRoomGlobalSettings } from "../api/room";
 import { describe, expect, it } from "vitest";
 import {
   commandAckResultIsValid,
@@ -83,4 +84,17 @@ describe("room settings event validation", () => {
       )).toBe(false);
     },
   );
+});
+
+
+it("carries a new room lobby name and rejects a mismatched acknowledgement", () => {
+  const named = { ...settings(), lobby_name: "팀 대화" };
+  expect(commandAckResultIsValid("room.settings.update", {}, result(named, named), "general", "operator-local")).toBe(true);
+  expect(normalizeRoomGlobalSettings(named, "general")?.lobbyName).toBe(named.lobby_name);
+  expect(normalizeRoomGlobalSettings(settings(), "general")?.lobbyName).toBeUndefined();
+  expect(commandAckResultIsValid("room.settings.update", {}, result(named, settings()), "general", "operator-local")).toBe(false);
+  for (const lobby_name of [null, 1, ""]) {
+    const invalid = { ...named, lobby_name };
+    expect(publicRoomEventIsValid(result(invalid, invalid).event, "general")).toBe(false);
+  }
 });

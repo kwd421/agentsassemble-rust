@@ -180,7 +180,7 @@ it("restores a fixed server name only after the existing rename operation succee
   await user.click(screen.getByRole("button", { name: "취소" }));
   vi.mocked(loadRoomDockItems).mockReturnValue([]);
   await user.click(screen.getByRole("button", { name: "Mac Studio 이름 변경" }));
-  expect(screen.getByText(/‘새 회의실’ · Mac Studio에서 열린 방/)).toBeTruthy();
+  expect(screen.getByText(/‘새 방’ · Mac Studio에서 열린 방/)).toBeTruthy();
 });
 
 const conflict = { servers: [

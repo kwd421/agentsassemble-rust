@@ -134,7 +134,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
   }
 
   function namePreview(name: string, serverId?: string | null) {
-    const roomName = loadRoomDockItems().find(room => serverId && room.serverId === serverId)?.label || "새 회의실";
+    const roomName = loadRoomDockItems().find(room => serverId && room.serverId === serverId)?.label || "새 방";
     return <p className="dc-server-name-preview text-xs text-text-muted preserve-words">
       초대받은 사람에게는 이렇게 보여요<br />‘{roomName}’ · {name}에서 열린 방
     </p>;
@@ -199,7 +199,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         <div className="dc-server-row-copy">
           <strong className="break-all">{localName || localDefaultName || "프로필 이름 확인 중"}</strong>
           <span className="dc-server-row-meta">
-            <span className="dc-server-row-dot" aria-hidden />이 기기 · <span aria-label="호스트 운영체제">{OS_LABELS[localHost.host_os as keyof typeof OS_LABELS]}</span>
+            <span className="dc-server-row-dot" aria-hidden />이 기기 · <span aria-label="서버 컴퓨터 운영체제">{OS_LABELS[localHost.host_os as keyof typeof OS_LABELS]}</span>
           </span>
           {editingId === "local" && nameEditor(localDefaultName)}
         </div>
@@ -229,7 +229,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
           <span className="dc-server-row-meta">
             <span className="dc-server-row-dot" aria-hidden />
             {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기" : state === "online" ? "연결 가능" : "연결 끊김"}
-            {server.relation !== "member" && <> · <span aria-label="호스트 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span></>}
+            {server.relation !== "member" && <> · <span aria-label="서버 컴퓨터 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span></>}
           </span>
           {editingId === server.server_id && nameEditor(server.default_name, server)}
         </div>

@@ -468,7 +468,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     sessionToken: admittedSessionToken,
     localAvailable: !guestLocked && isDesktopWebview(),
   });
-  const visibleChannels = [...CHANNELS, ...roomChannels.activeChannels.filter((item) => item.type === "text").map((item) => ({ id: item.id, label: item.name, icon: Hash }))];
+  const visibleChannels = [...CHANNELS.map(item => item.id === "lobby" && canonicalRoom.roomSettings?.roomId === activeRoom.meetingId && canonicalRoom.roomSettings.lobbyName ? { ...item, label: canonicalRoom.roomSettings.lobbyName } : item), ...roomChannels.activeChannels.filter((item) => item.type === "text").map((item) => ({ id: item.id, label: item.name, icon: Hash }))];
   const messageSearchChannelLabels = Object.fromEntries(visibleChannels.map((item) => [item.id, item.label]));
   useEffect(() => {
     setMessageSearchScope("all");

@@ -76,7 +76,7 @@ export function createFreshRoom(now = new Date()): RoomDockItem {
   const suffix = compactTimestamp(now);
   return {
     id: `fresh-${suffix}`,
-    label: "새 회의실",
+    label: "새 방",
     meetingId: `room-${suffix}`,
     roomOrigin: "local",
     connectionState: "local",
