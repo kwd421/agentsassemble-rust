@@ -112,7 +112,8 @@ async fn execute(target: &Path, request: Request) -> anyhow::Result<Value> {
             let mut job = RestoreJob::resume(target, operation_id)?;
             let identity = identity(&job).await?;
             job.bind_switch(&expected_epoch, identity.fingerprint())?;
-            let tuple = tuple(&job)?;
+            // Match Worker canonicalJson even when serde_json/preserve_order is enabled.
+            let tuple: BTreeMap<String, Value> = serde_json::from_value(tuple(&job)?)?;
             let request_id = URL_SAFE_NO_PAD.encode(Sha256::digest(serde_json::to_vec(&tuple)?));
             Ok(json!({"journal":job.journal(),"request_id":request_id,
                 "path":path(&job,"restore-proof")?,"body":base(&job,&identity)?}))
@@ -457,6 +458,16 @@ mod tests {
 
     #[tokio::test]
     async fn native_binding_uses_fresh_key_and_rejects_changed_intent() -> anyhow::Result<()> {
+        binding_fixture(false).await
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Node and IDENTITY_DIRECTORY checkout; see scripts/check_restore_fixture.mjs"]
+    async fn native_restore_worker_shared_fixture() -> anyhow::Result<()> {
+        binding_fixture(true).await
+    }
+
+    async fn binding_fixture(cross_implementation: bool) -> anyhow::Result<()> {
         let source_dir = tempfile::tempdir()?;
         let source = SqliteStore::open_path(&source_dir.path().join("source.sqlite")).await?;
         source
@@ -524,6 +535,9 @@ mod tests {
         )
         .await?;
         assert_eq!(resumed["body"], expected_base);
+        if cross_implementation {
+            assert_worker_fixture(&target, operation, &resumed).await?;
+        }
         assert!(
             execute(
                 &target,
@@ -546,6 +560,43 @@ mod tests {
         assert!(execute(&target, Request::Inspect).await?.is_null());
         assert!(!target.exists());
         source.close().await?;
+        Ok(())
+    }
+    async fn assert_worker_fixture(
+        target: &Path,
+        operation: uuid::Uuid,
+        bound: &Value,
+    ) -> anyhow::Result<()> {
+        let draft = execute(
+            target,
+            Request::Draft {
+                operation_id: operation,
+                owner_person_id: "fixture-owner".into(),
+                proof: "f".repeat(43),
+            },
+        )
+        .await?;
+        let job = RestoreJob::resume(target, operation)?;
+        let body = draft["body"].as_str().context("missing draft")?;
+        validate_switch(&job, body).await?;
+        let fixture = target.with_extension("fixture.json");
+        std::fs::write(
+            &fixture,
+            serde_json::to_vec(&json!({"bound":bound,"draft":draft,
+                "issuer":central()?.origin().ascii_serialization()}))?,
+        )?;
+        let result = std::process::Command::new("node")
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../scripts/check_restore_fixture.mjs"
+            ))
+            .arg(&fixture)
+            .output()?;
+        ensure!(
+            result.status.success(),
+            "Worker fixture failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
         Ok(())
     }
     fn assert_fenced_cancellation(target: &Path, operation: uuid::Uuid) -> anyhow::Result<()> {

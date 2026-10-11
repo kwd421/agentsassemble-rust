@@ -1,5 +1,41 @@
 # Verification Contract
 
+## Windows restore step-up request identity (2026-10-11)
+
+Root cause: native `Request::Bind` hashed a `serde_json::Value` with insertion
+order (`purpose,server_id,expected_epoch,new_key_fingerprint,operation_id`)
+under the transitively enabled `preserve_order` feature. Worker `canonicalJson`
+sorts those keys (`expected_epoch,new_key_fingerprint,operation_id,purpose,server_id`).
+Bind now uses a BTreeMap, matching the existing host-proof serialization owner.
+Validated JWK canonicalization/fingerprint, epoch string type, operation UUID and
+body fields agree; no Worker or frontend comparison relaxation is needed.
+
+The shared fixture regression creates a real Rust SQLite backup/prepared job,
+resumes `bind`, generates `draft`, validates native switch intent, and passes
+those public wire values to the actual Worker `restoreIdentity`, `restoreCanonical`
+and Ed25519 verifier through `scripts/check_restore_fixture.mjs`. It reproduced
+the unfixed request-ID mismatch (Worker `q77lqvovwCXiCRcw7e2OGfExc3kUJfRxqd8EjgZUFTY`,
+native `hJk1OOisIxS_3qpCGv0N4zUnO1TbszgORZYBPZCYVAM`) after matching fingerprint,
+epoch and operation. Fixture data is generated locally, not from the owner backup;
+no private key or real step-up credential enters the shared JSON. The explicit
+ignored test requires Node and a Worker checkout; its invocation is documented
+in the script. Worker tested at `2707b1eb119776213e85b4c83f114c27c1cace70`.
+
+Guest proofs hit the same mismatch at frontend `parseDeletionProof`; Google
+fails earlier at start/handoff. Both use the corrected bind identity. The existing
+`draft`/`switch` host proof already sorts its tuple. A failure at the reported
+Google comparison precedes switch dispatch and leaves the job Prepared: after
+installing the corrected Windows app, retry the same job without cancelling.
+Existing operation/key/epoch remain durable; no journal migration is needed.
+Windows UI/OAuth completion remains unverified; no Computer Use was performed.
+
+Validation: fixed native restore tests 2/2 (including the explicitly enabled
+Rust-to-Worker fixture), Worker guest/Google restore tests 13/13, frontend
+`serverMove` tests 4/4, architecture/source structure and 19 policy tests,
+workspace formatting, diff checks and server lib/tests Clippy (`-D warnings`)
+passed. The shared fixture also verifies
+Worker acceptance of the Rust draft signature and native switch validation.
+
 ## UI design audit polish (2026-10-11)
 
 Baseline `d7704362`; audit captures 02/13/16/22/23/30/34/36/37/41/42.

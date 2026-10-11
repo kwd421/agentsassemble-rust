@@ -22,6 +22,17 @@ invariants, not constant values. Record reproduction, fixes and remaining unknow
 
 ## Backup-based server move (2026-10-11)
 
+Urgent Windows step-up correction: native `bind` and Worker `restoreIdentity`
+must hash the same canonical restore tuple, including the validated public JWK
+fingerprint, string epoch and durable operation ID. Google start/handoff and guest
+proof checks must accept that same identity; native `draft`/`switch` must retain
+Worker-verifiable host signatures. Verify a shared fixture produced by a real
+Rust prepared job in the actual JavaScript Worker implementation, including a
+resume of the same prepared job. Preserve strict comparisons and durable uncertainty;
+this failure before switch does not require cancelling or replacing the job.
+No Computer Use. Commit/push and dispatch the Windows build for a native fix;
+Worker deployment is authorized only if Worker code requires correction.
+
 Packaged export correction (0.1.30 -> 0.1.31): reproduce the owner/native save
 dialog failure with the live UI Check data, then preserve snapshot consistency,
 strict schema/JSON reconstruction, authority stripping, authenticated encryption,
