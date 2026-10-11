@@ -694,7 +694,7 @@ fn valid_content_type(value: &str) -> bool {
         })
 }
 
-fn metadata(
+pub(crate) fn metadata(
     id: String,
     filename: String,
     content_type: String,
@@ -714,7 +714,7 @@ fn metadata(
     }
 }
 
-fn canonical_metadata(attachment: &MessageAttachmentMetadata) -> bool {
+pub(crate) fn canonical_metadata(attachment: &MessageAttachmentMetadata) -> bool {
     is_message_attachment_id(&attachment.id)
         && canonical_message_attachment_filename(&attachment.filename) == attachment.filename
         && attachment.content_type.len() <= MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES

@@ -117,3 +117,47 @@ async fn hostile_schema_and_unknown_json_never_become_active_authority()
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn assets_roundtrip_exact_bytes_and_reject_corrupt_image_payload()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let store = SqliteStore::open_path(&directory.path().join("source.sqlite")).await?;
+    store
+        .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Owner")
+        .await?;
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::new_rgba8(3, 2).write_to(&mut png, image::ImageFormat::Png)?;
+    let bytes = png.into_inner();
+    sqlx::query("INSERT INTO profile_avatar_assets SELECT 'avatar',user_id,'avatar.png','image/png',?,?,?,'current',NULL FROM user_profiles")
+        .bind(&bytes).bind(i64::try_from(bytes.len())?).bind(chrono::Utc::now().to_rfc3339())
+        .execute(&store.pool).await?;
+    let payload = directory.path().join("payload.sqlite");
+    store
+        .export_backup_payload(
+            &ServerOwnerAuthority::LocalOperator,
+            &directory.path().join("snapshot"),
+            &payload,
+        )
+        .await?;
+    let output = directory.path().join("rebuilt.sqlite");
+    reconstruct_payload(&payload, &output).await?;
+    let mut restored = open_input(&output).await?;
+    let actual: Vec<u8> = sqlx::query_scalar("SELECT content FROM profile_avatar_assets")
+        .fetch_one(&mut restored)
+        .await?;
+    assert_eq!(actual, bytes);
+    restored.close().await?;
+    let mut attacker =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&payload)).await?;
+    sqlx::query("UPDATE profile_avatar_assets SET content=zeroblob(size)")
+        .execute(&mut attacker)
+        .await?;
+    attacker.close().await?;
+    assert!(
+        reconstruct_payload(&payload, &directory.path().join("rejected.sqlite"))
+            .await
+            .is_err()
+    );
+    Ok(())
+}

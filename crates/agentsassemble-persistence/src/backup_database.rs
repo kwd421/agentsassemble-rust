@@ -12,6 +12,9 @@ use sqlx::{
 };
 use std::{collections::BTreeMap, path::Path};
 
+#[path = "backup_assets.rs"]
+mod assets;
+
 type Object = (String, String, String, Option<String>);
 
 async fn objects(connection: &mut SqliteConnection) -> Result<Vec<Object>, PersistenceError> {
@@ -239,6 +242,7 @@ pub(crate) async fn reconstruct(
             if !sanitize(table.name, &mut values)? {
                 continue;
             }
+            assets::validate(table.name, &mut values).await?;
             let names = values
                 .keys()
                 .map(|n| format!("\"{n}\""))

@@ -181,7 +181,7 @@ fn validate_card(card: &PersonaCard) -> Result<(), PersistenceError> {
     }
 }
 
-fn validate_thumbnail(
+pub(crate) fn validate_thumbnail(
     card: &PersonaCard,
     thumbnail: Option<&[u8]>,
 ) -> Result<(), PersistenceError> {
