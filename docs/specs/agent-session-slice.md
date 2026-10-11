@@ -13,6 +13,20 @@ retain their authority, state transitions and retry/failure behavior. No aliases
 or fallback. Verify the provider crate with existing build/tests and one final
 pre-push `make verify`; no live provider, deployment, signing or manual checks.
 
+## Agent creation names and disabled choices (2026-10-11)
+
+Server agent-add and local AI setup share `AgentCreateModal` and
+`defaultAgentDisplayName`. This-computer `OwnComputerCreateModal` has no selected
+local model yet and uses the provider display name. Default 표시 이름 uses the
+selected catalog model's human label, or the provider display name when absent
+or a raw provider/model-id. Never generate a raw provider/model-id name. Preserve
+user-entered names through model/provider selection and catalog refresh; preserve
+explicit handoff names (the local setup packet requires a nonempty name).
+Disabled permission options reuse existing disabled styling and cannot be selected.
+No runtime, permission authority, persistence, retry or provider execution changes.
+Acceptance: frontend regression tests/build and mandatory gates; central assets-only
+deployment and HTTP smoke. No Computer Use; visual acceptance remains unverified.
+
 ## Shared agent creation presentation (2026-10-05)
 
 App/web `AgentCreateModal` shows all providers once under 구독 에이전트, API 키,

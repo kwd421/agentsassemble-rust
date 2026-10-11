@@ -1,5 +1,21 @@
 # Verification Contract
 
+## Agent display-name defaults and disabled options (2026-10-11)
+
+Server/local setup defaults use the catalog human label or provider display name;
+raw provider/model-id labels fall back to the provider. This-computer selection
+and shared creation preserve typed names; local handoff names remain intact.
+Disabled dropdown options reuse the trigger disabled style and suppress hover.
+Frontend 203 files / 1,341 tests and build pass. Desktop Clippy / 49 tests,
+workspace tests (1,174 passed, 2 existing ignored), workspace Clippy, format,
+architecture/source-growth, 19 policy/artifact tests, diff and artifact checks pass.
+The initial make verify exposed pre-existing desktop declaration formatting and
+export_types main length failures. Corrected only formatting and moved message
+exports into the existing chat export owner; regenerated bindings are unchanged.
+Resumed all remaining checks successfully. Existing source-size, bundle-size and
+ts-rs warnings remain. No Computer Use or live provider run; visual acceptance
+remains unverified. Central assets deployment follows this commit.
+
 ## 탈퇴 후 UI 정리와 Firefox E2E19 (2026-10-11)
 
 Rust `5043656b`: 완료 본문/건너뛴 서버 안내, 완료 즉시 방 트리 해제와 원격 연결

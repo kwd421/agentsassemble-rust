@@ -6,7 +6,7 @@ import { useCompanionInvites } from "../../app/useCompanionInvites";
 import { createCompanionAttendeeInvite } from "../../api/attendeeInvite";
 import type { RoomGuestSession } from "../../lib/roomGuestSession";
 import type { RoomEvent } from "../../api";
-import { codexProvider } from "./AgentCreateModal.testProviders";
+import { codexProvider, openCodeProvider } from "./AgentCreateModal.testProviders";
 import OwnComputerCreateModal from "./OwnComputerCreateModal";
 vi.mock("../../api/attendeeInvite", async (original) => ({ ...await original<typeof import("../../api/attendeeInvite")>(), createCompanionAttendeeInvite: vi.fn() }));
 vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: vi.fn(() => false) }));
@@ -69,4 +69,20 @@ it("closes desktop creation after handoff, leaves status and never retains setup
   expect(screen.getByRole("status").textContent).toBe("이 컴퓨터에 뜬 창에서 마저 설정해 주세요.");
   fireEvent.click(screen.getByRole("button", { name: "다시 열기" }));
   expect(screen.queryByRole("link")).toBeNull();
+});
+
+
+it("keeps a typed name when changing the this-computer provider", () => {
+  function Surface() {
+    const controls = useCompanionInvites(null);
+    return <OwnComputerCreateModal roomLabel="Room" providers={[codexProvider(), openCodeProvider()]}
+      controls={controls} onClose={() => {}} />;
+  }
+  render(<Surface />);
+  fireEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
+  const name = screen.getByLabelText("표시 이름") as HTMLInputElement;
+  expect(name.value).toBe("OpenCode");
+  fireEvent.change(name, { target: { value: "My own AI" } });
+  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  expect(name.value).toBe("My own AI");
 });

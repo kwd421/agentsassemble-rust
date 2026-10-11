@@ -10,6 +10,7 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
   onClose: () => void; locationChoice?: ReactNode;
 }) {
   const selectedProvider = providers.find((provider) => provider.id === controls.provider);
+  const [displayNameEdited, setDisplayNameEdited] = useState(Boolean(controls.displayName));
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [opener] = useState(() => document.activeElement);
   useEffect(() => {
@@ -26,12 +27,12 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
         {locationChoice}
         <p className="dc-agent-hint preserve-words">모델과 작업 폴더는 이 컴퓨터에 뜨는 창에서 골라요. 내가 방을 나가면 이 AI도 함께 나가요.</p>
         <ProviderTileGrid providers={providers} selectedId={controls.provider} remoteCatalog disabled={controls.creating}
-          onSelect={(provider) => { controls.setProvider(provider.id); controls.setDisplayName(provider.display_name); }} />
+          onSelect={(provider) => { controls.setProvider(provider.id); if (!displayNameEdited) controls.setDisplayName(provider.display_name); }} />
         {selectedProvider && <section className="dc-agent-section">
           <p className="dc-agent-section-title">기본 정보</p>
           <div className="dc-agent-field-grid"><label className="dc-agent-field"><span>표시 이름</span>
             <input maxLength={80} value={controls.displayName} disabled={controls.creating}
-              onChange={(event) => controls.setDisplayName(event.target.value)} />
+              onChange={(event) => { controls.setDisplayName(event.target.value); setDisplayNameEdited(true); }} />
           </label></div>
         </section>}
         {controls.status && <p role="status" className="dc-agent-hint">{controls.status}</p>}

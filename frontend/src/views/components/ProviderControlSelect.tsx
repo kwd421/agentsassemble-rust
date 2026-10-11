@@ -348,6 +348,7 @@ export default function ProviderControlSelect({
                           role="menuitemradio"
                           aria-label={providerControlOptionAccessibleName(option)}
                           aria-checked={selected}
+                          disabled={option.metadata?.disabled === true}
                           data-selected={selected}
                           data-effect={providerControlOptionEffect(option)}
                           {...modelDetails.bind(option)}

@@ -58,7 +58,7 @@
   text-align: left;
 }
 
-.dc-agent-select-menu button:hover,
+.dc-agent-select-menu button:hover:not(:disabled),
 .dc-agent-select-menu button:focus-visible {
   background: var(--color-sidebar-hover);
   color: var(--color-text-primary);

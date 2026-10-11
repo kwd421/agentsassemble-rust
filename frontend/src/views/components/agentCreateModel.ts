@@ -2,7 +2,6 @@ import type {
   NativeCliProviderAvailability,
   ProviderControl,
 } from "../../roomSocketClient";
-import { resolveProviderPresentation } from "./providerBranding";
 
 export function deriveAgentCreateStatus({
   status,
@@ -58,12 +57,9 @@ export function defaultAgentDisplayName(
   const modelControl = provider.controls.find((control) => control.key === "model");
   const modelOption = modelControl?.options.find((option) => option.value === settings.model);
   const modelName = String(modelOption?.label || "").trim();
-  return resolveProviderPresentation({
-    providerId: provider.id,
-    providerKind: provider.provider_kind,
-    providerDisplayName: providerName,
-    modelLabel: modelName,
-  }).defaultAgentName;
+  return modelName && !/^[^\s/]+\/[^\s]+$/.test(modelName)
+    ? modelName
+    : providerName;
 }
 
 /** Explains a provider that cannot start, naming a missing CLI instead of the raw probe text. */

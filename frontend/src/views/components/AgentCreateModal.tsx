@@ -212,8 +212,10 @@ export default function AgentCreateModal({
     const initialSettings = initializeProviderSettings(provider);
     pendingInitialSettings.current = provider.controls.length ? "" : provider.id;
     setProviderId(provider.id);
-    setDisplayName(defaultAgentDisplayName(provider, initialSettings));
-    setDisplayNameEdited(false);
+    if (!wasOpen.current || !displayNameEdited) {
+      setDisplayName(defaultAgentDisplayName(provider, initialSettings));
+      setDisplayNameEdited(false);
+    }
     setSettings(initialSettings);
     setCustomEndpoint("");
     setCustomModel("");

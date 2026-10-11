@@ -1,8 +1,9 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import AgentCreateModal from "./AgentCreateModal";
+import { defaultAgentDisplayName } from "./agentCreateModel";
 import { agentCreationPayload } from "../../api/agentSessions";
 import { localAttendeeCreateRequest } from "../../api/localAttendee";
 import { chooseWorkspace } from "./AgentCreateModal.testUi";
@@ -103,4 +104,35 @@ it("disables conversation-only permission for a free OpenCode model", async () =
   const packet = { request_id: "local-request", room_id: "room-a", room_uid: "room-uid", provider: "opencode", display_name: "Local", invite_id: "invite", expires_at: "2030-01-01T00:00:00Z", attend_command: "attend", join_url: "https://example.test/join?token=secret" };
   expect(localAttendeeCreateRequest(packet, request).creation).toMatchObject({ full_access_acknowledged: true });
   expect(agentCreationPayload({ ...request, fullAccessAcknowledged: undefined })).not.toHaveProperty("full_access_acknowledged");
+});
+
+
+it.each([false, true])("defaults to the catalog label and preserves typed names (local: %s)", async localProviderActions => {
+  const provider = openCodeProvider();
+  provider.controls[0].default_value = "opencode/mimo-v2.6-flash-free";
+  provider.controls[0].options = [{ value: "opencode/mimo-v2.6-flash-free", label: "MiMo 2.6 Flash" }];
+  const props = { open: true, meetingId: "room-a", roomLabel: "Room A", localProviderActions,
+    providers: [provider, codexProvider()], onClose: vi.fn(), onCreate: vi.fn() };
+  const { rerender } = render(<AgentCreateModal {...props} />);
+  await userEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
+  const name = screen.getByLabelText("표시 이름") as HTMLInputElement;
+  expect(name.value).toBe("MiMo 2.6 Flash");
+  const refreshed = { ...provider, controls: [{ ...provider.controls[0], options: [
+    { value: "opencode/mimo-v2.6-flash-free", label: "opencode/mimo-v2.6-flash-free" },
+  ] }] };
+  rerender(<AgentCreateModal {...props} providers={[refreshed, codexProvider()]} />);
+  expect(name.value).toBe("OpenCode");
+  fireEvent.change(name, { target: { value: "My agent" } });
+  rerender(<AgentCreateModal {...props} />);
+  expect(name.value).toBe("My agent");
+  await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  expect(name.value).toBe("My agent");
+});
+
+
+it.each(["", "opencode/mimo-v2.6-flash-free"])("uses the provider name for a non-human catalog label: %s", label => {
+  const provider = openCodeProvider();
+  provider.controls[0].options = [{ value: "opencode/mimo-v2.6-flash-free", label }];
+  expect(defaultAgentDisplayName(provider, { model: "opencode/mimo-v2.6-flash-free" })).toBe("OpenCode");
+  expect(defaultAgentDisplayName(provider, { model: "missing" })).toBe("OpenCode");
 });

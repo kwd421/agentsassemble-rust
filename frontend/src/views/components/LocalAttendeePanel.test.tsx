@@ -284,3 +284,14 @@ it.each([false, true])("does not bootstrap when the live session is missing or r
   expect(fetchLocalProviderCatalog).not.toHaveBeenCalled();
   expect(createLocalAttendee).not.toHaveBeenCalled();
 });
+
+
+it("preserves the handoff name and local edits through catalog refresh", async () => {
+  render(<LocalAttendeePanel />);
+  const name = await screen.findByLabelText("표시 이름") as HTMLInputElement;
+  await waitFor(() => expect(name.value).toBe("Browser draft"));
+  fireEvent.change(name, { target: { value: "Local draft" } });
+  await userEvent.click(screen.getByRole("button", { name: "AI 다시 확인" }));
+  await screen.findByText("모델 목록을 새로고침했어요.");
+  expect(name.value).toBe("Local draft");
+});
