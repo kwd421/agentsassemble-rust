@@ -82,7 +82,9 @@ export async function switchServerRestore(job:RestoreJournal,recoveryCode:string
     },status,signal);
     proof=await stepUp({kind:"google",flow_kind:"native",action:"complete",authorization_code:code.authorization_code,code_verifier:code.code_verifier});
   }
-  const fresh=parseDeletionProof(proof,requestId);
+  let fresh:ReturnType<typeof parseDeletionProof>;
+  try { fresh=parseDeletionProof(proof,requestId); }
+  catch { throw new Error("복원 확인 응답을 확인하지 못했어요. 다시 시도해 주세요."); }
   current(session);signal.throwIfAborted();
   status("서버를 이 기기로 옮기는 중이에요. 창을 닫아도 다음 실행에서 결과를 확인할 수 있어요.");
   const draft=strictRecord(await requestDesktopServerRestore({action:"draft",operation_id:job.operation_id,owner_person_id:session.person.person_id,proof:fresh.proof}),"복원 요청");

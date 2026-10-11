@@ -50,7 +50,8 @@ export function parseDeletionProof(value: unknown, requestId: string): DeletionP
   const r = strictRecord(value, "탈퇴 확인");
   assertExactKeys(r, ["request_id", "proof", "expires_at"], "탈퇴 확인");
   if (r.request_id !== requestId || typeof r.proof !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(r.proof) ||
-    typeof r.expires_at !== "number" || !Number.isSafeInteger(r.expires_at) || r.expires_at <= Date.now() / 1000 || r.expires_at > Date.now() / 1000 + 301) throw invalid();
+    typeof r.expires_at !== "number" || !Number.isSafeInteger(r.expires_at) || r.expires_at <= 0) throw invalid();
+  // Expiry is enforced by the server; comparing it with this computer's clock rejected valid proofs on skewed clocks.
   return r as DeletionProof;
 }
 
