@@ -60,7 +60,7 @@ export default function AppUpdateIndicator() {
     if (event.key === "Escape") { event.stopPropagation(); close(); }
   }}>
     <button ref={trigger} type="button" className="dc-head-icon"
-      title={`새 버전 ${version}`} aria-label={`새 버전 ${version}`}
+      data-tip="업데이트" aria-label={`새 버전 ${version}`}
       aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
       <Download size={20} />
       <span aria-hidden="true" className="dc-head-badge" />

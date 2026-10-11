@@ -619,7 +619,7 @@ export default function UserPanel({
         <div className="dc-user-actions">
           <button
             type="button"
-            aria-label={profile.micMuted ? "마이크 음소거 해제" : "마이크 음소거"}
+            aria-label={profile.micMuted ? "마이크 음소거 해제" : "마이크 음소거"} data-tip={profile.micMuted ? "음소거 해제" : "음소거"}
             aria-pressed={profile.micMuted}
             data-danger={profile.micMuted}
             className="dc-user-action-primary"
@@ -638,7 +638,7 @@ export default function UserPanel({
           </button>
           <button
             type="button"
-            aria-label={profile.deafened ? "헤드셋 켜기" : "헤드셋 끄기"}
+            aria-label={profile.deafened ? "헤드셋 켜기" : "헤드셋 끄기"} data-tip={profile.deafened ? "헤드셋 켜기" : "헤드셋 끄기"}
             aria-pressed={profile.deafened}
             onClick={() => updateProfileFlag("deafened", !profile.deafened)}
           >
@@ -652,7 +652,7 @@ export default function UserPanel({
           >
             <ChevronDown size={14} />
           </button>
-          <button ref={settingsButtonRef} type="button" aria-label="사용자 설정" onClick={() => openSettings("account")}>
+          <button ref={settingsButtonRef} type="button" aria-label="사용자 설정" data-tip="사용자 설정" onClick={() => openSettings("account")}>
             <Settings size={16} />
           </button>
         </div>

@@ -301,7 +301,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                   {section.label}
                   <ChevronDown size={12} />
                 </button>
-                {canManageActiveRoom && <button type="button" aria-label="텍스트 채널 만들기"
+                {canManageActiveRoom && <button type="button" aria-label="텍스트 채널 만들기" data-tip="채널 만들기"
                   disabled={!canCreateChannel} style={{ minWidth: 44, minHeight: 44 }}
                   className="flex items-center justify-center text-text-muted"
                   onClick={(event) => { event.currentTarget.focus(); setCreateChannelScope(channelScope); }}><Plus size={18} /></button>}

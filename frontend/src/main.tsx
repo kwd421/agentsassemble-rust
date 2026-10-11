@@ -16,6 +16,7 @@ import "./index.css";
 import { clearCentralMemberRequest, consumeMemberReturn, consumeCentralMemberRequest, type MemberTargetRequest } from "./lib/central/memberConnect";
 import { isCentralWebEntry } from "./lib/central/identity";
 import MemberJoinPanel from "./views/components/MemberJoinPanel";
+import TooltipLayer from "./views/components/TooltipLayer";
 
 const deletionGooglePopup = isDeletionGooglePopup();
 const memberLoginPopup = isMemberLoginPopup();
@@ -49,5 +50,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       )}
     </StartupIdentityBoundary>}
     </AccountDeletionSurface>
+    <TooltipLayer />
   </React.StrictMode>
 );

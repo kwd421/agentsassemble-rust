@@ -30,11 +30,11 @@ export function MessageActions({ onReply, replyDisabled, onTogglePin, pinned, pi
 }) {
   return <div className="dc-message-actions" aria-label="메시지 작업">
     {onReply && <button type="button" className="dc-message-action-button" aria-label="메시지에 답장"
-      title="답장" disabled={replyDisabled} onClick={onReply}><CornerUpLeft size={15} /></button>}
+      title="답장" disabled={replyDisabled} onClick={onReply}><CornerUpLeft size={18} /></button>}
     {onTogglePin && <button type="button" className="dc-message-action-button"
       aria-label={pinned ? "메시지 고정 해제" : "메시지 고정"} title={pinned ? "고정 해제" : "메시지 고정"}
       aria-pressed={Boolean(pinned)} disabled={pinDisabled} onClick={onTogglePin}>
-      <Pin size={14} fill={pinned ? "currentColor" : "none"} />
+      <Pin size={18} fill={pinned ? "currentColor" : "none"} />
     </button>}
     {children}
   </div>;

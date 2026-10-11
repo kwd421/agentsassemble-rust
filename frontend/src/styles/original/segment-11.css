@@ -643,3 +643,43 @@
 }
 
 /* ----------------------------------------------------------- mobile room ---- */
+
+/* Hover hint drawn by TooltipLayer. */
+.dc-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 240px;
+  border: 1px solid #323237;
+  border-radius: 8px;
+  background: #24242a;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.32);
+  padding: 6px 12px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.dc-tooltip::after {
+  position: absolute;
+  left: var(--dc-tooltip-arrow, 50%);
+  width: 10px;
+  height: 10px;
+  border: 1px solid #323237;
+  border-top: 0;
+  border-left: 0;
+  background: #24242a;
+  content: "";
+}
+
+.dc-tooltip[data-placement="top"]::after {
+  bottom: -6px;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.dc-tooltip[data-placement="bottom"]::after {
+  top: -6px;
+  transform: translateX(-50%) rotate(225deg);
+}

@@ -243,7 +243,7 @@ export default function ChannelHeader({
         <button
           type="button"
           className="dc-head-icon dc-mobile-search-trigger"
-          aria-label="채널 검색"
+          aria-label="채널 검색" data-tip="검색"
           aria-pressed={activePanel === "search"}
           onClick={() => togglePanel("search")}
         >
@@ -253,7 +253,7 @@ export default function ChannelHeader({
         <button
           type="button"
           className="dc-head-icon"
-          aria-label="알림 설정"
+          aria-label="알림 설정" data-tip="알림 설정"
           aria-pressed={activePanel === "notifications"}
           onClick={() => togglePanel("notifications")}
         >
@@ -262,7 +262,7 @@ export default function ChannelHeader({
         <button
           type="button"
           className="dc-head-icon"
-          aria-label="고정 메시지"
+          aria-label="고정 메시지" data-tip="고정 메시지"
           style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 44, minHeight: 44 }}
           aria-pressed={activePanel === "pins"}
           onClick={() => {
@@ -273,13 +273,13 @@ export default function ChannelHeader({
           <Pin size={20} />
         </button>
         {headerActions?.onToggleSideChat && <button type="button" className="dc-head-icon"
-          aria-label="사이드챗 열기" aria-pressed={headerActions.sideChatOpen}
+          aria-label="사이드챗 열기" data-tip="사이드챗" aria-pressed={headerActions.sideChatOpen}
           onClick={headerActions.onToggleSideChat}><MessageSquare size={20} /></button>}
         {onToggleMembers && (
           <button
             type="button"
             onClick={openMemberSurface}
-            aria-label="멤버 목록 토글"
+            aria-label="멤버 목록 토글" data-tip="멤버 목록"
             aria-pressed={membersOpen}
             className={`dc-head-icon ${
               membersOpen ? "text-text-primary" : "text-text-muted"
