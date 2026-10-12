@@ -589,5 +589,5 @@ fn sequence(value: &Value) -> Result<i64, ConnectorClientError> {
 }
 
 fn room_state(snapshot: &Value) -> Value {
-    json!({"role":snapshot["role"],"delegated_actions":snapshot["delegated_actions"],"conversation_mode":snapshot["conversation_mode"],"guidance":snapshot["guidance"],"unread_mentions":snapshot["unread_mentions"]})
+    json!({"role":snapshot["role"],"delegated_actions":snapshot["delegated_actions"],"conversation_mode":snapshot["conversation_mode"],"guidance":snapshot["guidance"],"unread_mentions":snapshot["unread_mentions"],"mention_overflow":snapshot["mention_overflow"],"mention_resync_guidance":snapshot["mention_resync_guidance"]})
 }

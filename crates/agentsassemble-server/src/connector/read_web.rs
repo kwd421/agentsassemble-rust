@@ -62,7 +62,7 @@ pub(super) async fn status(
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
     let mut value = json!(status);
-    enrich(&state, &authorization, &mut value, &[]).await?;
+    enrich(&state, &authorization, &mut value, &[], false).await?;
     Ok(Json(value))
 }
 
@@ -82,13 +82,8 @@ pub(super) async fn snapshot(
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
     let messages = messages(snapshot.events, authorization.principal(), false);
-    let read_ids = if cursor.joining {
-        Vec::new()
-    } else {
-        messages.iter().map(|event| event.id.clone()).collect()
-    };
     let mut value = json!({"room":snapshot.room,"participants":snapshot.participants,"messages":messages,"last_seq":snapshot.last_seq,"resync_required":snapshot.resume_gap});
-    enrich(&state, &authorization, &mut value, &read_ids).await?;
+    enrich(&state, &authorization, &mut value, &[], !cursor.joining).await?;
     Ok(Json(value))
 }
 
@@ -119,7 +114,7 @@ pub(super) async fn search(
         .map(|message| message.event_id.clone())
         .collect::<Vec<_>>();
     let mut value = json!(result);
-    enrich(&state, &authorization, &mut value, &read_ids).await?;
+    enrich(&state, &authorization, &mut value, &read_ids, false).await?;
     Ok(Json(value))
 }
 
@@ -149,7 +144,7 @@ pub(super) async fn context(
         .map(|event| event.id.clone())
         .collect::<Vec<_>>();
     let mut value = json!(result);
-    enrich(&state, &authorization, &mut value, &read_ids).await?;
+    enrich(&state, &authorization, &mut value, &read_ids, false).await?;
     Ok(Json(value))
 }
 
@@ -246,6 +241,7 @@ async fn enrich(
     authorization: &ConnectorSessionAuthorization,
     value: &mut Value,
     read_ids: &[String],
+    acknowledge_page: bool,
 ) -> Result<(), ConnectorHttpError> {
     let principal = authorization.principal();
     let participant = state
@@ -268,10 +264,19 @@ async fn enrich(
     };
     let mut metadata = state
         .store
-        .connector_mentions(authorization, read_ids)
+        .connector_mentions(authorization, read_ids, acknowledge_page)
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    for key in ["conversation_mode", "guidance", "unread_mentions"] {
+    if acknowledge_page {
+        value["mention_messages"] = metadata["mention_messages"].take();
+    }
+    for key in [
+        "conversation_mode",
+        "guidance",
+        "unread_mentions",
+        "mention_overflow",
+        "mention_resync_guidance",
+    ] {
         value[key] = metadata[key].take();
     }
     Ok(())
@@ -285,25 +290,40 @@ async fn wait_result(
 ) -> Result<Option<Value>, ConnectorHttpError> {
     let mut metadata = state
         .store
-        .connector_mentions(authorization, &[])
+        .connector_mentions(authorization, &[], false)
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
     let mentions = metadata["mention_messages"].take();
     if let Some(object) = metadata.as_object_mut() {
         object.remove("mention_messages");
     }
-    let pending = if metadata["conversation_mode"] == "free_access"
-        || mentions
-            .as_array()
-            .is_some_and(|messages| !messages.is_empty())
-    {
-        mentions
-    } else {
-        json!(pending)
-    };
-    if pending.as_array().is_none_or(Vec::is_empty) {
+    let ordinary = state
+        .store
+        .connector_ordinary_messages(
+            authorization,
+            &pending.iter().map(|event| event.seq).collect::<Vec<_>>(),
+        )
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    let mut messages = pending
+        .into_iter()
+        .filter(|event| ordinary.contains(&event.seq))
+        .map(|event| json!(event))
+        .collect::<Vec<_>>();
+    if let Some(mentions) = mentions.as_array() {
+        for mention in mentions {
+            if messages.len() < SNAPSHOT_EVENTS
+                && !messages.iter().any(|event| event["id"] == mention["id"])
+            {
+                messages.push(mention.clone());
+            }
+        }
+    }
+    messages.sort_by_key(|event| event["seq"].as_i64());
+    if messages.is_empty() && metadata["mention_overflow"] != true {
         return Ok(None);
     }
+    let pending = json!(messages);
     metadata["messages"] = pending;
     metadata["last_seq"] = json!(delivered);
     Ok(Some(metadata))

@@ -136,6 +136,12 @@ impl SqliteStore {
             .bind(current.fingerprint.as_slice())
             .execute(&mut *tx)
             .await?;
+        crate::connector_mentions::purge(
+            &mut tx,
+            &principal.room_id,
+            Some(&principal.participant_id),
+        )
+        .await?;
         let event = crate::participant_leave::participant_left_event(&mut tx, &participant).await?;
         crate::room_turns::support::insert_event(&mut tx, &event).await?;
         let outcome = crate::agent_lifecycle_events::store_result(

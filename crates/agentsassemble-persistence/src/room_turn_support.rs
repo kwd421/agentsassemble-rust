@@ -198,6 +198,7 @@ pub(crate) async fn insert_event(
         .bind(serde_json::to_string(event)?)
         .execute(&mut **transaction)
         .await?;
+    crate::connector_delivery::record(transaction, event).await?;
     index_room_message(transaction, event).await?;
     Ok(())
 }

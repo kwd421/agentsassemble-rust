@@ -318,6 +318,7 @@ pub(crate) async fn revoke_room_access(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<Vec<[u8; 32]>, PersistenceError> {
+    crate::connector_mentions::purge(transaction, room_id, None).await?;
     let mut fingerprints = sqlx::query_scalar::<_, Vec<u8>>("UPDATE human_room_sessions SET state = 'ended' WHERE room_id = ? AND state = 'active' RETURNING session_fingerprint")
         .bind(room_id).fetch_all(&mut **transaction).await?;
     let paired = sqlx::query_scalar::<_, Option<Vec<u8>>>(

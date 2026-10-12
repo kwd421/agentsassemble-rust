@@ -19,7 +19,8 @@ pub(crate) enum Policy {
 
 pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
     Ok(match table {
-        "rooms"
+        "connector_message_delivery"
+        | "rooms"
         | "participants"
         | "user_profiles"
         | "persona_assets"
@@ -59,6 +60,7 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "attendee_cleanup_controls"
         | "room_connector_uploads"
         | "connector_mentions"
+        | "connector_mention_overflow"
         | "prejoin_avatar_assets"
         | "provider_requests"
         | "provider_turn_executions"

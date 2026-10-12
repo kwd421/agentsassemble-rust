@@ -37,12 +37,7 @@ pub(crate) async fn record(
                     .map(|p| (p.participant_id.as_str(), p.display_name.as_str())),
                 &participant.participant_id,
             )
-            && crate::connector_session::owns_participant(
-                tx,
-                &event.room_id,
-                &participant.participant_id,
-            )
-            .await?
+            && active_connector(tx, &event.room_id, &participant.participant_id).await?
         {
             sqlx::query(
                 "INSERT INTO connector_mentions(room_id,participant_id,seq) VALUES (?,?,?)",
@@ -52,6 +47,7 @@ pub(crate) async fn record(
             .bind(event.seq)
             .execute(&mut **tx)
             .await?;
+            trim(tx, &event.room_id, &participant.participant_id).await?;
         }
     }
     Ok(())
@@ -66,6 +62,7 @@ impl SqliteStore {
         &self,
         authorization: &ConnectorSessionAuthorization,
         read_ids: &[String],
+        acknowledge_page: bool,
     ) -> Result<Value, PersistenceError> {
         let mut tx = self.pool.begin().await?;
         let authority = RoomMutationAuthority::ConnectorSession(authorization);
@@ -79,15 +76,101 @@ impl SqliteStore {
             .map(|row| serde_json::from_str::<RoomEvent>(row))
             .collect::<Result<Vec<_>, _>>()?;
         let mentions = events.iter().map(|e| json!({"event_id":e.id,"by":e.actor.participant_id,"display_name":e.display_name})).collect::<Vec<_>>();
+        let overflow: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM connector_mention_overflow WHERE room_id=? AND participant_id=?)")
+            .bind(&principal.room_id).bind(&principal.participant_id).fetch_one(&mut *tx).await?;
+        if acknowledge_page {
+            for event in &events {
+                sqlx::query(
+                    "DELETE FROM connector_mentions WHERE room_id=? AND participant_id=? AND seq=?",
+                )
+                .bind(&principal.room_id)
+                .bind(&principal.participant_id)
+                .bind(event.seq)
+                .execute(&mut *tx)
+                .await?;
+            }
+            sqlx::query(
+                "DELETE FROM connector_mention_overflow WHERE room_id=? AND participant_id=?",
+            )
+            .bind(&principal.room_id)
+            .bind(&principal.participant_id)
+            .execute(&mut *tx)
+            .await?;
+        }
         for id in read_ids {
             sqlx::query("DELETE FROM connector_mentions WHERE room_id=? AND participant_id=? AND seq=(SELECT seq FROM room_events WHERE room_id=? AND json_extract(event_json,'$.id')=?)")
                 .bind(&principal.room_id).bind(&principal.participant_id).bind(&principal.room_id).bind(id).execute(&mut *tx).await?;
         }
         tx.commit().await?;
         Ok(
-            json!({"unread_mentions":mentions,"mention_messages":events.iter().map(|event| agentsassemble_domain::public_event_for_principal(event, &principal)).collect::<Vec<_>>(),"conversation_mode":settings.conversation_mode,"guidance":if settings.conversation_mode == "free_access" {
+            json!({"mention_overflow":overflow,"mention_resync_guidance":if overflow { "Older mentions were dropped. Resync room history before continuing." } else { "" },"unread_mentions":mentions,"mention_messages":events.iter().map(|event| agentsassemble_domain::public_event_for_principal(event, &principal)).collect::<Vec<_>>(),"conversation_mode":settings.conversation_mode,"guidance":if settings.conversation_mode == "free_access" {
             "This room does not notify you about ordinary messages. Visit when you have something to share or check; room_wait_next returns only when someone mentions you. Leave room_wait_next pending whenever you want to be reachable; a pending wait invokes no inference."
         } else { "" }}),
         )
     }
+}
+
+const BACKLOG: i64 = 200;
+
+async fn active_connector(
+    tx: &mut Transaction<'_, Sqlite>,
+    room: &str,
+    participant: &str,
+) -> Result<bool, PersistenceError> {
+    let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM room_connector_invites i JOIN participants p ON p.room_id=i.room_id AND p.participant_id=i.participant_id WHERE i.room_id=? AND i.participant_id=? AND i.revoked=0 AND i.session_fingerprint IS NOT NULL AND i.session_expires_at>? AND json_extract(p.participant_json,'$.status')='joined')")
+        .bind(room).bind(participant).bind(chrono::Utc::now().timestamp_micros()).fetch_one(&mut **tx).await?;
+    Ok(active)
+}
+
+async fn trim(
+    tx: &mut Transaction<'_, Sqlite>,
+    room: &str,
+    participant: &str,
+) -> Result<(), PersistenceError> {
+    let removed = sqlx::query("DELETE FROM connector_mentions WHERE room_id=? AND participant_id=? AND seq IN (SELECT seq FROM connector_mentions WHERE room_id=? AND participant_id=? ORDER BY seq DESC LIMIT -1 OFFSET ?)")
+        .bind(room).bind(participant).bind(room).bind(participant).bind(BACKLOG).execute(&mut **tx).await?;
+    if removed.rows_affected() > 0 {
+        sqlx::query(
+            "INSERT OR IGNORE INTO connector_mention_overflow(room_id,participant_id) VALUES(?,?)",
+        )
+        .bind(room)
+        .bind(participant)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn purge(
+    tx: &mut Transaction<'_, Sqlite>,
+    room: &str,
+    participant: Option<&str>,
+) -> Result<(), PersistenceError> {
+    for table in ["connector_mentions", "connector_mention_overflow"] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DELETE FROM {table} WHERE room_id=? AND (? IS NULL OR participant_id=?)"
+        )))
+        .bind(room)
+        .bind(participant)
+        .bind(participant)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn upgrade(tx: &mut Transaction<'_, Sqlite>) -> Result<(), PersistenceError> {
+    let participants = sqlx::query_as::<_, (String, String)>(
+        "SELECT DISTINCT room_id,participant_id FROM connector_mentions",
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    for (room, participant) in participants {
+        if active_connector(tx, &room, &participant).await? {
+            trim(tx, &room, &participant).await?;
+        } else {
+            purge(tx, &room, Some(&participant)).await?;
+        }
+    }
+    Ok(())
 }

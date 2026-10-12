@@ -231,7 +231,9 @@ async fn free_access_mentions_survive_schema_upgrade_and_reopen_until_exact_read
     let authorization = reopened
         .authorize_connector_session(&fingerprint, now)
         .await?;
-    let unread = reopened.connector_mentions(&authorization, &[]).await?;
+    let unread = reopened
+        .connector_mentions(&authorization, &[], false)
+        .await?;
     assert_eq!(
         unread["unread_mentions"]
             .as_array()
@@ -240,9 +242,11 @@ async fn free_access_mentions_survive_schema_upgrade_and_reopen_until_exact_read
         2
     );
     reopened
-        .connector_mentions(&authorization, &[first.outcome.event.id])
+        .connector_mentions(&authorization, &[first.outcome.event.id], false)
         .await?;
-    let unread = reopened.connector_mentions(&authorization, &[]).await?;
+    let unread = reopened
+        .connector_mentions(&authorization, &[], false)
+        .await?;
     assert_eq!(
         unread["unread_mentions"]
             .as_array()
@@ -294,6 +298,199 @@ async fn entering_free_access_drains_previously_accepted_inputs_without_reclassi
         stored_session(&store, super::super::AGENT_ID)
             .await
             .pending_inputs
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn connector_backlog_pages_overflow_and_terminal_cleanup_are_independent_of_recent_history()
+-> TestResult {
+    use sha2::{Digest, Sha256};
+    for terminal in ["leave", "remove", "room"] {
+        let (store, principal, _directory) = fixture().await;
+        let revision = public_settings(&RoomSettings::defaults("General"))?.settings_revision;
+        update_mode(&store, &principal, "free", &revision, "free_access").await?;
+        let manager = store
+            .authorize_local_room_manager(
+                "general",
+                &principal.principal_id,
+                &principal.participant_id,
+            )
+            .await?;
+        let now = chrono::Utc::now();
+        let invite = store
+            .create_connector_invite(
+                &crate::RoomManagerAuthority::Local(manager),
+                uuid::Uuid::new_v4(),
+                agentsassemble_domain::InviteScope::ReadOnly,
+                now,
+            )
+            .await?;
+        let joined = store
+            .admit_connector(
+                &Sha256::digest(invite.invite_bearer.as_bytes()).into(),
+                &[3; 32],
+                uuid::Uuid::new_v4(),
+                "Reader",
+                now,
+            )
+            .await?;
+        let authorization = joined.authorization;
+        let mut ids = Vec::new();
+        for index in 0..205 {
+            ids.push(
+                send_message(
+                    &store,
+                    &principal,
+                    &format!("mention-{index}"),
+                    "@Reader read me",
+                )
+                .await
+                .outcome
+                .event
+                .id,
+            );
+        }
+        for index in 0..60 {
+            send_message(
+                &store,
+                &principal,
+                &format!("ordinary-{index}"),
+                "recent ordinary message",
+            )
+            .await;
+        }
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM connector_mentions")
+            .fetch_one(&store.pool)
+            .await?;
+        assert_eq!(count, 200);
+        let pending = store.connector_mentions(&authorization, &[], false).await?;
+        assert_eq!(pending["mention_overflow"], true);
+        assert_eq!(pending["unread_mentions"][0]["event_id"], ids[5]);
+        for page in 0..4 {
+            let read = store.connector_mentions(&authorization, &[], true).await?;
+            assert_eq!(read["mention_messages"].as_array().ok_or("page")?.len(), 50);
+            assert_eq!(read["unread_mentions"][0]["event_id"], ids[5 + page * 50]);
+            assert_eq!(read["mention_overflow"], page == 0);
+        }
+        assert_eq!(
+            store.connector_mentions(&authorization, &[], false).await?["unread_mentions"],
+            json!([])
+        );
+        send_message(
+            &store,
+            &principal,
+            "pending-at-end",
+            "@Reader before leaving",
+        )
+        .await;
+        match terminal {
+            "leave" => {
+                store
+                    .leave_connector_session(&authorization, "leave")
+                    .await?;
+            }
+            "remove" => {
+                let mut tx = store.pool.begin().await?;
+                crate::participant_removal::revoke_participant_access(
+                    &mut tx,
+                    "general",
+                    &authorization.principal().participant_id,
+                )
+                .await?;
+                tx.commit().await?;
+            }
+            _ => {
+                let mut tx = store.pool.begin().await?;
+                crate::room_lifecycle::revoke_room_access(&mut tx, "general").await?;
+                tx.commit().await?;
+            }
+        }
+        send_message(&store, &principal, "after-end", "@Reader after leaving").await;
+        for table in ["connector_mentions", "connector_mention_overflow"] {
+            let count: i64 =
+                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
+                    .fetch_one(&store.pool)
+                    .await?;
+            assert_eq!(count, 0, "terminal {terminal}: {table}");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn connector_delivery_survives_reopen_and_legacy_rows_require_resync() -> TestResult {
+    use sha2::{Digest, Sha256};
+    let (store, principal, directory) = fixture().await;
+    let manager = store
+        .authorize_local_room_manager(
+            "general",
+            &principal.principal_id,
+            &principal.participant_id,
+        )
+        .await?;
+    let now = chrono::Utc::now();
+    let invite = store
+        .create_connector_invite(
+            &crate::RoomManagerAuthority::Local(manager),
+            uuid::Uuid::new_v4(),
+            agentsassemble_domain::InviteScope::ReadOnly,
+            now,
+        )
+        .await?;
+    let joined = store
+        .admit_connector(
+            &Sha256::digest(invite.invite_bearer.as_bytes()).into(),
+            &[3; 32],
+            uuid::Uuid::new_v4(),
+            "Reader",
+            now,
+        )
+        .await?;
+    let ordinary = send_message(&store, &principal, "ordinary", "ordinary")
+        .await
+        .outcome
+        .event
+        .seq;
+    let revision =
+        public_settings(&store.snapshot("general", 0, 200).await?.settings)?.settings_revision;
+    update_mode(&store, &principal, "free", &revision, "free_access").await?;
+    let silent = send_message(&store, &principal, "silent", "silent")
+        .await
+        .outcome
+        .event
+        .seq;
+    let path = directory.path().join("runtime.sqlite3");
+    store.pool.close().await;
+    drop(store);
+    let store = SqliteStore::open_path(&path).await?;
+    assert_eq!(
+        store
+            .connector_ordinary_messages(&joined.authorization, &[ordinary, silent])
+            .await?,
+        vec![ordinary]
+    );
+    // A genuine v90 upgrade has no acceptance facts for old rows. Never invent
+    // those facts from the current room mode, even when it differs from arrival.
+    sqlx::raw_sql("DROP TABLE connector_message_delivery; DROP TABLE connector_mention_overflow; UPDATE runtime_metadata SET value='90' WHERE key='schema_version'")
+        .execute(&store.pool).await?;
+    store.pool.close().await;
+    drop(store);
+    let store = SqliteStore::open_path(&path).await?;
+    assert!(
+        matches!(store.connector_ordinary_messages(&joined.authorization, &[ordinary,silent]).await,
+        Err(crate::PersistenceError::CommandRejected { code, .. }) if code == "connector_resync_required")
+    );
+    let later = send_message(&store, &principal, "later", "still silent")
+        .await
+        .outcome
+        .event
+        .seq;
+    assert!(
+        store
+            .connector_ordinary_messages(&joined.authorization, &[later])
+            .await?
             .is_empty()
     );
     Ok(())

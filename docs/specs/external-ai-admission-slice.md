@@ -1841,3 +1841,22 @@ new retry loop, fallback, timer, map or permission bypass is added. Existing rej
 unconsumed/consumed invitation handling remains subject to the same canonical result.
 Acceptance is the actual read-budget/MCP/room path followed by an exact committed
 leave, plus existing rejected-admission and response-loss regressions.
+
+## Connector mention delivery correction (2026-10-12)
+
+Non-joining `room_read` returns and acknowledges exactly its oldest mention page,
+independently of the recent ordinary message page. Joining/status/wait do not
+acknowledge; targeted context/search acknowledge only returned IDs. Record only
+active, joined, unrevoked, unexpired connector participants; leave, revocation and
+removal purge mention state. Retain at most 200 mentions per participant, dropping
+the oldest with a durable overflow/resync marker exposed to the AI until a
+non-joining read acknowledges it. Wait must surface this marker even without
+messages. Backlog and live wait delivery use each message's acceptance-time
+classification: ordinary messages accepted before entering free_access still
+notify, and ordinary messages accepted during free_access never become notifications
+when leaving it. Preserve this fact in SQLite at message acceptance, with normal
+migration and the immutable archive-schema catalog extension. Old rows lacking
+historical classification require explicit resync, never guessed delivery.
+Entry points: connector/read_web, connector_mentions, room message acceptance,
+connector leave/removal and room revocation, archive export/restore. Verify oldest
+page progress, bounded overflow, terminal cleanup and both mode-switch directions.

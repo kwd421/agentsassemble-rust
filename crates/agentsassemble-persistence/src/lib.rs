@@ -306,3 +306,5 @@ pub use secure_session::SecureSessionBinding;
 
 #[cfg(test)]
 mod backup_authority_tests;
+
+mod connector_delivery;

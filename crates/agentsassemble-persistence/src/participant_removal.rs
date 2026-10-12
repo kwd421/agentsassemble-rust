@@ -210,6 +210,7 @@ pub(crate) async fn revoke_participant_access(
     room_id: &str,
     participant_id: &str,
 ) -> Result<Vec<[u8; 32]>, PersistenceError> {
+    crate::connector_mentions::purge(transaction, room_id, Some(participant_id)).await?;
     let mut fingerprints = sqlx::query_scalar::<_, Vec<u8>>(
         "UPDATE human_room_sessions SET state = 'ended' WHERE room_id = ? AND participant_id = ? AND state = 'active' RETURNING session_fingerprint",
     ).bind(room_id).bind(participant_id).fetch_all(&mut **transaction).await?;

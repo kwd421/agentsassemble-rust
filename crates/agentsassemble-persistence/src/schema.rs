@@ -8,6 +8,16 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 pub(crate) const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "connector_message_delivery",
+        ddl: crate::connector_delivery::DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
+        name: "connector_mention_overflow",
+        ddl: crate::connector_delivery::OVERFLOW_DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "ai_owner_bindings",
         ddl: crate::delegation_owner::DDL,
         infrastructure: false,

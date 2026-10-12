@@ -178,6 +178,11 @@ impl ConnectorHttpError {
                 (StatusCode::CONFLICT, "connector_resync_required")
             }
             PersistenceError::CommandConflict => (StatusCode::CONFLICT, "command_conflict"),
+            PersistenceError::CommandRejected { code, .. }
+                if code == "connector_resync_required" =>
+            {
+                (StatusCode::CONFLICT, code.as_ref())
+            }
             PersistenceError::CommandRejected { code, .. } => {
                 (StatusCode::FORBIDDEN, code.as_ref())
             }
