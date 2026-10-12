@@ -75,9 +75,12 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .fetch_one(&mut *tx)
             .await?;
     if version == "70" {
-        sqlx::query(crate::message_attachments::connector::DDL)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(sqlx::AssertSqlSafe(crate::archive_schema::table_statement(
+            87,
+            "room_connector_uploads",
+        )?))
+        .execute(&mut *tx)
+        .await?;
         sqlx::query("UPDATE runtime_metadata SET value = '71' WHERE key = 'schema_version'")
             .execute(&mut *tx)
             .await?;

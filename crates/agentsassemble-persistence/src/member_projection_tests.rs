@@ -279,6 +279,7 @@ async fn v83_upgrade_keeps_rooms_and_sender_deadline_survives_reopen() -> TestRe
     let before: String = sqlx::query_scalar("SELECT room_json FROM rooms WHERE room_id='kept'")
         .fetch_one(&store.pool)
         .await?;
+    crate::room_file_schema::tests::restore_v91(&store.pool).await?;
     for sql in [
         "ALTER TABLE attendee_connections DROP COLUMN execution_os",
         "DROP TABLE central_member_removals",

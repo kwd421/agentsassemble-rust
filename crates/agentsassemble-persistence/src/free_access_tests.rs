@@ -189,6 +189,7 @@ async fn free_access_mentions_survive_schema_upgrade_and_reopen_until_exact_read
     sqlx::query("DROP TABLE connector_mentions")
         .execute(&store.pool)
         .await?;
+    crate::room_file_schema::tests::restore_v91(&store.pool).await?;
     sqlx::query("UPDATE runtime_metadata SET value='88' WHERE key='schema_version'")
         .execute(&store.pool)
         .await?;
@@ -473,6 +474,7 @@ async fn connector_delivery_survives_reopen_and_legacy_rows_require_resync() -> 
     );
     // A genuine v90 upgrade has no acceptance facts for old rows. Never invent
     // those facts from the current room mode, even when it differs from arrival.
+    crate::room_file_schema::tests::restore_v91(&store.pool).await?;
     sqlx::raw_sql("DROP TABLE connector_message_delivery; DROP TABLE connector_mention_overflow; UPDATE runtime_metadata SET value='90' WHERE key='schema_version'")
         .execute(&store.pool).await?;
     store.pool.close().await;

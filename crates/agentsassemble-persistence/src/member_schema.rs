@@ -73,6 +73,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
 
 #[cfg(test)]
 pub(crate) async fn restore_v80_fixture(store: &crate::SqliteStore) -> Result<(), sqlx::Error> {
+    crate::room_file_schema::tests::restore_v91(&store.pool).await?;
     let mut c = store.pool.acquire().await?;
     sqlx::query("PRAGMA foreign_keys = OFF")
         .execute(&mut *c)

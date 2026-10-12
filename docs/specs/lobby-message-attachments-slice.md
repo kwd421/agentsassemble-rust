@@ -712,3 +712,55 @@ accept raw desktop-save bytes through the room-file ceiling. Keep other resource
 callers' 10 MiB default and the existing 64 MiB live-resource budget. The preflight
 reads current settings through the existing settings HTTP authority before file
 encoding; it does not introduce a client policy cache or edit the composer flow.
+
+## Round-3 security corrections (2026-10-12)
+
+Required behavior and entry points: human attachment responses at `profile_web`
+(including encrypted virtual HTTP) must reserve validated stored bytes before BLOB
+selection, with host-wide weighted admission and per-principal concurrency, and
+retain admission with response bytes through completion/drop. Exhaustion is an
+immediate, specific retryable refusal; refused reads must not allocate the BLOB.
+Managed-provider, attendee and connector reads must reject metadata above their
+10 MiB reader ceiling before BLOB selection, preserving `attachment_too_large`
+with actual size and limit through each public error mapping. Connector insertions
+keep their 10 MiB file ceiling but share transactional room quota accounting.
+
+Archive reconstruction must reject schema-92 limits in all pre-92 settings and
+nested settings receipts/events before current decoding; the same provenance rule
+applies to post-87 conversation modes, delegation and delivery classification.
+Schema-92 migration must reject replacement objects, validate the exact historical
+source schema, create fresh replacements, and copy named columns byte-exactly.
+
+MCP pre-parse admission must use trustworthy existing connector transport identity
+if available. Otherwise use a global byte-weighted envelope budget that allows
+many independent small requests, a bounded envelope, and a seconds-long no-progress
+deadline. Never invent identity from untrusted headers or source addresses. Preserve
+10 MiB connector uploads and release envelopes before long-running tool dispatch.
+
+Verification: concurrent 50 MiB response leases and zero BLOB selection on refusal;
+metadata-only oversized AI refusal through all mappings; transactional connector
+quota refusal; historical restore plus version-smuggling rejection before activation;
+stalled MCP requests alongside unrelated calls; hostile migration schema refusal
+and byte-exact genuine upgrade. Existing delegation tools and UI are out of scope.
+
+Download admission uses 512 MiB host weight, charging twice stored size for the
+SQLite result and retained response, with four concurrent responses per authenticated
+principal (matching the frontend scheduler). Five concurrent 50 MiB responses fit,
+leaving 12 MiB of weight for small images. Message and room-appearance readers
+acquire after metadata validation, before selecting content. Public profile/prejoin
+and agent avatars also share this byte pool and retain their existing shared six-read
+anonymous gate; these public image routes have no authenticated reader identity.
+`attachment_download_budget_exhausted` is an immediate HTTP 429; admission follows
+response Bytes clones across both plain and encrypted transports.
+
+MCP metadata audit: generated Codex, Claude Code, Antigravity and Grok registration
+commands supply only the common `/mcp` URL. Hosted and standalone services are
+stateless (`legacy_session_mode(false)`, a request-local session manager); neither
+MCP session headers nor bearer headers are bound to a room connector. Host/Origin
+and proxy/source checks prove ingress only. The private connection handle arrives
+inside JSON arguments. Therefore use the authorized identity-free alternative:
+256 MiB global weight, four times collected bytes rounded to 64 KiB, and a two-second
+nonempty-data idle deadline plus ten-second total pre-parse ceiling. 127 small stalled
+bodies use 31.75 MiB; unrelated small requests retain capacity. The per-envelope
+ceiling remains the encoded 10 MiB upload plus its bounded JSON overhead so existing
+uploads keep working. Exhaustion, timeout and over-limit responses are distinct.

@@ -189,6 +189,7 @@ mod tests {
                 "Retained",
             )
             .await?;
+        crate::room_file_schema::tests::restore_v91(&store.pool).await?;
         for ddl in [
             "DROP TABLE central_member_removals",
             "DROP TABLE connector_mentions",

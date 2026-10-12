@@ -172,6 +172,7 @@ async fn v82_upgrade_preserves_legacy_live_authority_and_bounds_ended_history() 
         .execute(&store.pool)
         .await?;
     // Construct actual v82 columns/indexes with a legacy seed-backed live session.
+    crate::room_file_schema::tests::restore_v91(&store.pool).await?;
     for sql in [
         "DROP TABLE central_member_removals",
         "DROP TABLE connector_mentions",

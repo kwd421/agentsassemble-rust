@@ -58,3 +58,13 @@ pub(crate) async fn tables(output: &mut SqliteConnection) -> Result<Vec<String>,
     Ok(sqlx::query("SELECT name FROM pragma_table_list WHERE schema='main' AND type IN ('table','virtual') AND name!='sqlite_schema' ORDER BY name")
         .fetch_all(output).await?.iter().map(|r| r.get("name")).collect())
 }
+
+pub(crate) fn table_statement(version: i64, name: &str) -> Result<String, PersistenceError> {
+    statements(version)?
+        .into_iter()
+        .find(|ddl| {
+            ddl.starts_with("CREATE TABLE ")
+                && (ddl.contains(&format!(" {name} (")) || ddl.contains(&format!(" \"{name}\" (")))
+        })
+        .ok_or_else(invalid)
+}

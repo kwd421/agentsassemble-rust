@@ -29,6 +29,63 @@ async fn rebuild_preserves_rows_custody_schema_and_retries_after_failure() -> Te
         sqlx::query_as("SELECT name,sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name")
             .fetch_all(&pool)
             .await?;
+    // Replacement objects must never be reused, even if empty and column-compatible.
+    for kind in ["TABLE", "VIEW"] {
+        let ddl = if kind == "TABLE" {
+            "CREATE TABLE room_message_attachments_v92 AS SELECT * FROM room_message_attachments WHERE 0"
+        } else {
+            "CREATE VIEW room_message_attachments_v92 AS SELECT * FROM room_message_attachments"
+        };
+        sqlx::query(sqlx::AssertSqlSafe(ddl)).execute(&pool).await?;
+        assert!(schema_version::upgrade_schema(&pool).await.is_err());
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DROP {kind} room_message_attachments_v92"
+        )))
+        .execute(&pool)
+        .await?;
+    }
+    sqlx::query("ALTER TABLE room_connector_uploads ADD COLUMN hostile TEXT")
+        .execute(&pool)
+        .await?;
+    assert!(schema_version::upgrade_schema(&pool).await.is_err());
+    sqlx::query("ALTER TABLE room_connector_uploads DROP COLUMN hostile")
+        .execute(&pool)
+        .await?;
+    // A same-typed reorder is also rejected, rather than copied positionally.
+    let historical = crate::archive_schema::table_statement(91, "room_connector_uploads")?;
+    let columns = "attachment_id,room_id,participant_id,filename,content_type,content,size,is_safe_image,created_at,expires_at";
+    sqlx::query("CREATE TEMP TABLE reordered_rows AS SELECT * FROM room_connector_uploads")
+        .execute(&pool)
+        .await?;
+    sqlx::query("DROP TABLE room_connector_uploads")
+        .execute(&pool)
+        .await?;
+    sqlx::query(sqlx::AssertSqlSafe(historical.replace(
+        "filename TEXT NOT NULL, content_type TEXT NOT NULL",
+        "content_type TEXT NOT NULL, filename TEXT NOT NULL",
+    )))
+    .execute(&pool)
+    .await?;
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "INSERT INTO room_connector_uploads ({columns}) SELECT {columns} FROM reordered_rows"
+    )))
+    .execute(&pool)
+    .await?;
+    assert!(schema_version::upgrade_schema(&pool).await.is_err());
+    sqlx::query("DROP TABLE room_connector_uploads")
+        .execute(&pool)
+        .await?;
+    sqlx::query(sqlx::AssertSqlSafe(historical))
+        .execute(&pool)
+        .await?;
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "INSERT INTO room_connector_uploads ({columns}) SELECT {columns} FROM reordered_rows"
+    )))
+    .execute(&pool)
+    .await?;
+    sqlx::query("DROP TABLE reordered_rows")
+        .execute(&pool)
+        .await?;
     // Abort at the final version write, after both originals have been dropped.
     sqlx::query("CREATE TRIGGER fail_v92 BEFORE UPDATE OF value ON runtime_metadata WHEN NEW.key='schema_version' AND NEW.value='92' BEGIN SELECT RAISE(ABORT,'injected migration failure'); END").execute(&pool).await?;
     assert!(schema_version::upgrade_schema(&pool).await.is_err());
@@ -198,4 +255,38 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
     );
     store.close().await?;
     Ok(())
+}
+
+// Restore genuine historical leaf DDL when a test simulates a pre-92 database.
+pub(crate) async fn restore_v91(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    for name in ["room_message_attachments", "room_connector_uploads"] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "CREATE TEMP TABLE fixture_rows AS SELECT * FROM {name}"
+        )))
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE {name}")))
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(sqlx::AssertSqlSafe(
+            crate::archive_schema::table_statement(91, name).expect("frozen DDL"),
+        ))
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "INSERT INTO {name} SELECT * FROM fixture_rows"
+        )))
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("DROP TABLE fixture_rows")
+            .execute(&mut *tx)
+            .await?;
+    }
+    for statement in crate::schema::statements()
+        .filter(|s| s.starts_with("CREATE INDEX") && s.contains(" ON room_message_attachments("))
+    {
+        sqlx::query(statement).execute(&mut *tx).await?;
+    }
+    tx.commit().await
 }

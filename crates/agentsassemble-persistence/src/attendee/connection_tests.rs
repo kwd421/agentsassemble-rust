@@ -218,6 +218,7 @@ async fn v84_upgrade_preserves_attendee_custody_and_adds_only_closed_os_metadata
     sqlx::query("ALTER TABLE room_attendee_invites DROP COLUMN restore_parent_kind")
         .execute(&store.pool)
         .await?;
+    crate::room_file_schema::tests::restore_v91(&store.pool).await?;
     sqlx::query("UPDATE runtime_metadata SET value='84' WHERE key='schema_version'")
         .execute(&store.pool)
         .await?;
