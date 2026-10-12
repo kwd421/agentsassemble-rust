@@ -10,6 +10,7 @@ async fn migrate(pool: &SqlitePool, version: i64) -> Result<(), PersistenceError
         91 => crate::room_file_schema::upgrade(pool).await,
         92 => crate::room_file_chunk_schema::upgrade(pool).await,
         93 => crate::message_attachment_previews::upgrade(pool).await,
+        94 => super::upgrade_attachment_semantics(pool).await,
         _ => unreachable!(),
     }
 }
@@ -17,7 +18,7 @@ async fn migrate(pool: &SqlitePool, version: i64) -> Result<(), PersistenceError
 #[tokio::test]
 async fn every_room_file_migration_refuses_indirect_cascades_and_future_table_triggers()
 -> TestResult {
-    for version in 91..=93 {
+    for version in 91..=94 {
         let directory = tempfile::tempdir()?;
         let (path, _) = backup_database::archive_tests::archive(directory.path(), version).await?;
         let pool = SqlitePoolOptions::new()
@@ -28,7 +29,7 @@ async fn every_room_file_migration_refuses_indirect_cascades_and_future_table_tr
                     .foreign_keys(true),
             )
             .await?;
-        let content_table = if version == 93 {
+        let content_table = if version >= 93 {
             "room_message_attachment_chunks"
         } else {
             "room_message_attachments"
@@ -62,7 +63,7 @@ async fn every_room_file_migration_refuses_indirect_cascades_and_future_table_tr
         sqlx::query("PRAGMA writable_schema=ON")
             .execute(&pool)
             .await?;
-        let future = if version == 93 {
+        let future = if version >= 93 {
             "room_message_attachment_previews".into()
         } else {
             format!("room_message_attachments_v{}", version + 1)
@@ -134,6 +135,19 @@ async fn every_room_file_migration_refuses_indirect_cascades_and_future_table_tr
                 .await?;
         assert_eq!(stored, version.to_string());
         migrate(&pool, version).await?; // Refusals remain retryable with genuine objects.
+        let upgraded: String =
+            sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key='schema_version'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(upgraded, (version + 1).to_string());
+        if version == 94 {
+            let preserved: Vec<(String, Vec<u8>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+                "SELECT attachment_id,content FROM {content_table} ORDER BY attachment_id"
+            )))
+            .fetch_all(&pool)
+            .await?;
+            assert_eq!(preserved, original);
+        }
         pool.close().await;
     }
     Ok(())

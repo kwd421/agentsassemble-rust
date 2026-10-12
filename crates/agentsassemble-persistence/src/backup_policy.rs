@@ -98,7 +98,7 @@ pub(crate) fn json(
     version: i64,
 ) -> Result<String, PersistenceError> {
     let value: Value = serde_json::from_str(encoded).map_err(|_| invalid())?;
-    if version < 92 {
+    if version < 95 {
         match (table, column) {
             ("rooms", "settings_json") => historical_settings(&value, version)?,
             ("room_events", "event_json")
@@ -153,6 +153,15 @@ fn historical_settings(value: &Value, version: i64) -> Result<(), PersistenceErr
 }
 
 fn historical_receipt(value: &Value, version: i64, event: bool) -> Result<(), PersistenceError> {
+    if event
+        && version < 95
+        && value
+            .get("attachments")
+            .and_then(Value::as_array)
+            .is_some_and(|attachments| attachments.len() > 8)
+    {
+        return Err(invalid());
+    }
     let newer_fields: &[&str] = if event {
         &[
             "actor_participant_id",

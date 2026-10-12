@@ -31,7 +31,21 @@ pub(crate) async fn require_unbound_user(
     match version.parse::<i64>() {
         Ok(70..=80) => Ok(()),
         Ok(
-            MEMBER_SCHEMA_VERSION | 82 | 83 | 84 | 85 | 86 | 87 | 88 | 89 | 90 | 91 | 92 | 93 | 94,
+            MEMBER_SCHEMA_VERSION
+            | 82
+            | 83
+            | 84
+            | 85
+            | 86
+            | 87
+            | 88
+            | 89
+            | 90
+            | 91
+            | 92
+            | 93
+            | 94
+            | 95,
         ) => {
             let bound: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM central_identity_bindings WHERE user_id = ?)",

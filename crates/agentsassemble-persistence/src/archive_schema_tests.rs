@@ -142,8 +142,31 @@ async fn product_seed(
     store
         .store_message_attachment(&principal, "pending.png", "image/png", png.into_inner())
         .await?;
-    store.execute_message(&principal, &uuid::Uuid::new_v4().to_string(), "message.send",
-        &serde_json::json!({"content":"Historical searchable message", "attachment_ids":[format!("ma_{}", "a".repeat(32))]})).await?;
+    let mut ids = vec![format!("ma_{}", "a".repeat(32))];
+    // The new catalog carries a genuine ten-file event, not just a relabelled row.
+    if version >= 95 {
+        for _ in 1..10 {
+            ids.push(
+                store
+                    .store_message_attachment(
+                        &principal,
+                        "file.txt",
+                        "text/plain",
+                        b"file".to_vec(),
+                    )
+                    .await?
+                    .id,
+            );
+        }
+    }
+    store
+        .execute_message(
+            &principal,
+            &uuid::Uuid::new_v4().to_string(),
+            "message.send",
+            &serde_json::json!({"content":"Historical searchable message", "attachment_ids":ids}),
+        )
+        .await?;
     if version >= 90 {
         use agentsassemble_domain::{InviteScope, SetMessagePin};
         use sha2::{Digest, Sha256};
@@ -558,6 +581,56 @@ async fn delegated_archives_restore_and_refuse_contradictory_executors()
                 );
             }
         }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn historical_attachment_count_refuses_events_and_nested_receipts()
+-> Result<(), Box<dyn std::error::Error>> {
+    for version in 87..=94 {
+        let directory = tempfile::tempdir()?;
+        let (source, _) = archive(directory.path(), version).await?;
+        let mut connection =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&source)).await?;
+        let encoded: String = sqlx::query_scalar("SELECT event_json FROM room_events WHERE json_extract(event_json,'$.type')='message_final' LIMIT 1")
+            .fetch_one(&mut connection).await?;
+        let mut event: serde_json::Value = serde_json::from_str(&encoded)?;
+        event["attachments"] = serde_json::json!((0..9).map(|index| {
+            let id = format!("ma_{index:032x}");
+            serde_json::json!({"id":id, "filename":"file.bin", "content_type":"application/octet-stream", "size":1, "is_image":false,
+                "url":format!("/api/attachments/{id}?view=1"), "download_url":format!("/api/attachments/{id}?download=1")})
+        }).collect::<Vec<_>>());
+        // The exact event/receipt is current-decodable: only its historical label refuses.
+        for (table, column, value) in [
+            ("room_events", "event_json", event.clone()),
+            (
+                "command_results",
+                "result_json",
+                serde_json::json!({"event":event}),
+            ),
+            (
+                "room_create_results",
+                "result_json",
+                serde_json::json!({"start":{"events":[event]}}),
+            ),
+        ] {
+            let encoded = value.to_string();
+            crate::backup_policy::json(table, column, &encoded, 95)?;
+            assert!(matches!(
+                crate::backup_policy::json(table, column, &encoded, version),
+                Err(crate::PersistenceError::InvalidBackup)
+            ));
+        }
+        sqlx::query("UPDATE room_events SET event_json=? WHERE json_extract(event_json,'$.type')='message_final'")
+            .bind(event.to_string()).execute(&mut connection).await?;
+        connection.close().await?;
+        let target = directory.path().join("rejected.sqlite");
+        assert!(
+            reconstruct_payload(&source, &target, version)
+                .await
+                .is_err()
+        );
     }
     Ok(())
 }

@@ -247,7 +247,9 @@ fn unsupported_manifest_versions_fail_before_payload_output() -> Result<(), Back
         altered.extend_from_slice(&remainder);
         let mut output = Vec::new();
         assert!(matches!(
-            decode(&mut altered.as_slice(), &mut output, None),
+            decode_with_preflight(&mut altered.as_slice(), &mut output, None, |_| panic!(
+                "unsupported manifest reached preflight"
+            )),
             Err(BackupError::Manifest)
         ));
         assert!(output.is_empty());

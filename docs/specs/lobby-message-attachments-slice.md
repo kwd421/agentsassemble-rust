@@ -1439,3 +1439,20 @@ is solely the validated ACK event or the exact event matched by observe.
 Owner/entry point: roomSocketValidation::commandAckResultIsValid, used by roomSocketClient.
 Acceptance: actor/content/reply/ordered-ID mismatches refuse; real canonical messages,
 vote creation/anonymous transitions and random responses remain valid.
+
+## Round-10 archive attachment semantics (Medium 2, 2026-10-13)
+
+Ten-attachment publication requires schema/archive semantic version 95. The live
+94→95 upgrade changes only metadata, transactionally after room_file_migration
+source-graph validation; no DDL or product data changes. The archive catalog adds
+95 with unchanged DDL. Decode source versions 87–94 with at most eight attachments
+per event, including nested events in command/create/delete receipts; version 95
+uses the current ten-attachment domain contract. Current export/backup manifests
+carry 95. Previous binaries only support through 94, so their existing manifest
+validation rejects 95 before preflight or writing database payload bytes, even
+when the first incompatible event occurs much later. Keep every genuine historical
+catalog restorable and preserve existing local state during metadata-only upgrade.
+Owners: schema_version, room_file_migration, archive_schema_changes, backup_policy,
+backup_codec manifest validation. Acceptance: a nine-attachment historical event or
+receipt refuses; genuine old archives restore; current catalog/export agree and
+94 upgrade preserves data. No envelope format change or compatibility fallback.

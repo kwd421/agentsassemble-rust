@@ -134,6 +134,19 @@ pub(crate) async fn require_foreign_keys(
     Ok(())
 }
 
+// Schema 95 changes the per-event attachment contract, without changing DDL.
+pub(crate) async fn upgrade_attachment_semantics(
+    pool: &sqlx::SqlitePool,
+) -> Result<(), PersistenceError> {
+    let mut tx = pool.begin().await?;
+    require_source(&mut tx, 94).await?;
+    sqlx::query("UPDATE runtime_metadata SET value='95' WHERE key='schema_version'")
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "room_file_migration_tests.rs"]
 mod tests;
