@@ -26,7 +26,7 @@ it("uses one distinct native ticket and rejects changed room or injected shell a
 });
 
 it("uses the room bearer and paired device for a companion and requires the current public origin", async () => {
-  vi.stubGlobal("window", { location: { origin: "https://room.example.test" } });
+  vi.stubGlobal("window", { location: { origin: "https://room.example.test", href: "https://room.example.test/app/" } });
   const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(packet), { status: 200 }));
   vi.stubGlobal("fetch", fetch);
   const session = { sessionToken: "human-session", roomUid: "room-uid", meetingId: "general" };

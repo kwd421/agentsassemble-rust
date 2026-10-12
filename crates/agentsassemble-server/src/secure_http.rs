@@ -322,11 +322,19 @@ async fn send_response(
         .filter(|(name, _)| {
             !matches!(
                 name.as_str(),
-                "set-cookie" | "content-security-policy" | "access-control-allow-origin"
+                "set-cookie"
+                    | "content-security-policy"
+                    | "access-control-allow-origin"
+                    | "x-agentsassemble-message-attachment-limit"
             )
         })
         .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.as_str(), value)))
         .collect::<Vec<_>>();
+    let attachment_limit = agentsassemble_domain::MAX_MESSAGE_ATTACHMENTS_PER_EVENT.to_string();
+    headers.push((
+        "x-agentsassemble-message-attachment-limit",
+        &attachment_limit,
+    ));
     headers.push(("x-agentsassemble-upload-credit", "1"));
     headers.push((CAPABILITY, "1"));
     headers.push((crate::secure_queue::WINDOW_CAPABILITY, "1"));

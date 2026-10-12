@@ -569,7 +569,8 @@ async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
         .await?;
     let active = &active.assignments[0];
     let mut batches = Vec::new();
-    for (index, count) in [5, 4].into_iter().enumerate() {
+    let first_batch = agentsassemble_domain::MAX_MESSAGE_ATTACHMENTS_PER_EVENT - 3;
+    for (index, count) in [first_batch, 4].into_iter().enumerate() {
         let mut ids = Vec::new();
         for item in 0..count {
             let attachment = store

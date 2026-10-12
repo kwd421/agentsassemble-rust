@@ -1,3 +1,4 @@
+import { LEGACY_MESSAGE_ATTACHMENT_LIMIT, parseMessageAttachmentLimit } from "../messageAttachmentCapabilities";
 import type { RoomGuestSession } from "../roomGuestSession";
 export type SecureMemberEntry = { server_id: string; registration_epoch: string; inviteToken?: string };
 import type { CentralOwnerWorkspace } from "../central/ownerWorkspace";
@@ -34,6 +35,13 @@ export function closeRemoteWorkspace() {
   workspace?.transport.close(); workspace = null;
   for (const listener of listeners) listener();
 }
+const plainUploads = new Map<string, { transfer: boolean; limit: number }>();
+export function messageAttachmentCapabilities(token: string, path: string) {
+  const transport = remoteSessionTransport(token);
+  if (transport) return transport.messageAttachmentCapabilities();
+  if (workspace || sessions.has(token)) throw connectionEnded();
+  return plainUploads.get(requestOrigin(path)) ?? { transfer: false, limit: LEGACY_MESSAGE_ATTACHMENT_LIMIT };
+}
 const plainImagePreviews = new Map<string, boolean>();
 function requestOrigin(path: string) { return new URL(path, window.location.href).origin; }
 export function supportsMessageAttachmentPreview(token: string, path: string): boolean {
@@ -45,6 +53,10 @@ export function supportsMessageAttachmentPreview(token: string, path: string): b
 
 export function fetchPlainProductTransport(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(path, init).then(response => {
+    plainUploads.set(requestOrigin(path), {
+      transfer: response.headers.get("x-agentsassemble-upload-transfer") === "1",
+      limit: parseMessageAttachmentLimit(response.headers.get("x-agentsassemble-message-attachment-limit")),
+    });
     plainImagePreviews.set(requestOrigin(path), response.headers.get("x-agentsassemble-image-preview") === "1");
     return response;
   });

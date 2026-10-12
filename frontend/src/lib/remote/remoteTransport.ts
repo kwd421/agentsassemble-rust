@@ -1,6 +1,8 @@
 import { decodeCanonicalBase64Url, encodeBase64Url } from "../base64Url.ts";
 import { beginSecureHandshake, type SecureTarget, type SecurePurpose, type ServerHello, type SecureCipher } from "./secureCrypto.ts";
 
+import { LEGACY_MESSAGE_ATTACHMENT_LIMIT, parseMessageAttachmentLimit } from "../messageAttachmentCapabilities.ts";
+
 import { BODY_BINARY, BODY_BINARY_CONFIRMED, encodeBodyRecord, decodeBodyRecord } from "./remoteBodyRecord.ts";
 
 import { BODY_WINDOW, BODY_WINDOW_CONFIRMED, CreditWindow, WINDOW_BYTES } from "./remoteCreditWindow.ts";
@@ -49,6 +51,9 @@ export class RemoteTransport {
   private windowConfirmed = false;
   private legacyBinaryChildren = new Set<number>();
   private credits = new CreditWindow(() => this.close());
+  private uploadTransfer = false;
+  private attachmentLimit = LEGACY_MESSAGE_ATTACHMENT_LIMIT;
+  messageAttachmentCapabilities() { return { transfer: this.uploadTransfer, limit: this.attachmentLimit }; }
   private imagePreview = false;
   supportsImagePreview() { return this.imagePreview; }
   private uploading: Promise<unknown> = Promise.resolve();
@@ -195,7 +200,22 @@ export class RemoteTransport {
     init.signal?.throwIfAborted();
     // Response owns one streamed encoding and its headers, including multipart boundary.
     // Request.body is unavailable in Firefox; metadata never owns a second body.
-    const body = new Response(init.body, { headers: init.headers });
+    const bodyHeaders = new Headers(init.headers);
+    let source = init.body;
+    if (source instanceof Blob) {
+      const blob = source;
+      if (blob.type && !bodyHeaders.has("Content-Type")) bodyHeaders.set("Content-Type", blob.type);
+      let offset = 0;
+      source = new ReadableStream<Uint8Array<ArrayBuffer>>({
+        async pull(controller) {
+          if (offset === blob.size) { controller.close(); return; }
+          const piece = blob.slice(offset, offset + REMOTE_CHUNK);
+          const bytes = new Uint8Array(await piece.arrayBuffer());
+          offset += bytes.length; controller.enqueue(bytes);
+        },
+      }, { highWaterMark: 0 });
+    }
+    const body = new Response(source, { headers: bodyHeaders });
     const request = new Request(new URL(path, this.hello.origin), { ...init, body: undefined, headers: body.headers, credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" });
     if (init.body != null && ["GET", "HEAD"].includes(request.method)) throw new TypeError("GET/HEAD requests cannot have a body.");
     const id = this.allocate();
@@ -291,6 +311,9 @@ export class RemoteTransport {
         if (!wait.offeredBinary) throw connectionEnded();
         this.binaryConfirmed = true;
       }
+      if (headers.get("x-agentsassemble-upload-transfer") === "1") this.uploadTransfer = true;
+      const attachmentLimit = headers.get("x-agentsassemble-message-attachment-limit");
+      if (attachmentLimit !== null) this.attachmentLimit = parseMessageAttachmentLimit(attachmentLimit);
       if (headers.get("x-agentsassemble-upload-credit") === "1") this.uploadCredit = true;
       if (headers.get("x-agentsassemble-image-preview") === "1") this.imagePreview = true;
       this.credits.release(id);

@@ -193,6 +193,17 @@ pub fn router(state: AppState) -> Router {
         app = app.merge(crate::central::registration_web::routes());
     }
     app = app
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::HeaderName::from_static("x-agentsassemble-message-attachment-limit"),
+            axum::http::HeaderValue::from_str(
+                &agentsassemble_domain::MAX_MESSAGE_ATTACHMENTS_PER_EVENT.to_string(),
+            )
+            .expect("attachment limit header"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::HeaderName::from_static("x-agentsassemble-upload-transfer"),
+            axum::http::HeaderValue::from_static("1"),
+        ))
         .route_layer(middleware::from_fn(require_trusted_ingress))
         .layer(SetResponseHeaderLayer::overriding(
             axum::http::HeaderName::from_static("x-agentsassemble-image-preview"),

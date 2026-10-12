@@ -310,3 +310,23 @@ test("unrelated responses cannot refresh a withheld upload-credit deadline", asy
   await vi.advanceTimersByTimeAsync(15_000);
   expect(transport.active).toBe(false); await pending;
 });
+
+test("Blob uploads pull bounded pieces into negotiated binary/credit records", async () => {
+  Peer.advertiseBinary = Peer.advertiseWindow = true; Peer.echoBody = false;
+  const transport = await connectWithoutRequestBody(), peer = Peer.latest;
+  await (await transport.fetch("/probe")).text(); await (await transport.fetch("/probe")).text();
+  const bytes = new Uint8Array(7 * 64 * 1024 + 9).fill(73);
+  const blob = new Blob([bytes]);
+  blob.arrayBuffer = () => { throw new Error("whole Blob buffering"); };
+  const originalSlice = blob.slice.bind(blob);
+  const slice = vi.spyOn(blob, "slice").mockImplementation((start, end, type) => {
+    expect(Number(end) - Number(start)).toBeLessThanOrEqual(64 * 1024);
+    return originalSlice(start, end, type);
+  });
+  const result = await transport.fetch("/upload", { method: "POST", body: blob });
+  expect((await result.json()).received).toBe(bytes.length);
+  const stored = [...peer.requests.values()].at(-1)!.chunks;
+  expect(new Uint8Array(await new Blob(stored.map(chunk => chunk.slice().buffer)).arrayBuffer())).toEqual(bytes);
+  expect(slice).toHaveBeenCalledTimes(8); expect(peer.binaryRequests).toBeGreaterThan(8);
+  expect(transport.active).toBe(true);
+});

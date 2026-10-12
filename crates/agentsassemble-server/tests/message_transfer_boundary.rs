@@ -7,6 +7,22 @@ async fn plain_raw_transfer_is_exact_resumable_idempotent_and_bindable() -> Test
     let server = start_local().await;
     set_limit(&server, 50 * 1024 * 1024, "transfer-limit").await?;
     let client = Client::new();
+    let discovery = client
+        .get(format!("{}/api/message-attachments", server.base_url))
+        .header("Origin", "tauri://localhost")
+        .send()
+        .await?;
+    assert_eq!(discovery.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(discovery.headers()["x-agentsassemble-upload-transfer"], "1");
+    assert_eq!(
+        discovery.headers()["x-agentsassemble-message-attachment-limit"],
+        "10"
+    );
+    assert!(
+        discovery.headers()["access-control-expose-headers"]
+            .to_str()?
+            .contains("x-agentsassemble-message-attachment-limit")
+    );
     for (index, bytes, content_type) in [
         (
             0,

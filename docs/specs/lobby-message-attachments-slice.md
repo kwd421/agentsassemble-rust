@@ -111,6 +111,62 @@ No peak-RSS, paced WAN throughput, packaged UI or provider verification was run.
 SQLx piece bounds and Hyper's bounded writer establish the allocation envelope;
 client whole-Blob retention and the ACK throughput ceiling remain later slices.
 
+## Transfer rework: headless client (slice 5, 2026-10-13)
+
+Picking, dropping and pasting stage local Files only; refuse a selection whole if
+it exceeds the current host's message limit. Send snapshots text, reply and ordered
+files into one outgoing message and frees the draft immediately. One client owner
+per host/person schedules at most three files across rooms/messages; structured
+host defer returns work to its queue with the host retry hint, never a failure.
+Expose immutable snapshots/subscription, identity (client ID, room, person and
+authority generation), message/file states, sent/accepted/total bytes, cancellation,
+retry and discard. Publication uses the existing socket owner only after all files
+finish, retaining completed attachments on retry and its same-request retry callback
+when publication is uncertain. Delivery reconciles by the confirmed event ID.
+
+Affected owners: `frontend/src/api/messageAttachmentTransfers.ts`,
+`frontend/src/lib/outgoingMessages.ts`, `lobbyComposerModel.ts`, remote transport
+and capability observation, domain attachment count and generated bindings. Keep
+legacy upload unchanged for hosts without transfer advertisement; preflight current
+room file policy. Plain/desktop data bodies are Blob slices; encrypted transport
+pulls bounded pieces through negotiated binary records/shared credit. Interrupted
+data and lost finish replies resolve via status. Closed session/channel requires
+re-admission and a fresh incomplete transfer from zero, with no custody renewal.
+Reject late work from retired room/person/generation; leaving/signout cancels owned
+messages. Room/draft switching does not move work into a different draft.
+
+Raise the domain limit to ten and advertise its numeric value separately from
+transfer support: older hosts (including slice-3 hosts) still allow eight. Consumers
+derive validation and provider attachment/read byte budgets from the domain value.
+No views, styles, markup, preview URLs or composer wiring in this slice. Native
+streaming saves need a separate IPC/write lifecycle and remain outside this slice.
+Acceptance uses controlled transports/clock for concurrency, defer, resume, finish
+uncertainty, partial failure/retry, cancel, stale authority, skew and bounded bodies;
+run affected Rust tests, bindings, TypeScript, api/lib Vitest and architecture gates.
+Packaged UX and peak RSS remain unverified until UI integration.
+
+Slice-5 implementation is paused at the outgoing model's publication boundary:
+`message.send` cannot cancel an already-dispatched request, while the required
+whole-outgoing cancellation includes `sending`. Owner decision is pending on
+making `sending` non-cancellable versus a separate host cancellation contract.
+Do not imply cancellation can retract a committed publication. Existing `say()`
+also discards the event acknowledgement; model wiring must use existing `command`
+with the message payload and retain its same-request uncertain-outcome retry.
+The API/capability prerequisite can be verified independently while this is open.
+Provider consumers now admit ten context/observation IDs and ten distinct reads;
+the existing two attempts at 10 MiB each raise the read byte budget 160 -> 200 MiB.
+
+API/limit prerequisite verified: bindings regenerated; domain 67, protocol 6,
+provider 303, persistence 526 and server 190 library tests passed (two existing
+ignored tests). Real plain HTTP and production WebCrypto transport integration
+passed, including 50 MiB transfer/resume/finish/bind and capability discovery.
+TypeScript and `vitest run src/api src/lib` passed 79 files / 474 tests. Earlier
+concurrent runs hit the existing five-second transport-test timeout; a two-worker
+run and the final default run after Rust checks completed passed without timeout
+or gate changes. Formatting, diff and architecture checks pass. No outgoing model,
+scheduler or model acceptance tests are implemented pending the decision above;
+no packaged UI, peak RSS or desktop streaming-sink acceptance is claimed.
+
 ## Transfer rework: human upload owner (slice 3, 2026-10-13)
 
 Required entry points: authenticated begin/data/finish/status/cancel under

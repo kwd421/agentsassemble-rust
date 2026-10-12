@@ -40,6 +40,7 @@ pub(crate) fn exact_tauri_cors(methods: impl IntoIterator<Item = Method>) -> Cor
         .expose_headers([
             HeaderName::from_static("x-agentsassemble-image-preview"),
             HeaderName::from_static("x-agentsassemble-upload-transfer"),
+            HeaderName::from_static("x-agentsassemble-message-attachment-limit"),
         ])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }

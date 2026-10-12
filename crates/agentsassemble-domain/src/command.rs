@@ -306,6 +306,15 @@ mod tests {
         assert_eq!(command.content, "");
         assert_eq!(command.attachment_ids, [first, second]);
 
+        let ten: Vec<_> = (0..10).map(|index| format!("ma_{index:032x}")).collect();
+        let staged = MessageSend::from_payload(&json!({"content":"", "attachment_ids": ten}))
+            .unwrap_or_else(|error| panic!("ten attachments: {error}"));
+        assert_eq!(staged.attachment_ids, ten);
+        let eleven: Vec<_> = (0..11).map(|index| format!("ma_{index:032x}")).collect();
+        assert!(
+            MessageSend::from_payload(&json!({"content":"", "attachment_ids": eleven})).is_err()
+        );
+
         for payload in [
             json!({"content": "", "attachment_ids": []}),
             json!({"content": "ok", "attachment_ids": [first, first]}),
