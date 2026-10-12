@@ -11,9 +11,7 @@ use crate::{
     AgentTurnAssignment, LiveRuntimeReconciliation, PersistenceError,
     RuntimeReconciliationCandidate, RuntimeReconciliationObservation, SqliteStore,
     agent_lifecycle::clear_intent,
-    agent_lifecycle_events::{
-        append_error_event, append_session_event, append_state_event, store_result,
-    },
+    agent_lifecycle_events::{append_error_event, append_session_event, append_state_event},
     agent_lifecycle_reservations::{
         LifecycleReservation, finish_lifecycle_command, reject_lifecycle_command,
     },
@@ -412,12 +410,12 @@ async fn finalize_recovered_stop(
         "events": events,
         "event": events.last(),
     });
-    store_result(
+    crate::delegated_agent_control::store_control_result(
         transaction,
         &reservation.principal,
         &reservation.request_id,
         &reservation.action,
-        reservation.payload_hash.clone(),
+        &reservation.payload,
         result,
         events,
     )

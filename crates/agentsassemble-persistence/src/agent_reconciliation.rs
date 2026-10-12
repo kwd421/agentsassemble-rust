@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    PersistenceError, SqliteStore, agent_lifecycle_authority::payload_agent_id,
-    agent_session_rows::update_agent_session_row, turn_authority::active_turn_authority,
+    PersistenceError, SqliteStore, agent_session_rows::update_agent_session_row,
+    turn_authority::active_turn_authority,
 };
 
 const ACTIVE_RUNTIME_STATES: [AgentRuntimeStatus; 6] = [
@@ -412,7 +412,7 @@ fn decode_reservation(
         .ok_or_else(invalid_stored_authority)?;
     if principal.room_id != session.public.room_id
         || principal.principal_id != principal_id
-        || !principal.capabilities.agent_control
+        || !crate::delegated_agent_control::valid_recorded_actor(&principal, action, &payload)
         || principal.participant_id.is_empty()
         || canonical_payload_hash(&payload) != payload_hash
         || payload_session_id(action, &payload, prepared_result_json, session)?
@@ -467,7 +467,8 @@ fn payload_session_id<'a>(
             .map(|(id, _)| id)
             .map_err(|_| invalid_stored_authority());
     }
-    payload_agent_id(payload).map_err(|_| invalid_stored_authority())
+    crate::delegated_agent_control::control_agent_id(payload)
+        .map_err(|_| invalid_stored_authority())
 }
 
 fn reservation_matches_intent(reservation: &Value, intent_action: &str) -> bool {

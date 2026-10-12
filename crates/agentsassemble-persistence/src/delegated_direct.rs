@@ -28,6 +28,7 @@ impl DelegatedRoomActionAuthority {
             "set_message_pin" => true,
             "create_text_channel" | "rename_text_channel" => self.owner.capabilities.room_manage,
             "set_participant_mute" => self.owner.capabilities.participant_mute,
+            "start_agent" | "stop_agent" => self.owner.capabilities.agent_control,
             _ => false,
         }
     }
@@ -104,6 +105,9 @@ impl SqliteStore {
             ));
         }
         let (mut mutation, target, description) = match request {
+            DirectRoomAction::StartAgent(_) | DirectRoomAction::StopAgent(_) => {
+                return Err(rejected("bad_request", "Use the lifecycle mutation owner."));
+            }
             DirectRoomAction::CreateTextChannel(_) | DirectRoomAction::RenameTextChannel(_) => {
                 let (delta, target) = channel_delta(&mut tx, authority.room_id(), request).await?;
                 let outcome =
@@ -143,7 +147,7 @@ impl SqliteStore {
         )?;
         let event = attributed_action_event(
             &mut tx,
-            &proof,
+            proof.attribution(),
             request_id,
             request.name(),
             &target,

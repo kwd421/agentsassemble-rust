@@ -6,7 +6,7 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError,
-    agent_lifecycle_events::{append_session_event, append_state_event, store_result},
+    agent_lifecycle_events::{append_session_event, append_state_event},
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -14,7 +14,7 @@ pub(crate) async fn commit_launch_result(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
     request_id: &str,
-    payload_hash: String,
+    payload: &serde_json::Value,
     session: &DurableAgentSession,
     participant: &Participant,
     joined: bool,
@@ -27,12 +27,12 @@ pub(crate) async fn commit_launch_result(
         result["status"] = json!("readded");
         result["participant"] = json!(participant);
     }
-    store_result(
+    crate::delegated_agent_control::store_control_result(
         transaction,
         principal,
         request_id,
         command_action,
-        payload_hash,
+        payload,
         result,
         events,
     )

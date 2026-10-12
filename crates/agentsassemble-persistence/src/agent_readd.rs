@@ -23,7 +23,10 @@ pub(crate) fn launch_payload(
     action: &str,
 ) -> Result<(String, bool), PersistenceError> {
     match action {
-        "agent.start" | "agent.resume" => payload_agent_id(payload).map(|id| (id, true)),
+        "agent.start" => {
+            crate::delegated_agent_control::control_agent_id(payload).map(|id| (id, true))
+        }
+        "agent.resume" => payload_agent_id(payload).map(|id| (id, true)),
         READD => {
             let id = payload_agent_id_with_fields(payload, &["start", "start_now"])?;
             let mut start = None;

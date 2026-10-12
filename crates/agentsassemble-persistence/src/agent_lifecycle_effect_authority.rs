@@ -7,9 +7,9 @@ use chrono::Utc;
 use serde_json::Value;
 
 use crate::{
-    PersistenceError, RoomMutationAuthority, SqliteStore,
+    PersistenceError, SqliteStore,
     agent_lifecycle::{AgentStartEffect, AgentStopEffect, load_session, save_session},
-    agent_lifecycle_authority::{lifecycle_operation_id, payload_agent_id, require_intent},
+    agent_lifecycle_authority::{lifecycle_operation_id, require_intent},
     agent_lifecycle_reservations::load_lifecycle_reservation,
     authority::active_room_for_principal,
 };
@@ -71,9 +71,9 @@ impl SqliteStore {
     ///
     /// Returns an exact reservation, authority, state, or persistence failure.
     #[allow(clippy::too_many_arguments)]
-    pub async fn authorize_agent_start_effect(
+    pub async fn authorize_agent_start_effect<'a>(
         &self,
-        authority: RoomMutationAuthority<'_>,
+        authority: impl Into<crate::AgentControlAuthority<'a>>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
@@ -82,9 +82,12 @@ impl SqliteStore {
         runtime_owner_id: &str,
         runtime_lease_token: &str,
     ) -> Result<AgentStartEffect, PersistenceError> {
-        let mut transaction = self.pool.begin().await?;
-        let resolved = authority.resolve(&mut transaction).await?;
-        let principal = resolved.as_ref();
+        let authority = authority.into();
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let resolved = authority
+            .resolve(&mut transaction, request_id, command_action, payload)
+            .await?;
+        let principal = &resolved;
         let (agent_id, _) = crate::agent_readd::launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, command_action);
@@ -144,17 +147,20 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Returns a stale-effect, authority, or persistence failure.
-    pub async fn authorize_agent_stop_effect(
+    pub async fn authorize_agent_stop_effect<'a>(
         &self,
-        authority: RoomMutationAuthority<'_>,
+        authority: impl Into<crate::AgentControlAuthority<'a>>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
     ) -> Result<AgentStopEffect, PersistenceError> {
-        let mut transaction = self.pool.begin().await?;
-        let resolved = authority.resolve(&mut transaction).await?;
-        let principal = resolved.as_ref();
-        let agent_id = payload_agent_id(payload)?;
+        let authority = authority.into();
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let resolved = authority
+            .resolve(&mut transaction, request_id, STOP, payload)
+            .await?;
+        let principal = &resolved;
+        let agent_id = crate::delegated_agent_control::control_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, STOP);
         if operation_id != expected_operation_id {

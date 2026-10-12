@@ -13,7 +13,7 @@ use crate::{
     CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore,
     agent_launch_events::commit_launch_result,
     agent_lifecycle_authority::{
-        authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id, require_intent,
+        lifecycle_intent_is_empty, lifecycle_operation_id, require_intent,
         require_matching_operation, validate_runtime_started,
     },
     agent_lifecycle_reservations::{LifecycleReservation, finish_lifecycle_command},
@@ -106,17 +106,19 @@ impl SqliteStore {
     ///
     /// # Errors
     /// Returns authorization, payload, replay, inactive-custody, or storage failures.
-    pub async fn prepare_agent_launch(
+    pub async fn prepare_agent_launch<'a>(
         &self,
-        authority: RoomMutationAuthority<'_>,
+        authority: impl Into<crate::AgentControlAuthority<'a>>,
         request_id: &str,
         payload: &Value,
         command_action: &'static str,
     ) -> Result<AgentStartPlan, PersistenceError> {
-        let mut transaction = self.pool.begin().await?;
-        let resolved = authority.resolve(&mut transaction).await?;
-        let principal = resolved.as_ref();
-        authorize_control(principal)?;
+        let authority = authority.into();
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let resolved = authority
+            .resolve(&mut transaction, request_id, command_action, payload)
+            .await?;
+        let principal = &resolved;
         let (agent_id, start_requested) = launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let operation_id = lifecycle_operation_id(principal, request_id, command_action);
@@ -328,7 +330,7 @@ impl SqliteStore {
             &mut transaction,
             principal,
             request_id,
-            payload_hash,
+            payload,
             &session,
             &participant,
             joined,
@@ -615,3 +617,7 @@ mod room_deletion_tests;
 #[cfg(test)]
 #[path = "attachment_storage_tests.rs"]
 mod attachment_storage_tests;
+
+#[cfg(test)]
+#[path = "delegated_agent_control_tests.rs"]
+mod delegated_control_tests;

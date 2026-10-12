@@ -17,12 +17,17 @@ request!(SetParticipantMute {
     muted: bool
 });
 
+request!(StartAgent { agent_id: String });
+request!(StopAgent { agent_id: String });
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectRoomAction {
     CreateTextChannel(CreateTextChannel),
     RenameTextChannel(RenameTextChannel),
     SetParticipantMute(SetParticipantMute),
+    StartAgent(StartAgent),
+    StopAgent(StopAgent),
 }
 impl DirectRoomAction {
     pub const NAMES: &[&str] = &[
@@ -36,6 +41,8 @@ impl DirectRoomAction {
             Self::CreateTextChannel(r) => &r.request_id,
             Self::RenameTextChannel(r) => &r.request_id,
             Self::SetParticipantMute(r) => &r.request_id,
+            Self::StartAgent(r) => &r.request_id,
+            Self::StopAgent(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -44,6 +51,8 @@ impl DirectRoomAction {
             Self::CreateTextChannel(_) => "create_text_channel",
             Self::RenameTextChannel(_) => "rename_text_channel",
             Self::SetParticipantMute(_) => "set_participant_mute",
+            Self::StartAgent(_) => "start_agent",
+            Self::StopAgent(_) => "stop_agent",
         }
     }
 }

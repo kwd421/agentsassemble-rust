@@ -142,7 +142,7 @@ pub(crate) async fn commit_already_stopped(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
     request_id: &str,
-    payload_hash: String,
+    payload: &Value,
     session: &AgentSession,
 ) -> Result<CommandOutcome, PersistenceError> {
     let event = append_state_event(transaction, principal, session).await?;
@@ -159,12 +159,12 @@ pub(crate) async fn commit_already_stopped(
         "events": events,
         "event": events.last(),
     });
-    store_result(
+    crate::delegated_agent_control::store_control_result(
         transaction,
         principal,
         request_id,
         "agent.stop",
-        payload_hash,
+        payload,
         result,
         events,
     )

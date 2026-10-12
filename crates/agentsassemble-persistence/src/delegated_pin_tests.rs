@@ -259,17 +259,11 @@ async fn guest_pin_rechecks_scope_and_disconnect_of_the_exact_parent_on_retry() 
         turn_generation: turn.authority.turn_generation,
         execution_id: turn.authority.execution_id,
     };
-    let direct = agentsassemble_domain::DirectRoomAction::CreateTextChannel(
-        agentsassemble_domain::CreateTextChannel {
-            request_id: Uuid::new_v4().to_string(),
-            name: "Guest denied".into(),
-        },
+    assert_direct_rejections(&store, &authority, "owner_not_permitted").await;
+    assert_eq!(
+        store.delegated_direct_actions(&authority).await?,
+        vec!["set_message_pin"]
     );
-    assert!(
-        matches!(store.execute_delegated_atomic(&authority, &direct, |_,_,_|Ok(())).await,
-        Err(PersistenceError::CommandRejected {code,..}) if code=="owner_not_permitted")
-    );
-    assert!(store.delegated_direct_actions(&authority).await?.is_empty());
     let request = SetMessagePin {
         channel_id: "lobby".into(),
         message_id: message.outcome.event.id,
@@ -281,10 +275,7 @@ async fn guest_pin_rechecks_scope_and_disconnect_of_the_exact_parent_on_retry() 
         .await?;
     // Change only the bound session's current scope: no other session may substitute.
     set_guest_scope(&store, "read_only").await?;
-    assert!(
-        matches!(store.execute_delegated_atomic(&authority, &direct, |_,_,_|Ok(())).await,
-        Err(PersistenceError::CommandRejected {code,..}) if code=="owner_scope_read_only")
-    );
+    assert_direct_rejections(&store, &authority, "owner_scope_read_only").await;
     assert!(!store.delegated_pin_available(&authority).await?);
     assert!(
         matches!(store.set_delegated_message_pin(&authority,&request,|_,_,_|Ok(())).await, Err(PersistenceError::CommandRejected {code,..}) if code=="owner_scope_read_only")
@@ -294,10 +285,7 @@ async fn guest_pin_rechecks_scope_and_disconnect_of_the_exact_parent_on_retry() 
     sqlx::query("UPDATE human_room_sessions SET secure_channel_id=?,secure_client_key_fingerprint=? WHERE session_fingerprint=?").bind(&channel).bind([7_u8;32].as_slice()).bind(fingerprint.as_slice()).execute(&store.pool).await?;
     assert!(store.delegated_pin_available(&authority).await?);
     store.disconnect_secure_channel(&channel).await?;
-    assert!(
-        matches!(store.execute_delegated_atomic(&authority, &direct, |_,_,_|Ok(())).await,
-        Err(PersistenceError::CommandRejected {code,..}) if code=="owner_authority_unavailable")
-    );
+    assert_direct_rejections(&store, &authority, "owner_authority_unavailable").await;
     assert!(!store.delegated_pin_available(&authority).await?);
     assert!(
         matches!(store.set_delegated_message_pin(&authority,&request,|_,_,_|Ok(())).await, Err(PersistenceError::CommandRejected {code,..}) if code=="owner_authority_unavailable")
@@ -331,3 +319,51 @@ async fn set_guest_scope(store: &SqliteStore, scope: &str) -> TestResult {
 
 #[path = "delegated_direct_tests.rs"]
 mod direct;
+
+async fn assert_direct_rejections(
+    store: &SqliteStore,
+    authority: &DelegateRoomAuthority,
+    expected: &str,
+) {
+    use agentsassemble_domain::*;
+    let id = || Uuid::new_v4().to_string();
+    for request in [
+        DirectRoomAction::CreateTextChannel(CreateTextChannel {
+            request_id: id(),
+            name: "Denied".into(),
+        }),
+        DirectRoomAction::RenameTextChannel(RenameTextChannel {
+            request_id: id(),
+            channel_id: "missing".into(),
+            name: "Denied".into(),
+            expected_settings_revision: "stale".into(),
+        }),
+        DirectRoomAction::SetParticipantMute(SetParticipantMute {
+            request_id: id(),
+            participant_id: "missing".into(),
+            muted: true,
+        }),
+        DirectRoomAction::StartAgent(StartAgent {
+            request_id: id(),
+            agent_id: "missing".into(),
+        }),
+        DirectRoomAction::StopAgent(StopAgent {
+            request_id: id(),
+            agent_id: "missing".into(),
+        }),
+    ] {
+        let error = match request {
+            DirectRoomAction::StartAgent(_) | DirectRoomAction::StopAgent(_) => store
+                .admit_delegated_agent_control(authority, &request, |_, _, _| Ok(()))
+                .await
+                .err(),
+            _ => store
+                .execute_delegated_atomic(authority, &request, |_, _, _| Ok(()))
+                .await
+                .err(),
+        };
+        assert!(
+            matches!(error,Some(PersistenceError::CommandRejected {code,..}) if code == expected)
+        );
+    }
+}

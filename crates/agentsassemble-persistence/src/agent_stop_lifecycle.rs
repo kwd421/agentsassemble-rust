@@ -17,13 +17,12 @@ use crate::{
         merged_turn_queue, require_valid_turn_authority, save_session, unresolved_effect,
     },
     agent_lifecycle_authority::{
-        agent_stop_requires_cleanup, authorize_control, lifecycle_intent_is_empty,
-        lifecycle_operation_id, payload_agent_id, require_intent, require_matching_operation,
+        agent_stop_requires_cleanup, lifecycle_intent_is_empty, lifecycle_operation_id,
+        require_intent, require_matching_operation,
     },
     agent_lifecycle_effect_authority::stop_effect,
     agent_lifecycle_events::{
         append_error_event, append_session_event, append_state_event, commit_already_stopped,
-        store_result,
     },
     agent_lifecycle_reservations::{
         LifecycleReservation, finish_lifecycle_command, reject_lifecycle_command,
@@ -43,17 +42,19 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Returns authorization, idempotency, payload, state, or storage failures.
-    pub async fn prepare_agent_stop(
+    pub async fn prepare_agent_stop<'a>(
         &self,
-        authority: RoomMutationAuthority<'_>,
+        authority: impl Into<crate::AgentControlAuthority<'a>>,
         request_id: &str,
         payload: &Value,
     ) -> Result<AgentStopPlan, PersistenceError> {
-        let mut transaction = self.pool.begin().await?;
-        let resolved = authority.resolve(&mut transaction).await?;
-        let principal = resolved.as_ref();
-        authorize_control(principal)?;
-        let agent_id = payload_agent_id(payload)?;
+        let authority = authority.into();
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let resolved = authority
+            .resolve(&mut transaction, request_id, STOP, payload)
+            .await?;
+        let principal = &resolved;
+        let agent_id = crate::delegated_agent_control::control_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let operation_id = lifecycle_operation_id(principal, request_id, STOP);
         active_room_for_principal(&mut transaction, principal).await?;
@@ -90,7 +91,7 @@ impl SqliteStore {
                 &mut transaction,
                 principal,
                 request_id,
-                payload_hash,
+                payload,
                 &session.public,
             )
             .await?;
@@ -152,7 +153,7 @@ impl SqliteStore {
         operation_id: &str,
         reason: (&str, &str),
     ) -> Result<Vec<RoomEvent>, PersistenceError> {
-        let agent_id = payload_agent_id(payload)?;
+        let agent_id = crate::delegated_agent_control::control_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
@@ -367,7 +368,7 @@ pub(crate) async fn finalize_stop_in(
     request_id: &str,
     payload: &Value,
 ) -> Result<crate::CommandOutcome, PersistenceError> {
-    let agent_id = payload_agent_id(payload)?;
+    let agent_id = crate::delegated_agent_control::control_agent_id(payload)?;
     let payload_hash = canonical_payload_hash(payload);
     let mut session = load_session(transaction, &principal.room_id, &agent_id).await?;
     let operation_id = lifecycle_operation_id(principal, request_id, STOP);
@@ -400,12 +401,12 @@ pub(crate) async fn finalize_stop_in(
         "events": events,
         "event": events.last(),
     });
-    let outcome = store_result(
+    let outcome = crate::delegated_agent_control::store_control_result(
         transaction,
         principal,
         request_id,
         STOP,
-        payload_hash,
+        payload,
         result,
         events,
     )

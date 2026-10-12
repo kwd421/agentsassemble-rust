@@ -212,7 +212,7 @@ impl SqliteStore {
         let admission = admit(&proof.owner.principal_id, &delegate.principal_id, bytes)?;
         let mut event = attributed_action_event(
             &mut tx,
-            &proof,
+            proof.attribution(),
             &request.request_id,
             "set_message_pin",
             &request.message_id,
@@ -252,44 +252,59 @@ impl SqliteStore {
     }
 }
 
+pub(crate) struct ActionAttribution<'a> {
+    pub(crate) room_id: &'a str,
+    pub(crate) actor_id: &'a str,
+    pub(crate) actor_name: &'a str,
+    pub(crate) owner_id: &'a str,
+    pub(crate) owner_name: &'a str,
+}
+impl DelegatedRoomActionAuthority {
+    pub(crate) fn attribution(&self) -> ActionAttribution<'_> {
+        ActionAttribution {
+            room_id: &self.delegate.room_id,
+            actor_id: &self.delegate.participant_id,
+            actor_name: &self.delegate.display_name,
+            owner_id: &self.owner.participant_id,
+            owner_name: &self.owner.display_name,
+        }
+    }
+}
+
 pub(crate) async fn attributed_action_event(
     tx: &mut Transaction<'_, Sqlite>,
-    proof: &DelegatedRoomActionAuthority,
+    attribution: ActionAttribution<'_>,
     request_id: &str,
     action: &str,
     target_id: &str,
     description: &str,
 ) -> Result<RoomEvent, PersistenceError> {
-    let delegate = &proof.delegate;
     Ok(RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),
-        seq: crate::room_event_sequence::next_sequence(tx, &delegate.room_id).await?,
+        seq: crate::room_event_sequence::next_sequence(tx, attribution.room_id).await?,
         created_at: Utc::now(),
-        room_id: delegate.room_id.clone(),
+        room_id: attribution.room_id.into(),
         event_type: "message_final".into(),
         actor: Actor {
-            participant_id: delegate.participant_id.clone(),
+            participant_id: attribution.actor_id.into(),
             participant_type: "agent".into(),
         },
-        participant_id: Some(delegate.participant_id.clone()),
+        participant_id: Some(attribution.actor_id.into()),
         participant_type: Some("agent".into()),
-        actor_id: Some(delegate.participant_id.clone()),
+        actor_id: Some(attribution.actor_id.into()),
         actor_type: Some("agent".into()),
-        display_name: Some(delegate.display_name.clone()),
+        display_name: Some(attribution.actor_name.into()),
         content: Some(format!(
             "{} {} on behalf of {}.",
-            delegate.display_name, description, proof.owner.display_name
+            attribution.actor_name, description, attribution.owner_name
         )),
         message_kind: Some("system".into()),
         extra: [
-            (
-                "actor_participant_id".into(),
-                json!(delegate.participant_id),
-            ),
+            ("actor_participant_id".into(), json!(attribution.actor_id)),
             (
                 "on_behalf_of_participant_id".into(),
-                json!(proof.owner.participant_id),
+                json!(attribution.owner_id),
             ),
             ("action".into(), json!(action)),
             ("target_id".into(), json!(target_id)),
