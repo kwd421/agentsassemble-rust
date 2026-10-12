@@ -42,7 +42,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     let server = human_invite::start(store.clone()).await;
     let url = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
     let mut client = RoomAttendeeClient::new(&url, "codex", "External Execution")?;
-    let (mut human, attachment_id) = send_input(&server, &store).await?;
+    let (mut human, attachment_id, large_id) = send_input(&server, &store).await?;
     let mut runtime = prepare_runtime(&mut client, &catalog, directory.path())
         .await
         .map_err(|error| format!("initial local runtime: {error}"))?;
@@ -92,7 +92,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
         &store,
         server.state().rooms.subscribe("general").await,
         &mut tools_rx,
-        (&attachment_id, &mut attachments_rx),
+        (&attachment_id, &large_id, &mut attachments_rx),
     )
     .await?;
     let view =
@@ -278,6 +278,7 @@ async fn send_input(
     (
         room_socket_peer::RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
         String,
+        String,
     ),
     Box<dyn std::error::Error>,
 > {
@@ -285,7 +286,7 @@ async fn send_input(
     human.subscribe(0).await;
     let snapshot = human.receive_json().await;
     human.send_json(&json!({"op":"command", "request_id":"native-tools-mode", "action":"room.settings.update", "payload":{
-        "expected_revision":snapshot["room_settings"]["settings_revision"], "tool_mode":"tabletop"
+        "expected_revision":snapshot["room_settings"]["settings_revision"], "tool_mode":"tabletop", "attachment_file_limit_bytes":26214400
     }})).await;
     loop {
         let frame = human
@@ -306,7 +307,17 @@ async fn send_input(
             b"external attachment proof".to_vec(),
         )
         .await?;
-    human.send_json(&json!({"op":"command", "request_id":"external-execution-input", "action":"message.send", "payload":{"content":"Reply through the external runtime", "attachment_ids":[attachment.id]}})).await;
+    let large = store
+        .store_local_message_attachment(
+            "general",
+            agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+            agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+            "large.bin",
+            "application/octet-stream",
+            vec![42; 10485761],
+        )
+        .await?;
+    human.send_json(&json!({"op":"command", "request_id":"external-execution-input", "action":"message.send", "payload":{"content":"Reply through the external runtime", "attachment_ids":[attachment.id,large.id]}})).await;
     loop {
         let frame = human
             .receive_json_with_timeout(Duration::from_secs(2))
@@ -316,5 +327,5 @@ async fn send_input(
             break;
         }
     }
-    Ok((human, attachment.id))
+    Ok((human, attachment.id, large.id))
 }

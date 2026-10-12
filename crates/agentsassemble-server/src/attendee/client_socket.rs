@@ -156,6 +156,7 @@ fn handshake_error(failure: tokio_tungstenite::tungstenite::Error) -> AttendeeCl
         && !matches!(response.status().as_u16(), 408 | 429)
     {
         return AttendeeClientError {
+            message: String::new(),
             code: "attendee_connection_rejected".to_owned(),
             resolution: Some(agentsassemble_protocol::CommandResolution::Rejected),
         };

@@ -72,6 +72,49 @@ async fn connector_attachments_keep_pending_custody_and_revalidate_leave()
         )
         .await?;
     assert!(observer.read_attachment(image_id).await?.is_image);
+    // Humans may retain larger files; connector reads still fail with a specific
+    // metadata-only refusal that survives the real HTTP client mapping.
+    use agentsassemble_domain::{
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, public_settings,
+    };
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
+    let principal = AuthenticatedPrincipal {
+        principal_id: super::LOCAL_OPERATOR_USER_ID.into(),
+        participant_id: super::LOCAL_OPERATOR_PARTICIPANT_ID.into(),
+        room_id: "general".into(),
+        display_name: "Host".into(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    let settings = store.snapshot("general", 0, 100).await?.settings;
+    store.execute_room_settings_update(TrustedPrincipal(&principal), "large-policy", &json!({
+        "expected_revision":public_settings(&settings)?.settings_revision,"attachment_file_limit_bytes":26214400
+    })).await?;
+    let large = store
+        .store_message_attachment(
+            &principal,
+            "large.bin",
+            "application/octet-stream",
+            vec![42; 10485761],
+        )
+        .await?;
+    store
+        .execute_message_with_turn(
+            &principal,
+            "large-file",
+            "message.send",
+            &json!({"content":"", "attachment_ids":[large.id]}),
+        )
+        .await?;
+    let refusal = observer
+        .read_attachment(&large.id)
+        .await
+        .expect_err("oversized connector read");
+    assert_eq!(refusal.code, "attachment_too_large");
+    assert!(refusal.message.contains("10485761") && refusal.message.contains("10485760"));
+    assert!(refusal.to_string().contains("attachment_too_large"));
     for client in &clients {
         client
             .command(RoomAction::ParticipantLeave, json!({}))

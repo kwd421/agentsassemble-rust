@@ -196,6 +196,7 @@ impl Session<'_> {
                     return Err(error("attendee_ack_mismatch"));
                 }
                 return Err(AttendeeClientError {
+                    message: String::new(),
                     code: failure.code,
                     resolution: Some(resolution),
                 });

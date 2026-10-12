@@ -117,6 +117,7 @@ struct AttendeeHttpError {
     status: StatusCode,
     code: std::borrow::Cow<'static, str>,
     resolution: CommandResolution,
+    message: Option<String>,
 }
 
 impl AttendeeHttpError {
@@ -125,6 +126,7 @@ impl AttendeeHttpError {
             status,
             code: code.into(),
             resolution: CommandResolution::Rejected,
+            message: None,
         }
     }
 
@@ -153,6 +155,14 @@ impl AttendeeHttpError {
             status,
             code: code.to_owned().into(),
             resolution: failure.resolution,
+            message: match &failure.error {
+                PersistenceError::CommandRejected { code, message }
+                    if code == "attachment_too_large" =>
+                {
+                    Some(message.clone())
+                }
+                _ => None,
+            },
         }
     }
 }
@@ -170,9 +180,13 @@ impl From<BodyDecodeError> for AttendeeHttpError {
 
 impl IntoResponse for AttendeeHttpError {
     fn into_response(self) -> Response {
+        let mut error = json!({"code": self.code});
+        if let Some(message) = self.message {
+            error["message"] = json!(message);
+        }
         (
             self.status,
-            Json(json!({"error":{"code":self.code},"resolution":self.resolution})),
+            Json(json!({"error":error,"resolution":self.resolution})),
         )
             .into_response()
     }

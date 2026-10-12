@@ -252,7 +252,13 @@ impl RoomPortalMcp {
         let attachment = ingress
             .read(authority, input.attachment_id.clone())
             .await
-            .map_err(|error| error.message)?;
+            .map_err(|error| {
+                if error.code == "attachment_too_large" {
+                    format!("{}: {}", error.code, error.message)
+                } else {
+                    error.message
+                }
+            })?;
         let result = attachment_tool_result(&attachment)?;
         reservation.complete(attachment.size)?;
         Ok(result)

@@ -44,7 +44,7 @@ fn public_read_error(error: PersistenceError) -> ProviderAttachmentReadError {
         PersistenceError::CommandRejected { code, message }
             if matches!(
                 code.as_bytes(),
-                b"message_attachment_missing" | b"stale_provider_turn"
+                b"message_attachment_missing" | b"stale_provider_turn" | b"attachment_too_large"
             ) =>
         {
             ProviderAttachmentReadError { code, message }

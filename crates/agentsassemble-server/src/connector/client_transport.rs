@@ -40,7 +40,18 @@ pub(super) async fn read_response(
     if !status.is_success() {
         let (code, resolution) =
             room_client_transport::remote_rejection(&value, "connector_remote_rejection");
-        return Err(ConnectorClientError { code, resolution });
+        return Err(ConnectorClientError {
+            message: if code == "attachment_too_large" {
+                value["error"]["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned()
+            } else {
+                String::new()
+            },
+            code,
+            resolution,
+        });
     }
     Ok(value)
 }

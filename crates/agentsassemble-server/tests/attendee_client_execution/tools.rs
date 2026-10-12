@@ -22,6 +22,7 @@ pub(super) async fn verify(
     receiver: &mut mpsc::Receiver<ProviderRoomToolCommand>,
     attachment: (
         &str,
+        &str,
         &mut mpsc::Receiver<agentsassemble_provider::ProviderAttachmentReadCommand>,
     ),
 ) -> TestResult {
@@ -29,6 +30,7 @@ pub(super) async fn verify(
         StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
     );
     let attachment_id = attachment.0.to_owned();
+    let large_id = attachment.1.to_owned();
     let store = store.clone();
     let delegate = store.snapshot("general", 0, 200).await?.agent_sessions[0]
         .participant_id
@@ -87,6 +89,18 @@ pub(super) async fn verify(
                 .map(|text| text.text.as_str()),
             Some("external attachment proof")
         );
+        let refused = client
+            .call_tool(
+                CallToolRequestParams::new("read_attachment").with_arguments(
+                    serde_json::from_value(json!({"attachment_id":large_id})).unwrap(),
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(refused.is_error, Some(true));
+        let message = &refused.content[0].as_text().unwrap().text;
+        assert!(message.contains("attachment_too_large"));
+        assert!(message.contains("10485761") && message.contains("10485760"));
         crate::delegated_pin::verify(&client, &store, &delegate, event_id, None, events)
             .await
             .unwrap();
@@ -106,7 +120,7 @@ pub(super) async fn verify(
         }
         call.complete(Ok(result));
     }
-    let command = tokio::time::timeout(Duration::from_secs(10), attachment.1.recv())
+    let command = tokio::time::timeout(Duration::from_secs(10), attachment.2.recv())
         .await?
         .ok_or("attachment request missing")?;
     let result = client
@@ -114,6 +128,17 @@ pub(super) async fn verify(
         .await?;
     assert_eq!(result.content, b"external attachment proof");
     command.complete(Ok(result));
+    let command = tokio::time::timeout(Duration::from_secs(10), attachment.2.recv())
+        .await?
+        .ok_or("oversized read missing")?;
+    let failure = client
+        .read_provider_attachment(connection, &command)
+        .await
+        .expect_err("metadata limit");
+    assert_eq!(failure.code, "attachment_too_large");
+    assert!(failure.message.contains("10485761") && failure.message.contains("10485760"));
+    command.complete(Err(failure.into()));
+
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             tokio::select! {

@@ -126,6 +126,7 @@ async fn store_upload(
         })
         .await
         .map_err(|_| ConnectorHttpError {
+            message: None,
             status: axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             code: "connector_operation_failed".into(),
             resolution: agentsassemble_protocol::CommandResolution::Unresolved,

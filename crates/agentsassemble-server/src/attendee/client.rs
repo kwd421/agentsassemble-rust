@@ -20,9 +20,10 @@ const RESPONSE_LIMIT: usize = 2 * agentsassemble_domain::MAX_ATTACHMENT_BYTES
     + 200 * (agentsassemble_domain::MAX_MESSAGE_CHARACTERS * 4 + 8192);
 
 #[derive(Debug, thiserror::Error)]
-#[error("{code}")]
+#[error("{code}{suffix}", suffix = if .message.is_empty() { String::new() } else { format!(": {}", .message) })]
 pub struct AttendeeClientError {
     pub code: String,
+    pub message: String,
     pub resolution: Option<CommandResolution>,
 }
 
@@ -46,6 +47,7 @@ impl AttendeeClientError {
     pub(crate) fn local(code: &str) -> Self {
         Self {
             code: code.to_owned(),
+            message: String::new(),
             resolution: None,
         }
     }
@@ -330,7 +332,18 @@ async fn read_response(request: reqwest::RequestBuilder) -> Result<Value, Attend
     if !status.is_success() {
         let (code, resolution) =
             room_client_transport::remote_rejection(&value, "attendee_remote_rejection");
-        return Err(AttendeeClientError { code, resolution });
+        return Err(AttendeeClientError {
+            message: if code == "attachment_too_large" {
+                value["error"]["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned()
+            } else {
+                String::new()
+            },
+            code,
+            resolution,
+        });
     }
     Ok(value)
 }

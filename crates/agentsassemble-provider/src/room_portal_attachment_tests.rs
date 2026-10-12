@@ -398,6 +398,22 @@ async fn assert_unlisted_and_malformed_ids(
         .await
         .unwrap_or_else(|error| panic!("join missing attachment read: {error}"));
     assert_eq!(missing.is_error, Some(true));
+    let oversized = tokio::spawn(call_tool(
+        client.clone(),
+        "read_attachment",
+        json!({"attachment_id": "ma_44444444444444444444444444444444"}),
+    ));
+    let command = commands.recv().await.expect("retry reaches room owner");
+    command.complete(Err(crate::room_attachment::ProviderAttachmentReadError {
+        code: "attachment_too_large".into(),
+        message: "Attachment size 52428800 bytes exceeds read limit 10485760 bytes.".into(),
+    }));
+    let oversized = oversized.await.expect("oversized response");
+    assert_eq!(oversized.is_error, Some(true));
+    let message = oversized.content[0].as_text().expect("read error");
+    assert!(message.text.contains("attachment_too_large"));
+    assert!(message.text.contains("52428800") && message.text.contains("10485760"));
+
     let malformed = call_tool(
         client.clone(),
         "read_attachment",

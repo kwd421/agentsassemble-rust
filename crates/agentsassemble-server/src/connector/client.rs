@@ -18,15 +18,17 @@ use uuid::Uuid;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
-#[error("{code}")]
+#[error("{code}{suffix}", suffix = if .message.is_empty() { String::new() } else { format!(": {}", .message) })]
 pub struct ConnectorClientError {
     pub code: String,
+    pub message: String,
     pub resolution: Option<CommandResolution>,
 }
 impl ConnectorClientError {
     fn local(code: &str) -> Self {
         Self {
             code: code.to_owned(),
+            message: String::new(),
             resolution: None,
         }
     }

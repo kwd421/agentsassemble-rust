@@ -173,6 +173,7 @@ pub(crate) struct ConnectorHttpError {
     status: StatusCode,
     pub(super) code: std::borrow::Cow<'static, str>,
     resolution: CommandResolution,
+    message: Option<String>,
 }
 
 impl ConnectorHttpError {
@@ -181,6 +182,7 @@ impl ConnectorHttpError {
             status: StatusCode::BAD_REQUEST,
             code: "invalid_connector_request".into(),
             resolution: CommandResolution::Rejected,
+            message: None,
         }
     }
     pub(crate) fn unauthorized() -> Self {
@@ -188,6 +190,7 @@ impl ConnectorHttpError {
             status: StatusCode::UNAUTHORIZED,
             code: "connector_credential_required".into(),
             resolution: CommandResolution::Rejected,
+            message: None,
         }
     }
     pub(crate) fn from_persistence(error: PersistenceError) -> Self {
@@ -227,6 +230,14 @@ impl ConnectorHttpError {
             status,
             code: code.to_owned().into(),
             resolution: failure.resolution,
+            message: match &failure.error {
+                PersistenceError::CommandRejected { code, message }
+                    if code == "attachment_too_large" =>
+                {
+                    Some(message.clone())
+                }
+                _ => None,
+            },
         }
     }
 }
@@ -245,9 +256,13 @@ impl From<BodyDecodeError> for ConnectorHttpError {
 
 impl IntoResponse for ConnectorHttpError {
     fn into_response(self) -> Response {
+        let mut error = json!({"code": self.code});
+        if let Some(message) = self.message {
+            error["message"] = json!(message);
+        }
         (
             self.status,
-            Json(json!({"error":{"code":self.code},"resolution":self.resolution})),
+            Json(json!({"error":error,"resolution":self.resolution})),
         )
             .into_response()
     }
@@ -261,6 +276,7 @@ impl From<crate::upload_body_budget::Error> for ConnectorHttpError {
                 status: StatusCode::TOO_MANY_REQUESTS,
                 code: crate::upload_body_budget::ERROR_CODE.into(),
                 resolution: agentsassemble_protocol::CommandResolution::Rejected,
+                message: None,
             },
         }
     }

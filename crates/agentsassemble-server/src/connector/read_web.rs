@@ -373,6 +373,7 @@ fn messages(
 
 fn rejected(status: StatusCode, code: &'static str) -> ConnectorHttpError {
     ConnectorHttpError {
+        message: None,
         status,
         code: code.into(),
         resolution: agentsassemble_protocol::CommandResolution::Rejected,

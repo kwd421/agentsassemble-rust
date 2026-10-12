@@ -193,3 +193,19 @@ impl RoomAttendeeClient {
 fn invalid_response() -> AttendeeClientError {
     AttendeeClientError::local("invalid_attendee_tool_response")
 }
+
+impl From<AttendeeClientError> for agentsassemble_provider::ProviderAttachmentReadError {
+    fn from(failure: AttendeeClientError) -> Self {
+        if failure.code == "attachment_too_large" {
+            Self {
+                code: failure.code.into(),
+                message: failure.message,
+            }
+        } else {
+            Self {
+                code: "attendee_attachment_rejected".into(),
+                message: failure.code,
+            }
+        }
+    }
+}

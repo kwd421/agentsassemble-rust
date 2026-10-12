@@ -78,9 +78,7 @@ impl Tools {
                     Err(failure) if failure.is_retryable() => return Err(failure),
                     result => {
                         if let Some(command) = self.attachment.take() {
-                            command.complete(result.map_err(|failure| ProviderAttachmentReadError {
-                                code: "attendee_attachment_rejected".into(), message: failure.code,
-                            }));
+                            command.complete(result.map_err(ProviderAttachmentReadError::from));
                         }
                     }
                 }
