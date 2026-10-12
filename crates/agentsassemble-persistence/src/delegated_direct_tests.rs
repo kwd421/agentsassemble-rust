@@ -47,6 +47,16 @@ async fn channels_preserve_other_settings_and_bind_replay_revision_and_limits() 
     );
     let canonical = &first.outcome.events[0];
     assert_eq!(canonical.event_type, "room_settings_updated");
+    for event in &first.outcome.events {
+        assert_eq!(event.actor.participant_id, authority.delegate_id());
+        assert_eq!(event.actor.participant_type, "agent");
+        assert_eq!(event.actor_id.as_deref(), Some(authority.delegate_id()));
+        assert_eq!(event.actor_type.as_deref(), Some("agent"));
+        assert_eq!(
+            event.extra["on_behalf_of_participant_id"],
+            agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID
+        );
+    }
     assert_eq!(
         canonical.extra["actor_participant_id"],
         first.outcome.event.extra["actor_participant_id"]
@@ -186,6 +196,11 @@ async fn mute_shares_human_targets_and_next_call_revocation() -> TestResult {
             muted
         );
         assert_eq!(result.outcome.events[0].event_type, "participant_muted");
+        for event in &result.outcome.events {
+            assert_eq!(event.actor.participant_id, authority.delegate_id());
+            assert_eq!(event.actor.participant_type, "agent");
+            assert_eq!(event.extra["on_behalf_of_participant_id"], owner_id);
+        }
         assert_eq!(
             result.outcome.event.extra["target_id"],
             target.participant_id

@@ -73,6 +73,7 @@ pub(crate) async fn confirm_in(
     .await?;
     let reservation = crate::agent_reconciliation::validate_candidate_authority(&session, &rows)?
         .ok_or_else(invalid_stop)?;
+    let first_seq = crate::room_event_sequence::next_sequence(tx, &session.public.room_id).await?;
     let terminal = crate::provider_turn_stop::terminalize_confirmed_stop_turn(tx, &session).await?;
     session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectApplied;
     session.public.updated_at = Utc::now();
@@ -88,6 +89,14 @@ pub(crate) async fn confirm_in(
     .await?;
     let mut events = terminal.into_iter().collect::<Vec<_>>();
     events.extend(outcome.events);
+    crate::delegated_event_attribution::control_events(
+        tx,
+        &reservation.principal,
+        &reservation.payload,
+        first_seq,
+        &mut events,
+    )
+    .await?;
     Ok(AgentTurnCommit {
         events,
         next_assignments: Vec::new(),

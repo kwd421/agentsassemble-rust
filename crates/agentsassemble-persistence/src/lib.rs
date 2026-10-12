@@ -1,5 +1,6 @@
 mod delegated_agent_control;
 mod delegated_direct;
+mod delegated_event_attribution;
 pub use delegated_agent_control::{AgentControlAuthority, DelegatedAgentControl};
 mod delegated_pin;
 pub use delegated_pin::DelegateRoomAuthority;

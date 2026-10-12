@@ -40,6 +40,7 @@ async fn delegated_external_stop_keeps_custody_and_finishes_at_cleanup() -> Test
             return Err("external stop transferred custody or completed prematurely".into());
         };
         assert_eq!(events.len(), usize::from(!restarted));
+        assert_executor(&events, &control.principal().participant_id)?;
     }
     let report = crate::AttendeeCleanupReport {
         request_id: Uuid::new_v4(),
@@ -65,6 +66,7 @@ async fn delegated_external_stop_keeps_custody_and_finishes_at_cleanup() -> Test
         outcome.event.extra["actor_participant_id"],
         control.principal().participant_id
     );
+    assert_executor(&outcome.events, &control.principal().participant_id)?;
     assert!(!serde_json::to_string(&outcome.result)?.contains(&report.stopped.runtime_lease_token));
     assert!(store.load_attendee_cleanup(&cleanup).await?.is_none());
     Ok(())
@@ -268,6 +270,7 @@ async fn delegated_lifecycle_uses_shared_effect_receipts_and_replay() -> TestRes
     };
     assert_eq!(stopped.result["status"], "succeeded");
     for outcome in [&started, &*stopped] {
+        assert_executor(&outcome.events, &start.principal().participant_id)?;
         assert_eq!(
             outcome.event.extra["actor_participant_id"],
             start.principal().participant_id
@@ -283,6 +286,57 @@ async fn delegated_lifecycle_uses_shared_effect_receipts_and_replay() -> TestRes
                 .all(|event| event.extra.contains_key("on_behalf_of_participant_id"))
         );
     }
+    let before = store.snapshot("general", 0, 200).await?.last_seq;
+    let (retry_start, _) = store
+        .admit_delegated_agent_control(&delegate, &request(true), |_, _, _| Ok(()))
+        .await?;
+    let AgentStartPlan::Start(effect) = store
+        .prepare_agent_launch(
+            AgentControlAuthority::Delegated(&retry_start),
+            retry_start.request_id(),
+            retry_start.payload(),
+            retry_start.action(),
+        )
+        .await?
+    else {
+        return Err("no retry start".into());
+    };
+    store
+        .authorize_agent_start_effect(
+            AgentControlAuthority::Delegated(&retry_start),
+            retry_start.request_id(),
+            retry_start.payload(),
+            &effect.operation_id,
+            retry_start.action(),
+            "owned-runtime-2",
+            "supervisor-instance-2",
+            "lease-generation-2",
+        )
+        .await?;
+    let pending = store
+        .mark_agent_start_unconfirmed(
+            retry_start.principal(),
+            AGENT_ID,
+            &effect.operation_id,
+            "owned-runtime-2",
+            "supervisor-instance-2",
+            "controlled_unknown",
+            "Controlled unconfirmed start.",
+        )
+        .await?;
+    assert_executor(&pending, &retry_start.principal().participant_id)?;
+    let candidate = store
+        .load_runtime_reconciliation_candidates()
+        .await?
+        .into_iter()
+        .find(|c| c.session.public.session_id == AGENT_ID)
+        .ok_or("missing retry candidate")?;
+    store
+        .apply_runtime_reconciliation(&candidate, &crate::RuntimeReconciliationObservation::Gone)
+        .await?;
+    let recovered = store.snapshot("general", before, 200).await?.events;
+    assert!(recovered.iter().any(|event| event.event_type == "error"));
+    assert_executor(&recovered, &retry_start.principal().participant_id)?;
     Ok(())
 }
 
@@ -407,5 +461,28 @@ async fn control_revalidates_before_reservation_and_effect_and_refuses_execution
             .await
             .is_err()
     );
+    Ok(())
+}
+
+fn assert_executor(events: &[agentsassemble_domain::RoomEvent], actor: &str) -> TestResult {
+    for event in events {
+        assert_eq!(event.actor.participant_id, actor);
+        assert_eq!(event.actor.participant_type, "agent");
+        assert_eq!(event.actor_id.as_deref(), Some(actor));
+        assert_eq!(event.actor_type.as_deref(), Some("agent"));
+        assert_eq!(
+            event.extra["on_behalf_of_participant_id"],
+            agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID
+        );
+        let imported = crate::backup_json::event(serde_json::to_value(event)?)?;
+        assert_eq!(imported.actor, event.actor);
+        let viewer = crate::human_session_authority_tests::local_operator_principal();
+        let projected = agentsassemble_domain::public_event_for_principal(event, &viewer);
+        assert_eq!(projected.actor, event.actor);
+        assert_eq!(
+            projected.extra["on_behalf_of_participant_id"],
+            event.extra["on_behalf_of_participant_id"]
+        );
+    }
     Ok(())
 }

@@ -236,10 +236,10 @@ pub(crate) async fn reject_lifecycle_command(
     reservation: &LifecycleReservation<'_>,
     failure_code: &str,
     failure_message: &str,
-) -> Result<(), PersistenceError> {
+) -> Result<Value, PersistenceError> {
     validate_stored_rejection(failure_code, failure_message)?;
-    let updated = sqlx::query(
-        "UPDATE lifecycle_command_reservations SET status = 'rejected', failure_code = ?, failure_message = ? WHERE room_id = ? AND principal_id = ? AND request_id = ? AND action = ? AND payload_hash = ? AND session_id = ? AND operation_id = ? AND status = 'pending' AND phase = ? AND prepared_result_json = ?",
+    let payload = sqlx::query_scalar::<_, String>(
+        "UPDATE lifecycle_command_reservations SET status = 'rejected', failure_code = ?, failure_message = ? WHERE room_id = ? AND principal_id = ? AND request_id = ? AND action = ? AND payload_hash = ? AND session_id = ? AND operation_id = ? AND status = 'pending' AND phase = ? AND prepared_result_json = ? RETURNING payload_json",
     )
     .bind(failure_code)
     .bind(failure_message)
@@ -252,13 +252,10 @@ pub(crate) async fn reject_lifecycle_command(
     .bind(reservation.operation_id)
     .bind(reservation.phase)
     .bind(reservation.prepared_result_json)
-    .execute(&mut **transaction)
+    .fetch_optional(&mut **transaction)
     .await?
-    .rows_affected();
-    if updated != 1 {
-        return Err(invalid_reservation());
-    }
-    Ok(())
+    .ok_or_else(invalid_reservation)?;
+    Ok(serde_json::from_str(&payload)?)
 }
 
 pub(crate) fn stored_rejection(failure_code: String, failure_message: String) -> PersistenceError {

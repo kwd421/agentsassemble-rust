@@ -251,7 +251,7 @@ impl SqliteStore {
             "Provider launch failed.".clone_into(&mut session.public.last_error);
         }
         session.public.last_error_code = error_code.to_owned();
-        reject_lifecycle_command(
+        let payload = reject_lifecycle_command(
             &mut transaction,
             &reservation,
             &session.public.last_error_code,
@@ -266,6 +266,8 @@ impl SqliteStore {
         clear_intent(&mut session);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
+        let first_seq =
+            crate::room_event_sequence::next_sequence(&mut transaction, &principal.room_id).await?;
         let error = append_error_event(
             &mut transaction,
             principal,
@@ -275,8 +277,17 @@ impl SqliteStore {
         )
         .await?;
         let state = append_state_event(&mut transaction, principal, &session.public).await?;
+        let mut events = vec![error, state];
+        crate::delegated_event_attribution::control_events(
+            &mut transaction,
+            principal,
+            &payload,
+            first_seq,
+            &mut events,
+        )
+        .await?;
         let commit = AgentLaunchFailureCommit {
-            events: vec![error, state],
+            events,
             code: session.public.last_error_code,
             message: session.public.last_error,
         };
@@ -336,6 +347,15 @@ impl SqliteStore {
         session.lifecycle_intent_status = AgentLifecycleIntentStatus::Unconfirmed;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
+        let first_seq =
+            crate::room_event_sequence::next_sequence(&mut transaction, &principal.room_id).await?;
+        let (actor, payload) = crate::delegated_event_attribution::recorded_control(
+            &mut transaction,
+            &principal.room_id,
+            agent_id,
+            operation_id,
+        )
+        .await?;
         let error = append_error_event(
             &mut transaction,
             principal,
@@ -345,7 +365,16 @@ impl SqliteStore {
         )
         .await?;
         let state = append_state_event(&mut transaction, principal, &session.public).await?;
+        let mut events = vec![error, state];
+        crate::delegated_event_attribution::control_events(
+            &mut transaction,
+            &actor,
+            &payload,
+            first_seq,
+            &mut events,
+        )
+        .await?;
         transaction.commit().await?;
-        Ok(vec![error, state])
+        Ok(events)
     }
 }

@@ -100,11 +100,22 @@ impl SqliteStore {
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
         if session.public.external_owned && session.public.process_ownership == "external" {
-            let events = crate::attendee::stop::prepare_in(
+            let first_seq =
+                crate::room_event_sequence::next_sequence(&mut transaction, &principal.room_id)
+                    .await?;
+            let mut events = crate::attendee::stop::prepare_in(
                 &mut transaction,
                 principal,
                 &mut session,
                 &operation_id,
+            )
+            .await?;
+            crate::delegated_event_attribution::control_events(
+                &mut transaction,
+                principal,
+                payload,
+                first_seq,
+                &mut events,
             )
             .await?;
             authority.record_success(&mut transaction).await?;
@@ -179,6 +190,8 @@ impl SqliteStore {
         reason.0.clone_into(&mut session.public.last_error_code);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
+        let first_seq =
+            crate::room_event_sequence::next_sequence(&mut transaction, &principal.room_id).await?;
         let error = append_error_event(
             &mut transaction,
             principal,
@@ -188,8 +201,17 @@ impl SqliteStore {
         )
         .await?;
         let state = append_state_event(&mut transaction, principal, &session.public).await?;
+        let mut events = vec![error, state];
+        crate::delegated_event_attribution::control_events(
+            &mut transaction,
+            principal,
+            payload,
+            first_seq,
+            &mut events,
+        )
+        .await?;
         transaction.commit().await?;
-        Ok(vec![error, state])
+        Ok(events)
     }
 
     /// Records confirmed shutdown before final state and command result writes.
@@ -218,8 +240,25 @@ impl SqliteStore {
             expected_status,
             "stale_stop_confirmation",
         )?;
+        let first_seq =
+            crate::room_event_sequence::next_sequence(&mut transaction, room_id).await?;
+        let (actor, payload) = crate::delegated_event_attribution::recorded_control(
+            &mut transaction,
+            room_id,
+            session_id,
+            operation_id,
+        )
+        .await?;
         crate::provider_turn_stop::terminalize_confirmed_stop_turn(&mut transaction, &session)
             .await?;
+        crate::delegated_event_attribution::control_events(
+            &mut transaction,
+            &actor,
+            &payload,
+            first_seq,
+            &mut [],
+        )
+        .await?;
         session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectApplied;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
@@ -285,6 +324,15 @@ impl SqliteStore {
             &participant,
         )
         .await?;
+        let first_seq =
+            crate::room_event_sequence::next_sequence(&mut transaction, &principal.room_id).await?;
+        let (actor, payload) = crate::delegated_event_attribution::recorded_control(
+            &mut transaction,
+            &principal.room_id,
+            agent_id,
+            operation_id,
+        )
+        .await?;
         let error = append_error_event(
             &mut transaction,
             principal,
@@ -294,8 +342,17 @@ impl SqliteStore {
         )
         .await?;
         let state = append_state_event(&mut transaction, principal, &session.public).await?;
+        let mut events = vec![error, state];
+        crate::delegated_event_attribution::control_events(
+            &mut transaction,
+            &actor,
+            &payload,
+            first_seq,
+            &mut events,
+        )
+        .await?;
         transaction.commit().await?;
-        Ok(vec![error, state])
+        Ok(events)
     }
 
     /// Finalizes a previously confirmed stop without repeating its external effect.
@@ -331,10 +388,20 @@ impl SqliteStore {
             });
         }
         let (room, settings) = load_active_room(&mut transaction, &principal.room_id).await?;
+        let first_seq =
+            crate::room_event_sequence::next_sequence(&mut transaction, &principal.room_id).await?;
         let mut outcome =
             finalize_stop_in(&mut transaction, principal, request_id, payload).await?;
         let scheduled = assign_pending_in(&mut transaction, &room, &settings).await?;
         outcome.events.extend(scheduled.events);
+        crate::delegated_event_attribution::control_events(
+            &mut transaction,
+            principal,
+            payload,
+            first_seq,
+            &mut outcome.events,
+        )
+        .await?;
         authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(RoomCommandMutation {
@@ -388,7 +455,18 @@ pub(crate) async fn finalize_stop_in(
         &operation_id,
     );
     finish_lifecycle_command(transaction, &reservation).await?;
-    let events = detach_confirmed_session(transaction, principal, &agent_id, &mut session).await?;
+    let first_seq =
+        crate::room_event_sequence::next_sequence(transaction, &principal.room_id).await?;
+    let mut events =
+        detach_confirmed_session(transaction, principal, &agent_id, &mut session).await?;
+    crate::delegated_event_attribution::control_events(
+        transaction,
+        principal,
+        payload,
+        first_seq,
+        &mut events,
+    )
+    .await?;
     let result = json!({
         "agent_session": session.public,
         "process": {

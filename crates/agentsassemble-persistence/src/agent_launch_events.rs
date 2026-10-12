@@ -21,7 +21,18 @@ pub(crate) async fn commit_launch_result(
     runtime_reused: bool,
     command_action: &'static str,
 ) -> Result<CommandOutcome, PersistenceError> {
-    let events = append_launch_events(transaction, principal, session, participant, joined).await?;
+    let first_seq =
+        crate::room_event_sequence::next_sequence(transaction, &principal.room_id).await?;
+    let mut events =
+        append_launch_events(transaction, principal, session, participant, joined).await?;
+    crate::delegated_event_attribution::control_events(
+        transaction,
+        principal,
+        payload,
+        first_seq,
+        &mut events,
+    )
+    .await?;
     let mut result = launch_result(session, runtime_reused, &events);
     if command_action == crate::agent_readd::READD {
         result["status"] = json!("readded");

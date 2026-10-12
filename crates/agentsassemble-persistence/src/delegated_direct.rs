@@ -117,6 +117,8 @@ impl SqliteStore {
                 None,
             ));
         }
+        let first_seq =
+            crate::room_event_sequence::next_sequence(&mut tx, authority.room_id()).await?;
         let (mut mutation, target, description) = match request {
             DirectRoomAction::StartAgent(_) | DirectRoomAction::StopAgent(_) => {
                 return Err(rejected("bad_request", "Use the lifecycle mutation owner."));
@@ -192,6 +194,14 @@ impl SqliteStore {
         }
         crate::room_turns::support::insert_event(&mut tx, &event).await?;
         mutation.outcome.events.push(event.clone());
+        crate::delegated_event_attribution::attribute_since(
+            &mut tx,
+            &proof.delegate,
+            &proof.owner.participant_id,
+            first_seq,
+            &mut mutation.outcome.events,
+        )
+        .await?;
         mutation.outcome.event = event.clone();
         mutation.outcome.result = json!({"status":"succeeded","request_id":request_id,"action":request.name(),"target_id":target,"event_id":event.id,"event":event,"events":mutation.outcome.events});
         crate::command_admission::store_command_result(

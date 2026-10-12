@@ -19,6 +19,11 @@ pub(crate) async fn append_session_event(
     extra: BTreeMap<String, Value>,
     created_at: chrono::DateTime<Utc>,
 ) -> Result<RoomEvent, PersistenceError> {
+    let actor_type = if principal.client_kind == agentsassemble_domain::ClientKind::Browser {
+        "human"
+    } else {
+        "agent"
+    };
     let event = RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),
@@ -28,12 +33,12 @@ pub(crate) async fn append_session_event(
         event_type: event_type.to_owned(),
         actor: Actor {
             participant_id: principal.participant_id.clone(),
-            participant_type: "human".to_owned(),
+            participant_type: actor_type.to_owned(),
         },
         participant_id: Some(session.participant_id.clone()),
         participant_type: Some("agent".to_owned()),
         actor_id: Some(principal.participant_id.clone()),
-        actor_type: Some("human".to_owned()),
+        actor_type: Some(actor_type.to_owned()),
         display_name: Some(session.display_name.clone()),
         content: None,
         message_kind: None,
@@ -145,8 +150,17 @@ pub(crate) async fn commit_already_stopped(
     payload: &Value,
     session: &AgentSession,
 ) -> Result<CommandOutcome, PersistenceError> {
+    let first_seq = next_sequence(transaction, &principal.room_id).await?;
     let event = append_state_event(transaction, principal, session).await?;
-    let events = vec![event];
+    let mut events = vec![event];
+    crate::delegated_event_attribution::control_events(
+        transaction,
+        principal,
+        payload,
+        first_seq,
+        &mut events,
+    )
+    .await?;
     let result = json!({
         "agent_session": session,
         "process": {

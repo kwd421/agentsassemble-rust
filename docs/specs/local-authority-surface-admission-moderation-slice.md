@@ -1,5 +1,19 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
+## Round-4 delegated event attribution (2026-10-12)
+
+Channel create/rename, mute/unmute, pin and agent start/stop on managed provider,
+attendee and connector transports name the AI executor in top-level `actor` and
+`actor_id` with type `agent`; the bound human authorizer remains in
+`on_behalf_of_participant_id`. Apply this to every event committed by the action,
+including private cancellation, pending/error events and restart recovery. Preserve
+target participant/session fields and recipient visibility. Direct human events
+keep their existing actor. The event producer owns attribution; projection,
+archive allowlists/provenance and generated frontend event contracts must preserve
+these existing fields without inventing a human executor. Verify live transport
+receipts/publication and recovered durable events, including failed recovery.
+Frontend views remain unchanged; report any changed displayed strings.
+
 ## Round-4 delegated mute correction (2026-10-12)
 
 Provider, attendee and connector director calls must refuse `muted=true` when

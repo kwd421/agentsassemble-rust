@@ -112,6 +112,16 @@ pub(super) async fn verify(
             agentsassemble_domain::AgentRuntimeStatus::Stopped
         );
         for result in [started, stopped] {
+            for event in result["events"].as_array().unwrap() {
+                assert_eq!(event["actor"]["participant_id"], delegate);
+                assert_eq!(event["actor"]["participant_type"], "agent");
+                assert_eq!(event["actor_id"], delegate);
+                assert_eq!(event["actor_type"], "agent");
+                assert_eq!(
+                    event["on_behalf_of_participant_id"],
+                    LOCAL_OPERATOR_PARTICIPANT_ID
+                );
+            }
             assert_eq!(result["event"]["actor_participant_id"], delegate);
             assert_eq!(
                 result["event"]["on_behalf_of_participant_id"],

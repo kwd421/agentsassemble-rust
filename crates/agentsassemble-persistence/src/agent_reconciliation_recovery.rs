@@ -76,6 +76,9 @@ async fn reject_abandoned_in_transaction(
     clear_intent(&mut session);
     session.public.updated_at = Utc::now();
     save_reconciled_session(transaction, &session).await?;
+    let first_seq =
+        crate::room_event_sequence::next_sequence(transaction, &reservation.principal.room_id)
+            .await?;
     append_error_event(
         transaction,
         &reservation.principal,
@@ -85,6 +88,14 @@ async fn reject_abandoned_in_transaction(
     )
     .await?;
     append_state_event(transaction, &reservation.principal, &session.public).await?;
+    crate::delegated_event_attribution::control_events(
+        transaction,
+        &reservation.principal,
+        &reservation.payload,
+        first_seq,
+        &mut [],
+    )
+    .await?;
     Ok(())
 }
 
@@ -336,6 +347,9 @@ async fn reject_recovered_start(
     clear_intent(session);
     session.public.updated_at = Utc::now();
     save_reconciled_session(transaction, session).await?;
+    let first_seq =
+        crate::room_event_sequence::next_sequence(transaction, &reservation.principal.room_id)
+            .await?;
     append_error_event(
         transaction,
         &reservation.principal,
@@ -345,6 +359,14 @@ async fn reject_recovered_start(
     )
     .await?;
     append_state_event(transaction, &reservation.principal, &session.public).await?;
+    crate::delegated_event_attribution::control_events(
+        transaction,
+        &reservation.principal,
+        &reservation.payload,
+        first_seq,
+        &mut [],
+    )
+    .await?;
     Ok(())
 }
 
@@ -358,6 +380,9 @@ async fn finalize_recovered_stop(
         .reservation
         .as_ref()
         .ok_or_else(invalid_stored_authority)?;
+    let first_seq =
+        crate::room_event_sequence::next_sequence(transaction, &reservation.principal.room_id)
+            .await?;
     finish_lifecycle_command(transaction, &reservation_ref(reservation)).await?;
     session.pending_inputs =
         crate::agent_lifecycle::merged_turn_queue(transaction, session).await?;
@@ -420,13 +445,23 @@ async fn finalize_recovered_stop(
         events,
     )
     .await?;
-    if floor_progression == FloorProgression::Defer {
-        return Ok(Vec::new());
-    }
-    let (room, settings) = load_active_room(transaction, &session.public.room_id).await?;
-    Ok(assign_pending_in(transaction, &room, &settings)
-        .await?
-        .next_assignments)
+    let assignments = if floor_progression == FloorProgression::Defer {
+        Vec::new()
+    } else {
+        let (room, settings) = load_active_room(transaction, &session.public.room_id).await?;
+        assign_pending_in(transaction, &room, &settings)
+            .await?
+            .next_assignments
+    };
+    crate::delegated_event_attribution::control_events(
+        transaction,
+        &reservation.principal,
+        &reservation.payload,
+        first_seq,
+        &mut [],
+    )
+    .await?;
+    Ok(assignments)
 }
 
 fn reservation_ref(

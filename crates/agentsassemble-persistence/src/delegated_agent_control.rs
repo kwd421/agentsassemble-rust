@@ -108,9 +108,9 @@ impl AgentControlAuthority<'_> {
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Attribution {
+pub(crate) struct Attribution {
     actor_participant_id: String,
-    on_behalf_of_participant_id: String,
+    pub(crate) on_behalf_of_participant_id: String,
 }
 
 impl SqliteStore {
@@ -267,6 +267,9 @@ pub(crate) async fn store_control_result(
         )
         .await?;
         for canonical in &mut events {
+            canonical.actor.clone_from(&event.actor);
+            canonical.actor_id.clone_from(&event.actor_id);
+            canonical.actor_type.clone_from(&event.actor_type);
             for key in [
                 "actor_participant_id",
                 "on_behalf_of_participant_id",
