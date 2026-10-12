@@ -105,7 +105,10 @@ impl Output {
         }
     }
     pub(crate) async fn send(&self, frame: serde_json::Value) -> Result<(), ()> {
-        let bytes = serde_json::to_vec(&frame).map_err(|_| ())?;
+        self.send_bytes(serde_json::to_vec(&frame).map_err(|_| ())?)
+            .await
+    }
+    pub(crate) async fn send_bytes(&self, bytes: Vec<u8>) -> Result<(), ()> {
         if bytes.len() > 96 * 1024 {
             return Err(());
         }

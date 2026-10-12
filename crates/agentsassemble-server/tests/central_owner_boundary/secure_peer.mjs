@@ -18,7 +18,8 @@ async function post(path, body, extra={}) {
 }
 const denied = await remote.fetch('/api/runtime/version'); assert.equal(denied.status, 403);
 // Advertisement stays inside headers; the transport still checks exact frame keys.
-assert.equal(denied.headers.get('x-agentsassemble-upload-credit'), '1'); await denied.text();
+assert.equal(denied.headers.get('x-agentsassemble-upload-credit'), '1');
+assert.equal(denied.headers.get('x-agentsassemble-body-binary'), '1'); await denied.text();
 const owner = await post('/api/central-owner/session', { grant_token:config.grant, generation:config.target.generation,
   device:{device_name:'Encrypted test',browser:'Node WebCrypto',os:'test'} });
 const root = {session_token:owner.session_token,generation:config.target.generation};
@@ -114,7 +115,7 @@ const slowUpload = new ReadableStream({ async pull(controller) {
   controller.enqueue(encodedUpload.slice(uploadOffset, uploadOffset + 64 * 1024)); uploadOffset += 64 * 1024;
 } });
 const memberHeaders = {'content-type':'application/json','x-device-token':memberDevice,authorization:`Bearer ${memberJoined.session_token}`};
-const uploadedResponse = await member.fetch('/api/message-attachments',{method:'POST',headers:memberHeaders,body:slowUpload,duplex:'half'});
+const uploadedResponse = await legacyBodyFetch(member,'/api/message-attachments',{method:'POST',headers:memberHeaders,body:slowUpload,duplex:'half'});
 const uploaded = await uploadedResponse.json();
 assert.equal(uploadedResponse.status,200); assert.equal(uploaded.attachment.size,fileBytes.length);
 assert.ok(performance.now() - uploadStarted > 10_000);
@@ -138,7 +139,7 @@ for(let i=0;i<10;i++){if((await memberReceive()).op==='snapshot')break;}
 const memberMessage=crypto.randomUUID();
 memberSocket.send(JSON.stringify({op:'command',request_id:memberMessage,action:'message.send',payload:{content:'retained member text',attachment_ids:[uploaded.attachment.id]}}));
 for(let i=0;i<10;i++){const f=await memberReceive();if(f.op==='ack'&&f.request_id===memberMessage){assert.ok(f.accepted);break;}}
-const downloaded = await member.fetch(uploaded.attachment.download_url,{headers:memberHeaders});
+const downloaded = await legacyBodyFetch(member,uploaded.attachment.download_url,{headers:memberHeaders});
 assert.equal(downloaded.status,200); assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),fileBytes);
 const largeAttachment = await verifyRoomFilePolicy({member, memberHeaders, memberSocket, memberReceive,
   managerSocket:socket, managerReceive:receive, revision:snapshot.room_settings.settings_revision});

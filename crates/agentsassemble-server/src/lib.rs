@@ -170,6 +170,7 @@ pub mod release_health;
 mod room_agent_lifecycle_runtime;
 mod room_channel;
 mod room_client_transport;
+mod secure_body_record;
 mod secure_channel;
 mod secure_client;
 mod secure_http;

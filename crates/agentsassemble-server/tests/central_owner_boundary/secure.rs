@@ -29,7 +29,8 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
         .arg("--input-type=module")
         .arg("-e")
         .arg(format!(
-            "{}\n{}\n{}",
+            "{}\n{}\n{}\n{}",
+            include_str!("legacy_body_peer.mjs"),
             include_str!("message_transfer_peer.mjs"),
             include_str!("room_file_policy_peer.mjs"),
             include_str!("secure_peer.mjs")

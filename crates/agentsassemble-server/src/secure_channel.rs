@@ -286,10 +286,14 @@ fn run(
             let Ok(plaintext) = crypto.receive.open(&record) else {
                 break;
             };
-            let Ok(frame) = serde_json::from_slice::<Frame>(&plaintext) else {
-                break;
+            let accepted = if plaintext.first() == Some(&crate::secure_body_record::REQUEST) {
+                requests.accept_binary(&plaintext)
+            } else if let Ok(frame) = serde_json::from_slice::<Frame>(&plaintext) {
+                requests.accept(frame).await
+            } else {
+                Err(())
             };
-            if requests.accept(frame).await.is_err() {
+            if accepted.is_err() {
                 break;
             }
         }

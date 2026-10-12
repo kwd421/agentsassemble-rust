@@ -1,4 +1,5 @@
 //! Virtual HTTP uses the original router, public provenance and connection permits.
+use crate::secure_body_record::{self, CAPABILITY, CONFIRMED};
 use axum::{
     body::{Body, Bytes},
     http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri},
@@ -6,6 +7,10 @@ use axum::{
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use futures_util::StreamExt;
 use serde_json::json;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
@@ -30,6 +35,8 @@ pub(crate) struct Input {
     tx: mpsc::Sender<Part>,
     pub(crate) cancel: CancellationToken,
     ended: bool,
+    binary: bool,
+    offset: u64,
 }
 struct Part {
     bytes: Vec<u8>,
@@ -44,7 +51,7 @@ impl Input {
         if self.tx.is_closed() {
             return Ok(());
         }
-        if self.ended || data.len() > CHUNK_BYTES.div_ceil(3) * 4 {
+        if self.binary || self.ended || data.len() > CHUNK_BYTES.div_ceil(3) * 4 {
             return Err(());
         }
         let bytes = URL_SAFE_NO_PAD.decode(data).map_err(|_| ())?;
@@ -58,6 +65,32 @@ impl Input {
         self.ended = end;
         Ok(())
     }
+    pub(crate) fn push_binary(
+        &mut self,
+        record: secure_body_record::Record<'_>,
+        budget: &Budget,
+    ) -> Result<(), ()> {
+        if !self.binary {
+            return Err(());
+        }
+        if self.tx.is_closed() {
+            return Ok(());
+        }
+        if self.ended || record.offset != self.offset {
+            return Err(());
+        }
+        let charge = budget.charge(record.bytes.len())?;
+        self.tx
+            .try_send(Part {
+                bytes: record.bytes.to_vec(),
+                end: record.end,
+                charge,
+            })
+            .map_err(|_| ())?;
+        self.offset += record.bytes.len() as u64;
+        self.ended = record.end;
+        Ok(())
+    }
 }
 
 pub(crate) struct Start {
@@ -66,6 +99,7 @@ pub(crate) struct Start {
     pub(crate) path: String,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) upload_credit: bool,
+    pub(crate) binary_confirmed: Arc<AtomicBool>,
 }
 
 pub(crate) fn start(
@@ -82,6 +116,16 @@ pub(crate) fn start(
     ),
     (),
 > {
+    let mode = start
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(CAPABILITY))
+        .map(|(_, value)| value.as_str());
+    let binary = match mode {
+        None | Some("1") => false,
+        Some("2") if start.binary_confirmed.load(Ordering::Acquire) => true,
+        _ => return Err(()),
+    };
     let admission = provenance.admission.admit_virtual().ok_or(())?;
     let (method, uri, headers) = request_metadata(client, provenance, start)?;
     let (tx, rx) = mpsc::channel::<Part>(16);
@@ -109,21 +153,25 @@ pub(crate) fn start(
         tx,
         cancel: cancel.clone(),
         ended: false,
+        binary,
+        offset: 0,
     };
     let output = output.with_cancel(cancel.clone());
     let id = start.id;
     let channel = client.closed().clone();
+    let confirm = (mode == Some("1")).then(|| start.binary_confirmed.clone());
     let task = async move {
         let _permit = permit;
         let _admission = admission;
         // Once dispatched, never abort a handler: its mutation may already own durable work.
         let response = crate::web::router(state).oneshot(request).await;
         let Ok(response) = response;
-        respond(response, id, output, cancel, channel).await;
+        respond_mode(response, id, output, cancel, channel, binary, confirm).await;
     };
     Ok((input, task))
 }
 
+#[cfg(test)]
 async fn respond(
     response: axum::response::Response,
     id: u32,
@@ -131,12 +179,24 @@ async fn respond(
     cancel: CancellationToken,
     channel: CancellationToken,
 ) {
+    respond_mode(response, id, output, cancel, channel, false, None).await;
+}
+
+async fn respond_mode(
+    response: axum::response::Response,
+    id: u32,
+    output: Output,
+    cancel: CancellationToken,
+    channel: CancellationToken,
+    binary: bool,
+    confirm: Option<Arc<AtomicBool>>,
+) {
     let progress = response
         .extensions()
         .get::<crate::http_body_policy::Progress>()
         .cloned();
     let output = output.with_progress(progress.clone());
-    let response = send_response(response, id, output, cancel.clone());
+    let response = send_response(response, id, output, cancel.clone(), binary, confirm);
     if let Some(progress) = progress {
         tokio::select! {
             // Stop-and-wait is channel-wide: a withheld ACK can prevent an error
@@ -155,6 +215,8 @@ async fn send_response(
     id: u32,
     output: Output,
     cancel: CancellationToken,
+    binary: bool,
+    confirm: Option<Arc<AtomicBool>>,
 ) {
     let mut headers = response
         .headers()
@@ -168,6 +230,11 @@ async fn send_response(
         .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.as_str(), value)))
         .collect::<Vec<_>>();
     headers.push(("x-agentsassemble-upload-credit", "1"));
+    headers.push((CAPABILITY, "1"));
+    if let Some(confirm) = confirm {
+        confirm.store(true, Ordering::Release);
+        headers.push((CONFIRMED, "1"));
+    }
     if !headers
         .iter()
         .any(|(name, _)| *name == "x-agentsassemble-upload-transfer")
@@ -176,12 +243,23 @@ async fn send_response(
     }
     if output.send(json!({"op":"response", "id":id, "status":response.status().as_u16(), "headers":headers})).await.is_err() { return; }
     let mut body = response.into_body().into_data_stream();
+    let mut offset = 0;
     loop {
         let next = tokio::select! { () = cancel.cancelled() => return, next = body.next() => next };
         match next {
             Some(Ok(bytes)) => {
                 for chunk in bytes.chunks(CHUNK_BYTES) {
-                    if output.send(json!({"op":"data", "id":id, "data":URL_SAFE_NO_PAD.encode(chunk), "end":false})).await.is_err() { return; }
+                    let sent = if binary {
+                        output
+                            .send_bytes(secure_body_record::encode(id, offset, chunk, false))
+                            .await
+                    } else {
+                        output.send(json!({"op":"data", "id":id, "data":URL_SAFE_NO_PAD.encode(chunk), "end":false})).await
+                    };
+                    if sent.is_err() {
+                        return;
+                    }
+                    offset += chunk.len() as u64;
                 }
             }
             Some(Err(_)) => {
@@ -191,9 +269,15 @@ async fn send_response(
                 return;
             }
             None => {
-                let _ = output
-                    .send(json!({"op":"data", "id":id, "data":"", "end":true}))
-                    .await;
+                if binary {
+                    let _ = output
+                        .send_bytes(secure_body_record::encode(id, offset, &[], true))
+                        .await;
+                } else {
+                    let _ = output
+                        .send(json!({"op":"data", "id":id, "data":"", "end":true}))
+                        .await;
+                }
                 return;
             }
         }
@@ -314,6 +398,7 @@ fn request_metadata(
                     | "accept"
                     | "if-none-match"
                     | "range"
+                    | "x-agentsassemble-body-binary"
             )
         {
             return Err(());

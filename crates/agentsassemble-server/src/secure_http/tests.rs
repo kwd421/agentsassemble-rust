@@ -12,6 +12,8 @@ async fn secure_upload_consumes_more_than_direction_capacity() {
         tx,
         cancel: cancel.clone(),
         ended: false,
+        binary: false,
+        offset: 0,
     };
     let (output, mut credits) = Output::new(global.clone(), cancel.clone());
     let request = Request::new(request_body(
@@ -77,11 +79,15 @@ async fn cancellation_releases_only_its_request_queue() {
         tx: tx_a,
         cancel: cancel_a.clone(),
         ended: false,
+        binary: false,
+        offset: 0,
     };
     let mut b = Input {
         tx: tx_b,
         cancel: cancel_b.clone(),
         ended: false,
+        binary: false,
+        offset: 0,
     };
     let body_a = request_body(
         rx_a,
@@ -155,6 +161,8 @@ async fn virtual_upload_timeout_drops_its_queue_and_ignores_late_data() {
         tx,
         cancel: cancel.clone(),
         ended: false,
+        binary: false,
+        offset: 0,
     };
     let body = request_body(
         rx,
@@ -250,6 +258,8 @@ async fn lost_credit_path_cannot_complete_a_body_without_its_end_marker() {
         tx,
         cancel: cancel.clone(),
         ended: false,
+        binary: false,
+        offset: 0,
     };
     assert!(
         input
@@ -287,6 +297,8 @@ async fn unpaced_request_releases_charges_without_credit_frames()
         tx,
         cancel: cancel.clone(),
         ended: false,
+        binary: false,
+        offset: 0,
     };
     let mut body = request_body(
         rx,
@@ -340,6 +352,8 @@ async fn unpaced_virtual_bodies_share_host_admission_and_release_on_cancel() {
             tx,
             cancel: cancel.clone(),
             ended: false,
+            binary: false,
+            offset: 0,
         };
         input
             .push(&URL_SAFE_NO_PAD.encode(b" "), false, &queue)
@@ -412,4 +426,37 @@ async fn unpaced_virtual_bodies_share_host_admission_and_release_on_cancel() {
         .reserve(Some("same-principal"), &Request::new(Body::empty()), 1024)
         .expect("second");
     drop((first, second));
+}
+
+#[tokio::test]
+async fn binary_offsets_and_legacy_shape_cannot_mix_and_cancel_releases_bytes() {
+    let global = Arc::new(Semaphore::new(crate::secure_queue::GLOBAL_BYTES));
+    let budget = Budget::new(global.clone());
+    let (tx, rx) = mpsc::channel(16);
+    let mut input = Input {
+        tx,
+        cancel: CancellationToken::new(),
+        ended: false,
+        binary: true,
+        offset: 0,
+    };
+    assert!(input.push("YQ", false, &budget).is_err());
+    let push = |input: &mut Input, offset, end| {
+        let plaintext = secure_body_record::encode(1, offset, if end { &[] } else { b"abc" }, end);
+        input.push_binary(
+            secure_body_record::decode(&plaintext, secure_body_record::RESPONSE).expect("body"),
+            &budget,
+        )
+    };
+    assert!(push(&mut input, 1, false).is_err());
+    assert!(push(&mut input, 0, false).is_ok());
+    assert!(push(&mut input, 0, false).is_err());
+    assert!(push(&mut input, 4, false).is_err());
+    assert!(push(&mut input, 3, true).is_ok());
+    assert!(push(&mut input, 3, true).is_err());
+    drop(rx);
+    assert_eq!(
+        global.available_permits(),
+        crate::secure_queue::GLOBAL_BYTES
+    );
 }

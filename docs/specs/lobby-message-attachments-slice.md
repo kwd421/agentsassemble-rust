@@ -191,6 +191,55 @@ again from zero. Carrying an incomplete transfer over to a newly admitted sessio
 of the same person (a custody-renewal rule) is a separate follow-up, to be weighed
 after the measured acceptance shows how often real links drop mid-file.
 
+## Transfer rework: encrypted transport (slice 4, 2026-10-13)
+
+Required entry points: `secure_channel`, `secure_channel_requests`, `secure_http`,
+`secure_queue` and production `frontend/src/lib/remote/remoteTransport.ts`; the
+Node WebCrypto peer in `tests/central_owner_boundary` verifies their real router
+flow. Routes, authority, upload/download owners and frontend views stay unchanged.
+
+Request and response body pieces use authenticated binary plaintext containing
+direction/type, request ID, exact next byte offset, length and at most 64 KiB of
+raw bytes. Control remains JSON; AEAD sequence/order authentication and the
+handshake stay unchanged. Advertise in existing response headers, opt in through
+request headers, then confirm in response headers for this channel only. Both
+version skews retain the exact legacy JSON/base64 body and ACK/consumed shapes;
+neither binary data nor sliding credits may precede mutual agreement.
+
+Replace record ACK and upload consumed stop-and-wait with cumulative byte credit
+in both directions. Each direction shares one 384 KiB data window across all
+bodies, backed by reservations from the existing 8 MiB global / 512 KiB direction
+budgets before advertisement; the remaining capacity serves control/accounting.
+Count promised, queued, processing and unacknowledged ownership without gaps.
+Return upload credit after owner acceptance and download credit after downstream
+consumption. Concurrent bodies progress fairly, and deadlines reclaim a stalled
+body's share without preventing other bodies or control traffic. Independent
+cancellation promptly drops its charges, including records behind other traffic.
+Withheld channel credit/ACK closes within the existing 30-second idle bound and
+releases every charge. Preserve 64 KiB/120-second progress and one-hour ceiling;
+server-imposed credit waits do not count as client stalling. Do not raise gates.
+
+Acceptance: byte-exact uploads/downloads including 50 MiB, replayed legacy shapes
+for new-client/old-host and old-client/new-host, unchanged queue maxima and window
+bounds, three concurrent uploads and ten downloads, isolated stall/deadline and
+cancel, withheld credit cleanup, malformed binary/offset and overflowing,
+underflowing or replayed credit refusal. Measure loopback one/ten 50 MiB transfers
+in each direction on both paths; report timings, including the heavy integration
+test, without pinned throughput expectations. Partial implementation or missing
+measurements do not establish completion of this contract.
+
+Binary checkpoint: `x-agentsassemble-body-binary: 1` advertises the raw codec;
+request value `1` opts in using legacy body shapes and response
+`x-agentsassemble-body-binary-confirmed: 1` confirms. Only subsequent requests
+with value `2` use binary bodies. Each in-flight request retains its selected
+codec, including legacy children on an upgraded channel. This checkpoint keeps
+the existing ACK/consumed pacing and does not advertise sliding-window support.
+The production WebCrypto integration preserves 50 MiB upload/finish/bind/read,
+ten large downloads and frozen legacy request/data replay against the new host
+(17.11 seconds). Server unit tests, affected frontend tests/typecheck, formatting
+and architecture gates pass. Sliding-credit, multiplexed deadline/cancel cleanup
+and old/new throughput comparisons remain required work.
+
 ## Approved target contract after Phase 0B
 
 - This slice owns only attachments on the ordinary lobby `message_final` path. Custom

@@ -7,7 +7,13 @@ use crate::{
     secure_queue::{Budget, Output},
 };
 use serde_json::json;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore, mpsc},
     task::JoinSet,
@@ -29,6 +35,7 @@ pub(super) struct Requests {
     inputs: HashMap<u32, Input>,
     pub(super) tasks: JoinSet<u32>,
     last_id: u32,
+    binary_confirmed: Arc<AtomicBool>,
 }
 impl Requests {
     pub(super) fn new(
@@ -50,6 +57,7 @@ impl Requests {
             inputs: HashMap::new(),
             tasks: JoinSet::new(),
             last_id: 0,
+            binary_confirmed: Arc::new(AtomicBool::new(false)),
         }
     }
     pub(super) fn remove(&mut self, id: u32) {
@@ -73,6 +81,18 @@ impl Requests {
             Ok(None)
         }
     }
+    pub(super) fn accept_binary(&mut self, plaintext: &[u8]) -> Result<(), ()> {
+        if !self.binary_confirmed.load(Ordering::Acquire) {
+            return Err(());
+        }
+        let record =
+            crate::secure_body_record::decode(plaintext, crate::secure_body_record::REQUEST)?;
+        match self.inputs.get_mut(&record.id) {
+            Some(Input::Http(input)) => input.push_binary(record, &self.budget),
+            None if record.id <= self.last_id => Ok(()),
+            _ => Err(()),
+        }
+    }
     pub(super) async fn accept(&mut self, frame: Frame) -> Result<(), ()> {
         match frame {
             Frame::Ack { sequence } => self.acknowledgements.try_send(sequence).map_err(|_| ()),
@@ -89,6 +109,7 @@ impl Requests {
                     path,
                     headers,
                     upload_credit,
+                    binary_confirmed: self.binary_confirmed.clone(),
                 })
                 .await
             }
