@@ -94,12 +94,12 @@ pub(crate) fn json(
     version: i64,
 ) -> Result<String, PersistenceError> {
     let value: Value = serde_json::from_str(encoded).map_err(|_| invalid())?;
-    if version < 89 {
+    if version < 92 {
         match (table, column) {
             ("rooms", "settings_json") => historical_settings(&value, version)?,
             ("room_events", "event_json")
             | ("command_results" | "room_create_results" | "room_delete_results", "result_json") => {
-                historical_receipt(&value, version)?;
+                historical_receipt(&value, version, table == "room_events")?;
             }
             _ => {}
         }
@@ -133,14 +133,38 @@ pub(crate) fn json(
 
 fn historical_settings(value: &Value, version: i64) -> Result<(), PersistenceError> {
     if (version == 87 && value.get("lobby_name").is_some())
-        || value.get("conversation_mode").and_then(Value::as_str) == Some("free_access")
+        || (version < 89
+            && value.get("conversation_mode").and_then(Value::as_str) == Some("free_access"))
+        || (version < 92
+            && [
+                "attachment_file_limit_bytes",
+                "attachment_storage_limit_bytes",
+            ]
+            .iter()
+            .any(|key| value.get(key).is_some()))
     {
         return Err(invalid());
     }
     Ok(())
 }
 
-fn historical_receipt(value: &Value, version: i64) -> Result<(), PersistenceError> {
+fn historical_receipt(value: &Value, version: i64, event: bool) -> Result<(), PersistenceError> {
+    let newer_fields: &[&str] = if event {
+        &[
+            "actor_participant_id",
+            "on_behalf_of_participant_id",
+            "action",
+            "target_id",
+            "request_id",
+            "target_channel_id",
+            "pinned",
+        ]
+    } else {
+        &["target_id", "event_id"]
+    };
+    if version < 90 && newer_fields.iter().any(|key| value.get(key).is_some()) {
+        return Err(invalid());
+    }
     for key in ["settings", "room_settings"] {
         if let Some(settings) = value.get(key) {
             historical_settings(settings, version)?;
@@ -148,13 +172,13 @@ fn historical_receipt(value: &Value, version: i64) -> Result<(), PersistenceErro
     }
     if let Some(events) = value.get("events").and_then(Value::as_array) {
         for event in events {
-            historical_receipt(event, version)?;
+            historical_receipt(event, version, true)?;
         }
     }
     for key in ["event", "start"] {
         if let Some(nested) = value.get(key) {
             // The current receipt owner rejects recursively nested start receipts.
-            historical_receipt(nested, version)?;
+            historical_receipt(nested, version, key == "event")?;
         }
     }
     Ok(())

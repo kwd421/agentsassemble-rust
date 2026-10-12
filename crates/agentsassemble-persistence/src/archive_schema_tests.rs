@@ -132,6 +132,18 @@ async fn product_seed(
         )
         .await?;
     store.close().await?;
+    if version < 92 {
+        let mut historical =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&seed)).await?;
+        sqlx::query("UPDATE rooms SET settings_json=json_remove(settings_json,'$.attachment_file_limit_bytes','$.attachment_storage_limit_bytes')").execute(&mut historical).await?;
+        for (table, column) in [
+            ("room_events", "event_json"),
+            ("room_create_results", "result_json"),
+        ] {
+            sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE {table} SET {column}=json_remove({column},'$.settings.attachment_file_limit_bytes','$.settings.attachment_storage_limit_bytes','$.room_settings.attachment_file_limit_bytes','$.room_settings.attachment_storage_limit_bytes')"))).execute(&mut historical).await?;
+        }
+        historical.close().await?;
+    }
     Ok(seed)
 }
 
@@ -234,6 +246,127 @@ async fn historical_tampering_is_rejected_before_prepared() -> Result<(), Box<dy
         assert!(job.bind_switch("epoch", &"a".repeat(43)).is_err());
         assert!(!target.exists());
         job.cancel()?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn newer_fields_cannot_enter_historical_archives() -> Result<(), Box<dyn std::error::Error>> {
+    for version in 87..=91 {
+        let directory = tempfile::tempdir()?;
+        let (source, manifest) = archive(directory.path(), version).await?;
+        for (table, column, path, value, introduced) in [
+            (
+                "rooms",
+                "settings_json",
+                "$.attachment_file_limit_bytes",
+                "52428800",
+                92,
+            ),
+            (
+                "rooms",
+                "settings_json",
+                "$.attachment_storage_limit_bytes",
+                "null",
+                92,
+            ),
+            (
+                "room_events",
+                "event_json",
+                "$.settings.attachment_file_limit_bytes",
+                "52428800",
+                92,
+            ),
+            (
+                "room_create_results",
+                "result_json",
+                "$.event.settings.attachment_storage_limit_bytes",
+                "null",
+                92,
+            ),
+            (
+                "room_create_results",
+                "result_json",
+                "$.start.events[0].settings.attachment_file_limit_bytes",
+                "52428800",
+                92,
+            ),
+            (
+                "rooms",
+                "settings_json",
+                "$.conversation_mode",
+                "\"free_access\"",
+                89,
+            ),
+            (
+                "room_events",
+                "event_json",
+                "$.on_behalf_of_participant_id",
+                "\"owner\"",
+                90,
+            ),
+        ] {
+            if version >= introduced {
+                continue;
+            }
+            let altered = directory
+                .path()
+                .join(format!("altered-{table}-{}.sqlite", path.replace('.', "_")));
+            std::fs::copy(&source, &altered)?;
+            let mut connection =
+                SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&altered))
+                    .await?;
+            // Use complete current-decodable settings/events so rejection cannot
+            // be explained by an unrelated malformed nested object.
+            if table == "room_events" && path.starts_with("$.settings.") {
+                sqlx::query("UPDATE room_events SET event_json=json_set(event_json,'$.settings',json((SELECT settings_json FROM rooms LIMIT 1)))")
+                    .execute(&mut connection).await?;
+            }
+            if table == "room_create_results" {
+                let event: String = sqlx::query_scalar("SELECT json_set(event_json,'$.settings',json((SELECT settings_json FROM rooms LIMIT 1))) FROM room_events ORDER BY seq LIMIT 1")
+                    .fetch_one(&mut connection).await?;
+                let event: serde_json::Value = serde_json::from_str(&event)?;
+                let receipt = if path.starts_with("$.start.") {
+                    serde_json::json!({"start":{"events":[event]}})
+                } else {
+                    serde_json::json!({"event":event})
+                };
+                sqlx::query("UPDATE room_create_results SET result_json=?")
+                    .bind(receipt.to_string())
+                    .execute(&mut connection)
+                    .await?;
+            }
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "UPDATE {table} SET {column}=json_set({column},?,json(?))"
+            )))
+            .bind(path)
+            .bind(value)
+            .execute(&mut connection)
+            .await?;
+            let encoded: String = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+                "SELECT {column} FROM {table} LIMIT 1"
+            )))
+            .fetch_one(&mut connection)
+            .await?;
+            crate::backup_policy::json(table, column, &encoded, 92)?;
+            connection.close().await?;
+            let mut manifest = manifest.clone();
+            (manifest.database_bytes, manifest.database_sha256) =
+                backup_codec::measure_payload(&mut std::fs::File::open(&altered)?)?;
+            let destination = tempfile::tempdir()?;
+            let target = destination.path().join("runtime.sqlite3");
+            let mut job = crate::restore_job::RestoreJob::begin(&target)?;
+            assert!(
+                job.prepare(&altered, manifest).await.is_err(),
+                "v{version} {path}"
+            );
+            assert_eq!(
+                job.journal().phase,
+                crate::restore_job::RestorePhase::Validating
+            );
+            assert!(!target.exists());
+            job.cancel()?;
+        }
     }
     Ok(())
 }
