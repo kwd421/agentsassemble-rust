@@ -59,6 +59,7 @@ export function event(seq: number) {
     type: "message_final",
     actor: { participant_id: "operator-local", participant_type: "human" },
     content: `message ${seq}`,
+    message_kind: "message",
   };
 }
 

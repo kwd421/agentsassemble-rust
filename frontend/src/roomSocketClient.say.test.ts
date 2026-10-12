@@ -60,7 +60,7 @@ describe("room socket message attachments", () => {
       resolution: "committed",
       request_id: textCommand.request_id,
       action: "message.send",
-      result: { event: event(1), event_seq: 1 },
+      result: { event: { ...event(1), content: "evidence", attachments: [second, first] }, event_seq: 1 },
     });
     await expect(textSend).resolves.toEqual({ events: [] });
 
@@ -77,7 +77,7 @@ describe("room socket message attachments", () => {
       resolution: "committed",
       request_id: attachmentCommand.request_id,
       action: "message.send",
-      result: { event: event(2), event_seq: 2 },
+      result: { event: { ...event(2), content: "", attachments: [first] }, event_seq: 2 },
     });
     await expect(attachmentOnly).resolves.toEqual({ events: [] });
     handle.close();
@@ -138,7 +138,7 @@ describe("room socket message attachments", () => {
       resolution: "committed",
       request_id: createCommand.request_id,
       action: "message.send",
-      result: { event: event(1), event_seq: 1 },
+      result: { event: { ...event(1), content: "", message_kind: "vote", vote_question: "Ship it?", vote_options: ["Yes", "No"], attachments: [attachment("a")] }, event_seq: 1 },
     });
     await expect(create).resolves.toEqual({ events: [] });
 
@@ -173,7 +173,7 @@ describe("room socket message attachments", () => {
         resolution: "committed",
         request_id: command.request_id,
         action: "message.send",
-        result: { event: event(wireIndex), event_seq: wireIndex },
+        result: { event: { ...event(wireIndex), actor: { participant_id: "", participant_type: "" }, content: "", message_kind: operation.payload.kind, vote_id: "evt-1" }, event_seq: wireIndex },
       });
       await expect(pending).resolves.toEqual({ events: [] });
     }

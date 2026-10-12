@@ -98,7 +98,7 @@ describe("room socket exact-command retry", () => {
       resolution: "committed",
       request_id: finalCommand.request_id,
       action: "message.send",
-      result: { event: event(1), event_seq: 1 },
+      result: { event: { ...event(1), content: "received before close" }, event_seq: 1 },
       deduplicated: true,
     });
     sockets[7].close();
@@ -129,7 +129,7 @@ describe("room socket exact-command retry", () => {
       resolution: "committed",
       request_id: replayed.request_id,
       action: "message.send",
-      result: { event: event(1), event_seq: 1 },
+      result: { event: { ...event(1), content: "closed transport" }, event_seq: 1 },
       deduplicated: true,
     });
     await expect(pendingCommand).resolves.toMatchObject({ resolution: "committed" });
@@ -205,7 +205,7 @@ describe("room socket exact-command retry", () => {
       resolution: "committed",
       request_id: backedOffReplay.request_id,
       action: "message.send",
-      result: { event: event(1), event_seq: 1 },
+      result: { event: { ...event(1), content: "commit once" }, event_seq: 1 },
       deduplicated: true,
     });
     await expect(pendingCommand).resolves.toMatchObject({
@@ -253,7 +253,7 @@ describe("room socket exact-command retry", () => {
     receiveServerFrame(sockets[7], {
       op: "ack", accepted: true, resolution: "committed",
       request_id: retried.request_id, action: "message.send",
-      result: { event: event(1), event_seq: 1 }, deduplicated: true,
+      result: { event: { ...event(1), content: "bounded uncertainty" }, event_seq: 1 }, deduplicated: true,
     });
     await expect(recovered).resolves.toMatchObject({ deduplicated: true });
     handle.close();

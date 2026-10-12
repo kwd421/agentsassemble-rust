@@ -15,6 +15,7 @@ import type { PublicRoomSettings } from "../types/generated/PublicRoomSettings";
 import type { RoomAppearance } from "../types/generated/RoomAppearance";
 import type { RoomChannel } from "../types/generated/RoomChannel";
 import type { RoomSnapshot } from "../types/generated/RoomSnapshot";
+import { MAX_MESSAGE_CHARACTERS } from "../types/generated/ROOM_MESSAGE_WIRE";
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreateAckProjectionsAreCoherent,
@@ -328,6 +329,31 @@ function channelHistoryResultIsValid(
   } catch { return false; }
 }
 
+// Match the domain's clean_message, including Rust White_Space (not JS trim's
+// BOM handling) and Unicode scalar truncation rather than UTF-16 code units.
+function canonicalMessageContent(content: string): string {
+  const whitespace = "[\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
+  const normalized = content.replace(/\0/g, "").replace(/\r\n?/g, "\n")
+    .replace(new RegExp(`^${whitespace}+|${whitespace}+$`, "g"), "");
+  return Array.from(normalized).slice(0, MAX_MESSAGE_CHARACTERS).join("");
+}
+
+function messageSendAckMatches(event: Record<string, unknown>, payload: Record<string, unknown>, participant: string): boolean {
+  const kind = payload.kind ?? "message";
+  if (typeof kind !== "string") return false;
+  const attachments = event.attachments ?? [];
+  const ids = payload.attachment_ids ?? [];
+  if (event.message_kind !== kind || !Array.isArray(attachments) || !Array.isArray(ids) ||
+      attachments.length !== ids.length || attachments.some((attachment, index) => !isRecord(attachment) || attachment.id !== ids[index]) ||
+      (event.reply_to_event_id ?? undefined) !== payload.reply_to_event_id) return false;
+  // Cast/withdraw/close deliberately remove the actor and ballot choice before
+  // persistence and public projection; publicRoomEventIsValid checks that marker.
+  if (isVoteTransitionKind(kind)) return event.content === "" && event.vote_id === payload.vote_id;
+  if (!isRecord(event.actor) || event.actor.participant_id !== participant) return false;
+  if (kind === "message") return typeof payload.content === "string" && event.content === canonicalMessageContent(payload.content);
+  return kind === "vote" && event.content === "";
+}
+
 export function commandAckResultIsValid(
   action: string,
   payload: Record<string, unknown>,
@@ -367,9 +393,10 @@ export function commandAckResultIsValid(
         event.message_deleted !== true && event.channel_id === payload.channel_id && result.channel_id === payload.channel_id && event.participant_id === expectedParticipantId);
     } catch { return false; }
   }
-  if (action === "message.send" || action.startsWith("room.random.")) {
-    return hasDurableEvent && event?.type === "message_final";
+  if (action === "message.send") {
+    return Boolean(hasDurableEvent && event?.type === "message_final" && messageSendAckMatches(event, payload, expectedParticipantId));
   }
+  if (action.startsWith("room.random.")) return hasDurableEvent && event?.type === "message_final";
   if (action === "message.edit" || action === "message.delete") {
     return Boolean(
       hasDurableEvent &&

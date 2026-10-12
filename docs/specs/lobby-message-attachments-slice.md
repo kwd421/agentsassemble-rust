@@ -1421,3 +1421,21 @@ publish substituted attachments. Existing cancellation and explicit retry remain
 Entry points: createMessageAttachmentUploadClient, OutgoingMessages.upload/pump/retry.
 Acceptance: controlled hostile sequences fail boundedly without publication;
 interrupted multi-piece partial acceptance still resumes and publishes once.
+
+## Round-10 publication ACK contract (High 2 validator, 2026-10-13)
+
+message.send ACKs must match the sent command's canonical kind, normalized content,
+reply target and complete ordered attachment IDs, and the expected actor for ordinary
+messages and vote creation. Rust MessageSend uses clean_message (NUL removal, CRLF/CR
+normalization, Rust whitespace trim, Unicode-character truncation); compare that
+canonical value, preserving honest sends with raw whitespace/newlines. Vote creation
+has empty content. Vote cast/withdraw/close are deliberately anonymous public markers:
+projection::privacy_minimized_vote_transition clears the actor and ballot choice.
+Those ACKs require the same vote kind/ID, empty content, no reply or attachments,
+and the existing canonical anonymous event validation, rather than exposing identity.
+room.random.* validation remains unchanged. Invalid ACKs follow the socket's existing
+contract-violation path. The UI-owned hook remains untouched: OutgoingMessage.eventId
+is solely the validated ACK event or the exact event matched by observe.
+Owner/entry point: roomSocketValidation::commandAckResultIsValid, used by roomSocketClient.
+Acceptance: actor/content/reply/ordered-ID mismatches refuse; real canonical messages,
+vote creation/anonymous transitions and random responses remain valid.

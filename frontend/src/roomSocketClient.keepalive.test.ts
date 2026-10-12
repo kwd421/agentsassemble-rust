@@ -83,6 +83,7 @@ describe("canonical room socket quiet keepalive", () => {
           type: "message_final",
           actor: { participant_id: "operator-local", participant_type: "human" },
           content: "still here",
+          message_kind: "message",
         },
         event_seq: 1,
       },

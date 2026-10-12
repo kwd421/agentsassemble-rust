@@ -141,7 +141,7 @@ describe("bounded canonical room socket", () => {
       resolution: "committed",
       request_id: command.request_id,
       action: "message.send",
-      result: { event: event(3), event_seq: 3 },
+      result: { event: { ...event(3), content: "hello" }, event_seq: 3 },
     });
     await expect(pending).resolves.toMatchObject({ accepted: true });
     handle.close();
