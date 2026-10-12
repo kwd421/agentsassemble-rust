@@ -34,11 +34,27 @@ export function closeRemoteWorkspace() {
   workspace?.transport.close(); workspace = null;
   for (const listener of listeners) listener();
 }
+const plainImagePreviews = new Map<string, boolean>();
+function requestOrigin(path: string) { return new URL(path, window.location.href).origin; }
+export function supportsMessageAttachmentPreview(token: string, path: string): boolean {
+  const transport = remoteSessionTransport(token);
+  if (transport) return transport.supportsImagePreview();
+  if (workspace || sessions.has(token)) return false;
+  return plainImagePreviews.get(requestOrigin(path)) === true;
+}
+
+export function fetchPlainProductTransport(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(path, init).then(response => {
+    plainImagePreviews.set(requestOrigin(path), response.headers.get("x-agentsassemble-image-preview") === "1");
+    return response;
+  });
+}
+
 export function fetchSessionTransport(token: string | undefined, path: string, init: RequestInit = {}): Promise<Response> {
   const transport = remoteSessionTransport(token);
   if (transport) return transport.fetch(path, init);
   if (workspace || token && sessions.has(token)) return Promise.reject(connectionEnded());
-  return fetch(path, init);
+  return fetchPlainProductTransport(path, init);
 }
 
 export function fetchProductTransport(path: string, init: RequestInit = {}): Promise<Response> {

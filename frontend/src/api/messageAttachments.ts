@@ -1,6 +1,6 @@
 import { fetchRoomSettings } from "./room";
 import { readResourceBlob, releaseResourceBlob } from "../lib/remote/remoteResources";
-import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
+import { fetchProductTransport, supportsMessageAttachmentPreview } from "../lib/remote/remoteWorkspace";
 import {
   requestDesktopMessageAttachmentReadTicket,
   requestDesktopMessageAttachmentUploadTicket,
@@ -18,6 +18,9 @@ import { isUnicodeScalarString } from "../lib/unicodeScalarString";
 import { trimRustWhitespace } from "../lib/rustWhitespace";
 import { MAX_ATTACHMENT_BYTES, MAX_ROOM_FILE_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 import {
+  MAX_MESSAGE_ATTACHMENT_PREVIEW_BYTES,
+  MESSAGE_ATTACHMENT_PREVIEW_SUFFIX,
+  MESSAGE_ATTACHMENT_VIEW_SUFFIX,
   MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
   MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS,
 } from "../types/generated/MESSAGE_ATTACHMENTS_WIRE";
@@ -210,7 +213,7 @@ export async function fetchMessageAttachmentBlob(
   attachmentValue: LobbyAttachmentRef,
   roomId: string,
   authority: MessageAttachmentAuthority,
-  mode: "view" | "download",
+  mode: "preview" | "view" | "download",
   signal?: AbortSignal,
   beforeDispatch?: () => void
 ): Promise<Blob> {
@@ -222,8 +225,12 @@ export async function fetchMessageAttachmentBlob(
     authority,
     signal
   );
-  const reference =
-    mode === "view" ? attachment.url : attachment.download_url;
+  const preview = mode === "preview" && attachment.is_image && supportsMessageAttachmentPreview(
+    resolvedAuthority.credential, `${resolvedAuthority.baseUrl}${attachment.url}`
+  );
+  const reference = preview
+    ? attachment.url.replace(MESSAGE_ATTACHMENT_VIEW_SUFFIX, MESSAGE_ATTACHMENT_PREVIEW_SUFFIX)
+    : mode === "download" ? attachment.download_url : attachment.url;
   beforeDispatch?.();
   const response = await fetchProductTransport(`${resolvedAuthority.baseUrl}${reference}`, {
     cache: "no-store",
@@ -231,14 +238,13 @@ export async function fetchMessageAttachmentBlob(
     signal,
   });
   if (!response.ok) throw await responseError(response);
-  if (!isPrivateNoStoreResponse(response, attachment.content_type)) invalidResponse();
+  const contentType = response.headers.get("Content-Type");
+  const derivedType = preview && contentType !== null && ["image/jpeg", "image/webp"].includes(contentType);
+  if (!isPrivateNoStoreResponse(response, derivedType ? contentType : attachment.content_type)) invalidResponse();
   const blob = await readResourceBlob(response, attachment.size);
-  if (
-    blob.size !== attachment.size ||
-    blob.size < 1 ||
-    blob.size > MAX_ROOM_FILE_BYTES ||
-    blob.type !== attachment.content_type
-  ) {
+  const original = blob.size === attachment.size && blob.type === attachment.content_type;
+  const derived = derivedType && blob.size <= MAX_MESSAGE_ATTACHMENT_PREVIEW_BYTES;
+  if (blob.size < 1 || blob.type !== contentType || !(original || derived)) {
     releaseResourceBlob(blob); invalidResponse();
   }
   return blob;

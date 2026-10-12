@@ -1,4 +1,4 @@
-import { remoteWorkspaceSnapshot } from "./remote/remoteWorkspace";
+import { remoteWorkspaceSnapshot, fetchPlainProductTransport } from "./remote/remoteWorkspace";
 import type { HostDeviceInfo } from "../types/generated/HostDeviceInfo";
 import type { HostInstallationInfo } from "../types/generated/HostInstallationInfo";
 import type { HostProductSurface } from "../types/generated/HostProductSurface";
@@ -721,7 +721,7 @@ export async function fetchDesktopRoomPreferences(
   const query = method === "GET" ? `?room_id=${encodeURIComponent(roomId)}` : "";
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
-  return fetch(`${issued.http_base_url}/api/room-settings${query}`, {
+  return fetchPlainProductTransport(`${issued.http_base_url}/api/room-settings${query}`, {
     ...init,
     cache: "no-store",
     method,
@@ -746,7 +746,7 @@ async function fetchDesktopHumanInvite(
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   beforeDispatch?.();
-  return fetch(`${issued.http_base_url}/api/room-invite/${operation}`, {
+  return fetchPlainProductTransport(`${issued.http_base_url}/api/room-invite/${operation}`, {
     ...init,
     cache: "no-store",
     method: "POST",
@@ -792,7 +792,7 @@ export async function fetchDesktopRuntime(
   const issued = await requestDesktopRuntimeTicket(roomId);
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
-  return fetch(`${issued.displayResourceBase}${path}`, { ...init, headers });
+  return fetchPlainProductTransport(`${issued.displayResourceBase}${path}`, { ...init, headers });
 }
 
 export async function fetchDesktopOperatorRuntimeWithBase(
@@ -808,7 +808,7 @@ export async function fetchDesktopOperatorRuntimeWithBase(
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   beforeDispatch?.();
   return {
-    response: await fetch(`${issued.http_base_url}${path}`, { ...init, headers }),
+    response: await fetchPlainProductTransport(`${issued.http_base_url}${path}`, { ...init, headers }),
     httpBaseUrl: issued.http_base_url,
   };
 }
@@ -830,7 +830,7 @@ export async function fetchDesktopCentralRegistration(
   const issued = await requestDesktopCentralRegistrationTicket();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
-  const response = await fetch(
+  const response = await fetchPlainProductTransport(
     `${issued.http_base_url}/api/central-directory/registration-proof`,
     { ...init, headers }
   );

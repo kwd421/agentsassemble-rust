@@ -2,7 +2,7 @@
 use crate::PersistenceError;
 use image::{DynamicImage, GenericImageView, ImageEncoder, imageops::FilterType};
 
-pub(crate) const MAX_BYTES: usize = 256 * 1024;
+pub(crate) const MAX_BYTES: usize = agentsassemble_domain::MAX_MESSAGE_ATTACHMENT_PREVIEW_BYTES;
 pub(crate) const MAX_DIMENSION: u32 = 1100;
 
 pub(crate) struct Preview {

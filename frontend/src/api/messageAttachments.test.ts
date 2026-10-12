@@ -386,3 +386,36 @@ describe("lobby message-attachment HTTP authority", () => {
     expect(bridge.read).not.toHaveBeenCalled();
   });
 });
+
+
+it.each([false, true])("uses preview only on an advertised encrypted channel (%s)", async supported => {
+  const image = { ...attachment, filename: "image.png", content_type: "image/png", size: 400000, is_image: true };
+  const fetch = vi.fn().mockResolvedValue(attachmentResponse(
+    new Uint8Array(supported ? 100 : image.size), supported ? "image/webp" : "image/png"));
+  const transport = { hello: { origin: "https://preview.test" }, active: true,
+    supportsImagePreview: () => supported, onClose: () => () => {}, close() {}, fetch };
+  installRemoteWorkspace({ transport: transport as unknown as RemoteTransport,
+    owner: { sessionToken: "preview-owner" } as never, deviceToken: "device", clientId: "client" });
+  try {
+    const blob = await fetchMessageAttachmentBlob(image, "general", { kind: "remote", sessionToken: "preview-owner" }, "preview");
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0][0]).toBe(image.url.replace("?view=1", supported ? "?preview=1" : "?view=1"));
+    releaseResourceBlob(blob);
+  } finally { closeRemoteWorkspace(); }
+});
+
+it("learns plain desktop capability from a response and never probes an old host", async () => {
+  const image = { ...attachment, content_type: "image/png", size: 400000, is_image: true };
+  bridge.read.mockResolvedValue({ ...grant("preview-local"), http_base_url: "http://127.0.0.1:49255" });
+  const first = attachmentResponse(new Uint8Array(image.size), "image/png");
+  first.headers.set("x-agentsassemble-image-preview", "1");
+  const fetch = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(attachmentResponse(new Uint8Array(100), "image/webp"));
+  vi.stubGlobal("fetch", fetch);
+  const original = await fetchMessageAttachmentBlob(image, "general", { kind: "local" }, "preview");
+  const preview = await fetchMessageAttachmentBlob(image, "general", { kind: "local" }, "preview");
+  expect(fetch.mock.calls.map(call => call[0])).toEqual([
+    `http://127.0.0.1:49255${image.url}`, `http://127.0.0.1:49255${image.url.replace("?view=1", "?preview=1")}`,
+  ]);
+  releaseResourceBlob(original); releaseResourceBlob(preview);
+  vi.unstubAllGlobals();
+});

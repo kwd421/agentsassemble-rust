@@ -7,7 +7,7 @@ import {
 
 export const MESSAGE_ATTACHMENT_READ_CONCURRENCY = 4;
 
-type ReadMode = "view" | "download";
+type ReadMode = "preview" | "view" | "download";
 type ReadTransport = (
   attachment: LobbyAttachmentRef,
   roomId: string,

@@ -5,6 +5,8 @@ pub const MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS: usize = 120;
 pub const MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES: usize = 127;
 pub const MESSAGE_ATTACHMENT_REFERENCE_PREFIX: &str = "/api/attachments/";
 pub const MESSAGE_ATTACHMENT_VIEW_SUFFIX: &str = "?view=1";
+pub const MAX_MESSAGE_ATTACHMENT_PREVIEW_BYTES: usize = 256 * 1024;
+pub const MESSAGE_ATTACHMENT_PREVIEW_SUFFIX: &str = "?preview=1";
 pub const MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX: &str = "?download=1";
 
 /// Reports whether one opaque identifier belongs to the message-attachment namespace.

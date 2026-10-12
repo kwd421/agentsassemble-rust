@@ -37,6 +37,8 @@ export class RemoteTransport {
   private nextId = 1;
   private sending = Promise.resolve();
   private uploadCredit = false;
+  private imagePreview = false;
+  supportsImagePreview() { return this.imagePreview; }
   private uploading: Promise<unknown> = Promise.resolve();
   private receiving = Promise.resolve();
   private sendBytes = 0;
@@ -228,6 +230,7 @@ export class RemoteTransport {
       if (wait.responded || !Number.isInteger(frame.status) || Number(frame.status) < 200 || Number(frame.status) > 599 || !Array.isArray(frame.headers)) throw connectionEnded();
       const headers = new Headers(frame.headers as [string, string][]); wait.responded = true;
       if (headers.get("x-agentsassemble-upload-credit") === "1") this.uploadCredit = true;
+      if (headers.get("x-agentsassemble-image-preview") === "1") this.imagePreview = true;
       wait.stopUpload?.(); wait.consumed?.(); wait.consumed = undefined;
       const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
         start: controller => { wait.controller = controller; },

@@ -53,7 +53,7 @@ class Peer {
     let body = new Uint8Array(request.chunks.reduce((length, part) => length + part.length, 0));
     let offset = 0; for (const part of request.chunks) { body.set(part, offset); offset += part.length; }
     if (!Peer.echoBody) body = encoder.encode(JSON.stringify({ received: body.length }));
-    this.emit({ op: "response", id: frame.id, status: 200, headers: [...request.headers, ...(Peer.advertise ? [["x-agentsassemble-upload-credit", "1"]] : [])] });
+    this.emit({ op: "response", id: frame.id, status: 200, headers: [...request.headers, ...(Peer.advertise ? [["x-agentsassemble-upload-credit", "1"], ["x-agentsassemble-image-preview", "1"]] : [])] });
     for (let start = 0; start < body.length; start += 64 * 1024)
       this.emit({ op: "data", id: frame.id, data: encodeBase64Url(body.slice(start, start + 64 * 1024)), end: false });
     this.emit({ op: "data", id: frame.id, data: "", end: true });
@@ -171,4 +171,19 @@ test("advertisement does not change an in-flight unpaced request or a fresh chan
   Peer.advertise = false;
   const fresh = await connectWithoutRequestBody();
   expect(await (await fresh.fetch("/api/uploads", { method: "POST", body: "fresh" })).text()).toBe("fresh");
+});
+
+
+test("preview support belongs to the advertising channel", async () => {
+  Peer.advertise = true;
+  const current = await connectWithoutRequestBody();
+  expect(current.supportsImagePreview()).toBe(false);
+  await (await current.fetch("/api/probe")).arrayBuffer();
+  expect(current.supportsImagePreview()).toBe(true);
+  current.close();
+  Peer.advertise = false;
+  const old = await connectWithoutRequestBody();
+  await (await old.fetch("/api/probe")).arrayBuffer();
+  expect(old.supportsImagePreview()).toBe(false);
+  old.close();
 });
