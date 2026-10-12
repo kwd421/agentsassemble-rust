@@ -84,8 +84,23 @@ fn decode<T: serde::de::DeserializeOwned + serde::Serialize>(
     Ok(serde_json::to_value(strict::<T>(value)?)?)
 }
 
-pub(crate) fn json(table: &str, column: &str, encoded: &str) -> Result<String, PersistenceError> {
+pub(crate) fn json(
+    table: &str,
+    column: &str,
+    encoded: &str,
+    version: i64,
+) -> Result<String, PersistenceError> {
     let value: Value = serde_json::from_str(encoded).map_err(|_| invalid())?;
+    if version < 89 {
+        match (table, column) {
+            ("rooms", "settings_json") => historical_settings(&value, version)?,
+            ("room_events", "event_json")
+            | ("command_results" | "room_create_results" | "room_delete_results", "result_json") => {
+                historical_receipt(&value, version)?;
+            }
+            _ => {}
+        }
+    }
     let decoded = match (table, column) {
         ("rooms", "room_json") => decode::<Room>(value)?,
         ("rooms", "settings_json") => decode::<RoomSettings>(value)?,
@@ -111,4 +126,31 @@ pub(crate) fn json(table: &str, column: &str, encoded: &str) -> Result<String, P
         _ => return Err(invalid()),
     };
     Ok(serde_json::to_string(&decoded)?)
+}
+
+fn historical_settings(value: &Value, version: i64) -> Result<(), PersistenceError> {
+    if (version == 87 && value.get("lobby_name").is_some())
+        || value.get("conversation_mode").and_then(Value::as_str) == Some("free_access")
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn historical_receipt(value: &Value, version: i64) -> Result<(), PersistenceError> {
+    for key in ["settings", "room_settings"] {
+        if let Some(settings) = value.get(key) {
+            historical_settings(settings, version)?;
+        }
+    }
+    if let Some(events) = value.get("events").and_then(Value::as_array) {
+        for event in events {
+            historical_receipt(event, version)?;
+        }
+    }
+    if let Some(start) = value.get("start") {
+        // The current receipt owner rejects recursively nested start receipts.
+        historical_receipt(start, version)?;
+    }
+    Ok(())
 }

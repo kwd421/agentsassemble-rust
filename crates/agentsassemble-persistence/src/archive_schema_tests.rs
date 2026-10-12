@@ -1,0 +1,211 @@
+use super::*;
+use crate::{
+    ServerOwnerAuthority, SqliteStore,
+    backup_codec::{self, BackupManifest},
+};
+
+// Build source-version product data in source-version trusted DDL. No database
+// binary or downgraded current schema is used as an historical archive.
+pub(crate) async fn archive(
+    directory: &Path,
+    version: i64,
+) -> Result<(std::path::PathBuf, BackupManifest), Box<dyn std::error::Error>> {
+    let store = SqliteStore::open_path(&directory.join("live.sqlite")).await?;
+    store
+        .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Historical owner")
+        .await?;
+    store
+        .create_room_for_local_operator(
+            &uuid::Uuid::new_v4().to_string(),
+            "general",
+            "Historical room",
+        )
+        .await?;
+    sqlx::query("UPDATE rooms SET settings_json=json_remove(settings_json,'$.lobby_name')")
+        .execute(&store.pool)
+        .await?;
+    // Creation receipts/events also contain settings: use the same historical
+    // representation, not current-only defaults, in the fixture seed.
+    for (table, column) in [
+        ("room_events", "event_json"),
+        ("room_create_results", "result_json"),
+    ] {
+        sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE {table} SET {column}=json_remove({column},'$.settings.lobby_name','$.room_settings.lobby_name')"))).execute(&store.pool).await?;
+    }
+    let bytes = b"historical attachment\0\xff\x01";
+    sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,filename,content_type,content,size,is_safe_image,created_at,state,expires_at) SELECT ?, 'general',user_id,'history.bin','application/octet-stream',?,?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1")
+        .bind(format!("ma_{}", "a".repeat(32))).bind(bytes.as_slice()).bind(i64::try_from(bytes.len())?).execute(&store.pool).await?;
+    let seed = directory.join("seed.sqlite");
+    store
+        .export_backup_payload(
+            &ServerOwnerAuthority::LocalOperator,
+            &directory.join("snapshot.sqlite"),
+            &seed,
+        )
+        .await?;
+    store.close().await?;
+    let path = directory.join("historical.sqlite");
+    let mut target = create_version_payload(&path, version).await?;
+    sqlx::query("ATTACH DATABASE ? AS seed")
+        .bind(seed.to_str().ok_or("path")?)
+        .execute(&mut target)
+        .await?;
+    for table in crate::archive_schema::tables(&mut target).await? {
+        if backup_policy::policy(&table)? == Policy::Ephemeral {
+            continue;
+        }
+        let fields = columns(&mut target, &table)
+            .await?
+            .into_iter()
+            .filter(|c| c.2 == 0)
+            .map(|c| format!("\"{}\"", c.0))
+            .collect::<Vec<_>>()
+            .join(",");
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "INSERT INTO main.\"{table}\"({fields}) SELECT {fields} FROM seed.\"{table}\""
+        )))
+        .execute(&mut target)
+        .await?;
+    }
+    sqlx::query("UPDATE runtime_metadata SET value=? WHERE key='schema_version'")
+        .bind(version.to_string())
+        .execute(&mut target)
+        .await?;
+    sqlx::query("DETACH DATABASE seed")
+        .execute(&mut target)
+        .await?;
+    let server_id = sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key='server_id'")
+        .fetch_one(&mut target)
+        .await?;
+    let (rooms, messages, assets) = crate::restore_preparation::counts(&mut target).await?;
+    target.close().await?;
+    let (database_bytes, database_sha256) =
+        backup_codec::measure_payload(&mut std::fs::File::open(&path)?)?;
+    let manifest = BackupManifest {
+        schema_version: version,
+        server_id,
+        server_name: "Historical owner".into(),
+        issuer: "https://central.example".into(),
+        owner_person_id: "owner".into(),
+        source_epoch: "epoch".into(),
+        source_key_fingerprint: "a".repeat(43),
+        snapshot_at: chrono::Utc::now(),
+        rooms,
+        messages,
+        assets,
+        database_bytes,
+        database_sha256,
+    };
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    backup_codec::encode(
+        &mut std::fs::File::open(&path)?,
+        &mut encoded,
+        &manifest,
+        None,
+        Default::default(),
+    )?;
+    encoded.set_position(0);
+    let decoded = directory.join("decoded.sqlite");
+    let manifest = backup_codec::decode(&mut encoded, &mut std::fs::File::create(&decoded)?, None)?;
+    Ok((decoded, manifest))
+}
+
+pub(crate) async fn assert_product_rows(
+    source: &Path,
+    target: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut source = open_input(source).await?;
+    let mut target = open_input(target).await?;
+    for table in crate::archive_schema::tables(&mut source).await? {
+        if backup_policy::policy(&table)? != Policy::Product {
+            continue;
+        }
+        let fields = columns(&mut source, &table)
+            .await?
+            .into_iter()
+            .filter(|c| c.2 == 0)
+            .map(|c| format!("\"{}\"", c.0))
+            .collect::<Vec<_>>()
+            .join(",");
+        let query = format!("SELECT {fields} FROM \"{table}\" ORDER BY {fields}");
+        let before = sqlx::query(sqlx::AssertSqlSafe(query.as_str()))
+            .fetch_all(&mut source)
+            .await?;
+        let after = sqlx::query(sqlx::AssertSqlSafe(query.as_str()))
+            .fetch_all(&mut target)
+            .await?;
+        assert_eq!(before.len(), after.len(), "{table} count");
+        for (before, after) in before.iter().zip(&after) {
+            assert_eq!(row_values(before)?, row_values(after)?, "{table}");
+        }
+    }
+    source.close().await?;
+    target.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn every_catalog_version_reconstructs_real_encoded_rows()
+-> Result<(), Box<dyn std::error::Error>> {
+    for version in crate::archive_schema::FLOOR..=crate::schema_version::CURRENT_SCHEMA_VERSION {
+        let directory = tempfile::tempdir()?;
+        let (source, _) = archive(directory.path(), version).await?;
+        let target = directory.path().join("rebuilt.sqlite");
+        reconstruct_payload(&source, &target).await?;
+        assert_product_rows(&source, &target).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn fresh_exports_must_match_frozen_catalog() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let mut current = create_payload(&directory.path().join("current.sqlite")).await?;
+    let mut catalog = create_version_payload(
+        &directory.path().join("catalog.sqlite"),
+        crate::schema_version::CURRENT_SCHEMA_VERSION,
+    )
+    .await?;
+    require_schema(&mut current, &mut catalog, true).await?;
+    current.close().await?;
+    catalog.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn historical_tampering_is_rejected_before_prepared() -> Result<(), Box<dyn std::error::Error>>
+{
+    for mutation in [
+        "UPDATE runtime_metadata SET value='90' WHERE key='schema_version'",
+        "UPDATE runtime_metadata SET value='86' WHERE key='schema_version'",
+        "UPDATE runtime_metadata SET value='088' WHERE key='schema_version'",
+        "UPDATE runtime_metadata SET value='87' WHERE key='schema_version'",
+        "ALTER TABLE user_profiles ADD COLUMN secret TEXT",
+        "CREATE TABLE surprise(value TEXT)",
+        "UPDATE user_profiles SET profile_json=json_set(profile_json,'$.unknown',1)",
+        "UPDATE rooms SET settings_json=json_set(settings_json,'$.conversation_mode','free_access')",
+    ] {
+        let directory = tempfile::tempdir()?;
+        let (source, mut manifest) = archive(directory.path(), 88).await?;
+        let mut connection =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&source)).await?;
+        sqlx::query(sqlx::AssertSqlSafe(mutation))
+            .execute(&mut connection)
+            .await?;
+        connection.close().await?;
+        (manifest.database_bytes, manifest.database_sha256) =
+            backup_codec::measure_payload(&mut std::fs::File::open(&source)?)?;
+        let destination = tempfile::tempdir()?;
+        let target = destination.path().join("runtime.sqlite3");
+        let mut job = crate::restore_job::RestoreJob::begin(&target)?;
+        assert!(job.prepare(&source, manifest).await.is_err(), "{mutation}");
+        assert_eq!(
+            job.journal().phase,
+            crate::restore_job::RestorePhase::Validating
+        );
+        assert!(job.bind_switch("epoch", &"a".repeat(43)).is_err());
+        assert!(!target.exists());
+        job.cancel()?;
+    }
+    Ok(())
+}

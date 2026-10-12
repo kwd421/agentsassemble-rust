@@ -88,6 +88,20 @@ pub(crate) async fn open_input(path: &Path) -> Result<SqliteConnection, Persiste
 }
 
 pub(crate) async fn create_payload(path: &Path) -> Result<SqliteConnection, PersistenceError> {
+    create_with_ddl(path, crate::schema::statements()).await
+}
+
+pub(crate) async fn create_version_payload(
+    path: &Path,
+    version: i64,
+) -> Result<SqliteConnection, PersistenceError> {
+    create_with_ddl(path, crate::archive_schema::statements(version)?).await
+}
+
+async fn create_with_ddl(
+    path: &Path,
+    ddl: impl IntoIterator<Item = impl AsRef<str>>,
+) -> Result<SqliteConnection, PersistenceError> {
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -102,8 +116,8 @@ pub(crate) async fn create_payload(path: &Path) -> Result<SqliteConnection, Pers
             .pragma("trusted_schema", "OFF"),
     )
     .await?;
-    for statement in crate::schema::statements() {
-        sqlx::raw_sql(sqlx::AssertSqlSafe(statement))
+    for statement in ddl {
+        sqlx::raw_sql(sqlx::AssertSqlSafe(statement.as_ref()))
             .execute(&mut connection)
             .await?;
     }
@@ -128,16 +142,16 @@ pub(crate) async fn require_schema(
     {
         return Err(invalid());
     }
-    for table in crate::schema::tables() {
-        backup_policy::policy(table.name)?;
-        if columns(source, table.name).await? != columns(output, table.name).await? {
+    for table in crate::archive_schema::tables(output).await? {
+        backup_policy::policy(&table)?;
+        if columns(source, &table).await? != columns(output, &table).await? {
             return Err(invalid());
         }
     }
     Ok(())
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 enum Cell {
     Null,
     Text(String),
@@ -177,7 +191,11 @@ fn row_values(row: &SqliteRow) -> Result<BTreeMap<String, Cell>, PersistenceErro
         .collect()
 }
 
-fn sanitize(table: &str, values: &mut BTreeMap<String, Cell>) -> Result<bool, PersistenceError> {
+fn sanitize(
+    table: &str,
+    version: i64,
+    values: &mut BTreeMap<String, Cell>,
+) -> Result<bool, PersistenceError> {
     if table == "runtime_metadata" {
         return Ok(matches!(
             values.get("key").and_then(Cell::text),
@@ -214,7 +232,7 @@ fn sanitize(table: &str, values: &mut BTreeMap<String, Cell>) -> Result<bool, Pe
         if column.ends_with("_json")
             && let Cell::Text(text) = cell
         {
-            *text = backup_policy::json(table, column, text)?;
+            *text = backup_policy::json(table, column, text, version)?;
         }
     }
     Ok(true)
@@ -226,13 +244,15 @@ pub(crate) async fn reconstruct(
     hostile: bool,
 ) -> Result<(), PersistenceError> {
     require_schema(source, output, hostile).await?;
+    let version = crate::archive_schema::version(source).await?;
+    let tables = crate::archive_schema::tables(output).await?;
     let mut tx = output.begin().await?;
-    for table in crate::schema::tables() {
-        if backup_policy::policy(table.name)? == Policy::Ephemeral {
+    for table in tables {
+        if backup_policy::policy(&table)? == Policy::Ephemeral {
             if hostile
                 && sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
                     "SELECT count(*) FROM \"{}\"",
-                    table.name
+                    &table
                 )))
                 .fetch_one(&mut *source)
                 .await?
@@ -242,7 +262,7 @@ pub(crate) async fn reconstruct(
             }
             continue;
         }
-        let fields = columns(source, table.name)
+        let fields = columns(source, &table)
             .await?
             .into_iter()
             .filter(|c| c.2 == 0)
@@ -256,7 +276,7 @@ pub(crate) async fn reconstruct(
             .join(" OR ");
         let oversized = format!(
             "SELECT EXISTS(SELECT 1 FROM \"{}\" WHERE {oversized})",
-            table.name
+            &table
         );
         if sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(oversized))
             .fetch_one(&mut *source)
@@ -264,13 +284,13 @@ pub(crate) async fn reconstruct(
         {
             return Err(invalid());
         }
-        let fields = if table.name == "room_attendee_invites" && !hostile {
+        let fields = if table == "room_attendee_invites" && !hostile {
             fields.replace("\"restore_parent_kind\"", "CASE WHEN parent_fingerprint IS NULL THEN restore_parent_kind ELSE (SELECT group_concat(kind) FROM (SELECT 'human' AS kind FROM human_room_sessions WHERE session_fingerprint=room_attendee_invites.parent_fingerprint UNION ALL SELECT 'operator' FROM operator_pairings WHERE session_fingerprint=room_attendee_invites.parent_fingerprint)) END AS restore_parent_kind")
         } else {
             fields
         };
-        let mut query = format!("SELECT {fields} FROM \"{}\"", table.name);
-        let live_companions = table.name == "room_attendee_invites" && !hostile;
+        let mut query = format!("SELECT {fields} FROM \"{}\"", &table);
+        let live_companions = table == "room_attendee_invites" && !hostile;
         if live_companions {
             // Expired/revoked invitations cannot be redeemed and their parent
             // sessions may already be purged. Never invent replacement provenance.
@@ -283,20 +303,17 @@ pub(crate) async fn reconstruct(
         let mut rows = query.fetch(&mut *source);
         while let Some(row) = rows.try_next().await? {
             let mut values = row_values(&row)?;
-            if !sanitize(table.name, &mut values)? {
+            if !sanitize(&table, version, &mut values)? {
                 continue;
             }
-            assets::validate(table.name, &mut values).await?;
+            assets::validate(&table, &mut values).await?;
             let names = values
                 .keys()
                 .map(|n| format!("\"{n}\""))
                 .collect::<Vec<_>>()
                 .join(",");
             let parameters = vec!["?"; values.len()].join(",");
-            let statement = format!(
-                "INSERT INTO \"{}\" ({names}) VALUES ({parameters})",
-                table.name
-            );
+            let statement = format!("INSERT INTO \"{}\" ({names}) VALUES ({parameters})", &table);
             let mut insert = sqlx::query(sqlx::AssertSqlSafe(statement));
             for cell in values.into_values() {
                 insert = match cell {
@@ -338,7 +355,8 @@ async fn require_foreign_keys(connection: &mut SqliteConnection) -> Result<(), P
 /// Rejects schema objects, columns, fields or authority state outside v1 policy.
 pub async fn reconstruct_payload(input: &Path, output: &Path) -> Result<(), PersistenceError> {
     let mut source = open_input(input).await?;
-    let mut target = create_payload(output).await?;
+    let version = crate::archive_schema::version(&mut source).await?;
+    let mut target = create_version_payload(output, version).await?;
     let result = reconstruct(&mut source, &mut target, true).await;
     // Await handle release even on ENOSPC/validation failure before the native
     // owner removes staging (Windows cannot unlink a still-open SQLite file).
@@ -405,3 +423,7 @@ pub async fn payload_counts(path: &Path) -> Result<(u64, u64, u64), PersistenceE
     connection.close().await?;
     Ok(counts)
 }
+
+#[cfg(test)]
+#[path = "archive_schema_tests.rs"]
+pub(crate) mod archive_tests;

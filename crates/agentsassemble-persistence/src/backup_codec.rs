@@ -87,8 +87,8 @@ pub struct BackupManifest {
 }
 
 impl BackupManifest {
-    fn validate(&self) -> Result<(), BackupError> {
-        if self.schema_version != crate::schema_version::CURRENT_SCHEMA_VERSION
+    pub(crate) fn validate(&self) -> Result<(), BackupError> {
+        if !crate::archive_schema::supported(self.schema_version)
             || uuid::Uuid::parse_str(&self.server_id).is_err()
             || self.server_name.len() > 400
             || self.issuer.len() > 2048

@@ -1,4 +1,5 @@
 mod account_data_reset;
+mod archive_schema;
 pub mod backup_codec;
 pub mod backup_database;
 mod backup_json;

@@ -211,3 +211,46 @@ fn capacity_preflight_precedes_payload_on_the_same_stream() -> Result<(), Backup
     }
     Ok(())
 }
+
+#[test]
+fn unsupported_manifest_versions_fail_before_payload_output() -> Result<(), BackupError> {
+    let (data, manifest) = fixture();
+    let mut encoded = Vec::new();
+    encode(
+        &mut data.as_slice(),
+        &mut encoded,
+        &manifest,
+        None,
+        parameters(),
+    )?;
+    let mut input = Cursor::new(encoded);
+    input.set_position(8);
+    let header = read_record(&mut input, 4096)?;
+    let original = read_record(&mut input, CHUNK)?;
+    let mut remainder = Vec::new();
+    input.read_to_end(&mut remainder)?;
+    for version in [
+        serde_json::json!(86),
+        serde_json::json!(crate::schema_version::CURRENT_SCHEMA_VERSION + 1),
+        serde_json::json!("87"),
+        serde_json::json!(87.5),
+    ] {
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&original).map_err(|_| BackupError::Manifest)?;
+        value["schema_version"] = version;
+        let mut altered = MAGIC.to_vec();
+        write_record(&mut altered, &header)?;
+        write_record(
+            &mut altered,
+            &serde_json::to_vec(&value).map_err(|_| BackupError::Manifest)?,
+        )?;
+        altered.extend_from_slice(&remainder);
+        let mut output = Vec::new();
+        assert!(matches!(
+            decode(&mut altered.as_slice(), &mut output, None),
+            Err(BackupError::Manifest)
+        ));
+        assert!(output.is_empty());
+    }
+    Ok(())
+}

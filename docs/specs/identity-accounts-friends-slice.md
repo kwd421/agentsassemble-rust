@@ -116,6 +116,33 @@ Regression scope: ACK cleanup/restart including legacy Ready without staging,
 Activated replay, rejected ACKs, unfinished phases and local chooser behavior.
 No Computer Use or physical Windows acceptance in this correction.
 
+### Historical archive restoration (2026-10-12)
+
+Required entry points: native backup export and pre-runtime import, envelope
+validation (`backup_codec`), trusted reconstruction (`backup_database`), and
+`RestoreJob::prepare`. Schema 87 is the first native-export version (9c3afbee);
+accept 87 through CURRENT inclusive, rejecting unsupported/malformed versions and
+manifest/database disagreement before reconstruction. Schema 89 adds connector
+mentions; it does not raise attachment limits.
+
+Freeze exact source DDL in a trusted archive catalog: shared 87 baseline and
+version-indexed additions/replacements/removals. Keep source-version JSON, cell,
+asset, ephemeral, foreign-key, integrity and custody restrictions. Never execute
+archive DDL or upgrade the hostile input. Fresh exports must exactly match the
+catalog. Reconstruct privately at the source version, verify identity/counts,
+provision fresh identity and run ordinary schema upgrades while still Validating.
+Rebuild current-schema derived state and validate before persisting Prepared.
+Migration/space failures leave the live store untouched and cannot initiate a
+central switch; retries reconstruct from validated staging. Existing journal,
+commit, activation hash and rename ordering remain authoritative.
+
+Acceptance: real encoder archives built from each catalog version with representative
+product rows/assets preserve exported rows and attachment bytes at CURRENT;
+newer/below-floor/malformed versions, relabelled manifests, altered DDL, extra
+objects and invalid cells fail before activation. Verify failed upgrade/retry and
+existing journal crash boundaries. Run persistence tests, formatting and architecture
+checks. Attachment policy/transport/UI changes and usage-report work are excluded.
+
 The owner authorizes implementation of export and restore of the same logical
 server on a new computer. Central stores no backup bytes. Direct transfer,
 server cloning, ownership transfer and replacing existing installations are out
@@ -132,7 +159,7 @@ of scope. The design review C0/H2/M2/L1 is binding with these corrections:
 - Treat every import as hostile: read-only SQLite, extensions disabled,
   trusted_schema off, exact supported schema-object and column allowlist. Reject
   unknown tables/indexes/triggers/views/columns and JSON fields. Decode fields
-  through domain owners into a fresh current-schema database; NEVER activate,
+  through source-version domain owners into a fresh source-schema database; NEVER activate,
   migrate or execute writes against the supplied database.
 - Authority sanitization: discard owner/member/operator/human/attendee/connector
   sessions; redeemed pairing credentials; challenges, bearer fingerprints,

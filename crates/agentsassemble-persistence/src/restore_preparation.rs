@@ -33,6 +33,13 @@ impl RestoreJob {
         if self.journal.phase != RestorePhase::Validating || self.journal.manifest.is_some() {
             return Err(invalid());
         }
+        manifest.validate().map_err(|_| invalid())?;
+        let mut source = crate::backup_database::open_input(input).await?;
+        let version = crate::archive_schema::version(&mut source).await;
+        source.close().await?;
+        if version? != manifest.schema_version {
+            return Err(invalid());
+        }
         let mut input_file = std::fs::File::open(input).map_err(PersistenceError::WriterLease)?;
         let (size, hash) =
             crate::backup_codec::measure_payload(&mut input_file).map_err(|_| invalid())?;
