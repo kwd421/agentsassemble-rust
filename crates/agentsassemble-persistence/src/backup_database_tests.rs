@@ -256,19 +256,43 @@ async fn aggregate_rows_are_rejected_before_materialization()
     sqlx::raw_sql("CREATE TABLE sample(a BLOB,b BLOB,c BLOB); INSERT INTO sample VALUES(zeroblob(12000000),zeroblob(12000000),zeroblob(12000000))")
         .execute(&mut source).await?;
     assert!(matches!(
-        require_row_bounds(&mut source, "sample", "a,b,c").await,
+        require_row_bounds(&mut source, "sample", "a,b,c", 92).await,
         Err(PersistenceError::InvalidBackup)
     ));
     sqlx::query("UPDATE sample SET c=NULL")
         .execute(&mut source)
         .await?;
-    require_row_bounds(&mut source, "sample", "a,b,c").await?;
+    require_row_bounds(&mut source, "sample", "a,b,c", 92).await?;
+    sqlx::raw_sql("CREATE TABLE room_message_attachments(content BLOB,a BLOB,b BLOB); INSERT INTO room_message_attachments VALUES(zeroblob(52428800),zeroblob(12000000),zeroblob(12000000))")
+        .execute(&mut source).await?;
+    assert!(
+        require_row_bounds(&mut source, "room_message_attachments", "content,a,b", 92)
+            .await
+            .is_err()
+    );
+    sqlx::query("UPDATE room_message_attachments SET a=NULL,b=NULL")
+        .execute(&mut source)
+        .await?;
+    require_row_bounds(&mut source, "room_message_attachments", "content,a,b", 92).await?;
+    assert!(
+        require_row_bounds(&mut source, "room_message_attachments", "content,a,b", 91)
+            .await
+            .is_err()
+    );
+    sqlx::query("UPDATE room_message_attachments SET content=zeroblob(52428801)")
+        .execute(&mut source)
+        .await?;
+    assert!(
+        require_row_bounds(&mut source, "room_message_attachments", "content,a,b", 92)
+            .await
+            .is_err()
+    );
     // Structured JSON and identifiers are bounded before deserialization, even
     // if a hostile file was created with CHECK constraints disabled.
     sqlx::raw_sql("CREATE TABLE persona_assets(persona_id TEXT,card_json TEXT); INSERT INTO persona_assets VALUES('valid',printf('%.*c',11000000,'x'))")
         .execute(&mut source).await?;
     assert!(
-        require_row_bounds(&mut source, "persona_assets", "persona_id,card_json")
+        require_row_bounds(&mut source, "persona_assets", "persona_id,card_json", 92)
             .await
             .is_err()
     );
@@ -276,7 +300,7 @@ async fn aggregate_rows_are_rejected_before_materialization()
         .execute(&mut source)
         .await?;
     assert!(
-        require_row_bounds(&mut source, "persona_assets", "persona_id,card_json")
+        require_row_bounds(&mut source, "persona_assets", "persona_id,card_json", 92)
             .await
             .is_err()
     );

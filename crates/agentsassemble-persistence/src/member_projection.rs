@@ -218,7 +218,7 @@ pub(crate) async fn upgrade(
 ) -> Result<(), PersistenceError> {
     if matches!(
         version,
-        "84" | "85" | "86" | "87" | "88" | "89" | "90" | "91"
+        "84" | "85" | "86" | "87" | "88" | "89" | "90" | "91" | "92"
     ) {
         return Ok(());
     }

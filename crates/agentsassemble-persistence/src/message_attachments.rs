@@ -3,11 +3,11 @@ use std::collections::BTreeSet;
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID, MAX_ATTACHMENT_BYTES, MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
-    MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_MESSAGE_CHARACTERS, MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX,
-    MESSAGE_ATTACHMENT_ID_PREFIX, MESSAGE_ATTACHMENT_REFERENCE_PREFIX,
-    MESSAGE_ATTACHMENT_VIEW_SUFFIX, RoomEvent, VOTE_QUESTION_CHARACTER_LIMIT,
-    canonical_message_attachment_filename, clean_message, has_visible_text,
-    is_message_attachment_id, require_message_write_authority,
+    MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_MESSAGE_CHARACTERS, MAX_ROOM_FILE_BYTES,
+    MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX, MESSAGE_ATTACHMENT_ID_PREFIX,
+    MESSAGE_ATTACHMENT_REFERENCE_PREFIX, MESSAGE_ATTACHMENT_VIEW_SUFFIX, RoomEvent,
+    VOTE_QUESTION_CHARACTER_LIMIT, canonical_message_attachment_filename, clean_message,
+    has_visible_text, is_message_attachment_id, require_message_write_authority,
 };
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -719,7 +719,7 @@ pub(crate) fn canonical_metadata(attachment: &MessageAttachmentMetadata) -> bool
         && canonical_message_attachment_filename(&attachment.filename) == attachment.filename
         && attachment.content_type.len() <= MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES
         && valid_content_type(&attachment.content_type)
-        && (1..=MAX_ATTACHMENT_BYTES).contains(&attachment.size)
+        && (1..=MAX_ROOM_FILE_BYTES).contains(&attachment.size)
         && attachment.is_image == is_safe_raster_content_type(&attachment.content_type)
         && attachment.url
             == format!(

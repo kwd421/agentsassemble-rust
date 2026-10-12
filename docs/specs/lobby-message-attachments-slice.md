@@ -617,3 +617,27 @@ limit while the outer envelope applies the host-wide bound.
 Regression acceptance: concurrent slow bodies across one/many principals stay within
 admission, refusal changes no accounting, and success/error/timeout/cancellation
 return capacity on both transports, including uncooperative credit-free clients.
+
+### Storage ceiling only — schema 92 (2026-10-12)
+
+Normal persistence opening upgrades schema 91 to 92 by rebuilding message attachment
+and connector upload tables in one transaction. Connector publication copies pending
+files into message rows, so both stored-size checks become 52,428,800 bytes. Copy
+all rows with INSERT SELECT, verify counts and foreign keys before dropping originals,
+rename replacements, recreate existing indexes, and commit the version together.
+Failure preserves the original tables/version and reopening retries; no VACUUM.
+Every other limit, key, index and custody constraint remains unchanged; fresh and
+upgraded schemas agree. The domain owns a separate room-file ceiling; live upload
+validators, avatars/personas, provider transports and settings remain unchanged.
+
+Backup export, hostile reconstruction and RestoreJob preparation accept stored
+message metadata through the ceiling. Extend the immutable archive catalog to 92;
+accepted versions 87–91 retain their validation rules and restore through normal
+upgrades to 92. Only schema-92 message content may exceed the 16 MiB cell bound.
+For that cell, charge at most the historical 10 MiB against the existing 32 MiB row
+budget; all other bytes retain their full charge and individual bounds. Thus large
+content does not admit hostile wide metadata. Pending connector uploads remain
+excluded from archives. Verify exact row/BLOB/custody preservation, transaction
+rollback and retry, 50 MiB export/restore, historical restore, hostile wide-row
+rejection and unchanged non-message storage limits. Transfer performance and larger
+live uploads belong to later slices.

@@ -16,6 +16,7 @@ fn integer(values: &BTreeMap<String, Cell>, name: &str) -> Result<i64, Persisten
 pub(super) async fn validate(
     table: &str,
     values: &mut BTreeMap<String, Cell>,
+    version: i64,
 ) -> Result<(), PersistenceError> {
     let column = match table {
         "persona_assets" => "thumbnail_png",
@@ -53,7 +54,10 @@ pub(super) async fn validate(
             usize::try_from(integer(values, "size")?).map_err(|_| invalid())?,
             integer(values, "is_safe_image")? == 1,
         );
-        if !message_attachments::canonical_metadata(&metadata) || metadata.size != content.len() {
+        if !message_attachments::canonical_metadata(&metadata)
+            || metadata.size != content.len()
+            || (version < 92 && metadata.size > agentsassemble_domain::MAX_ATTACHMENT_BYTES)
+        {
             return Err(invalid());
         }
     } else if table != "persona_assets" {

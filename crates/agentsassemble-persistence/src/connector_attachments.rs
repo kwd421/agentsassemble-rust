@@ -4,12 +4,12 @@ use super::{
     Row, Sqlite, Transaction, attachment_unavailable, invalid_attachment_state, metadata,
 };
 
-pub(crate) const DDL: &str = "CREATE TABLE room_connector_uploads (
+pub(crate) const DDL: &str = "CREATE TABLE \"room_connector_uploads\" (
     attachment_id TEXT PRIMARY KEY,
     room_id TEXT NOT NULL, participant_id TEXT NOT NULL,
     filename TEXT NOT NULL, content_type TEXT NOT NULL,
     content BLOB NOT NULL CHECK(typeof(content) = 'blob'),
-    size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760 AND length(content) = size),
+    size INTEGER NOT NULL CHECK(size > 0 AND size <= 52428800 AND length(content) = size),
     is_safe_image INTEGER NOT NULL CHECK(is_safe_image IN (0,1)),
     created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL CHECK(expires_at > created_at),
     FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE

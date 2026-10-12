@@ -77,7 +77,7 @@ pub use agent_session_state::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
     AgentTurnPhase,
 };
-pub use asset::MAX_ATTACHMENT_BYTES;
+pub use asset::{MAX_ATTACHMENT_BYTES, MAX_ROOM_FILE_BYTES};
 pub use channel_messages::{
     CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE, ChannelHistoryPage,
     ChannelHistoryRequest, ChannelMessageSend, prepare_channel_message_event,

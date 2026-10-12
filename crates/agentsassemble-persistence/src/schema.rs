@@ -458,7 +458,7 @@ pub(crate) const TABLES: &[TableDefinition] = &[
     TableDefinition {
         name: "room_message_attachments",
         ddl: concat!(
-            "CREATE TABLE IF NOT EXISTS room_message_attachments (",
+            "CREATE TABLE IF NOT EXISTS \"room_message_attachments\" (",
             "attachment_id TEXT PRIMARY KEY CHECK(",
             "typeof(attachment_id) = 'text' AND length(CAST(attachment_id AS BLOB)) = 35 ",
             "AND attachment_id GLOB 'ma_[0-9a-f][0-9a-f][0-9a-f][0-9a-f]",
@@ -472,7 +472,7 @@ pub(crate) const TABLES: &[TableDefinition] = &[
             "filename TEXT NOT NULL, ",
             "content_type TEXT NOT NULL, ",
             "content BLOB NOT NULL CHECK(typeof(content) = 'blob'), ",
-            "size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760 AND length(content) = size), ",
+            "size INTEGER NOT NULL CHECK(size > 0 AND size <= 52428800 AND length(content) = size), ",
             "is_safe_image INTEGER NOT NULL CHECK(is_safe_image IN (0, 1)), ",
             "created_at INTEGER NOT NULL CHECK(created_at > 0), ",
             "state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), ",

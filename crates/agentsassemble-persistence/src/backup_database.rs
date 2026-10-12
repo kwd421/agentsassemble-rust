@@ -250,9 +250,12 @@ fn sanitize(
 // the sum (trusted schemas have only a bounded number of columns).
 const MAX_ROW_BYTES: usize = 32 * 1024 * 1024;
 
-fn cell_limit(table: &str, column: &str) -> usize {
+fn cell_limit(table: &str, column: &str, version: i64) -> usize {
     // These bounds already exist in every supported version's owned schema.
     match (table, column.trim_matches('"')) {
+        ("room_message_attachments", "content") if version >= 92 => {
+            agentsassemble_domain::MAX_ROOM_FILE_BYTES
+        }
         ("persona_assets", "card_json" | "thumbnail_png") => 10 * 1024 * 1024,
         ("persona_assets", "persona_id") => 80,
         ("room_vote_states", "tallies_json") => 256,
@@ -265,6 +268,7 @@ async fn require_row_bounds(
     source: &mut SqliteConnection,
     table: &str,
     fields: &str,
+    version: i64,
 ) -> Result<(), PersistenceError> {
     let lengths = fields
         .split(',')
@@ -277,12 +281,24 @@ async fn require_row_bounds(
         .collect::<Vec<_>>();
     let cells = lengths
         .iter()
-        .map(|(column, length)| format!("{length}>{}", cell_limit(table, column)))
+        .map(|(column, length)| format!("{length}>{}", cell_limit(table, column, version)))
         .collect::<Vec<_>>()
         .join(" OR ");
     let aggregate = lengths
         .iter()
-        .map(|(_, length)| format!("min({length},{})", MAX_ROW_BYTES + 1))
+        .map(|(column, length)| {
+            // Discount only the extra room-file content. Metadata keeps the
+            // historical aggregate budget, including the original content charge.
+            let cap = if table == "room_message_attachments"
+                && column.trim_matches('"') == "content"
+                && version >= 92
+            {
+                agentsassemble_domain::MAX_ATTACHMENT_BYTES
+            } else {
+                MAX_ROW_BYTES + 1
+            };
+            format!("min({length},{cap})")
+        })
         .collect::<Vec<_>>()
         .join("+");
     let query = format!(
@@ -331,7 +347,7 @@ pub(crate) async fn reconstruct(
             .map(|c| format!("\"{}\"", c.0))
             .collect::<Vec<_>>()
             .join(",");
-        require_row_bounds(source, &table, &fields).await?;
+        require_row_bounds(source, &table, &fields, version).await?;
         let fields = if table == "room_attendee_invites" && !hostile {
             fields.replace("\"restore_parent_kind\"", "CASE WHEN parent_fingerprint IS NULL THEN restore_parent_kind ELSE (SELECT group_concat(kind) FROM (SELECT 'human' AS kind FROM human_room_sessions WHERE session_fingerprint=room_attendee_invites.parent_fingerprint UNION ALL SELECT 'operator' FROM operator_pairings WHERE session_fingerprint=room_attendee_invites.parent_fingerprint)) END AS restore_parent_kind")
         } else {
@@ -354,7 +370,7 @@ pub(crate) async fn reconstruct(
             if !sanitize(&table, version, &mut values)? {
                 continue;
             }
-            assets::validate(&table, &mut values).await?;
+            assets::validate(&table, &mut values, version).await?;
             let names = values
                 .keys()
                 .map(|n| format!("\"{n}\""))
