@@ -260,6 +260,7 @@ pub use human_invite_preflight::{
 pub use human_invites::{HumanInvite, NewHumanInvite};
 pub use human_prejoin_attachments::HumanPrejoinAvatarAuthorization;
 pub use human_session_authority::HumanSessionAuthorization;
+pub use message_attachments::reader::{MessageAttachmentReadAuthority, MessageAttachmentReader};
 pub use message_attachments::{
     MessageAttachment, MessageAttachmentMetadata, ProviderAttachmentReadAuthority,
 };

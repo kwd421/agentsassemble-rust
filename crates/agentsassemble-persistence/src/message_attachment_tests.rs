@@ -219,7 +219,7 @@ async fn upload_cleans_only_expired_message_pending_rows() {
     );
 }
 
-async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
+pub(super) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open message attachment fixture: {error}"));

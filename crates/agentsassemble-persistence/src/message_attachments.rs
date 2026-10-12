@@ -57,6 +57,8 @@ pub(crate) const DDL: &str = concat!(
 const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
 #[path = "connector_attachments.rs"]
 pub(crate) mod connector;
+#[path = "message_attachment_reader.rs"]
+pub(crate) mod reader;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MessageAttachmentMetadata {
@@ -581,6 +583,27 @@ async fn read_bound_message_attachment<T>(
     read_limit: usize,
     admit: impl FnOnce(usize) -> Result<T, PersistenceError>,
 ) -> Result<(MessageAttachment, T), PersistenceError> {
+    let stored =
+        read_bound_message_metadata(transaction, room_id, attachment_id, read_limit).await?;
+    let lease = admit(stored.size)?;
+    let content = crate::room_file_content::RoomFileContent::Message
+        .collect(transaction, attachment_id, stored.size)
+        .await?;
+    Ok((
+        MessageAttachment {
+            metadata: stored,
+            content,
+        },
+        lease,
+    ))
+}
+
+pub(crate) async fn read_bound_message_metadata(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    attachment_id: &str,
+    read_limit: usize,
+) -> Result<MessageAttachmentMetadata, PersistenceError> {
     let row = sqlx::query(
         "SELECT attachment.event_seq, attachment.filename, attachment.content_type, attachment.size, attachment.is_safe_image, event.event_json FROM room_message_attachments AS attachment INNER JOIN room_events AS event ON event.room_id = attachment.room_id AND event.seq = attachment.event_seq WHERE attachment.attachment_id = ? AND attachment.room_id = ? AND attachment.state = 'bound' AND attachment.pending_owner_user_id IS NULL AND attachment.expires_at IS NULL",
     )
@@ -609,17 +632,7 @@ async fn read_bound_message_attachment<T>(
             ),
         ));
     }
-    let lease = admit(stored.size)?;
-    let content = crate::room_file_content::RoomFileContent::Message
-        .collect(transaction, attachment_id, stored.size)
-        .await?;
-    Ok((
-        MessageAttachment {
-            metadata: stored,
-            content,
-        },
-        lease,
-    ))
+    Ok(stored)
 }
 
 fn stored_metadata(

@@ -59,6 +59,38 @@ rasters, quota races, deletion/expiry, and real loopback HTTP/native move flows.
 No transfer-throughput, peak-RSS, writer-occupancy or packaged-UI measurement was
 performed; whole-file/raster boundaries remain for the subsequent slices.
 
+## Transfer rework: streamed human downloads (slice 2, 2026-10-12)
+
+Both `GET /api/attachments/ma_*?view=1` and `?download=1`, through plain
+HTTP and `secure_http`/`secure_channel`, serve the same bytes and headers with a
+truthful Content-Length. Neither transport assembles a whole room file. Each
+64 KiB piece is read in a short transaction that revalidates the exact local
+identity or durable room session, history permission and canonical message
+reference; the connection is released before any network await. Attachment,
+message, room, membership, session or account deletion/revocation interrupts the
+body with an error, never a successful short EOF.
+
+Streamed admission charges a fixed 1 MiB allowance per response (SQLx piece
+copies, one yielded 64 KiB piece and the bounded HTTP write buffer, with margin),
+inside the existing shared 512 MiB host envelope. A principal may have 32 streams
+(32 MiB), beside the existing sixteen retained small/AI responses; their combined
+weight still cannot exceed 400 MiB. Ten 50 MiB downloads plus four visible images,
+room icons and reads from other devices therefore fit without a file-size refusal.
+Encrypted queued records remain separately charged by the unchanged 8 MiB global /
+512 KiB per-direction gates. No whole-file prefetch or sliding credit window.
+
+Reuse body-policy deadlines: 30 seconds idle, at least 64 KiB per 120 seconds,
+and a one-hour ceiling. Transport owners enforce expiry even without body polling,
+drop the response and release admission; connection/channel close and virtual
+request cancellation also release it. Only nonempty delivered pieces count.
+AI/provider/attendee/connector base64 JSON reads and other asset tables retain
+round-4 whole-value admission. Routes, wire records, clients and UI are unchanged.
+
+Acceptance: byte equality at non-piece-aligned sizes and 50 MiB on both transports;
+ten concurrent large streams by one principal and bounded host weight; controlled
+stalls, progress expiry, cancellation and mid-stream deletion/access loss; an
+unrelated database write completes while network consumption is stalled.
+
 ## Approved target contract after Phase 0B
 
 - This slice owns only attachments on the ordinary lobby `message_final` path. Custom
