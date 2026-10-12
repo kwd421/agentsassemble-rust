@@ -98,6 +98,44 @@ fn encode(value: &Value) -> Result<String, String> {
 #[tool_router]
 impl ConnectorMcp {
     #[tool(
+        description = "Start an existing conversation-only (meeting_read_only) agent. Workspace-write and full-access starts require the owner confirmation unavailable in these tools. Requires current director role and current owner agent-control authority."
+    )]
+    async fn start_agent(
+        &self,
+        Parameters(input): Parameters<contract::Direct<agentsassemble_domain::StartAgent>>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .execute_delegated_direct(&agentsassemble_domain::DirectRoomAction::StartAgent(
+                    input.request,
+                ))
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
+        description = "Stop an existing agent through its current lifecycle owner. Requires current director role and current owner agent-control authority."
+    )]
+    async fn stop_agent(
+        &self,
+        Parameters(input): Parameters<contract::Direct<agentsassemble_domain::StopAgent>>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .execute_delegated_direct(&agentsassemble_domain::DirectRoomAction::StopAgent(
+                    input.request,
+                ))
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
         description = "Create a text channel on behalf of your owner. Requires current director role and owner authority; check room_status for current delegated actions."
     )]
     async fn create_text_channel(

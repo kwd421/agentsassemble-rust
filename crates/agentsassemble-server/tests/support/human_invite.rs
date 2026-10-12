@@ -285,10 +285,17 @@ async fn start_configured(
         .unwrap_or_else(|error| panic!("read human invite address: {error}"));
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
-    let mut state = AppState::local(
+    #[cfg(unix)]
+    let provider_adapter = agentsassemble_provider::ProviderAdapter::with_managed_executable(
+        std::path::Path::new(env!("CARGO_BIN_EXE_agentsassemble-server")),
+    );
+    #[cfg(not(unix))]
+    let provider_adapter = agentsassemble_provider::ProviderAdapter::new();
+    let mut state = AppState::local_with_provider_adapter(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
         ProviderCatalogService::fixed(catalog),
+        provider_adapter,
     )
     .await
     .unwrap_or_else(|error| panic!("build human invite app state: {error}"));

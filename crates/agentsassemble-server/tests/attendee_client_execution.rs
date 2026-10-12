@@ -90,6 +90,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
         &endpoint,
         &token,
         &store,
+        server.state().rooms.subscribe("general").await,
         &mut tools_rx,
         (&attachment_id, &mut attachments_rx),
     )

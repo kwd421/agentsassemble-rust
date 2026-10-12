@@ -72,6 +72,18 @@ async fn delegated_admission_shares_owner_and_delegate_windows_and_replay_is_fre
         request_id: Uuid::new_v4().to_string(),
     };
     let first = apply(&store, &admission, &delegates[0], &request).await?;
+    let target_directory = tempfile::tempdir()?;
+    let target_id = "codex-00000000-0000-5000-8000-000000000321";
+    let draft = crate::runtime_reconciliation::tests::draft(target_directory.path(), target_id);
+    let target_id = draft.agent_id.as_str();
+    store
+        .execute_agent_create(
+            RoomMutationAuthority::TrustedPrincipal(&principal),
+            &Uuid::new_v4().to_string(),
+            &json!({"display_name":"Budget target"}),
+            &draft,
+        )
+        .await?;
     let direct = agentsassemble_domain::DirectRoomAction::CreateTextChannel(
         agentsassemble_domain::CreateTextChannel {
             request_id: Uuid::new_v4().to_string(),
@@ -79,14 +91,18 @@ async fn delegated_admission_shares_owner_and_delegate_windows_and_replay_is_fre
         },
     );
     let provider = agentsassemble_provider::ProviderAdapter::new();
+    let tracker = crate::lifecycle_command_tracker::LifecycleCommandTracker::default();
     let created = super::super::delegated_direct::apply(
         &store,
         &provider,
         &admission,
         &delegates[0],
         &direct,
+        &tracker,
+        None,
     )
     .await
+    .execution
     .reply
     .map_err(|failure| failure.error)?;
     assert_eq!(
@@ -116,8 +132,11 @@ async fn delegated_admission_shares_owner_and_delegate_windows_and_replay_is_fre
         &admission,
         &delegates[0],
         &direct,
+        &tracker,
+        None,
     )
     .await
+    .execution
     .reply
     .map_err(|failure| failure.error)?;
     assert!(replay.deduplicated);
@@ -129,10 +148,32 @@ async fn delegated_admission_shares_owner_and_delegate_windows_and_replay_is_fre
                 name: "Denied".into(),
             },
         );
-        assert!(matches!(super::super::delegated_direct::apply(
-            &store, &provider, &admission, delegate, &next,
-        ).await.reply.map_err(|failure| failure.error),
-            Err(PersistenceError::CommandRejected { code, .. }) if code == "write_budget_exceeded"));
+        for next in [
+            next,
+            agentsassemble_domain::DirectRoomAction::StartAgent(
+                agentsassemble_domain::StartAgent {
+                    request_id: Uuid::new_v4().to_string(),
+                    agent_id: target_id.into(),
+                },
+            ),
+            agentsassemble_domain::DirectRoomAction::StopAgent(agentsassemble_domain::StopAgent {
+                request_id: Uuid::new_v4().to_string(),
+                agent_id: target_id.into(),
+            }),
+        ] {
+            let result = super::super::delegated_direct::apply(
+                &store, &provider, &admission, delegate, &next, &tracker, None,
+            )
+            .await
+            .execution
+            .reply
+            .map_err(|failure| failure.error);
+            assert!(
+                matches!(&result,
+                Err(PersistenceError::CommandRejected { code, .. }) if code == "write_budget_exceeded"),
+                "{result:?}"
+            );
+        }
     }
     request.request_id = Uuid::new_v4().to_string();
     for delegate in &delegates {

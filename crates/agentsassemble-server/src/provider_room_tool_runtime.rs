@@ -28,23 +28,20 @@ pub(crate) async fn handle_provider_room_tool(
     };
     match command.request().clone() {
         ProviderRoomToolRequest::DirectAction(request) => {
-            let execution = crate::room_runtime::delegated_direct::apply(
-                store,
-                owners.provider_adapter,
+            crate::room_runtime::delegated_direct::execute_with_reply(
+                owners,
                 admission,
                 &delegated,
                 &request,
+                |result| {
+                    command.complete(
+                        result
+                            .map(ProviderRoomToolResult::DirectAction)
+                            .map_err(public_tool_error),
+                    )
+                },
             )
-            .await;
-            let publication =
-                crate::room_runtime::delegated_direct::publish(owners, &execution).await;
-            command.complete(
-                execution
-                    .reply
-                    .map(|outcome| ProviderRoomToolResult::DirectAction(outcome.result))
-                    .map_err(|failure| public_tool_error(failure.error)),
-            );
-            publication
+            .await
         }
         ProviderRoomToolRequest::DelegatedActions => {
             command.complete(
@@ -132,9 +129,14 @@ fn authority<'a>(
 
 pub(crate) fn public_tool_error(error: PersistenceError) -> ProviderRoomToolError {
     match error {
-        PersistenceError::CommandRejected { code, message } => {
+        PersistenceError::CommandRejected { code, message }
+        | PersistenceError::CommandUnresolved { code, message } => {
             ProviderRoomToolError { code, message }
         }
+        PersistenceError::StoredCommandRejected { code, message } => ProviderRoomToolError {
+            code: code.into(),
+            message,
+        },
         PersistenceError::CommandConflict => ProviderRoomToolError {
             code: "command_conflict".into(),
             message: "The request ID was used with different parameters.".into(),

@@ -129,6 +129,28 @@ fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservatio
 #[tool_router]
 impl RoomPortalMcp {
     #[tool(
+        description = "Start an existing conversation-only (meeting_read_only) agent. Workspace-write and full-access starts require the owner confirmation unavailable in these tools. Requires current director role and current owner agent-control authority."
+    )]
+    async fn start_agent(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::StartAgent>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(agentsassemble_domain::DirectRoomAction::StartAgent(request))
+            .await
+    }
+
+    #[tool(
+        description = "Stop an existing agent through its current lifecycle owner. Requires current director role and current owner agent-control authority."
+    )]
+    async fn stop_agent(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::StopAgent>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(agentsassemble_domain::DirectRoomAction::StopAgent(request))
+            .await
+    }
+
+    #[tool(
         description = "Create a text channel on behalf of your owner. Requires current director role and owner authority."
     )]
     async fn create_text_channel(

@@ -11,14 +11,66 @@ use serde_json::Value;
 use crate::{
     room_command_execution::{CommandExecution, progressed_execution},
     room_command_result::ended_session_authority,
-    room_runtime::RoomCommand,
     runtime_reconciliation::recover_exact_lifecycle_command,
 };
+
+/// Lifecycle execution context shared by human commands and action-bound delegation.
+/// Receipt authority records an observed effect; only control authority can reserve or execute it.
+pub(crate) struct LifecycleCommand<'a> {
+    pub(crate) principal: &'a agentsassemble_domain::AuthenticatedPrincipal,
+    pub(crate) request_id: &'a str,
+    pub(crate) action: RoomAction,
+    pub(crate) payload: &'a Value,
+    control: agentsassemble_persistence::AgentControlAuthority<'a>,
+    receipt: agentsassemble_persistence::RoomMutationAuthority<'a>,
+    reserved: Option<&'a tokio::sync::mpsc::UnboundedSender<String>>,
+}
+impl<'a> From<&'a crate::room_runtime::RoomCommand> for LifecycleCommand<'a> {
+    fn from(command: &'a crate::room_runtime::RoomCommand) -> Self {
+        let authority = command.mutation_authority();
+        Self {
+            principal: &command.principal,
+            request_id: &command.request_id,
+            action: command.action,
+            payload: &command.payload,
+            control: authority.into(),
+            receipt: authority,
+            reserved: None,
+        }
+    }
+}
+impl<'a> LifecycleCommand<'a> {
+    pub(crate) fn delegated(
+        control: &'a agentsassemble_persistence::DelegatedAgentControl,
+        action: RoomAction,
+        reserved: Option<&'a tokio::sync::mpsc::UnboundedSender<String>>,
+    ) -> Self {
+        Self {
+            principal: control.principal(),
+            request_id: control.request_id(),
+            action,
+            reserved,
+            payload: control.payload(),
+            control: agentsassemble_persistence::AgentControlAuthority::Delegated(control),
+            receipt: agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(
+                control.principal(),
+            ),
+        }
+    }
+    fn mutation_authority(&self) -> agentsassemble_persistence::RoomMutationAuthority<'a> {
+        self.receipt
+    }
+    fn report_reserved(&self, operation_id: &str) {
+        if let Some(reserved) = self.reserved {
+            let _ = reserved.send(operation_id.to_owned());
+        }
+    }
+}
 
 pub(crate) async fn execute_agent_start(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
 ) -> CommandExecution {
     if command.action == RoomAction::AgentResume
         && let Some(execution) = execute_paused_resume(store, provider_adapter, command).await
@@ -27,7 +79,7 @@ pub(crate) async fn execute_agent_start(
     }
     let mut plan = store
         .prepare_agent_launch(
-            command.mutation_authority(),
+            command.control,
             &command.request_id,
             &command.payload,
             command.action.as_str(),
@@ -47,7 +99,7 @@ pub(crate) async fn execute_agent_start(
             Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
                 store
                     .prepare_agent_launch(
-                        command.mutation_authority(),
+                        command.control,
                         &command.request_id,
                         &command.payload,
                         command.action.as_str(),
@@ -68,6 +120,7 @@ pub(crate) async fn execute_agent_start(
         }
         AgentStartPlan::Start(effect) => effect,
     };
+    command.report_reserved(&effect.operation_id);
     let reservation = match provider_adapter.reserve_start(&effect.session).await {
         Ok(reservation) => reservation,
         Err(error) => {
@@ -82,7 +135,7 @@ pub(crate) async fn execute_agent_start(
     };
     let authorized = store
         .authorize_agent_start_effect(
-            command.mutation_authority(),
+            command.control,
             &command.request_id,
             &command.payload,
             &effect.operation_id,
@@ -123,7 +176,7 @@ pub(crate) async fn execute_agent_start(
 async fn execute_paused_resume(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
 ) -> Option<CommandExecution> {
     let plan = match store
         .prepare_paused_agent_resume(
@@ -172,7 +225,7 @@ async fn execute_paused_resume(
 pub(crate) async fn execute_agent_pause(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
 ) -> CommandExecution {
     let plan = match store
         .prepare_agent_pause(
@@ -226,7 +279,7 @@ fn resident_runtime_failure(error: &ProviderAdapterError) -> CommandExecution {
 
 async fn record_agent_start_pre_effect_failure(
     store: &SqliteStore,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
     effect: &AgentStartEffect,
     reason: (&str, &str),
 ) -> CommandExecution {
@@ -256,7 +309,7 @@ async fn record_agent_start_pre_effect_failure(
 
 async fn complete_agent_start(
     store: &SqliteStore,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
     effect: &AgentStartEffect,
     started: ProviderRuntimeStarted,
 ) -> CommandExecution {
@@ -280,7 +333,7 @@ async fn complete_agent_start(
 async fn record_agent_start_failure(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
     effect: &AgentStartEffect,
     error: ProviderAdapterError,
 ) -> CommandExecution {
@@ -336,7 +389,7 @@ async fn record_agent_start_failure(
 
 async fn record_agent_stop_authorization_failure(
     store: &SqliteStore,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
     operation_id: &str,
     error: PersistenceError,
 ) -> CommandExecution {
@@ -361,7 +414,7 @@ async fn record_agent_stop_authorization_failure(
 pub(crate) async fn execute_agent_stop(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
 ) -> CommandExecution {
     confirm_lost_runtime_owner(store, provider_adapter, command).await;
     let plan = match prepare_agent_stop_with_recovery(store, provider_adapter, command).await {
@@ -392,6 +445,7 @@ pub(crate) async fn execute_agent_stop(
             }
         }
         AgentStopPlan::Stop(effect) => {
+            command.report_reserved(&effect.operation_id);
             execute_managed_stop(store, provider_adapter, command, effect).await
         }
     }
@@ -400,12 +454,12 @@ pub(crate) async fn execute_agent_stop(
 async fn execute_managed_stop(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
     effect: agentsassemble_persistence::AgentStopEffect,
 ) -> CommandExecution {
     let effect = match store
         .authorize_agent_stop_effect(
-            command.mutation_authority(),
+            command.control,
             &command.request_id,
             &command.payload,
             &effect.operation_id,
@@ -497,7 +551,7 @@ async fn execute_managed_stop(
 async fn confirm_lost_runtime_owner(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
 ) {
     let Some(session_id) = command.payload.get("agent_id").and_then(Value::as_str) else {
         return;
@@ -529,14 +583,10 @@ async fn confirm_lost_runtime_owner(
 async fn prepare_agent_stop_with_recovery(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
+    command: &LifecycleCommand<'_>,
 ) -> Result<AgentStopPlan, PersistenceError> {
     let plan = store
-        .prepare_agent_stop(
-            command.mutation_authority(),
-            &command.request_id,
-            &command.payload,
-        )
+        .prepare_agent_stop(command.control, &command.request_id, &command.payload)
         .await;
     if !plan.as_ref().is_err_and(unconfirmed_effect) {
         return plan;
@@ -553,11 +603,7 @@ async fn prepare_agent_stop_with_recovery(
     {
         Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
             store
-                .prepare_agent_stop(
-                    command.mutation_authority(),
-                    &command.request_id,
-                    &command.payload,
-                )
+                .prepare_agent_stop(command.control, &command.request_id, &command.payload)
                 .await
         }
         Ok(LiveRuntimeReconciliation::StillUnresolved) => plan,

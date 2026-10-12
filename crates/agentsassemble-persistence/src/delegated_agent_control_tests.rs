@@ -10,6 +10,66 @@ use uuid::Uuid;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
+#[tokio::test]
+async fn delegated_external_stop_keeps_custody_and_finishes_at_cleanup() -> TestResult {
+    let (mut store, connection, _, _) =
+        crate::attendee::turn_report_tests::assigned_report().await?;
+    let delegate = director(&store).await?;
+    let request = DirectRoomAction::StopAgent(StopAgent {
+        request_id: Uuid::new_v4().to_string(),
+        agent_id: connection.session().principal().participant_id.clone(),
+    });
+    let (control, _) = store
+        .admit_delegated_agent_control(&delegate, &request, |_, _, _| Ok(()))
+        .await?;
+    let cleanup = store
+        .authorize_attendee_cleanup(connection.session().session_fingerprint())
+        .await?;
+    for restarted in [false, true] {
+        if restarted {
+            store.runtime_generation = "restarted-server-generation".into();
+        }
+        let AgentStopPlan::ExternalPending(events) = store
+            .prepare_agent_stop(
+                AgentControlAuthority::Delegated(&control),
+                control.request_id(),
+                control.payload(),
+            )
+            .await?
+        else {
+            return Err("external stop transferred custody or completed prematurely".into());
+        };
+        assert_eq!(events.len(), usize::from(!restarted));
+    }
+    let report = crate::AttendeeCleanupReport {
+        request_id: Uuid::new_v4(),
+        stopped: store
+            .load_attendee_cleanup(&cleanup)
+            .await?
+            .ok_or("missing cleanup")?,
+    };
+    store.record_attendee_cleanup(&cleanup, &report).await?;
+    let AgentStopPlan::Outcome(outcome) = store
+        .prepare_agent_stop(
+            AgentControlAuthority::Delegated(&control),
+            control.request_id(),
+            control.payload(),
+        )
+        .await?
+    else {
+        return Err("delegated stop receipt missing".into());
+    };
+    assert!(outcome.deduplicated);
+    assert_eq!(outcome.result["status"], "succeeded");
+    assert_eq!(
+        outcome.event.extra["actor_participant_id"],
+        control.principal().participant_id
+    );
+    assert!(!serde_json::to_string(&outcome.result)?.contains(&report.stopped.runtime_lease_token));
+    assert!(store.load_attendee_cleanup(&cleanup).await?.is_none());
+    Ok(())
+}
+
 async fn director(
     store: &SqliteStore,
 ) -> Result<DelegateRoomAuthority, Box<dyn std::error::Error>> {

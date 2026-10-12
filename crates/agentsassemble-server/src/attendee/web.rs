@@ -135,6 +135,12 @@ impl AttendeeHttpError {
             PersistenceError::CommandRejected { code, .. } => {
                 (StatusCode::FORBIDDEN, code.as_ref())
             }
+            PersistenceError::CommandUnresolved { code, .. } => {
+                (StatusCode::CONFLICT, code.as_ref())
+            }
+            PersistenceError::StoredCommandRejected { code, .. } => {
+                (StatusCode::FORBIDDEN, code.as_str())
+            }
             PersistenceError::RoomMissing | PersistenceError::ParticipantMissing => {
                 (StatusCode::GONE, "room_membership_unavailable")
             }

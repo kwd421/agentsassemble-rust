@@ -88,7 +88,19 @@ pub(crate) fn public_command_outcome(
 pub(crate) fn ended_session_authority(error: &PersistenceError) -> Option<(&str, &str)> {
     match error {
         PersistenceError::CommandRejected { code, message }
-            if matches!(code.as_bytes(), b"session_revoked" | b"permission_denied") =>
+            if matches!(
+                code.as_bytes(),
+                b"session_revoked"
+                    | b"permission_denied"
+                    | b"role_required"
+                    | b"owner_muted"
+                    | b"owner_scope_read_only"
+                    | b"owner_authority_unavailable"
+                    | b"owner_not_permitted"
+                    | b"delegate_authority_expired"
+                    | b"stale_provider_turn"
+                    | b"owner_confirmation_required"
+            ) =>
         {
             Some((code.as_ref(), message))
         }

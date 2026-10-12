@@ -45,6 +45,37 @@ async fn guest_companion_pin_never_acquires_owner_operator_rights_and_revokes_im
             .json(&body)
             .send()
     };
+    let direct_endpoint = format!("{}/api/room-attendee/tool/direct", server.base_url);
+    for action in [
+        "create_text_channel",
+        "rename_text_channel",
+        "set_participant_mute",
+        "start_agent",
+        "stop_agent",
+    ] {
+        let mut tool = json!({"action":action,"request_id":Uuid::new_v4()});
+        match action {
+            "create_text_channel" => tool["name"] = json!("Denied"),
+            "rename_text_channel" => {
+                tool["name"] = json!("Denied");
+                tool["channel_id"] = json!("missing");
+                tool["expected_settings_revision"] = json!("stale");
+            }
+            "set_participant_mute" => {
+                tool["participant_id"] = json!("missing");
+                tool["muted"] = json!(true);
+            }
+            _ => tool["agent_id"] = json!("missing"),
+        }
+        let response = client.post(&direct_endpoint).bearer_auth(&bearer)
+            .header("x-attendee-connection-id", connection.connection_id().to_string())
+            .json(&json!({"turn_generation":turn.turn_generation,"execution_id":turn.execution_id,"request":tool})).send().await?;
+        assert!(response.status().is_client_error());
+        assert_eq!(
+            response.json::<Value>().await?["error"]["code"],
+            "owner_not_permitted"
+        );
+    }
     let mut discovery = request.clone();
     discovery["request"] = Value::Null;
     assert_eq!(

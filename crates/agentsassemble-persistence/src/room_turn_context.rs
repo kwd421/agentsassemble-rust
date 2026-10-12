@@ -526,7 +526,7 @@ fn render_recent_messages(context: &[RoomEvent]) -> Result<String, PersistenceEr
     Ok(messages.join("\n"))
 }
 
-const ADDRESSING_AND_ROLES: &str = "Put `<@ID>` in content to address a room participant. Set `reply_to_event_id` to quote a specific message; a reply alone does not hand over the floor. Set `next_agent_id` to hand over the floor; you may still use `pass_turn` instead of posting. Your current role is in the room view: a director AI may pin and unpin on behalf of its owner within the owner's current authority. Director grants no operator rights and cannot assign roles.";
+const ADDRESSING_AND_ROLES: &str = "Put `<@ID>` in content to address a room participant. Set `reply_to_event_id` to quote a specific message; a reply alone does not hand over the floor. Set `next_agent_id` to hand over the floor; you may still use `pass_turn` instead of posting. Your current role is in the room view: a director AI may pin/unpin, create/rename text channels, mute/unmute participants, stop agents, and start conversation-only agents on behalf of its owner within that owner's current authority. Other starts need the owner's confirmation. Director grants no operator rights and cannot assign roles or answer provider approvals.";
 
 fn render_observation_input(
     room: &Room,

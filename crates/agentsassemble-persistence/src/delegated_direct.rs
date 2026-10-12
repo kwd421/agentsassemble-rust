@@ -84,7 +84,7 @@ impl SqliteStore {
         let hash = canonical_payload_hash(
             &json!({"request":payload,"owner":proof.owner.participant_id,"delegate":proof.delegate.participant_id}),
         );
-        if let Some(outcome) = crate::command_admission::inspect_non_lifecycle_command(
+        if let Some(mut outcome) = crate::command_admission::inspect_non_lifecycle_command(
             &mut tx,
             authority.room_id(),
             &proof.delegate.principal_id,
@@ -94,6 +94,10 @@ impl SqliteStore {
         )
         .await?
         {
+            outcome.result = agentsassemble_domain::public_value_for_principal(
+                &outcome.result,
+                &proof.delegate,
+            )?;
             tx.commit().await?;
             return Ok((
                 ParticipantMuteMutation {
@@ -190,6 +194,10 @@ impl SqliteStore {
             &mutation.outcome.result,
         )
         .await?;
+        mutation.outcome.result = agentsassemble_domain::public_value_for_principal(
+            &mutation.outcome.result,
+            &proof.delegate,
+        )?;
         tx.commit().await?;
         self.notify_room_directory_changed();
         Ok((mutation, Some(debit)))

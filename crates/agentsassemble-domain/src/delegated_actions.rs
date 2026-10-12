@@ -34,6 +34,8 @@ impl DirectRoomAction {
         "create_text_channel",
         "rename_text_channel",
         "set_participant_mute",
+        "start_agent",
+        "stop_agent",
     ];
     #[must_use]
     pub fn request_id(&self) -> &str {

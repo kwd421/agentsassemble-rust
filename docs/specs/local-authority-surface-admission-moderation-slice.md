@@ -4,10 +4,13 @@
 
 Continuation acceptance: finish lifecycle start/stop, all three transport surfaces,
 fresh action-specific discovery, shared owner/delegate budgets, and revocation/replay
-regressions. Channel/mute persistence landed in `3a9bf65a`; this is not yet a
-complete reachable flow. Runtime execution must retain mute interruption and ordered
+regressions. Build on channel/mute persistence in `3a9bf65a` and retain all three
+reachable transports. Runtime execution must retain mute interruption and ordered
 turn progression through the existing room actor. Lifecycle admission, pre-effect
 authorization and durable completion must retain exact delegated provenance.
+Slow lifecycle effects return `in_progress` only after the lifecycle owner commits
+its reservation, with the exact operation ID. The room actor continues execution
+and publishes completion; portal request deadlines remain unchanged.
 
 Required behavior: extend the existing pin delegation owner with
 `create_text_channel(name, request_id)`,
@@ -38,8 +41,9 @@ commit together; lifecycle acceptance is distinct from completion. No frontend U
 Verification: affected crate tests, cargo fmt, architecture-check; cover each action's
 success/attribution and immediate revocation, guest ceilings, channel settings isolation,
 unsafe-start non-mutation, cross-room targets, replay conflicts and shared owner budget.
-Retain the requested two independently buildable commits under 1,000 changed lines
-and do not push. This section records acceptance, not implementation completion.
+The continuation authorizes as many independently buildable commits as needed, each
+under 1,000 changed lines; do not push. This section records acceptance, not
+implementation completion.
 
 
 ## Director delegation: pin slice

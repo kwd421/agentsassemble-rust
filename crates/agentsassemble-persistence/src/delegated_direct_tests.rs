@@ -183,20 +183,6 @@ async fn mute_shares_human_targets_and_next_call_revocation() -> TestResult {
                 .deduplicated
         );
     }
-    let requests = [
-        create("Denied"),
-        DirectRoomAction::RenameTextChannel(RenameTextChannel {
-            request_id: Uuid::new_v4().to_string(),
-            channel_id: "c000000000000".into(),
-            name: "Denied".into(),
-            expected_settings_revision: "stale".into(),
-        }),
-        DirectRoomAction::SetParticipantMute(SetParticipantMute {
-            request_id: Uuid::new_v4().to_string(),
-            participant_id: target.participant_id,
-            muted: true,
-        }),
-    ];
     let mut owner = store.participant("general", owner_id).await?;
     let mut delegate = store
         .participant("general", authority.delegate_id())
@@ -230,17 +216,7 @@ async fn mute_shares_human_targets_and_next_call_revocation() -> TestResult {
             .await?;
         }
         tx.commit().await?;
-        for request in &requests {
-            assert_eq!(
-                code(
-                    store
-                        .execute_delegated_atomic(&authority, request, |_, _, _| Ok(()))
-                        .await
-                        .unwrap_err()
-                ),
-                expected
-            );
-        }
+        assert_direct_rejections(&store, &authority, expected).await;
         assert!(store.delegated_direct_actions(&authority).await?.is_empty());
     }
     Ok(())

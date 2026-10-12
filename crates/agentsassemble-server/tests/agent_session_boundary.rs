@@ -411,6 +411,7 @@ async fn verify_room_turn_publication(first_status: &str) {
         &attachment_ids[0],
         &server.state.store,
         session_id,
+        server.state.rooms.subscribe("general").await,
     )
     .await;
     let snapshot = server

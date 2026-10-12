@@ -40,6 +40,7 @@ pub(super) async fn verify(
     attachment_id: &str,
     store: &SqliteStore,
     delegate: &str,
+    events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
 ) {
     let client = ()
         .serve(StreamableHttpClientTransport::from_config(
@@ -97,7 +98,7 @@ pub(super) async fn verify(
             .map(|text| text.text.as_str()),
         Some("managed attachment proof")
     );
-    crate::delegated_pin::verify(&client, store, delegate, event_id, None)
+    crate::delegated_pin::verify(&client, store, delegate, event_id, None, events)
         .await
         .unwrap();
     client

@@ -55,7 +55,7 @@ pub(crate) async fn execute_command(
             crate::room_agent_lifecycle_runtime::execute_agent_pause(
                 store,
                 provider_adapter,
-                command,
+                &crate::room_agent_lifecycle_runtime::LifecycleCommand::from(command),
             )
             .await
         }
@@ -66,7 +66,7 @@ pub(crate) async fn execute_command(
             crate::room_agent_lifecycle_runtime::execute_agent_start(
                 store,
                 provider_adapter,
-                command,
+                &crate::room_agent_lifecycle_runtime::LifecycleCommand::from(command),
             )
             .await
         }
@@ -74,7 +74,7 @@ pub(crate) async fn execute_command(
             crate::room_agent_lifecycle_runtime::execute_agent_stop(
                 store,
                 provider_adapter,
-                command,
+                &crate::room_agent_lifecycle_runtime::LifecycleCommand::from(command),
             )
             .await
         }

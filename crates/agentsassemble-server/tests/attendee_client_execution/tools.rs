@@ -18,6 +18,7 @@ pub(super) async fn verify(
     endpoint: &str,
     token: &str,
     store: &agentsassemble_persistence::SqliteStore,
+    events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
     receiver: &mut mpsc::Receiver<ProviderRoomToolCommand>,
     attachment: (
         &str,
@@ -86,7 +87,7 @@ pub(super) async fn verify(
                 .map(|text| text.text.as_str()),
             Some("external attachment proof")
         );
-        crate::delegated_pin::verify(&client, &store, &delegate, event_id, None)
+        crate::delegated_pin::verify(&client, &store, &delegate, event_id, None, events)
             .await
             .unwrap();
         let _ = client.cancel().await;

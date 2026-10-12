@@ -132,7 +132,6 @@ pub(super) async fn direct(
             .execute_delegated_direct(&authority, &request)
             .await
             .map_err(AttendeeHttpError::from_persistence)?
-            .result
     } else {
         json!(
             state

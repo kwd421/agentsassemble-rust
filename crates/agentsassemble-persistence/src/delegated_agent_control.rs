@@ -30,6 +30,14 @@ impl DelegatedAgentControl {
         &self.request_id
     }
     #[must_use]
+    pub fn operation_id(&self) -> String {
+        crate::agent_lifecycle_authority::lifecycle_operation_id(
+            &self.principal,
+            &self.request_id,
+            self.action,
+        )
+    }
+    #[must_use]
     pub const fn action(&self) -> &'static str {
         self.action
     }

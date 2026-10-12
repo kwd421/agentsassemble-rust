@@ -48,7 +48,7 @@ async fn mute(store: &SqliteStore, id: &str, muted: bool) -> TestResult {
 
 pub(super) async fn call(client: &Client, name: &'static str, args: Value) -> Value {
     let result = room_portal_fixture::call_tool(client, name, args).await;
-    assert_ne!(result.is_error, Some(true), "{result:?}");
+    assert_ne!(result.is_error, Some(true), "{name}: {result:?}");
     serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap()
 }
 
@@ -74,6 +74,7 @@ pub(super) async fn verify(
     delegate: &str,
     message: &str,
     connection: Option<Value>,
+    mut events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
 ) -> TestResult {
     let mut args = json!({"channel_id":"lobby","message_id":message,"pinned":true,"request_id":Uuid::new_v4()});
     if let Some(connection) = &connection {
@@ -84,6 +85,7 @@ pub(super) async fn verify(
         assert!(!tools.iter().any(|tool| tool.name == "set_message_pin"));
     }
     rejected(client, args.clone(), "role_required").await;
+    reject_direct_tools(client, connection.as_ref(), "role_required").await;
     role(store, delegate, "director").await?;
     let tools = client.list_all_tools().await?;
     assert!(tools.iter().any(|tool| tool.name == "set_message_pin"));
@@ -96,11 +98,13 @@ pub(super) async fn verify(
                 "set_message_pin",
                 "create_text_channel",
                 "rename_text_channel",
-                "set_participant_mute"
+                "set_participant_mute",
+                "start_agent",
+                "stop_agent"
             ])
         );
     }
-    verify_direct(client, store, delegate, connection.as_ref()).await?;
+    verify_direct(client, store, delegate, connection.as_ref(), &mut events).await?;
     let (first, retry) = tokio::join!(
         call(client, "set_message_pin", args.clone()),
         call(client, "set_message_pin", args.clone())
@@ -149,6 +153,7 @@ pub(super) async fn verify(
         .await;
     assert!(result.is_err() || result.is_ok_and(|result| result.is_error == Some(true)));
     mute(store, LOCAL_OPERATOR_PARTICIPANT_ID, true).await?;
+    reject_direct_tools(client, connection.as_ref(), "owner_muted").await;
     rejected(client, args.clone(), "owner_muted").await; // even a receipt retry revalidates authority
     if connection.is_none() {
         let tools = client.list_all_tools().await?;
@@ -172,6 +177,7 @@ pub(super) async fn verify(
     );
     role(store, delegate, "agent").await?;
     rejected(client, args, "role_required").await;
+    reject_direct_tools(client, connection.as_ref(), "role_required").await;
     if connection.is_none() {
         let tools = client.list_all_tools().await?;
         assert!(!tools.iter().any(|tool| tool.name == "set_message_pin"));
@@ -241,6 +247,7 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
         joined["participant_id"].as_str().unwrap(),
         &message,
         Some(joined["connection_id"].clone()),
+        server.state().rooms.subscribe("general").await,
     )
     .await?;
     role(
@@ -257,13 +264,21 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
             "set_message_pin",
             "create_text_channel",
             "rename_text_channel",
-            "set_participant_mute"
+            "set_participant_mute",
+            "start_agent",
+            "stop_agent"
         ])
     );
     store
         .revoke_operator_pairing(&manager, pairing.pairing_id)
         .await?;
     rejected(&client, json!({"connection_id":joined["connection_id"],"channel_id":"lobby","message_id":message,"pinned":true,"request_id":Uuid::new_v4()}), "owner_authority_unavailable").await;
+    reject_direct_tools(
+        &client,
+        Some(&joined["connection_id"]),
+        "owner_authority_unavailable",
+    )
+    .await;
     client.cancel().await?;
     server.stop().await;
     Ok(())
@@ -274,6 +289,7 @@ async fn verify_direct(
     store: &SqliteStore,
     delegate: &str,
     connection: Option<&Value>,
+    events: &mut tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
 ) -> TestResult {
     let args = |mut value: Value| {
         value["request_id"] = json!(Uuid::new_v4());
@@ -282,6 +298,7 @@ async fn verify_direct(
         }
         value
     };
+    lifecycle_tools::verify(client, store, delegate, connection, events).await?;
     let before = store.snapshot("general", 0, 200).await?.settings;
     let create = args(json!({"name":"Planning"}));
     let first = call(client, "create_text_channel", create.clone()).await;
@@ -359,4 +376,34 @@ async fn verify_direct(
     }
     assert_eq!(before, after);
     Ok(())
+}
+
+#[path = "delegated_lifecycle_tools.rs"]
+mod lifecycle_tools;
+
+async fn reject_direct_tools(client: &Client, connection: Option<&Value>, code: &str) {
+    for (name, mut payload) in [
+        ("create_text_channel", json!({"name":"Denied"})),
+        (
+            "rename_text_channel",
+            json!({"channel_id":"missing","name":"Denied","expected_settings_revision":"stale"}),
+        ),
+        (
+            "set_participant_mute",
+            json!({"participant_id":"missing","muted":true}),
+        ),
+        ("start_agent", json!({"agent_id":"missing"})),
+        ("stop_agent", json!({"agent_id":"missing"})),
+    ] {
+        payload["request_id"] = json!(Uuid::new_v4());
+        if let Some(connection) = connection {
+            payload["connection_id"] = connection.clone();
+        }
+        let result = room_portal_fixture::call_tool(client, name, payload).await;
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0].as_text().unwrap().text.contains(code),
+            "{name}: {result:?}"
+        );
+    }
 }
