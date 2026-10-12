@@ -51,4 +51,27 @@ async function verifyHumanTransfers({member, memberHeaders, memberSocket, member
     assert.equal(received,size);
     console.log(JSON.stringify({test_progress:'transfer_complete'}));
   }
+  // Immutable validation failure stays terminal across the real encrypted routes.
+  const root='/api/message-attachment-transfers';
+  const begun=await member.fetch(root,{method:'POST',headers:memberHeaders,body:JSON.stringify({
+    room_id:'secure-room',operation_id:crypto.randomUUID(),filename:'bad.png',
+    content_type:'image/png',declared_size:8})});
+  assert.equal(begun.status,200);
+  const path=`${root}/${(await begun.json()).transfer.handle}`;
+  const data=await member.fetch(`${path}/data?offset=0`,{method:'POST',
+    headers:{...memberHeaders,'content-type':'application/octet-stream'},body:'notimage'});
+  assert.equal(data.status,200);await data.json();
+  async function failedFinish() {
+    const response=await member.fetch(`${path}/finish`,{method:'POST',headers:memberHeaders});
+    const error=await response.json();
+    assert.ok(error.code==='upload_request_busy'||error.code==='attachment_invalid_image');
+    return error;
+  }
+  const errors=await Promise.all([failedFinish(),failedFinish(),failedFinish()]);
+  const diagnosis=errors.find(error=>error.code==='attachment_invalid_image');
+  assert.ok(diagnosis);
+  assert.deepEqual(await failedFinish(),diagnosis);
+  const status=await member.fetch(path,{headers:memberHeaders});
+  assert.equal(status.status,415);assert.deepEqual(await status.json(),diagnosis);
+
 }

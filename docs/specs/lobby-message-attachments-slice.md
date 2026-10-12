@@ -1259,3 +1259,35 @@ Owners: message_attachment_preview_reader, raster_assets, message_attachment_pre
 SqliteStore/from_owned_pool. Acceptance: a controlled slow generation permits an
 unrelated write promptly, concurrent first requests generate once, a concurrent
 cache insert is retained, and deletion during generation leaves no derived row.
+
+## Round-8 immutable raster validation failures (Medium 2, 2026-10-13)
+
+An immutable raster validation failure at transfer finish is terminal. Release
+staged bytes, the storage reservation and active transfer admission; retain only
+a small receipt within the existing bounded, expiring transfer registry. Status
+and repeated finish return the same validation error without assembly or decoding.
+Concurrent finish must coalesce or answer busy, never queue repeated CPU work.
+Capacity/defer, decode admission and storage-busy failures remain retryable; if
+cleanup itself fails, retry cleanup without repeating immutable validation.
+The lazy preview entry point must also remember immutable decode failures under
+its existing per-attachment generation guard, including cancelled workers, and
+recheck original authorization before returning that error. Negative receipts
+must be bounded without evicting live failures into repeated decoding; deleted
+originals may release receipts. No migration or original/upload-route changes.
+Owners: message_upload service, raster validation, message_attachment_preview_reader,
+SqliteStore. Acceptance: concurrent/repeated invalid finish validates once,
+releases reservation/admission and reports the same status error; transient refusal
+then succeeds; repeated/concurrent undecodable previews do not decode again.
+
+Verification: server library 190 passed / one existing ignored; persistence library
+526 passed / one existing ignored. Four affected preview tests pass after adding
+capacity-refusal recovery. Upload regressions prove one admitted invalid finish,
+busy concurrent finish, deleted staging/reservation, reusable active admissions,
+identical terminal status/finish errors and successful policy-refusal retry.
+The production Node WebCrypto encrypted-router integration passes in 18.82 seconds,
+including concurrent/repeated invalid finish and status. Lazy generation observes
+one worker across cancellation, concurrent/repeated reads and preserves authorization.
+Negative preview receipts reserve capacity before decode, retain live failures and
+reclaim deleted originals under the existing 4,096 retained-asset bound. Formatting,
+diff checks and unchanged architecture gates pass; migrations and frontend UI are
+untouched. No packaged UI, real WAN or storage-busy fault injection is claimed.

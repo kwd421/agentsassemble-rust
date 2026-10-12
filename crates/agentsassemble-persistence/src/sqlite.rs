@@ -124,6 +124,7 @@ pub struct SqliteStore {
     pub(crate) host_key: Arc<crate::host_key_file::HostKeyMaterial>,
     pub(crate) runtime_generation: Arc<str>,
     pub(crate) side_chat: Arc<crate::side_chat::SideChatRepository>,
+    pub(crate) preview_failures: Arc<crate::raster_validation_failure::PreviewFailures>,
     pub(crate) preview_generations: Arc<crate::message_attachment_previews::Generations>,
     pub(crate) created: bool,
     pub(crate) directory_changes: tokio::sync::watch::Sender<()>,

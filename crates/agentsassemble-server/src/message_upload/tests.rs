@@ -144,7 +144,10 @@ async fn interrupted_body_reports_offset_and_resumes_without_whole_file_assembly
         service.finish(auth.clone(), first.handle.clone())
     );
     let finished = a?;
-    assert_eq!(b?.attachment, finished.attachment);
+    assert_eq!(
+        error_json(b.err().ok_or("concurrent finish must be busy")?).await?["code"],
+        "upload_request_busy"
+    );
     assert_eq!(
         service
             .finish(auth.clone(), first.handle.clone())
@@ -210,5 +213,150 @@ async fn server_storage_wait_is_excluded_but_the_hard_ceiling_and_client_idle_re
             .is_err()
     );
 
+    Ok(())
+}
+
+async fn error_json(error: ProfileHttpError) -> TestResultJson {
+    let response = error.into_response();
+    Ok(serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 4096).await?,
+    )?)
+}
+type TestResultJson = Result<serde_json::Value, Box<dyn std::error::Error>>;
+
+#[tokio::test]
+async fn invalid_finish_is_terminal_but_policy_refusal_can_retry() -> TestResult {
+    let (service, auth, principal) = fixture().await;
+    let invalid = service
+        .begin(
+            auth.clone(),
+            "bad-raster".into(),
+            "bad.png".into(),
+            "image/png".into(),
+            8,
+        )
+        .await?;
+    service
+        .data(
+            auth.clone(),
+            invalid.handle.clone(),
+            0,
+            Body::from("notimage"),
+            Policy::new(),
+        )
+        .await?;
+    // The first finish owns validation; its sibling is refused rather than queued.
+    let (first, concurrent) = tokio::join!(
+        service.finish(auth.clone(), invalid.handle.clone()),
+        service.finish(auth.clone(), invalid.handle.clone())
+    );
+    let diagnosis = error_json(first.err().ok_or("invalid raster")?).await?;
+    assert_eq!(diagnosis["code"], "attachment_invalid_image");
+    assert_eq!(
+        error_json(concurrent.err().ok_or("busy")?).await?["code"],
+        "upload_request_busy"
+    );
+    // Assembly/decode cannot be repeated: the sole staging/reservation row is gone.
+    assert!(
+        matches!(service.store.message_upload_status(&auth, &invalid.handle).await,
+        Err(PersistenceError::CommandRejected {code, ..}) if code == "upload_missing")
+    );
+    for _ in 0..3 {
+        assert_eq!(
+            error_json(
+                service
+                    .finish(auth.clone(), invalid.handle.clone())
+                    .await
+                    .err()
+                    .ok_or("receipt")?
+            )
+            .await?,
+            diagnosis
+        );
+        assert_eq!(
+            error_json(
+                service
+                    .status(auth.clone(), invalid.handle.clone())
+                    .await
+                    .err()
+                    .ok_or("status receipt")?
+            )
+            .await?,
+            diagnosis
+        );
+    }
+    service.cleanup(false).await;
+    assert_eq!(
+        error_json(
+            service
+                .status(auth.clone(), invalid.handle.clone())
+                .await
+                .err()
+                .ok_or("retained receipt")?
+        )
+        .await?,
+        diagnosis
+    );
+    // All three active slots are usable after the failure; the fourth still defers.
+    let retry = begin(&service, &auth, "retry-policy", 10 * 1024 * 1024 + 1).await?;
+    let second = begin(&service, &auth, "second", 1).await?;
+    let third = begin(&service, &auth, "third", 1).await?;
+    assert_eq!(
+        error_json(
+            begin(&service, &auth, "fourth", 1)
+                .await
+                .err()
+                .ok_or("defer")?
+        )
+        .await?["code"],
+        "upload_deferred"
+    );
+    service.cancel(auth.clone(), second.handle).await?;
+    service.cancel(auth.clone(), third.handle).await?;
+    service
+        .data(
+            auth.clone(),
+            retry.handle.clone(),
+            0,
+            Body::from(vec![7; retry.declared_size]),
+            Policy::new(),
+        )
+        .await?;
+    for limit in [10, 50] {
+        let settings = service.store.snapshot("general", 0, 100).await?.settings;
+        service.store.execute_room_settings_update(
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
+            &format!("limit-{limit}"), &serde_json::json!({
+                "expected_revision": agentsassemble_domain::public_settings(&settings)?.settings_revision,
+                "attachment_file_limit_bytes": limit * 1024 * 1024,
+            })).await?;
+        if limit == 10 {
+            assert_eq!(
+                error_json(
+                    service
+                        .finish(auth.clone(), retry.handle.clone())
+                        .await
+                        .err()
+                        .ok_or("policy refusal")?
+                )
+                .await?["code"],
+                "attachment_too_large"
+            );
+            assert_eq!(
+                service
+                    .status(auth.clone(), retry.handle.clone())
+                    .await?
+                    .accepted_offset,
+                retry.declared_size
+            );
+        }
+    }
+    assert!(
+        service
+            .finish(auth, retry.handle)
+            .await?
+            .attachment
+            .is_some()
+    );
     Ok(())
 }

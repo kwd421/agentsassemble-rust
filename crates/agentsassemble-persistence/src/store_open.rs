@@ -64,6 +64,7 @@ impl SqliteStore {
             host_key,
             runtime_generation: format!("runtime-generation-v1-{}", uuid::Uuid::new_v4()).into(),
             side_chat: Arc::new(crate::side_chat::SideChatRepository::default()),
+            preview_failures: Arc::default(),
             preview_generations: Arc::default(),
             created: fresh,
             directory_changes: tokio::sync::watch::channel(()).0,

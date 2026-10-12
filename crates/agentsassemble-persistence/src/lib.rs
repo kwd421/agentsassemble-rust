@@ -140,6 +140,8 @@ mod private_fs;
 mod profile_attachments;
 mod profile_store;
 mod raster_assets;
+mod raster_validation_failure;
+pub use raster_validation_failure::RasterValidationFailure;
 mod raster_preview;
 #[cfg(test)]
 mod raster_preview_tests;

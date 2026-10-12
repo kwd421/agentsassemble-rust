@@ -26,6 +26,10 @@ impl SqliteStore {
             let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM room_message_attachment_previews WHERE attachment_id=?)")
                 .bind(id).fetch_one(&mut *tx).await?;
             if !exists {
+                if let Some(failure) = self.preview_failures.get(id) {
+                    return Err(failure.error());
+                }
+                let failure_slot = self.preview_failures.reserve(id, &mut tx).await?;
                 let hold = admit_generation(&principal, original.size)?;
                 tx.commit().await?;
                 // Even waiting for a decoder must not pin the single pooled connection.
@@ -45,6 +49,7 @@ impl SqliteStore {
                     permit,
                     hold,
                     generation_guard,
+                    failure_slot,
                 )
                 .await?;
                 generation_guard = returned_guard;

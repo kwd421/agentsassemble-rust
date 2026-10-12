@@ -67,6 +67,23 @@ async fn cache_upload_lazy_concurrency_restore_and_cascade_share_original_author
     sqlx::query("DELETE FROM room_message_attachment_previews")
         .execute(&store.pool)
         .await?;
+    // Capacity refusal is transient; the following concurrent requests must succeed.
+    let deferred = store
+        .open_message_attachment_preview_reader(
+            authority(&principal),
+            &attachment.id,
+            |_| Ok(()),
+            |_, _| {
+                Err::<(), _>(PersistenceError::CommandRejected {
+                    code: "attachment_download_budget_exhausted".into(),
+                    message: "busy".into(),
+                })
+            },
+        )
+        .await;
+    assert!(
+        matches!(deferred, Err(PersistenceError::CommandRejected {code, ..}) if code == "attachment_download_budget_exhausted")
+    );
     let generated = Arc::new(AtomicUsize::new(0));
     let barrier = Arc::new(tokio::sync::Barrier::new(3));
     let mut tasks = Vec::new();
@@ -300,5 +317,124 @@ async fn slow_lazy_generation_releases_writer_rechecks_deletion_and_keeps_compet
         }
         assert_eq!(generated.load(Ordering::SeqCst), 1);
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn invalid_lazy_preview_retains_failure_even_when_its_caller_cancels() -> TestResult {
+    let (store, principal) = crate::message_attachment_tests::fixture().await;
+    let attachment = store
+        .store_message_attachment(
+            &principal,
+            "historical.png",
+            "image/png",
+            crate::raster_preview_tests::large_png(true, true)?,
+        )
+        .await?;
+    store
+        .execute_message(
+            &principal,
+            "bind-invalid-preview",
+            "message.send",
+            &json!({"content":"", "attachment_ids":[attachment.id]}),
+        )
+        .await?;
+    sqlx::query("DELETE FROM room_message_attachment_previews WHERE attachment_id=?")
+        .bind(&attachment.id)
+        .execute(&store.pool)
+        .await?;
+    sqlx::query("UPDATE room_message_attachment_chunks SET content=zeroblob(length(content)) WHERE attachment_id=?")
+        .bind(&attachment.id).execute(&store.pool).await?;
+    // A transient admission failure must leave generation retryable.
+    let deferred = store
+        .open_message_attachment_preview_reader(
+            authority(&principal),
+            &attachment.id,
+            |_| Ok(()),
+            |_, _| {
+                Err::<(), _>(PersistenceError::CommandRejected {
+                    code: "attachment_download_budget_exhausted".into(),
+                    message: "busy".into(),
+                })
+            },
+        )
+        .await;
+    assert!(
+        matches!(deferred, Err(PersistenceError::CommandRejected {code, ..}) if code == "attachment_download_budget_exhausted")
+    );
+    let generated = Arc::new(AtomicUsize::new(0));
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+    let first = {
+        let (store, principal, id, generated) = (
+            store.clone(),
+            principal.clone(),
+            attachment.id.clone(),
+            generated.clone(),
+        );
+        tokio::spawn(async move {
+            store
+                .open_message_attachment_preview_reader(
+                    authority(&principal),
+                    &id,
+                    |_| Ok(()),
+                    |_, _| {
+                        generated.fetch_add(1, Ordering::SeqCst);
+                        Ok(PausedGeneration {
+                            entered: Some(entered_tx),
+                            resume: resume_rx,
+                        })
+                    },
+                )
+                .await
+        })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(10), entered_rx).await??;
+    first.abort();
+    resume_tx.send(())?;
+    assert!(first.await.err().ok_or("cancelled caller")?.is_cancelled());
+    let read = || async {
+        match store
+            .open_message_attachment_preview_reader(
+                authority(&principal),
+                &attachment.id,
+                |_| Ok(()),
+                |_, _| {
+                    generated.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                },
+            )
+            .await
+        {
+            Err(PersistenceError::CommandRejected { code, message }) => {
+                Ok::<_, Box<dyn std::error::Error>>((code, message))
+            }
+            _ => Err("invalid preview must retain its diagnosis".into()),
+        }
+    };
+    let (a, b) = tokio::join!(read(), read());
+    let diagnosis = a?;
+    assert_eq!(diagnosis.0, "attachment_invalid_image");
+    assert_eq!(b?, diagnosis);
+    assert_eq!(read().await?, diagnosis);
+    assert_eq!(
+        generated.load(Ordering::SeqCst),
+        1,
+        "one lazy decoder worker, including cancellation and repeats"
+    );
+    let denied = MessageAttachmentReadAuthority::Local {
+        room_id: "other-room".into(),
+        user_id: principal.principal_id.clone(),
+        participant_id: principal.participant_id.clone(),
+    };
+    let denied = store
+        .open_message_attachment_preview_reader(denied, &attachment.id, |_| Ok(()), |_, _| Ok(()))
+        .await
+        .err()
+        .ok_or("authority denial")?;
+    assert!(
+        crate::RasterValidationFailure::from_error(&denied).is_none(),
+        "authorize before returning a cached diagnosis"
+    );
     Ok(())
 }

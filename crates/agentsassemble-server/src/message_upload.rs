@@ -1,7 +1,7 @@
 //! One process-owned human transfer service behind both HTTP transports.
 use agentsassemble_persistence::{
     MESSAGE_UPLOAD_PIECE_BYTES, MessageUploadAuthority, MessageUploadStatus, PersistenceError,
-    SqliteStore,
+    RasterValidationFailure, SqliteStore,
 };
 use axum::{body::Body, http::StatusCode};
 use futures_util::StreamExt;
@@ -39,6 +39,7 @@ struct Entry {
     active: AtomicBool,
     cancel: CancellationToken,
     current: Mutex<EntryState>,
+    failure: tokio::sync::RwLock<Option<RasterValidationFailure>>,
 }
 struct EntryState {
     status: MessageUploadStatus,
@@ -66,6 +67,19 @@ impl Service {
         let entries = self.entries.lock().await.clone();
         for (handle, entry) in entries {
             let expired = entry.expiry <= chrono::Utc::now().timestamp();
+            if !expired && !shutdown && entry.failure.read().await.is_some() {
+                // Retry a failed storage cleanup without losing the diagnosis or
+                // making another request responsible for releasing admission.
+                let _current = entry.current.lock().await;
+                if entry.active.load(Ordering::Relaxed) {
+                    if self.store.discard_message_upload(&handle).await.is_err() {
+                        tracing::error!("Upload validation cleanup storage failed");
+                        continue;
+                    }
+                    entry.active.store(false, Ordering::Relaxed);
+                }
+                continue;
+            }
             let lost = if !expired && !shutdown && entry.active.load(Ordering::Relaxed) {
                 match self
                     .store
@@ -87,11 +101,16 @@ impl Service {
                 false
             };
             if expired || lost || shutdown || entry.cancel.is_cancelled() {
-                entry.cancel.cancel();
                 let mut current = entry.current.lock().await;
-                if !expired && !shutdown && current.status.attachment.is_some() {
-                    continue; // A failed/racing cancel cannot retire a committed receipt.
+                if !expired
+                    && !shutdown
+                    && (current.status.attachment.is_some()
+                        || (!entry.active.load(Ordering::Relaxed)
+                            && entry.failure.read().await.is_some()))
+                {
+                    continue; // Racing cleanup cannot retire a completed terminal receipt.
                 }
+                entry.cancel.cancel();
                 if self.store.discard_message_upload(&handle).await.is_err() {
                     tracing::error!("Upload cleanup storage failed");
                     continue;
@@ -128,6 +147,9 @@ impl Service {
                 {
                     return Err(error("upload_operation_conflict"));
                 }
+                if let Some(failure) = entry.failure.read().await.as_ref() {
+                    return Err(failure.error().into());
+                }
                 return self
                     .store
                     .message_upload_status(&authority, handle)
@@ -159,6 +181,7 @@ impl Service {
                 expiry: status.expires_at,
                 active: AtomicBool::new(status.attachment.is_none()),
                 cancel: CancellationToken::new(),
+                failure: tokio::sync::RwLock::new(None),
                 current: Mutex::new(EntryState {
                     status: status.clone(),
                     cancelled: false,
@@ -202,6 +225,9 @@ impl Service {
         if entry.cancelled {
             return Err(error("upload_missing"));
         }
+        if let Some(failure) = transfer.failure.read().await.as_ref() {
+            return Err(failure.error().into());
+        }
         entry.status = self
             .store
             .message_upload_status(&authority, &handle)
@@ -243,7 +269,12 @@ impl Service {
         authority: MessageUploadAuthority,
         handle: String,
     ) -> Result<MessageUploadStatus, ProfileHttpError> {
-        self.entry(&authority, &handle).await?;
+        let entry = self.entry(&authority, &handle).await?;
+        if !entry.active.load(Ordering::Relaxed) {
+            if let Some(failure) = entry.failure.read().await.as_ref() {
+                return Err(failure.error().into());
+            }
+        }
         self.store
             .message_upload_status(&authority, &handle)
             .await
@@ -256,16 +287,39 @@ impl Service {
     ) -> Result<MessageUploadStatus, ProfileHttpError> {
         let entry = self.entry(&authority, &handle).await?;
         let transfer = entry;
-        let mut entry = transfer.current.lock().await;
+        let mut entry = transfer
+            .current
+            .try_lock()
+            .map_err(|_| error("upload_request_busy"))?;
         if entry.cancelled {
             return Err(error("upload_missing"));
         }
-        entry.status = self
-            .store
-            .finish_message_upload(&authority, &handle)
-            .await?;
+        let prior_failure = transfer.failure.read().await.clone();
+        let failure = if let Some(failure) = prior_failure {
+            if !transfer.active.load(Ordering::Relaxed) {
+                return Err(failure.error().into());
+            }
+            failure
+        } else {
+            match self.store.finish_message_upload(&authority, &handle).await {
+                Ok(status) => {
+                    entry.status = status;
+                    transfer.active.store(false, Ordering::Relaxed);
+                    return Ok(entry.status.clone());
+                }
+                Err(error) => {
+                    let Some(failure) = RasterValidationFailure::from_error(&error) else {
+                        return Err(error.into()); // Admission/storage/policy remain retryable.
+                    };
+                    *transfer.failure.write().await = Some(failure.clone());
+                    failure
+                }
+            }
+        };
+        // A storage failure retries this cleanup, never the immutable CPU work.
+        self.store.discard_message_upload(&handle).await?;
         transfer.active.store(false, Ordering::Relaxed);
-        Ok(entry.status.clone())
+        Err(failure.error().into())
     }
     pub(crate) async fn cancel(
         &self,
