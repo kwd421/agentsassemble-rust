@@ -57,6 +57,8 @@ export default function UserSettingsPanel({
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current; dialog?.showModal();
+    // Opening focuses the first control; keep that on the section being shown.
+    dialog?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
     return () => { dialog?.close(); returnFocusRef.current?.focus(); };
   }, [returnFocusRef]);
   const canManageDevices = Boolean(profileIdentity?.centralSession) || (!profileIdentity?.sessionToken && isDesktopWebview());
@@ -238,7 +240,7 @@ export default function UserSettingsPanel({
                   </select>
                 </label>
                 <label>
-                  아바타 라벨
+                  사진 대신 보일 글자
                   <input
                     style={{ minHeight: 44 }}
                     disabled={saving}

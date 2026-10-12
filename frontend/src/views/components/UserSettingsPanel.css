@@ -153,13 +153,27 @@ dialog.dc-user-settings-dialog {
 .dc-user-settings-grid input,
 .dc-user-settings-grid select {
   min-width: 0;
+  border: 1px solid var(--color-panel-border);
   border-radius: 8px;
-  background: #121214;
+  background: var(--color-server-rail);
   padding: 10px 12px;
   color: var(--color-text-primary);
   font-size: 15px;
-  font-weight: 500;
-  outline: 1px solid transparent;
+  font-weight: 400;
+  outline: none;
+}
+
+.dc-user-settings-grid input:hover:not(:disabled),
+.dc-user-settings-grid select:hover:not(:disabled) {
+  border-color: #474851;
+}
+
+/* A select without its arrow reads as a text field. */
+.dc-user-settings-grid select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394959c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  padding-right: 36px;
 }
 
 .dc-user-settings-grid input[type="color"] {
@@ -169,7 +183,7 @@ dialog.dc-user-settings-dialog {
 
 .dc-user-settings-grid input:focus,
 .dc-user-settings-grid select:focus {
-  outline-color: var(--profile-accent, var(--color-accent));
+  border-color: var(--profile-accent, var(--color-accent));
 }
 
 .dc-user-settings-toggles {
