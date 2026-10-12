@@ -240,6 +240,43 @@ ten large downloads and frozen legacy request/data replay against the new host
 and architecture gates pass. Sliding-credit, multiplexed deadline/cancel cleanup
 and old/new throughput comparisons remain required work.
 
+Open acceptance decision (code verified): `http_api::decode_upload_body` collects
+the complete legacy JSON body before deserializing; `profile_web::upload_message_attachment`
+then invokes its whole-file upload owner. Resuming that collector accepts bytes
+into its bounded allocation, not durable piece storage. In contrast,
+`message_upload::data` resumes only after `append_message_upload` accepts the
+piece. Applying durable piece credit to the legacy JSON route as well cannot
+stream a >384 KiB body while keeping its owner unchanged. Clarify whether bounded
+collector acceptance is sufficient there, the legacy owner must change, or that
+route keeps its existing pacing. No sliding-credit capability is advertised and
+no unverified credit prototype is retained pending that decision. The required
+contract above is not narrowed by this checkpoint.
+
+Measured with `AA_TRANSPORT_BENCHMARK=1 cargo test -p agentsassemble-server --test
+integration central_owner_boundary::secure::trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket
+-- --nocapture`: loopback TCP proxy, production Node WebCrypto/RemoteTransport,
+real router/upload owner and in-memory SQLite fixture. Upload timing includes
+begin/data/finish, with up to three concurrent admissions; publication and
+byte-exact readback run afterwards. Downloads consume and compare every piece.
+Legacy replay freezes both wire shapes and the channel-wide consumed chain.
+These are single-run observations, not performance assertions or WAN/disk evidence.
+
+| 50 MiB bodies | Legacy JSON/base64 + ACK | Binary + ACK |
+| --- | --- | --- |
+| Upload, one | 0.70 s / 71.8 MiB/s | 0.59 s / 85.4 MiB/s |
+| Upload, ten | 7.30 s / 68.5 MiB/s | 5.93 s / 84.3 MiB/s |
+| Download, one | 2.65 s / 18.8 MiB/s | 0.16 s / 319.8 MiB/s |
+| Download, ten | 26.69 s / 18.7 MiB/s | 1.58 s / 316.6 MiB/s |
+
+The benchmark-enabled integration passed in 93.12 seconds, including byte-exact
+finish/bind/read/delete for measured upload fixtures. Opt-in measurement avoids
+adding that workload to the ordinary integration. Shared-window bounds, credit
+overflow/replay, withheld-credit cleanup and isolated stalled-body reclamation
+remain unimplemented/unverified; binary throughput is not sliding-window acceptance.
+Final checkpoint checks: server unit suite 183 passed / one ignored, ordinary
+encrypted integration 17.01 seconds, frontend typecheck and 14 affected Vitest
+tests passed, plus `cargo fmt --all`, `git diff --check` and unchanged architecture gates.
+
 ## Approved target contract after Phase 0B
 
 - This slice owns only attachments on the ordinary lobby `message_final` path. Custom

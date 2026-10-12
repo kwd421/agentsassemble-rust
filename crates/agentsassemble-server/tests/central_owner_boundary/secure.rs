@@ -29,8 +29,9 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
         .arg("--input-type=module")
         .arg("-e")
         .arg(format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}",
             include_str!("legacy_body_peer.mjs"),
+            include_str!("transport_throughput_peer.mjs"),
             include_str!("message_transfer_peer.mjs"),
             include_str!("room_file_policy_peer.mjs"),
             include_str!("secure_peer.mjs")
@@ -49,7 +50,7 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
         .spawn()?;
     let mut input = peer.stdin.take().ok_or("stdin")?;
     let mut output = BufReader::new(peer.stdout.take().ok_or("stdout")?).lines();
-    input.write_all(format!("{}\n",json!({"proxy":proxy_address.to_string(),"device":DEVICE,"grant":TOKEN,"late_grant":SECOND_TOKEN,"persona_png":base64::engine::general_purpose::STANDARD.encode(super::super::persona_library_boundary::png_card()),"target":{
+    input.write_all(format!("{}\n",json!({"benchmark":std::env::var_os("AA_TRANSPORT_BENCHMARK").is_some(),"proxy":proxy_address.to_string(),"device":DEVICE,"grant":TOKEN,"late_grant":SECOND_TOKEN,"persona_png":base64::engine::general_purpose::STANDARD.encode(super::super::persona_library_boundary::png_card()),"target":{
         "server_id":info["server_id"],"registration_epoch":"secure-test-epoch","origin":ORIGIN,"generation":generation,
         "host_public_key_jwk":info["host_public_key_jwk"],"host_key_fingerprint":info["host_key_fingerprint"]}})).as_bytes()).await?;
     // Each existing work stage retains its 30-second harness deadline. The new
@@ -68,6 +69,9 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
                     | "transfer_complete"
             )
         ) {
+            if let Some(throughput) = value.get("throughput") {
+                println!("transport loopback: {throughput}");
+            }
             continue;
         }
         break value;

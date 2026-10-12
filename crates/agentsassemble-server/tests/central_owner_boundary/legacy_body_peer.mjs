@@ -18,10 +18,16 @@ async function legacyBodyFetch(channel, path, init = {}) {
       if (reader) for (;;) {
         const piece = await reader.read(); if (piece.done) break;
         for (let start=0;start<piece.value.length;start+=64*1024) {
-          const consumed = new Promise(resolve => {wait.consumed = resolve;});
-          const data = Buffer.from(piece.value.subarray(start,start+64*1024)).toString('base64url');
-          await channel.send({op:'data',id,data,end:false});
-          await consumed;
+          const bytes=piece.value.subarray(start,start+64*1024);
+          // Freeze the previous client's channel-wide consumed chain as well.
+          const sent=(channel.legacyUploading || Promise.resolve()).then(async ()=>{
+            if(wait.responded)return;
+            const consumed=new Promise(resolve=>{wait.consumed=resolve;});
+            await channel.send({op:'data',id,data:Buffer.from(bytes).toString('base64url'),end:false});
+            await consumed;
+          });
+          channel.legacyUploading=sent.catch(()=>{});
+          await sent;
           if (wait.responded) {await reader.cancel();return;}
         }
       }

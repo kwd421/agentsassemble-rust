@@ -33,6 +33,7 @@ async function verifyRoomFilePolicy({member, memberHeaders, memberSocket, member
   }
   await limit(50 * 1024 * 1024);
   await verifyHumanTransfers({member,memberHeaders,memberSocket,memberReceive});
+  if(config.benchmark)await measureUploadTransport({member,memberHeaders,memberSocket,memberReceive});
   const uploads = [];
   for (const mib of [25, 50]) {
     const bytes = Buffer.alloc(mib * 1024 * 1024 + (mib === 25 ? 19 : 0), mib);
@@ -42,6 +43,20 @@ async function verifyRoomFilePolicy({member, memberHeaders, memberSocket, member
     const {attachment} = await response.json();
     assert.equal(attachment.size, bytes.length);
     uploads.push({attachment, bytes});
+  }
+  if(config.benchmark) {
+    const declaration=await member.fetch('/api/message-attachment-transfers',{method:'POST',headers:memberHeaders,
+      body:JSON.stringify({room_id:'secure-room',operation_id:crypto.randomUUID(),filename:'measured-download',
+        content_type:'application/octet-stream',declared_size:transferSize})});
+    assert.equal(declaration.status,200);
+    const root=`/api/message-attachment-transfers/${(await declaration.json()).transfer.handle}`;
+    const data=await member.fetch(`${root}/data?offset=0`,{method:'POST',headers:{...memberHeaders,'content-type':'application/octet-stream'},body:measuredBody(),duplex:'half'});
+    assert.equal(data.status,200);await data.json();
+    const finish=await member.fetch(`${root}/finish`,{method:'POST',headers:memberHeaders});
+    assert.equal(finish.status,200);const attachment=(await finish.json()).transfer.attachment;
+    const bound=await command(memberSocket,memberReceive,'message.send',{content:'',attachment_ids:[attachment.id]});
+    await measureDownloadTransport({member,memberHeaders,attachment});
+    await command(memberSocket,memberReceive,'message.delete',{event_id:bound.event.id});
   }
   await limit(10 * 1024 * 1024);
   await command(memberSocket, memberReceive, 'message.send', {content:'files retained after lowering',

@@ -64,7 +64,7 @@ export class RemoteTransport {
       if (this.receiveBytes + this.bodyBytes > QUEUE_LIMIT) { this.close(capacityError()); return; }
       this.receiving = this.receiving.then(async () => {
         try {
-          const plaintext = new Uint8Array(await this.receiveCipher.open(record));
+          const plaintext = await this.receiveCipher.open(record);
           if (plaintext[0] === 2) await this.acceptBinary(plaintext);
           else await this.accept(JSON.parse(decoder.decode(plaintext)));
           await this.send({ op: "ack", sequence: this.acknowledged++ });
