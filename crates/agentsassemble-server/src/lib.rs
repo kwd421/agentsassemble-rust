@@ -254,6 +254,7 @@ pub use web::{ServeError, router, serve};
 
 pub use room_runtime::{AttendeeOperation, AttendeeOperationResult};
 
+mod message_upload;
 mod upload_body_budget;
 
 mod attachment_download;

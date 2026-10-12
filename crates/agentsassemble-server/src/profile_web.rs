@@ -31,6 +31,8 @@ mod avatar_admission;
 #[cfg(test)]
 mod avatar_admission_tests;
 mod google_profile;
+#[path = "message_upload_http.rs"]
+mod transfer;
 
 const MAX_PROFILE_BODY_BYTES: usize = 16 * 1024;
 
@@ -64,6 +66,10 @@ pub(crate) fn routes() -> Router<AppState> {
             header::CACHE_CONTROL,
             PRIVATE_NO_STORE.clone(),
         ))
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::HeaderName::from_static("x-agentsassemble-upload-transfer"),
+            HeaderValue::from_static("1"),
+        ))
         .layer(profile_cors())
 }
 
@@ -73,13 +79,17 @@ registered_routes! {
         secure_remote "/api/agent-avatars/{asset_id}" => get(agent_avatar::read),
         secure_remote "/api/user-profile" => get(read_profile).post(update_profile),
         secure_remote "/api/attachments" => post(upload_attachment),
+        secure_remote "/api/message-attachment-transfers" => post(transfer::begin),
+        secure_remote "/api/message-attachment-transfers/{handle}" => get(transfer::status).delete(transfer::cancel),
+        secure_remote "/api/message-attachment-transfers/{handle}/data" => post(transfer::data),
+        secure_remote "/api/message-attachment-transfers/{handle}/finish" => post(transfer::finish),
         secure_remote "/api/message-attachments" => post(upload_message_attachment),
         secure_remote "/api/attachments/{attachment_id}" => get(read_attachment),
     }
 }
 
 fn profile_cors() -> CorsLayer {
-    exact_tauri_cors([Method::GET, Method::POST]).allow_headers([
+    exact_tauri_cors([Method::GET, Method::POST, Method::DELETE]).allow_headers([
         header::AUTHORIZATION,
         header::CONTENT_TYPE,
         DEVICE_CREDENTIAL_HEADER,
@@ -756,29 +766,33 @@ fn profile_authority(ticket: ConsumedProfileTicket) -> Result<ProfileAuthority, 
     }
 }
 
-#[derive(Debug)]
-struct ProfileHttpError {
+#[derive(Debug, thiserror::Error)]
+#[error("{code}")]
+pub(crate) struct ProfileHttpError {
+    extra: serde_json::Map<String, serde_json::Value>,
     status: StatusCode,
     code: std::borrow::Cow<'static, str>,
     message: String,
 }
 
 impl ProfileHttpError {
-    fn new(
+    pub(crate) fn new(
         status: StatusCode,
         code: impl Into<std::borrow::Cow<'static, str>>,
         message: impl Into<String>,
     ) -> Self {
         Self {
+            extra: serde_json::Map::new(),
             status,
             code: code.into(),
             message: message.into(),
         }
     }
 
-    fn from_body(error: BodyDecodeError) -> Self {
+    pub(crate) fn from_body(error: BodyDecodeError) -> Self {
         match error {
             BodyDecodeError::RequestTimeout => Self {
+                extra: serde_json::Map::new(),
                 status: StatusCode::REQUEST_TIMEOUT,
                 code: "request_timeout".into(),
                 message: "Request body timed out.".to_owned(),
@@ -792,6 +806,7 @@ impl ProfileHttpError {
     }
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
+            extra: serde_json::Map::new(),
             status: StatusCode::BAD_REQUEST,
             code: "bad_request".into(),
             message: message.into(),
@@ -800,6 +815,7 @@ impl ProfileHttpError {
 
     fn unauthorized() -> Self {
         Self {
+            extra: serde_json::Map::new(),
             status: StatusCode::UNAUTHORIZED,
             code: "unauthorized".into(),
             message: "Valid request authority is required.".to_owned(),
@@ -808,14 +824,26 @@ impl ProfileHttpError {
 
     fn payload_too_large() -> Self {
         Self {
+            extra: serde_json::Map::new(),
             status: StatusCode::PAYLOAD_TOO_LARGE,
             code: "payload_too_large".into(),
             message: "Request body exceeds the route limit.".to_owned(),
         }
     }
 
+    pub(crate) fn with_defer(mut self, milliseconds: u64) -> Self {
+        self.extra.insert("disposition".into(), json!("defer"));
+        self.extra
+            .insert("retry_after_ms".into(), json!(milliseconds));
+        self
+    }
+    pub(crate) fn with_offset(mut self, offset: usize) -> Self {
+        self.extra.insert("accepted_offset".into(), json!(offset));
+        self
+    }
     fn internal() -> Self {
         Self {
+            extra: serde_json::Map::new(),
             status: StatusCode::SERVICE_UNAVAILABLE,
             code: "persistence_failed".into(),
             message: "Persistence operation failed.".to_owned(),
@@ -861,6 +889,7 @@ impl From<PersistenceError> for ProfileHttpError {
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {
+                    extra: serde_json::Map::new(),
                     status,
                     code,
                     message,
@@ -879,11 +908,12 @@ impl From<PersistenceError> for ProfileHttpError {
 
 impl IntoResponse for ProfileHttpError {
     fn into_response(self) -> Response {
-        (
-            self.status,
-            Json(json!({"error": self.message, "code": self.code})),
-        )
-            .into_response()
+        let mut payload = json!({"error":self.message,"code":self.code});
+        payload
+            .as_object_mut()
+            .expect("error object")
+            .extend(self.extra);
+        (self.status, Json(payload)).into_response()
     }
 }
 
@@ -892,6 +922,7 @@ impl From<crate::upload_body_budget::Error> for ProfileHttpError {
         match error {
             crate::upload_body_budget::Error::Body(error) => Self::from_body(error),
             crate::upload_body_budget::Error::Exhausted => Self {
+                extra: serde_json::Map::new(),
                 status: StatusCode::TOO_MANY_REQUESTS,
                 code: crate::upload_body_budget::ERROR_CODE.into(),
                 message: "Upload body capacity is busy; retry later.".into(),

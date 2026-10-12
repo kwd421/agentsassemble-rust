@@ -328,11 +328,14 @@ async fn reservations_exclusion_cleanup_policy_change_and_restart() -> TestResul
             50 * 1024 * 1024,
         )
         .await?;
+    store
+        .append_message_upload(&auth, &second.handle, 0, b"expiry tail")
+        .await?;
     sqlx::query("UPDATE temp.message_uploads SET expires_at=0 WHERE handle=?")
         .bind(&second.handle)
         .execute(&store.pool)
         .await?;
-    store
+    let prior = store
         .begin_message_upload(
             &auth,
             "third",
@@ -345,6 +348,29 @@ async fn reservations_exclusion_cleanup_policy_change_and_restart() -> TestResul
         .fetch_one(&store.pool)
         .await?;
     assert_eq!(pieces, 0);
+    sqlx::query(
+        "UPDATE rooms SET room_json=json_set(room_json,'$.room_uid',?) WHERE room_id='general'",
+    )
+    .bind(Uuid::new_v4().to_string())
+    .execute(&store.pool)
+    .await?;
+    code(
+        store.message_upload_status(&auth, &prior.handle).await,
+        "upload_missing",
+    );
+    let replacement = store
+        .begin_message_upload(
+            &auth,
+            "third",
+            "file.bin",
+            "application/octet-stream",
+            50 * 1024 * 1024,
+        )
+        .await?;
+    assert_ne!(
+        replacement.handle, prior.handle,
+        "a replacement room cannot inherit a transfer"
+    );
     store.close().await?;
     let reopened = SqliteStore::open_path(&directory.path().join("runtime.sqlite")).await?;
     let transfers: i64 = sqlx::query_scalar("SELECT count(*) FROM temp.message_uploads")

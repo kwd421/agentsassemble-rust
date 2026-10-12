@@ -21,12 +21,33 @@ pub(crate) const UPLOAD_CEILING: Duration = Duration::from_secs(60 * 60);
 pub(crate) struct Policy {
     started: Instant,
     upload: Arc<AtomicBool>,
+    clock: tokio::sync::watch::Sender<ClientClock>,
+}
+#[derive(Clone, Copy, Default)]
+struct ClientClock {
+    excluded: Duration,
+    paused: Option<Instant>,
+    owners: usize,
+}
+pub(crate) struct ServerWait(Policy);
+impl Drop for ServerWait {
+    fn drop(&mut self) {
+        self.0.clock.send_modify(|clock| {
+            clock.owners -= 1;
+            if clock.owners == 0 {
+                if let Some(start) = clock.paused.take() {
+                    clock.excluded += start.elapsed();
+                }
+            }
+        });
+    }
 }
 impl Policy {
     pub(crate) fn new() -> Self {
         Self {
             started: Instant::now(),
             upload: Arc::new(AtomicBool::new(false)),
+            clock: tokio::sync::watch::channel(ClientClock::default()).0,
         }
     }
     pub(crate) fn authorize_upload(&self) -> Result<(), BodyDecodeError> {
@@ -35,6 +56,22 @@ impl Policy {
         }
         self.upload.store(true, Ordering::Relaxed);
         Ok(())
+    }
+    /// Storage/credit waits don't consume the client's idle or progress allowance.
+    pub(crate) fn server_wait(&self) -> ServerWait {
+        self.clock.send_modify(|clock| {
+            if clock.owners == 0 {
+                clock.paused = Some(Instant::now());
+            }
+            clock.owners += 1;
+        });
+        ServerWait(self.clone())
+    }
+    fn client_now(&self) -> Instant {
+        let clock = self.clock.borrow();
+        Instant::now()
+            - clock.excluded
+            - clock.paused.map_or(Duration::ZERO, |start| start.elapsed())
     }
 }
 
@@ -63,7 +100,9 @@ impl ProgressWindow {
         }
     }
     fn deadline(&mut self) -> Result<Instant, UploadTimeout> {
-        let now = Instant::now();
+        self.deadline_at(Instant::now())
+    }
+    fn deadline_at(&mut self, now: Instant) -> Result<Instant, UploadTimeout> {
         if now >= self.started + UPLOAD_CEILING || now >= self.last_data + IDLE {
             return Err(UploadTimeout);
         }
@@ -79,8 +118,11 @@ impl ProgressWindow {
             .min(self.window_end))
     }
     fn accept(&mut self, bytes: usize) {
+        self.accept_at(bytes, Instant::now());
+    }
+    fn accept_at(&mut self, bytes: usize, now: Instant) {
         if bytes > 0 {
-            self.last_data = Instant::now();
+            self.last_data = now;
             self.bytes = self.bytes.saturating_add(bytes);
         }
     }
@@ -124,9 +166,13 @@ pub(crate) async fn apply(request: Request, next: Next) -> Response {
     next.run(wrap(request)).await
 }
 
-fn wrap(request: Request) -> Request {
+pub(crate) fn wrap(request: Request) -> Request {
     let (mut parts, body) = request.into_parts();
-    let policy = Policy::new();
+    let policy = parts
+        .extensions
+        .get::<Policy>()
+        .cloned()
+        .unwrap_or_else(Policy::new);
     let started = policy.started;
     parts.extensions.insert(policy.clone());
     let stream = futures_util::stream::try_unfold(
@@ -136,26 +182,40 @@ fn wrap(request: Request) -> Request {
             ProgressWindow::new(started),
         ),
         |(mut body, policy, mut progress)| async move {
-            loop {
-                let now = Instant::now();
-                let upload = policy.upload.load(Ordering::Relaxed);
-                let hard_end = policy.started + if upload { UPLOAD_CEILING } else { CONTROL };
-                if now >= hard_end {
-                    return Err(axum::Error::new(UploadTimeout));
-                }
-                let deadline = if upload {
-                    progress.deadline().map_err(axum::Error::new)?
-                } else {
-                    hard_end
-                };
-                match timeout_at(deadline, body.next()).await {
-                    Err(_) => continue,
-                    Ok(None) => return Ok(None),
-                    Ok(Some(Err(error))) => return Err(error),
-                    Ok(Some(Ok(bytes))) => {
-                        progress.accept(bytes.len());
-                        return Ok(Some((bytes, (body, policy, progress))));
+            let mut changes = policy.clock.subscribe();
+            let received = {
+                let next = body.next();
+                tokio::pin!(next);
+                loop {
+                    let now = Instant::now();
+                    let upload = policy.upload.load(Ordering::Relaxed);
+                    let hard_end = policy.started + if upload { UPLOAD_CEILING } else { CONTROL };
+                    if now >= hard_end {
+                        return Err(axum::Error::new(UploadTimeout));
                     }
+                    let deadline = if upload && policy.clock.borrow().paused.is_none() {
+                        let client_now = policy.client_now();
+                        let deadline =
+                            progress.deadline_at(client_now).map_err(axum::Error::new)?;
+                        (now + deadline.saturating_duration_since(client_now)).min(hard_end)
+                    } else {
+                        hard_end
+                    };
+                    let received = tokio::select! {
+                        _ = changes.changed() => continue,
+                        received = timeout_at(deadline, &mut next) => received,
+                    };
+                    if let Ok(received) = received {
+                        break received;
+                    }
+                }
+            };
+            match received {
+                None => Ok(None),
+                Some(Err(error)) => Err(error),
+                Some(Ok(bytes)) => {
+                    progress.accept_at(bytes.len(), policy.client_now());
+                    Ok(Some((bytes, (body, policy, progress))))
                 }
             }
         },

@@ -14,7 +14,14 @@ async fn secure_upload_consumes_more_than_direction_capacity() {
         ended: false,
     };
     let (output, mut credits) = Output::new(global.clone(), cancel.clone());
-    let request = Request::new(request_body(rx, cancel, 1, true, output));
+    let request = Request::new(request_body(
+        rx,
+        cancel,
+        1,
+        true,
+        output,
+        crate::http_body_policy::Policy::new(),
+    ));
     let collect = crate::http_api::decode_json_body::<String>(
         request,
         crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES,
@@ -82,6 +89,7 @@ async fn cancellation_releases_only_its_request_queue() {
         1,
         true,
         output.with_cancel(cancel_a.clone()),
+        crate::http_body_policy::Policy::new(),
     );
     let body_b = request_body(
         rx_b,
@@ -89,6 +97,7 @@ async fn cancellation_releases_only_its_request_queue() {
         2,
         true,
         output.with_cancel(cancel_b),
+        crate::http_body_policy::Policy::new(),
     );
     let chunk = URL_SAFE_NO_PAD.encode(vec![b' '; CHUNK_BYTES]);
     for _ in 0..4 {
@@ -147,7 +156,14 @@ async fn virtual_upload_timeout_drops_its_queue_and_ignores_late_data() {
         cancel: cancel.clone(),
         ended: false,
     };
-    let body = request_body(rx, cancel, 1, true, output);
+    let body = request_body(
+        rx,
+        cancel,
+        1,
+        true,
+        output,
+        crate::http_body_policy::Policy::new(),
+    );
     let other_request = budget
         .charge(CHUNK_BYTES)
         .unwrap_or_else(|_| panic!("independent request"));
@@ -240,7 +256,14 @@ async fn lost_credit_path_cannot_complete_a_body_without_its_end_marker() {
             .push(&URL_SAFE_NO_PAD.encode(b"null"), false, &budget)
             .is_ok()
     );
-    let request = Request::new(request_body(rx, cancel, 1, true, output));
+    let request = Request::new(request_body(
+        rx,
+        cancel,
+        1,
+        true,
+        output,
+        crate::http_body_policy::Policy::new(),
+    ));
     assert!(
         crate::http_api::decode_json_body::<serde_json::Value>(request, 1024)
             .await
@@ -265,7 +288,15 @@ async fn unpaced_request_releases_charges_without_credit_frames()
         cancel: cancel.clone(),
         ended: false,
     };
-    let mut body = request_body(rx, cancel, 1, false, output).into_data_stream();
+    let mut body = request_body(
+        rx,
+        cancel,
+        1,
+        false,
+        output,
+        crate::http_body_policy::Policy::new(),
+    )
+    .into_data_stream();
     for _ in 0..16 {
         assert!(
             input
@@ -314,7 +345,14 @@ async fn unpaced_virtual_bodies_share_host_admission_and_release_on_cancel() {
             .push(&URL_SAFE_NO_PAD.encode(b" "), false, &queue)
             .expect("queue chunk");
         // No credit opt-in: admission cannot depend on cooperative pacing.
-        let request = Request::new(request_body(rx, cancel, id, false, output.clone()));
+        let request = Request::new(request_body(
+            rx,
+            cancel,
+            id,
+            false,
+            output.clone(),
+            crate::http_body_policy::Policy::new(),
+        ));
         let mut read = Box::pin(decode_upload_body::<serde_json::Value>(
             request,
             1024,

@@ -95,7 +95,7 @@ pub(crate) async fn initialize_connection(
         "PRAGMA temp_store=FILE",
         "CREATE TEMP TABLE message_uploads (
             handle TEXT PRIMARY KEY, attachment_id TEXT NOT NULL UNIQUE,
-            room_id TEXT NOT NULL, user_id TEXT NOT NULL, participant_id TEXT NOT NULL,
+            room_id TEXT NOT NULL, room_uid TEXT NOT NULL, user_id TEXT NOT NULL, participant_id TEXT NOT NULL,
             operation_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL,
             size INTEGER NOT NULL CHECK(size BETWEEN 1 AND 52428800),
             accepted INTEGER NOT NULL DEFAULT 0 CHECK(accepted BETWEEN 0 AND size),
@@ -145,6 +145,7 @@ impl SqliteStore {
                 || row.get::<String,_>("content_type") != content_type {
                 return Err(rejected("upload_operation_conflict"));
             }
+            require_custody(&mut tx,authority,&row.get::<String,_>("handle")).await?;
             let result = status_row(&row)?;
             tx.commit().await?;
             return Ok(result);
@@ -154,26 +155,13 @@ impl SqliteStore {
         let handle = Uuid::new_v4().simple().to_string();
         let id = format!("ma_{}", Uuid::new_v4().simple());
         let expiry = Utc::now().timestamp() + 3600;
-        sqlx::query("INSERT INTO temp.message_uploads(handle,attachment_id,room_id,user_id,participant_id,operation_id,filename,content_type,size,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
+        sqlx::query("INSERT INTO temp.message_uploads(handle,attachment_id,room_id,user_id,participant_id,operation_id,filename,content_type,size,expires_at,room_uid) VALUES(?,?,?,?,?,?,?,?,?,?,(SELECT json_extract(room_json,'$.room_uid') FROM rooms WHERE room_id=?))")
             .bind(&handle).bind(&id).bind(&p.room_id).bind(&p.principal_id).bind(&p.participant_id)
-            .bind(operation_id).bind(filename).bind(content_type).bind(size as i64).bind(expiry)
+            .bind(operation_id).bind(filename).bind(content_type).bind(size as i64).bind(expiry).bind(&p.room_id)
             .execute(&mut *tx).await?;
         let status = status_in(&mut tx, &handle).await?;
         tx.commit().await?;
         Ok(status)
-    }
-
-    /// Revalidate human authority without retaining a connection between request pieces.
-    /// # Errors
-    /// Returns current authority/persistence failure.
-    pub async fn authorize_message_upload(
-        &self,
-        authority: &MessageUploadAuthority,
-    ) -> Result<(), PersistenceError> {
-        let mut tx = self.pool.begin().await?;
-        authority.resolve(&mut tx).await?;
-        tx.commit().await?;
-        Ok(())
     }
 
     /// Append at most one bounded input piece, retaining a partial tail for exact resume.
@@ -350,7 +338,7 @@ async fn require_custody(
     handle: &str,
 ) -> Result<(), PersistenceError> {
     let (room, user, participant) = authority.identity();
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM temp.message_uploads WHERE handle=? AND room_id=? AND user_id=? AND participant_id=?)")
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM temp.message_uploads AS upload JOIN rooms ON rooms.room_id=upload.room_id WHERE handle=? AND upload.room_id=? AND user_id=? AND participant_id=? AND upload.room_uid=json_extract(rooms.room_json,'$.room_uid'))")
         .bind(handle).bind(room).bind(user).bind(participant).fetch_one(&mut **tx).await?;
     if !exists {
         return Err(rejected("upload_missing"));
@@ -393,7 +381,7 @@ fn status_row(row: &sqlx::sqlite::SqliteRow) -> Result<MessageUploadStatus, Pers
     })
 }
 pub(crate) async fn expire_in(tx: &mut Transaction<'_, Sqlite>) -> Result<(), PersistenceError> {
-    sqlx::query("DELETE FROM temp.message_uploads WHERE expires_at<=?")
+    sqlx::query("DELETE FROM temp.message_uploads WHERE expires_at<=? OR NOT EXISTS(SELECT 1 FROM rooms WHERE rooms.room_id=message_uploads.room_id AND json_extract(rooms.room_json,'$.room_uid')=message_uploads.room_uid)")
         .bind(Utc::now().timestamp())
         .execute(&mut **tx)
         .await?;

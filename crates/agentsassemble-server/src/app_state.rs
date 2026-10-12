@@ -58,6 +58,7 @@ pub struct AppState {
     pub(crate) socket_admission: SocketAdmission,
     pub(crate) secure_queue_budget: Arc<tokio::sync::Semaphore>,
     pub(crate) downloads: crate::download_budget::Budget,
+    pub(crate) uploads: crate::message_upload::Service,
     pub(crate) upload_bodies: crate::upload_body_budget::Budget,
     pub(crate) avatar_reads: Arc<tokio::sync::Semaphore>,
     pub(crate) avatar_uploads: Arc<tokio::sync::Semaphore>,
@@ -165,6 +166,7 @@ impl AppState {
             provider_adapter.clone(),
         );
         let downloads = rooms.downloads.clone();
+        let uploads = crate::message_upload::Service::new(store.clone());
         Ok(Self {
             rooms,
             store,
@@ -203,6 +205,7 @@ impl AppState {
                 crate::secure_queue::GLOBAL_BYTES,
             )),
             downloads,
+            uploads,
             upload_bodies: crate::upload_body_budget::Budget::default(),
             avatar_reads: Arc::new(tokio::sync::Semaphore::new(6)),
             avatar_uploads: Arc::new(tokio::sync::Semaphore::new(2)),

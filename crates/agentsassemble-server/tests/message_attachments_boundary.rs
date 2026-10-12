@@ -725,7 +725,7 @@ async fn local_tcp_preview_is_private_bounded_and_preserves_original_download()
     assert_eq!(preview.headers()["x-agentsassemble-image-preview"], "1");
     assert_eq!(
         preview.headers()["access-control-expose-headers"],
-        "x-agentsassemble-image-preview"
+        "x-agentsassemble-image-preview,x-agentsassemble-upload-transfer"
     );
     assert_eq!(preview.headers()["content-type"], "image/webp");
     assert!(

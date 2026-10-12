@@ -86,6 +86,7 @@ pub(crate) fn start(
     let (method, uri, headers) = request_metadata(client, provenance, start)?;
     let (tx, rx) = mpsc::channel::<Part>(16);
     let cancel = client.closed().child_token();
+    let policy = crate::http_body_policy::Policy::new();
     let mut request = Request::builder()
         .method(method)
         .uri(uri)
@@ -95,6 +96,7 @@ pub(crate) fn start(
             start.id,
             start.upload_credit,
             output.with_cancel(cancel.clone()),
+            policy.clone(),
         ))
         .map_err(|_| ())?;
     *request.headers_mut() = headers;
@@ -102,6 +104,7 @@ pub(crate) fn start(
     request.extensions_mut().insert(provenance.ingress.clone());
     request.extensions_mut().insert(admission.clone());
     request.extensions_mut().insert(client.clone());
+    request.extensions_mut().insert(policy);
     let input = Input {
         tx,
         cancel: cancel.clone(),
@@ -165,6 +168,12 @@ async fn send_response(
         .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.as_str(), value)))
         .collect::<Vec<_>>();
     headers.push(("x-agentsassemble-upload-credit", "1"));
+    if !headers
+        .iter()
+        .any(|(name, _)| *name == "x-agentsassemble-upload-transfer")
+    {
+        headers.push(("x-agentsassemble-upload-transfer", "1"));
+    }
     if output.send(json!({"op":"response", "id":id, "status":response.status().as_u16(), "headers":headers})).await.is_err() { return; }
     let mut body = response.into_body().into_data_stream();
     loop {
@@ -197,10 +206,11 @@ fn request_body(
     id: u32,
     upload_credit: bool,
     output: Output,
+    policy: crate::http_body_policy::Policy,
 ) -> Body {
     let stream = futures_util::stream::unfold(
-        (rx, false, cancel, false),
-        move |(mut rx, ended, cancel, credit)| {
+        (rx, false, cancel, false, policy),
+        move |(mut rx, ended, cancel, credit, policy)| {
             let output = output.clone();
             async move {
                 if ended {
@@ -208,12 +218,16 @@ fn request_body(
                 }
                 // Resumption means the bounded consumer has processed the prior chunk.
                 // A failed credit path is an incomplete body, never successful EOF.
-                let next = if credit
-                    && output
+                let credit_failed = if credit {
+                    let _server_wait = policy.server_wait();
+                    output
                         .send(json!({"op":"consumed", "id":id}))
                         .await
                         .is_err()
-                {
+                } else {
+                    false
+                };
+                let next = if credit_failed {
                     None
                 } else {
                     tokio::select! { biased; () = cancel.cancelled() => None, next = rx.recv() => next }
@@ -226,14 +240,14 @@ fn request_body(
                         drop(charge);
                         Some((
                             Ok::<_, std::io::Error>(Bytes::from(bytes)),
-                            (rx, end, cancel, upload_credit && !end),
+                            (rx, end, cancel, upload_credit && !end, policy),
                         ))
                     }
                     None => Some((
                         Err(std::io::Error::other(
                             "Encrypted request ended before its body completed",
                         )),
-                        (rx, true, cancel, false),
+                        (rx, true, cancel, false, policy),
                     )),
                 }
             }

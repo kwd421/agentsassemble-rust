@@ -134,6 +134,8 @@ pub enum ServeError {
     LocalAttendee(#[from] crate::LocalAttendeeError),
     #[error("runtime reconciliation task failed: {0}")]
     RuntimeReconciliationTask(tokio::task::JoinError),
+    #[error("upload cleanup task failed: {0}")]
+    UploadCleanupTask(tokio::task::JoinError),
     #[error("room runtime shutdown failed: {0}")]
     RoomShutdown(#[from] RoomShutdownError),
     #[error("runtime reconciliation failed: {0}")]
@@ -449,6 +451,11 @@ async fn serve_runtime(
     let central_directory = CentralDirectoryTask::spawn(&state, public_ingress.clone());
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
+    let uploads = state.uploads.clone();
+    let upload_shutdown = connection_shutdown.child_token();
+    let upload_cleanup = tokio::spawn(async move {
+        uploads.cleanup_until_shutdown(upload_shutdown).await;
+    });
     let http_admission = HttpAdmission::default();
     let reconciliation_owner = tokio::spawn(watch_runtime_reconciliation(
         state.store.clone(),
@@ -510,6 +517,7 @@ async fn serve_runtime(
     let central_directory_shutdown = central_directory.shutdown().await;
     let ingress_shutdown = tokio::spawn(async move { public_ingress.shutdown().await });
     drain_connections(&connections, &connection_shutdown).await;
+    let upload_cleanup = upload_cleanup.await;
     http_admission.report_rejections();
     let (
         login_shutdown,
@@ -537,6 +545,7 @@ async fn serve_runtime(
     attendee_shutdown?;
     provider_shutdown?;
     reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;
+    upload_cleanup.map_err(ServeError::UploadCleanupTask)?;
     ingress_shutdown?;
     central_directory_shutdown?;
     result.map_err(ServeError::Io)
