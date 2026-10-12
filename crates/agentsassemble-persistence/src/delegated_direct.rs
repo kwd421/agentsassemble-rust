@@ -80,6 +80,15 @@ impl SqliteStore {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let proof =
             DelegatedRoomActionAuthority::direct(&mut tx, authority, request.name()).await?;
+        if let DirectRoomAction::SetParticipantMute(r) = request
+            && r.muted
+            && r.participant_id == proof.owner.participant_id
+        {
+            return Err(rejected(
+                "owner_not_permitted",
+                "A delegate cannot mute its bound human owner.",
+            ));
+        }
         let payload = serde_json::to_value(request)?;
         let hash = canonical_payload_hash(
             &json!({"request":payload,"owner":proof.owner.participant_id,"delegate":proof.delegate.participant_id}),

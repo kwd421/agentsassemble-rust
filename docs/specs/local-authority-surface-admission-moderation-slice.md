@@ -1,5 +1,13 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
+## Round-4 delegated mute correction (2026-10-12)
+
+Provider, attendee and connector director calls must refuse `muted=true` when
+the target is their exact bound human owner, before canonical mutation or budget
+debit. Delegated unmute remains allowed under the existing current-authority
+checks; human direct mute/unmute is unchanged. Verify refusal leaves the owner
+unmuted and the same director can still unmute.
+
 ## Director delegation: remaining direct actions (slice 2)
 
 Continuation acceptance: finish lifecycle start/stop, all three transport surfaces,

@@ -144,6 +144,22 @@ async fn channels_preserve_other_settings_and_bind_replay_revision_and_limits() 
 async fn mute_shares_human_targets_and_next_call_revocation() -> TestResult {
     let (store, authority, _, _directory) = fixture().await?;
     let owner_id = agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID;
+    for muted in [true, false] {
+        let request = DirectRoomAction::SetParticipantMute(SetParticipantMute {
+            request_id: Uuid::new_v4().to_string(),
+            participant_id: owner_id.into(),
+            muted,
+        });
+        let result = store
+            .execute_delegated_atomic(&authority, &request, |_, _, _| Ok(()))
+            .await;
+        if muted {
+            assert_eq!(code(result.unwrap_err()), "owner_not_permitted");
+        } else {
+            result?;
+        }
+        assert!(!store.participant("general", owner_id).await?.muted);
+    }
     let mut target = store.participant("general", owner_id).await?;
     target.participant_id = "mute-target".into();
     sqlx::query(

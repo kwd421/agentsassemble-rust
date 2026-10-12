@@ -329,40 +329,28 @@ async fn verify_direct(
             .contains("command_conflict")
     );
     let muted = args(json!({"participant_id":LOCAL_OPERATOR_PARTICIPANT_ID,"muted":true}));
-    let receipt = call(client, "set_participant_mute", muted).await;
+    let refused = room_portal_fixture::call_tool(client, "set_participant_mute", muted).await;
+    assert_eq!(refused.is_error, Some(true));
     assert!(
-        store
+        refused.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .contains("owner_not_permitted")
+    );
+    assert!(
+        !store
             .participant("general", LOCAL_OPERATOR_PARTICIPANT_ID)
             .await?
             .muted
     );
-    for (name, request) in [
-        ("create_text_channel", args(json!({"name":"Denied"}))),
-        ("rename_text_channel", rename),
-        (
-            "set_participant_mute",
-            args(json!({"participant_id":LOCAL_OPERATOR_PARTICIPANT_ID,"muted":false})),
-        ),
-    ] {
-        let result = room_portal_fixture::call_tool(client, name, request).await;
-        assert_eq!(result.is_error, Some(true));
-        assert!(
-            result.content[0]
-                .as_text()
-                .unwrap()
-                .text
-                .contains("owner_muted"),
-            "{result:?}"
-        );
-    }
-    mute(store, LOCAL_OPERATOR_PARTICIPANT_ID, false).await?;
     let unmuted = call(
         client,
         "set_participant_mute",
         args(json!({"participant_id":LOCAL_OPERATOR_PARTICIPANT_ID,"muted":false})),
     )
     .await;
-    for result in [first, renamed, receipt, unmuted] {
+    for result in [first, renamed, unmuted] {
         assert_eq!(result["event"]["actor_participant_id"], delegate);
         assert_eq!(
             result["event"]["on_behalf_of_participant_id"],
