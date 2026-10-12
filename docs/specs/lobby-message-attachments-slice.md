@@ -952,7 +952,9 @@ animated PNG/GIF/WebP use the original streamed reader. Apply EXIF orientation
 before resizing; preserve alpha using lossless WebP, use JPEG for opaque pixels,
 and reduce dimensions further when necessary to meet the byte ceiling. Validation
 failures remain errors. Preserve existing two-decoder, dimension/pixel and 72 MiB
-decoder allocation limits. Historical images generate lazily at first authorized
+decoder allocation limits. GIF animation detection inspects frame headers with the
+already-used GIF decoder library, preserving first-frame-only validation and avoiding
+allocation/validation of later animation frames. Historical images generate lazily at first authorized
 request, under serialized persistence ownership, and store the result (including
 the no-separate-preview decision) once for concurrent first requests.
 
@@ -968,7 +970,11 @@ round-5 schema migration pattern.
 Preview readers share original room/session/visibility/deletion authorization and
 recheck it on each piece. Admission precedes byte selection: cached previews and
 original passthrough use streamed cost; lazy generation additionally reserves its
-whole-input/decode/encoding cost until the blocking decoder finishes. Responses
+whole-input/decode/encoding cost (2× stored size + 160 MiB for decoder/rotation
+and resize/encoding) until the blocking decoder releases the input. The existing
+single writer transaction serializes the first generation and insertion; a cold
+preview briefly holds that writer during CPU work, with no network await. Subsequent
+reads use only the cache pieces. Responses
 retain private/no-store rules across plain desktop and encrypted channels.
 Entry owners: raster_assets, message_attachments/connector, message_attachment_reader,
 schema_version/archive_schema/backup_policy, profile_web/attachment_download/

@@ -75,7 +75,13 @@ async fn preview_bounds_alpha_orientation_and_original_passthrough() -> TestResu
     {
         let mut encoder = image::codecs::gif::GifEncoder::new(&mut animation);
         encoder.encode_frame(image::Frame::new(image.clone()))?;
-        encoder.encode_frame(image::Frame::new(image))?;
+        // The first-frame validator already accepts this animation. Later
+        // frames must not consume a second full-canvas decoder allocation.
+        encoder.encode_frame(image::Frame::new(RgbaImage::from_pixel(
+            4096,
+            4096,
+            Rgba([10, 20, 30, 255]),
+        )))?;
     }
     assert!(animation.len() > MAX_BYTES);
     let (content, safe, preview) =

@@ -108,6 +108,25 @@ impl Budget {
         self.reserve_weight(Some(principal), STREAM_BYTES, true)
     }
 
+    pub(crate) fn reserve_preview_generation(
+        &self,
+        principal: &str,
+        size: usize,
+    ) -> Result<Lease, PersistenceError> {
+        // Whole encoded input/driver copies, bounded decoder/rotation buffers,
+        // plus <=1100px resize and temporary encoding. Held by the blocking task.
+        let weight = size
+            .checked_mul(2)
+            .and_then(|n| {
+                n.checked_add(
+                    2 * agentsassemble_persistence::MAX_RASTER_DECODE_ALLOC_BYTES as usize
+                        + 16 * 1024 * 1024,
+                )
+            })
+            .ok_or_else(exhausted)?;
+        self.reserve_weight(Some(principal), weight, false)
+    }
+
     fn reserve_weight(
         &self,
         principal: Option<&str>,

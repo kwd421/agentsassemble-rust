@@ -27,6 +27,7 @@ command-fds = { version = "0.3.3", features = ["tokio"] }
 futures-util = "0.3.31"
 fs2 = "0.4.3"
 getrandom = "0.4.3"
+gif = "0.14.2"
 hex = "0.4.3"
 eventsource-stream = "0.2.3"
 hyper = { version = "1.11.0", features = ["client", "http1", "server"] }

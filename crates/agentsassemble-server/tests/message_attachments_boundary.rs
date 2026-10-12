@@ -673,3 +673,111 @@ fn local_principal() -> AuthenticatedPrincipal {
 
 #[path = "room_file_upload_boundary.rs"]
 mod room_file_upload_boundary;
+
+#[tokio::test]
+async fn local_tcp_preview_is_private_bounded_and_preserves_original_download()
+-> Result<(), Box<dyn std::error::Error>> {
+    let server = start_local().await;
+    let client = Client::new();
+    let width = 1600_u32;
+    let height = 800_u32;
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    let mut noise = 0x12345678_u32;
+    for _ in 0..width * height {
+        noise ^= noise << 13;
+        noise ^= noise >> 17;
+        noise ^= noise << 5;
+        pixels.extend_from_slice(&[(noise >> 16) as u8, (noise >> 8) as u8, noise as u8, 128]);
+    }
+    let mut original = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut original, width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header()?.write_image_data(&pixels)?;
+    }
+    assert!(original.len() > 256 * 1024);
+    let attachment = upload_local(&client, &server, "large.png", "image/png", &original).await;
+    server
+        .store
+        .execute_message(
+            &local_principal(),
+            "bind-large-preview",
+            "message.send",
+            &json!({"content":"", "attachment_ids":[attachment["id"]]}),
+        )
+        .await?;
+    let id = attachment["id"].as_str().ok_or("attachment id")?;
+    let path = format!("{}/api/attachments/{id}?preview=1", server.base_url);
+    assert_eq!(
+        client.get(&path).send().await?.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let ticket = issue_local_read_id(&server.tickets, id).await;
+    let preview = client
+        .get(&path)
+        .bearer_auth(&ticket)
+        .header("Origin", "tauri://localhost")
+        .send()
+        .await?;
+    assert_eq!(preview.status(), StatusCode::OK);
+    assert_eq!(preview.headers()["cache-control"], "private, no-store");
+    assert_eq!(preview.headers()["x-agentsassemble-image-preview"], "1");
+    assert_eq!(
+        preview.headers()["access-control-expose-headers"],
+        "x-agentsassemble-image-preview"
+    );
+    assert_eq!(preview.headers()["content-type"], "image/webp");
+    assert!(
+        preview.headers()["content-disposition"]
+            .to_str()?
+            .starts_with("inline;")
+    );
+    let bytes = preview.bytes().await?;
+    assert!(!bytes.is_empty() && bytes.len() <= 256 * 1024);
+    assert_eq!(
+        client
+            .get(&path)
+            .bearer_auth(&ticket)
+            .send()
+            .await?
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let ticket = issue_local_read_id(&server.tickets, id).await;
+    let download = read_attachment(
+        &client,
+        &server.base_url,
+        &attachment["download_url"],
+        &ticket,
+    )
+    .await;
+    assert_eq!(download.status(), StatusCode::OK);
+    assert_eq!(download.bytes().await?.as_ref(), original);
+    let small = STANDARD.decode(PNG_BASE64)?;
+    let small_attachment = upload_local(&client, &server, "small.png", "image/png", &small).await;
+    server
+        .store
+        .execute_message(
+            &local_principal(),
+            "bind-small-preview",
+            "message.send",
+            &json!({"content":"", "attachment_ids":[small_attachment["id"]]}),
+        )
+        .await?;
+    let small_id = small_attachment["id"].as_str().ok_or("small id")?;
+    let small_ticket = issue_local_read_id(&server.tickets, small_id).await;
+    let small_preview = client
+        .get(format!(
+            "{}/api/attachments/{small_id}?preview=1",
+            server.base_url
+        ))
+        .bearer_auth(small_ticket)
+        .send()
+        .await?;
+    assert_eq!(small_preview.status(), StatusCode::OK);
+    assert_eq!(small_preview.headers()["content-type"], "image/png");
+    assert_eq!(small_preview.bytes().await?.as_ref(), small);
+    server.stop().await;
+    Ok(())
+}

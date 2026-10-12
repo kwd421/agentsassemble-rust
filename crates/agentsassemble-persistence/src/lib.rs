@@ -290,6 +290,7 @@ pub use provider_turn_reconciliation::{
     ProviderTurnReconciliationCandidate, ProviderTurnReconciliationCursor,
     ProviderTurnReconciliationPage,
 };
+pub use raster_assets::MAX_RASTER_DECODE_ALLOC_BYTES;
 pub use room_appearance_assets::{RoomAppearanceAsset, RoomAppearanceAssetMetadata};
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
 pub use room_preferences::{LocalRoomPreferencesDirectoryEntry, RoomPreferencesSnapshot};

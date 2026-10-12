@@ -5,6 +5,8 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{PersistenceError, SqliteStore};
 
+// Preview caches have one FK-owned row per asset, each <=256 KiB (<=1 GiB
+// in addition to this product-byte ceiling); they are not user storage/quota.
 pub(crate) const MAX_RETAINED_ASSETS: i64 = 4096;
 const MAX_RETAINED_ASSET_BYTES: i64 = 8 * 1024 * 1024 * 1024;
 

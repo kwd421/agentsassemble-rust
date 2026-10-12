@@ -18,6 +18,8 @@ pub struct MessageAttachmentReader {
     store: SqliteStore,
     authority: MessageAttachmentReadAuthority,
     metadata: MessageAttachmentMetadata,
+    original: MessageAttachmentMetadata,
+    preview: bool,
 }
 
 impl MessageAttachmentReadAuthority {
@@ -88,7 +90,9 @@ impl SqliteStore {
             MessageAttachmentReader {
                 store: self.clone(),
                 authority,
+                original: metadata.clone(),
                 metadata,
+                preview: false,
             },
             lease,
         ))
@@ -112,12 +116,16 @@ impl MessageAttachmentReader {
             .authority
             .metadata_in(&mut tx, &self.metadata.id)
             .await?;
-        if metadata != self.metadata {
+        if metadata != self.original {
             return Err(invalid_attachment_state());
         }
-        let bytes = crate::room_file_content::RoomFileContent::Message
-            .read(&mut tx, &metadata.id, sequence)
-            .await?;
+        let bytes = if self.preview {
+            self.preview_piece(&mut tx, sequence).await?
+        } else {
+            crate::room_file_content::RoomFileContent::Message
+                .read(&mut tx, &metadata.id, sequence)
+                .await?
+        };
         tx.commit().await?;
         Ok(bytes)
     }
@@ -126,3 +134,9 @@ impl MessageAttachmentReader {
 #[cfg(test)]
 #[path = "message_attachment_reader_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "message_attachment_preview_reader_tests.rs"]
+mod preview_tests;
+#[path = "message_attachment_preview_reader.rs"]
+mod previews;

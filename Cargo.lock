@@ -106,6 +106,7 @@ dependencies = [
  "chrono",
  "fs2",
  "futures-util",
+ "gif",
  "hex",
  "hmac 0.12.1",
  "image",

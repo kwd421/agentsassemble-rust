@@ -16,14 +16,9 @@ async fn piece_reads_reauthorize_after_deletion_and_access_loss() -> TestResult 
         let (store, _) =
             crate::human_session_authority_tests::admitted_fixture(InviteScope::ReadOnly).await;
         let (_, principal) = crate::message_attachment_tests::fixture().await;
-        let bytes: Vec<u8> = (0..65536 + 19).map(|n| (n % 251) as u8).collect();
+        let bytes = crate::raster_preview_tests::large_png(true, false)?;
         let attachment = store
-            .store_message_attachment(
-                &principal,
-                "pieces.bin",
-                "application/octet-stream",
-                bytes.clone(),
-            )
+            .store_message_attachment(&principal, "pixels.png", "image/png", bytes.clone())
             .await?;
         store
             .execute_message(
@@ -38,16 +33,28 @@ async fn piece_reads_reauthorize_after_deletion_and_access_loss() -> TestResult 
         let (reader, ()) = store
             .open_message_attachment_reader(
                 MessageAttachmentReadAuthority::Session(Box::new(RoomSessionAuthorization::Human(
-                    session,
+                    session.clone(),
                 ))),
                 &attachment.id,
                 |_| Ok(()),
             )
             .await?;
+        let (preview, ()) = store
+            .open_message_attachment_preview_reader(
+                MessageAttachmentReadAuthority::Session(Box::new(RoomSessionAuthorization::Human(
+                    session,
+                ))),
+                &attachment.id,
+                |_| Ok(()),
+                |_, _| Ok(()),
+            )
+            .await?;
+        assert!(!preview.read_piece(0).await?.is_empty());
         assert_eq!(reader.read_piece(0).await?, bytes[..65536]);
         // Releasing the first read permits an unrelated writer before any next read.
         sqlx::query(mutation).execute(&store.pool).await?;
         assert!(reader.read_piece(1).await.is_err(), "{mutation}");
+        assert!(preview.read_piece(1).await.is_err(), "preview: {mutation}");
     }
     Ok(())
 }

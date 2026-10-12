@@ -391,6 +391,7 @@ async fn read_attachment(
 ) -> Result<Response, ProfileHttpError> {
     if attachment_id.starts_with(agentsassemble_domain::MESSAGE_ATTACHMENT_ID_PREFIX) {
         let inline_requested = attachment_inline_query(raw_query.as_deref())?;
+        let preview_requested = raw_query.as_deref() == Some("preview=1");
         let authority = resolve_message_attachment_read_authority(
             &state,
             request.headers(),
@@ -409,12 +410,24 @@ async fn read_attachment(
                 MessageAttachmentReadAuthority::Session(session)
             }
         };
-        let (reader, lease) = state
-            .store
-            .open_message_attachment_reader(authority, &attachment_id, |principal| {
-                state.downloads.reserve_stream(principal)
-            })
-            .await?;
+        let (reader, lease) = if preview_requested {
+            state
+                .store
+                .open_message_attachment_preview_reader(
+                    authority,
+                    &attachment_id,
+                    |principal| state.downloads.reserve_stream(principal),
+                    |principal, size| state.downloads.reserve_preview_generation(principal, size),
+                )
+                .await?
+        } else {
+            state
+                .store
+                .open_message_attachment_reader(authority, &attachment_id, |principal| {
+                    state.downloads.reserve_stream(principal)
+                })
+                .await?
+        };
         let metadata = reader.metadata().clone();
         let (body, progress) =
             crate::attachment_download::body(reader, lease, request.extensions().get());
@@ -501,10 +514,10 @@ async fn read_attachment(
 
 fn attachment_inline_query(query: Option<&str>) -> Result<bool, ProfileHttpError> {
     match query {
-        Some("view=1") => Ok(true),
+        Some("view=1" | "preview=1") => Ok(true),
         Some("download=1") => Ok(false),
         _ => Err(ProfileHttpError::bad_request(
-            "Message attachments require the exact view or download query.",
+            "Message attachments require the exact view, preview or download query.",
         )),
     }
 }

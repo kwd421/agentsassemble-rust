@@ -190,7 +190,12 @@ pub fn router(state: AppState) -> Router {
     if state.central_registration_enabled {
         app = app.merge(crate::central::registration_web::routes());
     }
-    app = app.route_layer(middleware::from_fn(require_trusted_ingress));
+    app = app
+        .route_layer(middleware::from_fn(require_trusted_ingress))
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::HeaderName::from_static("x-agentsassemble-image-preview"),
+            axum::http::HeaderValue::from_static("1"),
+        ));
     if let Some(frontend_release) = frontend_release {
         let frontend_root = frontend_release.root();
         let index_html = frontend_release.index_html();

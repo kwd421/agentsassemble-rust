@@ -1,6 +1,6 @@
 //! Derived conversation pixels; originals keep their exact bytes and metadata.
 use crate::PersistenceError;
-use image::{DynamicImage, ImageEncoder, imageops::FilterType};
+use image::{DynamicImage, GenericImageView, ImageEncoder, imageops::FilterType};
 
 pub(crate) const MAX_BYTES: usize = 256 * 1024;
 pub(crate) const MAX_DIMENSION: u32 = 1100;
@@ -11,10 +11,11 @@ pub(crate) struct Preview {
 }
 
 pub(crate) fn encode(image: DynamicImage) -> Result<Preview, PersistenceError> {
+    let transparent =
+        image.color().has_alpha() && image.pixels().any(|(_, _, pixel)| pixel[3] != 255);
     let mut side = MAX_DIMENSION.min(image.width().max(image.height()));
     loop {
         let scaled = image.resize(side, side, FilterType::Triangle).to_rgba8();
-        let transparent = scaled.pixels().any(|pixel| pixel[3] != 255);
         let mut content = Vec::new();
         let content_type = if transparent {
             image::codecs::webp::WebPEncoder::new_lossless(&mut content).write_image(
