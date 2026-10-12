@@ -7,10 +7,6 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let mut expected = SqliteConnection::connect("sqlite::memory:").await?;
     let mut tx = pool.begin().await?;
     for name in ["room_message_attachments", "room_connector_uploads"] {
-        let table = schema::TABLES
-            .iter()
-            .find(|table| table.name == name)
-            .ok_or_else(|| PersistenceError::InvalidSchemaVersion(name.into()))?;
         let replacement = format!("{name}_v92");
         if sqlx::query("SELECT 1 FROM sqlite_schema WHERE name = ?")
             .bind(&replacement)
@@ -48,8 +44,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             .map(|name| format!("\"{name}\""))
             .collect::<Vec<_>>()
             .join(",");
-        let ddl = table
-            .ddl
+        let ddl = crate::archive_schema::table_statement(92, name)?
             .replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE")
             .replace(&format!("\"{name}\""), &format!("\"{replacement}\""));
         sqlx::query(sqlx::AssertSqlSafe(ddl))

@@ -8,6 +8,44 @@ cut over at `e0622cb`, with final D-03 manual cross-review closed at `5693e13`
 Reconnect the copied lobby composer and message attachment renderer to one durable
 Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle.
 
+## Transfer rework: storage prerequisite (slice 1, 2026-10-12)
+
+Persistence owns one bounded content interface for all room message attachments
+and connector uploads. SQLx 0.9 has no approved safe incremental-BLOB route on
+the existing connection (settled owner decision); schema 93 uses child chunk rows
+for every file, with no retained whole-BLOB representation. Each storage read or
+write step holds at most one 64 KiB piece, independent of file size; the final
+piece is shorter. This bounds driver copies while keeping a 50 MiB file to 800
+rows. No spool, second runtime connection/driver, unsafe code, or transaction
+across network reception is introduced. A piece append is one SQL statement;
+the existing upload boundary still inserts a completed file in its atomic local
+transaction. Later reception can use one-piece transactions on the same writer
+lease, releasing the writer between pieces. This slice does not claim to bound
+existing whole-body HTTP, download, or raster-validation allocations.
+
+Affected entry points: human/local uploads and authorized downloads; managed
+provider, attendee and connector attachment reads/uploads; message.send pending
+binding and connector publication; backup export, server move and staged archive
+restore/reconstruction; retained storage accounting, expiry and parent/message
+deletion. All content access uses this persistence owner. Custody, identical
+bytes, sizes, room/server quotas, file limits, atomic publication and failures
+remain unchanged; metadata-only accounting counts each parent once.
+
+Schema 92 -> 93 is transactional: refuse an unexpected source shape or an
+existing replacement object, copy metadata by column name, split BLOBs inside
+SQLite and verify every total length before committing. Failure rolls back the
+conversion and version update. The frozen archive catalog retains 87–92, with
+staged upgrade before Prepared and truthful historical-field provenance. New
+archives use chunk rows and need no >16 MiB attachment-cell exception; the outer
+envelope and early too-new-manifest refusal remain unchanged. As with previous
+schema bumps, newer archives require an equally new or newer receiving app.
+
+Acceptance: byte-exact piece and whole reads at non-aligned sizes and 50 MiB;
+genuine schema-92 conversion and hostile-shape rollback; 87–92 archives restoring
+into current storage; deletion/expiry leaving no pieces; unchanged quota races
+and existing upload -> bind -> download flows. No wire, route, client, UI,
+download-budget, upload-protocol, message-count or raster-policy change.
+
 ## Approved target contract after Phase 0B
 
 - This slice owns only attachments on the ordinary lobby `message_final` path. Custom

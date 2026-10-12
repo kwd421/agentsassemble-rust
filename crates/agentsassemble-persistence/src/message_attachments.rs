@@ -831,7 +831,7 @@ fn attachment_unavailable() -> PersistenceError {
     )
 }
 
-fn invalid_attachment_state() -> PersistenceError {
+pub(crate) fn invalid_attachment_state() -> PersistenceError {
     rejected(
         "invalid_state",
         "Stored message attachment metadata is invalid.",
