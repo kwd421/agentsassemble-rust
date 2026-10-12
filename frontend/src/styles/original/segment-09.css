@@ -50,10 +50,135 @@
   outline: none;
 }
 
-.dc-reply-draft + .dc-composer-bar {
+.dc-reply-draft + .dc-composer-bar,
+.dc-upload-tray + .dc-composer-bar {
   border-top: 0;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
+}
+
+/* Files waiting to be sent sit inside the composer box, above the input. */
+.dc-upload-tray {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+  overflow-x: auto;
+  border: 1px solid var(--color-panel-border);
+  border-bottom-color: var(--color-panel-separator);
+  border-radius: 8px 8px 0 0;
+  background: var(--color-panel-soft);
+  padding: 20px 10px 10px;
+  list-style: none;
+}
+
+.dc-reply-draft + .dc-upload-tray {
+  border-top: 0;
+  border-radius: 0;
+}
+
+.dc-upload-card {
+  position: relative;
+  display: flex;
+  width: 200px;
+  height: 200px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 8px;
+  background: #2c2d32;
+  padding: 8px;
+}
+
+.dc-upload-card-preview {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+}
+
+.dc-upload-card-preview img,
+.dc-upload-card-preview video {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.dc-upload-card-name {
+  overflow: hidden;
+  color: var(--color-text-normal);
+  font-size: 14px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dc-upload-card-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  background: var(--color-panel-soft);
+  color: #f57976;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.dc-upload-card-remove:hover:not(:disabled),
+.dc-upload-card-remove:focus-visible {
+  background: #303137;
+}
+
+.dc-upload-card-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dc-upload-limit-dialog {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  width: min(400px, calc(100vw - 32px));
+  gap: 8px;
+  margin: auto;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 12px;
+  background: var(--color-panel-bg);
+  padding: 24px;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+.dc-upload-limit-dialog:not([open]) {
+  display: none;
+}
+
+.dc-upload-limit-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.dc-upload-limit-dialog h2 {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.dc-upload-limit-dialog p {
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.dc-upload-limit-dialog .dc-accent-button {
+  min-height: 40px;
+  margin-top: 16px;
 }
 
 .dc-composer-readonly {
@@ -152,12 +277,6 @@
 .dc-composer-button:disabled {
   cursor: not-allowed;
   opacity: 0.35;
-}
-
-.dc-composer-attachment {
-  border: 1px solid var(--color-line);
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.18);
 }
 
 .dc-attachment-list {

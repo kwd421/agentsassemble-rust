@@ -170,6 +170,26 @@ describe("LobbyComposer", () => {
     expect(await screen.findByText("map.png")).toBeTruthy();
   });
 
+  it("refuses a selection that does not fit in one message instead of attaching part of it", async () => {
+    HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) { this.open = true; };
+    HTMLDialogElement.prototype.close ??= function close(this: HTMLDialogElement) { this.open = false; };
+    render(
+      <LobbyComposer
+        meetingId="room-a"
+        onPosted={vi.fn()}
+        postingMode="guest"
+        roomSessionToken="aas1.public-session"
+        roomDeviceToken="browser-device"
+      />
+    );
+    const files = Array.from({ length: 40 }, (_, index) => new File(["x"], `${index}.txt`, { type: "text/plain" }));
+    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), { target: { files } });
+
+    fireEvent.click(await screen.findByRole("button", { name: "알겠어요", hidden: true }));
+    expect(apiMocks.uploadLobbyAttachment).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "알겠어요", hidden: true })).toBeNull();
+  });
+
   it("shows a local preview of an image or video before it is sent", async () => {
     const createObjectURL = vi.fn((file: File) => `blob:preview-${file.name}`);
     const revokeObjectURL = vi.fn();

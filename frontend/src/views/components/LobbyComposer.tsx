@@ -1,5 +1,6 @@
 import { createResourceUrl, revokeResourceUrl } from "../../lib/remote/remoteResources";
 import ResourceImage from "./ResourceImage";
+import UploadLimitDialog from "./UploadLimitDialog";
 import {
   useCallback,
   useEffect,
@@ -12,7 +13,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { LucideIcon } from "lucide-react";
-import { AtSign, Paperclip, Plus, Send, Smile, Sparkles, X } from "lucide-react";
+import { AtSign, FileText, Paperclip, Plus, Send, Smile, Sparkles, Trash2, X } from "lucide-react";
 import {
   uploadLobbyAttachment,
   type LobbyAttachmentRef,
@@ -21,7 +22,6 @@ import {
 import { useRoomSocket } from "../../RoomSocketContext";
 import { RoomSocketSayError } from "../../roomSocketClient";
 import {
-  MAX_ATTACHMENTS_MESSAGE,
   MAX_ATTACHMENTS_PER_EVENT,
   lobbySubmitFailureDraft,
   lobbySubmitSuccessDraft,
@@ -165,6 +165,7 @@ export default function LobbyComposer({
   // they clear on their own, unlike a send failure that the draft depends on.
   const [attachmentError, setAttachmentError] = useState("");
   const shownError = error || attachmentError;
+  const [tooManyOpen, setTooManyOpen] = useState(false);
   useEffect(() => {
     if (!attachmentError) return undefined;
     const timer = window.setTimeout(() => setAttachmentError(""), ATTACHMENT_ERROR_MS);
@@ -331,15 +332,15 @@ export default function LobbyComposer({
   async function uploadFiles(selected: File[]) {
     if (!selected.length) return;
 
-    const { accepted: filesToUpload, error: selectionError } = selectLobbyAttachmentFiles(
+    const { accepted: filesToUpload, tooMany } = selectLobbyAttachmentFiles(
       pendingAttachments.length,
       selected
     );
-    if (filesToUpload.length === 0) {
-      setAttachmentError(selectionError || MAX_ATTACHMENTS_MESSAGE);
+    if (tooMany) {
+      setTooManyOpen(true);
       return;
     }
-    setAttachmentError(selectionError);
+    setAttachmentError("");
 
     const operation: AttachmentUploadOperation = {
       controller: new AbortController(),
@@ -589,49 +590,33 @@ export default function LobbyComposer({
       )}
 
       {pendingAttachments.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-2">
+        <ul className="dc-upload-tray" aria-label="보낼 파일">
           {pendingAttachments.map((attachment) => {
             const preview = localPreviews[attachment.id];
             return (
-              <span
-                key={attachment.id}
-                className={`dc-composer-attachment inline-flex max-w-full text-[12px] font-bold text-text-secondary ${
-                  preview ? "w-40 flex-col items-stretch gap-1.5 p-1.5" : "items-center gap-2 px-3 py-1.5"
-                }`}
-              >
-                {preview?.kind === "image" && (
-                  <ResourceImage
-                    src={preview.url}
-                    alt=""
-                    className="h-32 w-full rounded-[3px] bg-black/30 object-contain"
-                  />
-                )}
-                {preview?.kind === "video" && (
-                  <video
-                    src={preview.url}
-                    muted
-                    playsInline
-                    preload="metadata"
-                    aria-hidden="true"
-                    className="h-32 w-full rounded-[3px] bg-black/30 object-contain"
-                  />
-                )}
-                <span className={`flex min-w-0 items-center gap-2 ${preview ? "px-0.5" : ""}`}>
-                  <span className="min-w-0 flex-1 truncate preserve-words">{attachment.filename}</span>
-                  <button
-                    type="button"
-                    onClick={() => removePendingAttachment(attachment.id)}
-                    disabled={busy || uploading}
-                    className="grid h-5 w-5 shrink-0 place-items-center rounded border border-line/70 text-text-muted hover:border-danger/45 hover:text-danger"
-                    aria-label={`${attachment.filename} 첨부 제거`}
-                  >
-                    <X size={12} />
-                  </button>
+              <li key={attachment.id} className="dc-upload-card">
+                <span className="dc-upload-card-preview">
+                  {preview?.kind === "image" && <ResourceImage src={preview.url} alt="" />}
+                  {preview?.kind === "video" && (
+                    <video src={preview.url} muted playsInline preload="metadata" aria-hidden="true" />
+                  )}
+                  {!preview && <FileText size={40} aria-hidden="true" />}
                 </span>
-              </span>
+                <span className="dc-upload-card-name preserve-words">{attachment.filename}</span>
+                <button
+                  type="button"
+                  onClick={() => removePendingAttachment(attachment.id)}
+                  disabled={busy || uploading}
+                  className="dc-upload-card-remove"
+                  aria-label={`${attachment.filename} 첨부 제거`}
+                  data-tip="첨부 제거"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
 
       <div className="dc-composer-bar">
@@ -737,6 +722,9 @@ export default function LobbyComposer({
         </button>
       </div>
       </section>
+      {tooManyOpen && (
+        <UploadLimitDialog limit={MAX_ATTACHMENTS_PER_EVENT} onClose={() => setTooManyOpen(false)} />
+      )}
       {voteDialogOpen && (
         <VoteComposerDialog
           onClose={closeVoteDialog}
