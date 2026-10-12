@@ -61,5 +61,13 @@
       "CREATE TABLE \"room_message_attachment_chunks\" (\n    attachment_id TEXT NOT NULL REFERENCES \"room_message_attachments\"(attachment_id) ON DELETE CASCADE,\n    sequence INTEGER NOT NULL CHECK(sequence >= 0 AND sequence < 800),\n    content BLOB NOT NULL CHECK(typeof(content)='blob' AND length(content) BETWEEN 1 AND 65536),\n    PRIMARY KEY(attachment_id, sequence)\n) WITHOUT ROWID",
       "CREATE TABLE \"room_connector_upload_chunks\" (\n    attachment_id TEXT NOT NULL REFERENCES \"room_connector_uploads\"(attachment_id) ON DELETE CASCADE,\n    sequence INTEGER NOT NULL CHECK(sequence >= 0 AND sequence < 800),\n    content BLOB NOT NULL CHECK(typeof(content)='blob' AND length(content) BETWEEN 1 AND 65536),\n    PRIMARY KEY(attachment_id, sequence)\n) WITHOUT ROWID"
     ]
+  },
+  {
+    "version": 94,
+    "remove": [],
+    "add": [
+      "CREATE TABLE \"room_message_attachment_previews\" (\n    attachment_id TEXT NOT NULL PRIMARY KEY REFERENCES \"room_message_attachments\"(attachment_id) ON DELETE CASCADE,\n    content_type TEXT, content BLOB,\n    CHECK((content_type IS NULL AND content IS NULL) OR\n        (content_type IS NOT NULL AND content_type IN ('image/jpeg','image/webp')\n        AND content IS NOT NULL AND typeof(content)='blob' AND length(content) BETWEEN 1 AND 262144))\n)",
+      "CREATE TABLE \"room_connector_upload_previews\" (\n    attachment_id TEXT NOT NULL PRIMARY KEY REFERENCES \"room_connector_uploads\"(attachment_id) ON DELETE CASCADE,\n    content_type TEXT, content BLOB,\n    CHECK((content_type IS NULL AND content IS NULL) OR\n        (content_type IS NOT NULL AND content_type IN ('image/jpeg','image/webp')\n        AND content IS NOT NULL AND typeof(content)='blob' AND length(content) BETWEEN 1 AND 262144))\n)"
+    ]
   }
 ]

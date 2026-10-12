@@ -272,6 +272,14 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
 
 // Restore genuine historical leaf DDL when a test simulates a pre-92 database.
 pub(crate) async fn restore_v91(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
+    for table in [
+        "room_message_attachment_previews",
+        "room_connector_upload_previews",
+    ] {
+        sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE {table}")))
+            .execute(pool)
+            .await?;
+    }
     let mut tx = pool.begin().await?;
     for name in ["room_message_attachments", "room_connector_uploads"] {
         let kind = if name == "room_message_attachments" {

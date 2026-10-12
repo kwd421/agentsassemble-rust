@@ -88,7 +88,8 @@ async fn genuine_v92_converts_exact_bytes_and_refuses_hostile_shapes_atomically(
     }
     let quota: i64 = sqlx::query_scalar("SELECT sum(size) FROM (SELECT size FROM room_message_attachments UNION ALL SELECT size FROM room_connector_uploads)").fetch_one(&mut *db).await?;
     assert_eq!(quota, expected_quota);
-    let mut fresh = backup_database::create_payload(&directory.path().join("fresh.sqlite")).await?;
+    let mut fresh =
+        backup_database::create_version_payload(&directory.path().join("fresh.sqlite"), 93).await?;
     backup_database::require_schema(&mut db, &mut fresh, true).await?;
     backup_database::require_integrity(&mut db).await?;
     sqlx::query("DELETE FROM rooms").execute(&mut *db).await?;

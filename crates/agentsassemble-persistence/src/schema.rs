@@ -461,6 +461,16 @@ pub(crate) const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "room_message_attachment_previews",
+        ddl: crate::message_attachment_previews::MESSAGE_DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
+        name: "room_connector_upload_previews",
+        ddl: crate::message_attachment_previews::CONNECTOR_DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_message_attachment_chunks",
         ddl: crate::room_file_content::MESSAGE_DDL,
         infrastructure: false,

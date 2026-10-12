@@ -20,7 +20,7 @@ use crate::{
     asset_storage::enforce_storage_replacement,
     authority::load_active_participant,
     provider_turn_execution::load_execution_in,
-    raster_assets::{is_safe_raster_content_type, validate_preserved_safe_raster},
+    raster_assets::{is_safe_raster_content_type, prepare_preserved_raster},
     room_turns::support::load_participant,
     room_user_identity::resolve_room_user_identity,
     turn_authority::active_turn_authority,
@@ -262,6 +262,7 @@ struct PreparedMessageAttachment {
     content: Vec<u8>,
     size: i64,
     is_safe_image: bool,
+    preview: Option<crate::raster_preview::Preview>,
 }
 
 impl SqliteStore {
@@ -681,7 +682,8 @@ async fn prepare_message_attachment(
     require_file_size(content.len(), limit)?;
     let filename = canonical_message_attachment_filename(filename);
     let content_type = normalize_content_type(content_type, &filename);
-    let (content, is_safe_image) = validate_preserved_safe_raster(&content_type, content).await?;
+    let (content, is_safe_image, preview) =
+        prepare_preserved_raster(&content_type, content, true).await?;
     let size = i64::try_from(content.len()).map_err(|_| {
         rejected(
             "attachment_too_large",
@@ -694,6 +696,7 @@ async fn prepare_message_attachment(
         content,
         size,
         is_safe_image,
+        preview,
     })
 }
 
@@ -773,6 +776,15 @@ async fn store_pending_in_transaction(
     crate::room_file_content::RoomFileContent::Message
         .write(transaction, &attachment_id, &prepared.content)
         .await?;
+    if prepared.is_safe_image {
+        crate::message_attachment_previews::store(
+            transaction,
+            &attachment_id,
+            prepared.preview,
+            false,
+        )
+        .await?;
+    }
     Ok(metadata(
         attachment_id,
         prepared.filename,

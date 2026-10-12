@@ -127,6 +127,7 @@ mod human_invite_preflight;
 mod human_invites;
 mod human_prejoin_attachments;
 mod human_session_authority;
+mod message_attachment_previews;
 mod message_attachments;
 mod message_mutations;
 mod message_pins;
@@ -137,6 +138,9 @@ mod private_fs;
 mod profile_attachments;
 mod profile_store;
 mod raster_assets;
+mod raster_preview;
+#[cfg(test)]
+mod raster_preview_tests;
 mod room_appearance_assets;
 mod room_deletion;
 mod room_directory;

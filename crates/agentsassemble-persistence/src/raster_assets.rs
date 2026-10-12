@@ -63,20 +63,45 @@ pub(crate) async fn validate_preserved_safe_raster(
     content_type: &str,
     content: Vec<u8>,
 ) -> Result<(Vec<u8>, bool), PersistenceError> {
-    let Some(declared_format) = safe_image_format(content_type) else {
-        return Ok((content, false));
+    let (content, safe, _) = prepare_preserved_raster(content_type, content, false).await?;
+    Ok((content, safe))
+}
+
+pub(crate) async fn prepare_preserved_raster(
+    content_type: &str,
+    content: Vec<u8>,
+    preview: bool,
+) -> Result<(Vec<u8>, bool, Option<crate::raster_preview::Preview>), PersistenceError> {
+    let Some(format) = safe_image_format(content_type) else {
+        return Ok((content, false, None));
     };
-    let permit = decode_admission()
+    let permit = decode_permit().await?;
+    decode_preserved(format, content, preview, permit, ()).await
+}
+
+pub(crate) async fn decode_permit()
+-> Result<tokio::sync::SemaphorePermit<'static>, PersistenceError> {
+    decode_admission()
         .acquire()
         .await
-        .map_err(|_| decode_task_failed())?;
-    let content = tokio::task::spawn_blocking(move || {
+        .map_err(|_| decode_task_failed())
+}
+
+async fn decode_preserved<T: Send + 'static>(
+    format: ImageFormat,
+    content: Vec<u8>,
+    preview: bool,
+    permit: tokio::sync::SemaphorePermit<'static>,
+    hold: T,
+) -> Result<(Vec<u8>, bool, Option<crate::raster_preview::Preview>), PersistenceError> {
+    tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        validate_preserved_blocking(declared_format, content)
+        let _hold = hold;
+        let derived = validate_preserved_blocking(format, &content, preview)?;
+        Ok((content, true, derived))
     })
     .await
-    .map_err(|_| decode_task_failed())??;
-    Ok((content, true))
+    .map_err(|_| decode_task_failed())?
 }
 
 async fn canonicalize(
@@ -130,9 +155,11 @@ fn canonicalize_blocking(
 
 fn validate_preserved_blocking(
     declared_format: ImageFormat,
-    content: Vec<u8>,
-) -> Result<Vec<u8>, PersistenceError> {
-    let reader = bounded_reader(Cursor::new(content.as_slice()))?;
+    content: &[u8],
+    preview: bool,
+) -> Result<Option<crate::raster_preview::Preview>, PersistenceError> {
+    use image::{AnimationDecoder, ImageDecoder, metadata::Orientation};
+    let reader = bounded_reader(Cursor::new(content))?;
     let detected_format = reader.format().ok_or_else(invalid_image)?;
     if detected_format != declared_format {
         return Err(rejected(
@@ -140,9 +167,75 @@ fn validate_preserved_blocking(
             "Raster attachment bytes do not match the declared image type.",
         ));
     }
-    let decoded = reader.decode().map_err(|_| invalid_image())?;
+    let wants_preview = preview && content.len() > crate::raster_preview::MAX_BYTES;
+    let animated = if wants_preview {
+        match declared_format {
+            ImageFormat::Png => {
+                image::codecs::png::PngDecoder::with_limits(Cursor::new(content), decode_limits())
+                    .and_then(|d| d.is_apng())
+                    .map_err(|_| invalid_image())?
+            }
+            ImageFormat::WebP => image::codecs::webp::WebPDecoder::new(Cursor::new(content))
+                .map_err(|_| invalid_image())?
+                .has_animation(),
+            _ => false,
+        }
+    } else {
+        false
+    };
+    // GIF's first frame is the validation decode. Inspect only the next frame,
+    // never collect the animation; each frame uses the same decoder limits.
+    let (mut decoded, animated, orientation) =
+        if wants_preview && declared_format == ImageFormat::Gif {
+            let mut decoder = image::codecs::gif::GifDecoder::new(Cursor::new(content))
+                .map_err(|_| invalid_image())?;
+            decoder
+                .set_limits(decode_limits())
+                .map_err(|_| invalid_image())?;
+            let mut frames = decoder.into_frames();
+            let first = frames
+                .next()
+                .ok_or_else(invalid_image)?
+                .map_err(|_| invalid_image())?;
+            let animated = frames
+                .next()
+                .transpose()
+                .map_err(|_| invalid_image())?
+                .is_some();
+            (
+                DynamicImage::ImageRgba8(first.into_buffer()),
+                animated,
+                Orientation::NoTransforms,
+            )
+        } else {
+            let mut decoder = reader.into_decoder().map_err(|_| invalid_image())?;
+            let mut limits = decode_limits();
+            limits
+                .reserve(decoder.total_bytes())
+                .map_err(|_| invalid_image())?;
+            decoder.set_limits(limits).map_err(|_| invalid_image())?;
+            let orientation = if wants_preview && !animated {
+                decoder
+                    .exif_metadata()
+                    .map_err(|_| invalid_image())?
+                    .as_deref()
+                    .and_then(Orientation::from_exif_chunk)
+                    .unwrap_or(Orientation::NoTransforms)
+            } else {
+                Orientation::NoTransforms
+            };
+            (
+                DynamicImage::from_decoder(decoder).map_err(|_| invalid_image())?,
+                animated,
+                orientation,
+            )
+        };
     validate_pixels(&decoded)?;
-    Ok(content)
+    if !wants_preview || animated {
+        return Ok(None);
+    }
+    decoded.apply_orientation(orientation);
+    crate::raster_preview::encode(decoded).map(Some)
 }
 
 fn bounded_reader<R: std::io::BufRead + std::io::Seek>(
@@ -151,12 +244,17 @@ fn bounded_reader<R: std::io::BufRead + std::io::Seek>(
     let mut reader = ImageReader::new(source)
         .with_guessed_format()
         .map_err(|_| invalid_image())?;
+    let limits = decode_limits();
+    reader.limits(limits);
+    Ok(reader)
+}
+
+fn decode_limits() -> Limits {
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
     limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
     limits.max_alloc = Some(MAX_DECODE_ALLOC_BYTES);
-    reader.limits(limits);
-    Ok(reader)
+    limits
 }
 
 fn validate_pixels(image: &DynamicImage) -> Result<(), PersistenceError> {

@@ -30,6 +30,9 @@ pub(super) async fn store(
     crate::room_file_content::RoomFileContent::Connector
         .write(tx, id, &prepared.content)
         .await?;
+    if prepared.is_safe_image {
+        crate::message_attachment_previews::store(tx, id, prepared.preview, true).await?;
+    }
     Ok(metadata(
         id.to_owned(),
         prepared.filename,
@@ -76,6 +79,8 @@ pub(super) async fn bind(
             return Err(attachment_unavailable());
         }
         crate::room_file_content::RoomFileContent::publish_connector(tx, id).await?;
+        sqlx::query("INSERT INTO room_message_attachment_previews SELECT * FROM room_connector_upload_previews WHERE attachment_id=?")
+            .bind(id).execute(&mut **tx).await?;
         sqlx::query("DELETE FROM room_connector_uploads WHERE attachment_id = ?")
             .bind(id)
             .execute(&mut **tx)

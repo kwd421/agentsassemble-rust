@@ -936,3 +936,47 @@ source objects fail atomically without executing their triggers. This closes the
 shared cause at both migration owners; no new schema, fallback or gate change.
 Acceptance: hostile version-update corruption triggers at both source versions
 are refused and original rows/version remain intact; genuine copies are exact.
+
+## Image previews (2026-10-12)
+
+Conversation images (single and grid) request a server-derived preview only after
+their transport learns `x-agentsassemble-image-preview: 1`. Older hosts receive
+the original view request with no probe/retry. The route variant is
+`/api/attachments/{id}?preview=1`; stored metadata and event JSON stay unchanged.
+Opening large fetches the original once, retaining the preview while it loads;
+downloads and all AI reads retain original bytes and their existing entry points.
+
+At existing upload decode, generate static safe-raster previews with long side
+at most 1100 pixels and encoded size at most 256 KiB. Originals <=256 KiB and
+animated PNG/GIF/WebP use the original streamed reader. Apply EXIF orientation
+before resizing; preserve alpha using lossless WebP, use JPEG for opaque pixels,
+and reduce dimensions further when necessary to meet the byte ceiling. Validation
+failures remain errors. Preserve existing two-decoder, dimension/pixel and 72 MiB
+decoder allocation limits. Historical images generate lazily at first authorized
+request, under serialized persistence ownership, and store the result (including
+the no-separate-preview decision) once for concurrent first requests.
+
+Schema 94 adds attachment-owned derived cache rows (including pending connector
+uploads, transferred on publication). Cascade deletion, archive Ephemeral policy,
+and a maximum of one <=256 KiB preview per retained asset bound extra host storage
+to 4096 * 256 KiB = 1 GiB without consuming room quota or changing the user-asset
+8 GiB ceiling. Archives 87–93 still reconstruct and upgrade; restored caches are
+empty and regenerate lazily. Reject noncanonical source catalog objects and
+preexisting destination objects before migration/version mutation, using the
+round-5 schema migration pattern.
+
+Preview readers share original room/session/visibility/deletion authorization and
+recheck it on each piece. Admission precedes byte selection: cached previews and
+original passthrough use streamed cost; lazy generation additionally reserves its
+whole-input/decode/encoding cost until the blocking decoder finishes. Responses
+retain private/no-store rules across plain desktop and encrypted channels.
+Entry owners: raster_assets, message_attachments/connector, message_attachment_reader,
+schema_version/archive_schema/backup_policy, profile_web/attachment_download/
+download_budget, transports, messageAttachments/read scheduler, LobbyAttachments.
+
+Acceptance: bounded large previews with alpha/orientation; small/animated exact
+originals; concurrent lazy generation once; identical access refusal and per-piece
+revocation; cascade cleanup; archive exclusion/historical restore/lazy regeneration;
+old-host originals only; large-open original once while showing preview. Verify
+affected crate tests, fmt, architecture-check, frontend tsc/vitest and report any
+remaining real packaged-client verification separately.
