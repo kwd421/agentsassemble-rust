@@ -661,20 +661,19 @@ async fn store_pending_in_transaction(
         .bind(created_at)
         .execute(&mut **transaction)
         .await?;
+    let settings =
+        crate::room_preferences::load_room_settings(transaction, &principal.room_id).await?;
     if principal.client_kind != ClientKind::RoomConnector {
-        let settings =
-            crate::room_preferences::load_room_settings(transaction, &principal.room_id).await?;
         require_file_size(prepared.content.len(), settings.attachment_file_limit_bytes)?;
-        if let Some(limit) = settings.attachment_storage_limit_bytes {
-            let used: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM room_message_attachments WHERE room_id = ? UNION ALL SELECT size FROM room_connector_uploads WHERE room_id = ?)")
+    }
+    if let Some(limit) = settings.attachment_storage_limit_bytes {
+        let used: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM room_message_attachments WHERE room_id = ? UNION ALL SELECT size FROM room_connector_uploads WHERE room_id = ?)")
                 .bind(&principal.room_id).bind(&principal.room_id).fetch_one(&mut **transaction).await?;
-            if u64::try_from(used + prepared.size).map_err(|_| invalid_attachment_state())? > limit
-            {
-                return Err(rejected(
-                    "room_attachment_quota_reached",
-                    "Room attachment storage limit reached.",
-                ));
-            }
+        if u64::try_from(used + prepared.size).map_err(|_| invalid_attachment_state())? > limit {
+            return Err(rejected(
+                "room_attachment_quota_reached",
+                "Room attachment storage limit reached.",
+            ));
         }
     }
     enforce_storage_replacement(transaction, None, prepared.size).await?;

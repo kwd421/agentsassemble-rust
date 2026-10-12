@@ -108,6 +108,38 @@ async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> Te
             .bind(index).execute(&store.pool).await?;
     }
     sqlx::query("INSERT INTO room_connector_uploads SELECT 'ma_'||printf('%032x',9),room_id,participant_id,'connector.bin','application/octet-stream',zeroblob(52428799),52428799,0,1,9223372036854775807 FROM participants WHERE room_id='general' LIMIT 1").execute(&store.pool).await?;
+    use sha2::{Digest, Sha256};
+    let authority =
+        crate::RoomManagerAuthority::Local(crate::room_user_identity::test_authority(&store).await);
+    let now = chrono::Utc::now();
+    let invite = store
+        .create_connector_invite(
+            &authority,
+            uuid::Uuid::new_v4(),
+            agentsassemble_domain::InviteScope::ReadWrite,
+            now,
+        )
+        .await?;
+    let connector = store
+        .admit_connector(
+            &Sha256::digest(invite.invite_bearer.as_bytes()).into(),
+            &[7; 32],
+            uuid::Uuid::new_v4(),
+            "Connector",
+            now,
+        )
+        .await?;
+    super::assert_rejected_code(
+        store
+            .store_authorized_message_attachment(
+                crate::RoomMutationAuthority::ConnectorSession(&connector.authorization),
+                "over.bin",
+                "application/octet-stream",
+                vec![1, 2],
+            )
+            .await,
+        "room_attachment_quota_reached",
+    );
     let initial = format!("ma_{:032x}", 0);
     store
         .execute_message_with_turn(
