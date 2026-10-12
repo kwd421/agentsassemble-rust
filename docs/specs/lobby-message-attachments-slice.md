@@ -184,10 +184,12 @@ not occupy the connection tracker. No peak-RSS, paced-WAN, packaged-UI or real
 provider verification was performed. Transfer handles/receipts are process-local;
 finished attachments themselves retain ordinary durable pending custody.
 
-Open authority decision: existing encrypted-channel close ends its durable room
-session. Interrupted child requests retain the transfer while that authority is
-valid. Resuming on a newly admitted channel/session requires an explicit custody
-renewal rule; the full resume criterion is not closed until this is settled.
+Decided (reviewer, 2026-10-13): closing an encrypted channel ends its room session
+and with it the session's incomplete transfers. Interrupted child requests resume
+while that authority is valid; after a new admission the client starts the file
+again from zero. Carrying an incomplete transfer over to a newly admitted session
+of the same person (a custody-renewal rule) is a separate follow-up, to be weighed
+after the measured acceptance shows how often real links drop mid-file.
 
 ## Approved target contract after Phase 0B
 
