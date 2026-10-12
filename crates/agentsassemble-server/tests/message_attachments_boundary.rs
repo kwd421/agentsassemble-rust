@@ -725,10 +725,18 @@ async fn local_tcp_preview_is_private_bounded_and_preserves_original_download()
     assert_eq!(preview.status(), StatusCode::OK);
     assert_eq!(preview.headers()["cache-control"], "private, no-store");
     assert_eq!(preview.headers()["x-agentsassemble-image-preview"], "1");
-    assert_eq!(
-        preview.headers()["access-control-expose-headers"],
-        "x-agentsassemble-image-preview,x-agentsassemble-upload-transfer"
-    );
+    // The desktop webview is cross-origin: every capability header it reads must be exposed.
+    let exposed = preview.headers()["access-control-expose-headers"].to_str()?;
+    for header in [
+        "x-agentsassemble-image-preview",
+        "x-agentsassemble-upload-transfer",
+        "x-agentsassemble-message-attachment-limit",
+    ] {
+        assert!(
+            exposed.split(',').any(|name| name.trim() == header),
+            "{header}"
+        );
+    }
     assert_eq!(preview.headers()["content-type"], "image/webp");
     assert!(
         preview.headers()["content-disposition"]
