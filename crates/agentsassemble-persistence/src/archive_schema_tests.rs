@@ -90,7 +90,7 @@ async fn product_seed(
 ) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let store = SqliteStore::open_path(&directory.join("live.sqlite")).await?;
     store
-        .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Historical owner")
+        .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Archive owner")
         .await?;
     store
         .create_room_for_local_operator(
@@ -125,7 +125,7 @@ async fn product_seed(
     let principal = agentsassemble_domain::AuthenticatedPrincipal {
         principal_id: agentsassemble_domain::LOCAL_OPERATOR_USER_ID.into(),
         participant_id: agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID.into(),
-        display_name: "Historical owner".into(),
+        display_name: "Archive owner".into(),
         room_id: "general".into(),
         client_kind: agentsassemble_domain::ClientKind::Browser,
         invite_scope: agentsassemble_domain::InviteScope::ReadWrite,
@@ -144,6 +144,49 @@ async fn product_seed(
         .await?;
     store.execute_message(&principal, &uuid::Uuid::new_v4().to_string(), "message.send",
         &serde_json::json!({"content":"Historical searchable message", "attachment_ids":[format!("ma_{}", "a".repeat(32))]})).await?;
+    if version >= 90 {
+        use agentsassemble_domain::{InviteScope, SetMessagePin};
+        use sha2::{Digest, Sha256};
+        let manager = crate::room_user_identity::test_authority(&store).await;
+        let invite = store
+            .create_connector_invite(
+                &crate::RoomManagerAuthority::Local(manager),
+                uuid::Uuid::new_v4(),
+                InviteScope::ReadWrite,
+                chrono::Utc::now(),
+            )
+            .await?;
+        let admitted = store
+            .admit_connector(
+                &Sha256::digest(invite.invite_bearer.as_bytes()).into(),
+                &[44; 32],
+                uuid::Uuid::new_v4(),
+                "Delegate",
+                chrono::Utc::now(),
+            )
+            .await?;
+        let delegate = admitted.authorization.principal().participant_id.clone();
+        store
+            .execute_participant_role_update(
+                crate::RoomMutationAuthority::TrustedPrincipal(&principal),
+                "delegate-role",
+                &serde_json::json!({"participant_id":delegate,"role":"director"}),
+            )
+            .await?;
+        let message_id = sqlx::query_scalar("SELECT json_extract(event_json,'$.id') FROM room_events WHERE json_extract(event_json,'$.content')='Historical searchable message'").fetch_one(&store.pool).await?;
+        store
+            .set_delegated_message_pin(
+                &crate::DelegateRoomAuthority::Connector(admitted.authorization),
+                &SetMessagePin {
+                    channel_id: "lobby".into(),
+                    message_id,
+                    pinned: true,
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                },
+                |_, _, _| Ok(()),
+            )
+            .await?;
+    }
     let seed = directory.join("seed.sqlite");
     store
         .export_backup_payload(
@@ -394,6 +437,10 @@ async fn newer_fields_cannot_enter_historical_archives() -> Result<(), Box<dyn s
             .bind(value)
             .execute(&mut connection)
             .await?;
+            if path == "$.on_behalf_of_participant_id" {
+                sqlx::query("UPDATE room_events SET event_json=json_set(event_json,'$.actor_participant_id','delegate','$.actor.participant_id','delegate','$.actor.participant_type','agent','$.actor_id','delegate','$.actor_type','agent')")
+                    .execute(&mut connection).await?;
+            }
             let encoded: String = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
                 "SELECT {column} FROM {table} LIMIT 1"
             )))
@@ -417,6 +464,99 @@ async fn newer_fields_cannot_enter_historical_archives() -> Result<(), Box<dyn s
             );
             assert!(!target.exists());
             job.cancel()?;
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn delegated_archives_restore_and_refuse_contradictory_executors()
+-> Result<(), Box<dyn std::error::Error>> {
+    use serde_json::json;
+    for version in 90..=crate::schema_version::CURRENT_SCHEMA_VERSION {
+        let directory = tempfile::tempdir()?;
+        let (source, manifest) = archive(directory.path(), version).await?;
+        let mut read = open_input(&source).await?;
+        let encoded: String = sqlx::query_scalar("SELECT event_json FROM room_events WHERE json_extract(event_json,'$.actor_participant_id') IS NOT NULL")
+            .fetch_one(&mut read).await?;
+        read.close().await?;
+        let event: serde_json::Value = serde_json::from_str(&encoded)?;
+        let destination = tempfile::tempdir()?;
+        let mut job =
+            crate::restore_job::RestoreJob::begin(&destination.path().join("runtime.sqlite3"))?;
+        job.prepare(&source, manifest).await?;
+        assert_eq!(
+            job.journal().phase,
+            crate::restore_job::RestorePhase::Prepared
+        );
+        assert_product_rows(&source, &job.stage().join("runtime.sqlite3")).await?;
+        job.cancel()?;
+
+        for (index, (field, value)) in [
+            ("/actor_participant_id", None),
+            ("/on_behalf_of_participant_id", None),
+            ("/actor_participant_id", Some(json!("other-executor"))),
+            ("/actor_id", Some(json!("other-executor"))),
+            ("/actor/participant_id", Some(json!("other-executor"))),
+            ("/actor/participant_type", Some(json!("human"))),
+            ("/actor_type", Some(json!("human"))),
+            ("/on_behalf_of_participant_id", Some(json!(""))),
+            (
+                "/on_behalf_of_participant_id",
+                Some(event["actor_participant_id"].clone()),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut bad = event.clone();
+            if let Some(value) = value {
+                *bad.pointer_mut(field).ok_or("event field")? = value;
+            } else {
+                bad.as_object_mut().ok_or("event")?.remove(&field[1..]);
+            }
+            // The same shared decoder owns top-level events and all receipt nesting.
+            for (location, receipt) in [
+                bad.clone(),
+                json!({"event":bad}),
+                json!({"events":[bad]}),
+                json!({"start":{"events":[bad]}}),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let altered = directory
+                    .path()
+                    .join(format!("bad-{index}-{location}.sqlite"));
+                std::fs::copy(&source, &altered)?;
+                let mut connection =
+                    SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&altered))
+                        .await?;
+                let query = if location == 0 {
+                    "UPDATE room_events SET event_json=? WHERE json_extract(event_json,'$.actor_participant_id') IS NOT NULL"
+                } else {
+                    "UPDATE command_results SET result_json=? WHERE json_extract(result_json,'$.event.actor_participant_id') IS NOT NULL"
+                };
+                assert_eq!(
+                    sqlx::query(query)
+                        .bind(receipt.to_string())
+                        .execute(&mut connection)
+                        .await?
+                        .rows_affected(),
+                    1
+                );
+                connection.close().await?;
+                let rejected = directory
+                    .path()
+                    .join(format!("rejected-{index}-{location}.sqlite"));
+                assert!(
+                    matches!(
+                        reconstruct_payload(&altered, &rejected, version).await,
+                        Err(PersistenceError::InvalidBackup)
+                    ),
+                    "v{version} {field} location {location}"
+                );
+            }
         }
     }
     Ok(())

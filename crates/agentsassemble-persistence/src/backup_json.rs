@@ -35,14 +35,25 @@ pub(crate) fn event(value: Value) -> Result<RoomEvent, PersistenceError> {
     if event.v != 1 || event.seq < 1 || event.room_id.is_empty() || event.id.is_empty() {
         return Err(invalid());
     }
+    let executor = event.extra.get("actor_participant_id");
+    let owner = event.extra.get("on_behalf_of_participant_id");
+    if executor.is_some() || owner.is_some() {
+        let executor = executor.and_then(Value::as_str).ok_or_else(invalid)?;
+        let owner = owner.and_then(Value::as_str).ok_or_else(invalid)?;
+        if executor != event.actor.participant_id
+            || event.actor_id.as_deref() != Some(executor)
+            || event.actor.participant_type != "agent"
+            || event.actor_type.as_deref() != Some("agent")
+            || owner.is_empty()
+            || owner == executor
+        {
+            return Err(invalid());
+        }
+    }
     for (field, value) in &mut event.extra {
         match field.as_str() {
-            "actor_participant_id"
-            | "on_behalf_of_participant_id"
-            | "action"
-            | "target_id"
-            | "request_id"
-            | "target_channel_id" => {
+            "actor_participant_id" | "on_behalf_of_participant_id" => {}
+            "action" | "target_id" | "request_id" | "target_channel_id" => {
                 strict::<String>(value.clone())?;
             }
             "pinned" => {

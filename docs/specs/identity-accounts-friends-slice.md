@@ -146,6 +146,19 @@ with existing schema-owned bounds (persona JSON/ID/thumbnail and vote tallies/ID
 codec and preparation path; malformed rows fail before Prepared without committing
 partial product data. No archive-supplied SQL is executed.
 
+### Delegated archive attribution (round 5, 2026-10-12)
+
+Backup export, hostile archive reconstruction and staged restore must preserve a
+single executor identity for delegated events, including receipt `event`, `events`
+and nested `start` events. If either delegated attribution field exists, require
+both strings; `actor_participant_id`, `actor.participant_id` and `actor_id` must
+agree, both actor types must be `agent`, and `on_behalf_of_participant_id` must be
+nonempty and different from that executor. Invalid archives fail before Prepared;
+no authority is revived. Current delegated pin/direct/control writers already
+emit this shape. Acceptance: genuine delegated events and their receipts restore
+through supported schema-90+ archives; contradictory or partial attribution is
+refused at the shared event decoder. No live writer, schema or frontend change.
+
 ### Historical archive restoration (2026-10-12)
 
 Required entry points: native backup export and pre-runtime import, envelope
