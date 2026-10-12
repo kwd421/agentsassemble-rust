@@ -114,7 +114,7 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(screen.getByRole("button", { name: turnCount ? "재개" : "시작" })).toBeTruthy();
   });
 
-  it("shows only diagnostics owned by the current Agent Session contract", () => {
+  it("shows why an agent session failed", () => {
     const session: RoomAgentSession = agentSessionFixture({
       room_id: "room-1",
       session_id: "session-1",
@@ -132,10 +132,6 @@ describe("AgentSessionDetails diagnostics", () => {
     });
 
     render(<AgentSessionDetails session={session} />);
-    fireEvent.click(screen.getByText("고급 진단"));
-
-    expect(screen.getByText("turns 2")).toBeTruthy();
-    expect(screen.getByText("cursor event-2")).toBeTruthy();
     expect(
       screen.getByText(
         (_, element) =>

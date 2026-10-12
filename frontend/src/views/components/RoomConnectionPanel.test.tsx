@@ -362,46 +362,6 @@ describe("RoomConnectionPanel", () => {
     expect(screen.queryByTitle("세션 재개")).toBeNull();
   });
 
-  it("shows only runtime diagnostics owned by the Agent Session contract", () => {
-    const session = {
-      ...agentSession("idle"),
-      turn_count: 4,
-      last_seen_event_id: "event-4",
-      provider_session_active: true,
-      provider_session_reused: true,
-    };
-
-    render(
-      <RoomConnectionPanel
-        room={room}
-        agents={[agent()]}
-        members={[member()]}
-        agentSessions={[session]}
-      />
-    );
-
-    openAgentDetails();
-
-    expect(screen.getByText("turns 4")).toBeTruthy();
-    expect(screen.getByText("cursor event-4")).toBeTruthy();
-    expect(screen.getByText("provider session 이어짐")).toBeTruthy();
-  });
-
-  it("does not claim that PTY providers lack a provider session", () => {
-    render(
-      <RoomConnectionPanel
-        room={room}
-        agents={[agent()]}
-        members={[member()]}
-        agentSessions={[{ ...agentSession("idle"), transport: "pty", provider_session_active: false }]}
-      />
-    );
-
-    openAgentDetails();
-    expect(screen.queryByText("provider session 비활성")).toBeNull();
-    expect(screen.queryByText("provider session 재개 대기")).toBeNull();
-  });
-
   it("changes only the viewer's thought and tool activity visibility", () => {
     const session = agentSession("idle");
     const onVisibilityChange = vi.fn();

@@ -44,13 +44,6 @@ export function agentSessionPresenceStatus(status?: string, recoveryRequired = f
   return "offline";
 }
 
-function providerSessionContinuity(session: RoomAgentSession) {
-  if (!session.provider_session_active && !session.provider_session_reused) return "";
-  if (!session.provider_session_active) return "provider session 비활성";
-  if (session.provider_session_reused) return "provider session 이어짐";
-  return "provider session 활성";
-}
-
 function actionCompletedLabel(action: AgentSessionControlAction) {
   if (action === "start") return "세션 시작 요청 완료";
   if (action === "pause") return "세션 일시정지 완료";
@@ -138,7 +131,6 @@ export default function AgentSessionDetails({
     (serverOwned ? provider?.turn_interrupt === "retained_runtime"
       : session.external_owned && session.process_ownership === "external" && session.external_retained_interrupt === true)
     && status === "busy" && !session.recovery_required;
-  const continuity = providerSessionContinuity(session);
   const canConfigure =
     serverOwned && !session.enabled && !session.recovery_required &&
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
@@ -267,6 +259,7 @@ export default function AgentSessionDetails({
           {(canPause || pendingAction === "pause") && <button
             type="button"
             className="dc-member-session-button"
+            data-variant="quiet"
             title="세션 일시정지"
             disabled={!canPause || Boolean(pendingAction)}
             onClick={() => void runControl("pause")}
@@ -277,7 +270,7 @@ export default function AgentSessionDetails({
           {(canStop || pendingAction === "stop") && <button
             type="button"
             className="dc-member-session-button"
-            data-variant={strandedRuntime ? undefined : "danger"}
+            data-variant={strandedRuntime ? "quiet" : "danger"}
             title={strandedRuntime ? "남은 실행이 끝났는지 확인하고 정리해요" : "세션 중지"}
             disabled={!canStop || Boolean(pendingAction)}
             onClick={() => void runControl("stop")}
@@ -298,6 +291,7 @@ export default function AgentSessionDetails({
           {(canInterrupt || pendingAction === "interrupt") && <button
             type="button"
             className="dc-member-session-button"
+            data-variant="quiet"
             title="현재 응답 중단"
             disabled={!canInterrupt || Boolean(pendingAction)}
             onClick={() => void runControl("interrupt")}
@@ -386,12 +380,6 @@ export default function AgentSessionDetails({
         onActivityVisibilityChange={onActivityVisibilityChange}
       />
       {actionStatus && <p role="status" className="dc-member-session-status preserve-words">{actionStatus}</p>}
-      <details className="dc-room-runtime-diagnostics preserve-words">
-        <summary>고급 진단</summary>
-        <p>turns {session.turn_count}</p>
-        <p>cursor {session.last_seen_event_id || "none"}</p>
-        {continuity && <p>{continuity}</p>}
-      </details>
     </section>
   );
 }

@@ -290,8 +290,8 @@
 
 .dc-member-detail-note {
   color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .dc-member-session-summary {

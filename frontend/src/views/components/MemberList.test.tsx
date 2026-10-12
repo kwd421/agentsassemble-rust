@@ -88,7 +88,6 @@ describe("MemberList component wiring", () => {
     const dialog = screen.getByRole("dialog", { name: "Agent One" });
     expect(within(dialog).getByRole("region", { name: "Agent One 실행 및 설정" })).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "시작" })).toBeTruthy();
-    expect(within(dialog).getByText("고급 진단")).toBeTruthy();
   });
 
   it("closes the detail modal on a click outside the card, not inside it", () => {

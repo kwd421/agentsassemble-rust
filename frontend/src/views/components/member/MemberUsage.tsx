@@ -26,7 +26,7 @@ export default function MemberUsage({ displayName, provider }: {
     <section className="dc-member-detail-section" aria-label={`${displayName} 사용량`}>
       <h3>사용량</h3>
       {!supported ? <p className="dc-member-detail-note preserve-words">
-        이 AI 서비스는 확인 가능한 정확한 잔여량을 제공하지 않아요.
+        이 AI는 남은 사용량을 알려 주지 않아요.
       </p> : !local ? <p className="dc-member-detail-note preserve-words">
         계정 사용량은 서버 운영자의 데스크톱 앱에서 확인할 수 있어요.
       </p> : <>
