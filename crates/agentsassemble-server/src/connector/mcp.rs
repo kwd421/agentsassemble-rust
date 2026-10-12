@@ -26,7 +26,7 @@ use hub::ConnectorHub;
 pub struct ConnectorMcp {
     hub: Arc<ConnectorHub>,
     tool_router: ToolRouter<Self>,
-    pub(super) envelopes: Arc<tokio::sync::Semaphore>,
+    pub(super) envelopes: super::mcp_web::EnvelopeBudget,
     pub(super) request_admission: Option<Arc<super::mcp_web::RequestAdmission>>,
 }
 
@@ -39,7 +39,7 @@ impl ConnectorMcp {
         Ok(Self {
             hub: Arc::new(ConnectorHub::new(allowed_servers)?),
             tool_router: Self::tool_router(),
-            envelopes: Arc::new(tokio::sync::Semaphore::new(2)),
+            envelopes: super::mcp_web::EnvelopeBudget::default(),
             request_admission: None,
         })
     }
@@ -48,7 +48,7 @@ impl ConnectorMcp {
         Self {
             hub: Arc::new(ConnectorHub::hosted(state)),
             tool_router: Self::tool_router(),
-            envelopes: Arc::new(tokio::sync::Semaphore::new(2)),
+            envelopes: super::mcp_web::EnvelopeBudget::default(),
             request_admission: None,
         }
     }

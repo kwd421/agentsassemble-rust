@@ -760,7 +760,9 @@ MCP session headers nor bearer headers are bound to a room connector. Host/Origi
 and proxy/source checks prove ingress only. The private connection handle arrives
 inside JSON arguments. Therefore use the authorized identity-free alternative:
 256 MiB global weight, four times collected bytes rounded to 64 KiB, and a two-second
-nonempty-data idle deadline plus ten-second total pre-parse ceiling. 127 small stalled
-bodies use 31.75 MiB; unrelated small requests retain capacity. The per-envelope
+nonempty-data idle deadline plus ten-second total pre-parse ceiling. Of that weight,
+32 MiB reserves the first 64 KiB for 128 requests (comparable to 127 public connections);
+larger envelopes use only the remaining 224 MiB. Thus even exhausted large-envelope
+capacity cannot deny unrelated small tool calls. 127 small stalled bodies use 31.75 MiB. The per-envelope
 ceiling remains the encoded 10 MiB upload plus its bounded JSON overhead so existing
 uploads keep working. Exhaustion, timeout and over-limit responses are distinct.

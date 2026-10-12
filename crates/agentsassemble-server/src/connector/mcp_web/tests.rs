@@ -186,8 +186,9 @@ async fn chunked_waits_release_envelopes_and_leave_all_upload_capacity_available
         let available = fixture
             .connector
             .envelopes
+            .small
             .clone()
-            .acquire_many_owned(2)
+            .acquire_many_owned(SMALL_ENVELOPE_BYTES as u32)
             .await
             .expect("dispatch released");
         drop(available);
@@ -220,8 +221,9 @@ async fn chunked_waits_release_envelopes_and_leave_all_upload_capacity_available
         fixture
             .connector
             .envelopes
+            .small
             .clone()
-            .try_acquire_many_owned(2)
+            .try_acquire_many_owned(SMALL_ENVELOPE_BYTES as u32)
             .is_ok()
     );
     fixture.stop().await;
@@ -244,7 +246,9 @@ async fn hosted_upload_uses_resolved_principal_limit_and_releases_after_storage(
         .upload_bodies
         .reserve_length(Some(principal), 1, 1)
         .expect("second");
-    let args = json!({"connection_id":joined["connection_id"], "filename":"proof.txt", "content_type":"text/plain", "data_base64":"cHJvb2Y="});
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let content = vec![42; 10 * 1024 * 1024];
+    let args = json!({"connection_id":joined["connection_id"], "filename":"proof.bin", "content_type":"application/octet-stream", "data_base64":STANDARD.encode(&content)});
     let refused = call(&fixture.connector, "room_upload_attachment", args.clone()).await;
     assert_eq!(refused["result"]["isError"], true);
     assert!(
@@ -255,7 +259,7 @@ async fn hosted_upload_uses_resolved_principal_limit_and_releases_after_storage(
     );
     drop(second);
     let uploaded = result(&call(&fixture.connector, "room_upload_attachment", args).await);
-    assert_eq!(uploaded["attachment"]["size"], 5);
+    assert_eq!(uploaded["attachment"]["size"], content.len());
     let (_, returned) = fixture
         .state
         .upload_bodies
@@ -272,11 +276,18 @@ async fn hosted_upload_uses_resolved_principal_limit_and_releases_after_storage(
     fixture.stop().await;
 }
 
-#[tokio::test]
-async fn preparse_limit_refuses_without_reading_and_cancellation_returns_permits() {
+#[tokio::test(start_paused = true)]
+async fn stalled_envelopes_leave_other_clients_capacity_and_expire_without_progress() {
     let connector = ConnectorMcp::new(Some(vec!["http://127.0.0.1:1".into()])).expect("connector");
+    // Even completely occupied large-envelope capacity cannot steal the control reserve.
+    let large = connector
+        .envelopes
+        .large
+        .clone()
+        .try_acquire_many_owned(LARGE_ENVELOPE_BYTES as u32)
+        .expect("large pool");
     let mut requests = Vec::new();
-    for _ in 0..2 {
+    for _ in 0..126 {
         let (sent, received) = oneshot::channel();
         let stream = futures_util::stream::once(async move {
             let _ = sent.send(());
@@ -289,27 +300,55 @@ async fn preparse_limit_refuses_without_reading_and_cancellation_returns_permits
         )));
         received.await.expect("body poll confirms admission");
     }
-    let response = serve_request(connector.clone(), request(Body::empty()), config()).await;
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let response = serve_request(
+        connector.clone(),
+        request(Body::from(
+            json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}).to_string(),
+        )),
+        config(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(requests.iter().all(|request| !request.is_finished()));
+    tokio::time::advance(PREPARSE_IDLE).await;
     for request in requests {
-        request.abort();
-        let _ = request.await;
+        assert_eq!(
+            request.await.expect("expired").status(),
+            StatusCode::REQUEST_TIMEOUT
+        );
     }
-    assert!(
-        connector
-            .envelopes
-            .clone()
-            .try_acquire_many_owned(2)
-            .is_ok()
+    let all = connector
+        .envelopes
+        .small
+        .clone()
+        .try_acquire_many_owned(SMALL_ENVELOPE_BYTES as u32)
+        .expect("all bytes returned");
+    // A refused envelope never polls its body; no request waits for capacity.
+    let body = futures_util::stream::poll_fn(
+        |_| -> std::task::Poll<Option<Result<axum::body::Bytes, Infallible>>> {
+            panic!("exhausted budget must not poll");
+        },
     );
+    assert_eq!(
+        serve_request(
+            connector.clone(),
+            request(Body::from_stream(body)),
+            config()
+        )
+        .await
+        .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    drop((all, large));
     let response =
         serve_request(connector.clone(), request(Body::from("not JSON")), config()).await;
     assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
     assert!(
         connector
             .envelopes
+            .small
             .clone()
-            .try_acquire_many_owned(2)
+            .try_acquire_many_owned(SMALL_ENVELOPE_BYTES as u32)
             .is_ok()
     );
 }
