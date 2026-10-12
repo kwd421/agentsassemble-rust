@@ -744,8 +744,10 @@ stalled MCP requests alongside unrelated calls; hostile migration schema refusal
 and byte-exact genuine upgrade. Existing delegation tools and UI are out of scope.
 
 Download admission uses 512 MiB host weight, charging twice stored size for the
-SQLite result and retained response, with four concurrent responses per authenticated
-principal (matching the frontend scheduler). Five concurrent 50 MiB responses fit,
+SQLite result and retained response, with sixteen concurrent responses per authenticated
+principal: one client's scheduler runs four, while room-appearance reads and the same
+person's other devices run beside it and a refusal is not retried by the client. Host
+weight, not the count, bounds memory. Five concurrent 50 MiB responses fit,
 leaving 12 MiB of weight for small images. Message and room-appearance readers
 acquire after metadata validation, before selecting content. Public profile/prejoin
 and agent avatars also share this byte pool and retain their existing shared six-read

@@ -5,11 +5,13 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 // Two copies cover the SQLite result and response allocation while transferring.
-// Five 50 MiB files fit concurrently, with room for small images. Four requests per
-// principal match the shared frontend image scheduler without letting it own the host.
+// Five 50 MiB files fit concurrently, with room for small images. One client's image
+// scheduler runs four reads, and room icons and the same person's other devices read
+// outside it; a refusal has no client retry, so the count leaves room for all of them.
+// Host bytes, not this count, bound memory.
 const HOST_BYTES: usize = 512 * 1024 * 1024;
 const COPIES: usize = 2;
-const PER_PRINCIPAL: usize = 4;
+const PER_PRINCIPAL: usize = 16;
 pub(crate) const ERROR_CODE: &str = "attachment_download_budget_exhausted";
 
 #[derive(Clone)]
