@@ -2,7 +2,6 @@ import { useResourceImage } from "./ResourceImage";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import { useEffect, useRef, useState } from "react";
 import {
-  ChevronDown,
   ChevronRight,
   Headphones,
   LogOut,
@@ -622,19 +621,9 @@ export default function UserPanel({
             aria-label={profile.micMuted ? "마이크 음소거 해제" : "마이크 음소거"} data-tip={profile.micMuted ? "음소거 해제" : "음소거"}
             aria-pressed={profile.micMuted}
             data-danger={profile.micMuted}
-            className="dc-user-action-primary"
             onClick={() => updateProfileFlag("micMuted", !profile.micMuted)}
           >
             {profile.micMuted ? <MicOff size={16} /> : <Mic size={16} />}
-          </button>
-          <button
-            type="button"
-            aria-label="마이크 옵션"
-            data-danger={profile.micMuted}
-            className="dc-user-action-caret"
-            onClick={() => openSettings("voice")}
-          >
-            <ChevronDown size={14} />
           </button>
           <button
             type="button"
@@ -643,14 +632,6 @@ export default function UserPanel({
             onClick={() => updateProfileFlag("deafened", !profile.deafened)}
           >
             <Headphones size={16} />
-          </button>
-          <button
-            type="button"
-            aria-label="오디오 옵션"
-            className="dc-user-action-caret"
-            onClick={() => openSettings("voice")}
-          >
-            <ChevronDown size={14} />
           </button>
           <button ref={settingsButtonRef} type="button" aria-label="사용자 설정" data-tip="사용자 설정" onClick={() => openSettings("account")}>
             <Settings size={16} />

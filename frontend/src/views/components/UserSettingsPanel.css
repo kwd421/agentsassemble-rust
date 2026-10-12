@@ -186,36 +186,6 @@ dialog.dc-user-settings-dialog {
   border-color: var(--profile-accent, var(--color-accent));
 }
 
-.dc-user-settings-toggles {
-  display: grid;
-  gap: 8px;
-}
-
-.dc-user-settings-toggles button {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  gap: 9px;
-  border-radius: 6px;
-  background: #121214;
-  padding: 9px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 850;
-  text-align: left;
-}
-
-.dc-user-settings-toggles button:hover,
-.dc-user-settings-toggles button:focus-visible {
-  background: #202024;
-  color: #fff;
-  outline: none;
-}
-
-.dc-user-settings-toggles button[aria-pressed="true"] {
-  color: #ff8d8f;
-}
-
 .dc-user-settings-savebar {
   display: flex;
   align-items: center;

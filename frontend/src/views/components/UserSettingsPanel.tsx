@@ -1,6 +1,6 @@
 import { useResourceImage } from "./ResourceImage";
 import { useEffect, useRef, type RefObject } from "react";
-import { X, Camera, Headphones, Mic, MicOff } from "lucide-react";
+import { X, Camera } from "lucide-react";
 
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
@@ -13,7 +13,7 @@ import GuestRecoverySettings from "./GuestRecoverySettings";
 import OwnerDevicesPanel from "./OwnerDevicesPanel";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 
-export type UserSettingsSection = "account" | "profile" | "voice" | "recovery" | "devices";
+export type UserSettingsSection = "account" | "profile" | "recovery" | "devices";
 
 const USER_SETTINGS_SECTIONS: Array<{
   id: UserSettingsSection;
@@ -21,7 +21,6 @@ const USER_SETTINGS_SECTIONS: Array<{
 }> = [
   { id: "account", label: "계정" },
   { id: "profile", label: "프로필" },
-  { id: "voice", label: "음성" },
   { id: "recovery", label: "복구" },
   { id: "devices", label: "기기" },
 ];
@@ -279,32 +278,6 @@ export default function UserSettingsPanel({
                   </div>
                 </div>
               </aside>
-              </div>
-            </>
-          )}
-
-          {settingsSection === "voice" && (
-            <>
-              <p className="dc-user-settings-lead">실제 음성 연결은 아니고, 방 클라이언트의 표시 상태만 저장해요.</p>
-              <div className="dc-user-settings-toggles">
-                <button
-                  type="button"
-                  style={{ minHeight: 44 }} disabled={saving}
-                  aria-pressed={draft.micMuted}
-                  onClick={() => onDraftChange({ ...draft, micMuted: !draft.micMuted })}
-                >
-                  {draft.micMuted ? <MicOff size={18} /> : <Mic size={18} />}
-                  <span>{draft.micMuted ? "마이크 음소거 표시" : "마이크 켜짐 표시"}</span>
-                </button>
-                <button
-                  type="button"
-                  style={{ minHeight: 44 }} disabled={saving}
-                  aria-pressed={draft.deafened}
-                  onClick={() => onDraftChange({ ...draft, deafened: !draft.deafened })}
-                >
-                  <Headphones size={18} />
-                  <span>{draft.deafened ? "헤드셋 차단 표시" : "헤드셋 사용 표시"}</span>
-                </button>
               </div>
             </>
           )}

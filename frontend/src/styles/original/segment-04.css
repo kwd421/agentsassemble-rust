@@ -391,10 +391,6 @@ body[data-sidebar-resizing="true"] {
   color: var(--color-text-secondary);
 }
 
-.dc-user-actions .dc-user-action-caret {
-  width: 24px;
-}
-
 .dc-user-actions button:hover,
 .dc-user-actions button:focus-visible {
   background: var(--color-sidebar-hover);
