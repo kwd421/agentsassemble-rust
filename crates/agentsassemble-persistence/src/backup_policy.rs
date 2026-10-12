@@ -148,9 +148,11 @@ fn historical_receipt(value: &Value, version: i64) -> Result<(), PersistenceErro
             historical_receipt(event, version)?;
         }
     }
-    if let Some(start) = value.get("start") {
-        // The current receipt owner rejects recursively nested start receipts.
-        historical_receipt(start, version)?;
+    for key in ["event", "start"] {
+        if let Some(nested) = value.get(key) {
+            // The current receipt owner rejects recursively nested start receipts.
+            historical_receipt(nested, version)?;
+        }
     }
     Ok(())
 }

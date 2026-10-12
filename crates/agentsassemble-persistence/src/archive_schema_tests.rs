@@ -10,40 +10,7 @@ pub(crate) async fn archive(
     directory: &Path,
     version: i64,
 ) -> Result<(std::path::PathBuf, BackupManifest), Box<dyn std::error::Error>> {
-    let store = SqliteStore::open_path(&directory.join("live.sqlite")).await?;
-    store
-        .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Historical owner")
-        .await?;
-    store
-        .create_room_for_local_operator(
-            &uuid::Uuid::new_v4().to_string(),
-            "general",
-            "Historical room",
-        )
-        .await?;
-    sqlx::query("UPDATE rooms SET settings_json=json_remove(settings_json,'$.lobby_name')")
-        .execute(&store.pool)
-        .await?;
-    // Creation receipts/events also contain settings: use the same historical
-    // representation, not current-only defaults, in the fixture seed.
-    for (table, column) in [
-        ("room_events", "event_json"),
-        ("room_create_results", "result_json"),
-    ] {
-        sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE {table} SET {column}=json_remove({column},'$.settings.lobby_name','$.room_settings.lobby_name')"))).execute(&store.pool).await?;
-    }
-    let bytes = b"historical attachment\0\xff\x01";
-    sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,filename,content_type,content,size,is_safe_image,created_at,state,expires_at) SELECT ?, 'general',user_id,'history.bin','application/octet-stream',?,?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1")
-        .bind(format!("ma_{}", "a".repeat(32))).bind(bytes.as_slice()).bind(i64::try_from(bytes.len())?).execute(&store.pool).await?;
-    let seed = directory.join("seed.sqlite");
-    store
-        .export_backup_payload(
-            &ServerOwnerAuthority::LocalOperator,
-            &directory.join("snapshot.sqlite"),
-            &seed,
-        )
-        .await?;
-    store.close().await?;
+    let seed = product_seed(directory, version).await?;
     let path = directory.join("historical.sqlite");
     let mut target = create_version_payload(&path, version).await?;
     sqlx::query("ATTACH DATABASE ? AS seed")
@@ -110,6 +77,64 @@ pub(crate) async fn archive(
     Ok((decoded, manifest))
 }
 
+async fn product_seed(
+    directory: &Path,
+    version: i64,
+) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let store = SqliteStore::open_path(&directory.join("live.sqlite")).await?;
+    store
+        .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Historical owner")
+        .await?;
+    store
+        .create_room_for_local_operator(
+            &uuid::Uuid::new_v4().to_string(),
+            "general",
+            "Historical room",
+        )
+        .await?;
+    if version == 87 {
+        sqlx::query("UPDATE rooms SET settings_json=json_remove(settings_json,'$.lobby_name')")
+            .execute(&store.pool)
+            .await?;
+        // Creation receipts/events also contain settings: use the same historical
+        // representation, not current-only defaults, in the fixture seed.
+        for (table, column) in [
+            ("room_events", "event_json"),
+            ("room_create_results", "result_json"),
+        ] {
+            sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE {table} SET {column}=json_remove({column},'$.settings.lobby_name','$.room_settings.lobby_name')"))).execute(&store.pool).await?;
+        }
+    }
+    let bytes = b"historical attachment\0\xff\x01";
+    sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,filename,content_type,content,size,is_safe_image,created_at,state,expires_at) SELECT ?, 'general',user_id,'history.bin','application/octet-stream',?,?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1")
+        .bind(format!("ma_{}", "a".repeat(32))).bind(bytes.as_slice()).bind(i64::try_from(bytes.len())?).execute(&store.pool).await?;
+    let principal = agentsassemble_domain::AuthenticatedPrincipal {
+        principal_id: agentsassemble_domain::LOCAL_OPERATOR_USER_ID.into(),
+        participant_id: agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID.into(),
+        display_name: "Historical owner".into(),
+        room_id: "general".into(),
+        client_kind: agentsassemble_domain::ClientKind::Browser,
+        invite_scope: agentsassemble_domain::InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: agentsassemble_domain::CapabilitySet::local_operator(
+            agentsassemble_domain::ClientKind::Browser,
+            agentsassemble_domain::InviteScope::ReadWrite,
+        ),
+    };
+    store.execute_message(&principal, &uuid::Uuid::new_v4().to_string(), "message.send",
+        &serde_json::json!({"content":"Historical searchable message", "attachment_ids":[format!("ma_{}", "a".repeat(32))]})).await?;
+    let seed = directory.join("seed.sqlite");
+    store
+        .export_backup_payload(
+            &ServerOwnerAuthority::LocalOperator,
+            &directory.join("snapshot.sqlite"),
+            &seed,
+        )
+        .await?;
+    store.close().await?;
+    Ok(seed)
+}
+
 pub(crate) async fn assert_product_rows(
     source: &Path,
     target: &Path,
@@ -151,7 +176,7 @@ async fn every_catalog_version_reconstructs_real_encoded_rows()
         let directory = tempfile::tempdir()?;
         let (source, _) = archive(directory.path(), version).await?;
         let target = directory.path().join("rebuilt.sqlite");
-        reconstruct_payload(&source, &target).await?;
+        reconstruct_payload(&source, &target, version).await?;
         assert_product_rows(&source, &target).await?;
     }
     Ok(())
@@ -182,14 +207,17 @@ async fn historical_tampering_is_rejected_before_prepared() -> Result<(), Box<dy
         "UPDATE runtime_metadata SET value='87' WHERE key='schema_version'",
         "ALTER TABLE user_profiles ADD COLUMN secret TEXT",
         "CREATE TABLE surprise(value TEXT)",
+        "DROP INDEX room_message_attachments_pending_expiry_idx; CREATE INDEX room_message_attachments_pending_expiry_idx ON room_message_attachments(size)",
+        "INSERT INTO central_owner_grants VALUES(zeroblob(32),zeroblob(32),'https://archive.example',1,9999999999)",
         "UPDATE user_profiles SET profile_json=json_set(profile_json,'$.unknown',1)",
         "UPDATE rooms SET settings_json=json_set(settings_json,'$.conversation_mode','free_access')",
+        "UPDATE room_create_results SET result_json=json_object('event',json_set((SELECT event_json FROM room_events ORDER BY seq LIMIT 1),'$.settings',json((SELECT settings_json FROM rooms LIMIT 1)),'$.settings.conversation_mode','free_access'))",
     ] {
         let directory = tempfile::tempdir()?;
         let (source, mut manifest) = archive(directory.path(), 88).await?;
         let mut connection =
             SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&source)).await?;
-        sqlx::query(sqlx::AssertSqlSafe(mutation))
+        sqlx::raw_sql(sqlx::AssertSqlSafe(mutation))
             .execute(&mut connection)
             .await?;
         connection.close().await?;

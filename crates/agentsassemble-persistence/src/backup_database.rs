@@ -116,10 +116,18 @@ async fn create_with_ddl(
             .pragma("trusted_schema", "OFF"),
     )
     .await?;
-    for statement in ddl {
-        sqlx::raw_sql(sqlx::AssertSqlSafe(statement.as_ref()))
-            .execute(&mut connection)
-            .await?;
+    let created: Result<(), PersistenceError> = async {
+        for statement in ddl {
+            sqlx::raw_sql(sqlx::AssertSqlSafe(statement.as_ref()))
+                .execute(&mut connection)
+                .await?;
+        }
+        Ok(())
+    }
+    .await;
+    if let Err(error) = created {
+        connection.close().await?;
+        return Err(error);
     }
     Ok(connection)
 }
@@ -242,9 +250,12 @@ pub(crate) async fn reconstruct(
     source: &mut SqliteConnection,
     output: &mut SqliteConnection,
     hostile: bool,
+    version: i64,
 ) -> Result<(), PersistenceError> {
     require_schema(source, output, hostile).await?;
-    let version = crate::archive_schema::version(source).await?;
+    if crate::archive_schema::version(source).await? != version {
+        return Err(invalid());
+    }
     let tables = crate::archive_schema::tables(output).await?;
     let mut tx = output.begin().await?;
     for table in tables {
@@ -327,14 +338,21 @@ pub(crate) async fn reconstruct(
             insert.execute(&mut *tx).await?;
         }
     }
-    require_foreign_keys(&mut tx).await?;
+    require_integrity(&mut tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+pub(crate) async fn require_integrity(
+    connection: &mut SqliteConnection,
+) -> Result<(), PersistenceError> {
+    require_foreign_keys(connection).await?;
     let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
-        .fetch_one(&mut *tx)
+        .fetch_one(connection)
         .await?;
     if integrity != "ok" {
         return Err(invalid());
     }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -350,14 +368,25 @@ async fn require_foreign_keys(connection: &mut SqliteConnection) -> Result<(), P
 }
 
 /// Reconstruct a validated payload into an exclusive, newly created staging DB.
-/// The caller owns private staging and must not activate either path on failure.
+/// `version` comes from the validated manifest; exact catalog DDL is checked
+/// before reading source metadata or rows. The caller owns private staging and
+/// must not activate either path on failure.
 /// # Errors
 /// Rejects schema objects, columns, fields or authority state outside v1 policy.
-pub async fn reconstruct_payload(input: &Path, output: &Path) -> Result<(), PersistenceError> {
+pub async fn reconstruct_payload(
+    input: &Path,
+    output: &Path,
+    version: i64,
+) -> Result<(), PersistenceError> {
     let mut source = open_input(input).await?;
-    let version = crate::archive_schema::version(&mut source).await?;
-    let mut target = create_version_payload(output, version).await?;
-    let result = reconstruct(&mut source, &mut target, true).await;
+    let mut target = match create_version_payload(output, version).await {
+        Ok(target) => target,
+        Err(error) => {
+            source.close().await?;
+            return Err(error);
+        }
+    };
+    let result = reconstruct(&mut source, &mut target, true, version).await;
     // Await handle release even on ENOSPC/validation failure before the native
     // owner removes staging (Windows cannot unlink a still-open SQLite file).
     let source_closed = source.close().await;
@@ -403,7 +432,13 @@ impl crate::SqliteStore {
         drop(connection);
         let mut source = open_input(snapshot).await?;
         let mut target = create_payload(output).await?;
-        reconstruct(&mut source, &mut target, false).await?;
+        reconstruct(
+            &mut source,
+            &mut target,
+            false,
+            crate::schema_version::CURRENT_SCHEMA_VERSION,
+        )
+        .await?;
         source.close().await?;
         target.close().await?;
         Ok(snapshot_at)

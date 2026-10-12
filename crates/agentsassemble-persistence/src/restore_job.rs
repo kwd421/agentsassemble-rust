@@ -41,6 +41,8 @@ pub struct RestoreJob {
     pub(crate) target: PathBuf,
     pub(crate) stage: PathBuf,
     lease: File,
+    #[cfg(test)]
+    pub(crate) fail_upgrade: bool,
 }
 
 pub(crate) fn marker_path(target: &Path) -> PathBuf {
@@ -145,6 +147,8 @@ impl RestoreJob {
             target,
             stage,
             lease,
+            #[cfg(test)]
+            fail_upgrade: false,
         };
         let mut file =
             tempfile::NamedTempFile::new_in(&parent).map_err(PersistenceError::WriterLease)?;
@@ -192,6 +196,8 @@ impl RestoreJob {
                 target,
                 stage,
                 lease,
+                #[cfg(test)]
+                fail_upgrade: false,
             });
         }
         let metadata = std::fs::symlink_metadata(&stage).map_err(PersistenceError::WriterLease)?;
@@ -219,6 +225,8 @@ impl RestoreJob {
             target,
             stage,
             lease,
+            #[cfg(test)]
+            fail_upgrade: false,
         })
     }
 

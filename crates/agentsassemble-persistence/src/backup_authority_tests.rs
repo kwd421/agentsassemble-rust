@@ -18,7 +18,13 @@ async fn restored(
     let payload = directory.join("payload.sqlite");
     let mut output = crate::backup_database::create_payload(&payload).await?;
     let mut connection = source.pool.acquire().await?;
-    crate::backup_database::reconstruct(&mut connection, &mut output, false).await?;
+    crate::backup_database::reconstruct(
+        &mut connection,
+        &mut output,
+        false,
+        CURRENT_SCHEMA_VERSION,
+    )
+    .await?;
     drop(connection);
     output.close().await?;
     let (rooms, messages, assets) = crate::backup_database::payload_counts(&payload).await?;

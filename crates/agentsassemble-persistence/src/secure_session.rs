@@ -227,6 +227,7 @@ mod tests {
         crate::backup_database::reconstruct_payload(
             &payload,
             &directory.path().join("restored.sqlite"),
+            crate::schema_version::CURRENT_SCHEMA_VERSION,
         )
         .await?;
         reopened.close().await?;

@@ -143,6 +143,16 @@ objects and invalid cells fail before activation. Verify failed upgrade/retry an
 existing journal crash boundaries. Run persistence tests, formatting and architecture
 checks. Attachment policy/transport/UI changes and usage-report work are excluded.
 
+Verification: `cargo test -p agentsassemble-persistence` passed 490 tests (one
+ignored); the final extended historical-tampering rerun also passed. Catalog-built
+87/88/89 archives passed the real codec, preparation, resume and local activation
+with all fixture product rows/attachment bytes intact and rebuilt search working.
+An injected failure in the real 88-to-89 migration left Validating at 88; resume
+reconstructed from the original archive and succeeded without changing the source
+store/key. `cargo fmt --all -- --check`, `git diff --check` and
+`make architecture-check` passed (existing structure warnings). Physical disk
+exhaustion, Windows and the packaged native chooser were not exercised.
+
 The owner authorizes implementation of export and restore of the same logical
 server on a new computer. Central stores no backup bytes. Direct transfer,
 server cloning, ownership transfer and replacing existing installations are out

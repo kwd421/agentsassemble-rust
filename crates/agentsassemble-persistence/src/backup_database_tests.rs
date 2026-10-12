@@ -25,7 +25,12 @@ async fn reconstruction_preserves_identity_but_never_copies_host_authority()
         .export_backup_payload(&ServerOwnerAuthority::LocalOperator, &snapshot, &payload)
         .await?;
     let rebuilt = directory.path().join("rebuilt.sqlite");
-    reconstruct_payload(&payload, &rebuilt).await?;
+    reconstruct_payload(
+        &payload,
+        &rebuilt,
+        crate::schema_version::CURRENT_SCHEMA_VERSION,
+    )
+    .await?;
     let mut restored = open_input(&rebuilt).await?;
     let identity: String =
         sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key='server_id'")
@@ -100,7 +105,12 @@ async fn hostile_schema_and_unknown_json_never_become_active_authority()
         let output = directory.path().join("reconstructed.sqlite");
         assert!(
             matches!(
-                reconstruct_payload(&payload, &output).await,
+                reconstruct_payload(
+                    &payload,
+                    &output,
+                    crate::schema_version::CURRENT_SCHEMA_VERSION
+                )
+                .await,
                 Err(PersistenceError::InvalidBackup)
             ),
             "accepted {mutation}"
@@ -141,7 +151,12 @@ async fn assets_roundtrip_exact_bytes_and_reject_corrupt_image_payload()
         )
         .await?;
     let output = directory.path().join("rebuilt.sqlite");
-    reconstruct_payload(&payload, &output).await?;
+    reconstruct_payload(
+        &payload,
+        &output,
+        crate::schema_version::CURRENT_SCHEMA_VERSION,
+    )
+    .await?;
     let mut restored = open_input(&output).await?;
     let actual: Vec<u8> = sqlx::query_scalar("SELECT content FROM profile_avatar_assets")
         .fetch_one(&mut restored)
@@ -155,9 +170,13 @@ async fn assets_roundtrip_exact_bytes_and_reject_corrupt_image_payload()
         .await?;
     attacker.close().await?;
     assert!(
-        reconstruct_payload(&payload, &directory.path().join("rejected.sqlite"))
-            .await
-            .is_err()
+        reconstruct_payload(
+            &payload,
+            &directory.path().join("rejected.sqlite"),
+            crate::schema_version::CURRENT_SCHEMA_VERSION
+        )
+        .await
+        .is_err()
     );
     Ok(())
 }

@@ -76,37 +76,60 @@ impl SqliteStore {
             .max_lifetime(None)
             .connect_with(prepared.options.clone().create_if_missing(true))
             .await?;
-        if prepared.identity.is_some() {
-            acquire_file_authority_lock(&pool).await?;
+        let authority: Result<_, PersistenceError> = async {
+            if prepared.identity.is_some() {
+                acquire_file_authority_lock(&pool).await?;
+            }
+            prepared.revalidate()?;
+            let (fresh_authority, host_key_policy, initialization_nonce) =
+                match inspect_database_authority(&pool).await? {
+                    DatabaseAuthority::Empty => {
+                        let nonce = uuid::Uuid::new_v4().to_string();
+                        install_initialization_marker(&pool, &nonce).await?;
+                        (true, HostKeyPolicy::CreateOnly, nonce)
+                    }
+                    DatabaseAuthority::Initializing(nonce) => {
+                        (true, HostKeyPolicy::CreateOrReuse, nonce)
+                    }
+                    DatabaseAuthority::Initialized(nonce) => {
+                        (false, HostKeyPolicy::ReuseOnly, nonce)
+                    }
+                };
+            let host_key = HostKeyMaterial::load_or_create(
+                prepared.host_key_path.as_deref(),
+                host_key_policy,
+                &initialization_nonce,
+            )?;
+            Ok((fresh_authority, host_key))
         }
-        prepared.revalidate()?;
-        let (fresh_authority, host_key_policy, initialization_nonce) =
-            match inspect_database_authority(&pool).await? {
-                DatabaseAuthority::Empty => {
-                    let nonce = uuid::Uuid::new_v4().to_string();
-                    install_initialization_marker(&pool, &nonce).await?;
-                    (true, HostKeyPolicy::CreateOnly, nonce)
-                }
-                DatabaseAuthority::Initializing(nonce) => {
-                    (true, HostKeyPolicy::CreateOrReuse, nonce)
-                }
-                DatabaseAuthority::Initialized(nonce) => (false, HostKeyPolicy::ReuseOnly, nonce),
-            };
-        let host_key = HostKeyMaterial::load_or_create(
-            prepared.host_key_path.as_deref(),
-            host_key_policy,
-            &initialization_nonce,
-        )?;
+        .await;
+        let (fresh_authority, host_key) = match authority {
+            Ok(authority) => authority,
+            Err(error) => {
+                pool.close().await;
+                return Err(error);
+            }
+        };
         let store = Self::from_owned_pool(pool, prepared, Arc::new(host_key), fresh_authority);
-        if store.created {
-            store.initialize().await?;
-        } else {
-            store.host_identity().await?;
-            crate::schema_version::upgrade_schema(&store.pool).await?;
+        let opened: Result<(), PersistenceError> = async {
+            if store.created {
+                store.initialize().await?;
+            } else {
+                store.host_identity().await?;
+                crate::schema_version::upgrade_schema(&store.pool).await?;
+            }
+            // Startup repair owns a large transactional scheduler future; keep it out of every
+            // caller's open/bootstrap state machine (observed downstream future: 16,824 bytes).
+            Box::pin(crate::ordered_turn_release::repair_startup(&store.pool)).await?;
+            Ok(())
         }
-        // Startup repair owns a large transactional scheduler future; keep it out of every
-        // caller's open/bootstrap state machine (observed downstream future: 16,824 bytes).
-        Box::pin(crate::ordered_turn_release::repair_startup(&store.pool)).await?;
+        .await;
+        if let Err(error) = opened {
+            // Restore preparation may retry immediately after a failed upgrade.
+            // Await pool/lease release before returning ownership to its caller.
+            store.close().await?;
+            return Err(error);
+        }
         Ok(store)
     }
 }
