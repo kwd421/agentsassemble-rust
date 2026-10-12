@@ -240,17 +240,31 @@ ten large downloads and frozen legacy request/data replay against the new host
 and architecture gates pass. Sliding-credit, multiplexed deadline/cancel cleanup
 and old/new throughput comparisons remain required work.
 
-Open acceptance decision (code verified): `http_api::decode_upload_body` collects
-the complete legacy JSON body before deserializing; `profile_web::upload_message_attachment`
-then invokes its whole-file upload owner. Resuming that collector accepts bytes
-into its bounded allocation, not durable piece storage. In contrast,
-`message_upload::data` resumes only after `append_message_upload` accepts the
-piece. Applying durable piece credit to the legacy JSON route as well cannot
-stream a >384 KiB body while keeping its owner unchanged. Clarify whether bounded
-collector acceptance is sufficient there, the legacy owner must change, or that
-route keeps its existing pacing. No sliding-credit capability is advertised and
-no unverified credit prototype is retained pending that decision. The required
-contract above is not narrowed by this checkpoint.
+Reviewer decision (2026-10-13): request credit returns when the consumer pulls
+bytes from the virtual body. The streamed upload owner pulls its next piece after
+storing the previous one; ordinary requests and the legacy JSON upload use their
+existing admitted, charged bounded collector. Keep those owners unchanged.
+Downloads return credit when the client reads the response body. Finish the shared
+384 KiB window, fair multiplexing, deadline and independent cancellation semantics
+above, including adversarial credit checks. Measure both paths on plain loopback
+and paced links at 50 ms and 100 ms RTT without timing assertions.
+
+Window protocol: `x-agentsassemble-body-window: 1` advertises support; request
+value `1` opts in with legacy records and response
+`x-agentsassemble-body-window-confirmed: 1` confirms the reserved ingress window.
+Only subsequent requests with value `2` and confirmed binary mode use cumulative
+`credit {id, offset}` and omit ACKs for body and credit records. Response headers
+still precede their own body. ACK sequence numbers still count every AEAD record.
+FIFO capacity waiters share 384 KiB; a body may retain at most 320 KiB, leaving
+one piece for other consumers. This trades one single-body in-flight piece for
+progress by other bodies while a consumer stalls. Cancellation reaches the writer
+even after the router task has finished. Timeout credit receipts expire with the
+error record ACK; late valid credits cannot release capacity twice. A negotiated
+cancel uses `cancelled {id}` / `cancel_confirm {id}` to return transmitted capacity
+only after the receiver has discarded earlier records; queued unsent bytes drop
+immediately. Request cancellation drains the virtual ingress queue even while its
+consumer awaits storage. The channel alone owns its advertised reservation, so a
+pending durable mutation cannot retain it after channel closure.
 
 Measured with `AA_TRANSPORT_BENCHMARK=1 cargo test -p agentsassemble-server --test
 integration central_owner_boundary::secure::trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket

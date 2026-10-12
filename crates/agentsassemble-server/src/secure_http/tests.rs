@@ -10,20 +10,26 @@ async fn secure_upload_consumes_more_than_direction_capacity() {
     let cancel = CancellationToken::new();
     let mut input = Input {
         tx,
+        queue: None,
         cancel: cancel.clone(),
         ended: false,
         binary: false,
         offset: 0,
+        window: None,
+        body_window: Arc::new(Semaphore::new(crate::secure_queue::BODY_WINDOW_BYTES)),
     };
     let (output, mut credits) = Output::new(global.clone(), cancel.clone());
-    let request = Request::new(request_body(
-        rx,
-        cancel,
-        1,
-        true,
-        output,
-        crate::http_body_policy::Policy::new(),
-    ));
+    let request = Request::new(
+        request_body(
+            rx,
+            cancel,
+            1,
+            true,
+            output,
+            crate::http_body_policy::Policy::new(),
+        )
+        .0,
+    );
     let collect = crate::http_api::decode_json_body::<String>(
         request,
         crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES,
@@ -77,17 +83,23 @@ async fn cancellation_releases_only_its_request_queue() {
     let cancel_b = CancellationToken::new();
     let mut a = Input {
         tx: tx_a,
+        queue: None,
         cancel: cancel_a.clone(),
         ended: false,
         binary: false,
         offset: 0,
+        window: None,
+        body_window: Arc::new(Semaphore::new(crate::secure_queue::BODY_WINDOW_BYTES)),
     };
     let mut b = Input {
         tx: tx_b,
+        queue: None,
         cancel: cancel_b.clone(),
         ended: false,
         binary: false,
         offset: 0,
+        window: None,
+        body_window: Arc::new(Semaphore::new(crate::secure_queue::BODY_WINDOW_BYTES)),
     };
     let body_a = request_body(
         rx_a,
@@ -96,7 +108,8 @@ async fn cancellation_releases_only_its_request_queue() {
         true,
         output.with_cancel(cancel_a.clone()),
         crate::http_body_policy::Policy::new(),
-    );
+    )
+    .0;
     let body_b = request_body(
         rx_b,
         cancel_b.clone(),
@@ -104,7 +117,8 @@ async fn cancellation_releases_only_its_request_queue() {
         true,
         output.with_cancel(cancel_b),
         crate::http_body_policy::Policy::new(),
-    );
+    )
+    .0;
     let chunk = URL_SAFE_NO_PAD.encode(vec![b' '; CHUNK_BYTES]);
     for _ in 0..4 {
         assert!(a.push(&chunk, false, &budget).is_ok());
@@ -112,6 +126,11 @@ async fn cancellation_releases_only_its_request_queue() {
     }
     assert!(budget.charge(1).is_err());
     cancel_a.cancel();
+    a.tx.closed().await; // Drain while the HTTP consumer has never been polled.
+    assert_eq!(
+        global.available_permits(),
+        crate::secure_queue::GLOBAL_BYTES - 4 * CHUNK_BYTES
+    );
     assert!(
         crate::http_api::ensure_empty_body(Request::new(body_a), 10 * CHUNK_BYTES)
             .await
@@ -159,10 +178,13 @@ async fn virtual_upload_timeout_drops_its_queue_and_ignores_late_data() {
     let cancel = CancellationToken::new();
     let mut input = Input {
         tx,
+        queue: None,
         cancel: cancel.clone(),
         ended: false,
         binary: false,
         offset: 0,
+        window: None,
+        body_window: Arc::new(Semaphore::new(crate::secure_queue::BODY_WINDOW_BYTES)),
     };
     let body = request_body(
         rx,
@@ -171,7 +193,8 @@ async fn virtual_upload_timeout_drops_its_queue_and_ignores_late_data() {
         true,
         output,
         crate::http_body_policy::Policy::new(),
-    );
+    )
+    .0;
     let other_request = budget
         .charge(CHUNK_BYTES)
         .unwrap_or_else(|_| panic!("independent request"));
@@ -256,24 +279,30 @@ async fn lost_credit_path_cannot_complete_a_body_without_its_end_marker() {
     let (tx, rx) = mpsc::channel(16);
     let mut input = Input {
         tx,
+        queue: None,
         cancel: cancel.clone(),
         ended: false,
         binary: false,
         offset: 0,
+        window: None,
+        body_window: Arc::new(Semaphore::new(crate::secure_queue::BODY_WINDOW_BYTES)),
     };
     assert!(
         input
             .push(&URL_SAFE_NO_PAD.encode(b"null"), false, &budget)
             .is_ok()
     );
-    let request = Request::new(request_body(
-        rx,
-        cancel,
-        1,
-        true,
-        output,
-        crate::http_body_policy::Policy::new(),
-    ));
+    let request = Request::new(
+        request_body(
+            rx,
+            cancel,
+            1,
+            true,
+            output,
+            crate::http_body_policy::Policy::new(),
+        )
+        .0,
+    );
     assert!(
         crate::http_api::decode_json_body::<serde_json::Value>(request, 1024)
             .await
@@ -295,10 +324,13 @@ async fn unpaced_request_releases_charges_without_credit_frames()
     let (tx, rx) = mpsc::channel(16);
     let mut input = Input {
         tx,
+        queue: None,
         cancel: cancel.clone(),
         ended: false,
         binary: false,
         offset: 0,
+        window: None,
+        body_window: Arc::new(Semaphore::new(crate::secure_queue::BODY_WINDOW_BYTES)),
     };
     let mut body = request_body(
         rx,
@@ -308,6 +340,7 @@ async fn unpaced_request_releases_charges_without_credit_frames()
         output,
         crate::http_body_policy::Policy::new(),
     )
+    .0
     .into_data_stream();
     for _ in 0..16 {
         assert!(
@@ -350,23 +383,29 @@ async fn unpaced_virtual_bodies_share_host_admission_and_release_on_cancel() {
         let cancel = CancellationToken::new();
         let mut input = Input {
             tx,
+            queue: None,
             cancel: cancel.clone(),
             ended: false,
             binary: false,
             offset: 0,
+            window: None,
+            body_window: Arc::new(Semaphore::new(crate::secure_queue::BODY_WINDOW_BYTES)),
         };
         input
             .push(&URL_SAFE_NO_PAD.encode(b" "), false, &queue)
             .expect("queue chunk");
         // No credit opt-in: admission cannot depend on cooperative pacing.
-        let request = Request::new(request_body(
-            rx,
-            cancel,
-            id,
-            false,
-            output.clone(),
-            crate::http_body_policy::Policy::new(),
-        ));
+        let request = Request::new(
+            request_body(
+                rx,
+                cancel,
+                id,
+                false,
+                output.clone(),
+                crate::http_body_policy::Policy::new(),
+            )
+            .0,
+        );
         let mut read = Box::pin(decode_upload_body::<serde_json::Value>(
             request,
             1024,
@@ -435,10 +474,13 @@ async fn binary_offsets_and_legacy_shape_cannot_mix_and_cancel_releases_bytes() 
     let (tx, rx) = mpsc::channel(16);
     let mut input = Input {
         tx,
+        queue: None,
         cancel: CancellationToken::new(),
         ended: false,
         binary: true,
         offset: 0,
+        window: None,
+        body_window: Arc::new(Semaphore::new(crate::secure_queue::BODY_WINDOW_BYTES)),
     };
     assert!(input.push("YQ", false, &budget).is_err());
     let push = |input: &mut Input, offset, end| {
@@ -455,6 +497,77 @@ async fn binary_offsets_and_legacy_shape_cannot_mix_and_cancel_releases_bytes() 
     assert!(push(&mut input, 3, true).is_ok());
     assert!(push(&mut input, 3, true).is_err());
     drop(rx);
+    assert_eq!(
+        global.available_permits(),
+        crate::secure_queue::GLOBAL_BYTES
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn quiet_event_stream_uses_a_fresh_credit_deadline_when_data_returns() {
+    use crate::secure_queue::Feedback;
+    let global = Arc::new(Semaphore::new(crate::secure_queue::GLOBAL_BYTES));
+    let closed = CancellationToken::new();
+    let (output, outgoing) = Output::new(global.clone(), closed.clone());
+    let (sent, mut records) = mpsc::unbounded_channel();
+    let sink = Box::pin(futures_util::sink::unfold(sent, |tx, record| async move {
+        tx.send(record).map_err(|_| ())?;
+        Ok::<_, ()>(tx)
+    }));
+    let (feedback, rx) = mpsc::channel(1);
+    let writer = tokio::spawn(crate::secure_channel::write_records(
+        sink,
+        |bytes| Ok(bytes.to_vec()),
+        outgoing,
+        rx,
+        closed.clone(),
+        output.budget.clone(),
+    ));
+    let (data, source) = mpsc::channel::<Bytes>(1);
+    let body = Body::from_stream(futures_util::stream::unfold(source, |mut rx| async move {
+        rx.recv()
+            .await
+            .map(|bytes| (Ok::<_, std::io::Error>(bytes), rx))
+    }));
+    let response = axum::response::Response::new(body);
+    let response = tokio::spawn(respond_mode(
+        response,
+        1,
+        output.with_http(1, true),
+        closed.child_token(),
+        closed.clone(),
+        true,
+        None,
+        true,
+        None,
+    ));
+    records.recv().await.unwrap();
+    feedback.send(Feedback::Ack(0)).await.unwrap();
+    data.send(Bytes::from_static(b"one")).await.unwrap();
+    records.recv().await.unwrap();
+    feedback
+        .send(Feedback::Credit { id: 1, offset: 3 })
+        .await
+        .unwrap();
+    output.send(json!({"op":"barrier"})).await.unwrap();
+    records.recv().await.unwrap();
+    feedback.send(Feedback::Ack(2)).await.unwrap();
+    tokio::time::advance(crate::http_body_policy::IDLE * 2).await;
+    data.send(Bytes::from_static(b"two")).await.unwrap();
+    records.recv().await.unwrap();
+    assert!(
+        !closed.is_cancelled(),
+        "quiet SSE is not an unconsumed file body"
+    );
+    feedback
+        .send(Feedback::Credit { id: 1, offset: 6 })
+        .await
+        .unwrap();
+    drop(data);
+    records.recv().await.unwrap();
+    response.await.unwrap();
+    drop(output);
+    writer.await.unwrap();
     assert_eq!(
         global.available_permits(),
         crate::secure_queue::GLOBAL_BYTES

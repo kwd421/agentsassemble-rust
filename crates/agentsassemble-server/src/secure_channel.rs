@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
@@ -71,6 +71,13 @@ async fn upgrade(
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 enum Frame {
+    CancelConfirm {
+        id: u32,
+    },
+    Credit {
+        id: u32,
+        offset: u64,
+    },
     Ack {
         sequence: u64,
     },
@@ -172,54 +179,9 @@ async fn handshake(
     Ok(handshake)
 }
 
-// The writer owns the receiver: every exit drops buffered records and charges.
-pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
-    mut sender: S,
-    mut seal: impl FnMut(&[u8]) -> Result<Vec<u8>, ()>,
-    mut outgoing: tokio::sync::mpsc::Receiver<crate::secure_queue::Queued>,
-    mut acknowledgements: tokio::sync::mpsc::Receiver<u64>,
-    closed: tokio_util::sync::CancellationToken,
-) {
-    let mut sequence = 0;
-    loop {
-        let item = tokio::select! {
-            () = closed.cancelled() => break,
-            item = outgoing.recv() => item,
-        };
-        let Some(item) = item else { break };
-        if item.cancel.is_cancelled() {
-            continue;
-        }
-        let Ok(record) = seal(&item.bytes) else { break };
-        let expiry = async {
-            if let Some(progress) = &item.progress {
-                progress.expired().await;
-            } else {
-                std::future::pending::<()>().await;
-            }
-        };
-        let accepted = async {
-            sender
-                .send(Message::Binary(record.into()))
-                .await
-                .map_err(|_| ())?;
-            if acknowledgements.recv().await != Some(sequence) {
-                return Err(());
-            }
-            Ok(())
-        };
-        let result = tokio::select! {
-            () = closed.cancelled() => break,
-            () = expiry => break,
-            result = tokio::time::timeout(crate::http_body_policy::IDLE, accepted) => result,
-        };
-        if !matches!(result, Ok(Ok(()))) {
-            break;
-        }
-        sequence += 1;
-    }
-    closed.cancel();
-}
+#[path = "secure_writer.rs"]
+mod writer;
+pub(crate) use writer::write_records;
 
 fn run(
     mut socket: WebSocket,
@@ -250,7 +212,8 @@ fn run(
             Output::new(state.secure_queue_budget.clone(), client.closed().clone());
         let (sender, mut receiver) = socket.split();
         let writer_client = client.clone();
-        let (ack_tx, ack_rx) = tokio::sync::mpsc::channel::<u64>(1);
+        let writer_budget = output.budget.clone();
+        let (ack_tx, ack_rx) = tokio::sync::mpsc::channel::<crate::secure_queue::Feedback>(1);
         let writer = tokio::spawn(async move {
             write_records(
                 sender,
@@ -258,6 +221,7 @@ fn run(
                 outgoing,
                 ack_rx,
                 writer_client.closed().clone(),
+                writer_budget,
             )
             .await;
             writer_client.close();
@@ -277,7 +241,7 @@ fn run(
                 () = client.closed().cancelled() => break,
                 () = state.shutdown.cancelled() => break,
                 () = tokio::time::sleep_until(first_admission), if !client.admitted() => { if !client.admitted() { break; } continue; },
-                done = requests.tasks.join_next(), if !requests.tasks.is_empty() => { match done { Some(Ok(id)) => { requests.remove(id); }, _ => break } continue; },
+                done = requests.tasks.join_next(), if !requests.tasks.is_empty() => { match done { Some(Ok(id)) => { requests.remove(id).await; }, _ => break } continue; },
                 incoming = next_record(&mut receiver) => incoming,
             };
             let Some(Ok(Message::Binary(record))) = incoming else {
@@ -299,7 +263,7 @@ fn run(
         }
 
         client.close();
-        requests.clear();
+        requests.clear().await;
         if state
             .store
             .disconnect_secure_channel(&client.binding().channel_id)

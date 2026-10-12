@@ -33,18 +33,29 @@ pub(crate) struct Provenance {
 
 pub(crate) struct Input {
     tx: mpsc::Sender<Part>,
+    queue: Option<Arc<tokio::sync::Mutex<mpsc::Receiver<Part>>>>,
     pub(crate) cancel: CancellationToken,
     ended: bool,
     binary: bool,
     offset: u64,
+    pub(crate) window: Option<Arc<tokio::sync::Semaphore>>,
+    body_window: Arc<tokio::sync::Semaphore>,
 }
 struct Part {
     bytes: Vec<u8>,
     end: bool,
-    charge: Charge,
+    charge: Option<Charge>,
+    credit: Option<(OwnedSemaphorePermit, OwnedSemaphorePermit)>,
 }
 
 impl Input {
+    pub(crate) async fn drain(&self) {
+        if let Some(queue) = &self.queue {
+            let mut rx = queue.lock().await;
+            rx.close();
+            while rx.try_recv().is_ok() {}
+        }
+    }
     pub(crate) fn push(&mut self, data: &str, end: bool, budget: &Budget) -> Result<(), ()> {
         // An early response/timeout has already dropped this request's receiver.
         // In-flight child data must not tear down unrelated channel operations.
@@ -60,7 +71,12 @@ impl Input {
         }
         let charge = budget.charge(bytes.len())?;
         self.tx
-            .try_send(Part { bytes, end, charge })
+            .try_send(Part {
+                bytes,
+                end,
+                charge: Some(charge),
+                credit: None,
+            })
             .map_err(|_| ())?;
         self.ended = end;
         Ok(())
@@ -79,17 +95,48 @@ impl Input {
         if self.ended || record.offset != self.offset {
             return Err(());
         }
-        let charge = budget.charge(record.bytes.len())?;
+        let (charge, credit) = if let Some(window) = &self.window {
+            (
+                None,
+                Some((
+                    self.body_window
+                        .clone()
+                        .try_acquire_many_owned(record.bytes.len() as u32)
+                        .map_err(|_| ())?,
+                    window
+                        .clone()
+                        .try_acquire_many_owned(record.bytes.len() as u32)
+                        .map_err(|_| ())?,
+                )),
+            )
+        } else {
+            (Some(budget.charge(record.bytes.len())?), None)
+        };
         self.tx
             .try_send(Part {
                 bytes: record.bytes.to_vec(),
                 end: record.end,
                 charge,
+                credit,
             })
             .map_err(|_| ())?;
         self.offset += record.bytes.len() as u64;
         self.ended = record.end;
         Ok(())
+    }
+}
+
+struct QueueLifetime {
+    queue: Arc<tokio::sync::Mutex<mpsc::Receiver<Part>>>,
+    ended: CancellationToken,
+}
+impl Drop for QueueLifetime {
+    fn drop(&mut self) {
+        if let Ok(mut rx) = self.queue.try_lock() {
+            rx.close();
+            while rx.try_recv().is_ok() {}
+        }
+        self.ended.cancel();
     }
 }
 
@@ -100,6 +147,8 @@ pub(crate) struct Start {
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) upload_credit: bool,
     pub(crate) binary_confirmed: Arc<AtomicBool>,
+    pub(crate) window_confirmed: Arc<AtomicBool>,
+    pub(crate) window: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 pub(crate) fn start(
@@ -126,22 +175,35 @@ pub(crate) fn start(
         Some("2") if start.binary_confirmed.load(Ordering::Acquire) => true,
         _ => return Err(()),
     };
+    let window_mode = start
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(crate::secure_queue::WINDOW_CAPABILITY))
+        .map(|(_, value)| value.as_str());
+    let window = match window_mode {
+        None | Some("1") => None,
+        Some("2") if binary && start.window_confirmed.load(Ordering::Acquire) => {
+            start.window.clone()
+        }
+        _ => return Err(()),
+    };
     let admission = provenance.admission.admit_virtual().ok_or(())?;
     let (method, uri, headers) = request_metadata(client, provenance, start)?;
     let (tx, rx) = mpsc::channel::<Part>(16);
     let cancel = client.closed().child_token();
     let policy = crate::http_body_policy::Policy::new();
+    let (body, queue) = request_body(
+        rx,
+        cancel.clone(),
+        start.id,
+        start.upload_credit && window.is_none(),
+        output.with_cancel(cancel.clone()),
+        policy.clone(),
+    );
     let mut request = Request::builder()
         .method(method)
         .uri(uri)
-        .body(request_body(
-            rx,
-            cancel.clone(),
-            start.id,
-            start.upload_credit,
-            output.with_cancel(cancel.clone()),
-            policy.clone(),
-        ))
+        .body(body)
         .map_err(|_| ())?;
     *request.headers_mut() = headers;
     request.extensions_mut().insert(provenance.peer);
@@ -151,22 +213,42 @@ pub(crate) fn start(
     request.extensions_mut().insert(policy);
     let input = Input {
         tx,
+        queue: Some(queue),
         cancel: cancel.clone(),
         ended: false,
         binary,
         offset: 0,
+        window: window.clone(),
+        body_window: Arc::new(tokio::sync::Semaphore::new(
+            crate::secure_queue::BODY_WINDOW_BYTES,
+        )),
     };
-    let output = output.with_cancel(cancel.clone());
+    let output = output
+        .with_cancel(cancel.clone())
+        .with_http(start.id, window.is_some());
     let id = start.id;
     let channel = client.closed().clone();
     let confirm = (mode == Some("1")).then(|| start.binary_confirmed.clone());
+    let windowed = window.is_some();
+    let confirm_window = (window_mode == Some("1")).then(|| start.window_confirmed.clone());
     let task = async move {
         let _permit = permit;
         let _admission = admission;
         // Once dispatched, never abort a handler: its mutation may already own durable work.
         let response = crate::web::router(state).oneshot(request).await;
         let Ok(response) = response;
-        respond_mode(response, id, output, cancel, channel, binary, confirm).await;
+        respond_mode(
+            response,
+            id,
+            output,
+            cancel,
+            channel,
+            binary,
+            confirm,
+            windowed,
+            confirm_window,
+        )
+        .await;
     };
     Ok((input, task))
 }
@@ -179,7 +261,10 @@ async fn respond(
     cancel: CancellationToken,
     channel: CancellationToken,
 ) {
-    respond_mode(response, id, output, cancel, channel, false, None).await;
+    respond_mode(
+        response, id, output, cancel, channel, false, None, false, None,
+    )
+    .await;
 }
 
 async fn respond_mode(
@@ -190,14 +275,25 @@ async fn respond_mode(
     channel: CancellationToken,
     binary: bool,
     confirm: Option<Arc<AtomicBool>>,
+    window: bool,
+    confirm_window: Option<Arc<AtomicBool>>,
 ) {
     let progress = response
         .extensions()
         .get::<crate::http_body_policy::Progress>()
         .cloned();
     let output = output.with_progress(progress.clone());
-    let response = send_response(response, id, output, cancel.clone(), binary, confirm);
-    if let Some(progress) = progress {
+    let response = send_response(
+        response,
+        id,
+        output,
+        cancel.clone(),
+        binary,
+        confirm,
+        window,
+        confirm_window,
+    );
+    if let Some(progress) = progress.filter(|_| !window) {
         tokio::select! {
             // Stop-and-wait is channel-wide: a withheld ACK can prevent an error
             // record too. Closing exposes failure and releases all queued records.
@@ -217,6 +313,8 @@ async fn send_response(
     cancel: CancellationToken,
     binary: bool,
     confirm: Option<Arc<AtomicBool>>,
+    window: bool,
+    confirm_window: Option<Arc<AtomicBool>>,
 ) {
     let mut headers = response
         .headers()
@@ -231,6 +329,11 @@ async fn send_response(
         .collect::<Vec<_>>();
     headers.push(("x-agentsassemble-upload-credit", "1"));
     headers.push((CAPABILITY, "1"));
+    headers.push((crate::secure_queue::WINDOW_CAPABILITY, "1"));
+    if let Some(confirm) = confirm_window {
+        confirm.store(true, Ordering::Release);
+        headers.push((crate::secure_queue::WINDOW_CONFIRMED, "1"));
+    }
     if let Some(confirm) = confirm {
         confirm.store(true, Ordering::Release);
         headers.push((CONFIRMED, "1"));
@@ -249,7 +352,15 @@ async fn send_response(
         match next {
             Some(Ok(bytes)) => {
                 for chunk in bytes.chunks(CHUNK_BYTES) {
-                    let sent = if binary {
+                    let sent = if window {
+                        output
+                            .send_window(
+                                id,
+                                offset,
+                                secure_body_record::encode(id, offset, chunk, false),
+                            )
+                            .await
+                    } else if binary {
                         output
                             .send_bytes(secure_body_record::encode(id, offset, chunk, false))
                             .await
@@ -257,6 +368,11 @@ async fn send_response(
                         output.send(json!({"op":"data", "id":id, "data":URL_SAFE_NO_PAD.encode(chunk), "end":false})).await
                     };
                     if sent.is_err() {
+                        if !cancel.is_cancelled() {
+                            let _ = output
+                                .send(json!({"op":"error", "id":id, "code":"response_failed"}))
+                                .await;
+                        }
                         return;
                     }
                     offset += chunk.len() as u64;
@@ -269,7 +385,15 @@ async fn send_response(
                 return;
             }
             None => {
-                if binary {
+                if window {
+                    let _ = output
+                        .send_window(
+                            id,
+                            offset,
+                            secure_body_record::encode(id, offset, &[], true),
+                        )
+                        .await;
+                } else if binary {
                     let _ = output
                         .send_bytes(secure_body_record::encode(id, offset, &[], true))
                         .await;
@@ -291,10 +415,25 @@ fn request_body(
     upload_credit: bool,
     output: Output,
     policy: crate::http_body_policy::Policy,
-) -> Body {
+) -> (Body, Arc<tokio::sync::Mutex<mpsc::Receiver<Part>>>) {
+    let rx = Arc::new(tokio::sync::Mutex::new(rx));
+    let lifetime = CancellationToken::new();
+    let guard = QueueLifetime {
+        queue: rx.clone(),
+        ended: lifetime.clone(),
+    };
+    let cleanup_rx = rx.clone();
+    let queue = rx.clone();
+    let cleanup_cancel = cancel.clone();
+    tokio::spawn(async move {
+        tokio::select! { () = cleanup_cancel.cancelled() => {}, () = lifetime.cancelled() => {} }
+        let mut rx = cleanup_rx.lock().await;
+        rx.close();
+        while rx.try_recv().is_ok() {}
+    });
     let stream = futures_util::stream::unfold(
-        (rx, false, cancel, false, policy),
-        move |(mut rx, ended, cancel, credit, policy)| {
+        (rx, false, cancel, false, policy, 0u64, guard),
+        move |(rx, ended, cancel, credit, policy, offset, guard)| {
             let output = output.clone();
             async move {
                 if ended {
@@ -314,30 +453,59 @@ fn request_body(
                 let next = if credit_failed {
                     None
                 } else {
-                    tokio::select! { biased; () = cancel.cancelled() => None, next = rx.recv() => next }
+                    let mut receiver = rx.lock().await;
+                    tokio::select! { biased; () = cancel.cancelled() => None, next = receiver.recv() => next }
                 };
                 match next {
                     Some(part) => {
-                        let Part { bytes, end, charge } = part;
+                        let Part {
+                            bytes,
+                            end,
+                            charge,
+                            credit,
+                        } = part;
+                        let offset = offset + bytes.len() as u64;
+                        if credit.is_some() && !bytes.is_empty() {
+                            drop(credit);
+                            let _server_wait = policy.server_wait();
+                            if output
+                                .send(json!({"op":"credit", "id":id, "offset":offset}))
+                                .await
+                                .is_err()
+                            {
+                                return Some((
+                                    Err(std::io::Error::other("Encrypted request credit failed")),
+                                    (rx, true, cancel, false, policy, offset, guard),
+                                ));
+                            }
+                        }
                         // The HTTP consumer now owns these bytes under its body limit;
                         // they are no longer retained in the encrypted ingress queue.
                         drop(charge);
                         Some((
                             Ok::<_, std::io::Error>(Bytes::from(bytes)),
-                            (rx, end, cancel, upload_credit && !end, policy),
+                            (
+                                rx,
+                                end,
+                                cancel,
+                                upload_credit && !end,
+                                policy,
+                                offset,
+                                guard,
+                            ),
                         ))
                     }
                     None => Some((
                         Err(std::io::Error::other(
                             "Encrypted request ended before its body completed",
                         )),
-                        (rx, true, cancel, false, policy),
+                        (rx, true, cancel, false, policy, offset, guard),
                     )),
                 }
             }
         },
     );
-    Body::from_stream(stream)
+    (Body::from_stream(stream), queue)
 }
 
 fn request_metadata(
@@ -399,6 +567,7 @@ fn request_metadata(
                     | "if-none-match"
                     | "range"
                     | "x-agentsassemble-body-binary"
+                    | "x-agentsassemble-body-window"
             )
         {
             return Err(());

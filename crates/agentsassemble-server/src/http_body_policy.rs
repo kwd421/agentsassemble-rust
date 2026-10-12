@@ -89,6 +89,7 @@ struct ProgressWindow {
     last_data: Instant,
     window_end: Instant,
     bytes: usize,
+    paused: Option<Instant>,
 }
 impl ProgressWindow {
     fn new(started: Instant) -> Self {
@@ -97,13 +98,20 @@ impl ProgressWindow {
             last_data: started,
             window_end: started + WINDOW,
             bytes: 0,
+            paused: None,
         }
     }
     fn deadline(&mut self) -> Result<Instant, UploadTimeout> {
         self.deadline_at(Instant::now())
     }
     fn deadline_at(&mut self, now: Instant) -> Result<Instant, UploadTimeout> {
-        if now >= self.started + UPLOAD_CEILING || now >= self.last_data + IDLE {
+        if now >= self.started + UPLOAD_CEILING {
+            return Err(UploadTimeout);
+        }
+        if self.paused.is_some() {
+            return Ok(self.started + UPLOAD_CEILING);
+        }
+        if now >= self.last_data + IDLE {
             return Err(UploadTimeout);
         }
         while now >= self.window_end {
@@ -117,9 +125,6 @@ impl ProgressWindow {
             .min(self.last_data + IDLE)
             .min(self.window_end))
     }
-    fn accept(&mut self, bytes: usize) {
-        self.accept_at(bytes, Instant::now());
-    }
     fn accept_at(&mut self, bytes: usize, now: Instant) {
         if bytes > 0 {
             self.last_data = now;
@@ -127,12 +132,38 @@ impl ProgressWindow {
         }
     }
 }
+pub(crate) struct ProgressWait(Progress);
+impl Drop for ProgressWait {
+    fn drop(&mut self) {
+        self.0.0.send_modify(|window| {
+            if let Some(start) = window.paused.take() {
+                let elapsed = start.elapsed();
+                window.last_data += elapsed;
+                window.window_end += elapsed;
+            }
+        });
+    }
+}
 impl Progress {
     pub(crate) fn new() -> Self {
         Self(tokio::sync::watch::channel(ProgressWindow::new(Instant::now())).0)
     }
     pub(crate) fn accept(&self, bytes: usize) {
-        self.0.send_modify(|window| window.accept(bytes));
+        self.0.send_modify(|window| {
+            window.accept_at(bytes, window.paused.unwrap_or_else(Instant::now))
+        });
+    }
+    pub(crate) fn ceiling(&self) -> Instant {
+        self.0.borrow().started + UPLOAD_CEILING
+    }
+    pub(crate) fn server_wait(&self) -> ProgressWait {
+        self.0
+            .send_modify(|window| window.paused = Some(Instant::now()));
+        ProgressWait(self.clone())
+    }
+    pub(crate) fn idle(&self) -> bool {
+        let window = self.0.borrow();
+        window.paused.is_none() && Instant::now() >= window.last_data + IDLE
     }
     pub(crate) fn check(&self) -> Result<(), UploadTimeout> {
         let mut result = Ok(());
@@ -225,3 +256,21 @@ pub(crate) fn wrap(request: Request) -> Request {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod credit_wait_tests {
+    use super::*;
+    #[tokio::test(start_paused = true)]
+    async fn server_credit_wait_excludes_client_idle_but_not_the_ceiling() {
+        let progress = Progress::new();
+        let wait = progress.server_wait();
+        tokio::time::advance(IDLE * 2).await;
+        assert!(progress.check().is_ok());
+        assert!(!progress.idle());
+        drop(wait);
+        assert!(progress.check().is_ok());
+        let _wait = progress.server_wait();
+        tokio::time::advance(UPLOAD_CEILING).await;
+        assert!(progress.check().is_err());
+    }
+}
