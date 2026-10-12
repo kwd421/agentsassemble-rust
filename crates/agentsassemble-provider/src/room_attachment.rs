@@ -19,7 +19,7 @@ pub struct ProviderAttachment {
     pub size: usize,
     pub is_image: bool,
     #[serde(with = "private_bytes")]
-    pub content: Vec<u8>,
+    pub content: bytes::Bytes,
 }
 
 impl ProviderAttachment {
@@ -261,10 +261,11 @@ mod private_bytes {
 
     pub(super) fn deserialize<'de, D: serde::Deserializer<'de>>(
         deserializer: D,
-    ) -> Result<Vec<u8>, D::Error> {
+    ) -> Result<bytes::Bytes, D::Error> {
         let encoded = String::deserialize(deserializer)?;
         STANDARD
             .decode(encoded)
+            .map(bytes::Bytes::from)
             .map_err(|_| serde::de::Error::custom("invalid attachment encoding"))
     }
 }

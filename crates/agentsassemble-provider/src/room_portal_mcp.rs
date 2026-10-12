@@ -253,7 +253,10 @@ impl RoomPortalMcp {
             .read(authority, input.attachment_id.clone())
             .await
             .map_err(|error| {
-                if error.code == "attachment_too_large" {
+                if matches!(
+                    error.code.as_ref(),
+                    "attachment_too_large" | "attachment_download_budget_exhausted"
+                ) {
                     format!("{}: {}", error.code, error.message)
                 } else {
                     error.message

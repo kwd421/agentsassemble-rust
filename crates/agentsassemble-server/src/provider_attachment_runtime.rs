@@ -6,6 +6,7 @@ use agentsassemble_provider::{
 pub(crate) async fn handle_provider_attachment_read(
     store: &SqliteStore,
     room_id: &str,
+    downloads: &crate::download_budget::Budget,
     command: ProviderAttachmentReadCommand,
 ) {
     let result = store
@@ -19,9 +20,12 @@ pub(crate) async fn handle_provider_attachment_read(
                 execution_id: command.execution_id(),
             },
             command.attachment_id(),
+            |principal, size| downloads.reserve_encoded(principal, size),
         )
         .await
-        .map(into_provider_attachment)
+        .map(|(attachment, lease)| {
+            provider_attachment(attachment.metadata, lease.retain(attachment.content))
+        })
         .map_err(public_read_error);
     command.complete(result);
 }
@@ -29,13 +33,20 @@ pub(crate) async fn handle_provider_attachment_read(
 pub(crate) fn into_provider_attachment(
     attachment: agentsassemble_persistence::MessageAttachment,
 ) -> ProviderAttachment {
+    provider_attachment(attachment.metadata, attachment.content.into())
+}
+
+fn provider_attachment(
+    attachment: agentsassemble_persistence::MessageAttachmentMetadata,
+    content: axum::body::Bytes,
+) -> ProviderAttachment {
     ProviderAttachment {
-        id: attachment.metadata.id,
-        filename: attachment.metadata.filename,
-        content_type: attachment.metadata.content_type,
-        size: attachment.metadata.size,
-        is_image: attachment.metadata.is_image,
-        content: attachment.content,
+        id: attachment.id,
+        filename: attachment.filename,
+        content_type: attachment.content_type,
+        size: attachment.size,
+        is_image: attachment.is_image,
+        content,
     }
 }
 
@@ -44,7 +55,10 @@ fn public_read_error(error: PersistenceError) -> ProviderAttachmentReadError {
         PersistenceError::CommandRejected { code, message }
             if matches!(
                 code.as_bytes(),
-                b"message_attachment_missing" | b"stale_provider_turn" | b"attachment_too_large"
+                b"message_attachment_missing"
+                    | b"stale_provider_turn"
+                    | b"attachment_too_large"
+                    | b"attachment_download_budget_exhausted"
             ) =>
         {
             ProviderAttachmentReadError { code, message }

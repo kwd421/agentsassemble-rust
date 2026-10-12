@@ -333,7 +333,10 @@ async fn read_response(request: reqwest::RequestBuilder) -> Result<Value, Attend
         let (code, resolution) =
             room_client_transport::remote_rejection(&value, "attendee_remote_rejection");
         return Err(AttendeeClientError {
-            message: if code == "attachment_too_large" {
+            message: if matches!(
+                code.as_ref(),
+                "attachment_too_large" | "attachment_download_budget_exhausted"
+            ) {
                 value["error"]["message"]
                     .as_str()
                     .unwrap_or_default()

@@ -18,19 +18,25 @@ use crate::{
 pub(super) async fn read(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<AttendeeToolReadResponse>, AttendeeHttpError> {
+) -> Result<axum::response::Response, AttendeeHttpError> {
     let fingerprint = purpose_bearer_fingerprint(request.headers(), ATTENDEE_SESSION_PREFIX)
         .ok_or_else(|| {
             AttendeeHttpError::rejected(StatusCode::UNAUTHORIZED, "attendee_credential_required")
         })?;
     let connection = connection_id(request.headers())?;
     let body: AttendeeToolReadRequest = decode_json_body(request, 16384).await?;
-    let result = state
+    let (result, lease) = state
         .store
-        .read_attendee_tool(&fingerprint, connection, &body, chrono::Utc::now())
+        .read_attendee_tool(
+            &fingerprint,
+            connection,
+            &body,
+            chrono::Utc::now(),
+            |principal, size| state.downloads.reserve_encoded(principal, size),
+        )
         .await
         .map_err(AttendeeHttpError::from_persistence)?;
-    Ok(Json(match result {
+    let response = match result {
         AttendeeToolReadResult::ConversationStatus(status) => {
             AttendeeToolReadResponse::ConversationStatus { result: status }
         }
@@ -44,7 +50,13 @@ pub(super) async fn read(
             metadata: attachment.metadata,
             content_base64: STANDARD.encode(attachment.content),
         },
-    }))
+    };
+    crate::download_budget::encoded_response(&response, lease).map_err(|_| {
+        AttendeeHttpError::rejected(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "attendee_operation_failed",
+        )
+    })
 }
 
 pub(super) async fn pin(

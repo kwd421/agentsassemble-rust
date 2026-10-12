@@ -56,12 +56,13 @@ async fn attendee_attachment_read_is_bound_to_prestart_input_and_current_connect
             attachment_id: attachment.id.clone(),
         },
     };
-    let read = store
+    let (read, _) = store
         .read_attendee_tool(
             session.session_fingerprint(),
             connection.connection_id(),
             &request,
             now,
+            |_, _| Ok(()),
         )
         .await?;
     let AttendeeToolReadResult::Attachment(read) = read else {
@@ -94,6 +95,7 @@ async fn attendee_attachment_read_is_bound_to_prestart_input_and_current_connect
             connection.connection_id(),
             &request,
             now,
+            |_, _| Ok(()),
         )
         .await;
     let Err(crate::PersistenceError::CommandRejected { code, message }) = refusal else {
@@ -110,7 +112,8 @@ async fn attendee_attachment_read_is_bound_to_prestart_input_and_current_connect
                 session.session_fingerprint(),
                 connection.connection_id(),
                 &request,
-                now
+                now,
+                |_, _| Ok(())
             )
             .await
             .is_err()
@@ -132,7 +135,8 @@ async fn attendee_attachment_read_is_bound_to_prestart_input_and_current_connect
                 session.session_fingerprint(),
                 connection.connection_id(),
                 &request,
-                now
+                now,
+                |_, _| Ok(())
             )
             .await
             .is_err()

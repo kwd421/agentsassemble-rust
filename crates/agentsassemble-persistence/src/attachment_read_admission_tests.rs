@@ -59,12 +59,20 @@ async fn download_refusal_and_oversized_ai_reads_never_select_the_blob()
             vec![42; 50 * 1024 * 1024],
         )
         .await?;
+    let small = store
+        .store_message_attachment(
+            &principal,
+            "small.bin",
+            "application/octet-stream",
+            vec![7; 65537],
+        )
+        .await?;
     let sent = store
         .execute_message_with_turn(
             &principal,
             "large-message",
             "message.send",
-            &json!({"content":"@Terra inspect", "attachment_ids":[attachment.id]}),
+            &json!({"content":"@Terra inspect", "attachment_ids":[attachment.id, small.id]}),
         )
         .await?;
     let assignment = sent.assignments.first().ok_or("assignment")?;
@@ -108,10 +116,31 @@ async fn download_refusal_and_oversized_ai_reads_never_select_the_blob()
                 execution_id: &assignment.execution_id,
             },
             &attachment.id,
+            |_, _| Ok(()),
         )
         .instrument(span.clone())
         .await;
     assert_oversized(provider.err().ok_or("provider accepted")?);
+    let provider_refused = store
+        .bound_provider_message_attachment(
+            ProviderAttachmentReadAuthority {
+                room_id: &assignment.session.public.room_id,
+                session_id: &assignment.session.public.session_id,
+                turn_id: &assignment.turn_id,
+                input_up_to_seq: assignment.session.input_up_to_seq,
+                turn_generation: assignment.turn_generation,
+                execution_id: &assignment.execution_id,
+            },
+            &small.id,
+            |id, size| {
+                assert_eq!(id, assignment.session.public.session_id);
+                assert_eq!(size, small.size);
+                Err::<(), _>(busy())
+            },
+        )
+        .instrument(span.clone())
+        .await;
+    assert_busy(provider_refused.err().ok_or("provider budget accepted")?);
     let mut connector = principal.clone();
     connector.client_kind = ClientKind::RoomConnector;
     let result = store
@@ -125,6 +154,20 @@ async fn download_refusal_and_oversized_ai_reads_never_select_the_blob()
         .instrument(span.clone())
         .await;
     assert_oversized(result.err().ok_or("connector accepted")?);
+    let refused = store
+        .bound_authorized_message_attachment(
+            RoomMutationAuthority::TrustedPrincipal(&connector),
+            &small.id,
+            |id, size| {
+                assert_eq!(id, connector.principal_id);
+                assert_eq!(size, small.size);
+                Err::<(), _>(busy())
+            },
+        )
+        .instrument(span.clone())
+        .await;
+    assert_busy(refused.err().ok_or("connector budget accepted")?);
+    attendee_refusal(span.clone()).await?;
     assert_eq!(
         queries.load(Ordering::SeqCst),
         0,
@@ -156,4 +199,75 @@ fn assert_oversized(error: PersistenceError) {
     };
     assert_eq!(code, "attachment_too_large");
     assert!(message.contains("52428800") && message.contains("10485760"));
+}
+
+fn busy() -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: "attachment_download_budget_exhausted".into(),
+        message: "Busy".into(),
+    }
+}
+fn assert_busy(error: PersistenceError) {
+    assert!(
+        matches!(error, PersistenceError::CommandRejected { code, .. } if code == "attachment_download_budget_exhausted")
+    );
+}
+async fn attendee_refusal(span: tracing::Span) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::{AttendeeToolRead, AttendeeToolReadRequest};
+    let (store, session, now) = crate::attendee::connection_tests::fixture().await?;
+    let connection = store
+        .claim_attendee_connection(&session, uuid::Uuid::new_v4(), None, now)
+        .await?
+        .authorization;
+    store
+        .record_attendee_ready(&connection, &crate::attendee::ready_tests::report(), now)
+        .await?;
+    let human = store
+        .authorize_human_session(
+            &crate::human_session_authority_tests::session_fingerprint(&store).await,
+        )
+        .await?;
+    let attachment = store
+        .store_authorized_message_attachment(
+            RoomMutationAuthority::HumanSession(&human),
+            "input.txt",
+            "text/plain",
+            b"input".to_vec(),
+        )
+        .await?;
+    store
+        .execute_authorized_message_with_turn(
+            RoomMutationAuthority::HumanSession(&human),
+            &uuid::Uuid::new_v4().to_string(),
+            "message.send",
+            &json!({"content":"Read", "attachment_ids":[attachment.id]}),
+        )
+        .await?;
+    let turn = store
+        .deliver_attendee_turn(&connection, now)
+        .await?
+        .ok_or("turn")?;
+    let request = AttendeeToolReadRequest {
+        turn_generation: turn.authority.turn_generation,
+        execution_id: turn.authority.execution_id,
+        tool: AttendeeToolRead::Attachment {
+            attachment_id: attachment.id,
+        },
+    };
+    let refused = store
+        .read_attendee_tool(
+            session.session_fingerprint(),
+            connection.connection_id(),
+            &request,
+            now,
+            |id, size| {
+                assert_eq!(id, session.principal().principal_id);
+                assert_eq!(size, 5);
+                Err::<(), _>(busy())
+            },
+        )
+        .instrument(span)
+        .await;
+    assert_busy(refused.err().ok_or("attendee budget accepted")?);
+    Ok(())
 }

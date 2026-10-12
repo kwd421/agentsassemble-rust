@@ -66,7 +66,7 @@ async fn attachment_results_reach_api_and_preserve_turn_completion() {
         let (ingress, mut commands) = ProviderAttachmentReadIngress::channel(1);
         let attachment = ProviderAttachment {
             id: id.clone(), filename: "controlled.txt".to_owned(),
-            content_type: content_type.to_owned(), size: content.len(), is_image, content,
+            content_type: content_type.to_owned(), size: content.len(), is_image, content: content.into(),
         };
         let owner = tokio::spawn(async move {
             let command = commands.recv().await.unwrap_or_else(|| panic!("missing attachment read"));

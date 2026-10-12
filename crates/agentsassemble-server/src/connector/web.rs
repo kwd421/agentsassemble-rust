@@ -209,6 +209,11 @@ impl ConnectorHttpError {
             {
                 (StatusCode::CONFLICT, code.as_ref())
             }
+            PersistenceError::CommandRejected { code, .. }
+                if code == "attachment_download_budget_exhausted" =>
+            {
+                (StatusCode::TOO_MANY_REQUESTS, code.as_ref())
+            }
             PersistenceError::CommandRejected { code, .. } => {
                 (StatusCode::FORBIDDEN, code.as_ref())
             }
@@ -232,7 +237,10 @@ impl ConnectorHttpError {
             resolution: failure.resolution,
             message: match &failure.error {
                 PersistenceError::CommandRejected { code, message }
-                    if code == "attachment_too_large" =>
+                    if matches!(
+                        code.as_ref(),
+                        "attachment_too_large" | "attachment_download_budget_exhausted"
+                    ) =>
                 {
                     Some(message.clone())
                 }

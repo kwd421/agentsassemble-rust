@@ -17,6 +17,7 @@ pub(super) struct Pipe<'a, R, W> {
     output: &'a mut Writer<W>,
     queued: VecDeque<Bytes>,
     dirty: bool,
+    retained: Vec<Bytes>,
 }
 
 impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Pipe<'a, R, W> {
@@ -26,6 +27,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Pipe<'a, R, W> {
             output,
             queued: VecDeque::new(),
             dirty: false,
+            retained: Vec::new(),
         }
     }
 
@@ -38,12 +40,27 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Pipe<'a, R, W> {
         Ok(())
     }
 
+    pub(super) fn queue_retained<T: Serialize>(
+        &mut self,
+        value: &T,
+        retention: Option<Bytes>,
+    ) -> Result<(), DriverError> {
+        self.queue(value)?;
+        if let Some(retention) = retention {
+            self.retained.push(retention);
+        }
+        Ok(())
+    }
+
     pub(super) async fn read<T: DeserializeOwned>(&mut self) -> Result<Option<T>, DriverError> {
         loop {
             tokio::select! {
                 result = wire::read(self.input) => return result,
                 result = advance(self.output, &mut self.queued, &mut self.dirty),
-                    if !self.queued.is_empty() || self.dirty => result?,
+                    if !self.queued.is_empty() || self.dirty => {
+                        result?;
+                        if !self.dirty { self.retained.clear(); }
+                    },
             }
         }
     }
@@ -52,6 +69,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Pipe<'a, R, W> {
         while !self.queued.is_empty() || self.dirty {
             advance(self.output, &mut self.queued, &mut self.dirty).await?;
         }
+        self.retained.clear();
         Ok(())
     }
 }
@@ -92,13 +110,26 @@ mod tests {
         let mut output = wire::writer(left_write);
         let mut pipe = Pipe::new(&mut input, &mut output);
         let payload = "x".repeat(4096);
-        pipe.queue(&payload)?;
+        let owner = std::sync::Arc::new(());
+        let lifetime = std::sync::Arc::downgrade(&owner);
+        struct Retained(std::sync::Arc<()>);
+        impl AsRef<[u8]> for Retained {
+            fn as_ref(&self) -> &[u8] {
+                let _ = &self.0;
+                b"owned"
+            }
+        }
+        pipe.queue_retained(&payload, Some(Bytes::from_owner(Retained(owner))))?;
         pipe.queue(&"second")?;
         tokio::select! {
             biased;
             result = pipe.read::<u64>() => return Err(format!("read completed before peer control: {result:?}").into()),
             () = std::future::ready(()) => {}
         }
+        assert!(
+            lifetime.upgrade().is_some(),
+            "cancelled backpressure retains admission"
+        );
         let peer = tokio::spawn(async move {
             let mut input = wire::reader(right_read);
             let mut output = wire::writer(right_write);
@@ -109,6 +140,7 @@ mod tests {
         });
         assert_eq!(pipe.read::<u64>().await?, Some(7));
         pipe.flush().await?;
+        assert!(lifetime.upgrade().is_none(), "flush releases admission");
         assert_eq!(peer.await??, (payload, "second".to_owned()));
         Ok(())
     }

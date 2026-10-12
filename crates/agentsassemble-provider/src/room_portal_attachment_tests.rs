@@ -158,7 +158,7 @@ fn image_attachment() -> ProviderAttachment {
         content_type: "image/png".to_owned(),
         size: 4,
         is_image: true,
-        content: vec![1, 2, 3, 4],
+        content: vec![1, 2, 3, 4].into(),
     }
 }
 
@@ -209,7 +209,7 @@ async fn pending_attachment_read_blocks_terminal_action_and_finish() {
         content_type: "text/plain".to_owned(),
         size: 5,
         is_image: false,
-        content: b"notes".to_vec(),
+        content: b"notes".to_vec().into(),
     }));
     assert_ne!(
         pending
@@ -252,7 +252,7 @@ async fn assert_response_validation_and_generic_resource(
         content_type: "application/octet-stream".to_owned(),
         size: 1,
         is_image: false,
-        content: vec![1],
+        content: vec![1].into(),
     }));
     let mismatched = mismatched
         .await
@@ -274,7 +274,7 @@ async fn assert_response_validation_and_generic_resource(
         content_type: "text/plain".to_owned(),
         size: 5,
         is_image: false,
-        content: b"notes".to_vec(),
+        content: b"notes".to_vec().into(),
     }));
     let generic = generic
         .await
@@ -305,7 +305,7 @@ async fn assert_response_validation_and_generic_resource(
         content_type: "application/octet-stream".to_owned(),
         size: 2,
         is_image: false,
-        content: vec![0xff, 0],
+        content: vec![0xff, 0].into(),
     }));
     let binary = binary
         .await

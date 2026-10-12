@@ -20,20 +20,20 @@ pub(super) async fn read(
     State(state): State<AppState>,
     Query(query): Query<AttachmentQuery>,
     request: Request,
-) -> Result<Json<Value>, ConnectorHttpError> {
+) -> Result<axum::response::Response, ConnectorHttpError> {
     let authorization = super::read::authorize_read(&state, request, 1).await?;
-    let (attachment, ()) = state
+    let (attachment, lease) = state
         .store
         .bound_authorized_message_attachment(
             RoomMutationAuthority::ConnectorSession(&authorization),
             &query.attachment_id,
-            |_, _| Ok(()),
+            |principal, size| state.downloads.reserve_encoded(principal, size),
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    Ok(Json(json!(
-        crate::provider_attachment_runtime::into_provider_attachment(attachment)
-    )))
+    let value = crate::provider_attachment_runtime::into_provider_attachment(attachment);
+    crate::download_budget::encoded_response(&value, Some(lease))
+        .map_err(|error| ConnectorHttpError::from_persistence(error.into()))
 }
 
 pub(super) async fn upload(

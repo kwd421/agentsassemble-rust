@@ -828,3 +828,22 @@ also limits retained weight to 400 MiB of the shared 512 MiB host pool. Four
 principal can still start a 50 MiB read. Release both count and weight only with
 the final transport-owned response clone. Applies to human, provider, attendee
 and connector admission; anonymous image admission remains host-bounded.
+
+## Round-4 AI retained downloads (2026-10-12)
+
+Managed provider attachment ingress, attendee tool HTTP and connector attachment
+HTTP must use the same host download owner as human reads. Reserve against the
+validated size and authority-derived principal before selecting any chunk. Keep
+the 10 MiB reader ceiling. Admission refusal selects nothing and preserves
+`attachment_download_budget_exhausted` with its retry message through all mappings.
+Lease custody lasts through encoded HTTP body completion/drop or the managed
+provider pipe frame's successful flush/drop, including queue backpressure and
+cancellation. Returning a JSON value or queuing a frame does not finish delivery.
+
+AI reads charge eight times stored size plus 64 KiB envelope/piece allowance:
+raw bytes (1x), base64 text (4/3x), serialization capacity (up to 8/3x), and
+the provider writer's copied frame capacity (up to 8/3x), rounded up to 8x.
+HTTP uses this same conservative bound; its body retains the final encoded bytes.
+Storage remains the schema-93 bounded piece owner. Per-principal count/weight
+caps apply to these reservations too. Verify refusal before chunk selection and
+slow/drop lifetime on each route and a backpressured provider pipe. No wire change.

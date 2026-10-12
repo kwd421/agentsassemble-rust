@@ -41,7 +41,10 @@ pub(super) async fn read_response(
         let (code, resolution) =
             room_client_transport::remote_rejection(&value, "connector_remote_rejection");
         return Err(ConnectorClientError {
-            message: if code == "attachment_too_large" {
+            message: if matches!(
+                code.as_ref(),
+                "attachment_too_large" | "attachment_download_budget_exhausted"
+            ) {
                 value["error"]["message"]
                     .as_str()
                     .unwrap_or_default()

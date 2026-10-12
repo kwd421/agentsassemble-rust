@@ -40,13 +40,14 @@ impl SqliteStore {
     ///
     /// # Errors
     /// Rejects stale connections/turns, pending interrupts, revoked permission and invalid targets.
-    pub async fn read_attendee_tool(
+    pub async fn read_attendee_tool<T>(
         &self,
         fingerprint: &[u8; 32],
         connection_id: Uuid,
         request: &AttendeeToolReadRequest,
         now: DateTime<Utc>,
-    ) -> Result<AttendeeToolReadResult, PersistenceError> {
+        admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
+    ) -> Result<(AttendeeToolReadResult, Option<T>), PersistenceError> {
         let mut tx = self.pool.begin().await?;
         let connection = authorize_current_in(&mut tx, fingerprint, connection_id, now).await?;
         let owner = connection.session().principal();
@@ -59,6 +60,7 @@ impl SqliteStore {
         .await?;
         let participant = load_participant(&mut tx, &owner.room_id, &owner.participant_id).await?;
         let principal = provider_room_principal(&session, &participant, InviteScope::ReadOnly)?;
+        let mut lease = None;
         let result = match &request.tool {
             AttendeeToolRead::ConversationStatus { before_seq } => {
                 AttendeeToolReadResult::ConversationStatus(
@@ -85,8 +87,8 @@ impl SqliteStore {
                     .await?,
                 )
             }
-            AttendeeToolRead::Attachment { attachment_id } => AttendeeToolReadResult::Attachment(
-                bound_provider_attachment_in(
+            AttendeeToolRead::Attachment { attachment_id } => {
+                let (attachment, reservation) = bound_provider_attachment_in(
                     &mut tx,
                     ProviderAttachmentReadAuthority {
                         room_id: &principal.room_id,
@@ -97,11 +99,14 @@ impl SqliteStore {
                         execution_id: &request.execution_id,
                     },
                     attachment_id,
+                    admit,
                 )
-                .await?,
-            ),
+                .await?;
+                lease = Some(reservation);
+                AttendeeToolReadResult::Attachment(attachment)
+            }
         };
         tx.commit().await?;
-        Ok(result)
+        Ok((result, lease))
     }
 }

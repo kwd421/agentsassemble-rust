@@ -113,7 +113,11 @@ pub(super) async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             }
             reply = callbacks.next() => {
                 let (callback_id, reply) = reply?;
-                pipe.queue(&Command::Callback { id: allocate(&mut next_id)?, callback_id, reply })?;
+                let retention = match &reply {
+                    super::callbacks::Reply::Attachment { result: Ok(attachment) } => Some(attachment.content.clone()),
+                    _ => None,
+                };
+                pipe.queue_retained(&Command::Callback { id: allocate(&mut next_id)?, callback_id, reply }, retention)?;
             }
             call = calls.recv() => {
                 let call = call.ok_or_else(protocol_error)?;

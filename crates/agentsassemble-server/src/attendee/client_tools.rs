@@ -196,7 +196,10 @@ fn invalid_response() -> AttendeeClientError {
 
 impl From<AttendeeClientError> for agentsassemble_provider::ProviderAttachmentReadError {
     fn from(failure: AttendeeClientError) -> Self {
-        if failure.code == "attachment_too_large" {
+        if matches!(
+            failure.code.as_ref(),
+            "attachment_too_large" | "attachment_download_budget_exhausted"
+        ) {
             Self {
                 code: failure.code.into(),
                 message: failure.message,

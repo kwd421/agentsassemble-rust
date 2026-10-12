@@ -87,6 +87,7 @@ enum RoomPublicationWake {
 }
 
 struct RoomTaskContext {
+    downloads: crate::download_budget::Budget,
     principal_mutations: PrincipalMutationAdmission,
     room_id: String,
     store: SqliteStore,
@@ -112,6 +113,7 @@ pub(crate) struct RoomCommandOwners<'a> {
 
 #[derive(Clone)]
 pub struct RoomRuntime {
+    pub(crate) downloads: crate::download_budget::Budget,
     store: SqliteStore,
     provider_catalog: ProviderCatalogService,
     provider_adapter: ProviderAdapter,
@@ -136,6 +138,7 @@ impl RoomRuntime {
         provider_adapter: ProviderAdapter,
     ) -> Self {
         Self {
+            downloads: crate::download_budget::Budget::default(),
             store,
             provider_catalog,
             provider_adapter,
@@ -448,6 +451,7 @@ impl RoomRuntime {
         let cancellation = self.cancellation.clone();
         let task = spawn_room_task(
             RoomTaskContext {
+                downloads: self.downloads.clone(),
                 principal_mutations: self.principal_mutations.clone(),
                 room_id: room_id.to_owned(),
                 store,
@@ -668,6 +672,7 @@ async fn handle_room_input(
             crate::provider_attachment_runtime::handle_provider_attachment_read(
                 &context.store,
                 &context.room_id,
+                &context.downloads,
                 command,
             )
             .await;

@@ -463,24 +463,26 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Fails closed for stale turns or IDs outside the canonical inflight messages.
-    pub async fn bound_provider_message_attachment(
+    pub async fn bound_provider_message_attachment<T>(
         &self,
         authority: ProviderAttachmentReadAuthority<'_>,
         attachment_id: &str,
-    ) -> Result<MessageAttachment, PersistenceError> {
+        admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
+    ) -> Result<(MessageAttachment, T), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let attachment =
-            bound_provider_attachment_in(&mut transaction, authority, attachment_id).await?;
+            bound_provider_attachment_in(&mut transaction, authority, attachment_id, admit).await?;
         transaction.commit().await?;
         Ok(attachment)
     }
 }
 
-pub(crate) async fn bound_provider_attachment_in(
+pub(crate) async fn bound_provider_attachment_in<T>(
     transaction: &mut Transaction<'_, Sqlite>,
     authority: ProviderAttachmentReadAuthority<'_>,
     attachment_id: &str,
-) -> Result<MessageAttachment, PersistenceError> {
+    admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
+) -> Result<(MessageAttachment, T), PersistenceError> {
     if !is_message_attachment_id(attachment_id) {
         return Err(message_attachment_missing());
     }
@@ -529,10 +531,10 @@ pub(crate) async fn bound_provider_attachment_in(
         authority.room_id,
         attachment_id,
         MAX_ATTACHMENT_BYTES,
-        |_| Ok(()),
+        |size| admit(&session.public.session_id, size),
     )
     .await?;
-    Ok(attachment.0)
+    Ok(attachment)
 }
 
 async fn current_local_message_principal(

@@ -62,10 +62,28 @@ impl Budget {
         principal: Option<&str>,
         size: usize,
     ) -> Result<Lease, PersistenceError> {
+        self.reserve_weight(principal, size.checked_mul(COPIES).ok_or_else(exhausted)?)
+    }
+
+    pub(crate) fn reserve_encoded(
+        &self,
+        principal: &str,
+        size: usize,
+    ) -> Result<Lease, PersistenceError> {
+        // Raw bytes, base64, serialization capacity, and copied pipe frame capacity.
         let weight = size
-            .checked_mul(COPIES)
-            .and_then(|n| u32::try_from(n).ok())
+            .checked_mul(8)
+            .and_then(|n| n.checked_add(64 * 1024))
             .ok_or_else(exhausted)?;
+        self.reserve_weight(Some(principal), weight)
+    }
+
+    fn reserve_weight(
+        &self,
+        principal: Option<&str>,
+        weight: usize,
+    ) -> Result<Lease, PersistenceError> {
+        let weight = u32::try_from(weight).map_err(|_| exhausted())?;
         let mut principals = self.principals.lock();
         if principal.is_some_and(|p| {
             let (count, used) = principals.get(p).copied().unwrap_or_default();
@@ -106,5 +124,53 @@ struct ResponseBytes {
 impl AsRef<[u8]> for ResponseBytes {
     fn as_ref(&self) -> &[u8] {
         &self.content
+    }
+}
+
+pub(crate) fn encoded_response(
+    value: &impl serde::Serialize,
+    lease: Option<Lease>,
+) -> Result<axum::response::Response, serde_json::Error> {
+    use axum::response::IntoResponse;
+    let content = serde_json::to_vec(value)?;
+    let bytes = match lease {
+        Some(lease) => lease.retain(content),
+        None => content.into(),
+    };
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        bytes,
+    )
+        .into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn encoded_downloads_retain_shared_weight_until_delivery_bytes_drop() {
+        let budget = Budget::default();
+        let blocking = budget.reserve(None, 200 * 1024 * 1024).unwrap();
+        // Provider raw bytes carry admission to the frame owner; HTTP retains encoded bytes.
+        for kind in ["provider", "attendee", "connector"] {
+            let lease = budget.reserve_encoded(kind, 10 * 1024 * 1024).unwrap();
+            let retained = if kind == "provider" {
+                lease.retain(vec![1])
+            } else {
+                let response =
+                    encoded_response(&serde_json::json!({"content_base64":"AQ=="}), Some(lease))
+                        .unwrap();
+                axum::body::to_bytes(response.into_body(), 1024)
+                    .await
+                    .unwrap()
+            };
+            assert!(budget.reserve_encoded("another", 10 * 1024 * 1024).is_err());
+            let clone = retained.clone();
+            drop(retained);
+            assert!(budget.reserve_encoded("another", 10 * 1024 * 1024).is_err());
+            drop(clone);
+            assert!(budget.reserve_encoded("another", 10 * 1024 * 1024).is_ok());
+        }
+        drop(blocking);
     }
 }

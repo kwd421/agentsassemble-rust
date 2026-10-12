@@ -126,7 +126,7 @@ pub(super) async fn verify(
     let result = client
         .read_provider_attachment(connection, &command)
         .await?;
-    assert_eq!(result.content, b"external attachment proof");
+    assert_eq!(result.content.as_ref(), b"external attachment proof");
     command.complete(Ok(result));
     let command = tokio::time::timeout(Duration::from_secs(10), attachment.2.recv())
         .await?

@@ -159,12 +159,14 @@ impl AppState {
         let shutdown = CancellationToken::new();
         let local_attendees =
             crate::LocalAttendeeService::new(store.clone(), shutdown.child_token());
+        let rooms = RoomRuntime::with_provider_adapter(
+            store.clone(),
+            provider_catalog.clone(),
+            provider_adapter.clone(),
+        );
+        let downloads = rooms.downloads.clone();
         Ok(Self {
-            rooms: RoomRuntime::with_provider_adapter(
-                store.clone(),
-                provider_catalog.clone(),
-                provider_adapter.clone(),
-            ),
+            rooms,
             store,
             google_accounts: crate::GoogleAccountService::default(),
             tickets,
@@ -200,7 +202,7 @@ impl AppState {
             secure_queue_budget: Arc::new(tokio::sync::Semaphore::new(
                 crate::secure_queue::GLOBAL_BYTES,
             )),
-            downloads: crate::download_budget::Budget::default(),
+            downloads,
             upload_bodies: crate::upload_body_budget::Budget::default(),
             avatar_reads: Arc::new(tokio::sync::Semaphore::new(6)),
             avatar_uploads: Arc::new(tokio::sync::Semaphore::new(2)),

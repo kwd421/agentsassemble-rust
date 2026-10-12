@@ -134,6 +134,11 @@ impl AttendeeHttpError {
         let failure = CommandFailure::transactional(error);
         let (status, code) = match &failure.error {
             PersistenceError::CommandConflict => (StatusCode::CONFLICT, "command_conflict"),
+            PersistenceError::CommandRejected { code, .. }
+                if code == "attachment_download_budget_exhausted" =>
+            {
+                (StatusCode::TOO_MANY_REQUESTS, code.as_ref())
+            }
             PersistenceError::CommandRejected { code, .. } => {
                 (StatusCode::FORBIDDEN, code.as_ref())
             }
@@ -157,7 +162,10 @@ impl AttendeeHttpError {
             resolution: failure.resolution,
             message: match &failure.error {
                 PersistenceError::CommandRejected { code, message }
-                    if code == "attachment_too_large" =>
+                    if matches!(
+                        code.as_ref(),
+                        "attachment_too_large" | "attachment_download_budget_exhausted"
+                    ) =>
                 {
                     Some(message.clone())
                 }
