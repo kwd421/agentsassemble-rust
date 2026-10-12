@@ -88,7 +88,7 @@ async fn retained_storage_conserves_all_parts_across_binding_deletion_and_expiry
         .await?;
     let retained = read(&store).await?;
     sqlx::query("UPDATE room_message_attachments SET created_at = 1, expires_at = 2 WHERE attachment_id = ?")
-        .bind(expiring.id).execute(&store.pool).await?;
+        .bind(&expiring.id).execute(&store.pool).await?;
     assert_eq!(
         read(&store).await?,
         retained,
@@ -100,6 +100,22 @@ async fn retained_storage_conserves_all_parts_across_binding_deletion_and_expiry
     let cleaned = read(&store).await?;
     assert_eq!(cleaned.total.files, retained.total.files);
     assert_eq!(cleaned.rooms[1].bytes, retained.rooms[1].bytes - 12);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM room_message_attachment_chunks WHERE attachment_id=?"
+        )
+        .bind(&expiring.id)
+        .fetch_one(&store.pool)
+        .await?,
+        0
+    );
+    for kind in [
+        crate::room_file_content::RoomFileContent::Message,
+        crate::room_file_content::RoomFileContent::Connector,
+    ] {
+        kind.require_complete(&mut *store.pool.acquire().await?)
+            .await?;
+    }
     Ok(())
 }
 

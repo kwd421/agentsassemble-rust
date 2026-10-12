@@ -253,7 +253,7 @@ const MAX_ROW_BYTES: usize = 32 * 1024 * 1024;
 fn cell_limit(table: &str, column: &str, version: i64) -> usize {
     // These bounds already exist in every supported version's owned schema.
     match (table, column.trim_matches('"')) {
-        ("room_message_attachments", "content") if version >= 92 => {
+        ("room_message_attachments", "content") if version == 92 => {
             agentsassemble_domain::MAX_ROOM_FILE_BYTES
         }
         ("persona_assets", "card_json" | "thumbnail_png") => 10 * 1024 * 1024,
@@ -291,7 +291,7 @@ async fn require_row_bounds(
             // historical aggregate budget, including the original content charge.
             let cap = if table == "room_message_attachments"
                 && column.trim_matches('"') == "content"
-                && version >= 92
+                && version == 92
             {
                 agentsassemble_domain::MAX_ATTACHMENT_BYTES
             } else {
@@ -323,6 +323,9 @@ pub(crate) async fn reconstruct(
     if crate::archive_schema::version(source).await? != version {
         return Err(invalid());
     }
+    if version < 93 {
+        crate::room_file_content::RoomFileContent::attach_archive(source, output).await?;
+    }
     let tables = crate::archive_schema::tables(output).await?;
     let mut tx = output.begin().await?;
     for table in tables {
@@ -340,6 +343,9 @@ pub(crate) async fn reconstruct(
             }
             continue;
         }
+        if version >= 93 && table == "room_message_attachment_chunks" {
+            continue; // Copied through the byte owner after parent metadata.
+        }
         let fields = columns(source, &table)
             .await?
             .into_iter()
@@ -350,6 +356,11 @@ pub(crate) async fn reconstruct(
         require_row_bounds(source, &table, &fields, version).await?;
         let fields = if table == "room_attendee_invites" && !hostile {
             fields.replace("\"restore_parent_kind\"", "CASE WHEN parent_fingerprint IS NULL THEN restore_parent_kind ELSE (SELECT group_concat(kind) FROM (SELECT 'human' AS kind FROM human_room_sessions WHERE session_fingerprint=room_attendee_invites.parent_fingerprint UNION ALL SELECT 'operator' FROM operator_pairings WHERE session_fingerprint=room_attendee_invites.parent_fingerprint)) END AS restore_parent_kind")
+        } else {
+            fields
+        };
+        let fields = if table == "room_message_attachments" && version < 93 {
+            fields.replace("\"content\"", "length(content) AS archive_content_length")
         } else {
             fields
         };
@@ -368,6 +379,18 @@ pub(crate) async fn reconstruct(
         while let Some(row) = rows.try_next().await? {
             let mut values = row_values(&row)?;
             if !sanitize(&table, version, &mut values)? {
+                continue;
+            }
+            if table == "room_message_attachments" && version < 93 {
+                assets::validate_historical_file(&mut tx, &values, version).await?;
+                crate::room_file_content::RoomFileContent::copy_archive_file(
+                    &mut tx,
+                    values
+                        .get("attachment_id")
+                        .and_then(Cell::text)
+                        .ok_or_else(invalid)?,
+                )
+                .await?;
                 continue;
             }
             assets::validate(&table, &mut values, version).await?;
@@ -391,8 +414,19 @@ pub(crate) async fn reconstruct(
             insert.execute(&mut *tx).await?;
         }
     }
+    if version >= 93 {
+        crate::room_file_content::RoomFileContent::Message
+            .copy_all(source, &mut tx)
+            .await?;
+        assets::validate_chunked(&mut tx).await?;
+    }
     require_integrity(&mut tx).await?;
     tx.commit().await?;
+    if version < 93 {
+        sqlx::query("DETACH DATABASE room_file_archive")
+            .execute(output)
+            .await?;
+    }
     Ok(())
 }
 

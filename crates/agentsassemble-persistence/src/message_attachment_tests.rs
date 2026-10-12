@@ -66,7 +66,7 @@ async fn pending_message_upload_preserves_bytes_and_classifies_only_verified_ras
     assert_eq!(image.url, format!("/api/attachments/{}?view=1", image.id));
 
     let stored = sqlx::query(
-        "SELECT room_id, pending_owner_user_id, content, size, is_safe_image, created_at, expires_at FROM room_message_attachments WHERE attachment_id = ?",
+        "SELECT room_id, pending_owner_user_id, size, is_safe_image, created_at, expires_at FROM room_message_attachments WHERE attachment_id = ?",
     )
     .bind(&image.id)
     .fetch_one(&store.pool)
@@ -77,7 +77,21 @@ async fn pending_message_upload_preserves_bytes_and_classifies_only_verified_ras
         stored.get::<String, _>("pending_owner_user_id"),
         LOCAL_OPERATOR_USER_ID
     );
-    assert_eq!(stored.get::<Vec<u8>, _>("content"), png);
+    assert_eq!(
+        crate::room_file_content::RoomFileContent::Message
+            .collect(
+                &mut *store
+                    .pool
+                    .acquire()
+                    .await
+                    .unwrap_or_else(|e| panic!("connection: {e}")),
+                &image.id,
+                image.size
+            )
+            .await
+            .unwrap_or_else(|e| panic!("image bytes: {e}")),
+        png
+    );
     assert_eq!(stored.get::<i64, _>("is_safe_image"), 1);
     assert!(stored.get::<i64, _>("expires_at") > stored.get::<i64, _>("created_at"));
 
@@ -90,13 +104,18 @@ async fn pending_message_upload_preserves_bytes_and_classifies_only_verified_ras
     assert_eq!(download.content_type, "text/html");
     assert!(!download.is_image);
     assert_eq!(
-        sqlx::query_scalar::<_, Vec<u8>>(
-            "SELECT content FROM room_message_attachments WHERE attachment_id = ?",
-        )
-        .bind(&download.id)
-        .fetch_one(&store.pool)
-        .await
-        .unwrap_or_else(|error| panic!("read preserved download bytes: {error}")),
+        crate::room_file_content::RoomFileContent::Message
+            .collect(
+                &mut *store
+                    .pool
+                    .acquire()
+                    .await
+                    .unwrap_or_else(|e| panic!("connection: {e}")),
+                &download.id,
+                download.size
+            )
+            .await
+            .unwrap_or_else(|e| panic!("download bytes: {e}")),
         active
     );
 

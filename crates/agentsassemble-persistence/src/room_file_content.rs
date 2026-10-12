@@ -5,15 +5,15 @@ use sqlx::{Row, SqliteConnection};
 
 pub(crate) const PIECE_BYTES: usize = 64 * 1024;
 
-pub(crate) const MESSAGE_DDL: &str = "CREATE TABLE room_message_attachment_chunks (
-    attachment_id TEXT NOT NULL REFERENCES room_message_attachments(attachment_id) ON DELETE CASCADE,
+pub(crate) const MESSAGE_DDL: &str = "CREATE TABLE \"room_message_attachment_chunks\" (
+    attachment_id TEXT NOT NULL REFERENCES \"room_message_attachments\"(attachment_id) ON DELETE CASCADE,
     sequence INTEGER NOT NULL CHECK(sequence >= 0 AND sequence < 800),
     content BLOB NOT NULL CHECK(typeof(content)='blob' AND length(content) BETWEEN 1 AND 65536),
     PRIMARY KEY(attachment_id, sequence)
 ) WITHOUT ROWID";
 
-pub(crate) const CONNECTOR_DDL: &str = "CREATE TABLE room_connector_upload_chunks (
-    attachment_id TEXT NOT NULL REFERENCES room_connector_uploads(attachment_id) ON DELETE CASCADE,
+pub(crate) const CONNECTOR_DDL: &str = "CREATE TABLE \"room_connector_upload_chunks\" (
+    attachment_id TEXT NOT NULL REFERENCES \"room_connector_uploads\"(attachment_id) ON DELETE CASCADE,
     sequence INTEGER NOT NULL CHECK(sequence >= 0 AND sequence < 800),
     content BLOB NOT NULL CHECK(typeof(content)='blob' AND length(content) BETWEEN 1 AND 65536),
     PRIMARY KEY(attachment_id, sequence)
@@ -88,7 +88,7 @@ impl RoomFileContent {
         let sequence = i64::try_from(sequence).map_err(|_| invalid_attachment_state())?;
         let row = sqlx::query(sqlx::AssertSqlSafe(format!(
             "SELECT substr(chunk.content,1,{PIECE_BYTES}) AS content,
-             length(chunk.content)=min({PIECE_BYTES},parent.size-?*{PIECE_BYTES}) AS valid
+             typeof(chunk.content)='blob' AND length(chunk.content)=min({PIECE_BYTES},parent.size-?*{PIECE_BYTES}) AS valid
              FROM {} AS chunk JOIN {} AS parent USING(attachment_id)
              WHERE attachment_id=? AND sequence=?",
             self.chunks(),
@@ -100,10 +100,10 @@ impl RoomFileContent {
         .fetch_optional(connection)
         .await?
         .ok_or_else(invalid_attachment_state)?;
-        if !row.get::<bool, _>("valid") {
+        if !row.try_get::<bool, _>("valid")? {
             return Err(invalid_attachment_state());
         }
-        Ok(row.get("content"))
+        Ok(row.try_get("content")?)
     }
 
     /// The existing whole-file boundary may assemble pieces; streaming owners
@@ -142,17 +142,92 @@ impl RoomFileContent {
         connection: &mut SqliteConnection,
     ) -> Result<(), PersistenceError> {
         let invalid: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT EXISTS(SELECT 1 FROM {} AS parent WHERE
+            "SELECT EXISTS(SELECT 1 FROM {} AS chunk LEFT JOIN {} AS parent USING(attachment_id) WHERE parent.attachment_id IS NULL)
+             OR EXISTS(SELECT 1 FROM {} AS parent WHERE
              size!=(SELECT coalesce(sum(length(content)),0) FROM {} WHERE attachment_id=parent.attachment_id)
              OR (size+{PIECE_BYTES}-1)/{PIECE_BYTES}!=(SELECT count(*) FROM {} WHERE attachment_id=parent.attachment_id)
              OR EXISTS(SELECT 1 FROM {} WHERE attachment_id=parent.attachment_id
                AND length(content)!=min({PIECE_BYTES},size-sequence*{PIECE_BYTES})))",
-            self.parent(), self.chunks(), self.chunks(), self.chunks()
+            self.chunks(), self.parent(), self.parent(), self.chunks(), self.chunks(), self.chunks()
         )))
         .fetch_one(connection).await?;
         if invalid {
             return Err(invalid_attachment_state());
         }
+        Ok(())
+    }
+
+    /// Backup/reconstruction use the same piece boundary, after parent metadata
+    /// has crossed its typed policy. Keyset iteration retains only one file ID.
+    pub(crate) async fn copy_all(
+        self,
+        source: &mut SqliteConnection,
+        output: &mut SqliteConnection,
+    ) -> Result<(), PersistenceError> {
+        self.require_complete(source).await?;
+        let mut previous = String::new();
+        loop {
+            let row = sqlx::query(sqlx::AssertSqlSafe(format!(
+                "SELECT attachment_id,size FROM {} WHERE attachment_id>? ORDER BY attachment_id LIMIT 1",
+                self.parent()
+            )))
+            .bind(&previous).fetch_optional(&mut *source).await?;
+            let Some(row) = row else { break };
+            let id: String = row.get("attachment_id");
+            let size = usize::try_from(row.get::<i64, _>("size"))
+                .map_err(|_| invalid_attachment_state())?;
+            for sequence in 0..size.div_ceil(PIECE_BYTES) {
+                let bytes = self.read(source, &id, sequence).await?;
+                self.append(output, &id, sequence, &bytes).await?;
+            }
+            previous = id;
+        }
+        Ok(())
+    }
+
+    /// Historical archive decoding only: attach the already catalog-checked,
+    /// read-only source to the existing reconstruction connection. No new driver
+    /// or runtime connection; the target is private, fresh historical staging.
+    pub(crate) async fn attach_archive(
+        source: &mut SqliteConnection,
+        output: &mut SqliteConnection,
+    ) -> Result<(), PersistenceError> {
+        let path: String =
+            sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name='main'")
+                .fetch_one(source)
+                .await?;
+        let mut uri = url::Url::from_file_path(path).map_err(|()| invalid_attachment_state())?;
+        uri.set_query(Some("mode=ro"));
+        sqlx::query("ATTACH DATABASE ? AS room_file_archive")
+            .bind(uri.as_str())
+            .execute(output)
+            .await?;
+        Ok(())
+    }
+
+    pub(crate) async fn read_archive_piece(
+        connection: &mut SqliteConnection,
+        id: &str,
+        sequence: usize,
+    ) -> Result<Vec<u8>, PersistenceError> {
+        let bytes: Vec<u8> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT substr(content,?*{PIECE_BYTES}+1,{PIECE_BYTES}) FROM room_file_archive.room_message_attachments WHERE attachment_id=?"
+        )))
+        .bind(sequence as i64).bind(id).fetch_one(connection).await?;
+        Ok(bytes)
+    }
+
+    /// Keep historical content inside SQLite until its normal staged migration.
+    /// Metadata and raster policy have already crossed archive validation. Never
+    /// bind a whole old BLOB through SQLx, or concatenate pieces into a BLOB.
+    pub(crate) async fn copy_archive_file(
+        connection: &mut SqliteConnection,
+        id: &str,
+    ) -> Result<(), PersistenceError> {
+        sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,event_seq,filename,content_type,content,size,is_safe_image,created_at,state,expires_at)
+            SELECT attachment_id,room_id,pending_owner_user_id,event_seq,filename,content_type,content,size,is_safe_image,created_at,state,expires_at
+            FROM room_file_archive.room_message_attachments WHERE attachment_id=?")
+            .bind(id).execute(connection).await?;
         Ok(())
     }
 

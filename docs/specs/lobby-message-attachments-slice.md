@@ -14,8 +14,8 @@ Persistence owns one bounded content interface for all room message attachments
 and connector uploads. SQLx 0.9 has no approved safe incremental-BLOB route on
 the existing connection (settled owner decision); schema 93 uses child chunk rows
 for every file, with no retained whole-BLOB representation. Each storage read or
-write step holds at most one 64 KiB piece, independent of file size; the final
-piece is shorter. This bounds driver copies while keeping a 50 MiB file to 800
+write step transfers one piece of at most 64 KiB; SQLx transient copies are fixed
+multiples of that bound, independent of file size. The final piece is shorter. This bounds driver copies while keeping a 50 MiB file to 800
 rows. No spool, second runtime connection/driver, unsafe code, or transaction
 across network reception is introduced. A piece append is one SQL statement;
 the existing upload boundary still inserts a completed file in its atomic local
@@ -37,7 +37,11 @@ SQLite and verify every total length before committing. Failure rolls back the
 conversion and version update. The frozen archive catalog retains 87–92, with
 staged upgrade before Prepared and truthful historical-field provenance. New
 archives use chunk rows and need no >16 MiB attachment-cell exception; the outer
-envelope and early too-new-manifest refusal remain unchanged. As with previous
+envelope and early too-new-manifest refusal remain unchanged. Historical file
+cells copy by named column inside SQLite into the existing historical staging
+schema, then the normal staged migration converts them; SQLx never fetches or
+binds an entire historical file cell. Existing raster validation alone assembles
+compressed input from piece reads under its current decoder budget. As with previous
 schema bumps, newer archives require an equally new or newer receiving app.
 
 Acceptance: byte-exact piece and whole reads at non-aligned sizes and 50 MiB;
@@ -45,6 +49,15 @@ genuine schema-92 conversion and hostile-shape rollback; 87–92 archives restor
 into current storage; deletion/expiry leaving no pieces; unchanged quota races
 and existing upload -> bind -> download flows. No wire, route, client, UI,
 download-budget, upload-protocol, message-count or raster-policy change.
+
+Verified for this slice: `cargo test -p agentsassemble-persistence` (512 passed,
+one ignored), server integration filters `message_attachments_boundary` (4),
+`connector_boundary` (22), and `server_move_process` (1), plus `cargo fmt --all`
+and `make architecture-check`. Coverage includes piece/whole equality at 50 MiB,
+genuine schema-92 hostile-shape/rollback cases, 87–92 staged restore including
+rasters, quota races, deletion/expiry, and real loopback HTTP/native move flows.
+No transfer-throughput, peak-RSS, writer-occupancy or packaged-UI measurement was
+performed; whole-file/raster boundaries remain for the subsequent slices.
 
 ## Approved target contract after Phase 0B
 

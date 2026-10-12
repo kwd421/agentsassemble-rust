@@ -28,8 +28,15 @@ pub(crate) async fn archive(
             .map(|c| format!("\"{}\"", c.0))
             .collect::<Vec<_>>()
             .join(",");
+        // Historical fixtures contain one small piece; use the actual old
+        // table DDL and named columns, not a relabeled current database.
+        let selected = if version < 93 && table == "room_message_attachments" {
+            fields.replace("\"content\"", "(SELECT content FROM seed.room_message_attachment_chunks WHERE attachment_id=seed.room_message_attachments.attachment_id AND sequence=0) AS content")
+        } else {
+            fields.clone()
+        };
         sqlx::query(sqlx::AssertSqlSafe(format!(
-            "INSERT INTO main.\"{table}\"({fields}) SELECT {fields} FROM seed.\"{table}\""
+            "INSERT INTO main.\"{table}\"({fields}) SELECT {selected} FROM seed.\"{table}\""
         )))
         .execute(&mut target)
         .await?;
@@ -106,8 +113,15 @@ async fn product_seed(
         }
     }
     let bytes = b"historical attachment\0\xff\x01";
-    sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,filename,content_type,content,size,is_safe_image,created_at,state,expires_at) SELECT ?, 'general',user_id,'history.bin','application/octet-stream',?,?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1")
-        .bind(format!("ma_{}", "a".repeat(32))).bind(bytes.as_slice()).bind(i64::try_from(bytes.len())?).execute(&store.pool).await?;
+    sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,filename,content_type,size,is_safe_image,created_at,state,expires_at) SELECT ?, 'general',user_id,'history.bin','application/octet-stream',?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1")
+        .bind(format!("ma_{}", "a".repeat(32))).bind(i64::try_from(bytes.len())?).execute(&store.pool).await?;
+    crate::room_file_content::RoomFileContent::Message
+        .write(
+            &mut *store.pool.acquire().await?,
+            &format!("ma_{}", "a".repeat(32)),
+            bytes,
+        )
+        .await?;
     let principal = agentsassemble_domain::AuthenticatedPrincipal {
         principal_id: agentsassemble_domain::LOCAL_OPERATOR_USER_ID.into(),
         participant_id: agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID.into(),
@@ -121,6 +135,13 @@ async fn product_seed(
             agentsassemble_domain::InviteScope::ReadWrite,
         ),
     };
+    // Include a real pending raster in every genuine historical catalog fixture:
+    // old archives validate through piece reads, new archives through chunk rows.
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::new_rgba8(2, 2).write_to(&mut png, image::ImageFormat::Png)?;
+    store
+        .store_message_attachment(&principal, "pending.png", "image/png", png.into_inner())
+        .await?;
     store.execute_message(&principal, &uuid::Uuid::new_v4().to_string(), "message.send",
         &serde_json::json!({"content":"Historical searchable message", "attachment_ids":[format!("ma_{}", "a".repeat(32))]})).await?;
     let seed = directory.join("seed.sqlite");
@@ -168,12 +189,41 @@ pub(crate) async fn assert_product_rows(
         let before = sqlx::query(sqlx::AssertSqlSafe(query.as_str()))
             .fetch_all(&mut source)
             .await?;
-        let after = sqlx::query(sqlx::AssertSqlSafe(query.as_str()))
+        let chunked = table == "room_message_attachments"
+            && crate::archive_schema::version(&mut source).await? < 93
+            && crate::archive_schema::version(&mut target).await? >= 93;
+        let target_query = if chunked {
+            query.replace("\"content\",", "")
+        } else {
+            query.clone()
+        };
+        let after = sqlx::query(sqlx::AssertSqlSafe(target_query.as_str()))
             .fetch_all(&mut target)
             .await?;
         assert_eq!(before.len(), after.len(), "{table} count");
         for (before, after) in before.iter().zip(&after) {
-            assert_eq!(row_values(before)?, row_values(after)?, "{table}");
+            let mut before = row_values(before)?;
+            let after = row_values(after)?;
+            if chunked {
+                let bytes = before.remove("content").ok_or("content")?;
+                let id = before
+                    .get("attachment_id")
+                    .and_then(Cell::text)
+                    .ok_or("id")?;
+                let size = match before.get("size") {
+                    Some(Cell::Integer(size)) => *size as usize,
+                    _ => return Err("size".into()),
+                };
+                assert_eq!(
+                    bytes,
+                    Cell::Blob(
+                        crate::room_file_content::RoomFileContent::Message
+                            .collect(&mut target, id, size)
+                            .await?
+                    )
+                );
+            }
+            assert_eq!(before, after, "{table}");
         }
     }
     source.close().await?;
@@ -222,6 +272,7 @@ async fn historical_tampering_is_rejected_before_prepared() -> Result<(), Box<dy
         "DROP INDEX room_message_attachments_pending_expiry_idx; CREATE INDEX room_message_attachments_pending_expiry_idx ON room_message_attachments(size)",
         "INSERT INTO central_owner_grants VALUES(zeroblob(32),zeroblob(32),'https://archive.example',1,9999999999)",
         "UPDATE user_profiles SET profile_json=json_set(profile_json,'$.unknown',1)",
+        "UPDATE room_message_attachments SET content=x'ffd80000',size=4 WHERE is_safe_image=1",
         "UPDATE rooms SET settings_json=json_set(settings_json,'$.conversation_mode','free_access')",
         "UPDATE room_create_results SET result_json=json_object('event',json_set((SELECT event_json FROM room_events ORDER BY seq LIMIT 1),'$.settings',json((SELECT settings_json FROM rooms LIMIT 1)),'$.settings.conversation_mode','free_access'))",
     ] {

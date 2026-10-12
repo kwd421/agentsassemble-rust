@@ -29,7 +29,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             .await?;
     if matches!(
         version.as_str(),
-        "83" | "84" | "85" | "86" | "87" | "88" | "89" | "90" | "91" | "92"
+        "83" | "84" | "85" | "86" | "87" | "88" | "89" | "90" | "91" | "92" | "93"
     ) {
         return Ok(());
     }

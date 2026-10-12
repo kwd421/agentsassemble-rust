@@ -8,8 +8,7 @@ pub(crate) const DDL: &str = "CREATE TABLE \"room_connector_uploads\" (
     attachment_id TEXT PRIMARY KEY,
     room_id TEXT NOT NULL, participant_id TEXT NOT NULL,
     filename TEXT NOT NULL, content_type TEXT NOT NULL,
-    content BLOB NOT NULL CHECK(typeof(content) = 'blob'),
-    size INTEGER NOT NULL CHECK(size > 0 AND size <= 52428800 AND length(content) = size),
+    size INTEGER NOT NULL CHECK(size > 0 AND size <= 52428800),
     is_safe_image INTEGER NOT NULL CHECK(is_safe_image IN (0,1)),
     created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL CHECK(expires_at > created_at),
     FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE
@@ -23,11 +22,14 @@ pub(super) async fn store(
     created_at: i64,
     expires_at: i64,
 ) -> Result<MessageAttachmentMetadata, PersistenceError> {
-    sqlx::query("INSERT INTO room_connector_uploads(attachment_id, room_id, participant_id, filename, content_type, content, size, is_safe_image, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    sqlx::query("INSERT INTO room_connector_uploads(attachment_id, room_id, participant_id, filename, content_type, size, is_safe_image, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(id).bind(&principal.room_id).bind(&principal.participant_id)
-        .bind(&prepared.filename).bind(&prepared.content_type).bind(prepared.content)
+        .bind(&prepared.filename).bind(&prepared.content_type)
         .bind(prepared.size).bind(prepared.is_safe_image).bind(created_at).bind(expires_at)
         .execute(&mut **tx).await?;
+    crate::room_file_content::RoomFileContent::Connector
+        .write(tx, id, &prepared.content)
+        .await?;
     Ok(metadata(
         id.to_owned(),
         prepared.filename,
@@ -67,12 +69,13 @@ pub(super) async fn bind(
     now: i64,
 ) -> Result<(), PersistenceError> {
     for id in ids {
-        let result = sqlx::query("INSERT INTO room_message_attachments(attachment_id, room_id, pending_owner_user_id, event_seq, filename, content_type, content, size, is_safe_image, created_at, state, expires_at) SELECT attachment_id, room_id, NULL, ?, filename, content_type, content, size, is_safe_image, created_at, 'bound', NULL FROM room_connector_uploads WHERE attachment_id = ? AND room_id = ? AND participant_id = ? AND expires_at > ?")
+        let result = sqlx::query("INSERT INTO room_message_attachments(attachment_id, room_id, pending_owner_user_id, event_seq, filename, content_type, size, is_safe_image, created_at, state, expires_at) SELECT attachment_id, room_id, NULL, ?, filename, content_type, size, is_safe_image, created_at, 'bound', NULL FROM room_connector_uploads WHERE attachment_id = ? AND room_id = ? AND participant_id = ? AND expires_at > ?")
             .bind(event_seq).bind(id).bind(&principal.room_id).bind(&principal.participant_id).bind(now)
             .execute(&mut **tx).await?;
         if result.rows_affected() != 1 {
             return Err(attachment_unavailable());
         }
+        crate::room_file_content::RoomFileContent::publish_connector(tx, id).await?;
         sqlx::query("DELETE FROM room_connector_uploads WHERE attachment_id = ?")
             .bind(id)
             .execute(&mut **tx)

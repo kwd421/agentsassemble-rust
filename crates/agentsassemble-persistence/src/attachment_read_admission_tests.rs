@@ -33,7 +33,7 @@ impl Visit for BlobSelection<'_> {
         if field.name() == "db.statement"
             && sql
                 .trim_start()
-                .starts_with("SELECT content FROM room_message_attachments ")
+                .starts_with("SELECT substr(chunk.content,1,65536)")
         {
             self.0.fetch_add(1, Ordering::SeqCst);
         }
@@ -144,7 +144,7 @@ async fn download_refusal_and_oversized_ai_reads_never_select_the_blob()
     assert!(read.content.iter().all(|byte| *byte == 42));
     assert_eq!(
         queries.load(Ordering::SeqCst),
-        1,
+        800,
         "successful read proves driver probe is live"
     );
     Ok(())

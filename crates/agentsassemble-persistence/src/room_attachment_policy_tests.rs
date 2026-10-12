@@ -101,13 +101,27 @@ async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> Te
         "expected_revision": public_settings(&RoomSettings::defaults("General"))?.settings_revision,
         "attachment_storage_limit_bytes": 524288000,
     })).await?;
-    // Real retained BLOBs at the already supported schema ceiling. Nine pending
+    // Retained file metadata at the already supported schema ceiling. Nine pending
     // message files plus one connector file leave exactly one byte of room quota.
     for index in 0..9 {
-        sqlx::query("INSERT INTO room_message_attachments SELECT 'ma_'||printf('%032x',?),room_id,user_id,NULL,'retained.bin','application/octet-stream',zeroblob(52428800),52428800,0,1,'pending',9223372036854775807 FROM rooms CROSS JOIN user_profiles WHERE room_id='general' LIMIT 1")
+        sqlx::query("INSERT INTO room_message_attachments SELECT 'ma_'||printf('%032x',?),room_id,user_id,NULL,'retained.bin','application/octet-stream',52428800,0,1,'pending',9223372036854775807 FROM rooms CROSS JOIN user_profiles WHERE room_id='general' LIMIT 1")
             .bind(index).execute(&store.pool).await?;
+        seed_pieces(
+            &store,
+            crate::room_file_content::RoomFileContent::Message,
+            &format!("ma_{index:032x}"),
+            52428800,
+        )
+        .await?;
     }
-    sqlx::query("INSERT INTO room_connector_uploads SELECT 'ma_'||printf('%032x',9),room_id,participant_id,'connector.bin','application/octet-stream',zeroblob(52428799),52428799,0,1,9223372036854775807 FROM participants WHERE room_id='general' LIMIT 1").execute(&store.pool).await?;
+    sqlx::query("INSERT INTO room_connector_uploads SELECT 'ma_'||printf('%032x',9),room_id,participant_id,'connector.bin','application/octet-stream',52428799,0,1,9223372036854775807 FROM participants WHERE room_id='general' LIMIT 1").execute(&store.pool).await?;
+    seed_pieces(
+        &store,
+        crate::room_file_content::RoomFileContent::Connector,
+        &format!("ma_{:032x}", 9),
+        52428799,
+    )
+    .await?;
     use sha2::{Digest, Sha256};
     let authority =
         crate::RoomManagerAuthority::Local(crate::room_user_identity::test_authority(&store).await);
@@ -191,5 +205,21 @@ async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> Te
         .await?;
     assert_eq!(read.0.content, [42]);
     store.close().await?;
+    Ok(())
+}
+
+async fn seed_pieces(
+    store: &SqliteStore,
+    kind: crate::room_file_content::RoomFileContent,
+    id: &str,
+    size: usize,
+) -> TestResult {
+    let mut tx = store.pool.begin().await?;
+    let piece = vec![0; crate::room_file_content::PIECE_BYTES];
+    for sequence in 0..size.div_ceil(piece.len()) {
+        let length = (size - sequence * piece.len()).min(piece.len());
+        kind.append(&mut tx, id, sequence, &piece[..length]).await?;
+    }
+    tx.commit().await?;
     Ok(())
 }

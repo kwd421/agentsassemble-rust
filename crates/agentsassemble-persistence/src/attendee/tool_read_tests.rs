@@ -70,8 +70,22 @@ async fn attendee_attachment_read_is_bound_to_prestart_input_and_current_connect
     assert_eq!(read.metadata, attachment);
     assert_eq!(read.content, b"exact external input");
     // A valid grandfathered 50 MiB file must fail before content/base64 is loaded.
-    sqlx::query("UPDATE room_message_attachments SET content=zeroblob(52428800),size=52428800 WHERE attachment_id=?")
-        .bind(&attachment.id).execute(&store.pool).await?;
+    sqlx::query("UPDATE room_message_attachments SET size=52428800 WHERE attachment_id=?")
+        .bind(&attachment.id)
+        .execute(&store.pool)
+        .await?;
+    sqlx::query("DELETE FROM room_message_attachment_chunks WHERE attachment_id=?")
+        .bind(&attachment.id)
+        .execute(&store.pool)
+        .await?;
+    let mut tx = store.pool.begin().await?;
+    let piece = vec![0; crate::room_file_content::PIECE_BYTES];
+    for sequence in 0..agentsassemble_domain::MAX_ROOM_FILE_BYTES.div_ceil(piece.len()) {
+        crate::room_file_content::RoomFileContent::Message
+            .append(&mut tx, &attachment.id, sequence, &piece)
+            .await?;
+    }
+    tx.commit().await?;
     sqlx::query("UPDATE room_events SET event_json=json_set(event_json,'$.attachments[0].size',52428800) WHERE room_id='general' AND seq=(SELECT event_seq FROM room_message_attachments WHERE attachment_id=?)")
         .bind(&attachment.id).execute(&store.pool).await?;
     let refusal = store

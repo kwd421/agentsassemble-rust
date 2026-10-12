@@ -135,7 +135,10 @@ pub(crate) async fn require_schema(
             .fetch_one(&mut **tx)
             .await?;
     // v88/v89 add companion provenance and mention delivery; removal retains the v87 protocol.
-    if !matches!(version.as_str(), "87" | "88" | "89" | "90" | "91" | "92") {
+    if !matches!(
+        version.as_str(),
+        "87" | "88" | "89" | "90" | "91" | "92" | "93"
+    ) {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }
     Ok(())
@@ -221,7 +224,10 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
         sqlx::query("UPDATE runtime_metadata SET value='87' WHERE key='schema_version'")
             .execute(&mut *tx)
             .await?;
-    } else if !matches!(version.as_str(), "87" | "88" | "89" | "90" | "91" | "92") {
+    } else if !matches!(
+        version.as_str(),
+        "87" | "88" | "89" | "90" | "91" | "92" | "93"
+    ) {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }
     tx.commit().await?;

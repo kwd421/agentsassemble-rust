@@ -180,6 +180,7 @@ pub use member_admission::MemberAdmission;
 mod provider_request_resolution_tests;
 #[cfg(test)]
 mod provider_request_tests;
+mod room_file_chunk_schema;
 mod room_file_content;
 mod room_file_schema;
 mod room_runtime_cleanup;

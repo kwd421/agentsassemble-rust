@@ -26,6 +26,34 @@ use crate::{
     turn_authority::active_turn_authority,
 };
 
+pub(crate) const DDL: &str = concat!(
+    "CREATE TABLE IF NOT EXISTS \"room_message_attachments\" (",
+    "attachment_id TEXT PRIMARY KEY CHECK(",
+    "typeof(attachment_id) = 'text' AND length(CAST(attachment_id AS BLOB)) = 35 ",
+    "AND attachment_id GLOB 'ma_[0-9a-f][0-9a-f][0-9a-f][0-9a-f]",
+    "[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]",
+    "[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]",
+    "[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]",
+    "[0-9a-f][0-9a-f][0-9a-f][0-9a-f]'), ",
+    "room_id TEXT NOT NULL, ",
+    "pending_owner_user_id TEXT, ",
+    "event_seq INTEGER CHECK(event_seq IS NULL OR event_seq > 0), ",
+    "filename TEXT NOT NULL, ",
+    "content_type TEXT NOT NULL, ",
+    "size INTEGER NOT NULL CHECK(size > 0 AND size <= 52428800), ",
+    "is_safe_image INTEGER NOT NULL CHECK(is_safe_image IN (0, 1)), ",
+    "created_at INTEGER NOT NULL CHECK(created_at > 0), ",
+    "state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), ",
+    "expires_at INTEGER, ",
+    "CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL ",
+    "AND event_seq IS NULL AND expires_at IS NOT NULL AND expires_at > created_at) OR ",
+    "(state = 'bound' AND pending_owner_user_id IS NULL ",
+    "AND event_seq IS NOT NULL AND expires_at IS NULL)), ",
+    "FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, ",
+    "FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE, ",
+    "FOREIGN KEY(room_id, event_seq) REFERENCES room_events(room_id, seq) ON DELETE CASCADE)",
+);
+
 const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
 #[path = "connector_attachments.rs"]
 pub(crate) mod connector;
@@ -552,7 +580,7 @@ async fn read_bound_message_attachment<T>(
     admit: impl FnOnce(usize) -> Result<T, PersistenceError>,
 ) -> Result<(MessageAttachment, T), PersistenceError> {
     let row = sqlx::query(
-        "SELECT attachment.event_seq, attachment.filename, attachment.content_type, attachment.size, attachment.is_safe_image, length(attachment.content) AS content_length, event.event_json FROM room_message_attachments AS attachment INNER JOIN room_events AS event ON event.room_id = attachment.room_id AND event.seq = attachment.event_seq WHERE attachment.attachment_id = ? AND attachment.room_id = ? AND attachment.state = 'bound' AND attachment.pending_owner_user_id IS NULL AND attachment.expires_at IS NULL",
+        "SELECT attachment.event_seq, attachment.filename, attachment.content_type, attachment.size, attachment.is_safe_image, event.event_json FROM room_message_attachments AS attachment INNER JOIN room_events AS event ON event.room_id = attachment.room_id AND event.seq = attachment.event_seq WHERE attachment.attachment_id = ? AND attachment.room_id = ? AND attachment.state = 'bound' AND attachment.pending_owner_user_id IS NULL AND attachment.expires_at IS NULL",
     )
     .bind(attachment_id)
     .bind(room_id)
@@ -580,17 +608,9 @@ async fn read_bound_message_attachment<T>(
         ));
     }
     let lease = admit(stored.size)?;
-    let content = sqlx::query_scalar::<_, Vec<u8>>(
-        "SELECT content FROM room_message_attachments WHERE attachment_id = ? AND room_id = ? AND event_seq = ? AND state = 'bound'",
-    )
-    .bind(attachment_id)
-    .bind(room_id)
-    .bind(event_seq)
-    .fetch_one(&mut **transaction)
-    .await?;
-    if content.len() != stored.size {
-        return Err(invalid_attachment_state());
-    }
+    let content = crate::room_file_content::RoomFileContent::Message
+        .collect(transaction, attachment_id, stored.size)
+        .await?;
     Ok((
         MessageAttachment {
             metadata: stored,
@@ -606,9 +626,6 @@ fn stored_metadata(
 ) -> Result<MessageAttachmentMetadata, PersistenceError> {
     let size =
         usize::try_from(row.get::<i64, _>("size")).map_err(|_| invalid_attachment_state())?;
-    if row.get::<i64, _>("content_length") != i64::try_from(size).unwrap_or(i64::MAX) {
-        return Err(invalid_attachment_state());
-    }
     let metadata = metadata(
         attachment_id.to_owned(),
         row.get("filename"),
@@ -725,20 +742,22 @@ async fn store_pending_in_transaction(
         .await;
     }
     sqlx::query(
-        "INSERT INTO room_message_attachments(attachment_id, room_id, pending_owner_user_id, event_seq, filename, content_type, content, size, is_safe_image, created_at, state, expires_at) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+        "INSERT INTO room_message_attachments(attachment_id, room_id, pending_owner_user_id, event_seq, filename, content_type, size, is_safe_image, created_at, state, expires_at) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, 'pending', ?)",
     )
     .bind(&attachment_id)
     .bind(&principal.room_id)
     .bind(&principal.principal_id)
     .bind(&prepared.filename)
     .bind(&prepared.content_type)
-    .bind(prepared.content)
     .bind(prepared.size)
     .bind(prepared.is_safe_image)
     .bind(created_at)
     .bind(expires_at)
     .execute(&mut **transaction)
     .await?;
+    crate::room_file_content::RoomFileContent::Message
+        .write(transaction, &attachment_id, &prepared.content)
+        .await?;
     Ok(metadata(
         attachment_id,
         prepared.filename,

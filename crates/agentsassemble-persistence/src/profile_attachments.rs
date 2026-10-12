@@ -594,7 +594,7 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("seed expired prejoin avatars: {error}"));
         sqlx::query(
-            "WITH digits(value) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15)), sequence(value) AS (SELECT first.value * 256 + second.value * 16 + third.value FROM digits AS first CROSS JOIN digits AS second CROSS JOIN digits AS third) INSERT INTO room_message_attachments(attachment_id, room_id, pending_owner_user_id, event_seq, filename, content_type, content, size, is_safe_image, created_at, state, expires_at) SELECT printf('ma_%032x', value), 'general', ?, NULL, 'stored.bin', 'application/octet-stream', X'00', 1, 0, 1, 'pending', 2 FROM sequence WHERE value < ?",
+            "WITH digits(value) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15)), sequence(value) AS (SELECT first.value * 256 + second.value * 16 + third.value FROM digits AS first CROSS JOIN digits AS second CROSS JOIN digits AS third) INSERT INTO room_message_attachments(attachment_id, room_id, pending_owner_user_id, event_seq, filename, content_type, size, is_safe_image, created_at, state, expires_at) SELECT printf('ma_%032x', value), 'general', ?, NULL, 'stored.bin', 'application/octet-stream', 1, 0, 1, 'pending', 2 FROM sequence WHERE value < ?",
         )
         .bind(&principal.principal_id)
         .bind(foreign_rows)

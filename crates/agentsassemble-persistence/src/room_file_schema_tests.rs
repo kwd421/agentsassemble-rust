@@ -1,4 +1,4 @@
-use crate::{ServerOwnerAuthority, SqliteStore, backup_database, schema_version};
+use crate::{ServerOwnerAuthority, SqliteStore, backup_database};
 use sqlx::{
     Connection, Row, SqliteConnection,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
@@ -37,7 +37,7 @@ async fn rebuild_preserves_rows_custody_schema_and_retries_after_failure() -> Te
             "CREATE VIEW room_message_attachments_v92 AS SELECT * FROM room_message_attachments"
         };
         sqlx::query(sqlx::AssertSqlSafe(ddl)).execute(&pool).await?;
-        assert!(schema_version::upgrade_schema(&pool).await.is_err());
+        assert!(super::upgrade(&pool).await.is_err());
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "DROP {kind} room_message_attachments_v92"
         )))
@@ -47,7 +47,7 @@ async fn rebuild_preserves_rows_custody_schema_and_retries_after_failure() -> Te
     sqlx::query("ALTER TABLE room_connector_uploads ADD COLUMN hostile TEXT")
         .execute(&pool)
         .await?;
-    assert!(schema_version::upgrade_schema(&pool).await.is_err());
+    assert!(super::upgrade(&pool).await.is_err());
     sqlx::query("ALTER TABLE room_connector_uploads DROP COLUMN hostile")
         .execute(&pool)
         .await?;
@@ -71,7 +71,7 @@ async fn rebuild_preserves_rows_custody_schema_and_retries_after_failure() -> Te
     )))
     .execute(&pool)
     .await?;
-    assert!(schema_version::upgrade_schema(&pool).await.is_err());
+    assert!(super::upgrade(&pool).await.is_err());
     sqlx::query("DROP TABLE room_connector_uploads")
         .execute(&pool)
         .await?;
@@ -88,7 +88,7 @@ async fn rebuild_preserves_rows_custody_schema_and_retries_after_failure() -> Te
         .await?;
     // Abort at the final version write, after both originals have been dropped.
     sqlx::query("CREATE TRIGGER fail_v92 BEFORE UPDATE OF value ON runtime_metadata WHEN NEW.key='schema_version' AND NEW.value='92' BEGIN SELECT RAISE(ABORT,'injected migration failure'); END").execute(&pool).await?;
-    assert!(schema_version::upgrade_schema(&pool).await.is_err());
+    assert!(super::upgrade(&pool).await.is_err());
     assert_eq!(
         sqlx::query_scalar::<_, String>(
             "SELECT value FROM runtime_metadata WHERE key='schema_version'"
@@ -104,10 +104,11 @@ async fn rebuild_preserves_rows_custody_schema_and_retries_after_failure() -> Te
             .await?;
     assert_eq!(before, after);
     assert_all_file_rows(&pool, &snapshot).await?;
-    schema_version::upgrade_schema(&pool).await?;
+    super::upgrade(&pool).await?;
     assert_all_file_rows(&pool, &snapshot).await?;
     let mut upgraded = pool.acquire().await?;
-    let mut fresh = backup_database::create_payload(&directory.path().join("fresh.sqlite")).await?;
+    let mut fresh =
+        backup_database::create_version_payload(&directory.path().join("fresh.sqlite"), 92).await?;
     backup_database::require_schema(&mut upgraded, &mut fresh, true).await?;
     backup_database::require_integrity(&mut upgraded).await?;
     // Custody remains enforced after replacement, including parent cascades.
@@ -172,9 +173,16 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
     let bytes: Vec<u8> = (0..agentsassemble_domain::MAX_ROOM_FILE_BYTES)
         .map(|i| (i % 251) as u8)
         .collect();
-    sqlx::query("INSERT INTO room_message_attachments SELECT 'ma_'||printf('%032x',1),'general',user_id,NULL,'large.bin','application/octet-stream',?,?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1").bind(&bytes).bind(bytes.len() as i64).execute(&store.pool).await?;
+    sqlx::query("INSERT INTO room_message_attachments SELECT 'ma_'||printf('%032x',1),'general',user_id,NULL,'large.bin','application/octet-stream',?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1").bind(bytes.len() as i64).execute(&store.pool).await?;
+    crate::room_file_content::RoomFileContent::Message
+        .write(
+            &mut *store.pool.acquire().await?,
+            "ma_00000000000000000000000000000001",
+            &bytes,
+        )
+        .await?;
     assert!(
-        sqlx::query("UPDATE room_message_attachments SET content=zeroblob(52428801),size=52428801")
+        sqlx::query("UPDATE room_message_attachments SET size=52428801")
             .execute(&store.pool)
             .await
             .is_err()
@@ -197,7 +205,7 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
         .await?;
     source.close().await?;
     let manifest = crate::backup_codec::BackupManifest {
-        schema_version: 92,
+        schema_version: crate::schema_version::CURRENT_SCHEMA_VERSION,
         server_id,
         server_name: "Owner".into(),
         issuer: "https://central.example".into(),
@@ -233,13 +241,18 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
     );
     let restored = job.stage().join("runtime.sqlite3");
     let mut connection = backup_database::open_input(&restored).await?;
-    let row = sqlx::query("SELECT content,size FROM room_message_attachments")
+    let row = sqlx::query("SELECT attachment_id,size FROM room_message_attachments")
         .fetch_one(&mut connection)
         .await?;
-    assert_eq!(row.get::<Vec<u8>, _>("content"), bytes);
+    assert_eq!(
+        crate::room_file_content::RoomFileContent::Message
+            .collect(&mut connection, row.get("attachment_id"), bytes.len())
+            .await?,
+        bytes
+    );
     assert_eq!(row.get::<i64, _>("size"), 52428800);
     connection.close().await?;
-    // The exception is content-only, versioned, and does not admit wide rows.
+    // New chunk archives retain the ordinary cell and aggregate metadata limits.
     let mut hostile =
         SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&payload)).await?;
     sqlx::query("UPDATE room_message_attachments SET filename=printf('%.*c',12000000,'x'),content_type=printf('%.*c',12000000,'x')").execute(&mut hostile).await?;
@@ -248,7 +261,7 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
         backup_database::reconstruct_payload(
             &payload,
             &directory.path().join("rejected.sqlite"),
-            92
+            crate::schema_version::CURRENT_SCHEMA_VERSION
         )
         .await
         .is_err()
@@ -261,11 +274,34 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
 pub(crate) async fn restore_v91(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
     for name in ["room_message_attachments", "room_connector_uploads"] {
+        let kind = if name == "room_message_attachments" {
+            crate::room_file_content::RoomFileContent::Message
+        } else {
+            crate::room_file_content::RoomFileContent::Connector
+        };
         sqlx::query(sqlx::AssertSqlSafe(format!(
-            "CREATE TEMP TABLE fixture_rows AS SELECT * FROM {name}"
+            "CREATE TEMP TABLE fixture_rows AS SELECT *,NULL AS content FROM {name}"
         )))
         .execute(&mut *tx)
         .await?;
+        let files: Vec<(String, i64)> =
+            sqlx::query_as("SELECT attachment_id,size FROM fixture_rows")
+                .fetch_all(&mut *tx)
+                .await?;
+        for (id, size) in files {
+            let bytes = kind
+                .collect(&mut tx, &id, size as usize)
+                .await
+                .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+            sqlx::query("UPDATE fixture_rows SET content=? WHERE attachment_id=?")
+                .bind(bytes)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE {}", kind.chunks())))
+            .execute(&mut *tx)
+            .await?;
         sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE {name}")))
             .execute(&mut *tx)
             .await?;
@@ -274,8 +310,18 @@ pub(crate) async fn restore_v91(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Err
         ))
         .execute(&mut *tx)
         .await?;
+        let columns: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM pragma_table_info(?) ORDER BY cid")
+                .bind(name)
+                .fetch_all(&mut *tx)
+                .await?;
+        let columns = columns
+            .iter()
+            .map(|c| format!("\"{c}\""))
+            .collect::<Vec<_>>()
+            .join(",");
         sqlx::query(sqlx::AssertSqlSafe(format!(
-            "INSERT INTO {name} SELECT * FROM fixture_rows"
+            "INSERT INTO {name}({columns}) SELECT {columns} FROM fixture_rows"
         )))
         .execute(&mut *tx)
         .await?;
