@@ -1,4 +1,4 @@
-//! Lazy cache work belongs to the same serialized writer and read authority.
+//! Lazy cache work retains read authority and per-attachment custody, never a CPU-held transaction.
 use super::*;
 use sqlx::Row;
 
@@ -18,6 +18,7 @@ impl SqliteStore {
         if !agentsassemble_domain::is_message_attachment_id(id) {
             return Err(super::super::message_attachment_missing());
         }
+        let mut generation_guard = self.preview_generations.lock(id).await;
         let mut tx = self.pool.begin().await?;
         let (original, principal) = authority.metadata_in(&mut tx, id).await?;
         let lease = admit(&principal)?;
@@ -26,17 +27,32 @@ impl SqliteStore {
                 .bind(id).fetch_one(&mut *tx).await?;
             if !exists {
                 let hold = admit_generation(&principal, original.size)?;
+                tx.commit().await?;
+                // Even waiting for a decoder must not pin the single pooled connection.
                 let permit = crate::raster_assets::decode_permit().await?;
+                tx = self.pool.begin().await?;
+                let (current, _) = authority.metadata_in(&mut tx, id).await?;
+                if current != original {
+                    return Err(invalid_attachment_state());
+                }
                 let content = crate::room_file_content::RoomFileContent::Message
                     .collect(&mut tx, id, original.size)
                     .await?;
-                let preview = crate::raster_assets::lazy_preview(
+                tx.commit().await?;
+                let (preview, returned_guard) = crate::raster_assets::lazy_preview(
                     &original.content_type,
                     content,
                     permit,
                     hold,
+                    generation_guard,
                 )
                 .await?;
+                generation_guard = returned_guard;
+                tx = self.pool.begin().await?;
+                let (current, _) = authority.metadata_in(&mut tx, id).await?;
+                if current != original {
+                    return Err(invalid_attachment_state());
+                }
                 crate::message_attachment_previews::store(&mut tx, id, preview, false).await?;
             }
         }
@@ -50,6 +66,7 @@ impl SqliteStore {
                 .map_err(|_| invalid_attachment_state())?;
         }
         tx.commit().await?;
+        drop(generation_guard);
         Ok((
             MessageAttachmentReader {
                 store: self.clone(),

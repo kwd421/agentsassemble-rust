@@ -2,6 +2,31 @@
 use crate::{PersistenceError, raster_preview::Preview};
 use sqlx::{Connection, SqliteConnection, SqlitePool};
 
+// Store clones share admission by attachment identity, not by database connection.
+// Weak entries retain no completed work; prune them on the next acquisition.
+#[derive(Default)]
+pub(crate) struct Generations {
+    locks: tokio::sync::Mutex<
+        std::collections::HashMap<String, std::sync::Weak<tokio::sync::Mutex<()>>>,
+    >,
+}
+
+impl Generations {
+    pub(crate) async fn lock(&self, id: &str) -> tokio::sync::OwnedMutexGuard<()> {
+        let lock = {
+            let mut locks = self.locks.lock().await;
+            locks.retain(|_, lock| lock.strong_count() > 0);
+            let lock = locks
+                .get(id)
+                .and_then(std::sync::Weak::upgrade)
+                .unwrap_or_else(|| std::sync::Arc::new(tokio::sync::Mutex::new(())));
+            locks.insert(id.to_owned(), std::sync::Arc::downgrade(&lock));
+            lock
+        };
+        lock.lock_owned().await
+    }
+}
+
 macro_rules! cache_ddl {
     ($table:literal, $parent:literal) => {
         concat!("CREATE TABLE \"", $table, "\" (\n",
@@ -27,9 +52,9 @@ pub(crate) async fn store(
     connector: bool,
 ) -> Result<(), PersistenceError> {
     let query = if connector {
-        "INSERT INTO room_connector_upload_previews(attachment_id,content_type,content) VALUES(?,?,?)"
+        "INSERT INTO room_connector_upload_previews(attachment_id,content_type,content) VALUES(?,?,?) ON CONFLICT(attachment_id) DO NOTHING"
     } else {
-        "INSERT INTO room_message_attachment_previews(attachment_id,content_type,content) VALUES(?,?,?)"
+        "INSERT INTO room_message_attachment_previews(attachment_id,content_type,content) VALUES(?,?,?) ON CONFLICT(attachment_id) DO NOTHING"
     };
     sqlx::query(query)
         .bind(id)

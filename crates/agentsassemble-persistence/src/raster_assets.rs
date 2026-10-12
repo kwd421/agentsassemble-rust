@@ -92,14 +92,23 @@ pub(crate) async fn lazy_preview<T: Send + 'static>(
     content: Vec<u8>,
     permit: tokio::sync::SemaphorePermit<'static>,
     hold: T,
-) -> Result<Option<crate::raster_preview::Preview>, PersistenceError> {
+    generation_guard: tokio::sync::OwnedMutexGuard<()>,
+) -> Result<
+    (
+        Option<crate::raster_preview::Preview>,
+        tokio::sync::OwnedMutexGuard<()>,
+    ),
+    PersistenceError,
+> {
     let format = declared_image_format(content_type)?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         let _hold = hold;
         let preview = validate_preserved_blocking(format, &content, true);
         drop(content); // Whole original never waits in the worker result without admission.
-        preview
+        // Cancellation cannot release per-attachment serialization while CPU work continues.
+        // Successful work returns the guard for the caller's final store transaction.
+        Ok((preview?, generation_guard))
     })
     .await
     .map_err(|_| decode_task_failed())?

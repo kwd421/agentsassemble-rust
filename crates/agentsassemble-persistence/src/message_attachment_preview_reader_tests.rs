@@ -163,3 +163,142 @@ async fn cache_upload_lazy_concurrency_restore_and_cascade_share_original_author
     job.cancel()?;
     Ok(())
 }
+
+// Pause at the blocking decoder's admission-release boundary, using the existing
+// generation lease rather than sleeps or a global decoder hook.
+struct PausedGeneration {
+    entered: Option<tokio::sync::oneshot::Sender<()>>,
+    resume: std::sync::mpsc::Receiver<()>,
+}
+impl Drop for PausedGeneration {
+    fn drop(&mut self) {
+        if let Some(entered) = self.entered.take() {
+            let _ = entered.send(());
+        }
+        let _ = self.resume.recv();
+    }
+}
+
+#[tokio::test]
+async fn slow_lazy_generation_releases_writer_rechecks_deletion_and_keeps_competing_cache()
+-> TestResult {
+    use std::time::Duration;
+    for delete in [false, true] {
+        let (store, principal) = crate::message_attachment_tests::fixture().await;
+        let original = crate::raster_preview_tests::large_png(true, true)?;
+        let attachment = store
+            .store_message_attachment(&principal, "old.png", "image/png", original)
+            .await?;
+        store
+            .execute_message(
+                &principal,
+                &uuid::Uuid::new_v4().to_string(),
+                "message.send",
+                &json!({"content":"", "attachment_ids":[attachment.id]}),
+            )
+            .await?;
+        let cached: (String, Vec<u8>) = sqlx::query_as(
+            "SELECT content_type,content FROM room_message_attachment_previews WHERE attachment_id=?",
+        ).bind(&attachment.id).fetch_one(&store.pool).await?;
+        sqlx::query("DELETE FROM room_message_attachment_previews WHERE attachment_id=?")
+            .bind(&attachment.id)
+            .execute(&store.pool)
+            .await?;
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let generated = Arc::new(AtomicUsize::new(0));
+        let first = {
+            let (store, principal, id, generated) = (
+                store.clone(),
+                principal.clone(),
+                attachment.id.clone(),
+                generated.clone(),
+            );
+            tokio::spawn(async move {
+                store
+                    .open_message_attachment_preview_reader(
+                        authority(&principal),
+                        &id,
+                        |_| Ok(()),
+                        |_, _| {
+                            generated.fetch_add(1, Ordering::SeqCst);
+                            Ok(PausedGeneration {
+                                entered: Some(entered_tx),
+                                resume: resume_rx,
+                            })
+                        },
+                    )
+                    .await
+            })
+        };
+        tokio::time::timeout(Duration::from_secs(10), entered_rx).await??;
+        // The decode worker cannot finish until resume_tx is sent or dropped.
+        // An unrelated write must finish while that worker is deliberately held.
+        let written = tokio::time::timeout(
+            Duration::from_secs(2),
+            sqlx::query("INSERT INTO runtime_metadata VALUES('unrelated_preview_write','done')")
+                .execute(&store.pool),
+        )
+        .await??;
+        assert_eq!(written.rows_affected(), 1);
+        let second = if delete {
+            sqlx::query("DELETE FROM room_message_attachments WHERE attachment_id=?")
+                .bind(&attachment.id)
+                .execute(&store.pool)
+                .await?;
+            None
+        } else {
+            let (store2, principal2, id, generated) = (
+                store.clone(),
+                principal.clone(),
+                attachment.id.clone(),
+                generated.clone(),
+            );
+            let task = tokio::spawn(async move {
+                store2
+                    .open_message_attachment_preview_reader(
+                        authority(&principal2),
+                        &id,
+                        |_| Ok(()),
+                        |_, _| {
+                            generated.fetch_add(1, Ordering::SeqCst);
+                            Ok(())
+                        },
+                    )
+                    .await
+            });
+            // Another writer may insert the same derived result before our store.
+            sqlx::query("INSERT INTO room_message_attachment_previews VALUES(?,?,?)")
+                .bind(&attachment.id)
+                .bind(&cached.0)
+                .bind(&cached.1)
+                .execute(&store.pool)
+                .await?;
+            Some(task)
+        };
+        resume_tx.send(())?;
+        let result = first.await?;
+        if delete {
+            assert!(result.is_err());
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT count(*) FROM room_message_attachment_previews WHERE attachment_id=?",
+                )
+                .bind(&attachment.id)
+                .fetch_one(&store.pool)
+                .await?,
+                0
+            );
+        } else {
+            let (reader, ()) = result?;
+            assert_eq!(
+                reader.read_piece(0).await?,
+                cached.1[..cached.1.len().min(65536)]
+            );
+            let (second, ()) = second.ok_or("second reader")?.await??;
+            assert_eq!(second.metadata().size, cached.1.len());
+        }
+        assert_eq!(generated.load(Ordering::SeqCst), 1);
+    }
+    Ok(())
+}

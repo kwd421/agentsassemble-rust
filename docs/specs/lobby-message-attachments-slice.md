@@ -973,10 +973,12 @@ Preview readers share original room/session/visibility/deletion authorization an
 recheck it on each piece. Admission precedes byte selection: cached previews and
 original passthrough use streamed cost; lazy generation additionally reserves its
 whole-input/decode/encoding cost (2× stored size + 160 MiB for decoder/rotation
-and resize/encoding) until the blocking decoder releases the input. The existing
-single writer transaction serializes the first generation and insertion; a cold
-preview briefly holds that writer during CPU work, with no network await. Subsequent
-reads use only the cache pieces. Responses
+and resize/encoding) until the blocking decoder releases the input. An in-process per-attachment guard serializes first generation and insertion.
+Authorization/original selection and final store each use short transactions;
+decode permit waits and decode/resize/encode run outside any database transaction.
+The store rechecks current authority, immutable original metadata and existence,
+and accepts an already-stored preview without overwriting it. Subsequent reads
+use only the cache pieces. Responses
 retain private/no-store rules across plain desktop and encrypted channels.
 Entry owners: raster_assets, message_attachments/connector, message_attachment_reader,
 schema_version/archive_schema/backup_policy, profile_web/attachment_download/
@@ -1031,3 +1033,19 @@ and `room_message_search_delete` on `room_message_search_records`. Older live
 `operator_pairings` keeps unquoted CREATE/ALTER-added columns, unlike quoted archive
 DDL; that unrelated textual difference is deliberately accepted. Full-row comparisons
 use indexed attachment identity joins, avoiding temporary trees of whole BLOB sets.
+
+## Lazy preview connection lifetime correction (2026-10-13)
+
+`open_message_attachment_preview_reader` must release the single pooled connection
+before waiting for decode capacity and throughout lazy decode/resize/encode. Keep
+existing generation admission and decoder permits, with authorization and original
+byte selection in short transactions. A per-attachment guard shared by store clones
+keeps concurrent first requests to one generation, without serializing different
+attachments or unrelated database writes; it stays with a cancelled blocking worker
+until decoding ends. A final short transaction rechecks live authority, immutable
+metadata and existence, tolerates a concurrently stored result and stores nothing
+if the attachment was deleted. Errors remain visible; no cache/storage fallback.
+Owners: message_attachment_preview_reader, raster_assets, message_attachment_previews,
+SqliteStore/from_owned_pool. Acceptance: a controlled slow generation permits an
+unrelated write promptly, concurrent first requests generate once, a concurrent
+cache insert is retained, and deletion during generation leaves no derived row.
