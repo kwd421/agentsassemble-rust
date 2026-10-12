@@ -4,14 +4,14 @@ use sqlx::SqlitePool;
 
 pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let mut tx = pool.begin().await?;
-    crate::room_file_schema::require_no_mutation_triggers(&mut tx, 93).await?;
-    let mut expected_counts = Vec::new();
+    crate::room_file_migration::require_source(&mut tx, 92).await?;
+    let mut copies = Vec::new();
     for kind in [RoomFileContent::Message, RoomFileContent::Connector] {
         let name = kind.parent();
         let replacement = format!("{name}_v93");
         let chunks = kind.chunks();
         for object in [&replacement, &chunks.to_owned()] {
-            if sqlx::query("SELECT 1 FROM sqlite_schema WHERE name=?")
+            if sqlx::query("SELECT 1 FROM sqlite_schema WHERE name=? COLLATE NOCASE")
                 .bind(object)
                 .fetch_optional(&mut *tx)
                 .await?
@@ -45,6 +45,14 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
                 "93: unexpected source objects: {name}"
             )));
         }
+    }
+    sqlx::query("UPDATE runtime_metadata SET value='93' WHERE key='schema_version'")
+        .execute(&mut *tx)
+        .await?;
+    for kind in [RoomFileContent::Message, RoomFileContent::Connector] {
+        let name = kind.parent();
+        let replacement = format!("{name}_v93");
+        let chunks = kind.chunks();
         let parent = schema::TABLES
             .iter()
             .find(|table| table.name == name)
@@ -67,22 +75,11 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             .map(|s| format!("\"{s}\""))
             .collect::<Vec<_>>()
             .join(",");
-        let copied = sqlx::query(sqlx::AssertSqlSafe(format!(
+        sqlx::query(sqlx::AssertSqlSafe(format!(
             "INSERT INTO {replacement}({columns}) SELECT {columns} FROM {name}"
         )))
         .execute(&mut *tx)
-        .await?
-        .rows_affected();
-        let count: i64 =
-            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {name}")))
-                .fetch_one(&mut *tx)
-                .await?;
-        let bytes: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT coalesce(sum(size),0) FROM {name}"
-        )))
-        .fetch_one(&mut *tx)
         .await?;
-        expected_counts.push((kind, count, bytes));
         let chunk_ddl = match kind {
             RoomFileContent::Message => crate::room_file_content::MESSAGE_DDL,
             RoomFileContent::Connector => crate::room_file_content::CONNECTOR_DDL,
@@ -101,15 +98,32 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
              SELECT attachment_id,sequence,substr(content,sequence*{piece}+1,{piece})
              FROM {name} CROSS JOIN pieces WHERE sequence*{piece}<size"
         ))).execute(&mut *tx).await?;
+        copies.push((kind, replacement, columns));
+    }
+    for (kind, replacement, columns) in &copies {
+        let name = kind.parent();
+        let chunks = kind.chunks();
+        crate::room_file_migration::require_equal_rows(&mut tx, name, replacement, columns, 93)
+            .await?;
+        kind.require_complete(&mut tx).await?;
         let mismatch: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT EXISTS(SELECT 1 FROM {name} AS source WHERE size!=length(content)
-             OR size!=(SELECT coalesce(sum(length(content)),0) FROM {chunks} WHERE attachment_id=source.attachment_id))"
-        ))).fetch_one(&mut *tx).await?;
-        if copied != count as u64 || mismatch {
-            return Err(PersistenceError::InvalidSchemaVersion(
-                "93: room file copy failed validation".into(),
+            "SELECT EXISTS(SELECT 1 FROM {name} WHERE size!=length(content))
+             OR EXISTS(SELECT 1 FROM {chunks} AS chunk JOIN {name} AS source USING(attachment_id)
+             WHERE chunk.content IS NOT substr(source.content,chunk.sequence*65536+1,65536))"
+        )))
+        .fetch_one(&mut *tx)
+        .await?;
+        if mismatch {
+            return Err(crate::room_file_migration::invalid(
+                93,
+                "room file chunk bytes",
             ));
         }
+    }
+    crate::room_file_migration::require_foreign_keys(&mut tx, 93).await?;
+    // Only DDL after the byte-exact validation; no incoming source references.
+    for (kind, replacement, _) in copies {
+        let name = kind.parent();
         sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE {name}")))
             .execute(&mut *tx)
             .await?;
@@ -123,32 +137,6 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
         .filter(|s| s.starts_with("CREATE INDEX") && s.contains(" ON room_message_attachments("))
     {
         sqlx::query(statement).execute(&mut *tx).await?;
-    }
-    if sqlx::query("SELECT * FROM pragma_foreign_key_check LIMIT 1")
-        .fetch_optional(&mut *tx)
-        .await?
-        .is_some()
-    {
-        return Err(PersistenceError::InvalidSchemaVersion(
-            "93: room file foreign keys".into(),
-        ));
-    }
-    sqlx::query("UPDATE runtime_metadata SET value='93' WHERE key='schema_version'")
-        .execute(&mut *tx)
-        .await?;
-    for (kind, count, bytes) in expected_counts {
-        kind.require_complete(&mut tx).await?;
-        let (rows, declared): (i64, i64) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "SELECT count(*),coalesce(sum(size),0) FROM {}",
-            kind.parent()
-        )))
-        .fetch_one(&mut *tx)
-        .await?;
-        if (rows, declared) != (count, bytes) {
-            return Err(PersistenceError::InvalidSchemaVersion(
-                "93: final room file counts".into(),
-            ));
-        }
     }
     tx.commit().await?;
     Ok(())

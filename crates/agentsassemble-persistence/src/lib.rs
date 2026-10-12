@@ -187,6 +187,7 @@ mod provider_request_resolution_tests;
 mod provider_request_tests;
 mod room_file_chunk_schema;
 mod room_file_content;
+mod room_file_migration;
 mod room_file_schema;
 mod room_runtime_cleanup;
 mod room_settings;

@@ -1002,3 +1002,32 @@ Owners: `secure_channel.rs`, `secure_queue.rs`, `http_body_policy.rs`. Keep exis
 stop-and-wait and download progress/window/ceiling semantics. Acceptance: controlled
 clock regression proves cancelled records behind that head release both budgets;
 successive timely ACKs keep a slow consuming channel alive beyond one idle interval.
+
+## Round-6 live migration boundary (2026-10-13)
+
+Normal open/staged upgrades at 91→92, 92→93 and 93→94 must compare every main-schema
+trigger (name, table, SQL) against the frozen source-version trigger set before
+mutation. Validate exact `runtime_metadata` DDL and incoming foreign-key topology
+for metadata and all room-file parents/chunks/previews against canonical references.
+Extra, missing or altered triggers anywhere, helper cascade references and smuggled
+triggers targeting future replacement names refuse atomically. Do not require full
+catalog textual equality: genuine older live databases retain ALTER TABLE spellings.
+Write the version first in the transaction, copy, validate full rows and every BLOB
+byte inside SQLite, then perform only drop/rename/index/cache DDL and commit. The
+preview migration copies no existing bytes; its unchanged parents/chunks must retain
+complete content. Owners: room_file_schema, room_file_chunk_schema,
+message_attachment_previews and shared room_file_migration validation.
+Acceptance: helper index/FK/trigger chains and future-table triggers at every source
+version refuse without changing version or bytes; a fixture created from the real
+oldest supported live schema (70) executes the actual upgrade stages through HEAD
+and preserves bytes/custody, as do frozen archive source versions.
+
+Genuine live schema 70 retains `CREATE TABLE runtime_metadata (key TEXT PRIMARY KEY,
+value TEXT NOT NULL)` and its sole `sqlite_autoindex_runtime_metadata_1`; neither
+metadata nor the two file parents has incoming FKs at 91/92. Source 93 has exactly
+the two chunk→corresponding-parent attachment_id FKs (NO ACTION on update, CASCADE
+on delete). The only main triggers at 91–93 are frozen `room_message_search_insert`
+and `room_message_search_delete` on `room_message_search_records`. Older live
+`operator_pairings` keeps unquoted CREATE/ALTER-added columns, unlike quoted archive
+DDL; that unrelated textual difference is deliberately accepted. Full-row comparisons
+use indexed attachment identity joins, avoiding temporary trees of whole BLOB sets.

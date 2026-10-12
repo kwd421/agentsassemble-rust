@@ -43,10 +43,10 @@ pub(crate) async fn store(
 pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let mut expected = SqliteConnection::connect("sqlite::memory:").await?;
     let mut tx = pool.begin().await?;
+    crate::room_file_migration::require_source(&mut tx, 93).await?;
     // Derive canonical SQL from frozen catalog, including indexes/triggers.
     // Validate all source objects before writing the version or creating cache.
     for name in [
-        "runtime_metadata",
         "room_message_attachments",
         "room_connector_uploads",
         "room_message_attachment_chunks",
@@ -96,12 +96,22 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             )));
         }
     }
-    for ddl in [MESSAGE_DDL, CONNECTOR_DDL] {
-        sqlx::query(ddl).execute(&mut *tx).await?;
-    }
     sqlx::query("UPDATE runtime_metadata SET value='94' WHERE key='schema_version'")
         .execute(&mut *tx)
         .await?;
+    // No original bytes are copied or changed in this migration. The validated
+    // graph has no metadata references/triggers; retain complete original chunks.
+    for kind in [
+        crate::room_file_content::RoomFileContent::Message,
+        crate::room_file_content::RoomFileContent::Connector,
+    ] {
+        kind.require_complete(&mut tx).await?;
+    }
+    crate::room_file_migration::require_foreign_keys(&mut tx, 94).await?;
+    // Only DDL after final validation.
+    for ddl in [MESSAGE_DDL, CONNECTOR_DDL] {
+        sqlx::query(ddl).execute(&mut *tx).await?;
+    }
     tx.commit().await?;
     Ok(())
 }
