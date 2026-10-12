@@ -37,6 +37,18 @@ pub(crate) fn event(value: Value) -> Result<RoomEvent, PersistenceError> {
     }
     for (field, value) in &mut event.extra {
         match field.as_str() {
+            "actor_participant_id"
+            | "on_behalf_of_participant_id"
+            | "action"
+            | "target_id"
+            | "request_id"
+            | "target_channel_id" => {
+                strict::<String>(value.clone())?;
+            }
+            "pinned" => {
+                strict::<bool>(value.clone())?;
+            }
+
             "participant" => canonical::<agentsassemble_domain::Participant>(value)?,
             "room" => canonical::<agentsassemble_domain::Room>(value)?,
             "room_settings" => canonical::<agentsassemble_domain::PublicRoomSettings>(value)?,
@@ -198,6 +210,10 @@ pub(crate) fn receipt(mut value: Value) -> Result<Value, PersistenceError> {
     let object = value.as_object_mut().ok_or_else(invalid)?;
     for (field, value) in object {
         match field.as_str() {
+            "target_id" | "event_id" => {
+                strict::<String>(value.clone())?;
+            }
+
             "start" => {
                 // Creation stores one canonical launch receipt, not another creation.
                 if value.get("start").is_some() {

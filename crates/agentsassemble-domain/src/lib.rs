@@ -23,6 +23,7 @@ mod identity;
 mod message_attachments;
 mod message_mutations;
 mod message_pins;
+pub use message_pins::SetMessagePin;
 mod message_search;
 mod model;
 mod persona;

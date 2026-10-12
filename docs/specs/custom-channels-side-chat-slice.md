@@ -14,6 +14,11 @@ on_behalf_of_participant_id, action, target and request_id. Publish after commit
 Preserve channel/target/capacity errors, current scope and authority lifetimes; charge
 both identities through existing write/admission owners. No pin UI changes.
 
+Implementation checkpoint: persistence and runtime now share owner pin authorization
+and mutation, debit both principal windows, and atomically retain attributed events
+and exact receipts, including backup reconstruction. Tool exposure is still pending;
+this checkpoint does not make delegated pinning reachable from AI clients.
+
 
 Status: Phase 6 approved through `25c7961`, C0/H0/M0/L0 after incarnation correction.
 

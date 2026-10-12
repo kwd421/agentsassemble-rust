@@ -12,6 +12,12 @@ Retain attendee connection/turn and connector session checks. Expired or disconn
 owner authority cannot delegate. All other delegated actions and confirmations remain
 outside this slice; see the director pin contract in the local-authority spec.
 
+Verified transport mismatch: remote/hosted connector MCP uses a shared stateless
+endpoint. Its tools take a private connection_id argument, but tools/list has no
+connection identity. Identical pin schemas and per-AI discovery remain requirements;
+choosing a new authenticated connection context or revising that protocol requires
+an owner decision. Do not infer a caller from another connection in the hub.
+
 
 ## 추가 창 표시 보정 (2026-10-07)
 

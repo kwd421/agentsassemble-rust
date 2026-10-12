@@ -102,17 +102,9 @@ impl SqliteStore {
         pinned: bool,
     ) -> Result<Vec<PinnedMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        expected.resolve(&mut transaction).await?;
+        let principal = expected.resolve(&mut transaction).await?;
         let room_id = &expected.manager.room_id;
-        set_pin(
-            &mut transaction,
-            room_id,
-            channel_id,
-            event_id,
-            pinned,
-            Utc::now(),
-        )
-        .await?;
+        set_pin_as(&mut transaction, &principal, channel_id, event_id, pinned).await?;
         let pins = load_pins(&mut transaction, room_id, channel_id).await?;
         transaction.commit().await?;
         Ok(pins)
@@ -135,19 +127,7 @@ impl SqliteStore {
             .mutation_authority()
             .resolve(&mut transaction)
             .await?;
-        require_permission(
-            principal.capabilities.message_modify,
-            "This room session cannot modify messages.",
-        )?;
-        set_pin(
-            &mut transaction,
-            &principal.room_id,
-            channel_id,
-            event_id,
-            pinned,
-            Utc::now(),
-        )
-        .await?;
+        set_pin_as(&mut transaction, &principal, channel_id, event_id, pinned).await?;
         let pins = load_pins(&mut transaction, &principal.room_id, channel_id).await?;
         expected
             .mutation_authority()
@@ -166,7 +146,49 @@ fn require_permission(allowed: bool, message: &'static str) -> Result<(), Persis
     }
 }
 
-async fn set_pin(
+pub(crate) async fn set_pin_as(
+    tx: &mut Transaction<'_, Sqlite>,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+    channel_id: &str,
+    event_id: &str,
+    pinned: bool,
+) -> Result<(), PersistenceError> {
+    require_pin_authority(tx, principal).await?;
+    set_pin(
+        tx,
+        &principal.room_id,
+        channel_id,
+        event_id,
+        pinned,
+        Utc::now(),
+    )
+    .await
+}
+
+pub(crate) async fn require_pin_authority(
+    tx: &mut Transaction<'_, Sqlite>,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+) -> Result<(), PersistenceError> {
+    require_permission(
+        principal.capabilities.message_modify,
+        "This room session cannot modify messages.",
+    )?;
+    let participant = crate::authority::load_active_participant(
+        tx,
+        &principal.room_id,
+        &principal.participant_id,
+    )
+    .await?;
+    if participant.muted {
+        return Err(rejected(
+            "participant_muted",
+            "Muted participants cannot modify pins.",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn set_pin(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     channel_id: &str,

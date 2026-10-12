@@ -252,17 +252,17 @@ pub(crate) async fn resolve_pin_owner(
     if owner.participant_id != delegate.owner_id {
         return Err(unavailable());
     }
-    let participant =
-        crate::authority::load_active_participant(tx, room_id, &owner.participant_id).await?;
-    if participant.muted {
-        return Err(rejected("owner_muted", "The owner is muted."));
-    }
-    if !owner.capabilities.message_modify {
-        return Err(rejected(
-            "owner_scope_read_only",
-            "The owner cannot pin messages.",
-        ));
-    }
+    crate::message_pins::require_pin_authority(tx, &owner)
+        .await
+        .map_err(|error| match error {
+            PersistenceError::CommandRejected { code, .. } if code == "participant_muted" => {
+                rejected("owner_muted", "The owner is muted.")
+            }
+            PersistenceError::CommandRejected { code, .. } if code == "permission_denied" => {
+                rejected("owner_scope_read_only", "The owner cannot pin messages.")
+            }
+            other => other,
+        })?;
     Ok(owner)
 }
 

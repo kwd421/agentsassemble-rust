@@ -1,3 +1,13 @@
+/// The fixed delegated pin action. Authority is supplied only by authenticated transport.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetMessagePin {
+    pub channel_id: String,
+    pub message_id: String,
+    pub pinned: bool,
+    pub request_id: String,
+}
+
 pub const MAX_CHANNEL_MESSAGE_PINS: i64 = 64;
 pub const MAX_MESSAGE_EVENT_ID_BYTES: usize = 128;
 

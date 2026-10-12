@@ -35,6 +35,9 @@ use crate::{
 
 use crate::room_command_execution::CommandExecution;
 
+#[path = "delegated_pin_runtime.rs"]
+pub(crate) mod delegated_pin;
+
 #[path = "room_command_queue.rs"]
 mod command_queue;
 pub(crate) use command_queue::{RoomCommand, RoomCommandSession};
