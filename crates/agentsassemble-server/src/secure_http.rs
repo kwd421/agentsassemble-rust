@@ -109,51 +109,86 @@ pub(crate) fn start(
     };
     let output = output.with_cancel(cancel.clone());
     let id = start.id;
+    let channel = client.closed().clone();
     let task = async move {
         let _permit = permit;
         let _admission = admission;
         // Once dispatched, never abort a handler: its mutation may already own durable work.
         let response = crate::web::router(state).oneshot(request).await;
         let Ok(response) = response;
-        let mut headers = response
-            .headers()
-            .iter()
-            .filter(|(name, _)| {
-                !matches!(
-                    name.as_str(),
-                    "set-cookie" | "content-security-policy" | "access-control-allow-origin"
-                )
-            })
-            .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.as_str(), value)))
-            .collect::<Vec<_>>();
-        headers.push(("x-agentsassemble-upload-credit", "1"));
-        if output.send(json!({"op":"response", "id":id, "status":response.status().as_u16(), "headers":headers})).await.is_err() { return; }
-        let mut body = response.into_body().into_data_stream();
-        loop {
-            let next =
-                tokio::select! { () = cancel.cancelled() => return, next = body.next() => next };
-            match next {
-                Some(Ok(bytes)) => {
-                    for chunk in bytes.chunks(CHUNK_BYTES) {
-                        if output.send(json!({"op":"data", "id":id, "data":URL_SAFE_NO_PAD.encode(chunk), "end":false})).await.is_err() { return; }
-                    }
-                }
-                Some(Err(_)) => {
-                    let _ = output
-                        .send(json!({"op":"error", "id":id, "code":"response_failed"}))
-                        .await;
-                    return;
-                }
-                None => {
-                    let _ = output
-                        .send(json!({"op":"data", "id":id, "data":"", "end":true}))
-                        .await;
-                    return;
-                }
-            }
-        }
+        respond(response, id, output, cancel, channel).await;
     };
     Ok((input, task))
+}
+
+async fn respond(
+    response: axum::response::Response,
+    id: u32,
+    output: Output,
+    cancel: CancellationToken,
+    channel: CancellationToken,
+) {
+    let progress = response
+        .extensions()
+        .get::<crate::http_body_policy::Progress>()
+        .cloned();
+    let output = output.with_progress(progress.clone());
+    let response = send_response(response, id, output, cancel.clone());
+    if let Some(progress) = progress {
+        tokio::select! {
+            // Stop-and-wait is channel-wide: a withheld ACK can prevent an error
+            // record too. Closing exposes failure and releases all queued records.
+            () = progress.expired() => channel.cancel(),
+            () = cancel.cancelled() => {},
+            () = response => {},
+        }
+    } else {
+        tokio::select! { () = cancel.cancelled() => {}, () = response => {} }
+    }
+}
+
+async fn send_response(
+    response: axum::response::Response,
+    id: u32,
+    output: Output,
+    cancel: CancellationToken,
+) {
+    let mut headers = response
+        .headers()
+        .iter()
+        .filter(|(name, _)| {
+            !matches!(
+                name.as_str(),
+                "set-cookie" | "content-security-policy" | "access-control-allow-origin"
+            )
+        })
+        .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.as_str(), value)))
+        .collect::<Vec<_>>();
+    headers.push(("x-agentsassemble-upload-credit", "1"));
+    if output.send(json!({"op":"response", "id":id, "status":response.status().as_u16(), "headers":headers})).await.is_err() { return; }
+    let mut body = response.into_body().into_data_stream();
+    loop {
+        let next = tokio::select! { () = cancel.cancelled() => return, next = body.next() => next };
+        match next {
+            Some(Ok(bytes)) => {
+                for chunk in bytes.chunks(CHUNK_BYTES) {
+                    if output.send(json!({"op":"data", "id":id, "data":URL_SAFE_NO_PAD.encode(chunk), "end":false})).await.is_err() { return; }
+                }
+            }
+            Some(Err(_)) => {
+                let _ = output
+                    .send(json!({"op":"error", "id":id, "code":"response_failed"}))
+                    .await;
+                return;
+            }
+            None => {
+                let _ = output
+                    .send(json!({"op":"data", "id":id, "data":"", "end":true}))
+                    .await;
+                return;
+            }
+        }
+    }
 }
 
 fn request_body(
@@ -280,3 +315,7 @@ fn request_metadata(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "secure_download_tests.rs"]
+mod download_tests;

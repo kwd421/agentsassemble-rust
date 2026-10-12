@@ -82,7 +82,10 @@ Encrypted queued records remain separately charged by the unchanged 8 MiB global
 Reuse body-policy deadlines: 30 seconds idle, at least 64 KiB per 120 seconds,
 and a one-hour ceiling. Transport owners enforce expiry even without body polling,
 drop the response and release admission; connection/channel close and virtual
-request cancellation also release it. Only nonempty delivered pieces count.
+request cancellation also release it. Only nonempty pieces accepted by the bounded
+transport count. With the existing channel-wide stop-and-wait ACK, download expiry
+closes the secure channel: a stalled ACK can also prevent an error record from
+reaching the peer. Explicit child cancellation continues to preserve the channel.
 AI/provider/attendee/connector base64 JSON reads and other asset tables retain
 round-4 whole-value admission. Routes, wire records, clients and UI are unchanged.
 
@@ -90,6 +93,23 @@ Acceptance: byte equality at non-piece-aligned sizes and 50 MiB on both transpor
 ten concurrent large streams by one principal and bounded host weight; controlled
 stalls, progress expiry, cancellation and mid-stream deletion/access loss; an
 unrelated database write completes while network consumption is stalled.
+
+Verification: persistence crate tests (514 passed, one ignored), server unit tests
+with four test threads (174 passed, one ignored), `message_attachments_boundary`
+integration (five passed), and the production WebCrypto/RemoteTransport encrypted
+HTTP/SSE/socket integration (one passed). Both real TCP transports preserve exact
+non-aligned and 50 MiB bytes, including ten concurrent 50 MiB reads by one principal.
+The encrypted flow also aborts a child request and interrupts an already-started
+download on access loss. Controlled-clock tests exercise unpolled stall expiry,
+piece lifetime/admission release and unchanged secure queue maxima; unrelated
+writes complete beside stalled bodies. `cargo fmt --all`, `git diff --check` and
+`make architecture-check` pass without gate changes. The larger encrypted fixture
+reports batch start/file completion to its existing 30-second harness waits; product
+deadlines are unchanged. A default-parallel unit run hit the existing four-worker
+runtime-authority pool; its gate was left unchanged and the four-thread run passed.
+No peak-RSS, paced WAN throughput, packaged UI or provider verification was run.
+SQLx piece bounds and Hyper's bounded writer establish the allocation envelope;
+client whole-Blob retention and the ACK throughput ceiling remain later slices.
 
 ## Approved target contract after Phase 0B
 

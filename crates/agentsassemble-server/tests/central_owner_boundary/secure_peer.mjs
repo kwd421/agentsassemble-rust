@@ -140,9 +140,14 @@ memberSocket.send(JSON.stringify({op:'command',request_id:memberMessage,action:'
 for(let i=0;i<10;i++){const f=await memberReceive();if(f.op==='ack'&&f.request_id===memberMessage){assert.ok(f.accepted);break;}}
 const downloaded = await member.fetch(uploaded.attachment.download_url,{headers:memberHeaders});
 assert.equal(downloaded.status,200); assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),fileBytes);
-await verifyRoomFilePolicy({member, memberHeaders, memberSocket, memberReceive,
+const largeAttachment = await verifyRoomFilePolicy({member, memberHeaders, memberSocket, memberReceive,
   managerSocket:socket, managerReceive:receive, revision:snapshot.room_settings.settings_revision});
-memberSocket.close(); // Keep this admitted channel idle while a second device connects.
+const revokedDownload = await member.fetch(largeAttachment.download_url,{headers:memberHeaders});
+assert.equal(revokedDownload.status,200);
+const revokedReader = revokedDownload.body.getReader();
+const revokedFirst = await revokedReader.read();
+assert.equal(revokedFirst.done,false); assert.equal(revokedFirst.value.length,64*1024);
+memberSocket.close(); // Keep this admitted download stalled while a second device connects.
 const reconnect=await RemoteTransport.connect(config.target,'member_connect');
 const connectChallenge=await memberPost(reconnect,'/api/member-connect/challenge',{});
 const available=await memberPost(reconnect,'/api/member-connect/rooms',{challenge_id:connectChallenge.challenge_id,grant_token:'aamc1.'+'A'.repeat(43)});
@@ -158,6 +163,7 @@ assert.equal(removalChallenge.registration_epoch,config.target.registration_epoc
 const removalResult=await memberPost(removal,'/api/account-removal/execute',{challenge_id:removalChallenge.challenge_id,grant_token:'aadg1.'+'A'.repeat(43),request_id:'r'.repeat(43)});
 assert.equal(removalResult.status,'account_removed');
 await Promise.all([firstEnded,secondEnded]);
+await assert.rejects(revokedReader.read());
 assert.equal(member.active,false);assert.equal(reconnect.active,false);
 let anonymized;
 for(let i=0;i<30;i++){const f=await receive();if(f.op==='event'){anonymized=f.events.find(e=>e.type==='participant_anonymized');if(anonymized)break;}}

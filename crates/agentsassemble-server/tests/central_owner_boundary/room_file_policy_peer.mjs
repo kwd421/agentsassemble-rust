@@ -34,7 +34,7 @@ async function verifyRoomFilePolicy({member, memberHeaders, memberSocket, member
   await limit(50 * 1024 * 1024);
   const uploads = [];
   for (const mib of [25, 50]) {
-    const bytes = Buffer.alloc(mib * 1024 * 1024, mib);
+    const bytes = Buffer.alloc(mib * 1024 * 1024 + (mib === 25 ? 19 : 0), mib);
     const response = await member.fetch('/api/message-attachments', {method:'POST',headers:memberHeaders,
       body:JSON.stringify({filename:`room-${mib}.bin`,content_type:'application/octet-stream',data_base64:bytes.toString('base64')})});
     assert.equal(response.status,200);
@@ -48,6 +48,29 @@ async function verifyRoomFilePolicy({member, memberHeaders, memberSocket, member
   for (const {attachment, bytes} of uploads) {
     const response = await member.fetch(attachment.download_url, {headers:memberHeaders});
     assert.equal(response.status,200);
+    assert.equal(Number(response.headers.get('content-length')), bytes.length);
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
   }
+  const large = uploads.find(item => item.attachment.size === 50 * 1024 * 1024);
+  console.log(JSON.stringify({test_progress:'download_batch_started'}));
+  await Promise.all(Array.from({length:10}, async () => {
+    const response = await member.fetch(large.attachment.download_url, {headers:memberHeaders});
+    assert.equal(response.status,200);
+    assert.equal(Number(response.headers.get('content-length')), large.bytes.length);
+    let received = 0;
+    for await (const piece of response.body) {
+      assert.deepEqual(Buffer.from(piece), large.bytes.subarray(received, received + piece.length));
+      received += piece.length;
+    }
+    assert.equal(received, large.bytes.length);
+    console.log(JSON.stringify({test_progress:'download_complete'}));
+  }));
+  const abort = new AbortController();
+  const cancelled = await member.fetch(large.attachment.download_url, {headers:memberHeaders, signal:abort.signal});
+  const reader = cancelled.body.getReader();
+  assert.equal((await reader.read()).done, false);
+  abort.abort();
+  await assert.rejects(reader.read());
+  assert.ok(member.active, 'request cancellation preserves the channel');
+  return large.attachment;
 }

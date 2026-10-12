@@ -61,6 +61,8 @@ impl Budget {
 pub(crate) struct Queued {
     pub(crate) bytes: Vec<u8>,
     pub(crate) _charge: Charge,
+    pub(crate) cancel: CancellationToken,
+    pub(crate) progress: Option<crate::http_body_policy::Progress>,
 }
 
 #[derive(Clone)]
@@ -68,6 +70,7 @@ pub(crate) struct Output {
     tx: mpsc::Sender<Queued>,
     budget: Budget,
     cancel: CancellationToken,
+    progress: Option<crate::http_body_policy::Progress>,
 }
 
 impl Output {
@@ -81,6 +84,7 @@ impl Output {
                 tx,
                 budget: Budget::new(global),
                 cancel,
+                progress: None,
             },
             rx,
         )
@@ -88,6 +92,15 @@ impl Output {
     pub(crate) fn with_cancel(&self, cancel: CancellationToken) -> Self {
         Self {
             cancel,
+            ..self.clone()
+        }
+    }
+    pub(crate) fn with_progress(
+        &self,
+        progress: Option<crate::http_body_policy::Progress>,
+    ) -> Self {
+        Self {
+            progress,
             ..self.clone()
         }
     }
@@ -99,7 +112,7 @@ impl Output {
         let charge = self.budget.wait(bytes.len() + 24, &self.cancel).await?;
         tokio::select! {
             () = self.cancel.cancelled() => Err(()),
-            result = self.tx.send(Queued { bytes, _charge: charge }) => result.map_err(|_| ()),
+            result = self.tx.send(Queued { bytes, _charge: charge, cancel: self.cancel.clone(), progress: self.progress.clone() }) => result.map_err(|_| ()),
         }
     }
 }

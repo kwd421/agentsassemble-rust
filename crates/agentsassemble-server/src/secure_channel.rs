@@ -209,14 +209,39 @@ fn run(
                 let Some(item) = item else {
                     break;
                 };
+                if item.cancel.is_cancelled() {
+                    continue;
+                }
                 let Ok(record) = crypto.send.seal(&item.bytes) else {
                     break;
                 };
-                let sent = tokio::select! { () = writer_client.closed().cancelled() => break, sent = sender.send(Message::Binary(record.into())) => sent };
+                let expiry = async {
+                    if let Some(progress) = &item.progress {
+                        progress.expired().await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                };
+                let sent = tokio::select! {
+                    () = writer_client.closed().cancelled() => break,
+                    () = expiry => break,
+                    sent = sender.send(Message::Binary(record.into())) => sent,
+                };
                 if sent.is_err() {
                     break;
                 }
-                let ack = tokio::select! { () = writer_client.closed().cancelled() => break, ack = ack_rx.recv() => ack };
+                let expiry = async {
+                    if let Some(progress) = &item.progress {
+                        progress.expired().await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                };
+                let ack = tokio::select! {
+                    () = writer_client.closed().cancelled() => break,
+                    () = expiry => break,
+                    ack = ack_rx.recv() => ack,
+                };
                 if ack != Some(sequence) {
                     break;
                 }
