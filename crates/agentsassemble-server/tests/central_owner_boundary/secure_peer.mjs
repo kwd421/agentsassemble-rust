@@ -140,6 +140,8 @@ memberSocket.send(JSON.stringify({op:'command',request_id:memberMessage,action:'
 for(let i=0;i<10;i++){const f=await memberReceive();if(f.op==='ack'&&f.request_id===memberMessage){assert.ok(f.accepted);break;}}
 const downloaded = await member.fetch(uploaded.attachment.download_url,{headers:memberHeaders});
 assert.equal(downloaded.status,200); assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),fileBytes);
+await verifyRoomFilePolicy({member, memberHeaders, memberSocket, memberReceive,
+  managerSocket:socket, managerReceive:receive, revision:snapshot.room_settings.settings_revision});
 memberSocket.close(); // Keep this admitted channel idle while a second device connects.
 const reconnect=await RemoteTransport.connect(config.target,'member_connect');
 const connectChallenge=await memberPost(reconnect,'/api/member-connect/challenge',{});

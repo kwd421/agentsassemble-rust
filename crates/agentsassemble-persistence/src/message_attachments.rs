@@ -235,7 +235,7 @@ struct PreparedMessageAttachment {
 }
 
 impl SqliteStore {
-    /// Proves that the canonical local room human may currently upload a message attachment.
+    /// Authorizes the canonical local human and returns the current room file limit.
     ///
     /// # Errors
     ///
@@ -245,14 +245,17 @@ impl SqliteStore {
         room_id: &str,
         user_id: &str,
         participant_id: &str,
-    ) -> Result<(), PersistenceError> {
+    ) -> Result<usize, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         current_local_message_principal(&mut transaction, room_id, user_id, participant_id).await?;
+        let limit = crate::room_preferences::load_room_settings(&mut transaction, room_id)
+            .await?
+            .attachment_file_limit_bytes;
         transaction.commit().await?;
-        Ok(())
+        Ok(limit)
     }
 
-    /// Proves that a room session may currently upload a message attachment.
+    /// Authorizes a room session and returns the current room file limit.
     ///
     /// # Errors
     ///
@@ -260,15 +263,19 @@ impl SqliteStore {
     pub async fn authorize_room_session_message_attachment_upload(
         &self,
         authorization: &RoomSessionAuthorization,
-    ) -> Result<(), PersistenceError> {
+    ) -> Result<usize, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let principal = authorization
             .mutation_authority()
             .resolve(&mut transaction)
             .await?;
         require_current_message_writer(&mut transaction, &principal).await?;
+        let limit =
+            crate::room_preferences::load_room_settings(&mut transaction, &principal.room_id)
+                .await?
+                .attachment_file_limit_bytes;
         transaction.commit().await?;
-        Ok(())
+        Ok(limit)
     }
 
     /// Stores one pending message attachment for the current writable room principal.
@@ -287,7 +294,13 @@ impl SqliteStore {
         content_type: &str,
         content: Vec<u8>,
     ) -> Result<MessageAttachmentMetadata, PersistenceError> {
-        let prepared = prepare_message_attachment(filename, content_type, content).await?;
+        let prepared = prepare_message_attachment(
+            filename,
+            content_type,
+            content,
+            upload_validation_limit(principal.client_kind),
+        )
+        .await?;
         let mut transaction = self.pool.begin().await?;
         require_current_message_writer(&mut transaction, principal).await?;
         let metadata = store_pending_in_transaction(&mut transaction, principal, prepared).await?;
@@ -310,7 +323,9 @@ impl SqliteStore {
         content_type: &str,
         content: Vec<u8>,
     ) -> Result<MessageAttachmentMetadata, PersistenceError> {
-        let prepared = prepare_message_attachment(filename, content_type, content).await?;
+        let prepared =
+            prepare_message_attachment(filename, content_type, content, MAX_ROOM_FILE_BYTES)
+                .await?;
         let mut transaction = self.pool.begin().await?;
         let principal =
             current_local_message_principal(&mut transaction, room_id, user_id, participant_id)
@@ -333,7 +348,13 @@ impl SqliteStore {
         content_type: &str,
         content: Vec<u8>,
     ) -> Result<MessageAttachmentMetadata, PersistenceError> {
-        let prepared = prepare_message_attachment(filename, content_type, content).await?;
+        let prepared = prepare_message_attachment(
+            filename,
+            content_type,
+            content,
+            upload_validation_limit(authority.principal().client_kind),
+        )
+        .await?;
         let mut transaction = self.pool.begin().await?;
         let principal = authority.resolve(&mut transaction).await?;
         require_current_message_writer(&mut transaction, &principal).await?;
@@ -567,17 +588,31 @@ fn stored_metadata(
     Ok(metadata)
 }
 
+fn upload_validation_limit(kind: ClientKind) -> usize {
+    if kind == ClientKind::RoomConnector {
+        MAX_ATTACHMENT_BYTES
+    } else {
+        MAX_ROOM_FILE_BYTES
+    }
+}
+
+fn require_file_size(size: usize, limit: usize) -> Result<(), PersistenceError> {
+    if size == 0 || size > limit {
+        return Err(rejected(
+            "attachment_too_large",
+            &format!("Message attachment must be between 1 byte and {limit} bytes."),
+        ));
+    }
+    Ok(())
+}
+
 async fn prepare_message_attachment(
     filename: &str,
     content_type: &str,
     content: Vec<u8>,
+    limit: usize,
 ) -> Result<PreparedMessageAttachment, PersistenceError> {
-    if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
-        return Err(rejected(
-            "attachment_too_large",
-            "Message attachment must be between 1 byte and 10 MiB.",
-        ));
-    }
+    require_file_size(content.len(), limit)?;
     let filename = canonical_message_attachment_filename(filename);
     let content_type = normalize_content_type(content_type, &filename);
     let (content, is_safe_image) = validate_preserved_safe_raster(&content_type, content).await?;
@@ -629,6 +664,7 @@ async fn store_pending_in_transaction(
     if principal.client_kind != ClientKind::RoomConnector {
         let settings =
             crate::room_preferences::load_room_settings(transaction, &principal.room_id).await?;
+        require_file_size(prepared.content.len(), settings.attachment_file_limit_bytes)?;
         if let Some(limit) = settings.attachment_storage_limit_bytes {
             let used: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM room_message_attachments WHERE room_id = ? UNION ALL SELECT size FROM room_connector_uploads WHERE room_id = ?)")
                 .bind(&principal.room_id).bind(&principal.room_id).fetch_one(&mut **transaction).await?;

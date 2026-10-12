@@ -684,3 +684,11 @@ architecture-check, generated types, frontend tsc and affected vitest suites.
 AI upload/read paths, avatars, appearance and personas keep today's 10 MiB;
 connector policy enforcement and new staged/managed transfers are later slices.
 No usage-report work, schema migration or provider verification belongs here.
+
+Human-download entry points also include `readResourceBlob`'s caller-provided
+bound and `desktop/src-tauri/src/message_attachment_save.rs`. Message downloads
+pass their validated retained size to the existing encrypted resource budget and
+accept raw desktop-save bytes through the room-file ceiling. Keep other resource
+callers' 10 MiB default and the existing 64 MiB live-resource budget. The preflight
+reads current settings through the existing settings HTTP authority before file
+encoding; it does not introduce a client policy cache or edit the composer flow.

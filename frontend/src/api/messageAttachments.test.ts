@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { installRemoteWorkspace, closeRemoteWorkspace } from "../lib/remote/remoteWorkspace";
+import { releaseResourceBlob } from "../lib/remote/remoteResources";
+import type { RemoteTransport } from "../lib/remote/remoteTransport";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const bridge = vi.hoisted(() => ({
   upload: vi.fn(),
   read: vi.fn(),
+  settings: vi.fn(),
 }));
 
 vi.mock("../lib/desktopBridge", async () => ({
@@ -12,6 +16,8 @@ vi.mock("../lib/desktopBridge", async () => ({
   requestDesktopMessageAttachmentUploadTicket: bridge.upload,
   requestDesktopMessageAttachmentReadTicket: bridge.read,
 }));
+
+vi.mock("./room", () => ({ fetchRoomSettings: bridge.settings }));
 
 import {
   fetchMessageAttachmentBlob,
@@ -63,9 +69,39 @@ function attachmentResponse(
 }
 
 describe("lobby message-attachment HTTP authority", () => {
+  afterEach(() => closeRemoteWorkspace());
   beforeEach(() => {
     vi.resetAllMocks();
+    bridge.settings.mockResolvedValue({ attachmentFileLimitBytes: 10485760 });
     vi.unstubAllGlobals();
+  });
+
+  it("preflights against freshly resolved room policy before reading file bytes", async () => {
+    const file = new File([new Uint8Array(25 * 1024 * 1024)], "large.bin");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ attachment: { ...attachment, size: file.size } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const authority = { kind: "remote" as const, sessionToken: "aas1.session" };
+    await expect(uploadMessageAttachment(file, "general", authority)).rejects.toThrow("파일은 최대 10MB까지 올릴 수 있어요.");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(bridge.settings).toHaveBeenCalledWith("general", { sessionToken: "aas1.session", deviceToken: undefined });
+    bridge.settings.mockResolvedValueOnce({ attachmentFileLimitBytes: 52428800 });
+    await expect(uploadMessageAttachment(file, "general", authority)).resolves.toMatchObject({ size: file.size });
+    bridge.settings.mockRejectedValueOnce(new Error("settings unavailable"));
+    await expect(uploadMessageAttachment(file, "general", authority)).rejects.toThrow("settings unavailable");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("downloads retained large files through the encrypted resource budget", async () => {
+    const bytes = new Uint8Array(25 * 1024 * 1024);
+    const fetch = vi.fn().mockResolvedValue(attachmentResponse(bytes));
+    const transport = { hello: { origin: "https://host.test" }, active: true, onClose: () => () => {}, close() {}, fetch };
+    installRemoteWorkspace({ transport: transport as unknown as RemoteTransport,
+      owner: { sessionToken: "resource-owner" } as never, deviceToken: "device", clientId: "client" });
+    const blob = await fetchMessageAttachmentBlob({ ...attachment, size: bytes.length }, "general",
+      { kind: "remote", sessionToken: "resource-owner" }, "download");
+    expect(blob.size).toBe(bytes.length);
+    releaseResourceBlob(blob);
+    expect(bridge.settings).not.toHaveBeenCalled();
   });
 
   it("uploads through one fresh local grant with only the canonical message payload", async () => {

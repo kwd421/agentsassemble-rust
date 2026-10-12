@@ -28,7 +28,11 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
     let mut peer = tokio::process::Command::new("node")
         .arg("--input-type=module")
         .arg("-e")
-        .arg(include_str!("secure_peer.mjs"))
+        .arg(format!(
+            "{}\n{}",
+            include_str!("room_file_policy_peer.mjs"),
+            include_str!("secure_peer.mjs")
+        ))
         .env(
             "AA_REMOTE_TRANSPORT_MODULE",
             concat!(

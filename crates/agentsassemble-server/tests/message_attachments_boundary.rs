@@ -670,3 +670,6 @@ fn local_principal() -> AuthenticatedPrincipal {
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
     }
 }
+
+#[path = "room_file_upload_boundary.rs"]
+mod room_file_upload_boundary;

@@ -16798,3 +16798,49 @@ src/views/components/RoomSettingsModal.test.tsx src/lib/roomSocketValidation.set
 check. Existing opt-in/real-provider tests remained ignored. Packaged UI pixels and
 larger live human transfers are not claimed by this commit; human enforcement and
 preflight follow in commit 2. No provider or usage-report work was performed.
+
+## Per-room human file transfers — commit 2 (2026-10-12)
+
+Human upload authorization now returns the current room limit before body
+collection; both declared and streamed bounds feed the existing host reservation.
+The final write transaction revalidates authority, per-file policy and room quota
+before the unchanged 8 GiB/4096-file outer cap. A 50 MiB file admits at most
+69,970,604 encoded-body bytes and reserves 279,882,416 weighted bytes: one fits
+inside 512 MiB, a second maximum request is refused, and release restores capacity.
+No host budget, transport queue, progress deadline or principal count was raised.
+
+Verified real TCP header-only and unfinished chunked rejection in a 10 MiB room,
+25 MiB acceptance in a 50 MiB room, byte-exact reads and pending binding after
+lowering. An HTTP Expect/continue barrier lowers the policy after admission;
+the final write rejects with attachment_too_large and the current byte limit,
+leaving no file. Production browser RemoteTransport/WebCrypto over loopback's
+physical tunnel fixture rejects oversized unknown-length bodies early, preserves
+the channel, and uploads/binds/downloads 25 and 50 MiB byte-exactly after lowering.
+The existing 10 MiB/eleven-second progress regression remains in that same flow.
+
+Code corrections to the design assumptions: local HTTP tickets previously relied
+on authority at issuance, so consumption now revalidates it before reading bytes.
+Virtual HTTP rejects Content-Length at its existing metadata allowlist; its
+supported browser flow exercises the streamed bound. The generic encrypted Blob
+reader and native file-save command also retained 10 MiB checks; message downloads
+now use validated retained sizes/the ceiling while other callers keep their limits.
+The native test saves and reads back 25 MiB exactly, preserving secure replacement.
+Client preflight fetches current settings before encoding and propagates settings
+failure without dispatch; retained downloads do not consult the current policy.
+
+Passed on the final code: `cargo test -p agentsassemble-domain -p
+agentsassemble-persistence -p agentsassemble-protocol -p agentsassemble-server`
+(945 passed, four existing opt-in tests ignored); `cargo test --manifest-path
+desktop/src-tauri/Cargo.toml` (51 passed); `cargo fmt --all` and desktop cargo fmt,
+including both --check runs; `make architecture-check`; `cd frontend && npx tsc
+--noEmit -p .`; and `npx vitest run src/api/messageAttachments.test.ts
+src/api/roomHistory.test.ts src/api/roomPreferences.test.ts
+src/app/useRoomSettingsController.test.tsx src/views/components/RoomSettingsModal.test.tsx
+src/lib/roomSocketValidation.settings.test.ts src/views/components/LobbyComposer.test.tsx
+src/lib/messageAttachmentDownload.test.ts src/lib/remote/remoteResources.test.ts
+src/lib/desktopBridge.test.ts` (108 passed). Initial new transport test failures
+were corrected at the tests: read the rejection headers before TCP teardown;
+do not send virtual HTTP's forbidden Content-Length header. Gates are unchanged.
+Packaged UI pixels, Windows native saving and a throttled 50 MiB slow-link run
+remain unverified. AI, persona/avatar limits, usage-report work and existing
+untracked .agents/ and scripts/__pycache__/ were left alone; nothing was pushed.

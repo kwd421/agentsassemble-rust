@@ -1,6 +1,5 @@
 use agentsassemble_domain::{
-    AttachmentStorageCount, AttachmentStorageUsage, MAX_ATTACHMENT_BYTES,
-    RoomAttachmentStorageUsage,
+    AttachmentStorageCount, AttachmentStorageUsage, MAX_ROOM_FILE_BYTES, RoomAttachmentStorageUsage,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -14,7 +13,7 @@ pub(crate) async fn enforce_storage_replacement(
     previous_size: Option<i64>,
     new_size: i64,
 ) -> Result<(), PersistenceError> {
-    if !(1..=i64::try_from(MAX_ATTACHMENT_BYTES).unwrap_or(i64::MAX)).contains(&new_size)
+    if !(1..=i64::try_from(MAX_ROOM_FILE_BYTES).unwrap_or(i64::MAX)).contains(&new_size)
         || previous_size.is_some_and(|size| size <= 0)
     {
         return Err(invalid_storage_usage());

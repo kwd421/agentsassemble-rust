@@ -1,4 +1,4 @@
-use agentsassemble_domain::{MAX_ATTACHMENT_BYTES, canonical_message_attachment_filename};
+use agentsassemble_domain::{MAX_ROOM_FILE_BYTES, canonical_message_attachment_filename};
 use tauri::{WebviewWindow, ipc::InvokeBody};
 
 use crate::caller_is_bundled_ui;
@@ -12,12 +12,10 @@ fn save_request(
     encoded_filename: Option<&str>,
 ) -> Result<(String, Vec<u8>), String> {
     let content = match body {
-        InvokeBody::Raw(content)
-            if !content.is_empty() && content.len() <= MAX_ATTACHMENT_BYTES =>
-        {
+        InvokeBody::Raw(content) if !content.is_empty() && content.len() <= MAX_ROOM_FILE_BYTES => {
             content.clone()
         }
-        _ => return Err("message attachment save requires 1 byte through 10 MiB".to_owned()),
+        _ => return Err("message attachment save requires 1 byte through 50 MiB".to_owned()),
     };
     let encoded_filename =
         encoded_filename.ok_or_else(|| "message attachment save filename is missing".to_owned())?;
@@ -57,7 +55,7 @@ pub(super) async fn save_message_attachment(
 mod tests {
     use std::fs;
 
-    use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
+    use agentsassemble_domain::MAX_ROOM_FILE_BYTES;
     use tauri::ipc::InvokeBody;
     use tempfile::tempdir;
 
@@ -74,7 +72,7 @@ mod tests {
             (InvokeBody::Json(serde_json::json!([1])), Some("file.txt")),
             (InvokeBody::Raw(Vec::new()), Some("file.txt")),
             (
-                InvokeBody::Raw(vec![0; MAX_ATTACHMENT_BYTES + 1]),
+                InvokeBody::Raw(vec![0; MAX_ROOM_FILE_BYTES + 1]),
                 Some("file.txt"),
             ),
             (InvokeBody::Raw(vec![1]), Some("..%2Fsecret")),
@@ -82,6 +80,23 @@ mod tests {
         ] {
             assert!(save_request(&body, filename).is_err());
         }
+    }
+
+    #[test]
+    fn retained_large_file_saves_exact_bytes() {
+        let bytes = vec![79; 25 * 1024 * 1024];
+        let (filename, content) =
+            save_request(&InvokeBody::Raw(bytes.clone()), Some("retained.bin"))
+                .unwrap_or_else(|error| panic!("prepare retained file: {error}"));
+        let directory = tempdir().unwrap_or_else(|error| panic!("directory: {error}"));
+        let directory =
+            fs::canonicalize(directory.path()).unwrap_or_else(|error| panic!("path: {error}"));
+        let target = directory.join(filename);
+        save_atomically(&target, &content).unwrap_or_else(|error| panic!("save: {error}"));
+        assert_eq!(
+            fs::read(target).unwrap_or_else(|error| panic!("read: {error}")),
+            bytes
+        );
     }
 
     #[test]

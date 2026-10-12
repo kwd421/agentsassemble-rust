@@ -83,6 +83,7 @@ export type ChannelSettings = {
 };
 
 export interface RoomSettings {
+  attachmentFileLimitBytes?: number;
   roomId: string;
   label: string;
   topic: string;
@@ -308,6 +309,7 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
     throw new Error("방 preference settings 값이 올바르지 않습니다.");
   }
   return {
+    attachmentFileLimitBytes: payload.attachment_file_limit_bytes as number | undefined,
     roomId: expectedRoomId,
     label: stringField(payload, "label", "방 preference.settings"),
     topic: stringField(payload, "topic", "방 preference.settings"),

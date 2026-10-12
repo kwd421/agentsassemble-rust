@@ -1,3 +1,4 @@
+import { fetchRoomSettings } from "./room";
 import { readResourceBlob, releaseResourceBlob } from "../lib/remote/remoteResources";
 import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import {
@@ -15,7 +16,7 @@ import {
 } from "../lib/strictJsonContract";
 import { isUnicodeScalarString } from "../lib/unicodeScalarString";
 import { trimRustWhitespace } from "../lib/rustWhitespace";
-import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
+import { MAX_ATTACHMENT_BYTES, MAX_ROOM_FILE_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 import {
   MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
   MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS,
@@ -101,7 +102,7 @@ export function parseMessageAttachment(value: unknown): LobbyAttachmentRef {
   if (
     !Number.isSafeInteger(size) ||
     Number(size) < 1 ||
-    Number(size) > MAX_ATTACHMENT_BYTES ||
+    Number(size) > MAX_ROOM_FILE_BYTES ||
     typeof attachment.is_image !== "boolean" ||
     attachment.url !== messageAttachmentReference(id, "view") ||
     attachment.download_url !== messageAttachmentReference(id, "download")
@@ -174,8 +175,16 @@ export async function uploadMessageAttachment(
   signal?: AbortSignal
 ): Promise<LobbyAttachmentRef> {
   const canonicalRoom = canonicalRoomId(roomId);
-  if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_ATTACHMENT_BYTES) {
-    throw new Error("메시지 첨부는 1바이트 이상 10MiB 이하여야 합니다.");
+  signal?.throwIfAborted();
+  const settings = await fetchRoomSettings(canonicalRoom, authority.kind === "remote"
+    ? { sessionToken: authority.sessionToken, deviceToken: authority.deviceToken } : {});
+  signal?.throwIfAborted();
+  const fileLimit = settings.attachmentFileLimitBytes ?? MAX_ATTACHMENT_BYTES;
+  if (!Number.isSafeInteger(file.size) || file.size < 1) {
+    throw new Error("빈 파일은 올릴 수 없어요.");
+  }
+  if (file.size > fileLimit) {
+    throw new Error(`파일은 최대 ${fileLimit / 1024 / 1024}MB까지 올릴 수 있어요.`);
   }
   const resolvedAuthority = await uploadAuthority(canonicalRoom, authority, signal);
   const dataBase64 = await fileToBase64(file, signal);
@@ -223,11 +232,11 @@ export async function fetchMessageAttachmentBlob(
   });
   if (!response.ok) throw await responseError(response);
   if (!isPrivateNoStoreResponse(response, attachment.content_type)) invalidResponse();
-  const blob = await readResourceBlob(response);
+  const blob = await readResourceBlob(response, attachment.size);
   if (
     blob.size !== attachment.size ||
     blob.size < 1 ||
-    blob.size > MAX_ATTACHMENT_BYTES ||
+    blob.size > MAX_ROOM_FILE_BYTES ||
     blob.type !== attachment.content_type
   ) {
     releaseResourceBlob(blob); invalidResponse();

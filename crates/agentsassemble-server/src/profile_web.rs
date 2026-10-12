@@ -234,7 +234,7 @@ async fn upload_message_attachment(
     policy: axum::Extension<crate::http_body_policy::Policy>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let authority = resolve_message_attachment_upload_authority(
+    let (authority, file_limit) = resolve_message_attachment_upload_authority(
         &state,
         request.headers(),
         request.extensions().get(),
@@ -246,7 +246,7 @@ async fn upload_message_attachment(
     };
     let (payload, reservation): (EncodedAttachmentUpload, _) = decode_upload_body(
         request,
-        MAX_BASE64_UPLOAD_BODY_BYTES,
+        crate::http_api::base64_upload_body_limit(file_limit),
         &policy,
         &state.upload_bodies,
         principal,
@@ -257,7 +257,21 @@ async fn upload_message_attachment(
         .clone()
         .spawn(async move {
             let _reservation = reservation;
+            if payload.data_base64.trim().len() > file_limit.div_ceil(3) * 4 {
+                return Err(ProfileHttpError::new(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "attachment_too_large",
+                    format!("Message attachment exceeds the room limit of {file_limit} bytes."),
+                ));
+            }
             let content = decode_attachment_content(&payload.data_base64)?;
+            if content.is_empty() || content.len() > file_limit {
+                return Err(ProfileHttpError::new(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "attachment_too_large",
+                    format!("Message attachment exceeds the room limit of {file_limit} bytes."),
+                ));
+            }
             let attachment = match authority {
                 RoomSessionHttpAuthority::LocalTicket(grant) => {
                     state
@@ -559,22 +573,32 @@ async fn resolve_message_attachment_upload_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
     origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
-) -> Result<RoomSessionHttpAuthority, ProfileHttpError> {
+) -> Result<(RoomSessionHttpAuthority, usize), ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
     match resolve_room_session_bearer(state, headers, origin, credential).await {
         Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
-            state
+            let limit = state
                 .store
                 .authorize_room_session_message_attachment_upload(&authorization)
                 .await?;
-            Ok(RoomSessionHttpAuthority::Session(authorization))
+            Ok((RoomSessionHttpAuthority::Session(authorization), limit))
         }
-        Ok(RoomSessionBearerResolution::Other) => state
-            .tickets
-            .consume_message_attachment_upload(credential)
-            .await
-            .map(RoomSessionHttpAuthority::LocalTicket)
-            .map_err(|_| ProfileHttpError::unauthorized()),
+        Ok(RoomSessionBearerResolution::Other) => {
+            let grant = state
+                .tickets
+                .consume_message_attachment_upload(credential)
+                .await
+                .map_err(|_| ProfileHttpError::unauthorized())?;
+            let limit = state
+                .store
+                .authorize_local_message_attachment_upload(
+                    &grant.room_id,
+                    &grant.principal_id,
+                    &grant.participant_id,
+                )
+                .await?;
+            Ok((RoomSessionHttpAuthority::LocalTicket(grant), limit))
+        }
         Err(RoomSessionBearerError::Invalid) => Err(ProfileHttpError::unauthorized()),
         Err(RoomSessionBearerError::Persistence(error)) => Err(error.into()),
     }

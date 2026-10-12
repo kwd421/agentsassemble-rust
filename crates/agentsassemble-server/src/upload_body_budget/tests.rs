@@ -175,3 +175,32 @@ async fn storage_work_retains_capacity_after_request_cancellation() {
     release.await.expect("released");
     assert_eq!(budget.bytes.available_permits(), HOST_BYTES);
 }
+
+#[test]
+fn maximum_room_upload_fits_unchanged_host_budget_and_releases_capacity() {
+    let budget = Budget::default();
+    let maximum =
+        crate::http_api::base64_upload_body_limit(agentsassemble_domain::MAX_ROOM_FILE_BYTES);
+    let request = Request::new(Body::empty());
+    let (_, held) = budget
+        .reserve(Some("large"), &request, maximum)
+        .expect("50 MiB admitted");
+    assert!(matches!(
+        budget.reserve(Some("other"), &request, maximum),
+        Err(Error::Exhausted)
+    ));
+    drop(held);
+    assert!(budget.reserve(Some("other"), &request, maximum).is_ok());
+    let too_long = Request::builder()
+        .header("content-length", maximum)
+        .body(Body::empty())
+        .expect("request");
+    assert!(matches!(
+        budget.reserve(
+            Some("small-room"),
+            &too_long,
+            crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES
+        ),
+        Err(Error::Body(BodyDecodeError::PayloadTooLarge))
+    ));
+}

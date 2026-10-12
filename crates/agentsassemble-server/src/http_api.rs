@@ -11,7 +11,12 @@ use crate::AppState;
 pub(crate) const PRIVATE_NO_STORE: HeaderValue = HeaderValue::from_static("private, no-store");
 pub(crate) const MAX_BASE64_ENCODED_BYTES: usize =
     agentsassemble_domain::MAX_ATTACHMENT_BYTES.div_ceil(3) * 4;
-pub(crate) const MAX_BASE64_UPLOAD_BODY_BYTES: usize = MAX_BASE64_ENCODED_BYTES + (64 * 1024);
+pub(crate) const MAX_BASE64_UPLOAD_BODY_BYTES: usize =
+    base64_upload_body_limit(agentsassemble_domain::MAX_ATTACHMENT_BYTES);
+
+pub(crate) const fn base64_upload_body_limit(file_limit: usize) -> usize {
+    file_limit.div_ceil(3) * 4 + (64 * 1024)
+}
 pub(crate) const DEVICE_CREDENTIAL_HEADER: HeaderName = HeaderName::from_static("x-device-token");
 pub(crate) const TAURI_ORIGINS: [&str; 3] = [
     "tauri://localhost",
