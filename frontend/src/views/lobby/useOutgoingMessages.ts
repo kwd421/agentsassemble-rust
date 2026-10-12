@@ -126,21 +126,24 @@ export function useOutgoingMessages({ roomUid, roomId, participantId, authority,
     }
     return ids;
   }, [events]);
+  // Observing notifies the model's listeners, so it must not run on every snapshot:
+  // only when the room's events change or the set of unresolved messages does.
+  const unresolved = all.filter((message) => message.phase === "outcome_unknown" || message.phase === "sending")
+    .map((message) => `${message.id}:${message.phase}`).join(",");
   useEffect(() => {
-    if (!owner.authority || all.length === 0) return;
-    const unresolved = all.some((message) => message.phase === "outcome_unknown" || message.phase === "sending");
-    if (unresolved) {
-      owner.model.observe(owner.authority, events.filter((event) => event.attachments?.length).map((event) => ({
-        id: event.record_id || event.id, room_id: roomId, type: "message_final",
-        actor: { participant_id: event.actor_id }, attachments: event.attachments,
-      }) as unknown as RoomEvent));
-    }
+    if (!owner.authority || !unresolved) return;
+    owner.model.observe(owner.authority, events.filter((event) => event.attachments?.length).map((event) => ({
+      id: event.record_id || event.id, room_id: roomId, type: "message_final",
+      actor: { participant_id: event.actor_id }, attachments: event.attachments,
+    }) as unknown as RoomEvent));
+  }, [owner, unresolved, events, roomId]);
+  useEffect(() => {
     for (const message of all) {
       const shown = message.files.some((file) => file.attachment && delivered.has(file.attachment.id)) ||
         (message.eventId ? delivered.has(message.eventId) : false);
       if (message.phase === "sent" && shown) void owner.model.discard(message.id);
     }
-  }, [owner, all, events, delivered, roomId]);
+  }, [owner, all, delivered]);
 
   const messages = useMemo(
     () => all.filter((message) => message.authority.roomId === roomId && message.phase !== "cancelled" &&

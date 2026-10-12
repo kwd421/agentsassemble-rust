@@ -217,12 +217,17 @@ test("uncertain delivery matches complete ordered ids and authority; definite re
   expect(model.retry(id)).toBe(false); expect(await model.discard(id)).toBe(true); model.close();
 });
 
-test("legacy host keeps its eight-file limit and uses only the legacy upload", async () => {
+test("legacy host keeps its eight-file limit and uploads whole files one at a time", async () => {
   const { model, client, publish } = fixture();
-  const old = { ...client, transfer: false, limit: 8, legacy: vi.fn(async (f: File) => ({ id: `ma_${f.name.padStart(32, "0")}`, filename: f.name, size: f.size, content_type: "application/octet-stream", is_image: false, url: "", download_url: "" })) };
+  let inFlight = 0; let peak = 0;
+  const old = { ...client, transfer: false, limit: 8, legacy: vi.fn(async (f: File) => {
+    peak = Math.max(peak, ++inFlight); await Promise.resolve(); inFlight--;
+    return { id: `ma_${f.name.padStart(32, "0")}`, filename: f.name, size: f.size, content_type: "application/octet-stream", is_image: false, url: "", download_url: "" };
+  }) };
   const next = { ...authority, generation: 2 }; model.admit(next, old);
   expect(() => model.send(next, { text: "", files: Array.from({ length: 10 }, () => file()) })).toThrow(UploadFailure);
   expect(() => model.send(next, { text: "text only", files: [] })).toThrow(UploadFailure);
   model.send(next, { text: "", files: [file("1"), file("2")] }); await flush();
-  expect(old.legacy).toHaveBeenCalledTimes(2); expect(client.begin).not.toHaveBeenCalled(); expect(publish).toHaveBeenCalledTimes(1); model.close();
+  expect(old.legacy).toHaveBeenCalledTimes(2); expect(client.begin).not.toHaveBeenCalled(); expect(publish).toHaveBeenCalledTimes(1);
+  expect(peak).toBe(1); model.close();
 });

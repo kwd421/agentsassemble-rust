@@ -73,6 +73,7 @@ export class OutgoingMessages {
   private messages = new Map<string, MessageState>();
   private listeners = new Set<() => void>();
   private active = 0;
+  private legacyActive = 0;
   private clock: OutgoingClock;
   private timer?: unknown;
   private closed = false;
@@ -227,14 +228,17 @@ export class OutgoingMessages {
       for (const file of message.files) {
         if (file.attachment || file.job || !["queued", "deferred"].includes(file.phase)) continue;
         if (file.notBefore > this.clock.now()) { wake = Math.min(wake, file.notBefore); continue; }
-        if (this.active === 3) continue;
         const uploads = this.rooms.get(message.authority.roomId)!.uploads;
+        // An older host takes whole files against a two-per-person budget sized by the
+        // file, so those go one at a time as they always did.
+        const legacy = !uploads.transfer;
+        if (this.active === 3 || legacy && this.legacyActive === 1) continue;
         const authority = message.authority;
         const abort = new AbortController();
-        this.active++;
+        this.active++; if (legacy) this.legacyActive++;
         // Start in a microtask so the job owns its cancellation before any network work.
         const done = Promise.resolve().then(() => this.upload(message, file, uploads, authority, abort.signal)).finally(() => {
-          file.job = undefined; this.active--; this.changed();
+          file.job = undefined; this.active--; if (legacy) this.legacyActive--; this.changed();
         });
         file.job = { abort, done };
       }

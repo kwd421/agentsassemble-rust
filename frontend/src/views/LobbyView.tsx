@@ -699,7 +699,7 @@ export default function LobbyView({
                 fileCount={message.files.length}
                 bytesDone={message.acceptedBytes} bytesTotal={message.totalBytes}
                 error={failed ? outgoing.failureText(message) : undefined}
-                onCancel={() => outgoing.cancel(message.id)}
+                onCancel={message.phase === "sending" || message.phase === "sent" ? undefined : () => outgoing.cancel(message.id)}
                 onRetry={failed && (message.phase === "outcome_unknown" || message.failure?.retryable) ? () => outgoing.retry(message.id) : undefined}
                 onDiscard={() => outgoing.discard(message.id)}
               />
