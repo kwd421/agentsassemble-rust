@@ -426,6 +426,12 @@
   padding-right: 8px;
 }
 
+.dc-computer-table tfoot td {
+  border-top: 1px solid var(--color-panel-separator);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
 .dc-computer-table tbody tr:hover {
   background: var(--color-chat-hover);
 }

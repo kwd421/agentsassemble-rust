@@ -51,7 +51,7 @@ it("groups same-name processes, retains unknown totals and lists every tool", as
     ],
   });
   render(<AdminPanel onClose={() => {}} />);
-  const table = await screen.findByRole("table");
+  const table = await screen.findByRole("table", { name: "프로세스 사용량" });
   const text = (name: string) => [...table.querySelectorAll("tbody tr")].find(row => row.textContent?.includes(name))?.textContent || "";
   expect(table.querySelectorAll("tbody tr")).toHaveLength(6);
   expect(text("Python × 2")).toContain("30.0%");
@@ -59,4 +59,20 @@ it("groups same-name processes, retains unknown totals and lists every tool", as
   expect(text("Codex × 2")).toContain("확인 중");
   expect(text("Codex × 2")).toContain("확인 불가");
   expect(screen.getByText("Grok")).toBeTruthy();
+});
+
+it("lists stored files per room, largest first, with the parts and the total the server reported", async () => {
+  vi.mocked(fetchLocalResources).mockResolvedValue({
+    observed_at: "2026-10-12T00:00:00Z", cpu_sample_seconds: 1, cpu_count: 8, total_memory_bytes: null, available_memory_bytes: null,
+    load_average: null, matching_process_count: 0, processes: [],
+    attachment_storage: { rooms: [{ room_id: "a", label: "작은 방", files: 1, bytes: 2_000_000 }, { room_id: "b", label: "큰 방", files: 3, bytes: 40_000_000 }],
+      other: { files: 2, bytes: 1_000_000 }, total: { files: 6, bytes: 43_000_000 } },
+  });
+  render(<AdminPanel onClose={() => {}} />);
+  const table = await screen.findByRole("table", { name: "방별 저장 공간" });
+  const rows = [...table.querySelectorAll("tbody tr")].map(row => row.textContent);
+  expect(rows[0]).toContain("큰 방");
+  expect(rows[1]).toContain("작은 방");
+  expect(rows[2]).toContain("1.0 MB");
+  expect(table.querySelector("tfoot")?.textContent).toContain("43.0 MB");
 });

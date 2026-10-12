@@ -68,6 +68,24 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             </table>
             <p className="mt-2 text-[12px] text-text-muted">다른 앱에서 실행한 같은 도구도 함께 보여요.</p>
           </section>}
+          {resources && <section className="dc-computer-card" aria-label="저장 공간">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="dc-computer-heading">저장 공간</h2>
+              <span className="text-[12px] text-text-muted">올린 파일 기준</span>
+            </div>
+            <table className="dc-computer-table" aria-label="방별 저장 공간">
+              <thead><tr><th>방</th><th>파일</th><th>용량</th></tr></thead>
+              <tbody>
+                {[...resources.attachment_storage.rooms].sort((left, right) => right.bytes - left.bytes).map(room => <tr key={room.room_id}>
+                  <td>{room.label}</td><td>{room.files}개</td><td>{memory(room.bytes)}</td>
+                </tr>)}
+                {resources.attachment_storage.other.files > 0 && <tr>
+                  <td className="text-text-muted">프로필 사진 등</td><td>{resources.attachment_storage.other.files}개</td><td>{memory(resources.attachment_storage.other.bytes)}</td>
+                </tr>}
+              </tbody>
+              <tfoot><tr><td>합계</td><td>{resources.attachment_storage.total.files}개</td><td>{memory(resources.attachment_storage.total.bytes)}</td></tr></tfoot>
+            </table>
+          </section>}
           <RuntimeRestartPanel />
           <ReleaseHealthPanel />
         </div>
@@ -78,6 +96,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
 function memory(bytes: number | null) {
   if (bytes === null) return "확인 불가";
+  if (bytes === 0) return "0 MB";
   return bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 function toolName(label: string) {
