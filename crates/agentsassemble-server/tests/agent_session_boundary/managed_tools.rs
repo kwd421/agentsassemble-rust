@@ -34,7 +34,13 @@ where
     vec![attachment.id]
 }
 
-pub(super) async fn verify(endpoint: &str, token: &str, attachment_id: &str) {
+pub(super) async fn verify(
+    endpoint: &str,
+    token: &str,
+    attachment_id: &str,
+    store: &SqliteStore,
+    delegate: &str,
+) {
     let client = ()
         .serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
@@ -91,6 +97,9 @@ pub(super) async fn verify(endpoint: &str, token: &str, attachment_id: &str) {
             .map(|text| text.text.as_str()),
         Some("managed attachment proof")
     );
+    crate::delegated_pin::verify(&client, store, delegate, event_id, None)
+        .await
+        .unwrap();
     client
         .cancel()
         .await

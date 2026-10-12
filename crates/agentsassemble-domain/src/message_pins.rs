@@ -1,5 +1,7 @@
 /// The fixed delegated pin action. Authority is supplied only by authenticated transport.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct SetMessagePin {
     pub channel_id: String,

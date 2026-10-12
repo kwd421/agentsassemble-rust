@@ -481,7 +481,7 @@ pub(super) fn reserve_room_tool(
     ),
     String,
 > {
-    reserve_tool(state, false)
+    reserve_tool(state, false, true)
 }
 
 pub(super) fn reserve_tabletop_tool(
@@ -494,12 +494,13 @@ pub(super) fn reserve_tabletop_tool(
     ),
     String,
 > {
-    reserve_tool(state, true)
+    reserve_tool(state, true, true)
 }
 
-fn reserve_tool(
+pub(super) fn reserve_tool(
     state: &Arc<Mutex<PortalState>>,
     require_tabletop: bool,
+    require_receipt: bool,
 ) -> Result<
     (
         RoomToolAuthority,
@@ -518,7 +519,9 @@ fn reserve_tool(
     if active.closing || active.outcome.is_some() {
         return Err("This turn already has a terminal room action.".to_owned());
     }
-    require_current_receipt(active)?;
+    if require_receipt {
+        require_current_receipt(active)?;
+    }
     if require_tabletop && !active.tabletop_tools {
         return Err("Room randomness is available only in tabletop mode.".to_owned());
     }

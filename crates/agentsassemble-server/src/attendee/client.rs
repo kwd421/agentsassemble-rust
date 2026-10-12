@@ -284,7 +284,7 @@ impl RoomAttendeeClient {
             .map_err(|_| AttendeeClientError::local("invalid_room_server_url"))
     }
 
-    async fn post(
+    pub(super) async fn post(
         &self,
         operation: &str,
         connection: Option<Uuid>,

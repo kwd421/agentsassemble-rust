@@ -1,6 +1,6 @@
 # Agent Session vertical slice
 
-## Director pin delegation (required, implementation in progress)
+## Director pin delegation
 
 Managed harness and API agent creation must retain the authenticated human owner's
 exact non-bearer authority reference, independently of runtime owner/lease identity.

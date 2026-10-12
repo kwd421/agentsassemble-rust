@@ -122,3 +122,6 @@ mod member_invite_boundary;
 mod local_attendee_turn;
 #[path = "../server_move_process.rs"]
 mod server_move_process;
+
+#[path = "../delegated_pin.rs"]
+mod delegated_pin;

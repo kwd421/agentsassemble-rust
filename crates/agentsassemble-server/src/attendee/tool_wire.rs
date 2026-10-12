@@ -4,6 +4,14 @@ use agentsassemble_persistence::MessageAttachmentMetadata;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DelegatedPinRequest {
+    pub turn_generation: u64,
+    pub execution_id: String,
+    pub request: Option<agentsassemble_domain::SetMessagePin>,
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AttendeeToolReadResponse {
     ConversationStatus {

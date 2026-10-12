@@ -84,6 +84,7 @@ enum RoomPublicationWake {
 }
 
 struct RoomTaskContext {
+    principal_mutations: PrincipalMutationAdmission,
     room_id: String,
     store: SqliteStore,
     provider_catalog: ProviderCatalogService,
@@ -444,6 +445,7 @@ impl RoomRuntime {
         let cancellation = self.cancellation.clone();
         let task = spawn_room_task(
             RoomTaskContext {
+                principal_mutations: self.principal_mutations.clone(),
                 room_id: room_id.to_owned(),
                 store,
                 provider_catalog,
@@ -648,6 +650,7 @@ async fn handle_room_input(
                 &context.room_id,
                 command,
                 provider_write_budget,
+                &context.principal_mutations,
             )
             .await;
         }

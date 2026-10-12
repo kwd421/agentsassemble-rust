@@ -1,6 +1,6 @@
 //! Native ACP permissions retain exact room execution and flushed-response custody.
 use super::{AcpPermissionPolicy, ProtocolState, delivery::Deliveries};
-use crate::room_portal_tool_contract::PROVIDER_ROOM_TOOL_NAMES;
+use crate::room_portal_tool_contract::is_available_provider_tool;
 use crate::{
     ProviderRequestIngress,
     driver::{DriverError, ProviderTurnRequest},
@@ -330,12 +330,12 @@ fn room_tool_identity(
             return None;
         }
         let name = raw_input.get("toolName")?.as_str()?;
-        return PROVIDER_ROOM_TOOL_NAMES.contains(&name).then_some(name);
+        return is_available_provider_tool(name, true).then_some(name);
     }
     let name = raw_input.get("tool_name")?.as_str()?;
     let bare = name
         .strip_prefix("agentsassemble_room__")
         .or_else(|| name.strip_prefix("agentsassemble_room_"))
         .unwrap_or(name);
-    PROVIDER_ROOM_TOOL_NAMES.contains(&bare).then_some(bare)
+    is_available_provider_tool(bare, true).then_some(bare)
 }

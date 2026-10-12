@@ -95,6 +95,23 @@ fn encode(value: &Value) -> Result<String, String> {
 #[tool_router]
 impl ConnectorMcp {
     #[tool(
+        description = "Pin or unpin a message on behalf of your owner. Works only for an AI currently holding the 진행 (director) role and only within its owner's current authority. Check room_status for current delegated actions."
+    )]
+    async fn set_message_pin(
+        &self,
+        Parameters(input): Parameters<contract::Pin>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .set_message_pin(&input.request)
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
         description = "Join an AgentsAssemble room with the full invite URL (/join?token=...), as this conversation. The first call returns connection_prepared with a private connection_id and does not enter the room yet; calling room_join again with that ID and the same invite and name enters it. The same ID works for retries. The URL itself does not need to be opened."
     )]
     async fn room_join(&self, Parameters(input): Parameters<Join>) -> Result<String, String> {

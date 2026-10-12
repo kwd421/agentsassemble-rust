@@ -247,6 +247,25 @@ async fn enrich(
     value: &mut Value,
     read_ids: &[String],
 ) -> Result<(), ConnectorHttpError> {
+    let principal = authorization.principal();
+    let participant = state
+        .store
+        .participant(&principal.room_id, &principal.participant_id)
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    value["role"] = json!(participant.role);
+    let allowed = state
+        .store
+        .delegated_pin_available(
+            &agentsassemble_persistence::DelegateRoomAuthority::Connector(authorization.clone()),
+        )
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    value["delegated_actions"] = if allowed {
+        json!(["set_message_pin"])
+    } else {
+        json!([])
+    };
     let mut metadata = state
         .store
         .connector_mentions(authorization, read_ids)

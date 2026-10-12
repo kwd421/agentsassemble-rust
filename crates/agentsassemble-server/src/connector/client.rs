@@ -242,6 +242,24 @@ impl RoomConnectorClient {
         self.get("read", &[], &session.bearer, false).await
     }
 
+    /// Pins under the current director and owner authority; exact UUID retries are safe.
+    /// # Errors
+    /// Preserves explicit authority rejections and transport uncertainty.
+    pub async fn set_message_pin(
+        &self,
+        request: &agentsassemble_domain::SetMessagePin,
+    ) -> Result<Value, ConnectorClientError> {
+        let session = self.session().await?;
+        self.request(
+            self.http
+                .post(self.endpoint("pin"))
+                .bearer_auth(&session.bearer)
+                .json(request)
+                .timeout(COMMAND_TIMEOUT),
+        )
+        .await
+    }
+
     /// Reads current public activity and open polls, including this participant's ballots.
     ///
     /// # Errors
@@ -571,5 +589,5 @@ fn sequence(value: &Value) -> Result<i64, ConnectorClientError> {
 }
 
 fn room_state(snapshot: &Value) -> Value {
-    json!({"conversation_mode":snapshot["conversation_mode"],"guidance":snapshot["guidance"],"unread_mentions":snapshot["unread_mentions"]})
+    json!({"role":snapshot["role"],"delegated_actions":snapshot["delegated_actions"],"conversation_mode":snapshot["conversation_mode"],"guidance":snapshot["guidance"],"unread_mentions":snapshot["unread_mentions"]})
 }

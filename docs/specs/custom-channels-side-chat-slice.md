@@ -1,9 +1,10 @@
 # Custom text channels and ephemeral side chat
 
-## Delegated pin mutation (required, implementation in progress)
+## Delegated pin mutation
 
 `set_message_pin(channel_id, message_id, pinned, request_id)` is the only new AI
 mutation, shared by RoomPortal and connector MCP with unknown fields rejected.
+Only connector MCP adds optional private `connection_id` to select its connection.
 Authentication supplies room, owner, delegate and turn. A private persistence
 DelegatedRoomActionAuthority proves both current authorities and invokes the same
 pin mutation core as the owner's local/session request, including mute rejection.
@@ -16,8 +17,9 @@ both identities through existing write/admission owners. No pin UI changes.
 
 Implementation checkpoint: persistence and runtime now share owner pin authorization
 and mutation, debit both principal windows, and atomically retain attributed events
-and exact receipts, including backup reconstruction. Tool exposure is still pending;
-this checkpoint does not make delegated pinning reachable from AI clients.
+and exact receipts, including backup reconstruction. Portal and connector tools now
+reach this owner; connector role/action reporting and fresh portal discovery retain
+the distinct discovery contracts in external-ai-admission-slice.md.
 
 
 Status: Phase 6 approved through `25c7961`, C0/H0/M0/L0 after incarnation correction.

@@ -17,6 +17,7 @@ pub(super) async fn verify(
     connection: Uuid,
     endpoint: &str,
     token: &str,
+    store: &agentsassemble_persistence::SqliteStore,
     receiver: &mut mpsc::Receiver<ProviderRoomToolCommand>,
     attachment: (
         &str,
@@ -27,7 +28,11 @@ pub(super) async fn verify(
         StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
     );
     let attachment_id = attachment.0.to_owned();
-    let native = tokio::spawn(async move {
+    let store = store.clone();
+    let delegate = store.snapshot("general", 0, 200).await?.agent_sessions[0]
+        .participant_id
+        .clone();
+    let mut native = tokio::spawn(async move {
         let client = ()
             .serve(transport)
             .await
@@ -81,6 +86,9 @@ pub(super) async fn verify(
                 .map(|text| text.text.as_str()),
             Some("external attachment proof")
         );
+        crate::delegated_pin::verify(&client, &store, &delegate, event_id, None)
+            .await
+            .unwrap();
         let _ = client.cancel().await;
     });
     for index in 0..4 {
@@ -105,7 +113,18 @@ pub(super) async fn verify(
         .await?;
     assert_eq!(result.content, b"external attachment proof");
     command.complete(Ok(result));
-    tokio::time::timeout(Duration::from_secs(10), native).await??;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            tokio::select! {
+                result = &mut native => { result?; return Ok::<_, Box<dyn std::error::Error>>(()); }
+                command = receiver.recv() => {
+                    let call = AttendeeToolCall::new(command.ok_or("pin relay ended")?).await?;
+                    let result = call.execute(client, connection).await.map_err(|error| agentsassemble_provider::ProviderRoomToolError {code:error.code.into(), message:"Attendee pin rejected".into()});
+                    call.complete(result);
+                }
+            }
+        }
+    }).await??;
     Ok(())
 }
 

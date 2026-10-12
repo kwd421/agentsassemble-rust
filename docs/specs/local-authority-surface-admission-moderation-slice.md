@@ -1,6 +1,6 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
-## Director delegation: pin slice (required, implementation in progress)
+## Director delegation: pin slice
 
 Human roles remain non-authorizing. An AI `director` delegates a fixed action list
 within its human owner's current authority; this slice implements only pin/unpin.
@@ -13,7 +13,9 @@ of the same person or promote remote custody to local bootstrap custody.
 Missing historical bindings fail `owner_authority_unavailable`. Disconnect ends
 delegation when it ends the bound authority (secure-channel close, owner release,
 expiry or revocation). Only local host authority needs no live socket; there is no
-new durable authorization lifetime. Fresh discovery and every call recheck authority.
+new durable authorization lifetime. Portal discovery and every call recheck authority.
+Connector discovery is static; its join/status report current role and delegated
+actions, as specified in external-ai-admission-slice.md.
 Both owner and delegate pay the existing write/admission budgets. Exact request-ID
 replay has one mutation and one room-visible attribution event; changed input conflicts.
 Acceptance covers human non-escalation, guest ceilings, mute/removal/read-only/demotion

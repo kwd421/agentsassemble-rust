@@ -53,6 +53,7 @@ registered_routes! {
         same_origin_public "/api/room-connector/attachment" => get(attachments::read),
         same_origin_public "/api/room-connector/upload" => post(attachments::upload),
         same_origin_public "/api/room-connector/join" => post(join),
+        same_origin_public "/api/room-connector/pin" => post(pin),
         same_origin_public "/api/room-connector/command" => post(command),
     }
 }
@@ -81,6 +82,28 @@ async fn join(
     Ok(Json(
         json!({"session_bearer":admitted.session_bearer,"room_id":authority.principal().room_id,"room_uid":authority.room_uid(),"participant_id":authority.principal().participant_id,"expires_at":authority.expires_at(),"deduplicated":admitted.deduplicated}),
     ))
+}
+
+async fn pin(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<Value>, ConnectorHttpError> {
+    let fingerprint = credential(&request, CONNECTOR_SESSION_PREFIX)?;
+    let authority = state
+        .store
+        .authorize_connector_session(&fingerprint, chrono::Utc::now())
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    let body = decode_json_body(request, 16384).await?;
+    let outcome = state
+        .rooms
+        .set_delegated_message_pin(
+            &agentsassemble_persistence::DelegateRoomAuthority::Connector(authority),
+            &body,
+        )
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    Ok(Json(outcome.result))
 }
 
 async fn command(

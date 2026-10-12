@@ -201,6 +201,15 @@ impl RemoteOpenAiDriver {
         self.turn_effect_uncertain = false;
         let credential = self.load_credential().await?;
         let observation = request.room_observation.as_ref();
+        if observation.is_some() {
+            self.tools = self
+                .portal_client
+                .active()
+                .ok_or(ROOM_PORTAL_UNAVAILABLE)?
+                .list_all_tools()
+                .await
+                .map_err(|_| ROOM_PORTAL_UNAVAILABLE)?;
+        }
         let tools = self.turn_tools(session, request);
         let mut messages = vec![json!({"role": "user", "content": request.input})];
         if let Some(instructions) = &request.session_instructions {

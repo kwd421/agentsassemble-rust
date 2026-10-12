@@ -68,7 +68,9 @@ impl RoomPortalMcp {
             ProviderRoomToolResult::MessageContext(context) => {
                 Ok(crate::room_portal_render::message_context(&context))
             }
-            ProviderRoomToolResult::Random(_) => {
+            ProviderRoomToolResult::Random(_)
+            | ProviderRoomToolResult::DelegatedPinAvailable(_)
+            | ProviderRoomToolResult::MessagePin(_) => {
                 Err("The room tool owner returned a mismatched result.".to_owned())
             }
         }
@@ -106,6 +108,28 @@ fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservatio
 
 #[tool_router]
 impl RoomPortalMcp {
+    #[tool(
+        description = "Pin or unpin a room message on behalf of your owner. Only a current director AI whose owner can currently pin may use this tool; no operator rights are granted."
+    )]
+    async fn set_message_pin(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::SetMessagePin>,
+    ) -> Result<String, String> {
+        let (authority, reservation, ingress) = reserve_room_tool(&self.state)?;
+        let result = ingress
+            .submit(
+                authority,
+                ProviderRoomToolRequest::SetMessagePin(request),
+                reservation,
+            )
+            .await
+            .map_err(|error| format!("{}: {}", error.code, error.message))?;
+        let ProviderRoomToolResult::MessagePin(result) = result else {
+            return Err("Unexpected pin result.".into());
+        };
+        serde_json::to_string(&result).map_err(|_| "Pin result encoding failed.".into())
+    }
+
     #[tool(
         description = "Read current agent activity and open polls with your own choices. Optional observation; does not end your turn. Follow a nonzero next_before_seq even when the poll page is empty."
     )]
@@ -291,25 +315,42 @@ impl RoomPortalMcp {
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for RoomPortalMcp {
-    // RMCP's generated tools/list uses async without suspension. Keep its router,
-    // result builders and negotiated cache hints, with an immediately ready result.
-    fn list_tools(
+    async fn list_tools(
         &self,
         _request: Option<rmcp::model::PaginatedRequestParams>,
-        context: rmcp::service::RequestContext<rmcp::RoleServer>,
-    ) -> impl std::future::Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
-    + Send
-    + '_ {
-        let mut result = rmcp::model::ListToolsResult::with_all_items(self.tool_router.list_all());
-        if context
-            .protocol_version()
-            .is_some_and(|version| version >= rmcp::model::ProtocolVersion::V_2026_07_28)
-        {
-            result = result
-                .with_ttl_ms(0)
-                .with_cache_scope(rmcp::model::CacheScope::Public);
-        }
-        std::future::ready(Ok(result))
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        let available = match crate::room_portal::reserve_tool(&self.state, false, false) {
+            Ok((authority, reservation, ingress)) => {
+                match ingress
+                    .submit(
+                        authority,
+                        ProviderRoomToolRequest::DelegatedPinAvailable,
+                        reservation,
+                    )
+                    .await
+                {
+                    Ok(ProviderRoomToolResult::DelegatedPinAvailable(value)) => value,
+                    Ok(_) => {
+                        return Err(rmcp::ErrorData::internal_error(
+                            "Invalid delegation discovery result",
+                            None,
+                        ));
+                    }
+                    Err(error) => return Err(rmcp::ErrorData::internal_error(error.message, None)),
+                }
+            }
+            Err(_) => false,
+        };
+        let tools = self
+            .tool_router
+            .list_all()
+            .into_iter()
+            .filter(|tool| tool.name != "set_message_pin" || available)
+            .collect();
+        Ok(rmcp::model::ListToolsResult::with_all_items(tools)
+            .with_ttl_ms(0)
+            .with_cache_scope(rmcp::model::CacheScope::Private))
     }
 
     fn get_info(&self) -> ServerInfo {

@@ -380,3 +380,6 @@ fn ready_report() -> AttendeeRuntimeReady {
         max_output_tokens: 0,
     }
 }
+
+#[path = "provider_request_broker/delegated_pin.rs"]
+mod delegated_pin;

@@ -1,22 +1,30 @@
 # External AI admission and bridges
 
-## Director pin delegation (required, implementation in progress)
+## Director pin delegation
 
 Companion, friend-attendee and connector invitation/admission retain the issuer's
 exact server-only non-bearer owner provenance, consistent with participant owner_id.
 Companion parent references remain authoritative. Historical missing provenance
 fails closed; invitation creator identity alone does not prove session authority.
-Attendee RoomPortal and connector MCP expose the same strict pin tool schema and
-recheck current owner/delegate authority on discovery and execution without reconnect.
-Retain attendee connection/turn and connector session checks. Expired or disconnected
-owner authority cannot delegate. All other delegated actions and confirmations remain
-outside this slice; see the director pin contract in the local-authority spec.
+Attendee RoomPortal lists the strict `set_message_pin(channel_id, message_id,
+pinned, request_id)` tool only while the current AI director and its owner can pin.
+Retain attendee connection/turn and connector session checks on every call.
+The shared stateless connector MCP lists this tool statically with the same optional
+private `connection_id` as its other tools; no connection-bound MCP authentication.
+Its description limits use to director AIs within their owner's current authority.
+`room_join` and `room_status` report the current AI role and `delegated_actions`
+(`["set_message_pin"]` for permitted pin/unpin, otherwise `[]`). Discovery grants
+nothing: calls distinguish `role_required`, `owner_authority_unavailable`, and owner
+permission errors. Disconnect-bound owners lose delegation immediately; local host
+operator authority lasts while the host runs. All other delegated actions and
+confirmations remain outside this slice.
 
-Verified transport mismatch: remote/hosted connector MCP uses a shared stateless
-endpoint. Its tools take a private connection_id argument, but tools/list has no
-connection identity. Identical pin schemas and per-AI discovery remain requirements;
-choosing a new authenticated connection context or revising that protocol requires
-an owner decision. Do not infer a caller from another connection in the hub.
+Acceptance crosses connector MCP/HTTP, managed/API RoomPortal and attendee/companion
+RoomPortal: human director gains nothing; eligible AI pin/unpin commits attributed
+room-visible output once on exact retry; owner mute/removal/read-only/disconnect and
+AI demotion deny the next call and remove portal discovery. Guest ownership grants
+only the guest's existing authority. Verify affected crate tests and architecture-check.
+
 
 
 ## 추가 창 표시 보정 (2026-10-07)

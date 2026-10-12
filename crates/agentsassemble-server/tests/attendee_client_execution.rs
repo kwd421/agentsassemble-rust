@@ -89,6 +89,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
         replacement.connection_id(),
         &endpoint,
         &token,
+        &store,
         &mut tools_rx,
         (&attachment_id, &mut attachments_rx),
     )

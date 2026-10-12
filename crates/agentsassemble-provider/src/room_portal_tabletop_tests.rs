@@ -42,7 +42,15 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
         .unwrap_or_else(|error| panic!("begin tabletop observation: {error}"));
     let client = Arc::new(connect(&portal).await);
     let control_client = connect(&portal).await;
-    assert_tabletop_tool_catalog(client.as_ref()).await;
+    let discovery = async {
+        let mut command = commands.recv().await.expect("delegation discovery");
+        command
+            .begin_execution()
+            .await
+            .expect("discovery authority");
+        command.complete(Ok(ProviderRoomToolResult::DelegatedPinAvailable(false)));
+    };
+    tokio::join!(assert_tabletop_tool_catalog(client.as_ref()), discovery);
     let read = call_tool(client.as_ref(), "read_discussion", json!({})).await;
     assert_ne!(read.is_error, Some(true));
 

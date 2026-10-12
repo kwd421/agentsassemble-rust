@@ -3,6 +3,15 @@ use serde::Deserialize;
 
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct Pin {
+    #[serde(default)]
+    pub(super) connection_id: String,
+    #[serde(flatten)]
+    pub(super) request: agentsassemble_domain::SetMessagePin,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Join {
     pub(super) invite_url: String,
     #[serde(default)]

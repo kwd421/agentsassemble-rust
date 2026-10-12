@@ -33,6 +33,13 @@ async fn delivered_result(
         "valid room result aborted the turn: {outcome:?}"
     );
     assert_eq!(bodies.len(), 3);
+    assert!(
+        bodies[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|schema| schema["function"]["name"] == tool)
+    );
     bodies[2]["messages"]
         .as_array()
         .and_then(|messages| {
@@ -86,6 +93,12 @@ async fn attachment_results_reach_api_and_preserve_turn_completion() {
 async fn search_over_huge_messages_reaches_api_as_previews_instead_of_failing() {
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(1);
     let owner = tokio::spawn(async move {
+        let mut discovery = commands.recv().await.expect("delegation discovery");
+        discovery
+            .begin_execution()
+            .await
+            .expect("discovery authority");
+        discovery.complete(Ok(ProviderRoomToolResult::DelegatedPinAvailable(false)));
         let mut command = commands
             .recv()
             .await
@@ -162,4 +175,29 @@ async fn rejected_attachment_reason_reaches_api_and_turn_continues() {
         value["error"]["message"],
         "The attachment is unavailable in this room."
     );
+}
+
+#[tokio::test]
+async fn eligible_pin_is_discovered_after_api_launch_and_result_reaches_next_round() {
+    let (ingress, mut commands) = ProviderRoomToolIngress::channel(1);
+    let owner = tokio::spawn(async move {
+        let mut discovery = commands.recv().await.expect("discovery");
+        discovery
+            .begin_execution()
+            .await
+            .expect("discovery authority");
+        discovery.complete(Ok(ProviderRoomToolResult::DelegatedPinAvailable(true)));
+        let mut pin = commands.recv().await.expect("pin");
+        pin.begin_execution().await.expect("pin authority");
+        pin.complete(Ok(ProviderRoomToolResult::MessagePin(
+            json!({"status":"succeeded"}),
+        )));
+    });
+    let mut observation = room_request("session")
+        .room_observation
+        .expect("observation");
+    observation.room_tool_ingress = Some(ingress);
+    let result = delivered_result(observation, "set_message_pin", json!({"channel_id":"lobby","message_id":"message-1","pinned":true,"request_id":uuid::Uuid::new_v4()})).await;
+    owner.await.expect("tool owner");
+    assert!(result.contains("succeeded"));
 }

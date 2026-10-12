@@ -405,7 +405,14 @@ async fn verify_room_turn_publication(first_status: &str) {
         server.stop().await;
         return;
     }
-    managed_tools::verify(&endpoint, &token, &attachment_ids[0]).await;
+    managed_tools::verify(
+        &endpoint,
+        &token,
+        &attachment_ids[0],
+        &server.state.store,
+        session_id,
+    )
+    .await;
     let snapshot = server
         .state
         .store

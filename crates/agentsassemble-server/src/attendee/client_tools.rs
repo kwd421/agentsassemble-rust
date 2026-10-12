@@ -11,6 +11,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use uuid::Uuid;
 
 enum Request {
+    Pin(crate::attendee::tool_wire::DelegatedPinRequest),
     Read(AttendeeToolReadRequest),
     Random(AttendeeRandomRequest),
 }
@@ -31,6 +32,17 @@ impl AttendeeToolCall {
             return Err(error);
         }
         let request = match command.request() {
+            ProviderRoomToolRequest::DelegatedPinAvailable
+            | ProviderRoomToolRequest::SetMessagePin(_) => {
+                Request::Pin(crate::attendee::tool_wire::DelegatedPinRequest {
+                    turn_generation: command.turn_generation(),
+                    execution_id: command.execution_id().into(),
+                    request: match command.request() {
+                        ProviderRoomToolRequest::SetMessagePin(request) => Some(request.clone()),
+                        _ => None,
+                    },
+                })
+            }
             ProviderRoomToolRequest::ReadRoomStatus { before_seq } => {
                 Request::Read(AttendeeToolReadRequest {
                     turn_generation: command.turn_generation(),
@@ -81,6 +93,17 @@ impl AttendeeToolCall {
         connection: Uuid,
     ) -> Result<ProviderRoomToolResult, AttendeeClientError> {
         match &self.request {
+            Request::Pin(request) => {
+                let result = client.post("tool/pin", Some(connection), request).await?;
+                if request.request.is_some() {
+                    Ok(ProviderRoomToolResult::MessagePin(result))
+                } else {
+                    result
+                        .as_bool()
+                        .map(ProviderRoomToolResult::DelegatedPinAvailable)
+                        .ok_or_else(invalid_response)
+                }
+            }
             Request::Random(request) => client
                 .random(connection, request)
                 .await

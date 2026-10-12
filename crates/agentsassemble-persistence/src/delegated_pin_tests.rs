@@ -220,3 +220,92 @@ async fn next_call_observes_owner_mute_removal_delegate_demotion_and_revocation(
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn guest_pin_rechecks_scope_and_disconnect_of_the_exact_parent_on_retry() -> TestResult {
+    let (store, session, now) = crate::attendee::connection_tests::fixture().await?;
+    let connection = store
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
+        .await?
+        .authorization;
+    store
+        .record_attendee_ready(&connection, &crate::attendee::ready_tests::report(), now)
+        .await?;
+    let fingerprint = crate::human_session_authority_tests::session_fingerprint(&store).await;
+    let human = store.authorize_human_session(&fingerprint).await?;
+    let message = store
+        .execute_authorized_message_with_turn(
+            crate::RoomMutationAuthority::HumanSession(&human),
+            &Uuid::new_v4().to_string(),
+            "message.send",
+            &json!({"content":"Guest pin"}),
+        )
+        .await?;
+    let turn = store
+        .deliver_attendee_turn(&connection, now)
+        .await?
+        .ok_or("turn missing")?;
+    let local = crate::human_session_authority_tests::local_operator_principal();
+    store
+        .execute_participant_role_update(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            &Uuid::new_v4().to_string(),
+            &json!({"participant_id":session.principal().participant_id,"role":"director"}),
+        )
+        .await?;
+    let authority = DelegateRoomAuthority::Attendee {
+        session,
+        connection_id: connection.connection_id(),
+        turn_generation: turn.authority.turn_generation,
+        execution_id: turn.authority.execution_id,
+    };
+    let request = SetMessagePin {
+        channel_id: "lobby".into(),
+        message_id: message.outcome.event.id,
+        pinned: true,
+        request_id: Uuid::new_v4().to_string(),
+    };
+    store
+        .set_delegated_message_pin(&authority, &request, |_, _, _| Ok(()))
+        .await?;
+    // Change only the bound session's current scope: no other session may substitute.
+    set_guest_scope(&store, "read_only").await?;
+    assert!(!store.delegated_pin_available(&authority).await?);
+    assert!(
+        matches!(store.set_delegated_message_pin(&authority,&request,|_,_,_|Ok(())).await, Err(PersistenceError::CommandRejected {code,..}) if code=="owner_scope_read_only")
+    );
+    set_guest_scope(&store, "read_write").await?;
+    let channel = "p".repeat(43);
+    sqlx::query("UPDATE human_room_sessions SET secure_channel_id=?,secure_client_key_fingerprint=? WHERE session_fingerprint=?").bind(&channel).bind([7_u8;32].as_slice()).bind(fingerprint.as_slice()).execute(&store.pool).await?;
+    assert!(store.delegated_pin_available(&authority).await?);
+    store.disconnect_secure_channel(&channel).await?;
+    assert!(!store.delegated_pin_available(&authority).await?);
+    assert!(
+        matches!(store.set_delegated_message_pin(&authority,&request,|_,_,_|Ok(())).await, Err(PersistenceError::CommandRejected {code,..}) if code=="owner_authority_unavailable")
+    );
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM room_events WHERE json_extract(event_json,'$.request_id')=?",
+    )
+    .bind(&request.request_id)
+    .fetch_one(&store.pool)
+    .await?;
+    assert_eq!(count, 1);
+    Ok(())
+}
+
+async fn set_guest_scope(store: &SqliteStore, scope: &str) -> TestResult {
+    let mut tx = store.pool.begin().await?;
+    sqlx::query("PRAGMA defer_foreign_keys=ON")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE room_invites SET invite_scope=?")
+        .bind(scope)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE human_room_sessions SET invite_scope=?")
+        .bind(scope)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
