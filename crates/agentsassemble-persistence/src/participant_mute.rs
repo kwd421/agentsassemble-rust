@@ -91,37 +91,44 @@ impl SqliteStore {
                 host_interrupt_effect: None,
             });
         }
-        let update = parse_update(payload)?;
-        let prepared = prepare_participant_mute(&mut transaction, principal, &update).await?;
-        let result = json!({
-            "participant": prepared.participant,
-            "event": prepared.event,
-            "event_seq": prepared.event.seq,
-        });
+        let mutation = mute_in(&mut transaction, principal, payload).await?;
+        let result = &mutation.outcome.result;
         store_command_result(
             &mut transaction,
             (&principal.room_id, &principal.principal_id),
             request_id,
             ACTION,
             &payload_hash,
-            &result,
+            result,
         )
         .await?;
         authorization.record_success(&mut transaction).await?;
         transaction.commit().await?;
-        let mut events = vec![prepared.event.clone()];
-        events.extend(prepared.scheduling.events);
-        Ok(ParticipantMuteMutation {
-            outcome: CommandOutcome {
-                result,
-                event: prepared.event,
-                events,
-                deduplicated: false,
-            },
-            assignments: prepared.scheduling.next_assignments,
-            host_interrupt_effect: prepared.host_interrupt_effect,
-        })
+        Ok(mutation)
     }
+}
+
+// Caller proves current action authority in this same transaction before admission/replay.
+pub(crate) async fn mute_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    payload: &Value,
+) -> Result<ParticipantMuteMutation, PersistenceError> {
+    let update = parse_update(payload)?;
+    let prepared = prepare_participant_mute(transaction, principal, &update).await?;
+    let result = json!({"participant":prepared.participant,"event":prepared.event,"event_seq":prepared.event.seq});
+    let mut events = vec![prepared.event.clone()];
+    events.extend(prepared.scheduling.events);
+    Ok(ParticipantMuteMutation {
+        outcome: CommandOutcome {
+            result,
+            event: prepared.event,
+            events,
+            deduplicated: false,
+        },
+        assignments: prepared.scheduling.next_assignments,
+        host_interrupt_effect: prepared.host_interrupt_effect,
+    })
 }
 
 async fn prepare_participant_mute(

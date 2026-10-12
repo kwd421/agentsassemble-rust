@@ -1,5 +1,11 @@
 # Agent Session vertical slice
 
+## Director direct actions: slice 2 acceptance
+
+Slice 2 adds channel create/rename, participant mute/unmute and agent start/stop to managed/API RoomPortal. Start is direct only for `meeting_read_only`; other permissions require the owner confirmation error without side effects. Shared lifecycle preparation, effect authorization, completion/recovery and room attribution remain mandatory.
+See the slice 2 section in local-authority-surface-admission-moderation-slice.md for the complete authority, replay, attribution and verification contract. Earlier pin-only sections describe slice 1.
+
+
 ## Director pin delegation
 
 Managed harness and API agent creation must retain the authenticated human owner's

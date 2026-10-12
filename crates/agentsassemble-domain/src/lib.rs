@@ -164,3 +164,6 @@ pub use vote::{
     VOTE_QUESTION_CHARACTER_LIMIT, VoteCast, VoteCommand, VoteCreate, VoteReference, VoteSummary,
     prepare_vote_event, resolve_vote_choice, validate_vote_id, vote_deadline_at,
 };
+
+mod delegated_actions;
+pub use delegated_actions::*;

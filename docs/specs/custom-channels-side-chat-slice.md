@@ -1,5 +1,11 @@
 # Custom text channels and ephemeral side chat
 
+## Director direct actions: slice 2 acceptance
+
+Slice 2 adds strict create/rename tools through the same settings-update owner. Construct only a channel delta from current settings; preserve all other settings, name/count limits, retirement and expected revision checks. No delete tool.
+See the slice 2 section in local-authority-surface-admission-moderation-slice.md for the complete authority, replay, attribution and verification contract. Earlier pin-only sections describe slice 1.
+
+
 ## Delegated pin mutation
 
 `set_message_pin(channel_id, message_id, pinned, request_id)` is the only new AI

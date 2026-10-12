@@ -1,5 +1,11 @@
 # External AI admission and bridges
 
+## Director direct actions: slice 2 acceptance
+
+Slice 2 extends attendee/companion and connector delegated actions with channel create/rename, mute/unmute, start/stop. Portal discovery is action-specific and fresh; connector discovery stays static and room_join/room_status report current availability. Every transport enforces current exact owner and AI authority at call time.
+See the slice 2 section in local-authority-surface-admission-moderation-slice.md for the complete authority, replay, attribution and verification contract. Earlier pin-only sections describe slice 1.
+
+
 ## Director pin delegation
 
 Companion, friend-attendee and connector invitation/admission retain the issuer's

@@ -1,3 +1,4 @@
+mod delegated_direct;
 mod delegated_pin;
 pub use delegated_pin::DelegateRoomAuthority;
 mod account_data_reset;

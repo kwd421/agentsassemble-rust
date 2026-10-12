@@ -1,5 +1,11 @@
 # Identity, accounts, friends and human admission
 
+## Director direct actions: slice 2 acceptance
+
+Slice 2 reuses the exact server-owned owner binding for channel, mute and agent lifecycle delegation. Never substitute another session for the owner; remote disconnect/revocation and restoration continue to fail closed. No invitation or confirmation behavior is added.
+See the slice 2 section in local-authority-surface-admission-moderation-slice.md for the complete authority, replay, attribution and verification contract. Earlier pin-only sections describe slice 1.
+
+
 ## Director owner provenance (required, implementation in progress)
 
 AI ownership identifies a human but never proves authority. Creation and invitation

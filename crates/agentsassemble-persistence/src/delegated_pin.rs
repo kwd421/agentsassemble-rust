@@ -110,12 +110,12 @@ impl DelegateRoomAuthority {
     }
 }
 
-struct DelegatedRoomActionAuthority {
-    owner: AuthenticatedPrincipal,
-    delegate: AuthenticatedPrincipal,
+pub(crate) struct DelegatedRoomActionAuthority {
+    pub(crate) owner: AuthenticatedPrincipal,
+    pub(crate) delegate: AuthenticatedPrincipal,
 }
 impl DelegatedRoomActionAuthority {
-    async fn pin(
+    pub(crate) async fn pin(
         tx: &mut Transaction<'_, Sqlite>,
         authority: &DelegateRoomAuthority,
     ) -> Result<Self, PersistenceError> {
@@ -210,7 +210,23 @@ impl SqliteStore {
         crate::room_write_budget::reserve_room_write_budget(&mut tx, &delegate.room_id, bytes)
             .await?;
         let admission = admit(&proof.owner.principal_id, &delegate.principal_id, bytes)?;
-        let event = attributed_event(&mut tx, &proof, request).await?;
+        let mut event = attributed_action_event(
+            &mut tx,
+            &proof,
+            &request.request_id,
+            "set_message_pin",
+            &request.message_id,
+            if request.pinned {
+                "pinned a message"
+            } else {
+                "unpinned a message"
+            },
+        )
+        .await?;
+        event.extra.insert("pinned".into(), json!(request.pinned));
+        event
+            .extra
+            .insert("target_channel_id".into(), json!(request.channel_id));
         crate::room_turns::support::insert_event(&mut tx, &event).await?;
         let result = json!({"status":"succeeded", "request_id":request.request_id,
             "action":"set_message_pin", "target_id":request.message_id, "event_id":event.id, "event":event});
@@ -236,10 +252,13 @@ impl SqliteStore {
     }
 }
 
-async fn attributed_event(
+pub(crate) async fn attributed_action_event(
     tx: &mut Transaction<'_, Sqlite>,
     proof: &DelegatedRoomActionAuthority,
-    request: &SetMessagePin,
+    request_id: &str,
+    action: &str,
+    target_id: &str,
+    description: &str,
 ) -> Result<RoomEvent, PersistenceError> {
     let delegate = &proof.delegate;
     Ok(RoomEvent {
@@ -259,10 +278,8 @@ async fn attributed_event(
         actor_type: Some("agent".into()),
         display_name: Some(delegate.display_name.clone()),
         content: Some(format!(
-            "{} {} a message on behalf of {}.",
-            delegate.display_name,
-            if request.pinned { "pinned" } else { "unpinned" },
-            proof.owner.display_name
+            "{} {} on behalf of {}.",
+            delegate.display_name, description, proof.owner.display_name
         )),
         message_kind: Some("system".into()),
         extra: [
@@ -274,11 +291,9 @@ async fn attributed_event(
                 "on_behalf_of_participant_id".into(),
                 json!(proof.owner.participant_id),
             ),
-            ("action".into(), json!("set_message_pin")),
-            ("target_id".into(), json!(request.message_id)),
-            ("request_id".into(), json!(request.request_id)),
-            ("pinned".into(), json!(request.pinned)),
-            ("target_channel_id".into(), json!(request.channel_id)),
+            ("action".into(), json!(action)),
+            ("target_id".into(), json!(target_id)),
+            ("request_id".into(), json!(request_id)),
         ]
         .into(),
     })

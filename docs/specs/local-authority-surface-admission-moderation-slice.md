@@ -1,5 +1,40 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
+## Director delegation: remaining direct actions (slice 2)
+
+Required behavior: extend the existing pin delegation owner with
+`create_text_channel(name, request_id)`,
+`rename_text_channel(channel_id, name, expected_settings_revision, request_id)`,
+`set_participant_mute(participant_id, muted, request_id)`, and
+`start_agent(agent_id, request_id)` / `stop_agent(agent_id, request_id)`.
+These operator actions require the exact bound owner's current corresponding
+capability, otherwise `owner_not_permitted`; director never grants operator rights.
+Start accepts only `meeting_read_only`; workspace-write/full-access targets return
+`owner_confirmation_required` without mutation or provider reservation. Confirmation,
+channel deletion, agent creation/configuration/removal, invites and roles stay excluded.
+
+Every call revalidates owner provenance and current delegate custody in the mutation
+transaction. Preserve immediate owner mute/removal/read-only/disconnect and delegate
+role/mute revocation, dual principal budgets, full-payload/room/action/owner/delegate
+replay binding, exact retries and fail-closed restored/re-created identities.
+Channels construct only the requested delta against current settings and invoke the
+settings owner, retaining count/name/revision/retirement checks. Mute shares the
+canonical target restrictions and exact execution interruption. Start/stop share
+preparation, effect authorization, completion and recovery with human requests;
+completed attribution must survive recovery without duplicate public lines.
+
+Affected entry points: managed/API RoomPortal, attendee/companion RoomPortal and
+connector MCP/HTTP; portal lists each currently permitted action, connector lists
+statically and reports fresh `delegated_actions` through room_join/room_status.
+Discovery is advisory. Canonical action events and room-visible completion attribution
+commit together; lifecycle acceptance is distinct from completion. No frontend UI.
+Verification: affected crate tests, cargo fmt, architecture-check; cover each action's
+success/attribution and immediate revocation, guest ceilings, channel settings isolation,
+unsafe-start non-mutation, cross-room targets, replay conflicts and shared owner budget.
+Retain the requested two independently buildable commits under 1,000 changed lines
+and do not push. This section records acceptance, not implementation completion.
+
+
 ## Director delegation: pin slice
 
 Human roles remain non-authorizing. An AI `director` delegates a fixed action list

@@ -31,7 +31,7 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         let principal = &authorization.resolve(&mut transaction).await?;
         let payload_hash = canonical_payload_hash(payload);
-        let mut room = active_room_for_principal(&mut transaction, principal).await?;
+        active_room_for_principal(&mut transaction, principal).await?;
         if !principal.capabilities.room_manage {
             return Err(rejected(
                 "permission_denied",
@@ -53,60 +53,7 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(outcome);
         }
-        let encoded =
-            sqlx::query_scalar::<_, String>("SELECT settings_json FROM rooms WHERE room_id = ?")
-                .bind(&principal.room_id)
-                .fetch_one(&mut *transaction)
-                .await?;
-        let current: RoomSettings = serde_json::from_str(&encoded)?;
-        let (expected_revision, next) = current
-            .strict_update(payload)
-            .map_err(|error| rejected(error.code, error.message))?;
-        let current_public = public_settings(&current)?;
-        if expected_revision != current_public.settings_revision {
-            return Err(rejected(
-                "settings_conflict",
-                "Room settings changed before this update was applied.",
-            ));
-        }
-        let now = Utc::now();
-        crate::room_channels::transition_channels(
-            &mut transaction,
-            &principal.room_id,
-            &current.channels,
-            &next.channels,
-        )
-        .await?;
-        transition_room_appearance_references(
-            &mut transaction,
-            &principal.room_id,
-            &current.appearance,
-            &next.appearance,
-            now,
-        )
-        .await?;
-        room.label.clone_from(&next.label);
-        room.updated_at = now;
-        let public = public_settings(&next)?;
-        let outcome = settings_updated_outcome(
-            principal,
-            &public,
-            next_sequence(&mut transaction, &principal.room_id).await?,
-            now,
-        );
-        let event = &outcome.event;
-        sqlx::query("UPDATE rooms SET room_json = ?, settings_json = ? WHERE room_id = ?")
-            .bind(serde_json::to_string(&room)?)
-            .bind(serde_json::to_string(&next)?)
-            .bind(&principal.room_id)
-            .execute(&mut *transaction)
-            .await?;
-        sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
-            .bind(&principal.room_id)
-            .bind(event.seq)
-            .bind(serde_json::to_string(event)?)
-            .execute(&mut *transaction)
-            .await?;
+        let outcome = update_settings_in(&mut transaction, principal, payload).await?;
         store_command_result(
             &mut transaction,
             (&principal.room_id, &principal.principal_id),
@@ -121,6 +68,70 @@ impl SqliteStore {
         self.notify_room_directory_changed();
         Ok(outcome)
     }
+}
+
+// Caller proves current action authority in this same transaction before admission/replay.
+pub(crate) async fn update_settings_in(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    payload: &Value,
+) -> Result<CommandOutcome, PersistenceError> {
+    let mut room = active_room_for_principal(transaction, principal).await?;
+    let encoded =
+        sqlx::query_scalar::<_, String>("SELECT settings_json FROM rooms WHERE room_id = ?")
+            .bind(&principal.room_id)
+            .fetch_one(&mut **transaction)
+            .await?;
+    let current: RoomSettings = serde_json::from_str(&encoded)?;
+    let (expected_revision, next) = current
+        .strict_update(payload)
+        .map_err(|error| rejected(error.code, error.message))?;
+    let current_public = public_settings(&current)?;
+    if expected_revision != current_public.settings_revision {
+        return Err(rejected(
+            "settings_conflict",
+            "Room settings changed before this update was applied.",
+        ));
+    }
+    let now = Utc::now();
+    crate::room_channels::transition_channels(
+        transaction,
+        &principal.room_id,
+        &current.channels,
+        &next.channels,
+    )
+    .await?;
+    transition_room_appearance_references(
+        transaction,
+        &principal.room_id,
+        &current.appearance,
+        &next.appearance,
+        now,
+    )
+    .await?;
+    room.label.clone_from(&next.label);
+    room.updated_at = now;
+    let public = public_settings(&next)?;
+    let outcome = settings_updated_outcome(
+        principal,
+        &public,
+        next_sequence(transaction, &principal.room_id).await?,
+        now,
+    );
+    let event = &outcome.event;
+    sqlx::query("UPDATE rooms SET room_json = ?, settings_json = ? WHERE room_id = ?")
+        .bind(serde_json::to_string(&room)?)
+        .bind(serde_json::to_string(&next)?)
+        .bind(&principal.room_id)
+        .execute(&mut **transaction)
+        .await?;
+    sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
+        .bind(&principal.room_id)
+        .bind(event.seq)
+        .bind(serde_json::to_string(event)?)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(outcome)
 }
 
 fn settings_updated_outcome(
