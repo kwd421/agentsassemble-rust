@@ -923,3 +923,16 @@ caps still apply, and the encoded class weight follows the same delivery lease.
 Acceptance: filling the encoded class with maximum reads plus a residual read
 still admits two maximum-file human streams; release restores class capacity.
 No asset, stream cost, wire, retry or frontend change.
+
+## Round-5 room-file migration trigger boundary (2026-10-12)
+
+Normal open and staged archive upgrade at schema 91→92 and 92→93 must reject
+noncanonical triggers on every table the migrations mutate, including
+`runtime_metadata`, before any copy or version write. Canonical 91/92 have no
+triggers on either room-file parent or runtime metadata. Revalidate row and byte
+counts after the version write, and schema-93 chunk completeness, before commit.
+Genuine databases retain byte-exact content/custody and upgrade normally; hostile
+source objects fail atomically without executing their triggers. This closes the
+shared cause at both migration owners; no new schema, fallback or gate change.
+Acceptance: hostile version-update corruption triggers at both source versions
+are refused and original rows/version remain intact; genuine copies are exact.

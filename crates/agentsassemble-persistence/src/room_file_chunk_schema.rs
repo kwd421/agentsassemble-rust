@@ -4,6 +4,8 @@ use sqlx::SqlitePool;
 
 pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let mut tx = pool.begin().await?;
+    crate::room_file_schema::require_no_mutation_triggers(&mut tx, 93).await?;
+    let mut expected_counts = Vec::new();
     for kind in [RoomFileContent::Message, RoomFileContent::Connector] {
         let name = kind.parent();
         let replacement = format!("{name}_v93");
@@ -75,6 +77,12 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {name}")))
                 .fetch_one(&mut *tx)
                 .await?;
+        let bytes: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT coalesce(sum(size),0) FROM {name}"
+        )))
+        .fetch_one(&mut *tx)
+        .await?;
+        expected_counts.push((kind, count, bytes));
         let chunk_ddl = match kind {
             RoomFileContent::Message => crate::room_file_content::MESSAGE_DDL,
             RoomFileContent::Connector => crate::room_file_content::CONNECTOR_DDL,
@@ -128,6 +136,20 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     sqlx::query("UPDATE runtime_metadata SET value='93' WHERE key='schema_version'")
         .execute(&mut *tx)
         .await?;
+    for (kind, count, bytes) in expected_counts {
+        kind.require_complete(&mut tx).await?;
+        let (rows, declared): (i64, i64) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "SELECT count(*),coalesce(sum(size),0) FROM {}",
+            kind.parent()
+        )))
+        .fetch_one(&mut *tx)
+        .await?;
+        if (rows, declared) != (count, bytes) {
+            return Err(PersistenceError::InvalidSchemaVersion(
+                "93: final room file counts".into(),
+            ));
+        }
+    }
     tx.commit().await?;
     Ok(())
 }

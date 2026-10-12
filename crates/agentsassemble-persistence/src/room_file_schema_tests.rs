@@ -86,8 +86,8 @@ async fn rebuild_preserves_rows_custody_schema_and_retries_after_failure() -> Te
     sqlx::query("DROP TABLE reordered_rows")
         .execute(&pool)
         .await?;
-    // Abort at the final version write, after both originals have been dropped.
-    sqlx::query("CREATE TRIGGER fail_v92 BEFORE UPDATE OF value ON runtime_metadata WHEN NEW.key='schema_version' AND NEW.value='92' BEGIN SELECT RAISE(ABORT,'injected migration failure'); END").execute(&pool).await?;
+    // Refuse the metadata trigger before a final version write can corrupt bytes.
+    sqlx::query("CREATE TRIGGER fail_v92 AFTER UPDATE OF value ON RUNTIME_METADATA WHEN NEW.key='schema_version' AND NEW.value='92' BEGIN UPDATE room_message_attachments SET content=zeroblob(size); END").execute(&pool).await?;
     assert!(super::upgrade(&pool).await.is_err());
     assert_eq!(
         sqlx::query_scalar::<_, String>(

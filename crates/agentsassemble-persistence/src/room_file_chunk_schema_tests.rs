@@ -48,10 +48,9 @@ async fn genuine_v92_converts_exact_bytes_and_refuses_hostile_shapes_atomically(
             "CREATE TRIGGER hostile AFTER INSERT ON room_connector_uploads BEGIN SELECT 1; END",
             "DROP TRIGGER hostile",
         ),
-        // Failure after both originals were dropped must still roll back bytes,
-        // custody, chunk tables, indexes and the schema version together.
+        // Refuse metadata triggers before they can mutate the rebuilt chunks.
         (
-            "CREATE TRIGGER fail_v93 BEFORE UPDATE OF value ON runtime_metadata WHEN NEW.key='schema_version' AND NEW.value='93' BEGIN SELECT RAISE(ABORT,'injected migration failure'); END",
+            "CREATE TRIGGER fail_v93 AFTER UPDATE OF value ON RUNTIME_METADATA WHEN NEW.key='schema_version' AND NEW.value='93' BEGIN DELETE FROM room_message_attachment_chunks; END",
             "DROP TRIGGER fail_v93",
         ),
     ] {

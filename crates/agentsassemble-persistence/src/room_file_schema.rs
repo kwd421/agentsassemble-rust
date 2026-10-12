@@ -2,10 +2,32 @@
 use crate::{PersistenceError, schema};
 use sqlx::{Connection, SqliteConnection, SqlitePool};
 
+// Frozen schemas 91 and 92 have no triggers on these mutated tables. In
+// particular a metadata trigger must not run after the copy checks/version write.
+pub(crate) async fn require_no_mutation_triggers(
+    connection: &mut SqliteConnection,
+    destination_version: i64,
+) -> Result<(), PersistenceError> {
+    let has_trigger: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM main.sqlite_schema WHERE type='trigger'
+         AND tbl_name COLLATE NOCASE IN ('room_message_attachments','room_connector_uploads','runtime_metadata'))",
+    )
+    .fetch_one(connection)
+    .await?;
+    if has_trigger {
+        return Err(PersistenceError::InvalidSchemaVersion(format!(
+            "{destination_version}: noncanonical room file migration trigger"
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     // Use the frozen pre-migration catalog as the sole source-schema authority.
     let mut expected = SqliteConnection::connect("sqlite::memory:").await?;
     let mut tx = pool.begin().await?;
+    require_no_mutation_triggers(&mut tx, 92).await?;
+    let mut expected_counts = Vec::new();
     for name in ["room_message_attachments", "room_connector_uploads"] {
         let replacement = format!("{name}_v92");
         if sqlx::query("SELECT 1 FROM sqlite_schema WHERE name = ?")
@@ -54,6 +76,12 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {name}")))
                 .fetch_one(&mut *tx)
                 .await?;
+        let bytes: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT coalesce(sum(length(content)),0) FROM {name}"
+        )))
+        .fetch_one(&mut *tx)
+        .await?;
+        expected_counts.push((name, count, bytes));
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "INSERT INTO {replacement} ({columns}) SELECT {columns} FROM {name}"
         )))
@@ -101,6 +129,19 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     sqlx::query("UPDATE runtime_metadata SET value='92' WHERE key='schema_version'")
         .execute(&mut *tx)
         .await?;
+    for (name, count, bytes) in expected_counts {
+        let (rows, stored, declared): (i64, i64, i64) =
+            sqlx::query_as(sqlx::AssertSqlSafe(format!(
+                "SELECT count(*),coalesce(sum(length(content)),0),coalesce(sum(size),0) FROM {name}"
+            )))
+            .fetch_one(&mut *tx)
+            .await?;
+        if (rows, stored, declared) != (count, bytes, bytes) {
+            return Err(PersistenceError::InvalidSchemaVersion(
+                "92: final room file counts".into(),
+            ));
+        }
+    }
     tx.commit().await?;
     Ok(())
 }
