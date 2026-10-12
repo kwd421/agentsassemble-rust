@@ -626,6 +626,21 @@ async fn store_pending_in_transaction(
         .bind(created_at)
         .execute(&mut **transaction)
         .await?;
+    if principal.client_kind != ClientKind::RoomConnector {
+        let settings =
+            crate::room_preferences::load_room_settings(transaction, &principal.room_id).await?;
+        if let Some(limit) = settings.attachment_storage_limit_bytes {
+            let used: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM room_message_attachments WHERE room_id = ? UNION ALL SELECT size FROM room_connector_uploads WHERE room_id = ?)")
+                .bind(&principal.room_id).bind(&principal.room_id).fetch_one(&mut **transaction).await?;
+            if u64::try_from(used + prepared.size).map_err(|_| invalid_attachment_state())? > limit
+            {
+                return Err(rejected(
+                    "room_attachment_quota_reached",
+                    "Room attachment storage limit reached.",
+                ));
+            }
+        }
+    }
     enforce_storage_replacement(transaction, None, prepared.size).await?;
 
     let attachment_id = format!("{MESSAGE_ATTACHMENT_ID_PREFIX}{}", Uuid::new_v4().simple());

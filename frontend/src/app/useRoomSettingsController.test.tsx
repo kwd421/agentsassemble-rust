@@ -106,6 +106,19 @@ describe("useRoomSettingsController", () => {
     saveCanonicalGlobalSettings.mockResolvedValue(globalSettings(roomA, "forest"));
   });
 
+  it("removes room quota through the canonical settings mutation", async () => {
+    const confirmed = globalSettings(roomA, "forest", { attachmentFileLimitBytes: 52428800, attachmentStorageLimitBytes: 524288000 });
+    saveCanonicalGlobalSettings.mockResolvedValueOnce({ ...confirmed, attachmentStorageLimitBytes: null });
+    const hook = renderHook(() => useRoomSettingsController({
+      activeRoom: roomA, preferenceAuthority: localPreferenceAuthority,
+      canonicalGlobalSettings: confirmed, saveCanonicalGlobalSettings, onRoomMetadataLoaded: vi.fn(),
+    }));
+    await waitFor(() => expect(hook.result.current.settingsStateFor(roomA).status).toBe("ready"));
+    await act(async () => { await hook.result.current.persist(roomA, { attachmentStorageLimitBytes: null }); });
+    expect(saveCanonicalGlobalSettings).toHaveBeenCalledWith({ attachmentStorageLimitBytes: null });
+    expect(hook.result.current.settingsStateFor(roomA)).toMatchObject({ status: "ready", value: { attachmentFileLimitBytes: 52428800, attachmentStorageLimitBytes: null } });
+  });
+
   it("persists a room read as one exact-room batch and retains rollback/retry", async () => {
     const confirmed = { ...settings(roomA, "forest"), channelSettings: {
       lobby: { notifications: "mentions" as const, lastReadAt: "seq:2" },

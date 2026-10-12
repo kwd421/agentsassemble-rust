@@ -98,3 +98,16 @@ it("carries a new room lobby name and rejects a mismatched acknowledgement", () 
     expect(publicRoomEventIsValid(result(invalid, invalid).event, "general")).toBe(false);
   }
 });
+
+
+it("carries room file policy and rejects malformed or conflicting projections", () => {
+  const policy = { ...settings(), attachment_file_limit_bytes: 26214400, attachment_storage_limit_bytes: 524288000 };
+  expect(commandAckResultIsValid("room.settings.update", {}, result(policy, policy), "general", "operator-local")).toBe(true);
+  expect(normalizeRoomGlobalSettings(policy, "general")).toMatchObject({ attachmentFileLimitBytes: 26214400, attachmentStorageLimitBytes: 524288000 });
+  expect(commandAckResultIsValid("room.settings.update", {}, result(policy, { ...policy, attachment_storage_limit_bytes: null }), "general", "operator-local")).toBe(false);
+  for (const attachment_file_limit_bytes of [null, "26214400", 26214400.5, 1]) {
+    const invalid = { ...policy, attachment_file_limit_bytes };
+    expect(normalizeRoomGlobalSettings(invalid, "general")).toBeNull();
+    expect(publicRoomEventIsValid(result(invalid, invalid).event, "general")).toBe(false);
+  }
+});

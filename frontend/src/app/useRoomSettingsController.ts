@@ -1,3 +1,4 @@
+import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchRoomSettings,
@@ -36,6 +37,8 @@ export type RoomPreferenceAuthority =
 type PersistedRoomSettingsOverrides = RoomGlobalSettingsUpdate;
 
 export type AuthoritativeRoomSettings = {
+  attachmentFileLimitBytes: number;
+  attachmentStorageLimitBytes: number | null;
   conversationMode: ConversationMode;
   toolMode: RoomToolMode;
   orderedExcludePreviousSpeaker: boolean;
@@ -73,10 +76,12 @@ function settingsError(errorValue: unknown, fallback: string): Error {
 function authoritativeSettings(
   settings: Pick<
     RoomGlobalSettings,
-    "conversationMode" | "toolMode" | "orderedExcludePreviousSpeaker"
+    "conversationMode" | "toolMode" | "orderedExcludePreviousSpeaker" | "attachmentFileLimitBytes" | "attachmentStorageLimitBytes"
   >
 ): AuthoritativeRoomSettings {
   return {
+    attachmentFileLimitBytes: settings.attachmentFileLimitBytes ?? MAX_ATTACHMENT_BYTES,
+    attachmentStorageLimitBytes: settings.attachmentStorageLimitBytes ?? null,
     conversationMode: settings.conversationMode,
     toolMode: settings.toolMode,
     orderedExcludePreviousSpeaker: settings.orderedExcludePreviousSpeaker,
@@ -485,6 +490,8 @@ export function useRoomSettingsController({
       const currentValue = settingsStateFor(room).value;
       const nextValue = currentValue
         ? {
+            attachmentFileLimitBytes: overrides.attachmentFileLimitBytes ?? currentValue.attachmentFileLimitBytes,
+            attachmentStorageLimitBytes: overrides.attachmentStorageLimitBytes === undefined ? currentValue.attachmentStorageLimitBytes : overrides.attachmentStorageLimitBytes,
             conversationMode: overrides.conversationMode ?? currentValue.conversationMode,
             toolMode: overrides.toolMode ?? currentValue.toolMode,
             orderedExcludePreviousSpeaker:

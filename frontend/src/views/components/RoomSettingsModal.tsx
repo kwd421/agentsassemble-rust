@@ -1,3 +1,4 @@
+import { ROOM_FILE_LIMITS, ROOM_STORAGE_LIMITS } from "../../types/generated/ASSET_SAFETY_WIRE";
 import { ROOM_LABEL_LIMIT } from "../../types/generated/ROOM_SETTINGS_WIRE";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Image as ImageIcon, Trash2, UserPlus, X } from "lucide-react";
@@ -31,6 +32,7 @@ type RoomSettingsSectionId =
   | "settings-overview"
   | "settings-appearance"
   | "settings-channels"
+  | "settings-storage"
   | "settings-notify"
   | "settings-invite";
 
@@ -49,6 +51,7 @@ export default function RoomSettingsModal({
   conversationMode,
   toolMode,
   orderedExcludePreviousSpeaker,
+  storageSettings,
   canInvite,
   lifecycleController,
   onClose,
@@ -77,6 +80,11 @@ export default function RoomSettingsModal({
   conversationMode: ConversationMode | null;
   toolMode: RoomToolMode | null;
   orderedExcludePreviousSpeaker: boolean | null;
+  storageSettings?: {
+    attachmentFileLimitBytes: number | null;
+    attachmentStorageLimitBytes: number | null;
+    onChange: (updates: { attachmentFileLimitBytes?: number; attachmentStorageLimitBytes?: number | null }) => void;
+  };
   canInvite: boolean;
   lifecycleController?: RoomLifecycleController | null;
   onClose: () => void;
@@ -196,6 +204,7 @@ export default function RoomSettingsModal({
           <a href="#settings-overview" aria-current={sectionInView === "settings-overview" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>개요</a>
           <a href="#settings-appearance" aria-current={sectionInView === "settings-appearance" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>외형</a>
           <a href="#settings-channels" aria-current={sectionInView === "settings-channels" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널</a>
+          {storageSettings && <a href="#settings-storage" aria-current={sectionInView === "settings-storage" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>저장 공간</a>}
           <a href="#settings-notify" aria-current={sectionInView === "settings-notify" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>알림</a>
           <a href="#settings-invite" aria-current={sectionInView === "settings-invite" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>초대</a>
           {lifecycleController && !mobileViewport && <span className="dc-settings-nav-separator" aria-hidden />}
@@ -475,6 +484,32 @@ export default function RoomSettingsModal({
               })}
             </div>
           </section>
+
+          {storageSettings && <section id="settings-storage" className="dc-settings-section">
+            <h3>저장 공간</h3>
+            <div className="dc-settings-field">
+              <p className="dc-settings-field-label">파일 하나 최대 크기</p>
+              <div className="dc-radio-stack">
+                {ROOM_FILE_LIMITS.map((limit) => <label key={limit}>
+                  <input type="radio" name="room-file-limit" checked={storageSettings.attachmentFileLimitBytes === limit}
+                    disabled={!routingSettingsReady} onChange={() => storageSettings.onChange({ attachmentFileLimitBytes: limit })} />
+                  <span className="preserve-words"><strong>{limit / 1024 / 1024}MB</strong></span>
+                </label>)}
+              </div>
+            </div>
+            <div className="dc-settings-field">
+              <label className="dc-channel-settings-row">
+                <span className="dc-settings-field-label">이 방의 저장 공간 한도</span>
+                <select value={storageSettings.attachmentStorageLimitBytes ?? ""} disabled={!routingSettingsReady}
+                  onChange={(event) => storageSettings.onChange({ attachmentStorageLimitBytes: event.target.value === "" ? null : Number(event.target.value) })}>
+                  <option value="">제한 없음</option>
+                  {ROOM_STORAGE_LIMITS.map((limit) => <option key={limit} value={limit}>
+                    {limit < 1024 ** 3 ? `${limit / 1024 ** 2}MB` : `${limit / 1024 ** 3}GB`}
+                  </option>)}
+                </select>
+              </label>
+            </div>
+          </section>}
 
           <section id="settings-notify" className="dc-settings-section">
             <h3>알림</h3>

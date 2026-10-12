@@ -2,4 +2,4 @@
 import type { RoomAppearance } from "./RoomAppearance.js";
 import type { RoomChannel } from "./RoomChannel.js";
 
-export type PublicRoomSettings = { settings_revision: string, label: string, topic: string, appearance: RoomAppearance, conversation_mode: string, tool_mode: string, ordered_exclude_previous_speaker: boolean, lobby_name?: string, channels: Array<RoomChannel>, };
+export type PublicRoomSettings = { attachment_file_limit_bytes?: number, attachment_storage_limit_bytes?: number, settings_revision: string, label: string, topic: string, appearance: RoomAppearance, conversation_mode: string, tool_mode: string, ordered_exclude_previous_speaker: boolean, lobby_name?: string, channels: Array<RoomChannel>, };

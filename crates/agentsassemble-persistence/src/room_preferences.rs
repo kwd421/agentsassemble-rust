@@ -258,7 +258,7 @@ async fn load_room_preferences_snapshot(
     })
 }
 
-async fn load_room_settings(
+pub(crate) async fn load_room_settings(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<RoomSettings, PersistenceError> {

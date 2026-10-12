@@ -276,3 +276,6 @@ fn assert_rejected_code<T>(result: Result<T, PersistenceError>, expected: &str) 
         Ok(_) => panic!("expected {expected} rejection"),
     }
 }
+
+#[path = "room_attachment_policy_tests.rs"]
+mod room_attachment_policy_tests;

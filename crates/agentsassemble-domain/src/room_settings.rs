@@ -50,6 +50,15 @@ pub struct RoomChannel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct RoomSettings {
+    #[serde(
+        default = "crate::asset::default_file_limit",
+        skip_serializing_if = "crate::asset::is_default_file_limit"
+    )]
+    #[ts(as = "Option<usize>", optional)]
+    pub attachment_file_limit_bytes: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub attachment_storage_limit_bytes: Option<u64>,
     pub label: String,
     pub topic: String,
     pub appearance: RoomAppearance,
@@ -65,6 +74,20 @@ pub struct RoomSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PublicRoomSettings {
+    #[serde(
+        default = "crate::asset::default_file_limit",
+        skip_serializing_if = "crate::asset::is_default_file_limit",
+        deserialize_with = "crate::asset::deserialize_file_limit"
+    )]
+    #[ts(as = "Option<usize>", optional)]
+    pub attachment_file_limit_bytes: usize,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::asset::deserialize_storage_limit"
+    )]
+    #[ts(optional, type = "number")]
+    pub attachment_storage_limit_bytes: Option<u64>,
     pub settings_revision: String,
     pub label: String,
     pub topic: String,
@@ -80,6 +103,8 @@ pub struct PublicRoomSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RoomSettingsPatch {
+    pub attachment_file_limit_bytes: Option<usize>,
+    pub attachment_storage_limit_bytes: Option<Option<u64>>,
     pub label: Option<String>,
     pub topic: Option<String>,
     pub appearance: RoomAppearancePatch,
@@ -134,6 +159,10 @@ struct RawRoomAppearance {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawRoomSettings {
+    #[serde(default = "crate::asset::default_file_limit")]
+    attachment_file_limit_bytes: usize,
+    #[serde(default)]
+    attachment_storage_limit_bytes: Option<u64>,
     label: String,
     topic: String,
     appearance: RawRoomAppearance,
@@ -169,6 +198,8 @@ impl RoomSettings {
     #[must_use]
     pub fn defaults(label: &str) -> Self {
         Self {
+            attachment_file_limit_bytes: crate::MAX_ATTACHMENT_BYTES,
+            attachment_storage_limit_bytes: None,
             label: clean_single_line(label, ROOM_LABEL_LIMIT),
             topic: String::new(),
             appearance: RoomAppearance {
@@ -198,6 +229,8 @@ impl RoomSettings {
         require_known_keys(
             object,
             &[
+                "attachment_file_limit_bytes",
+                "attachment_storage_limit_bytes",
                 "expected_revision",
                 "label",
                 "topic",
@@ -232,6 +265,11 @@ impl RoomSettings {
 impl RoomSettingsPatch {
     fn parse(object: &Map<String, Value>) -> Result<Self, RoomSettingsError> {
         Ok(Self {
+            attachment_file_limit_bytes: optional_typed(object, "attachment_file_limit_bytes")?,
+            attachment_storage_limit_bytes: optional_typed(
+                object,
+                "attachment_storage_limit_bytes",
+            )?,
             label: optional_string(object, "label")?,
             topic: optional_string(object, "topic")?,
             appearance: object.get("appearance").map_or_else(
@@ -249,7 +287,9 @@ impl RoomSettingsPatch {
     }
 
     fn is_empty(&self) -> bool {
-        self.label.is_none()
+        self.attachment_file_limit_bytes.is_none()
+            && self.attachment_storage_limit_bytes.is_none()
+            && self.label.is_none()
             && self.topic.is_none()
             && self.appearance.is_empty()
             && self.conversation_mode.is_none()
@@ -273,6 +313,12 @@ impl RoomSettingsPatch {
 
     fn apply(&self, current: &RoomSettings) -> Result<RoomSettings, RoomSettingsError> {
         let next = RoomSettings {
+            attachment_file_limit_bytes: self
+                .attachment_file_limit_bytes
+                .unwrap_or(current.attachment_file_limit_bytes),
+            attachment_storage_limit_bytes: self
+                .attachment_storage_limit_bytes
+                .unwrap_or(current.attachment_storage_limit_bytes),
             label: self.label.clone().unwrap_or_else(|| current.label.clone()),
             topic: self.topic.clone().unwrap_or_else(|| current.topic.clone()),
             appearance: self.appearance.apply(&current.appearance),
@@ -364,6 +410,8 @@ impl RoomAppearancePatch {
 impl From<RoomSettings> for RawRoomSettings {
     fn from(value: RoomSettings) -> Self {
         Self {
+            attachment_file_limit_bytes: value.attachment_file_limit_bytes,
+            attachment_storage_limit_bytes: value.attachment_storage_limit_bytes,
             label: value.label,
             topic: value.topic,
             appearance: RawRoomAppearance {
@@ -383,6 +431,15 @@ impl From<RoomSettings> for RawRoomSettings {
 }
 
 fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsError> {
+    if !crate::ROOM_FILE_LIMITS.contains(&raw.attachment_file_limit_bytes)
+        || raw
+            .attachment_storage_limit_bytes
+            .is_some_and(|v| !crate::ROOM_STORAGE_LIMITS.contains(&v))
+    {
+        return Err(RoomSettingsError::bad_request(
+            "Unsupported attachment limit.",
+        ));
+    }
     require_canonical_text(&raw.label, "label", ROOM_LABEL_LIMIT)?;
     require_canonical_text(&raw.topic, "topic", ROOM_TOPIC_LIMIT)?;
     if !matches!(
@@ -434,6 +491,8 @@ fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsE
         }
     }
     Ok(RoomSettings {
+        attachment_file_limit_bytes: raw.attachment_file_limit_bytes,
+        attachment_storage_limit_bytes: raw.attachment_storage_limit_bytes,
         label: raw.label,
         topic: raw.topic,
         appearance: validate_appearance(raw.appearance)?,
@@ -601,6 +660,8 @@ pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, se
     let canonical = crate::canonical_json::encode(&serde_json::to_value(settings)?);
     let revision = format!("room-settings-v1-{:x}", Sha256::digest(canonical));
     Ok(PublicRoomSettings {
+        attachment_file_limit_bytes: settings.attachment_file_limit_bytes,
+        attachment_storage_limit_bytes: settings.attachment_storage_limit_bytes,
         settings_revision: revision,
         label: settings.label.clone(),
         topic: settings.topic.clone(),
@@ -621,6 +682,70 @@ mod tests {
         ROOM_APPEARANCE_REFERENCE_QUERY, ROOM_APPEARANCE_REFERENCE_SUFFIX, RoomSettings,
         public_settings, room_appearance_asset_id,
     };
+
+    #[test]
+    fn attachment_policy_is_strict_revisioned_and_defaults_are_omitted()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let current = RoomSettings::defaults("General");
+        let revision = public_settings(&current)?.settings_revision;
+        let (_, defaults) = current.strict_update(&json!({"expected_revision": revision,
+            "attachment_file_limit_bytes": crate::MAX_ATTACHMENT_BYTES, "attachment_storage_limit_bytes": null}))?;
+        assert_eq!(
+            serde_json::to_value(&defaults)?,
+            serde_json::to_value(&current)?
+        );
+        assert_eq!(public_settings(&defaults)?.settings_revision, revision);
+        for file in crate::ROOM_FILE_LIMITS {
+            for storage in std::iter::once(None).chain(crate::ROOM_STORAGE_LIMITS.map(Some)) {
+                let (_, next) = current.strict_update(&json!({"expected_revision": revision,
+                    "attachment_file_limit_bytes": file, "attachment_storage_limit_bytes": storage}))?;
+                let stored = serde_json::to_value(&next)?;
+                assert_eq!(serde_json::from_value::<RoomSettings>(stored)?, next);
+                let public = public_settings(&next)?;
+                assert_eq!(
+                    serde_json::from_value::<super::PublicRoomSettings>(serde_json::to_value(
+                        &public
+                    )?)?,
+                    public
+                );
+                let (_, cleared) = next
+                    .strict_update(&json!({"expected_revision": public.settings_revision,
+                    "attachment_storage_limit_bytes": null}))?;
+                assert_eq!(cleared.attachment_file_limit_bytes, file);
+                assert_eq!(cleared.attachment_storage_limit_bytes, None);
+            }
+        }
+        for field in [
+            "attachment_file_limit_bytes",
+            "attachment_storage_limit_bytes",
+        ] {
+            for invalid in [
+                json!("10485760"),
+                json!(true),
+                json!(0),
+                json!(-1),
+                json!(10.5),
+                json!([]),
+            ] {
+                let mut stored = serde_json::to_value(&current)?;
+                stored[field] = invalid.clone();
+                assert!(serde_json::from_value::<RoomSettings>(stored).is_err());
+                assert!(
+                    current
+                        .strict_update(&json!({"expected_revision": revision, field: invalid}))
+                        .is_err()
+                );
+            }
+        }
+        assert!(
+            current
+                .strict_update(
+                    &json!({"expected_revision": revision, "attachment_file_limit_bytes": null})
+                )
+                .is_err()
+        );
+        Ok(())
+    }
 
     #[test]
     fn lobby_name_preserves_legacy_rooms_and_survives_settings_changes()

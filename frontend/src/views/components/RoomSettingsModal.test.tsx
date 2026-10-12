@@ -43,12 +43,14 @@ function renderSettings(
   onAppearanceChange = vi.fn().mockResolvedValue(undefined),
   onToolModeChange = vi.fn(),
   onAppearanceUpload = vi.fn().mockResolvedValue(true),
-  onRoomChange = vi.fn()
+  onRoomChange = vi.fn(),
+  storageSettings?: React.ComponentProps<typeof RoomSettingsModal>["storageSettings"]
 ) {
   render(
     <RoomSettingsModal
       channelOptions={[{ id: "lobby", label: "general" }, { id: "c000000000001", label: "토론" }]}
       room={room}
+      storageSettings={storageSettings}
       appearance={DEFAULT_ROOM_APPEARANCE}
       appearanceAssetError=""
       channelSettings={{}}
@@ -78,6 +80,24 @@ function renderSettings(
 
 describe("RoomSettingsModal conversation mode", () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it("shows manager storage controls and disables them until settings are ready", () => {
+    const onChange = vi.fn();
+    const policy = { attachmentFileLimitBytes: 10485760, attachmentStorageLimitBytes: 524288000, onChange };
+    renderSettings("ordered", undefined, "ready", undefined, undefined, undefined, undefined, undefined, undefined, policy);
+    fireEvent.click(screen.getByRole("radio", { name: "50MB" }));
+    expect(onChange).toHaveBeenCalledWith({ attachmentFileLimitBytes: 52428800 });
+    fireEvent.change(screen.getByRole("combobox", { name: "이 방의 저장 공간 한도" }), { target: { value: "" } });
+    expect(onChange).toHaveBeenCalledWith({ attachmentStorageLimitBytes: null });
+    cleanup();
+    renderSettings(null, undefined, "loading", undefined, undefined, undefined, undefined, undefined, undefined, policy);
+    expect((screen.getByRole("radio", { name: "50MB" }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("combobox", { name: "이 방의 저장 공간 한도" }) as HTMLSelectElement).disabled).toBe(true);
+    cleanup();
+    renderSettings("ordered");
+    expect(screen.queryByRole("link", { name: "저장 공간" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "50MB" })).toBeNull();
+  });
 
   it("uses the server room-name bound without splitting Unicode characters", () => {
     const onRoomChange = vi.fn();

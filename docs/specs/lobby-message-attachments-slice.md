@@ -641,3 +641,46 @@ excluded from archives. Verify exact row/BLOB/custody preservation, transaction
 rollback and retry, 50 MiB export/restore, historical restore, hostile wide-row
 rejection and unchanged non-message storage limits. Transfer performance and larger
 live uploads belong to later slices.
+
+### Per-room policy and human admission (2026-10-12)
+
+Two commits own (1) room policy, atomic accounting and settings controls, then
+(2) human upload enforcement and preflight. `rooms.settings_json` gains strict
+`attachment_file_limit_bytes` (10/25/50 MiB) and nullable
+`attachment_storage_limit_bytes` (none/500 MiB/1/2/4/8 GiB). Missing fields mean
+10 MiB and no quota; default fields are omitted from canonical serialization,
+preserving existing revisions. Explicit quota null removes it. Existing
+`room.settings.update` owns manager authorization, expected revision, receipt and
+publication. Snapshots and strict backup reconstruction preserve both fields;
+no schema change is needed. The manager-only settings-storage section follows
+channels with the approved Korean labels and existing controls/classes.
+
+Count retained pending/bound message files and pending connector files in the
+room quota. The existing single-connection writer serializes cleanup, current
+policy observation, quota check, server cap and insertion. Binding never charges
+twice. Human writes return attachment_too_large (413, applicable limit in safe
+error detail), room_attachment_quota_reached (429), or existing
+attachment_quota_reached (429). Lowering affects new storage only; retained
+files remain readable/downloadable through the 50 MiB ceiling.
+
+POST /api/message-attachments resolves writable authority and its exact room
+before collecting plain or encrypted bodies. The current room limit determines
+4 * ceil(limit / 3) + 64 KiB body admission and the existing four-copy host
+reservation; declared lengths and unknown-length collection share that bound.
+Validate base64 length, decoded bytes/content, then revalidate authority/current
+policy transactionally before quota, server cap and insertion. Keep existing
+credits, queue gates and progress deadlines. Frontend preflight uses current room
+settings and reports 파일은 최대 {N}MB까지 올릴 수 있어요.; metadata/downloads use
+the retained ceiling. Entry owners: domain room_settings, persistence
+message_attachments/asset_storage, profile_web/http_api, frontend api/room and
+api/messageAttachments, settings controller and RoomSettingsModal.
+
+Acceptance: unchanged defaults/revisions; manager-only updates and stale conflicts;
+concurrent quota contention; pending-to-bound neutrality; lowering retains reads;
+25 MiB refused before full collection in a 10 MiB room and byte-exact upload,
+bind/download in a 50 MiB room over plain/encrypted routes; legitimate 50 MiB
+admission within unchanged host budget. Run affected crate tests, fmt,
+architecture-check, generated types, frontend tsc and affected vitest suites.
+AI upload/read paths, avatars, appearance and personas keep today's 10 MiB;
+connector policy enforcement and new staged/managed transfers are later slices.
+No usage-report work, schema migration or provider verification belongs here.

@@ -127,6 +127,11 @@ export default function AppOverlays({ controller, companionInvites }: { controll
             orderedExcludePreviousSpeaker={
               roomSettings.orderedExcludePreviousSpeakerFor(settingsModalRoom)
             }
+            storageSettings={controller.canManageActiveRoom ? {
+              attachmentFileLimitBytes: roomSettings.settingsStateFor(settingsModalRoom).value?.attachmentFileLimitBytes ?? null,
+              attachmentStorageLimitBytes: roomSettings.settingsStateFor(settingsModalRoom).value?.attachmentStorageLimitBytes ?? null,
+              onChange: (updates) => { void roomSettings.persist(settingsModalRoom, updates).catch(() => undefined); },
+            } : undefined}
             canInvite={controller.canInviteRooms}
             lifecycleController={lifecycleController}
             onClose={() => setSettingsModal(null)}

@@ -16777,3 +16777,24 @@ published test release and physical update/restart remain unverified.
   Title-bar appearance, editing shortcuts, caption buttons and snap remain unknown
   on a real device. Windows test release dispatch follows the scoped commit/push;
   its run URL is reported in the task result, without claiming build completion.
+
+## Per-room file policy — commit 1 (2026-10-12)
+
+Added strict optional room file/storage settings, generated client presets,
+manager-only storage controls, and transactional human-upload quota accounting
+including retained message and connector rows. Default revision regression stays
+unchanged. The quota test uses a private 500 MiB SQLite fixture, a barrier and two
+uploads competing for one remaining byte; one succeeds, one gets the room quota
+error, and binding at capacity preserves usage/readability. Settings tests cover
+manager permission, revision conflict, replay, explicit quota removal and backup
+settings/event reconstruction. No schema/catalog change is needed.
+
+Passed: `cargo test -p agentsassemble-domain -p agentsassemble-persistence -p
+agentsassemble-protocol -p agentsassemble-server`, `cargo fmt --all`,
+`make architecture-check`, `cd frontend && npx tsc --noEmit -p .`, and
+`npx vitest run src/api/roomPreferences.test.ts src/app/useRoomSettingsController.test.tsx
+src/views/components/RoomSettingsModal.test.tsx src/lib/roomSocketValidation.settings.test.ts`
+(47 frontend tests). Domain tests also passed after removing a redundant raw-field
+check. Existing opt-in/real-provider tests remained ignored. Packaged UI pixels and
+larger live human transfers are not claimed by this commit; human enforcement and
+preflight follow in commit 2. No provider or usage-report work was performed.

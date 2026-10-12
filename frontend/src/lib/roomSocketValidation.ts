@@ -1,3 +1,4 @@
+import { roomAttachmentPolicyIsValid } from "./roomAttachmentPolicy";
 import { providerRequestEventIsValid } from "./providerRequestProjection";
 import { anonymizedParticipant } from "./participantAnonymization";
 import { channelMessageFieldsAreValid } from "./channelMessageContract";
@@ -52,6 +53,8 @@ const GENERATED_ROOM_SETTINGS_KEYS = [
   "ordered_exclude_previous_speaker",
   "channels",
   "lobby_name",
+  "attachment_file_limit_bytes",
+  "attachment_storage_limit_bytes",
 ] as const;
 const ROOM_SETTINGS_KEYS: ExactGeneratedKeys<
   PublicRoomSettings,
@@ -113,10 +116,12 @@ export { isSequence } from "./roomSequence";
 function publicRoomSettingsIsValid(value: unknown): value is PublicRoomSettings {
   try {
     const settings = strictRecord(value, "room settings");
-    assertExactKeys(settings, ROOM_SETTINGS_KEYS.filter(key => key !== "lobby_name"), "room settings", ["lobby_name"]);
+    const optional = ["lobby_name", "attachment_file_limit_bytes", "attachment_storage_limit_bytes"];
+    assertExactKeys(settings, ROOM_SETTINGS_KEYS.filter(key => !optional.includes(key)), "room settings", optional);
     const appearance = strictRecord(settings.appearance, "room settings appearance");
     assertExactKeys(appearance, APPEARANCE_KEYS, "room settings appearance");
     if (
+      !roomAttachmentPolicyIsValid(settings) ||
       ["settings_revision", "label", "topic", "conversation_mode", "tool_mode"]
         .some((key) => typeof settings[key] !== "string") ||
       (settings.lobby_name !== undefined && (typeof settings.lobby_name !== "string" || !settings.lobby_name.trim())) ||

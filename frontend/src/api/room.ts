@@ -1,3 +1,5 @@
+import { roomAttachmentPolicyIsValid } from "../lib/roomAttachmentPolicy";
+import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 import { remoteSessionTransport } from "../lib/remote/remoteWorkspace";
 import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
 import { isCustomChannelId } from "../lib/customChannelId";
@@ -45,6 +47,8 @@ export type RoomToolMode = "chat" | "tabletop";
 export type RoomGlobalAppearance = Omit<RoomAppearance, "notifications">;
 
 export interface RoomGlobalSettings {
+  attachmentFileLimitBytes?: number;
+  attachmentStorageLimitBytes?: number | null;
   lobbyName?: string;
   roomId: string;
   revision: string;
@@ -59,6 +63,8 @@ export interface RoomGlobalSettings {
 }
 
 export type RoomGlobalSettingsUpdate = {
+  attachmentFileLimitBytes?: number;
+  attachmentStorageLimitBytes?: number | null;
   label?: string;
   topic?: string;
   shortLabel?: string;
@@ -123,6 +129,8 @@ type ApiRoomAppearance = {
 };
 
 type ApiRoomSettings = {
+  attachment_file_limit_bytes?: number;
+  attachment_storage_limit_bytes?: number | null;
   lobby_name?: string;
   room_id?: string;
   settings_revision?: string;
@@ -243,11 +251,12 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
       "channels",
     ],
     "방 preference.settings",
-    ["lobby_name"]
+    ["lobby_name", "attachment_file_limit_bytes", "attachment_storage_limit_bytes"]
   );
   if (stringField(payload, "room_id", "방 preference.settings") !== expectedRoomId) {
     throw new Error("방 preference settings의 방 권위가 일치하지 않습니다.");
   }
+  if (!roomAttachmentPolicyIsValid(payload)) throw new Error("방 첨부 파일 설정이 올바르지 않습니다.");
   const revision = stringField(payload, "settings_revision", "방 preference.settings");
   if (!/^room-settings-v1-[0-9a-f]{64}$/.test(revision)) {
     throw new Error("방 preference settings revision이 올바르지 않습니다.");
@@ -335,6 +344,7 @@ export function normalizeRoomGlobalSettings(
   const payload = value as ApiRoomSettings;
   const appearance = payload.appearance;
   if (
+    !roomAttachmentPolicyIsValid(payload) ||
     (payload.lobby_name !== undefined && (typeof payload.lobby_name !== "string" || !payload.lobby_name.trim())) ||
     typeof payload.settings_revision !== "string" ||
     !payload.settings_revision ||
@@ -355,6 +365,8 @@ export function normalizeRoomGlobalSettings(
     return null;
   }
   return {
+    attachmentFileLimitBytes: payload.attachment_file_limit_bytes ?? MAX_ATTACHMENT_BYTES,
+    attachmentStorageLimitBytes: payload.attachment_storage_limit_bytes ?? null,
     lobbyName: payload.lobby_name,
     roomId: String(payload.room_id || fallbackRoomId || ""),
     revision: payload.settings_revision,
@@ -379,6 +391,8 @@ export function roomGlobalSettingsUpdateToApi(
   updates: RoomGlobalSettingsUpdate
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
+  if (updates.attachmentFileLimitBytes !== undefined) payload.attachment_file_limit_bytes = updates.attachmentFileLimitBytes;
+  if (updates.attachmentStorageLimitBytes !== undefined) payload.attachment_storage_limit_bytes = updates.attachmentStorageLimitBytes;
   if (updates.label !== undefined) payload.label = updates.label;
   if (updates.topic !== undefined) payload.topic = updates.topic;
   if (updates.conversationMode !== undefined) {

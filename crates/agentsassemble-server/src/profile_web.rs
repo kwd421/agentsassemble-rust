@@ -793,9 +793,9 @@ impl From<PersistenceError> for ProfileHttpError {
                     b"attachment_owner_mismatch" | b"profile_authority_mismatch" => {
                         StatusCode::FORBIDDEN
                     }
-                    b"pairing_capacity" | b"attachment_quota_reached" => {
-                        StatusCode::TOO_MANY_REQUESTS
-                    }
+                    b"pairing_capacity"
+                    | b"attachment_quota_reached"
+                    | b"room_attachment_quota_reached" => StatusCode::TOO_MANY_REQUESTS,
                     b"profile_revision_conflict" => StatusCode::CONFLICT,
                     b"attachment_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
                     b"attachment_type_unsupported"
