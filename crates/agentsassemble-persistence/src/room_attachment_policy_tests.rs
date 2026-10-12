@@ -186,9 +186,10 @@ async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> Te
             &manager.principal_id,
             &manager.participant_id,
             &winner.id,
+            |_, _| Ok(()),
         )
         .await?;
-    assert_eq!(read.content, [42]);
+    assert_eq!(read.0.content, [42]);
     store.close().await?;
     Ok(())
 }

@@ -214,9 +214,10 @@ async fn encrypted_move_recovers_lost_switch_response_across_native_processes() 
             agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
             agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
             &attachment_id,
+            |_, _| Ok(()),
         )
         .await?;
-    assert_eq!(attachment.content, vec![0x5a; 10 * 1024 * 1024]);
+    assert_eq!(attachment.0.content, vec![0x5a; 10 * 1024 * 1024]);
 
     assert_eq!(restored.host_identity().await?.server_id(), old.server_id());
     assert_ne!(

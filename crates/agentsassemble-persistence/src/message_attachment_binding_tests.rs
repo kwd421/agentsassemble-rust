@@ -413,6 +413,7 @@ async fn bound_read_requires_the_canonical_message_reference() {
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
                 &attachment.id,
+                |_, _| Ok(()),
             )
             .await,
         "message_attachment_missing",
@@ -434,12 +435,13 @@ async fn bound_read_requires_the_canonical_message_reference() {
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
             &attachment.id,
+            |_, _| Ok(()),
         )
         .await
         .unwrap_or_else(|error| panic!("read bound attachment: {error}"));
-    assert_eq!(read.content, bytes);
-    assert_eq!(read.metadata.id, attachment.id);
-    assert_eq!(read.metadata.filename, "evidence.txt");
+    assert_eq!(read.0.content, bytes);
+    assert_eq!(read.0.metadata.id, attachment.id);
+    assert_eq!(read.0.metadata.filename, "evidence.txt");
 
     event.extra.remove("attachments");
     sqlx::query("UPDATE room_events SET event_json = ? WHERE room_id = 'general' AND seq = ?")
@@ -458,6 +460,7 @@ async fn bound_read_requires_the_canonical_message_reference() {
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
                 &attachment.id,
+                |_, _| Ok(()),
             )
             .await,
         "message_attachment_missing",
@@ -624,3 +627,6 @@ async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
     assert_eq!(second.session.input_up_to_event_id, batches[1].0);
     Ok(())
 }
+
+#[path = "attachment_read_admission_tests.rs"]
+mod admission;

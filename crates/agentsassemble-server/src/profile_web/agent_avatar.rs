@@ -86,11 +86,14 @@ pub(super) async fn read(
         .await
         .map_err(ProfileHttpError::from_body)?;
     let permit = avatar_admission::acquire(&state.avatar_reads)?;
-    let asset = state.store.agent_avatar(&asset_id).await?;
+    let (asset, lease) = state
+        .store
+        .agent_avatar(&asset_id, |size| state.downloads.reserve(None, size))
+        .await?;
     avatar_admission::response(
         &asset.metadata.filename,
         &asset.metadata.content_type,
-        asset.content,
+        lease.retain(asset.content),
         true,
         permit,
     )

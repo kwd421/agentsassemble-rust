@@ -156,42 +156,51 @@ impl SqliteStore {
     ///
     /// Ordinary pending, expired pre-admission, malformed, and unknown identifiers
     /// all fail as not found.
-    pub async fn profile_attachment(
+    pub async fn profile_attachment<T>(
         &self,
         attachment_id: &str,
-    ) -> Result<ProfileAttachment, PersistenceError> {
+        admit: impl FnOnce(usize) -> Result<T, PersistenceError>,
+    ) -> Result<(ProfileAttachment, T), PersistenceError> {
         if !valid_attachment_id(attachment_id) {
             return Err(attachment_missing());
         }
+        let now = Utc::now().timestamp();
+        let mut transaction = self.pool.begin().await?;
         let rows = sqlx::query(
-            "SELECT filename, content_type, content, size, created_at FROM profile_avatar_assets WHERE attachment_id = ? AND state = 'current' UNION ALL SELECT filename, content_type, content, size, created_at FROM prejoin_avatar_assets WHERE attachment_id = ? AND expires_at > ? LIMIT 2",
+            "SELECT filename, content_type, length(content) AS content_length, size, created_at FROM profile_avatar_assets WHERE attachment_id = ? AND state = 'current' UNION ALL SELECT filename, content_type, length(content) AS content_length, size, created_at FROM prejoin_avatar_assets WHERE attachment_id = ? AND expires_at > ? LIMIT 2",
         )
         .bind(attachment_id)
         .bind(attachment_id)
-        .bind(Utc::now().timestamp())
-        .fetch_all(&self.pool)
+        .bind(now)
+        .fetch_all(&mut *transaction)
         .await?;
         if rows.len() != 1 {
             return Err(attachment_missing());
         }
         let row = &rows[0];
         let content_type = row.get::<String, _>("content_type");
-        let content = row.get::<Vec<u8>, _>("content");
         let size = row.get::<i64, _>("size");
         validate_stored_raster(
             &content_type,
             size,
-            i64::try_from(content.len()).unwrap_or(i64::MAX),
+            row.get("content_length"),
             row.get::<&str, _>("created_at"),
         )?;
-        Ok(ProfileAttachment {
-            metadata: attachment_metadata(
-                attachment_id.to_owned(),
-                sanitize_filename(row.get::<&str, _>("filename")),
-                content.len(),
-            ),
-            content,
-        })
+        let lease = admit(usize::try_from(size).map_err(|_| attachment_missing())?)?;
+        let content: Vec<u8> = sqlx::query_scalar("SELECT content FROM profile_avatar_assets WHERE attachment_id = ? AND state = 'current' UNION ALL SELECT content FROM prejoin_avatar_assets WHERE attachment_id = ? AND expires_at > ?")
+            .bind(attachment_id).bind(attachment_id).bind(now).fetch_one(&mut *transaction).await?;
+        transaction.commit().await?;
+        Ok((
+            ProfileAttachment {
+                metadata: attachment_metadata(
+                    attachment_id.to_owned(),
+                    sanitize_filename(row.get::<&str, _>("filename")),
+                    content.len(),
+                ),
+                content,
+            },
+            lease,
+        ))
     }
 }
 
@@ -463,7 +472,7 @@ mod tests {
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
         );
         assert_rejected_code(
-            store.profile_attachment(&first.id).await,
+            store.profile_attachment(&first.id, |_| Ok(())).await,
             "attachment_missing",
         );
         store
@@ -478,11 +487,11 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("bind first avatar: {error}"));
         let served = store
-            .profile_attachment(&first.id)
+            .profile_attachment(&first.id, |_| Ok(()))
             .await
             .unwrap_or_else(|error| panic!("read bound avatar: {error}"));
-        assert_eq!(served.metadata.content_type, "image/png");
-        assert_eq!(&served.content[..8], b"\x89PNG\r\n\x1a\n");
+        assert_eq!(served.0.metadata.content_type, "image/png");
+        assert_eq!(&served.0.content[..8], b"\x89PNG\r\n\x1a\n");
 
         let second = store
             .store_profile_attachment(&principal, "second.png", "image/png", png)
@@ -508,11 +517,11 @@ mod tests {
             Err(PersistenceError::Database(_))
         ));
         store
-            .profile_attachment(&first.id)
+            .profile_attachment(&first.id, |_| Ok(()))
             .await
             .unwrap_or_else(|error| panic!("old avatar survives rollback: {error}"));
         assert_rejected_code(
-            store.profile_attachment(&second.id).await,
+            store.profile_attachment(&second.id, |_| Ok(())).await,
             "attachment_missing",
         );
         sqlx::query("DROP TRIGGER reject_avatar_projection")
@@ -531,11 +540,11 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("swap avatar: {error}"));
         assert_rejected_code(
-            store.profile_attachment(&first.id).await,
+            store.profile_attachment(&first.id, |_| Ok(())).await,
             "attachment_missing",
         );
         store
-            .profile_attachment(&second.id)
+            .profile_attachment(&second.id, |_| Ok(()))
             .await
             .unwrap_or_else(|error| panic!("read replacement avatar: {error}"));
     }
@@ -553,7 +562,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("expire avatar: {error}"));
         assert_rejected_code(
-            store.profile_attachment(&expired.id).await,
+            store.profile_attachment(&expired.id, |_| Ok(())).await,
             "attachment_missing",
         );
         let _replacement = store

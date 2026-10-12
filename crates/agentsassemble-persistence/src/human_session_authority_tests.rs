@@ -472,10 +472,11 @@ async fn bound_appearance_read_revalidates_human_session_in_the_asset_snapshot()
         .bound_room_session_room_appearance_asset(
             &crate::RoomSessionAuthorization::Human(authorization.clone()),
             &stored.id,
+            |_, _| Ok(()),
         )
         .await
         .unwrap_or_else(|error| panic!("read session-bound appearance: {error}"));
-    assert_eq!(&asset.content[..8], b"\x89PNG\r\n\x1a\n");
+    assert_eq!(&asset.0.content[..8], b"\x89PNG\r\n\x1a\n");
 
     set_participant_status(&store, ParticipantStatus::Left).await;
     assert_rejected_code(
@@ -483,6 +484,7 @@ async fn bound_appearance_read_revalidates_human_session_in_the_asset_snapshot()
             .bound_room_session_room_appearance_asset(
                 &crate::RoomSessionAuthorization::Human(authorization.clone()),
                 &stored.id,
+                |_, _| Ok(()),
             )
             .await,
         "session_revoked",

@@ -38,6 +38,8 @@ winapi-util = "0.1.11"
 windows-acl = "0.3.0"
 
 [dev-dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [lints]

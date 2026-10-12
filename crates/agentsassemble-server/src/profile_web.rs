@@ -398,7 +398,7 @@ async fn read_attachment(
             &attachment_id,
         )
         .await?;
-        let attachment = match authority {
+        let (attachment, lease) = match authority {
             RoomSessionHttpAuthority::LocalTicket(grant) => {
                 state
                     .store
@@ -407,6 +407,7 @@ async fn read_attachment(
                         &grant.principal_id,
                         &grant.participant_id,
                         &attachment_id,
+                        |principal, size| state.downloads.reserve(Some(principal), size),
                     )
                     .await?
             }
@@ -416,6 +417,7 @@ async fn read_attachment(
                     .bound_authorized_message_attachment(
                         authorization.mutation_authority(),
                         &attachment_id,
+                        |principal, size| state.downloads.reserve(Some(principal), size),
                     )
                     .await?
             }
@@ -424,7 +426,7 @@ async fn read_attachment(
         return attachment_response(
             &attachment.metadata.filename,
             &attachment.metadata.content_type,
-            attachment.content,
+            lease.retain(attachment.content),
             inline,
         );
     }
@@ -441,11 +443,13 @@ async fn read_attachment(
             &attachment_id,
         )
         .await?;
-        let attachment = match authority {
+        let (attachment, lease) = match authority {
             AppearanceReadAuthority::Local(ConsumedAppearanceReadTicket::Pending(grant)) => {
                 state
                     .store
-                    .pending_room_appearance_asset(&grant, &attachment_id)
+                    .pending_room_appearance_asset(&grant, &attachment_id, |principal, size| {
+                        state.downloads.reserve(Some(principal), size)
+                    })
                     .await?
             }
             AppearanceReadAuthority::Local(ConsumedAppearanceReadTicket::Bound(grant)) => {
@@ -456,29 +460,37 @@ async fn read_attachment(
                         &grant.principal_id,
                         &grant.participant_id,
                         &attachment_id,
+                        |principal, size| state.downloads.reserve(Some(principal), size),
                     )
                     .await?
             }
             AppearanceReadAuthority::Session(authorization) => {
                 state
                     .store
-                    .bound_room_session_room_appearance_asset(&authorization, &attachment_id)
+                    .bound_room_session_room_appearance_asset(
+                        &authorization,
+                        &attachment_id,
+                        |principal, size| state.downloads.reserve(Some(principal), size),
+                    )
                     .await?
             }
         };
         return attachment_response(
             &attachment.metadata.filename,
             &attachment.metadata.content_type,
-            attachment.content,
+            lease.retain(attachment.content),
             true,
         );
     }
     let permit = avatar_admission::acquire(&state.avatar_reads)?;
-    let attachment = state.store.profile_attachment(&attachment_id).await?;
+    let (attachment, lease) = state
+        .store
+        .profile_attachment(&attachment_id, |size| state.downloads.reserve(None, size))
+        .await?;
     avatar_admission::response(
         &attachment.metadata.filename,
         &attachment.metadata.content_type,
-        attachment.content,
+        lease.retain(attachment.content),
         query.contains_key("view") && !query.contains_key("download"),
         permit,
     )
@@ -819,7 +831,8 @@ impl From<PersistenceError> for ProfileHttpError {
                     }
                     b"pairing_capacity"
                     | b"attachment_quota_reached"
-                    | b"room_attachment_quota_reached" => StatusCode::TOO_MANY_REQUESTS,
+                    | b"room_attachment_quota_reached"
+                    | b"attachment_download_budget_exhausted" => StatusCode::TOO_MANY_REQUESTS,
                     b"profile_revision_conflict" => StatusCode::CONFLICT,
                     b"attachment_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
                     b"attachment_type_unsupported"

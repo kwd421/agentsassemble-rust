@@ -36,13 +36,16 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
     let first = store
         .store_agent_avatar(&upload, AGENT_ID, "first.png", "image/png", png()?)
         .await?;
-    assert!(store.agent_avatar(&first.id).await.is_err());
+    assert!(store.agent_avatar(&first.id, |_| Ok(())).await.is_err());
     let bind = json!({"agent_id": AGENT_ID, "avatar_image_url": first.url});
     let outcome = store
         .execute_agent_profile_update(TrustedPrincipal(&principal), "avatar-first", &bind)
         .await?;
     assert_eq!(outcome.result["participant"]["avatar_image_url"], first.url);
-    assert_eq!(store.agent_avatar(&first.id).await?.metadata, first);
+    assert_eq!(
+        store.agent_avatar(&first.id, |_| Ok(())).await?.0.metadata,
+        first
+    );
     let discarded = store
         .store_agent_avatar(&upload, AGENT_ID, "discarded.png", "image/png", png()?)
         .await?;
@@ -79,17 +82,28 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
             .await
             .is_err()
     );
-    assert_eq!(store.agent_avatar(&first.id).await?.metadata, first);
+    assert_eq!(
+        store.agent_avatar(&first.id, |_| Ok(())).await?.0.metadata,
+        first
+    );
     let next_payload = json!({"agent_id": AGENT_ID, "avatar_image_url": next.url});
     let next_outcome = store
         .execute_agent_profile_update(TrustedPrincipal(&principal), "avatar-next", &next_payload)
         .await?;
-    assert!(store.agent_avatar(&first.id).await.is_err());
-    assert_eq!(store.profile_attachment(&human.id).await?.metadata, human);
+    assert!(store.agent_avatar(&first.id, |_| Ok(())).await.is_err());
     assert_eq!(
         store
-            .pending_room_appearance_asset(&authority, &appearance.id)
+            .profile_attachment(&human.id, |_| Ok(()))
             .await?
+            .0
+            .metadata,
+        human
+    );
+    assert_eq!(
+        store
+            .pending_room_appearance_asset(&authority, &appearance.id, |_, _| Ok(()))
+            .await?
+            .0
             .metadata,
         appearance
     );
@@ -101,7 +115,14 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
         .await?;
     assert!(replay.deduplicated);
     assert_eq!(replay.result, next_outcome.result);
-    assert_eq!(reopened.agent_avatar(&next.id).await?.metadata, next);
+    assert_eq!(
+        reopened
+            .agent_avatar(&next.id, |_| Ok(()))
+            .await?
+            .0
+            .metadata,
+        next
+    );
     reopened
         .execute_agent_profile_update(
             TrustedPrincipal(&principal),
@@ -109,9 +130,13 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
             &json!({"agent_id": AGENT_ID, "avatar_image_url": ""}),
         )
         .await?;
-    assert!(reopened.agent_avatar(&next.id).await.is_err());
+    assert!(reopened.agent_avatar(&next.id, |_| Ok(())).await.is_err());
     assert_eq!(
-        reopened.profile_attachment(&human.id).await?.metadata,
+        reopened
+            .profile_attachment(&human.id, |_| Ok(()))
+            .await?
+            .0
+            .metadata,
         human
     );
     Ok(())

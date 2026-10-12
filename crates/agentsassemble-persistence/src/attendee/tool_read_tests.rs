@@ -69,6 +69,24 @@ async fn attendee_attachment_read_is_bound_to_prestart_input_and_current_connect
     };
     assert_eq!(read.metadata, attachment);
     assert_eq!(read.content, b"exact external input");
+    // A valid grandfathered 50 MiB file must fail before content/base64 is loaded.
+    sqlx::query("UPDATE room_message_attachments SET content=zeroblob(52428800),size=52428800 WHERE attachment_id=?")
+        .bind(&attachment.id).execute(&store.pool).await?;
+    sqlx::query("UPDATE room_events SET event_json=json_set(event_json,'$.attachments[0].size',52428800) WHERE room_id='general' AND seq=(SELECT event_seq FROM room_message_attachments WHERE attachment_id=?)")
+        .bind(&attachment.id).execute(&store.pool).await?;
+    let refusal = store
+        .read_attendee_tool(
+            session.session_fingerprint(),
+            connection.connection_id(),
+            &request,
+            now,
+        )
+        .await;
+    let Err(crate::PersistenceError::CommandRejected { code, message }) = refusal else {
+        panic!("oversized attendee read must be rejected");
+    };
+    assert_eq!(code, "attachment_too_large");
+    assert!(message.contains("52428800") && message.contains("10485760"));
     request.tool = AttendeeToolRead::Attachment {
         attachment_id: pending.id,
     };

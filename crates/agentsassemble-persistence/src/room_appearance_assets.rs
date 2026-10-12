@@ -93,11 +93,12 @@ impl SqliteStore {
     ///
     /// Fails closed for malformed IDs, stale or mismatched authority, expiry, missing rows, or
     /// corrupt stored raster metadata.
-    pub async fn pending_room_appearance_asset(
+    pub async fn pending_room_appearance_asset<T>(
         &self,
         authority: &LocalRoomManagerAuthority,
         asset_id: &str,
-    ) -> Result<RoomAppearanceAsset, PersistenceError> {
+        admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
+    ) -> Result<(RoomAppearanceAsset, T), PersistenceError> {
         if !valid_asset_id(asset_id) {
             return Err(asset_missing());
         }
@@ -106,7 +107,7 @@ impl SqliteStore {
         let manager = require_exact_local_room_manager(&mut transaction, authority).await?;
         delete_expired_pending(&mut transaction, now.timestamp()).await?;
         let row = sqlx::query(
-            "SELECT filename, content_type, content, size, created_at FROM room_appearance_assets WHERE asset_id = ? AND room_id = ? AND pending_owner_user_id = ? AND state = 'pending' AND expires_at > ?",
+            "SELECT filename, content_type, length(content) AS content_length, size, created_at FROM room_appearance_assets WHERE asset_id = ? AND room_id = ? AND pending_owner_user_id = ? AND state = 'pending' AND expires_at > ?",
         )
         .bind(asset_id)
         .bind(&manager.room_id)
@@ -114,12 +115,23 @@ impl SqliteStore {
         .bind(now.timestamp())
         .fetch_optional(&mut *transaction)
         .await?;
-        let asset = row
-            .as_ref()
-            .map(|row| decode_asset(asset_id, row))
-            .transpose()?;
+        let Some(row) = row else {
+            transaction.commit().await?;
+            return Err(asset_missing());
+        };
+        let (filename, size) = validate_asset_metadata(&row, row.get("content_length"))?;
+        let lease = admit(&manager.user_id, size)?;
+        let content =
+            sqlx::query_scalar("SELECT content FROM room_appearance_assets WHERE asset_id = ?")
+                .bind(asset_id)
+                .fetch_one(&mut *transaction)
+                .await?;
+        let asset = RoomAppearanceAsset {
+            metadata: asset_metadata(asset_id.to_owned(), filename, size),
+            content,
+        };
         transaction.commit().await?;
-        asset.ok_or_else(asset_missing)
+        Ok((asset, lease))
     }
 
     /// Reads one room-owned PNG only while a current human member can reach its exact reference.
@@ -128,19 +140,23 @@ impl SqliteStore {
     ///
     /// Fails closed for malformed IDs, stale membership, cross-room or unreferenced assets, and
     /// corrupt stored state.
-    pub async fn bound_room_appearance_asset(
+    pub async fn bound_room_appearance_asset<T>(
         &self,
         room_id: &str,
         user_id: &str,
         participant_id: &str,
         asset_id: &str,
-    ) -> Result<RoomAppearanceAsset, PersistenceError> {
+        admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
+    ) -> Result<(RoomAppearanceAsset, T), PersistenceError> {
         if !valid_asset_id(asset_id) {
             return Err(asset_missing());
         }
         let mut transaction = self.pool.begin().await?;
         resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
-        let asset = read_bound_room_appearance_asset(&mut transaction, room_id, asset_id).await?;
+        let asset = read_bound_room_appearance_asset(&mut transaction, room_id, asset_id, |size| {
+            admit(user_id, size)
+        })
+        .await?;
         transaction.commit().await?;
         Ok(asset)
     }
@@ -151,11 +167,12 @@ impl SqliteStore {
     ///
     /// Fails closed when the issued session authority has expired or changed, the human has left,
     /// or the requested asset is no longer an intact reference owned by that room.
-    pub async fn bound_room_session_room_appearance_asset(
+    pub async fn bound_room_session_room_appearance_asset<T>(
         &self,
         authorization: &RoomSessionAuthorization,
         asset_id: &str,
-    ) -> Result<RoomAppearanceAsset, PersistenceError> {
+        admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
+    ) -> Result<(RoomAppearanceAsset, T), PersistenceError> {
         if !valid_asset_id(asset_id) {
             return Err(asset_missing());
         }
@@ -164,9 +181,13 @@ impl SqliteStore {
             .mutation_authority()
             .resolve(&mut transaction)
             .await?;
-        let asset =
-            read_bound_room_appearance_asset(&mut transaction, &principal.room_id, asset_id)
-                .await?;
+        let asset = read_bound_room_appearance_asset(
+            &mut transaction,
+            &principal.room_id,
+            asset_id,
+            |size| admit(&principal.principal_id, size),
+        )
+        .await?;
         authorization
             .mutation_authority()
             .record_success(&mut transaction)
@@ -176,11 +197,12 @@ impl SqliteStore {
     }
 }
 
-async fn read_bound_room_appearance_asset(
+async fn read_bound_room_appearance_asset<T>(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     asset_id: &str,
-) -> Result<RoomAppearanceAsset, PersistenceError> {
+    admit: impl FnOnce(usize) -> Result<T, PersistenceError>,
+) -> Result<(RoomAppearanceAsset, T), PersistenceError> {
     let row = sqlx::query(
             "SELECT asset.filename, asset.content_type, asset.size, length(asset.content) AS content_length, asset.created_at, room.settings_json FROM room_appearance_assets AS asset INNER JOIN rooms AS room ON room.room_id = asset.room_id WHERE asset.asset_id = ? AND asset.room_id = ? AND asset.state = 'bound' AND asset.pending_owner_user_id IS NULL AND asset.expires_at IS NULL",
         )
@@ -202,6 +224,7 @@ async fn read_bound_room_appearance_asset(
         return Err(asset_missing());
     }
     let (filename, size) = validate_asset_metadata(&row, row.get("content_length"))?;
+    let lease = admit(size)?;
     let content = sqlx::query_scalar::<_, Vec<u8>>(
             "SELECT content FROM room_appearance_assets WHERE asset_id = ? AND room_id = ? AND state = 'bound'",
         )
@@ -216,20 +239,7 @@ async fn read_bound_room_appearance_asset(
         metadata: asset_metadata(asset_id.to_owned(), filename, size),
         content,
     };
-    Ok(asset)
-}
-
-fn decode_asset(
-    asset_id: &str,
-    row: &sqlx::sqlite::SqliteRow,
-) -> Result<RoomAppearanceAsset, PersistenceError> {
-    let content = row.get::<Vec<u8>, _>("content");
-    let (filename, size) =
-        validate_asset_metadata(row, i64::try_from(content.len()).unwrap_or(i64::MAX))?;
-    Ok(RoomAppearanceAsset {
-        metadata: asset_metadata(asset_id.to_owned(), filename, size),
-        content,
-    })
+    Ok((asset, lease))
 }
 
 fn validate_asset_metadata(

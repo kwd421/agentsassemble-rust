@@ -229,3 +229,124 @@ async fn retained_body_saturation_is_retryable_before_the_authorized_route_reads
         StatusCode::BAD_REQUEST
     );
 }
+
+#[tokio::test]
+async fn large_download_responses_enforce_host_and_principal_budgets_until_last_clone_drops() {
+    use agentsassemble_domain::{CapabilitySet, ClientKind, InviteScope, public_settings};
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
+    let fixture = HumanSessionFixture::new(1).await;
+    let other = fixture.authorize(0).await;
+    let state = AppState::local(
+        fixture.store().clone(),
+        TicketStore::new(std::time::Duration::from_secs(30), 32),
+        ProviderCatalogService::fixed(ProviderCatalog::default()),
+    )
+    .await
+    .unwrap();
+    let principal = agentsassemble_domain::AuthenticatedPrincipal {
+        principal_id: LOCAL_OPERATOR_USER_ID.into(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.into(),
+        room_id: "general".into(),
+        display_name: "Host".into(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    let settings = state
+        .store
+        .snapshot("general", 0, 100)
+        .await
+        .unwrap()
+        .settings;
+    state.store.execute_room_settings_update(TrustedPrincipal(&principal), "large-policy", &json!({
+        "expected_revision":public_settings(&settings).unwrap().settings_revision, "attachment_file_limit_bytes":52428800
+    })).await.unwrap();
+    let attachment = state
+        .store
+        .store_message_attachment(
+            &principal,
+            "large.bin",
+            "application/octet-stream",
+            vec![42; 52428800],
+        )
+        .await
+        .unwrap();
+    state
+        .store
+        .execute_message_with_turn(
+            &principal,
+            "large-file",
+            "message.send",
+            &json!({"content":"", "attachment_ids":[attachment.id]}),
+        )
+        .await
+        .unwrap();
+    let mut responses = Vec::new();
+    for _ in 0..4 {
+        let response = read_message(&state, &attachment.id, &principal).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        responses.push(response);
+    }
+    assert_download_busy(read_message(&state, &attachment.id, &principal).await).await;
+    let response = read_message(&state, &attachment.id, other.principal()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    responses.push(response);
+    assert_download_busy(read_message(&state, &attachment.id, other.principal()).await).await;
+    let bytes = body::to_bytes(responses.pop().unwrap().into_body(), 52428800)
+        .await
+        .unwrap();
+    let clone = bytes.clone();
+    drop(bytes);
+    assert_download_busy(read_message(&state, &attachment.id, other.principal()).await).await;
+    drop(clone);
+    assert_eq!(
+        read_message(&state, &attachment.id, other.principal())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    drop(responses);
+    assert_eq!(
+        read_message(&state, &attachment.id, &principal)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+}
+
+async fn read_message(
+    state: &AppState,
+    id: &str,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+) -> Response {
+    let ticket = state
+        .tickets
+        .issue_bound_message_attachment_read(
+            principal.room_id.clone(),
+            principal.principal_id.clone(),
+            principal.participant_id.clone(),
+            id.into(),
+        )
+        .await
+        .unwrap();
+    let request = Request::builder()
+        .header(header::AUTHORIZATION, format!("Bearer {}", ticket.ticket))
+        .body(body::Body::empty())
+        .unwrap();
+    read_attachment(
+        State(state.clone()),
+        Path(id.into()),
+        Query(Default::default()),
+        RawQuery(Some("download=1".into())),
+        request,
+    )
+    .await
+    .unwrap_or_else(IntoResponse::into_response)
+}
+async fn assert_download_busy(response: Response) {
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let bytes = body::to_bytes(response.into_body(), 1024).await.unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["code"], "attachment_download_budget_exhausted");
+}

@@ -22,11 +22,12 @@ pub(super) async fn read(
     request: Request,
 ) -> Result<Json<Value>, ConnectorHttpError> {
     let authorization = super::read::authorize_read(&state, request, 1).await?;
-    let attachment = state
+    let (attachment, ()) = state
         .store
         .bound_authorized_message_attachment(
             RoomMutationAuthority::ConnectorSession(&authorization),
             &query.attachment_id,
+            |_, _| Ok(()),
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;

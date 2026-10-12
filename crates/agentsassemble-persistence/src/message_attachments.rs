@@ -369,20 +369,27 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Fails closed for stale membership, malformed IDs, unreferenced bytes, or corrupt state.
-    pub async fn bound_message_attachment(
+    pub async fn bound_message_attachment<T>(
         &self,
         room_id: &str,
         user_id: &str,
         participant_id: &str,
         attachment_id: &str,
-    ) -> Result<MessageAttachment, PersistenceError> {
+        admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
+    ) -> Result<(MessageAttachment, T), PersistenceError> {
         if !is_message_attachment_id(attachment_id) {
             return Err(message_attachment_missing());
         }
         let mut transaction = self.pool.begin().await?;
         resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
-        let attachment =
-            read_bound_message_attachment(&mut transaction, room_id, attachment_id).await?;
+        let attachment = read_bound_message_attachment(
+            &mut transaction,
+            room_id,
+            attachment_id,
+            MAX_ROOM_FILE_BYTES,
+            |size| admit(user_id, size),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(attachment)
     }
@@ -393,11 +400,12 @@ impl SqliteStore {
     ///
     /// Fails closed for expired or changed session authority, absent history permission,
     /// unreferenced bytes, or corrupt state.
-    pub async fn bound_authorized_message_attachment(
+    pub async fn bound_authorized_message_attachment<T>(
         &self,
         authority: crate::RoomMutationAuthority<'_>,
         attachment_id: &str,
-    ) -> Result<MessageAttachment, PersistenceError> {
+        admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
+    ) -> Result<(MessageAttachment, T), PersistenceError> {
         if !is_message_attachment_id(attachment_id) {
             return Err(message_attachment_missing());
         }
@@ -409,9 +417,14 @@ impl SqliteStore {
                 "This room session cannot read message history.",
             ));
         }
-        let attachment =
-            read_bound_message_attachment(&mut transaction, &principal.room_id, attachment_id)
-                .await?;
+        let attachment = read_bound_message_attachment(
+            &mut transaction,
+            &principal.room_id,
+            attachment_id,
+            upload_validation_limit(principal.client_kind),
+            |size| admit(&principal.principal_id, size),
+        )
+        .await?;
         authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(attachment)
@@ -483,9 +496,15 @@ pub(crate) async fn bound_provider_attachment_in(
     if event_seq > session.input_up_to_seq {
         return Err(message_attachment_missing());
     }
-    let attachment =
-        read_bound_message_attachment(transaction, authority.room_id, attachment_id).await?;
-    Ok(attachment)
+    let attachment = read_bound_message_attachment(
+        transaction,
+        authority.room_id,
+        attachment_id,
+        MAX_ATTACHMENT_BYTES,
+        |_| Ok(()),
+    )
+    .await?;
+    Ok(attachment.0)
 }
 
 async fn current_local_message_principal(
@@ -525,11 +544,13 @@ async fn current_local_message_principal(
     Ok(principal)
 }
 
-async fn read_bound_message_attachment(
+async fn read_bound_message_attachment<T>(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     attachment_id: &str,
-) -> Result<MessageAttachment, PersistenceError> {
+    read_limit: usize,
+    admit: impl FnOnce(usize) -> Result<T, PersistenceError>,
+) -> Result<(MessageAttachment, T), PersistenceError> {
     let row = sqlx::query(
         "SELECT attachment.event_seq, attachment.filename, attachment.content_type, attachment.size, attachment.is_safe_image, length(attachment.content) AS content_length, event.event_json FROM room_message_attachments AS attachment INNER JOIN room_events AS event ON event.room_id = attachment.room_id AND event.seq = attachment.event_seq WHERE attachment.attachment_id = ? AND attachment.room_id = ? AND attachment.state = 'bound' AND attachment.pending_owner_user_id IS NULL AND attachment.expires_at IS NULL",
     )
@@ -549,6 +570,16 @@ async fn read_bound_message_attachment(
     {
         return Err(message_attachment_missing());
     }
+    if stored.size > read_limit {
+        return Err(rejected(
+            "attachment_too_large",
+            &format!(
+                "Attachment size {} bytes exceeds read limit {read_limit} bytes.",
+                stored.size
+            ),
+        ));
+    }
+    let lease = admit(stored.size)?;
     let content = sqlx::query_scalar::<_, Vec<u8>>(
         "SELECT content FROM room_message_attachments WHERE attachment_id = ? AND room_id = ? AND event_seq = ? AND state = 'bound'",
     )
@@ -560,10 +591,13 @@ async fn read_bound_message_attachment(
     if content.len() != stored.size {
         return Err(invalid_attachment_state());
     }
-    Ok(MessageAttachment {
-        metadata: stored,
-        content,
-    })
+    Ok((
+        MessageAttachment {
+            metadata: stored,
+            content,
+        },
+        lease,
+    ))
 }
 
 fn stored_metadata(

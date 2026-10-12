@@ -49,11 +49,11 @@ async fn pending_room_asset_is_canonical_private_custody_until_expiry() {
     assert!(row.get::<Option<i64>, _>("expires_at").is_some());
 
     let preview = store
-        .pending_room_appearance_asset(&authority, &stored.id)
+        .pending_room_appearance_asset(&authority, &stored.id, |_, _| Ok(()))
         .await
         .unwrap_or_else(|error| panic!("preview pending appearance: {error}"));
-    assert_eq!(preview.metadata, stored);
-    assert_eq!(&preview.content[..8], b"\x89PNG\r\n\x1a\n");
+    assert_eq!(preview.0.metadata, stored);
+    assert_eq!(&preview.0.content[..8], b"\x89PNG\r\n\x1a\n");
 
     sqlx::query("UPDATE room_appearance_assets SET expires_at = 0 WHERE asset_id = ?")
         .bind(&stored.id)
@@ -62,7 +62,7 @@ async fn pending_room_asset_is_canonical_private_custody_until_expiry() {
         .unwrap_or_else(|error| panic!("expire pending appearance: {error}"));
     assert_rejected_code(
         store
-            .pending_room_appearance_asset(&authority, &stored.id)
+            .pending_room_appearance_asset(&authority, &stored.id, |_, _| Ok(()))
             .await,
         "appearance_asset_missing",
     );
@@ -106,19 +106,21 @@ async fn pending_room_asset_revalidates_exact_manager_and_shared_raster_safety()
     stale.room_uid = uuid::Uuid::new_v4();
     assert_rejected_code(
         store
-            .pending_room_appearance_asset(&stale, &stored.id)
+            .pending_room_appearance_asset(&stale, &stored.id, |_, _| Ok(()))
             .await,
         "room_authority_changed",
     );
     assert_rejected_code(
         store
-            .pending_room_appearance_asset(&stale, "ra_00000000000000000000000000000000")
+            .pending_room_appearance_asset(&stale, "ra_00000000000000000000000000000000", |_, _| {
+                Ok(())
+            })
             .await,
         "room_authority_changed",
     );
     assert_rejected_code(
         store
-            .pending_room_appearance_asset(&stale, "profile_avatar")
+            .pending_room_appearance_asset(&stale, "profile_avatar", |_, _| Ok(()))
             .await,
         "appearance_asset_missing",
     );
@@ -291,10 +293,11 @@ async fn bound_read_requires_current_membership_reference_and_integral_bytes() {
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
             &stored.id,
+            |_, _| Ok(()),
         )
         .await
         .unwrap_or_else(|error| panic!("read bound appearance: {error}"));
-    assert_eq!(&asset.content[..8], b"\x89PNG\r\n\x1a\n");
+    assert_eq!(&asset.0.content[..8], b"\x89PNG\r\n\x1a\n");
 
     sqlx::query("UPDATE room_appearance_assets SET size = size + 1 WHERE asset_id = ?")
         .bind(&stored.id)
@@ -308,6 +311,7 @@ async fn bound_read_requires_current_membership_reference_and_integral_bytes() {
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
                 &stored.id,
+                |_, _| Ok(()),
             )
             .await,
         "invalid_state",
@@ -332,6 +336,7 @@ async fn bound_read_requires_current_membership_reference_and_integral_bytes() {
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
                 &stored.id,
+                |_, _| Ok(()),
             )
             .await,
         "appearance_asset_missing",

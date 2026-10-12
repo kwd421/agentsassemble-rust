@@ -20,20 +20,20 @@ pub(super) fn acquire(
 pub(super) fn response(
     filename: &str,
     content_type: &str,
-    content: Vec<u8>,
+    content: impl Into<Bytes>,
     inline: bool,
     permit: OwnedSemaphorePermit,
 ) -> Result<Response, ProfileHttpError> {
     // Keep admission with the allocation, including transport-owned Bytes clones.
     let bytes = Bytes::from_owner(AvatarBytes {
-        content,
+        content: content.into(),
         _permit: permit,
     });
     attachment_response(filename, content_type, bytes, inline)
 }
 
 struct AvatarBytes {
-    content: Vec<u8>,
+    content: Bytes,
     _permit: OwnedSemaphorePermit,
 }
 

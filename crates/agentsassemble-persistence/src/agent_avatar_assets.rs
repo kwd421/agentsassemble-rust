@@ -93,32 +93,42 @@ impl SqliteStore {
     ///
     /// # Errors
     /// Pending/unknown identifiers are not found; inconsistent durable custody fails closed.
-    pub async fn agent_avatar(&self, asset_id: &str) -> Result<AgentAvatarAsset, PersistenceError> {
+    pub async fn agent_avatar<T>(
+        &self,
+        asset_id: &str,
+        admit: impl FnOnce(usize) -> Result<T, PersistenceError>,
+    ) -> Result<(AgentAvatarAsset, T), PersistenceError> {
         if !is_agent_avatar_asset_id(asset_id) {
             return Err(missing());
         }
         let mut transaction = self.pool.begin().await?;
-        let row = sqlx::query("SELECT room_id, session_id, filename, content_type, content, size, created_at FROM agent_avatar_assets WHERE asset_id = ? AND state = 'current'")
+        let row = sqlx::query("SELECT room_id, session_id, filename, content_type, length(content) AS content_length, size, created_at FROM agent_avatar_assets WHERE asset_id = ? AND state = 'current'")
             .bind(asset_id).fetch_optional(&mut *transaction).await?.ok_or_else(missing)?;
         let session =
             load_session(&mut transaction, row.get("room_id"), row.get("session_id")).await?;
         if agent_avatar_asset_id(&session.public.avatar_image_url) != Some(asset_id) {
             return Err(invalid_custody());
         }
-        let content = row.get::<Vec<u8>, _>("content");
         validate_stored_raster(
             row.get("content_type"),
             row.get("size"),
-            i64::try_from(content.len()).map_err(|_| invalid_custody())?,
+            row.get("content_length"),
             row.get("created_at"),
         )?;
+        let size = usize::try_from(row.get::<i64, _>("size")).map_err(|_| invalid_custody())?;
+        let lease = admit(size)?;
+        let content: Vec<u8> =
+            sqlx::query_scalar("SELECT content FROM agent_avatar_assets WHERE asset_id = ?")
+                .bind(asset_id)
+                .fetch_one(&mut *transaction)
+                .await?;
         let metadata = metadata(
             asset_id.to_owned(),
             sanitize_filename(row.get("filename")),
             content.len(),
         )?;
         transaction.commit().await?;
-        Ok(AgentAvatarAsset { metadata, content })
+        Ok((AgentAvatarAsset { metadata, content }, lease))
     }
 }
 

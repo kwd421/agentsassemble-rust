@@ -57,6 +57,7 @@ pub struct AppState {
     pub(crate) connection_admission: ConnectionAdmission,
     pub(crate) socket_admission: SocketAdmission,
     pub(crate) secure_queue_budget: Arc<tokio::sync::Semaphore>,
+    pub(crate) downloads: crate::download_budget::Budget,
     pub(crate) upload_bodies: crate::upload_body_budget::Budget,
     pub(crate) avatar_reads: Arc<tokio::sync::Semaphore>,
     pub(crate) avatar_uploads: Arc<tokio::sync::Semaphore>,
@@ -199,6 +200,7 @@ impl AppState {
             secure_queue_budget: Arc::new(tokio::sync::Semaphore::new(
                 crate::secure_queue::GLOBAL_BYTES,
             )),
+            downloads: crate::download_budget::Budget::default(),
             upload_bodies: crate::upload_body_budget::Budget::default(),
             avatar_reads: Arc::new(tokio::sync::Semaphore::new(6)),
             avatar_uploads: Arc::new(tokio::sync::Semaphore::new(2)),
