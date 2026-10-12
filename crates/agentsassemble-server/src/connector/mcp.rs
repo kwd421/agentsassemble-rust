@@ -26,6 +26,7 @@ use hub::ConnectorHub;
 pub struct ConnectorMcp {
     hub: Arc<ConnectorHub>,
     tool_router: ToolRouter<Self>,
+    pub(crate) body_reservation: Option<Arc<crate::upload_body_budget::Reservation>>,
 }
 
 impl ConnectorMcp {
@@ -37,6 +38,7 @@ impl ConnectorMcp {
         Ok(Self {
             hub: Arc::new(ConnectorHub::new(allowed_servers)?),
             tool_router: Self::tool_router(),
+            body_reservation: None,
         })
     }
 
@@ -47,6 +49,7 @@ impl ConnectorMcp {
         Self {
             hub: Arc::new(ConnectorHub::hosted(ingress, store)),
             tool_router: Self::tool_router(),
+            body_reservation: None,
         }
     }
 

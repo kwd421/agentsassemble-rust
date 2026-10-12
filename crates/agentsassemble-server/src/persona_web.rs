@@ -82,14 +82,18 @@ async fn import_persona(
         request.uri().path().starts_with("/api/central-owner/"),
     )
     .await?;
+    let (payload, reservation): (PersonaImportRequest, _) = decode_upload_body(
+        request,
+        MAX_BASE64_UPLOAD_BODY_BYTES,
+        &policy,
+        &state.upload_bodies,
+        agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+    )
+    .await?;
     let permit = import_admission()
         .acquire()
         .await
         .map_err(|_| PersonaHttpError::internal())?;
-    let payload: PersonaImportRequest =
-        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy)
-            .await
-            .map_err(PersonaHttpError::from_body)?;
     let filename = clean_filename(&payload.filename).ok_or_else(PersonaHttpError::unsupported)?;
     let extension = filename
         .rsplit_once('.')
@@ -103,8 +107,9 @@ async fn import_persona(
     }
     let encoded = payload.data_base64;
     let store = state.store.clone();
-    let task = tokio::spawn(async move {
+    let task = state.connections.spawn(async move {
         let _permit = permit;
+        let _reservation = reservation;
         let content = tokio::task::spawn_blocking(move || decode_upload(&encoded))
             .await
             .map_err(|_| PersonaHttpError::worker_failed())??;
@@ -326,5 +331,18 @@ impl IntoResponse for PersonaHttpError {
             Json(json!({"error": self.message, "code": self.code})),
         )
             .into_response()
+    }
+}
+
+impl From<crate::upload_body_budget::Error> for PersonaHttpError {
+    fn from(error: crate::upload_body_budget::Error) -> Self {
+        match error {
+            crate::upload_body_budget::Error::Body(error) => Self::from_body(error),
+            crate::upload_body_budget::Error::Exhausted => Self {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                code: crate::upload_body_budget::ERROR_CODE.into(),
+                message: "Upload body capacity is busy; retry later.".into(),
+            },
+        }
     }
 }

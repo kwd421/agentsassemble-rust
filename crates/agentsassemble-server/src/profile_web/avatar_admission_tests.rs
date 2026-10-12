@@ -187,3 +187,45 @@ async fn upload_authority_rejection_precedes_saturation() {
     assert_eq!(profile.into_response().status(), StatusCode::UNAUTHORIZED);
     assert_eq!(agent.into_response().status(), StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn retained_body_saturation_is_retryable_before_the_authorized_route_reads() {
+    let state = fixture().await;
+    let empty = Request::new(body::Body::empty());
+    let (_, first) = state
+        .upload_bodies
+        .reserve(
+            Some(LOCAL_OPERATOR_USER_ID),
+            &empty,
+            MAX_BASE64_UPLOAD_BODY_BYTES,
+        )
+        .expect("first");
+    let (_, second) = state
+        .upload_bodies
+        .reserve(
+            Some(LOCAL_OPERATOR_USER_ID),
+            &empty,
+            MAX_BASE64_UPLOAD_BODY_BYTES,
+        )
+        .expect("second");
+    let body = body::Body::from_stream(futures_util::stream::poll_fn(
+        |_| -> std::task::Poll<Option<Result<body::Bytes, std::io::Error>>> {
+            panic!("refused request must not read the body")
+        },
+    ));
+    let response = upload(&state, false, body).await;
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let encoded = body::to_bytes(response.into_body(), 1024)
+        .await
+        .expect("error body");
+    let error: serde_json::Value = serde_json::from_slice(&encoded).expect("JSON");
+    assert_eq!(error["code"], "upload_body_budget_exhausted");
+    drop((first, second));
+    // After release the same route reaches its ordinary JSON validation.
+    assert_eq!(
+        upload(&state, false, body::Body::from("invalid"))
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+}

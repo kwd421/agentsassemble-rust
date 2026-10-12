@@ -593,3 +593,27 @@ Pre-ebec3b14 evidence: `git show ebec3b14~1:frontend/src/lib/remote/remoteTransp
 accepts response headers via `new Headers` without a header-name allowlist;
 `git show ebec3b14~1:crates/agentsassemble-server/src/secure_channel.rs` uses
 `deny_unknown_fields`, so an unadvertised request must omit the new field entirely.
+
+## Host retained upload-body admission (2026-10-12)
+
+All authorized file-body entry points (message/connector attachments, profile,
+appearance, agent avatar and persona import), over plain HTTP and encrypted
+HTTP-over-WebSocket, share one host weighted budget and two concurrent uploads per
+principal. Reserve before reading, using the route maximum for unknown length or
+the declared length within that maximum; enforce that declared bound even on the
+virtual transport. Hold through decoding and storage, including uncancellable
+workers. Release on completion, failure, timeout and cancellation once retained
+work ends. Exhaustion immediately returns retryable `upload_body_budget_exhausted`
+(429), without awaiting capacity. Credentials and client credit opt-in are irrelevant
+to this host bound. Existing queue gates and progress deadlines remain.
+
+The host budget is 512 MiB, charging four times the encoded bound for body, JSON,
+decoded bytes and storage copies; at 10 MiB this admits nine maximum-size requests
+across principals. At a future 50 MiB file setting it admits one maximum request
+without growing host memory. Small declared bodies share the same weighted budget. The hosted MCP envelope is
+also charged before RMCP decoding and held by its request service clones; its
+principal is inside JSON, so the authenticated inner upload applies the principal
+limit while the outer envelope applies the host-wide bound.
+Regression acceptance: concurrent slow bodies across one/many principals stay within
+admission, refusal changes no accounting, and success/error/timeout/cancellation
+return capacity on both transports, including uncooperative credit-free clients.

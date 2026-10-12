@@ -41,21 +41,39 @@ pub(super) async fn upload(
         Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
     };
     let _permit = avatar_admission::acquire(&state.avatar_uploads)?;
-    let payload: EncodedAttachmentUpload =
-        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy)
-            .await
-            .map_err(ProfileHttpError::from_body)?;
-    let content = decode_attachment_content(&payload.data_base64)?;
+    let principal = match &authority {
+        RoomManagerAuthority::Local(binding) => &binding.manager.user_id,
+        RoomManagerAuthority::Operator(session) => &session.principal().principal_id,
+    };
+    let (payload, reservation): (EncodedAttachmentUpload, _) = decode_upload_body(
+        request,
+        MAX_BASE64_UPLOAD_BODY_BYTES,
+        &policy,
+        &state.upload_bodies,
+        principal,
+    )
+    .await?;
     let attachment = state
-        .store
-        .store_agent_avatar(
-            &authority,
-            &session_id,
-            &payload.filename,
-            &payload.content_type,
-            content,
-        )
-        .await?;
+        .connections
+        .clone()
+        .spawn(async move {
+            let _reservation = reservation;
+            let _permit = _permit;
+            let content = decode_attachment_content(&payload.data_base64)?;
+            let attachment = state
+                .store
+                .store_agent_avatar(
+                    &authority,
+                    &session_id,
+                    &payload.filename,
+                    &payload.content_type,
+                    content,
+                )
+                .await?;
+            Ok::<_, ProfileHttpError>(attachment)
+        })
+        .await
+        .map_err(|_| ProfileHttpError::internal())??;
     Ok(Json(json!({"attachment": attachment})))
 }
 

@@ -113,9 +113,14 @@ pub(crate) async fn decode_upload_body<T: serde::de::DeserializeOwned>(
     request: Request,
     limit: usize,
     policy: &crate::http_body_policy::Policy,
-) -> Result<T, BodyDecodeError> {
+    budget: &crate::upload_body_budget::Budget,
+    principal: &str,
+) -> Result<(T, crate::upload_body_budget::Reservation), crate::upload_body_budget::Error> {
+    let (limit, reservation) = budget.reserve(Some(principal), &request, limit)?;
     policy.authorize_upload()?;
-    decode_json_body(request, limit).await
+    let encoded = collect_body(request.into_body(), limit).await?;
+    let decoded = serde_json::from_slice(&encoded).map_err(|_| BodyDecodeError::InvalidJson)?;
+    Ok((decoded, reservation))
 }
 
 pub(crate) async fn decode_optional_json_body<T: serde::de::DeserializeOwned>(
@@ -134,7 +139,11 @@ pub(crate) async fn decode_optional_json_body<T: serde::de::DeserializeOwned>(
 
 async fn read_body(request: Request, limit: usize) -> Result<axum::body::Bytes, BodyDecodeError> {
     reject_declared_oversize(request.headers(), limit)?;
-    body::to_bytes(request.into_body(), limit)
+    collect_body(request.into_body(), limit).await
+}
+
+async fn collect_body(body: body::Body, limit: usize) -> Result<body::Bytes, BodyDecodeError> {
+    body::to_bytes(body, limit)
         .await
         .map_err(|error| classify_body_read_error(&error))
 }

@@ -170,10 +170,29 @@ async fn upload_attachment(
         ));
     }
     let _permit = avatar_admission::acquire(&state.avatar_uploads)?;
-    let payload: AttachmentUpload =
-        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy)
-            .await
-            .map_err(ProfileHttpError::from_body)?;
+    let principal = match &authority {
+        AttachmentUploadAuthority::Profile(ProfileAuthority::HumanSession(session)) => {
+            session.principal().principal_id.as_str()
+        }
+        AttachmentUploadAuthority::Operator(session) => session.principal().principal_id.as_str(),
+        AttachmentUploadAuthority::Appearance(
+            agentsassemble_persistence::RoomManagerAuthority::Local(binding),
+        ) => &binding.manager.user_id,
+        AttachmentUploadAuthority::Appearance(
+            agentsassemble_persistence::RoomManagerAuthority::Operator(session),
+        ) => &session.principal().principal_id,
+        AttachmentUploadAuthority::Profile(
+            ProfileAuthority::CentralOwner(_) | ProfileAuthority::LocalOperator,
+        ) => agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+    };
+    let (payload, reservation): (AttachmentUpload, _) = decode_upload_body(
+        request,
+        MAX_BASE64_UPLOAD_BODY_BYTES,
+        &policy,
+        &state.upload_bodies,
+        principal,
+    )
+    .await?;
     let authority = match authority {
         AttachmentUploadAuthority::Operator(session)
             if payload.purpose.trim() == "profile_avatar" && session.is_central_owner() =>
@@ -196,8 +215,17 @@ async fn upload_attachment(
             ));
         }
     }
-    let content = decode_attachment_content(&payload.data_base64)?;
-    let attachment = store_uploaded_attachment(&state, authority, &payload, content).await?;
+    let attachment = state
+        .connections
+        .clone()
+        .spawn(async move {
+            let _reservation = reservation;
+            let _permit = _permit;
+            let content = decode_attachment_content(&payload.data_base64)?;
+            store_uploaded_attachment(&state, authority, &payload, content).await
+        })
+        .await
+        .map_err(|_| ProfileHttpError::internal())??;
     Ok(Json(json!({"attachment": attachment})))
 }
 
@@ -212,37 +240,54 @@ async fn upload_message_attachment(
         request.extensions().get(),
     )
     .await?;
-    let payload: EncodedAttachmentUpload =
-        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy)
-            .await
-            .map_err(ProfileHttpError::from_body)?;
-    let content = decode_attachment_content(&payload.data_base64)?;
-    let attachment = match authority {
-        RoomSessionHttpAuthority::LocalTicket(grant) => {
-            state
-                .store
-                .store_local_message_attachment(
-                    &grant.room_id,
-                    &grant.principal_id,
-                    &grant.participant_id,
-                    &payload.filename,
-                    &payload.content_type,
-                    content,
-                )
-                .await?
-        }
-        RoomSessionHttpAuthority::Session(authorization) => {
-            state
-                .store
-                .store_authorized_message_attachment(
-                    authorization.mutation_authority(),
-                    &payload.filename,
-                    &payload.content_type,
-                    content,
-                )
-                .await?
-        }
+    let principal = match &authority {
+        RoomSessionHttpAuthority::LocalTicket(grant) => &grant.principal_id,
+        RoomSessionHttpAuthority::Session(session) => &session.principal().principal_id,
     };
+    let (payload, reservation): (EncodedAttachmentUpload, _) = decode_upload_body(
+        request,
+        MAX_BASE64_UPLOAD_BODY_BYTES,
+        &policy,
+        &state.upload_bodies,
+        principal,
+    )
+    .await?;
+    let attachment = state
+        .connections
+        .clone()
+        .spawn(async move {
+            let _reservation = reservation;
+            let content = decode_attachment_content(&payload.data_base64)?;
+            let attachment = match authority {
+                RoomSessionHttpAuthority::LocalTicket(grant) => {
+                    state
+                        .store
+                        .store_local_message_attachment(
+                            &grant.room_id,
+                            &grant.principal_id,
+                            &grant.participant_id,
+                            &payload.filename,
+                            &payload.content_type,
+                            content,
+                        )
+                        .await?
+                }
+                RoomSessionHttpAuthority::Session(authorization) => {
+                    state
+                        .store
+                        .store_authorized_message_attachment(
+                            authorization.mutation_authority(),
+                            &payload.filename,
+                            &payload.content_type,
+                            content,
+                        )
+                        .await?
+                }
+            };
+            Ok::<_, ProfileHttpError>(attachment)
+        })
+        .await
+        .map_err(|_| ProfileHttpError::internal())??;
     Ok(Json(json!({"attachment": attachment})))
 }
 
@@ -786,5 +831,18 @@ impl IntoResponse for ProfileHttpError {
             Json(json!({"error": self.message, "code": self.code})),
         )
             .into_response()
+    }
+}
+
+impl From<crate::upload_body_budget::Error> for ProfileHttpError {
+    fn from(error: crate::upload_body_budget::Error) -> Self {
+        match error {
+            crate::upload_body_budget::Error::Body(error) => Self::from_body(error),
+            crate::upload_body_budget::Error::Exhausted => Self {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                code: crate::upload_body_budget::ERROR_CODE.into(),
+                message: "Upload body capacity is busy; retry later.".into(),
+            },
+        }
     }
 }

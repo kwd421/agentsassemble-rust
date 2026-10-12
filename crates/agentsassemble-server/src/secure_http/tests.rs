@@ -158,13 +158,17 @@ async fn virtual_upload_timeout_drops_its_queue_and_ignores_late_data() {
                 |policy: axum::Extension<crate::http_body_policy::Policy>,
                  request: Request<Body>| async move {
                     match crate::http_api::decode_upload_body::<serde_json::Value>(
-                        request, 1024, &policy,
+                        request,
+                        1024,
+                        &policy,
+                        &crate::upload_body_budget::Budget::default(),
+                        "test",
                     )
                     .await
                     {
-                        Err(crate::http_api::BodyDecodeError::RequestTimeout) => {
-                            axum::http::StatusCode::REQUEST_TIMEOUT
-                        }
+                        Err(crate::upload_body_budget::Error::Body(
+                            crate::http_api::BodyDecodeError::RequestTimeout,
+                        )) => axum::http::StatusCode::REQUEST_TIMEOUT,
                         _ => axum::http::StatusCode::BAD_REQUEST,
                     }
                 },
@@ -286,4 +290,88 @@ async fn unpaced_request_releases_charges_without_credit_frames()
     assert!(body.next().await.is_none());
     assert!(frames.try_recv().is_err());
     Ok(())
+}
+
+#[tokio::test]
+async fn unpaced_virtual_bodies_share_host_admission_and_release_on_cancel() {
+    use crate::{http_api::decode_upload_body, http_body_policy::Policy, upload_body_budget};
+    let queues = Arc::new(Semaphore::new(crate::secure_queue::GLOBAL_BYTES));
+    let queue = Budget::new(queues.clone());
+    let bodies = upload_body_budget::Budget::default();
+    let (output, _credits) = Output::new(queues.clone(), CancellationToken::new());
+    let policy = Policy::new();
+    let mut inputs = Vec::new();
+    let mut reads = Vec::new();
+    for id in 0..3 {
+        let (tx, rx) = mpsc::channel(16);
+        let cancel = CancellationToken::new();
+        let mut input = Input {
+            tx,
+            cancel: cancel.clone(),
+            ended: false,
+        };
+        input
+            .push(&URL_SAFE_NO_PAD.encode(b" "), false, &queue)
+            .expect("queue chunk");
+        // No credit opt-in: admission cannot depend on cooperative pacing.
+        let request = Request::new(request_body(rx, cancel, id, false, output.clone()));
+        let mut read = Box::pin(decode_upload_body::<serde_json::Value>(
+            request,
+            1024,
+            &policy,
+            &bodies,
+            "same-principal",
+        ));
+        if id < 2 {
+            assert!(futures_util::poll!(&mut read).is_pending());
+            reads.push(read);
+        } else {
+            assert!(matches!(
+                read.await,
+                Err(upload_body_budget::Error::Exhausted)
+            ));
+        }
+        inputs.push(input);
+    }
+    assert_eq!(
+        queues.available_permits(),
+        crate::secure_queue::GLOBAL_BYTES
+    );
+    inputs[0].cancel.cancel();
+    assert!(reads.remove(0).await.is_err());
+    // Cancellation returned exactly one principal slot, while the other body
+    // is still retained after draining its encrypted queue charge.
+    let (_, held) = decode_upload_body::<serde_json::Value>(
+        Request::new(Body::from("null")),
+        1024,
+        &policy,
+        &bodies,
+        "same-principal",
+    )
+    .await
+    .expect("released slot");
+    assert!(matches!(
+        decode_upload_body::<serde_json::Value>(
+            Request::new(Body::from("null")),
+            1024,
+            &policy,
+            &bodies,
+            "same-principal"
+        )
+        .await,
+        Err(upload_body_budget::Error::Exhausted)
+    ));
+    drop(held);
+    inputs[1]
+        .push(&URL_SAFE_NO_PAD.encode(b"null"), true, &queue)
+        .expect("finish");
+    let (_, held) = reads.remove(0).await.expect("successful upload");
+    drop(held);
+    let (_, first) = bodies
+        .reserve(Some("same-principal"), &Request::new(Body::empty()), 1024)
+        .expect("first");
+    let (_, second) = bodies
+        .reserve(Some("same-principal"), &Request::new(Body::empty()), 1024)
+        .expect("second");
+    drop((first, second));
 }

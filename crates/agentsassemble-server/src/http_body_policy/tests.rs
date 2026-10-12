@@ -3,13 +3,21 @@ use crate::http_api::{decode_json_body, decode_upload_body};
 use axum::body::Bytes;
 use serde_json::Value;
 
-async fn upload(request: Request, limit: usize) -> Result<Value, BodyDecodeError> {
+async fn upload(request: Request, limit: usize) -> Result<Value, crate::upload_body_budget::Error> {
     let policy = request
         .extensions()
         .get::<Policy>()
         .unwrap_or_else(|| panic!("router policy"))
         .clone();
-    decode_upload_body(request, limit, &policy).await
+    decode_upload_body(
+        request,
+        limit,
+        &policy,
+        &crate::upload_body_budget::Budget::default(),
+        "test",
+    )
+    .await
+    .map(|(value, _reservation)| value)
 }
 
 fn paced(gap: u64, bytes: usize, count: usize) -> Body {
@@ -46,13 +54,17 @@ async fn upload_progress_outlives_control_deadline_but_not_idle_or_trickle_bound
         let started = Instant::now();
         assert_eq!(
             upload(wrap(Request::new(body)), 10 * 1024 * 1024).await,
-            Err(BodyDecodeError::RequestTimeout)
+            Err(crate::upload_body_budget::Error::Body(
+                BodyDecodeError::RequestTimeout
+            ))
         );
         assert_eq!(started.elapsed(), Duration::from_secs(elapsed));
     }
     assert_eq!(
         upload(wrap(Request::new(Body::from("12345"))), 4).await,
-        Err(BodyDecodeError::PayloadTooLarge)
+        Err(crate::upload_body_budget::Error::Body(
+            BodyDecodeError::PayloadTooLarge
+        ))
     );
 }
 
@@ -68,6 +80,8 @@ async fn control_and_late_authorization_keep_short_deadline() {
     tokio::time::advance(CONTROL).await;
     assert_eq!(
         upload(request, 1024).await,
-        Err(BodyDecodeError::RequestTimeout)
+        Err(crate::upload_body_budget::Error::Body(
+            BodyDecodeError::RequestTimeout
+        ))
     );
 }

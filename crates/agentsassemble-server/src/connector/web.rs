@@ -218,3 +218,16 @@ impl IntoResponse for ConnectorHttpError {
             .into_response()
     }
 }
+
+impl From<crate::upload_body_budget::Error> for ConnectorHttpError {
+    fn from(error: crate::upload_body_budget::Error) -> Self {
+        match error {
+            crate::upload_body_budget::Error::Body(error) => Self::from(error),
+            crate::upload_body_budget::Error::Exhausted => Self {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                code: crate::upload_body_budget::ERROR_CODE.into(),
+                resolution: agentsassemble_protocol::CommandResolution::Rejected,
+            },
+        }
+    }
+}

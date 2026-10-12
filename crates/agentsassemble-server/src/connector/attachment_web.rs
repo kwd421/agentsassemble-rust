@@ -49,23 +49,43 @@ pub(super) async fn upload(
     if !authorization.principal().capabilities.message_send {
         return Err(ConnectorHttpError::unauthorized());
     }
-    let payload: crate::profile_web::EncodedAttachmentUpload =
-        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy).await?;
-    if payload.data_base64.len() > MAX_BASE64_ENCODED_BYTES {
-        return Err(ConnectorHttpError::invalid());
-    }
-    let content = STANDARD
-        .decode(payload.data_base64.trim())
-        .map_err(|_| ConnectorHttpError::invalid())?;
-    let attachment = state
-        .store
-        .store_authorized_message_attachment(
-            RoomMutationAuthority::ConnectorSession(&authorization),
-            &payload.filename,
-            &payload.content_type,
-            content,
+    let (payload, reservation): (crate::profile_web::EncodedAttachmentUpload, _) =
+        decode_upload_body(
+            request,
+            MAX_BASE64_UPLOAD_BODY_BYTES,
+            &policy,
+            &state.upload_bodies,
+            &authorization.principal().principal_id,
         )
+        .await?;
+    let attachment = state
+        .connections
+        .clone()
+        .spawn(async move {
+            let _reservation = reservation;
+            if payload.data_base64.len() > MAX_BASE64_ENCODED_BYTES {
+                return Err(ConnectorHttpError::invalid());
+            }
+            let content = STANDARD
+                .decode(payload.data_base64.trim())
+                .map_err(|_| ConnectorHttpError::invalid())?;
+            let attachment = state
+                .store
+                .store_authorized_message_attachment(
+                    RoomMutationAuthority::ConnectorSession(&authorization),
+                    &payload.filename,
+                    &payload.content_type,
+                    content,
+                )
+                .await
+                .map_err(ConnectorHttpError::from_persistence)?;
+            Ok::<_, ConnectorHttpError>(attachment)
+        })
         .await
-        .map_err(ConnectorHttpError::from_persistence)?;
+        .map_err(|_| ConnectorHttpError {
+            status: axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            code: "connector_operation_failed".into(),
+            resolution: agentsassemble_protocol::CommandResolution::Unresolved,
+        })??;
     Ok(Json(json!({"attachment":attachment})))
 }
