@@ -671,6 +671,8 @@ fn local_principal() -> AuthenticatedPrincipal {
     }
 }
 
+#[path = "message_transfer_boundary.rs"]
+mod message_transfer_boundary;
 #[path = "room_file_upload_boundary.rs"]
 mod room_file_upload_boundary;
 

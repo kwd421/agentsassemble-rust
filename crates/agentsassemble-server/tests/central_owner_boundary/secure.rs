@@ -29,7 +29,8 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
         .arg("--input-type=module")
         .arg("-e")
         .arg(format!(
-            "{}\n{}",
+            "{}\n{}\n{}",
+            include_str!("message_transfer_peer.mjs"),
             include_str!("room_file_policy_peer.mjs"),
             include_str!("secure_peer.mjs")
         ))
@@ -59,7 +60,12 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
         let value: Value = serde_json::from_str(&completed)?;
         if matches!(
             value["test_progress"].as_str(),
-            Some("download_batch_started" | "download_complete")
+            Some(
+                "download_batch_started"
+                    | "download_complete"
+                    | "transfer_started"
+                    | "transfer_complete"
+            )
         ) {
             continue;
         }

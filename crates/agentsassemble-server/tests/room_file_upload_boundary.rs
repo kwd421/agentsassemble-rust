@@ -92,7 +92,7 @@ async fn ten_plain_large_downloads_are_exact_and_deletion_interrupts_a_stalled_b
     Ok(())
 }
 
-async fn set_limit(server: &LocalServer, limit: usize, request_id: &str) -> TestResult {
+pub(super) async fn set_limit(server: &LocalServer, limit: usize, request_id: &str) -> TestResult {
     let snapshot = server.store.snapshot("general", 0, 100).await?;
     server
         .store
@@ -108,7 +108,7 @@ async fn set_limit(server: &LocalServer, limit: usize, request_id: &str) -> Test
     Ok(())
 }
 
-async fn upload_ticket(server: &LocalServer) -> String {
+pub(super) async fn upload_ticket(server: &LocalServer) -> String {
     server
         .tickets
         .issue_message_attachment_upload(

@@ -32,6 +32,7 @@ async function verifyRoomFilePolicy({member, memberHeaders, memberSocket, member
     assert.ok(member.active, 'body refusal preserves the encrypted channel');
   }
   await limit(50 * 1024 * 1024);
+  await verifyHumanTransfers({member,memberHeaders,memberSocket,memberReceive});
   const uploads = [];
   for (const mib of [25, 50]) {
     const bytes = Buffer.alloc(mib * 1024 * 1024 + (mib === 25 ? 19 : 0), mib);

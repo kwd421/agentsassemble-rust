@@ -166,6 +166,24 @@ three admissions/fourth defer; bounded bodies on both transports and an unrelate
 room write completing while a request is stalled. Peak RSS and packaged UI remain
 separate measured acceptance; structural buffer tests must not claim those results.
 
+Verified: `cargo test -p agentsassemble-persistence -p agentsassemble-server --lib
+-- --test-threads=4` passed (524 persistence / 181 server, one ignored each);
+the affected HTTP integration suite passed seven tests and the production
+WebCrypto/RemoteTransport integration passed one. Both transports upload, finish,
+bind and download varied 50 MiB bytes and a safe raster exactly. Persistence tests
+compare generated large-raster previews with legacy validation, exercise offset
+and length failures, concurrent quota reservations, cancellation/expiry, policy
+lowering, invisible incomplete custody, file-backed backup exclusion and hostile
+restore refusal. Transfers pin the room incarnation (`room_uid`); replacement
+cannot inherit old bytes or quota. Controlled stalls allow an unrelated write;
+clock tests exclude server waits while retaining idle/progress/hard deadlines.
+An additional focused expiry/incarnation/restart regression passed. `cargo fmt
+--all`, `git diff --check` and `make architecture-check` passed without gate changes.
+The cleanup timer belongs to the server runtime, is joined at shutdown and does
+not occupy the connection tracker. No peak-RSS, paced-WAN, packaged-UI or real
+provider verification was performed. Transfer handles/receipts are process-local;
+finished attachments themselves retain ordinary durable pending custody.
+
 Open authority decision: existing encrypted-channel close ends its durable room
 session. Interrupted child requests retain the transfer while that authority is
 valid. Resuming on a newly admitted channel/session requires an explicit custody
