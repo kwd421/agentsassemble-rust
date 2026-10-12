@@ -32,6 +32,7 @@ pub struct CompanionInviteRequest<'a> {
 struct InvitationOwner {
     identity: RoomUserIdentity,
     parent: Option<[u8; 32]>,
+    binding: Option<crate::delegation_owner::OwnerBinding>,
     expires_at: DateTime<Utc>,
 }
 
@@ -53,6 +54,9 @@ impl SqliteStore {
         let owner = InvitationOwner {
             identity,
             parent: None,
+            binding: Some(
+                crate::delegation_owner::OwnerBinding::from_manager(&mut tx, manager).await?,
+            ),
             expires_at: now + Duration::hours(1),
         };
         let hash = canonical_payload_hash(&json!({"friend_id":friend_id}));
@@ -137,6 +141,7 @@ impl SqliteStore {
                 participant_id: principal.participant_id.clone(),
             },
             parent: Some(*current.session_fingerprint()),
+            binding: None,
             expires_at: current
                 .expires_at()
                 .map_or(now + Duration::minutes(10), |expiry| {
@@ -258,6 +263,11 @@ impl SqliteStore {
             .bind(invite_id.to_string()).bind(&identity.room_id).bind(room.room_uid.to_string()).bind(&identity.user_id).bind(&identity.participant_id)
             .bind(request.request_id.to_string()).bind(hash).bind(request.provider_kind).bind(request.display_name)
             .bind(owner.parent.as_ref().map(<[u8;32]>::as_slice)).bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).execute(&mut **tx).await?;
+        if let Some(binding) = &owner.binding {
+            binding
+                .save(tx, &identity.room_id, "attendee", &invite_id.to_string())
+                .await?;
+        }
         Ok(AttendeeInvite {
             invite_id,
             invite_bearer: bearer.bearer,

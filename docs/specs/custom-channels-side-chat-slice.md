@@ -1,5 +1,20 @@
 # Custom text channels and ephemeral side chat
 
+## Delegated pin mutation (required, implementation in progress)
+
+`set_message_pin(channel_id, message_id, pinned, request_id)` is the only new AI
+mutation, shared by RoomPortal and connector MCP with unknown fields rejected.
+Authentication supplies room, owner, delegate and turn. A private persistence
+DelegatedRoomActionAuthority proves both current authorities and invokes the same
+pin mutation core as the owner's local/session request, including mute rejection.
+Exact UUID retry returns the original success receipt without repinning, charging
+again or duplicating attribution; changed parameters conflict. Commit pin, receipt
+and room-visible system event atomically, with actor_participant_id,
+on_behalf_of_participant_id, action, target and request_id. Publish after commit.
+Preserve channel/target/capacity errors, current scope and authority lifetimes; charge
+both identities through existing write/admission owners. No pin UI changes.
+
+
 Status: Phase 6 approved through `25c7961`, C0/H0/M0/L0 after incarnation correction.
 
 ## Definition and observed contract

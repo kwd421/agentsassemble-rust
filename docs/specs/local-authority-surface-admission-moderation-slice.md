@@ -1,5 +1,27 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
+## Director delegation: pin slice (required, implementation in progress)
+
+Human roles remain non-authorizing. An AI `director` delegates a fixed action list
+within its human owner's current authority; this slice implements only pin/unpin.
+No operator rights, role assignment, CapabilitySet change, other delegated action,
+confirmation flow or frontend UI is included. Authority is proved inside the pin
+mutation transaction: joined/unmuted AI director with exact turn/connection/session
+custody, and its bound human owner with current writable, joined/unmuted authority.
+Persist only server-owned non-bearer provenance; never substitute another session
+of the same person or promote remote custody to local bootstrap custody.
+Missing historical bindings fail `owner_authority_unavailable`. Disconnect ends
+delegation when it ends the bound authority (secure-channel close, owner release,
+expiry or revocation). Only local host authority needs no live socket; there is no
+new durable authorization lifetime. Fresh discovery and every call recheck authority.
+Both owner and delegate pay the existing write/admission budgets. Exact request-ID
+replay has one mutation and one room-visible attribution event; changed input conflicts.
+Acceptance covers human non-escalation, guest ceilings, mute/removal/read-only/demotion
+on the next call, wrong-session rejection, missing binding, disconnect and exact replay.
+Verify affected crate tests, cargo fmt and architecture-check in three buildable
+commits: provenance/schema catalog, shared mutation/admission, then tool wiring.
+
+
 Status: implementation evidence retained; D-01 closed at `a7949bd` and D-02
 closed by the bounded JSON socket cutover
 
@@ -216,7 +238,8 @@ Participant roles are exactly the five currently reachable product values:
 `human`, `director`, `implementer`, `reviewer`, and `agent`. The Rust domain uses
 one typed enum with those exact snake-case wire values. Historical aliases and
 normalizing fallbacks are not part of the Rust contract. Role is room-owned
-collaboration/routing metadata and never operator authorization; human profiles,
+collaboration/routing metadata with the AI-only delegation exception above, never
+operator authorization; human profiles,
 Agent Sessions, and presentation inference cannot overwrite it.
 
 `participant.role.update` requires freshly resolved `room.manage` authority and

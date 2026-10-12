@@ -161,6 +161,13 @@ pub struct OperatorSessionAuthorization {
 }
 
 impl OperatorSessionAuthorization {
+    pub(crate) fn delegation_device(&self) -> &[u8; 32] {
+        &self.device_fingerprint
+    }
+    pub(crate) fn delegation_origin(&self) -> &str {
+        &self.target_origin
+    }
+
     #[must_use]
     pub const fn owner_session_fingerprint(&self) -> Option<&[u8; 32]> {
         self.owner_session_fingerprint.as_ref()
@@ -565,7 +572,7 @@ pub(crate) async fn record_operator_use(
         .await
 }
 
-async fn resolve_operator_session(
+pub(crate) async fn resolve_operator_session(
     tx: &mut Transaction<'_, Sqlite>,
     fingerprint: &[u8; 32],
     device: &[u8; 32],

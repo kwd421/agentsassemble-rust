@@ -1,5 +1,18 @@
 # Agent Session vertical slice
 
+## Director pin delegation (required, implementation in progress)
+
+Managed harness and API agent creation must retain the authenticated human owner's
+exact non-bearer authority reference, independently of runtime owner/lease identity.
+RoomPortal per-turn discovery and calls expose `set_message_pin(channel_id,
+message_id, pinned, request_id)` only for a currently eligible director AI and owner.
+The persistence mutation retains exact active-turn checks. ADDRESSING_AND_ROLES
+must describe only pin/unpin on behalf of the owner and explicitly deny operator
+rights. No other delegated tools or confirmation mechanism are implemented here.
+Authority, lifetime, budget and replay acceptance are owned by the director pin
+section in local-authority-surface-admission-moderation-slice.md.
+
+
 Status: published contract owner; implementation reopened by the 2026-09-01
 repository audit before further Agent Session work
 

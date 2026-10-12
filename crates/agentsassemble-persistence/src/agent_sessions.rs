@@ -104,8 +104,21 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(outcome);
         }
+        let owner_binding =
+            crate::delegation_owner::OwnerBinding::from_mutation(&mut transaction, authority)
+                .await?;
         let records =
             create_or_reuse_agent_records(&mut transaction, principal, draft, None, false).await?;
+        if !records.committed_events.is_empty() {
+            owner_binding
+                .save(
+                    &mut transaction,
+                    &principal.room_id,
+                    "participant",
+                    &records.session.public.session_id,
+                )
+                .await?;
+        }
         let outcome = store_result(
             &mut transaction,
             principal,

@@ -166,6 +166,30 @@ pub(crate) async fn require_parent(
     fingerprint: &[u8],
     now: DateTime<Utc>,
 ) -> Result<Option<DateTime<Utc>>, PersistenceError> {
+    let (principal, expires_at) = resolve_parent(tx, room_id, fingerprint, now).await?;
+    let (_, participant) =
+        crate::authority::load_active_membership(tx, room_id, &principal.participant_id).await?;
+    if principal.invite_scope != InviteScope::ReadWrite || participant.muted {
+        return Err(rejected(
+            "permission_denied",
+            "The companion's posting authority is unavailable.",
+        ));
+    }
+    Ok(expires_at)
+}
+
+pub(crate) async fn resolve_parent(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    fingerprint: &[u8],
+    now: DateTime<Utc>,
+) -> Result<
+    (
+        agentsassemble_domain::AuthenticatedPrincipal,
+        Option<DateTime<Utc>>,
+    ),
+    PersistenceError,
+> {
     let fingerprint: [u8; 32] = fingerprint
         .try_into()
         .map_err(|_| rejected("invalid_state", "Stored attendee parent is invalid."))?;
@@ -206,13 +230,5 @@ pub(crate) async fn require_parent(
             ));
         }
     };
-    let (_, participant) =
-        crate::authority::load_active_membership(tx, room_id, &principal.participant_id).await?;
-    if principal.invite_scope != InviteScope::ReadWrite || participant.muted {
-        return Err(rejected(
-            "permission_denied",
-            "The companion's posting authority is unavailable.",
-        ));
-    }
-    Ok(expires_at)
+    Ok((principal, expires_at))
 }

@@ -1,5 +1,19 @@
 # Identity, accounts, friends and human admission
 
+## Director owner provenance (required, implementation in progress)
+
+AI ownership identifies a human but never proves authority. Creation and invitation
+issuance retain only the exact local bootstrap or human/operator session reference
+needed for transactional delegated pin authorization, including room incarnation
+and remote provenance. No bearer, inferred privileged session or durable extension
+of authority is permitted. Reuse current expiry/revocation/disconnect owners.
+Historical records without provable binding fail `owner_authority_unavailable`.
+Extend the archive-schema catalog with the normal schema migration and preserve
+restoration of every supported archive version. Authority references are ephemeral backup data: restoration never revives
+old session custody and restored AIs need a fresh authenticated binding. Existing
+private invite delivery is unchanged; creating any invite on behalf of an owner is not part of this slice.
+
+
 ## UI audit functional corrections (2026-10-11)
 
 Entry points: trusted central `/member-join`, central start guest creation/recovery,

@@ -86,6 +86,15 @@ impl SqliteStore {
         sqlx::query("INSERT INTO room_connector_invites(invite_id,room_id,room_uid,creator_id,request_id,scope,token_fingerprint,expires_at) VALUES(?,?,?,?,?,?,?,?)")
             .bind(invite_id.to_string()).bind(&identity.room_id).bind(room.room_uid.to_string()).bind(&identity.user_id)
             .bind(request_id.to_string()).bind(scope).bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).execute(&mut *tx).await?;
+        crate::delegation_owner::OwnerBinding::from_manager(&mut tx, manager)
+            .await?
+            .save(
+                &mut tx,
+                &identity.room_id,
+                "connector",
+                &invite_id.to_string(),
+            )
+            .await?;
         tx.commit().await?;
         Ok(ConnectorInvite {
             invite_id,
@@ -212,6 +221,14 @@ impl SqliteStore {
         sqlx::query("UPDATE room_connector_invites SET client_fingerprint=?,join_request_id=?,join_payload_hash=?,participant_id=?,event_id=?,session_fingerprint=?,session_expires_at=? WHERE invite_id=?")
             .bind(client_fingerprint.as_slice()).bind(request_id.to_string()).bind(payload_hash).bind(&participant.participant_id).bind(&event.id)
             .bind(bearer.fingerprint.as_slice()).bind((now+TTL).timestamp_micros()).bind(row.get::<String,_>("invite_id")).execute(&mut *tx).await?;
+        crate::delegation_owner::admit_binding(
+            &mut tx,
+            &room_id,
+            "connector",
+            row.get("invite_id"),
+            &participant.participant_id,
+        )
+        .await?;
         let authorization = authorize_in(&mut tx, &bearer.fingerprint, now).await?;
         tx.commit().await?;
         Ok(ConnectorAdmission {

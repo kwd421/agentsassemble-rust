@@ -149,6 +149,14 @@ impl SqliteStore {
         sqlx::query("UPDATE room_attendee_invites SET client_fingerprint=?,join_request_id=?,participant_id=?,event_id=?,session_fingerprint=?,session_expires_at=? WHERE invite_id=?")
             .bind(request.client_fingerprint.as_slice()).bind(request.request_id.to_string()).bind(&event.actor.participant_id).bind(&event.id)
             .bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).bind(row.get::<String,_>("invite_id")).execute(&mut *tx).await?;
+        crate::delegation_owner::admit_binding(
+            &mut tx,
+            &room_id,
+            "attendee",
+            row.get("invite_id"),
+            &event.actor.participant_id,
+        )
+        .await?;
         let authorization = authorize_in(&mut tx, &bearer.fingerprint, now).await?;
         tx.commit().await?;
         Ok(AttendeeAdmission {

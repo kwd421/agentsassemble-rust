@@ -58,6 +58,10 @@ pub struct ServerOwnerLifecycleAuthorization {
 }
 
 impl ServerOwnerLifecycleAuthorization {
+    pub(crate) fn owner(&self) -> &ServerOwnerAuthority {
+        &self.owner
+    }
+
     #[must_use]
     pub const fn principal(&self) -> &agentsassemble_domain::AuthenticatedPrincipal {
         &self.principal

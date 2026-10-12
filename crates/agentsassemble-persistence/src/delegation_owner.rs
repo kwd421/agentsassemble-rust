@@ -1,0 +1,328 @@
+//! Server-only provenance. Identity alone never selects a session or grants authority.
+use agentsassemble_domain::{AuthenticatedPrincipal, ParticipantRole};
+use serde::{Deserialize, Serialize};
+use sqlx::{Row, Sqlite, Transaction};
+
+use crate::{PersistenceError, RoomManagerAuthority, RoomMutationAuthority, SqliteStore};
+
+pub(crate) const DDL: &str = "CREATE TABLE IF NOT EXISTS ai_owner_bindings (room_id TEXT NOT NULL, subject_kind TEXT NOT NULL CHECK(subject_kind IN ('participant','attendee','connector')), subject_id TEXT NOT NULL, binding_json TEXT NOT NULL, PRIMARY KEY(room_id,subject_kind,subject_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE) STRICT";
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OwnerBinding {
+    room_uid: uuid::Uuid,
+    user_id: String,
+    participant_id: String,
+    reference: OwnerReference,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum OwnerReference {
+    Local {
+        server_id: String,
+        authority_lineage_id: String,
+    },
+    Human {
+        fingerprint: [u8; 32],
+    },
+    Operator {
+        fingerprint: [u8; 32],
+        device: [u8; 32],
+        origin: String,
+    },
+    ServerOwner {
+        fingerprint: [u8; 32],
+        device: [u8; 32],
+        origin: String,
+    },
+}
+
+impl OwnerBinding {
+    pub(crate) async fn from_manager(
+        tx: &mut Transaction<'_, Sqlite>,
+        authority: &RoomManagerAuthority,
+    ) -> Result<Self, PersistenceError> {
+        match authority {
+            RoomManagerAuthority::Local(local) => {
+                let principal = local.resolve(tx).await?;
+                Self::from_mutation(tx, RoomMutationAuthority::TrustedPrincipal(&principal)).await
+            }
+            RoomManagerAuthority::Operator(operator) => {
+                Self::from_mutation(tx, RoomMutationAuthority::OperatorSession(operator)).await
+            }
+        }
+    }
+
+    pub(crate) async fn from_mutation(
+        tx: &mut Transaction<'_, Sqlite>,
+        authority: RoomMutationAuthority<'_>,
+    ) -> Result<Self, PersistenceError> {
+        // Issuers resolve this exact authority in the same creation transaction.
+        let principal = authority.principal();
+        let (room, _) = crate::authority::load_active_membership(
+            tx,
+            &principal.room_id,
+            &principal.participant_id,
+        )
+        .await?;
+        crate::room_user_identity::resolve_room_user_identity(
+            tx,
+            &principal.room_id,
+            &principal.principal_id,
+            &principal.participant_id,
+        )
+        .await?;
+        let local = async |tx: &mut Transaction<'_, Sqlite>| {
+            let (binding, _) = crate::room_user_identity::resolve_local_room_manager(
+                tx,
+                &principal.room_id,
+                &principal.principal_id,
+                &principal.participant_id,
+            )
+            .await?;
+            Ok::<_, PersistenceError>(OwnerReference::Local {
+                server_id: binding.server_id,
+                authority_lineage_id: binding.authority_lineage_id,
+            })
+        };
+        let operator = |session: &crate::OperatorSessionAuthorization| OwnerReference::Operator {
+            fingerprint: *session.session_fingerprint(),
+            device: *session.delegation_device(),
+            origin: session.delegation_origin().to_owned(),
+        };
+        let reference = match authority {
+            RoomMutationAuthority::TrustedPrincipal(_) => local(tx).await?,
+            RoomMutationAuthority::HumanSession(session) => OwnerReference::Human {
+                fingerprint: *session.session_fingerprint(),
+            },
+            RoomMutationAuthority::OperatorSession(session) => operator(session),
+            RoomMutationAuthority::ServerOwnerLifecycle(owner) => match owner.owner() {
+                crate::ServerOwnerAuthority::LocalOperator => local(tx).await?,
+                crate::ServerOwnerAuthority::CentralOwner(session) => operator(session),
+                crate::ServerOwnerAuthority::CentralSession(session) => {
+                    OwnerReference::ServerOwner {
+                        fingerprint: *session.fingerprint(),
+                        device: session.binding().browser_fingerprint,
+                        origin: session.binding().origin.clone(),
+                    }
+                }
+            },
+            RoomMutationAuthority::ConnectorSession(_) => return Err(unavailable()),
+        };
+        Ok(Self {
+            room_uid: room.room_uid,
+            user_id: principal.principal_id.clone(),
+            participant_id: principal.participant_id.clone(),
+            reference,
+        })
+    }
+
+    pub(crate) async fn save(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        room_id: &str,
+        kind: &str,
+        id: &str,
+    ) -> Result<(), PersistenceError> {
+        sqlx::query("INSERT INTO ai_owner_bindings(room_id,subject_kind,subject_id,binding_json) VALUES(?,?,?,?)")
+            .bind(room_id).bind(kind).bind(id).bind(serde_json::to_string(self)?)
+            .execute(&mut **tx).await?;
+        Ok(())
+    }
+
+    async fn resolve(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        room_id: &str,
+    ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+        let room = crate::authority::load_active_room(tx, room_id).await?;
+        if room.room_uid != self.room_uid {
+            return Err(unavailable());
+        }
+        let principal = match &self.reference {
+            OwnerReference::Local {
+                server_id,
+                authority_lineage_id,
+            } => {
+                let expected = crate::LocalRoomManagerAuthority {
+                    server_id: server_id.clone(),
+                    authority_lineage_id: authority_lineage_id.clone(),
+                    room_uid: self.room_uid,
+                    manager: crate::RoomUserIdentity {
+                        room_id: room_id.to_owned(),
+                        user_id: self.user_id.clone(),
+                        participant_id: self.participant_id.clone(),
+                    },
+                };
+                expected.resolve(tx).await?
+            }
+            OwnerReference::Human { fingerprint } => {
+                match crate::human_session_authority::resolve_human_session(
+                    tx,
+                    fingerprint,
+                    Some(room_id),
+                    chrono::Utc::now(),
+                )
+                .await?
+                {
+                    crate::human_session_authority::ResolvedHumanSession::Live {
+                        authorization,
+                        ..
+                    } => authorization.principal().clone(),
+                    _ => return Err(unavailable()),
+                }
+            }
+            OwnerReference::Operator {
+                fingerprint,
+                device,
+                origin,
+            } => crate::operator_pairing::resolve_operator_session(
+                tx,
+                fingerprint,
+                device,
+                origin,
+                chrono::Utc::now(),
+            )
+            .await?
+            .principal()
+            .clone(),
+            OwnerReference::ServerOwner {
+                fingerprint,
+                device,
+                origin,
+            } => {
+                crate::host_owner_session::resolve(tx, fingerprint, device, origin).await?;
+                crate::room_user_identity::resolve_local_room_manager(
+                    tx,
+                    room_id,
+                    &self.user_id,
+                    &self.participant_id,
+                )
+                .await?
+                .1
+            }
+        };
+        if principal.room_id != room_id
+            || principal.principal_id != self.user_id
+            || principal.participant_id != self.participant_id
+        {
+            return Err(unavailable());
+        }
+        Ok(principal)
+    }
+}
+
+// The invitation owns the reference until admission. Missing historical references stay missing.
+pub(crate) async fn admit_binding(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    kind: &str,
+    invite_id: &str,
+    participant_id: &str,
+) -> Result<(), PersistenceError> {
+    sqlx::query("UPDATE ai_owner_bindings SET subject_kind='participant',subject_id=? WHERE room_id=? AND subject_kind=? AND subject_id=?")
+        .bind(participant_id).bind(room_id).bind(kind).bind(invite_id).execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub(crate) async fn resolve_pin_owner(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    delegate_id: &str,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    let delegate = crate::authority::load_active_participant(tx, room_id, delegate_id).await?;
+    if delegate.participant_type != "agent" || delegate.role != ParticipantRole::Director {
+        return Err(rejected("role_required", "A director AI is required."));
+    }
+    if delegate.muted {
+        return Err(rejected(
+            "delegate_authority_expired",
+            "The delegate is muted.",
+        ));
+    }
+    let owner = resolve_bound_owner(tx, room_id, delegate_id)
+        .await
+        .map_err(|error| match error {
+            PersistenceError::CommandRejected { .. }
+            | PersistenceError::ParticipantMissing
+            | PersistenceError::RoomMissing => unavailable(),
+            other => other,
+        })?;
+    if owner.participant_id != delegate.owner_id {
+        return Err(unavailable());
+    }
+    let participant =
+        crate::authority::load_active_participant(tx, room_id, &owner.participant_id).await?;
+    if participant.muted {
+        return Err(rejected("owner_muted", "The owner is muted."));
+    }
+    if !owner.capabilities.message_modify {
+        return Err(rejected(
+            "owner_scope_read_only",
+            "The owner cannot pin messages.",
+        ));
+    }
+    Ok(owner)
+}
+
+async fn resolve_bound_owner(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    delegate_id: &str,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    // Companion provenance already lives on its invitation; do not duplicate or infer it.
+    if let Some(row) = sqlx::query("SELECT parent_fingerprint,creator_id,owner_participant_id,room_uid FROM room_attendee_invites WHERE room_id=? AND participant_id=? AND parent_fingerprint IS NOT NULL")
+        .bind(room_id).bind(delegate_id).fetch_optional(&mut **tx).await? {
+        let room = crate::authority::load_active_room(tx, room_id).await?;
+        if room.room_uid.to_string() != row.get::<String,_>("room_uid") { return Err(unavailable()); }
+        let (owner, _) = crate::attendee::session::resolve_parent(tx, room_id, row.get("parent_fingerprint"), chrono::Utc::now()).await?;
+        if owner.principal_id != row.get::<String,_>("creator_id") || owner.participant_id != row.get::<String,_>("owner_participant_id") { return Err(unavailable()); }
+        return Ok(owner);
+    }
+    let encoded: Option<String> = sqlx::query_scalar("SELECT binding_json FROM ai_owner_bindings WHERE room_id=? AND subject_kind='participant' AND subject_id=?")
+        .bind(room_id).bind(delegate_id).fetch_optional(&mut **tx).await?;
+    let binding: OwnerBinding = serde_json::from_str(&encoded.ok_or_else(unavailable)?)?;
+    binding.resolve(tx, room_id).await
+}
+
+impl SqliteStore {
+    /// Fresh owner/role eligibility for tool discovery; execution must also prove AI custody.
+    /// # Errors
+    /// Propagates storage corruption/failure; unavailable authority is not an eligible tool.
+    pub async fn director_owner_can_pin(
+        &self,
+        room_id: &str,
+        delegate_id: &str,
+    ) -> Result<bool, PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        let result = resolve_pin_owner(&mut tx, room_id, delegate_id).await;
+        tx.commit().await?;
+        match result {
+            Ok(_) => Ok(true),
+            Err(
+                PersistenceError::CommandRejected { .. }
+                | PersistenceError::ParticipantMissing
+                | PersistenceError::RoomMissing,
+            ) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+pub(crate) fn unavailable() -> PersistenceError {
+    rejected(
+        "owner_authority_unavailable",
+        "The bound owner's authority is unavailable.",
+    )
+}
+fn rejected(code: &'static str, message: &'static str) -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: code.into(),
+        message: message.into(),
+    }
+}
+
+#[cfg(test)]
+#[path = "delegation_owner_tests.rs"]
+mod tests;

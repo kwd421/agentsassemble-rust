@@ -47,7 +47,8 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "room_attendee_invites"
         | "room_connector_invites"
         | "local_bootstrap_authority" => Policy::Product,
-        "central_owner_sessions"
+        "ai_owner_bindings"
+        | "central_owner_sessions"
         | "host_owner_sessions"
         | "central_owner_grants"
         | "operator_pairings"

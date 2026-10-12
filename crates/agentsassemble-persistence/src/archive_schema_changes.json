@@ -14,5 +14,12 @@
     "add": [
       "CREATE TABLE connector_mentions (\n    room_id TEXT NOT NULL, participant_id TEXT NOT NULL, seq INTEGER NOT NULL,\n    PRIMARY KEY(room_id, participant_id, seq),\n    FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE,\n    FOREIGN KEY(room_id, seq) REFERENCES room_events(room_id, seq) ON DELETE CASCADE) STRICT"
     ]
+  },
+  {
+    "version": 90,
+    "remove": [],
+    "add": [
+      "CREATE TABLE IF NOT EXISTS ai_owner_bindings (room_id TEXT NOT NULL, subject_kind TEXT NOT NULL CHECK(subject_kind IN ('participant','attendee','connector')), subject_id TEXT NOT NULL, binding_json TEXT NOT NULL, PRIMARY KEY(room_id,subject_kind,subject_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE) STRICT"
+    ]
   }
 ]

@@ -1,5 +1,18 @@
 # External AI admission and bridges
 
+## Director pin delegation (required, implementation in progress)
+
+Companion, friend-attendee and connector invitation/admission retain the issuer's
+exact server-only non-bearer owner provenance, consistent with participant owner_id.
+Companion parent references remain authoritative. Historical missing provenance
+fails closed; invitation creator identity alone does not prove session authority.
+Attendee RoomPortal and connector MCP expose the same strict pin tool schema and
+recheck current owner/delegate authority on discovery and execution without reconnect.
+Retain attendee connection/turn and connector session checks. Expired or disconnected
+owner authority cannot delegate. All other delegated actions and confirmations remain
+outside this slice; see the director pin contract in the local-authority spec.
+
+
 ## 추가 창 표시 보정 (2026-10-07)
 
 AgentCreateModal/OwnComputerCreateModal의 위치 선택은 제공자 선택으로 설정이 늘어나도

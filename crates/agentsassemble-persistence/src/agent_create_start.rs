@@ -144,6 +144,9 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentCreateStartPlan::Start(Box::new(effect)));
         }
+        let owner_binding =
+            crate::delegation_owner::OwnerBinding::from_mutation(&mut transaction, authority)
+                .await?;
         let records = create_or_reuse_agent_records(
             &mut transaction,
             principal,
@@ -152,6 +155,16 @@ impl SqliteStore {
             true,
         )
         .await?;
+        if !records.committed_events.is_empty() {
+            owner_binding
+                .save(
+                    &mut transaction,
+                    &principal.room_id,
+                    "participant",
+                    &records.session.public.session_id,
+                )
+                .await?;
+        }
         let prepared_result_json = serde_json::to_string(&records.result)?;
         self.claim_lifecycle_command(
             &mut transaction,

@@ -4,6 +4,7 @@ pub mod backup_codec;
 pub mod backup_database;
 mod backup_json;
 mod backup_policy;
+mod delegation_owner;
 pub mod restore_activation;
 pub mod restore_job;
 mod restore_preparation;
