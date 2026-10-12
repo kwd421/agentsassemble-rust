@@ -58,7 +58,10 @@ pub use local_attendee::{
     LocalAttendeeStatus,
 };
 mod provider_turn;
-pub use local_resources::{LocalResourceProcess, LocalResourceStatus};
+pub use local_resources::{
+    AttachmentStorageCount, AttachmentStorageUsage, LocalResourceProcess, LocalResourceStatus,
+    RoomAttachmentStorageUsage,
+};
 mod provider_usage;
 pub use provider_usage::{ProviderBalance, ProviderQuota, ProviderRateWindow, ProviderUsage};
 mod room_history;

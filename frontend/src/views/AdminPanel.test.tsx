@@ -12,6 +12,7 @@ it("keeps unknown CPU distinct, keeps reading while open, clears stale results a
   vi.useFakeTimers();
   try {
     vi.mocked(fetchLocalResources).mockResolvedValueOnce({
+      attachment_storage: { rooms: [], other: { files: 0, bytes: 0 }, total: { files: 0, bytes: 0 } },
       observed_at: "2026-09-09T00:00:00Z", cpu_sample_seconds: null,
       cpu_count: 8, total_memory_bytes: 24_000_000_000, available_memory_bytes: null,
       load_average: null, matching_process_count: 1,
@@ -37,6 +38,7 @@ it("keeps unknown CPU distinct, keeps reading while open, clears stale results a
 
 it("groups same-name processes, retains unknown totals and lists every tool", async () => {
   vi.mocked(fetchLocalResources).mockResolvedValue({
+    attachment_storage: { rooms: [], other: { files: 0, bytes: 0 }, total: { files: 0, bytes: 0 } },
     observed_at: "2026-10-11T00:00:00Z", cpu_sample_seconds: 1,
     cpu_count: 8, total_memory_bytes: null, available_memory_bytes: null,
     load_average: null, matching_process_count: 8,

@@ -15,6 +15,23 @@ async fn catalog_result_read_requires_exact_operator_ticket_and_cannot_start_dis
     store
         .bootstrap_local_authority("f45c29c4-16a5-4a34-810d-929f7f9867a6", "Operator")
         .await?;
+    store
+        .create_room_for_local_operator(
+            "f8d17bea-0059-4a22-8d44-f5596c4fcf51",
+            "usage",
+            "Usage room",
+        )
+        .await?;
+    store
+        .store_local_message_attachment(
+            "usage",
+            LOCAL_OPERATOR_USER_ID,
+            agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+            "usage.txt",
+            "text/plain",
+            b"usage".to_vec(),
+        )
+        .await?;
     let tickets = TicketStore::new(Duration::from_secs(30), 16);
     // This provider only discovers static local metadata; no account or executable runs.
     let catalog = ProviderCatalogService::discovering_selected(
@@ -248,6 +265,35 @@ async fn assert_resource_authority(
     tickets: &TicketStore,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let route = route.replace("provider-catalog", "local-resources");
+    for principal in ["remote-user", "guest-user"] {
+        let ticket = tickets
+            .issue_server_operator(principal.to_owned())
+            .await?
+            .ticket;
+        assert_eq!(
+            client
+                .get(&route)
+                .bearer_auth(ticket)
+                .send()
+                .await?
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    let room_ticket = tickets
+        .issue_settings_directory_read(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await?
+        .ticket;
+    assert_eq!(
+        client
+            .get(&route)
+            .bearer_auth(room_ticket)
+            .send()
+            .await?
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+
     assert_eq!(
         client.get(&route).body("invalid").send().await?.status(),
         StatusCode::UNAUTHORIZED
@@ -270,6 +316,13 @@ async fn assert_resource_authority(
     );
     let resources: agentsassemble_domain::LocalResourceStatus = response.json().await?;
     assert!(resources.cpu_sample_seconds.is_none());
+    let usage = resources.attachment_storage;
+    assert_eq!(usage.rooms.len(), 1);
+    assert_eq!(usage.rooms[0].room_id, "usage");
+    assert_eq!(usage.rooms[0].label, "Usage room");
+    assert_eq!((usage.rooms[0].files, usage.rooms[0].bytes), (1, 5));
+    assert_eq!((usage.other.files, usage.other.bytes), (0, 0));
+    assert_eq!((usage.total.files, usage.total.bytes), (1, 5));
     assert_eq!(
         client
             .get(&route)

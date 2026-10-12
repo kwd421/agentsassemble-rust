@@ -766,6 +766,24 @@ remain phase acceptance work.
 
 ## Resource observation contract
 
+### Host attachment storage reading (2026-10-12)
+
+The private `GET /api/local-resources` adds `attachment_storage` to
+`LocalResourceStatus`: all rooms with current labels and retained file/byte counts,
+including empty rooms; `other` for assets without a room; and their summed `total`.
+Persistence owns one SQLite read snapshot over the six tables counted by
+`asset_storage.rs`, using stored sizes only, including pending/expired rows until
+actual cleanup. Binding an upload must preserve counts; deletion/cleanup lowers them.
+These are stored attachment bytes, excluding SQLite overhead, WAL and backups.
+Persona JSON/thumbnails have no stored size columns and are excluded: do not read
+bodies or migrate the schema for this report. The HTTP owner composes the reading
+with the existing OS sampler after local-operator authorization; remote/guest
+credentials cannot read it. Database failure fails the reading, never reports zero.
+No Worker traffic, UI rendering, quota changes, or upload-policy changes belong here.
+Verify conservation, zero-use rooms, binding neutrality and deletion/expiry in a
+persistence regression, plus non-operator rejection at the HTTP boundary. Run affected
+crate tests, type regeneration, TypeScript checking, and existing structure gates.
+
 The runtime owns one on-demand sysinfo sampler. It reads memory and process CPU,
 never arguments, environment, executable paths or task lists. The original scope
 remains the runtime, direct children and fixed related CLI/tool names; all displayed

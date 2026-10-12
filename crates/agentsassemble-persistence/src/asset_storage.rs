@@ -1,7 +1,10 @@
-use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
+use agentsassemble_domain::{
+    AttachmentStorageCount, AttachmentStorageUsage, MAX_ATTACHMENT_BYTES,
+    RoomAttachmentStorageUsage,
+};
 use sqlx::{Row, Sqlite, Transaction};
 
-use crate::PersistenceError;
+use crate::{PersistenceError, SqliteStore};
 
 pub(crate) const MAX_RETAINED_ASSETS: i64 = 4096;
 const MAX_RETAINED_ASSET_BYTES: i64 = 8 * 1024 * 1024 * 1024;
@@ -49,5 +52,52 @@ fn rejected(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
         code: code.into(),
         message: message.to_owned(),
+    }
+}
+
+impl SqliteStore {
+    /// One statement gives room labels and retained sizes from the same read snapshot.
+    /// Deliberately includes expired pending rows until their storage owner deletes them.
+    pub async fn attachment_storage_usage(
+        &self,
+    ) -> Result<AttachmentStorageUsage, PersistenceError> {
+        let rows = sqlx::query(
+            "WITH assets AS (
+                SELECT room_id, size FROM room_message_attachments
+                UNION ALL SELECT room_id, size FROM room_connector_uploads
+                UNION ALL SELECT room_id, size FROM room_appearance_assets
+                UNION ALL SELECT room_id, size FROM agent_avatar_assets
+                UNION ALL SELECT room_id, size FROM prejoin_avatar_assets
+                UNION ALL SELECT NULL, size FROM profile_avatar_assets
+            ), usage AS (
+                SELECT room_id, COUNT(*) AS files, SUM(size) AS bytes
+                FROM assets GROUP BY room_id
+            )
+            SELECT rooms.room_id AS room_id, json_extract(rooms.settings_json, '$.label') AS label,
+                COALESCE(usage.files, 0) AS files, COALESCE(usage.bytes, 0) AS bytes
+            FROM rooms LEFT JOIN usage ON usage.room_id = rooms.room_id
+            UNION ALL SELECT NULL, NULL, files, bytes FROM usage WHERE room_id IS NULL
+            ORDER BY room_id",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let mut report = AttachmentStorageUsage::default();
+        for row in rows {
+            let files = row.try_get("files")?;
+            let bytes = row.try_get("bytes")?;
+            report.total.files += files;
+            report.total.bytes += bytes;
+            if let Some(room_id) = row.try_get::<Option<String>, _>("room_id")? {
+                report.rooms.push(RoomAttachmentStorageUsage {
+                    room_id,
+                    label: row.try_get("label")?,
+                    files,
+                    bytes,
+                });
+            } else {
+                report.other = AttachmentStorageCount { files, bytes };
+            }
+        }
+        Ok(report)
     }
 }

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
-use agentsassemble_domain::{LocalResourceProcess, LocalResourceStatus};
+use agentsassemble_domain::{AttachmentStorageUsage, LocalResourceProcess, LocalResourceStatus};
 use chrono::Utc;
 use sysinfo::{CpuRefreshKind, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tokio::sync::Mutex;
@@ -16,18 +16,24 @@ struct Sampler {
 }
 
 impl LocalResources {
-    pub(crate) async fn read(&self) -> Result<LocalResourceStatus, ()> {
+    pub(crate) async fn read(
+        &self,
+        attachment_storage: AttachmentStorageUsage,
+    ) -> Result<LocalResourceStatus, ()> {
         // Acquire before dispatch: one OS read, no blocking-pool mutex waiters.
         // The owned guard survives a disconnected HTTP caller until the read ends.
         let mut sampler = Arc::clone(&self.0).lock_owned().await;
-        tokio::task::spawn_blocking(move || sampler.read())
+        tokio::task::spawn_blocking(move || sampler.read(attachment_storage))
             .await
             .map_err(|_| ())?
     }
 }
 
 impl Sampler {
-    fn read(&mut self) -> Result<LocalResourceStatus, ()> {
+    fn read(
+        &mut self,
+        attachment_storage: AttachmentStorageUsage,
+    ) -> Result<LocalResourceStatus, ()> {
         let now = Instant::now();
         let elapsed = self.cpu_sample.map(|previous| now.duration_since(previous));
         let sample_cpu = elapsed.is_none_or(|value| value >= sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
@@ -88,6 +94,7 @@ impl Sampler {
         processes.truncate(30);
         let total_memory_bytes = nonzero(self.system.total_memory());
         Ok(LocalResourceStatus {
+            attachment_storage,
             observed_at: Utc::now(),
             cpu_sample_seconds,
             cpu_count: (!self.system.cpus().is_empty()).then(|| self.system.cpus().len()),
@@ -158,7 +165,9 @@ mod tests {
 
     #[tokio::test]
     async fn native_first_sample_is_private_and_cpu_is_unknown() -> Result<(), ()> {
-        let resources = LocalResources::default().read().await?;
+        let resources = LocalResources::default()
+            .read(AttachmentStorageUsage::default())
+            .await?;
         assert!(resources.cpu_sample_seconds.is_none());
         assert!(resources.processes.iter().all(|p| p.cpu_percent.is_none()));
         assert!(resources.processes.len() <= 30);

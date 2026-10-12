@@ -36,9 +36,14 @@ async fn resources(
     request: Request,
 ) -> Result<Json<LocalResourceStatus>, StatusCode> {
     authorize_empty(&state, request).await?;
+    let attachment_storage = state
+        .store
+        .attachment_storage_usage()
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     state
         .local_resources
-        .read()
+        .read(attachment_storage)
         .await
         .map(Json)
         .map_err(|()| StatusCode::SERVICE_UNAVAILABLE)

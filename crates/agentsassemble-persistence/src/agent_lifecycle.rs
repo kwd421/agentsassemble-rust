@@ -611,3 +611,7 @@ mod room_lifecycle_tests;
 #[cfg(test)]
 #[path = "room_deletion_tests.rs"]
 mod room_deletion_tests;
+
+#[cfg(test)]
+#[path = "attachment_storage_tests.rs"]
+mod attachment_storage_tests;
