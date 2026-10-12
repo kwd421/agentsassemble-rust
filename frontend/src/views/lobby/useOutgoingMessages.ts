@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   createMessageAttachmentUploadClient,
   UploadFailure,
@@ -12,42 +12,80 @@ import {
   type OutgoingDraft,
   type OutgoingMessage,
 } from "../../lib/outgoingMessages";
+import { remoteWorkspaceSnapshot, sessionHostOrigin, subscribeRemoteWorkspace } from "../../lib/remote/remoteWorkspace";
 import { roomMessagePayload } from "../../lib/roomMessagePayload";
 import { RoomSocketSayError, type RoomSocketHandle } from "../../roomSocketTypes";
 import type { RoomEvent } from "../../types/generated/RoomEvent";
 
-// One owner per room incarnation and viewer. It outlives the view so that files keep
-// uploading while the person looks at another room; publication needs this room's
-// socket, so a message that finishes while the room is closed waits as a retryable
-// failure until the person comes back.
-type Owner = {
-  model: OutgoingMessages;
-  socket: RoomSocketHandle | null;
+// One owner per host: its scheduler shares the three upload slots across every room
+// the person has open there. A room is registered under it with the exact authority
+// generation it was admitted with; a publication is dispatched only through that
+// generation's socket, so nothing admitted before a reconnect, a re-admission or an
+// account change can speak through what replaced it. Uploads keep running while the
+// person looks at another room; a message that finishes then waits as a retryable
+// failure, because publishing needs the room's socket.
+type RoomEntry = {
   identity: string;
   generation: number;
+  socket: RoomSocketHandle | null;
   authority?: OutgoingAuthority;
   uploads?: MessageAttachmentUploadClient;
+};
+type Owner = {
+  model: OutgoingMessages;
+  rooms: Map<string, RoomEntry>;
+  generations: number;
   snapshot: readonly OutgoingMessage[];
 };
 const owners = new Map<string, Owner>();
 const NONE: readonly OutgoingMessage[] = Object.freeze([]);
+const socketIds = new WeakMap<RoomSocketHandle, number>();
+let nextSocketId = 0;
+function socketId(socket: RoomSocketHandle | null): number {
+  if (!socket) return 0;
+  let id = socketIds.get(socket);
+  if (!id) { id = ++nextSocketId; socketIds.set(socket, id); }
+  return id;
+}
 
-function ownerFor(key: string, hostId: string, personId: string): Owner {
-  const existing = owners.get(key);
+function ownerFor(hostId: string): Owner {
+  const existing = owners.get(hostId);
   if (existing) return existing;
   const owner: Owner = {
-    socket: null, identity: "", generation: 0, snapshot: NONE,
+    rooms: new Map(), generations: 0, snapshot: NONE,
     model: new OutgoingMessages({
-      hostId, personId,
-      publish: (_authority, request) => owner.socket?.ready()
-        ? owner.socket.command("message.send", roomMessagePayload(request))
-        : Promise.reject(new RoomSocketSayError("방 연결이 준비되지 않았어요. 연결된 뒤 다시 보내 주세요.", "socket_closed")),
+      hostId, personId: "viewer",
+      publish: (authority, request) => {
+        const room = owner.rooms.get(authority.roomId);
+        return room?.authority && room.generation === authority.generation && room.socket?.ready()
+          ? room.socket.command("message.send", roomMessagePayload(request))
+          : Promise.reject(new RoomSocketSayError("방 연결이 준비되지 않았어요. 연결된 뒤 다시 보내 주세요.", "socket_closed"));
+      },
     }),
   };
   owner.model.subscribe(() => { owner.snapshot = owner.model.snapshot(); });
-  owners.set(key, owner);
+  owners.set(hostId, owner);
   return owner;
 }
+// A room nobody is looking at, with nothing left to send, is forgotten; an owner
+// without rooms is closed.
+function forget(hostId: string, owner: Owner, roomId: string) {
+  const room = owner.rooms.get(roomId);
+  if (!room || room.socket) return;
+  if (owner.model.snapshot().some((message) => message.authority.roomId === roomId)) return;
+  owner.model.leaveRoom(roomId);
+  owner.rooms.delete(roomId);
+  if (owner.rooms.size === 0 && owners.get(hostId) === owner) { owner.model.close(); owners.delete(hostId); }
+}
+// Ending the remote workspace (sign-out, another account or server) ends everything queued under it.
+let seenWorkspace = remoteWorkspaceSnapshot();
+subscribeRemoteWorkspace(() => {
+  const current = remoteWorkspaceSnapshot();
+  if (current === seenWorkspace) return;
+  seenWorkspace = current;
+  for (const owner of owners.values()) owner.model.close();
+  owners.clear();
+});
 
 export function uploadFailureMessage(error: unknown, fileLimit?: number): string {
   if (!(error instanceof UploadFailure)) return error instanceof Error ? error.message : "파일을 올리지 못했어요.";
@@ -73,82 +111,103 @@ export type OutgoingController = {
   discard(id: string): void;
 };
 
-export function useOutgoingMessages({ roomUid, roomId, participantId, authority, socket, events }: {
-  roomUid: string;
+export function useOutgoingMessages({ roomId, participantId, authority, socket, events }: {
   roomId: string;
   participantId: string;
   authority: MessageAttachmentAuthority | undefined;
   socket: RoomSocketHandle | null;
   events: readonly LobbyEvent[];
 }): OutgoingController {
-  const key = `${roomUid || roomId}\n${participantId}`;
-  const owner = useMemo(() => ownerFor(key, roomUid || roomId, participantId), [key, roomUid, roomId, participantId]);
-  const [uploads, setUploads] = useState<MessageAttachmentUploadClient | undefined>(owner.uploads);
+  const hostId = !authority || !participantId ? ""
+    : authority.kind === "remote" ? sessionHostOrigin(authority.sessionToken) : "local";
+  const identity = hostId && authority ? JSON.stringify([participantId, authority, socketId(socket)]) : "";
+  const [admitted, setAdmitted] = useState(0);
+  const lastHost = useRef("");
 
   useEffect(() => {
-    owner.socket = socket;
-    return () => { if (owner.socket === socket) owner.socket = null; };
-  }, [owner, socket]);
-
-  const identity = authority && participantId ? JSON.stringify([roomId, participantId, authority]) : "";
-  useEffect(() => {
-    setUploads(owner.identity === identity ? owner.uploads : undefined);
-    if (!identity || !authority) return undefined;
-    if (owner.identity === identity && owner.uploads) return undefined;
+    if (!hostId || !identity || !authority) {
+      // Authority is gone (read-only, removed, signed out): nothing of this room may still be sent.
+      const previous = owners.get(lastHost.current);
+      if (previous?.rooms.has(roomId)) {
+        previous.model.leaveRoom(roomId); previous.rooms.delete(roomId);
+        if (previous.rooms.size === 0) { previous.model.close(); owners.delete(lastHost.current); }
+      }
+      return undefined;
+    }
+    lastHost.current = hostId;
+    const owner = ownerFor(hostId);
+    let room = owner.rooms.get(roomId);
+    if (!room) { room = { identity: "", generation: 0, socket: null }; owner.rooms.set(roomId, room); }
+    const entry = room;
+    if (entry.identity !== identity) {
+      // Retire the previous generation at once; publishing waits for the new admission.
+      entry.identity = identity; entry.generation = ++owner.generations;
+      entry.authority = undefined; entry.uploads = undefined;
+    }
+    entry.socket = socket;
     const controller = new AbortController();
-    void createMessageAttachmentUploadClient(roomId, authority, controller.signal).then((client) => {
-      if (controller.signal.aborted) return;
-      if (owner.identity !== identity) { owner.identity = identity; owner.generation += 1; }
-      owner.authority = { roomId, participantId, generation: owner.generation };
-      owner.uploads = client;
-      owner.model.admit(owner.authority, client);
-      setUploads(client);
-    }).catch(() => {
-      // Attaching stays unavailable; text messages do not depend on this.
-    });
-    return () => controller.abort();
+    if (!entry.authority) {
+      const generation = entry.generation;
+      void createMessageAttachmentUploadClient(roomId, authority, controller.signal).then((client) => {
+        if (controller.signal.aborted || entry.generation !== generation || owners.get(hostId) !== owner) return;
+        entry.uploads = client;
+        entry.authority = { roomId, participantId, generation };
+        owner.model.admit(entry.authority, client);
+        setAdmitted(generation);
+      }).catch(() => {
+        // Attaching stays unavailable; text messages do not depend on this.
+      });
+    }
+    setAdmitted(entry.authority ? entry.generation : 0);
+    return () => {
+      controller.abort();
+      if (entry.socket === socket) entry.socket = null;
+      forget(hostId, owner, roomId);
+    };
     // `authority` is covered by `identity`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [owner, identity, roomId, participantId]);
+  }, [hostId, identity, roomId, participantId, socket]);
 
+  const owner = hostId ? owners.get(hostId) : undefined;
+  const entry = owner?.rooms.get(roomId);
+  const uploads = entry?.authority && entry.generation === admitted ? entry.uploads : undefined;
   const all = useSyncExternalStore(
-    useCallback((listener: () => void) => owner.model.subscribe(listener), [owner]),
-    () => owner.snapshot,
+    useCallback((listener: () => void) => owner ? owner.model.subscribe(listener) : () => {}, [owner]),
+    () => owner?.snapshot ?? NONE,
   );
 
-  // Delivery resolves an uncertain publication, and lets the row give way to the real message.
   const delivered = useMemo(() => {
     const ids = new Set<string>();
-    for (const event of events) {
-      ids.add(event.id);
-      if (event.record_id) ids.add(event.record_id);
-      for (const attachment of event.attachments || []) ids.add(attachment.id);
-    }
+    for (const event of events) { ids.add(event.id); if (event.record_id) ids.add(event.record_id); }
     return ids;
   }, [events]);
   // Observing notifies the model's listeners, so it must not run on every snapshot:
   // only when the room's events change or the set of unresolved messages does.
-  const unresolved = all.filter((message) => message.phase === "outcome_unknown" || message.phase === "sending")
+  const unresolved = all.filter((message) => message.authority.roomId === roomId &&
+      (message.phase === "outcome_unknown" || message.phase === "sending"))
     .map((message) => `${message.id}:${message.phase}`).join(",");
   useEffect(() => {
-    if (!owner.authority || !unresolved) return;
-    owner.model.observe(owner.authority, events.filter((event) => event.attachments?.length).map((event) => ({
+    if (!owner || !entry?.authority || !unresolved) return;
+    owner.model.observe(entry.authority, events.filter((event) => event.attachments?.length).map((event) => ({
       id: event.record_id || event.id, room_id: roomId, type: "message_final",
       actor: { participant_id: event.actor_id }, attachments: event.attachments,
     }) as unknown as RoomEvent));
-  }, [owner, unresolved, events, roomId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner, admitted, unresolved, events, roomId]);
+  // The model decides that a message was sent and which event it became; the row
+  // gives way only when that very event is on screen.
+  const shown = useCallback((message: OutgoingMessage) =>
+    message.phase === "sent" && Boolean(message.eventId) && delivered.has(message.eventId!), [delivered]);
   useEffect(() => {
+    if (!owner) return;
     for (const message of all) {
-      const shown = message.files.some((file) => file.attachment && delivered.has(file.attachment.id)) ||
-        (message.eventId ? delivered.has(message.eventId) : false);
-      if (message.phase === "sent" && shown) void owner.model.discard(message.id);
+      if (message.authority.roomId === roomId && shown(message)) void owner.model.discard(message.id);
     }
-  }, [owner, all, delivered]);
+  }, [owner, all, roomId, shown]);
 
   const messages = useMemo(
-    () => all.filter((message) => message.authority.roomId === roomId && message.phase !== "cancelled" &&
-      !(message.phase === "sent" && message.files.some((file) => file.attachment && delivered.has(file.attachment.id)))),
-    [all, roomId, delivered],
+    () => all.filter((message) => message.authority.roomId === roomId && message.phase !== "cancelled" && !shown(message)),
+    [all, roomId, shown],
   );
 
   return useMemo<OutgoingController>(() => ({
@@ -161,15 +220,15 @@ export function useOutgoingMessages({ roomUid, roomId, participantId, authority,
       catch (error) { return uploadFailureMessage(error, uploads.fileLimit); }
     },
     send: (draft) => {
-      if (!owner.authority) throw new Error("잠시 후 다시 시도해 주세요.");
-      try { owner.model.send(owner.authority, draft); }
-      catch (error) { throw new Error(uploadFailureMessage(error, uploads?.fileLimit)); }
+      if (!owner || !uploads || !entry?.authority) throw new Error("잠시 후 다시 시도해 주세요.");
+      try { owner.model.send(entry.authority, draft); }
+      catch (error) { throw new Error(uploadFailureMessage(error, uploads.fileLimit)); }
     },
     messages,
     failureText: (message) => message.phase === "outcome_unknown" ? ""
       : uploadFailureMessage(new UploadFailure(message.failure?.code || "", false), uploads?.fileLimit),
-    cancel: (id) => { void owner.model.cancel(id).then(() => owner.model.discard(id)); },
-    retry: (id) => { owner.model.retry(id); },
-    discard: (id) => { void owner.model.discard(id); },
-  }), [owner, uploads, messages]);
+    cancel: (id) => { void owner?.model.cancel(id).then(() => owner.model.discard(id)); },
+    retry: (id) => { owner?.model.retry(id); },
+    discard: (id) => { void owner?.model.discard(id); },
+  }), [owner, entry, uploads, messages]);
 }

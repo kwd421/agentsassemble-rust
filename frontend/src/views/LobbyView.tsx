@@ -207,7 +207,7 @@ export default function LobbyView({
     [postingMode, roomSessionToken, roomDeviceToken]
   );
   const outgoing = useOutgoingMessages({
-    roomUid, roomId: activeRoom.meetingId, participantId: viewerParticipantId,
+    roomId: activeRoom.meetingId, participantId: viewerParticipantId,
     authority: canPostMessages ? messageAttachmentAuthority : undefined,
     socket: roomSocket, events: visibleEvents,
   });
