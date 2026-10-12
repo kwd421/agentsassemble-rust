@@ -53,10 +53,11 @@ pub(crate) async fn require_source(
     if actual != expected {
         return Err(invalid(version, "runtime metadata catalog"));
     }
-    // All main tables participate, including helper tables outside the product inventory.
+    // Every named schema row participates, whatever type it claims: SQLite builds a
+    // table (and its foreign-key actions) from the stored SQL, not from the type column.
     let references = r#"SELECT s.name,f.id,f.seq,f."table",f."from",f."to",f.on_update,f.on_delete,f."match"
         FROM main.sqlite_schema s JOIN pragma_foreign_key_list(s.name,'main') f
-        WHERE s.type='table' AND f."table" COLLATE NOCASE IN
+        WHERE f."table" COLLATE NOCASE IN
         ('runtime_metadata','room_message_attachments','room_connector_uploads',
          'room_message_attachment_chunks','room_connector_upload_chunks',
          'room_message_attachment_previews','room_connector_upload_previews')

@@ -198,3 +198,57 @@ async fn oldest_live_schema_runs_real_upgrade_stages_and_preserves_every_file_by
     );
     Ok(())
 }
+
+// SQLite re-parses stored SQL when it loads a schema and refuses a row whose stored
+// type or table name disagrees with it, so a disguised object never becomes active:
+// the reopened database fails closed before the migration can run. The catalog checks
+// above do not rely on this, but the disguise itself is not a working attack.
+#[tokio::test]
+async fn schema_rows_disguised_by_stored_type_or_table_fail_closed_on_reopen() -> TestResult {
+    let table =
+        "CREATE TABLE imposter(content BLOB REFERENCES runtime_metadata(value) ON UPDATE CASCADE)";
+    let trigger = "CREATE TRIGGER imposter AFTER UPDATE ON runtime_metadata BEGIN SELECT 1; END";
+    for (stored_type, stored_table, sql) in [
+        ("view", "unrelated", table),
+        ("index", "unrelated", table),
+        ("table", "unrelated", table),
+        ("view", "unrelated", trigger),
+        ("table", "unrelated", trigger),
+        ("trigger", "unrelated", trigger),
+    ] {
+        let directory = tempfile::tempdir()?;
+        let (path, _) = backup_database::archive_tests::archive(directory.path(), 93).await?;
+        let open = || {
+            SqlitePoolOptions::new().max_connections(1).connect_with(
+                SqliteConnectOptions::new()
+                    .filename(path.clone())
+                    .foreign_keys(true),
+            )
+        };
+        let pool = open().await?;
+        sqlx::query("PRAGMA writable_schema=ON")
+            .execute(&pool)
+            .await?;
+        sqlx::query("INSERT INTO sqlite_schema(type,name,tbl_name,rootpage,sql) SELECT ?,'imposter',?,rootpage,? FROM sqlite_schema WHERE name='room_message_attachment_chunks'")
+            .bind(stored_type)
+            .bind(stored_table)
+            .bind(sql)
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA writable_schema=OFF")
+            .execute(&pool)
+            .await?;
+        pool.close().await;
+        let reopened = open().await;
+        let refused = match reopened {
+            Err(_) => true,
+            Ok(pool) => {
+                let refused = migrate(&pool, 93).await.is_err();
+                pool.close().await;
+                refused
+            }
+        };
+        assert!(refused, "{stored_type}/{stored_table}/{sql}");
+    }
+    Ok(())
+}
