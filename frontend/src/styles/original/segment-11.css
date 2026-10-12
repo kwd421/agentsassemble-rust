@@ -539,32 +539,6 @@
   padding-top: 20px;
 }
 
-.dc-computer-summary {
-  display: flex;
-  cursor: pointer;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  list-style: none;
-}
-
-.dc-computer-summary::-webkit-details-marker {
-  display: none;
-}
-
-.dc-computer-checks {
-  margin-top: 12px;
-  font-size: 13px;
-}
-
-.dc-computer-checks li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  border-top: 1px solid var(--color-panel-separator);
-  padding: 8px 0;
-}
-
 /* Secondary action that should not shout: restart, expand, refresh. */
 .dc-quiet-button {
   display: inline-flex;

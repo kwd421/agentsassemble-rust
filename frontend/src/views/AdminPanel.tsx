@@ -1,5 +1,4 @@
 import RuntimeRestartPanel from "./components/RuntimeRestartPanel";
-import ReleaseHealthPanel from "./components/ReleaseHealthPanel";
 import { useEffect, useState } from "react";
 import { Activity, X } from "lucide-react";
 import { fetchLocalResources, type LocalResourceStatus } from "../api/localResources";
@@ -87,7 +86,6 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             </table>
           </section>}
           <RuntimeRestartPanel />
-          <ReleaseHealthPanel />
         </div>
       </div>
     </section>

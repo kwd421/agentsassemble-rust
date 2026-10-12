@@ -27,6 +27,10 @@ The original checkout `d504647` supplies these reachable entry points:
   usage entry points. Current structured native/API owners have since been found;
   the correction below restores those operations without reproducing their parsers.
 - `web/routes/observability.py` mounts resource and release-health projections.
+  Owner decision (2026-10-12): the release-health projection is no longer shown in the
+  desktop "내 컴퓨터" page — an installed app never has a saved report, so the page only
+  ever listed every check as not run. The local `assemble release-health list/run` entry
+  and its read endpoints are unchanged.
   `assemble release-health list/run` selects fixed local checks, bounds their
   execution and persists a latest report. Retain this CLI behavior using current
   Rust/frontend verification owners instead of old Python check implementations.
