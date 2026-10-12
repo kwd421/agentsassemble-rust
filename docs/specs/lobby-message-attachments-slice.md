@@ -819,3 +819,12 @@ larger envelopes use only the remaining 224 MiB. Thus even exhausted large-envel
 capacity cannot deny unrelated small tool calls. 127 small stalled bodies use 31.75 MiB. The per-envelope
 ceiling remains the encoded 10 MiB upload plus its bounded JSON overhead so existing
 uploads keep working. Exhaustion, timeout and over-limit responses are distinct.
+
+## Round-4 download fairness correction (2026-10-12)
+
+Every principal-keyed download reservation retains the sixteen-response limit and
+also limits retained weight to 400 MiB of the shared 512 MiB host pool. Four
+50 MiB human reads (100 MiB weight each) fit; a fifth is refused while another
+principal can still start a 50 MiB read. Release both count and weight only with
+the final transport-owned response clone. Applies to human, provider, attendee
+and connector admission; anonymous image admission remains host-bounded.

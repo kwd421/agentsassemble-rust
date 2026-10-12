@@ -12,12 +12,13 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 const HOST_BYTES: usize = 512 * 1024 * 1024;
 const COPIES: usize = 2;
 const PER_PRINCIPAL: usize = 16;
+const PER_PRINCIPAL_BYTES: usize = 400 * 1024 * 1024;
 pub(crate) const ERROR_CODE: &str = "attachment_download_budget_exhausted";
 
 #[derive(Clone)]
 pub(crate) struct Budget {
     bytes: Arc<Semaphore>,
-    principals: Arc<parking_lot::Mutex<HashMap<String, usize>>>,
+    principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize)>>>,
 }
 impl Default for Budget {
     fn default() -> Self {
@@ -29,8 +30,9 @@ impl Default for Budget {
 }
 pub(crate) struct Lease {
     _bytes: OwnedSemaphorePermit,
-    principals: Arc<parking_lot::Mutex<HashMap<String, usize>>>,
+    principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize)>>>,
     principal: Option<String>,
+    weight: usize,
 }
 impl Drop for Lease {
     fn drop(&mut self) {
@@ -41,8 +43,9 @@ impl Drop for Lease {
         let count = principals
             .get_mut(principal)
             .expect("live download principal");
-        *count -= 1;
-        if *count == 0 {
+        count.0 -= 1;
+        count.1 -= self.weight;
+        if count.0 == 0 {
             principals.remove(principal);
         }
     }
@@ -64,7 +67,10 @@ impl Budget {
             .and_then(|n| u32::try_from(n).ok())
             .ok_or_else(exhausted)?;
         let mut principals = self.principals.lock();
-        if principal.is_some_and(|p| principals.get(p).copied().unwrap_or(0) >= PER_PRINCIPAL) {
+        if principal.is_some_and(|p| {
+            let (count, used) = principals.get(p).copied().unwrap_or_default();
+            count >= PER_PRINCIPAL || used + weight as usize > PER_PRINCIPAL_BYTES
+        }) {
             return Err(exhausted());
         }
         let bytes = self
@@ -73,12 +79,15 @@ impl Budget {
             .try_acquire_many_owned(weight)
             .map_err(|_| exhausted())?;
         if let Some(principal) = principal {
-            *principals.entry(principal.to_owned()).or_default() += 1;
+            let usage = principals.entry(principal.to_owned()).or_default();
+            usage.0 += 1;
+            usage.1 += weight as usize;
         }
         Ok(Lease {
             _bytes: bytes,
             principals: self.principals.clone(),
             principal: principal.map(str::to_owned),
+            weight: weight as usize,
         })
     }
 }
