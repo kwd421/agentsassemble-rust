@@ -246,6 +246,57 @@ fn sanitize(
     Ok(true)
 }
 
+// Clamp each addend before summing. Even a hostile SQLite length cannot overflow
+// the sum (trusted schemas have only a bounded number of columns).
+const MAX_ROW_BYTES: usize = 32 * 1024 * 1024;
+
+fn cell_limit(table: &str, column: &str) -> usize {
+    // These bounds already exist in every supported version's owned schema.
+    match (table, column.trim_matches('"')) {
+        ("persona_assets", "card_json" | "thumbnail_png") => 10 * 1024 * 1024,
+        ("persona_assets", "persona_id") => 80,
+        ("room_vote_states", "tallies_json") => 256,
+        ("room_vote_states", "vote_id") => 128,
+        _ => 16 * 1024 * 1024,
+    }
+}
+
+async fn require_row_bounds(
+    source: &mut SqliteConnection,
+    table: &str,
+    fields: &str,
+) -> Result<(), PersistenceError> {
+    let lengths = fields
+        .split(',')
+        .map(|column| {
+            (
+                column,
+                format!("coalesce(length(CAST({column} AS BLOB)),0)"),
+            )
+        })
+        .collect::<Vec<_>>();
+    let cells = lengths
+        .iter()
+        .map(|(column, length)| format!("{length}>{}", cell_limit(table, column)))
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let aggregate = lengths
+        .iter()
+        .map(|(_, length)| format!("min({length},{})", MAX_ROW_BYTES + 1))
+        .collect::<Vec<_>>()
+        .join("+");
+    let query = format!(
+        "SELECT EXISTS(SELECT 1 FROM \"{table}\" WHERE {cells} OR ({aggregate})>{MAX_ROW_BYTES})"
+    );
+    if sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(query))
+        .fetch_one(source)
+        .await?
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 pub(crate) async fn reconstruct(
     source: &mut SqliteConnection,
     output: &mut SqliteConnection,
@@ -280,21 +331,7 @@ pub(crate) async fn reconstruct(
             .map(|c| format!("\"{}\"", c.0))
             .collect::<Vec<_>>()
             .join(",");
-        let oversized = fields
-            .split(',')
-            .map(|column| format!("length(CAST({column} AS BLOB)) > 16777216"))
-            .collect::<Vec<_>>()
-            .join(" OR ");
-        let oversized = format!(
-            "SELECT EXISTS(SELECT 1 FROM \"{}\" WHERE {oversized})",
-            &table
-        );
-        if sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(oversized))
-            .fetch_one(&mut *source)
-            .await?
-        {
-            return Err(invalid());
-        }
+        require_row_bounds(source, &table, &fields).await?;
         let fields = if table == "room_attendee_invites" && !hostile {
             fields.replace("\"restore_parent_kind\"", "CASE WHEN parent_fingerprint IS NULL THEN restore_parent_kind ELSE (SELECT group_concat(kind) FROM (SELECT 'human' AS kind FROM human_room_sessions WHERE session_fingerprint=room_attendee_invites.parent_fingerprint UNION ALL SELECT 'operator' FROM operator_pairings WHERE session_fingerprint=room_attendee_invites.parent_fingerprint)) END AS restore_parent_kind")
         } else {

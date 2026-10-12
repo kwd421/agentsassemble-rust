@@ -248,3 +248,37 @@ async fn hostile_schema_lengths_and_fk_results_are_bounded()
     source.lock_handle().await?.remove_progress_handler();
     Ok(())
 }
+
+#[tokio::test]
+async fn aggregate_rows_are_rejected_before_materialization()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = SqliteConnection::connect("sqlite::memory:").await?;
+    sqlx::raw_sql("CREATE TABLE sample(a BLOB,b BLOB,c BLOB); INSERT INTO sample VALUES(zeroblob(12000000),zeroblob(12000000),zeroblob(12000000))")
+        .execute(&mut source).await?;
+    assert!(matches!(
+        require_row_bounds(&mut source, "sample", "a,b,c").await,
+        Err(PersistenceError::InvalidBackup)
+    ));
+    sqlx::query("UPDATE sample SET c=NULL")
+        .execute(&mut source)
+        .await?;
+    require_row_bounds(&mut source, "sample", "a,b,c").await?;
+    // Structured JSON and identifiers are bounded before deserialization, even
+    // if a hostile file was created with CHECK constraints disabled.
+    sqlx::raw_sql("CREATE TABLE persona_assets(persona_id TEXT,card_json TEXT); INSERT INTO persona_assets VALUES('valid',printf('%.*c',11000000,'x'))")
+        .execute(&mut source).await?;
+    assert!(
+        require_row_bounds(&mut source, "persona_assets", "persona_id,card_json")
+            .await
+            .is_err()
+    );
+    sqlx::query("UPDATE persona_assets SET persona_id=printf('%.*c',81,'x'),card_json='{}'")
+        .execute(&mut source)
+        .await?;
+    assert!(
+        require_row_bounds(&mut source, "persona_assets", "persona_id,card_json")
+            .await
+            .is_err()
+    );
+    Ok(())
+}

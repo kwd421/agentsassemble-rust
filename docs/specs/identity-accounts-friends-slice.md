@@ -130,6 +130,16 @@ Regression scope: ACK cleanup/restart including legacy Ready without staging,
 Activated replay, rejected ACKs, unfinished phases and local chooser behavior.
 No Computer Use or physical Windows acceptance in this correction.
 
+### Archive reconstruction memory correction (2026-10-12)
+
+Before SQLx fetches product rows, `backup_database::reconstruct` must reject any
+row whose overflow-safe sum of cell byte lengths exceeds 32 MiB. This allows the
+existing persona card plus thumbnail (10 MiB each), while bounding driver and
+reconstruction copies. Keep the 16 MiB general cell ceiling and tighten columns
+with existing schema-owned bounds (persona JSON/ID/thumbnail and vote tallies/ID). Historical catalog versions must still restore through the real
+codec and preparation path; malformed rows fail before Prepared without committing
+partial product data. No archive-supplied SQL is executed.
+
 ### Historical archive restoration (2026-10-12)
 
 Required entry points: native backup export and pre-runtime import, envelope
