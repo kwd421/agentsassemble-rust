@@ -911,3 +911,15 @@ standalone MCP retains its authenticated HTTP boundary and timeout semantics.
 Acceptance: a published attachment read through the real hosted RMCP service
 holds shared download weight while its outer body is partly drained, releases on
 drop/EOF, and preserves exact MCP content. No frontend, wire or provider change.
+
+## Round-5 encoded AI class admission (2026-10-12)
+
+All encoded provider, attendee, connector HTTP and hosted MCP attachment reads
+share a class cap of host weight minus two maximum human reservations. Under
+streamed human admission that is 512 MiB - 2 × 1 MiB = 510 MiB, independent of
+the 50 MiB file ceiling. Six maximum 10 MiB AI reads (480.375 MiB) still fit;
+smaller encoded reads cannot consume the final 2 MiB. Existing host and principal
+caps still apply, and the encoded class weight follows the same delivery lease.
+Acceptance: filling the encoded class with maximum reads plus a residual read
+still admits two maximum-file human streams; release restores class capacity.
+No asset, stream cost, wire, retry or frontend change.

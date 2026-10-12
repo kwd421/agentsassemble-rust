@@ -11,6 +11,8 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 const STREAM_BYTES: usize = 1024 * 1024;
 const PER_PRINCIPAL_STREAMS: usize = 32;
 const HOST_BYTES: usize = 512 * 1024 * 1024;
+// Human downloads reserve STREAM_BYTES even for a maximum-size room file.
+const ENCODED_BYTES: usize = HOST_BYTES - 2 * STREAM_BYTES;
 const COPIES: usize = 2;
 const PER_PRINCIPAL: usize = 16;
 const PER_PRINCIPAL_BYTES: usize = 400 * 1024 * 1024;
@@ -19,18 +21,21 @@ pub(crate) const ERROR_CODE: &str = "attachment_download_budget_exhausted";
 #[derive(Clone)]
 pub(crate) struct Budget {
     bytes: Arc<Semaphore>,
+    encoded: Arc<Semaphore>,
     principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize, usize)>>>,
 }
 impl Default for Budget {
     fn default() -> Self {
         Self {
             bytes: Arc::new(Semaphore::new(HOST_BYTES)),
+            encoded: Arc::new(Semaphore::new(ENCODED_BYTES)),
             principals: Arc::default(),
         }
     }
 }
 pub(crate) struct Lease {
     _bytes: OwnedSemaphorePermit,
+    _encoded: Option<OwnedSemaphorePermit>,
     principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize, usize)>>>,
     principal: Option<String>,
     weight: usize,
@@ -89,7 +94,14 @@ impl Budget {
             .checked_mul(8)
             .and_then(|n| n.checked_add(64 * 1024))
             .ok_or_else(exhausted)?;
-        self.reserve_weight(Some(principal), weight, false)
+        let encoded = self
+            .encoded
+            .clone()
+            .try_acquire_many_owned(u32::try_from(weight).map_err(|_| exhausted())?)
+            .map_err(|_| exhausted())?;
+        let mut lease = self.reserve_weight(Some(principal), weight, false)?;
+        lease._encoded = Some(encoded);
+        Ok(lease)
     }
 
     pub(crate) fn reserve_stream(&self, principal: &str) -> Result<Lease, PersistenceError> {
@@ -130,6 +142,7 @@ impl Budget {
         }
         Ok(Lease {
             _bytes: bytes,
+            _encoded: None,
             principals: self.principals.clone(),
             principal: principal.map(str::to_owned),
             weight: weight as usize,
@@ -199,6 +212,37 @@ mod tests {
         drop(images);
         assert!(budget.reserve_encoded("one", 10 * 1024 * 1024).is_ok());
         drop(streams);
+        assert_eq!(budget.available(), HOST_BYTES);
+    }
+    #[test]
+    fn full_encoded_class_leaves_two_maximum_human_streams() {
+        let budget = Budget::default();
+        let mut ai = (0..6)
+            .map(|n| {
+                budget
+                    .reserve_encoded(
+                        &format!("ai-{n}"),
+                        agentsassemble_domain::MAX_ATTACHMENT_BYTES,
+                    )
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        // Fill the residual class capacity with one smaller attachment.
+        let residual = (budget.available() - 2 * STREAM_BYTES - 64 * 1024) / 8;
+        ai.push(budget.reserve_encoded("ai-residual", residual).unwrap());
+        assert!(budget.reserve_encoded("another-ai", 1).is_err());
+        // The 50 MiB human file takes the same fixed stream weight as a small one.
+        let human = [
+            budget.reserve_stream("human-a").unwrap(),
+            budget.reserve_stream("human-b").unwrap(),
+        ];
+        drop(human);
+        drop(ai);
+        assert!(
+            budget
+                .reserve_encoded("another-ai", agentsassemble_domain::MAX_ATTACHMENT_BYTES)
+                .is_ok()
+        );
         assert_eq!(budget.available(), HOST_BYTES);
     }
     #[tokio::test]
