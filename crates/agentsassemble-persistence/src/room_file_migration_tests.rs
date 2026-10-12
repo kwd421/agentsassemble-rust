@@ -83,6 +83,26 @@ async fn every_room_file_migration_refuses_indirect_cascades_and_future_table_tr
         sqlx::query("PRAGMA writable_schema=OFF")
             .execute(&pool)
             .await?;
+        // A falsified row type must not hide trigger SQL from the catalog check.
+        sqlx::query("PRAGMA writable_schema=ON")
+            .execute(&pool)
+            .await?;
+        sqlx::query("INSERT INTO sqlite_schema(type,name,tbl_name,rootpage,sql) VALUES('view','disguised','unrelated',0,?)")
+            .bind(format!("CREATE TRIGGER disguised AFTER UPDATE ON runtime_metadata BEGIN UPDATE {content_table} SET content=zeroblob(length(content)); END"))
+            .execute(&pool).await?;
+        sqlx::query("PRAGMA writable_schema=OFF")
+            .execute(&pool)
+            .await?;
+        assert!(migrate(&pool, version).await.is_err());
+        sqlx::query("PRAGMA writable_schema=ON")
+            .execute(&pool)
+            .await?;
+        sqlx::query("DELETE FROM sqlite_schema WHERE name='disguised'")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA writable_schema=OFF")
+            .execute(&pool)
+            .await?;
         // Removing or altering a legitimate trigger is as noncanonical as adding one.
         let canonical: String = sqlx::query_scalar(
             "SELECT sql FROM sqlite_schema WHERE name='room_message_search_delete'",

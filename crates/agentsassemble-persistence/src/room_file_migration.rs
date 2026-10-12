@@ -2,7 +2,7 @@
 use crate::{PersistenceError, archive_schema};
 use sqlx::{Connection, SqliteConnection};
 
-type Trigger = (String, String, Option<String>);
+type Trigger = (String, String, String, Option<String>);
 type Reference = (
     String,
     i64,
@@ -25,8 +25,10 @@ pub(crate) async fn require_source(
             .execute(&mut canonical)
             .await?;
     }
-    let triggers = "SELECT name,tbl_name,CASE WHEN length(sql)<=65536 THEN sql END
-        FROM main.sqlite_schema WHERE type='trigger' ORDER BY name LIMIT ?";
+    // SQLite builds a trigger from the stored SQL whatever the row's `type` claims, so
+    // any row whose SQL names the keyword is held to the canonical trigger set as well.
+    let triggers = "SELECT type,name,tbl_name,CASE WHEN length(sql)<=65536 THEN sql END
+        FROM main.sqlite_schema WHERE type='trigger' OR sql LIKE '%trigger%' ORDER BY name LIMIT ?";
     let expected: Vec<Trigger> = sqlx::query_as(triggers)
         .bind(i64::MAX)
         .fetch_all(&mut canonical)
