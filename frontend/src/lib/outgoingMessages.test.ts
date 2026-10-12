@@ -41,7 +41,7 @@ function fixture() {
     }),
     data: vi.fn(async (handle, offset, body) => {
       const entry = stored.get(handle)!;
-      expect(body).toBeInstanceOf(Blob); expect(body.size).toBeLessThanOrEqual(4);
+      expect(body).toBeInstanceOf(Blob); expect(body.size).toBeLessThanOrEqual(64 * 4);
       expect(offset).toBe(entry.bytes.length);
       entry.bytes += await read(body); entry.status = { ...entry.status, accepted_offset: entry.bytes.length };
       return { ...entry.status };
@@ -101,7 +101,7 @@ test("host defer returns its slot to the queue and clock hint retries without fa
 test("accepted offset resumes interrupted data; lost finish uses status, one attachment/publication", async () => {
   const { model, client, stored, publish } = fixture();
   const data = client.data; const finish = client.finish;
-  client.data = vi.fn<MessageAttachmentUploadClient["data"]>().mockImplementationOnce(async (...args) => { await data(...args); throw new Error("response lost"); }).mockImplementation(data);
+  client.data = vi.fn<MessageAttachmentUploadClient["data"]>().mockImplementationOnce(async (handle, offset, body, signal) => { await data(handle, offset, body.slice(0, 4), signal); throw new Error("connection lost mid-request"); }).mockImplementation(data);
   client.finish = vi.fn<MessageAttachmentUploadClient["finish"]>(async (...args) => { await finish(...args); throw new Error("finish reply lost"); });
   model.send(authority, { text: "", files: [file()] }); await flush();
   expect(one(model).phase).toBe("sent"); expect([...stored.values()][0].bytes).toBe("abcdefgh");

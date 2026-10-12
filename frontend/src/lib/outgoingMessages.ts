@@ -52,6 +52,12 @@ function failure(error: unknown): OutgoingFailure {
   };
   return { code: "upload_interrupted", retryable: true };
 }
+// One data request carries many pieces: a request per piece would cost a round trip
+// (and an upload grant) per 64 KiB and waste the transport's window. About twenty
+// requests per file keeps progress visible; the bounds are 4 and 64 pieces.
+function segmentBytes(size: number, piece: number) {
+  return Math.min(64, Math.max(4, Math.ceil(size / 20 / piece))) * piece;
+}
 function sameAuthority(a: OutgoingAuthority, b: OutgoingAuthority) {
   return a.roomId === b.roomId && a.participantId === b.participantId && a.generation === b.generation;
 }
@@ -272,7 +278,7 @@ export class OutgoingMessages {
           }
         } else {
           update("transferring");
-          const body = file.file.slice(offset, Math.min(file.file.size, offset + transfer.piece_size));
+          const body = file.file.slice(offset, Math.min(file.file.size, offset + segmentBytes(file.file.size, transfer.piece_size)));
           file.sentBytes = Math.max(file.sentBytes, offset + body.size); this.changed();
           try { transfer = await uploads.data(transfer.handle, offset, body, signal); }
           catch (error) {
