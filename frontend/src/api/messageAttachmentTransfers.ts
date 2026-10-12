@@ -71,6 +71,8 @@ export async function createMessageAttachmentUploadClient(
   signal?.throwIfAborted();
   const room = canonicalRoomId(roomId);
   const settingsAuthority = authority.kind === "remote" ? authority : {};
+  // Each creation explicitly re-probes via successful GET /api/room-settings;
+  // this client then keeps its snapshot even if later clients discover a change.
   const settings = await fetchRoomSettings(room, settingsAuthority, signal);
   signal?.throwIfAborted();
   async function grant() {
@@ -81,12 +83,6 @@ export async function createMessageAttachmentUploadClient(
     return { base: "", token: authority.sessionToken, device: authority.deviceToken };
   }
   const discovery = await grant();
-  if (authority.kind === "local") {
-    // POST-only on both old and new hosts: GET discovers response capabilities
-    // without consuming the purpose-bound one-use upload ticket or creating work.
-    const response = await fetchProductTransport(`${discovery.base}/api/message-attachments`, { cache: "no-store", signal });
-    await response.body?.cancel();
-  }
   const capabilities = messageAttachmentCapabilities(discovery.token, `${discovery.base}/api/message-attachments`);
   let fileLimit = settings.attachmentFileLimitBytes ?? MAX_ATTACHMENT_BYTES;
   function preflight(file: File) {

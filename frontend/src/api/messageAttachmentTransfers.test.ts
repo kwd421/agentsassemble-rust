@@ -31,14 +31,14 @@ test("Blob data uses exact authenticated lifecycle routes without buffering", as
   expect(file.arrayBuffer).not.toHaveBeenCalled();
   expect(selectLobbyAttachmentFiles(0, Array.from({ length: 10 }), client.limit).tooMany).toBe(false);
 });
-test("local discovery consumes no ticket; operations get fresh one-use authority", async () => {
+test("local client uses the preference discovery and operations get fresh one-use authority", async () => {
   fake.fetch.mockImplementation(async (_path: string, init: RequestInit) => init.method === "GET" ? new Response(null, { status: 405 }) : response({ transfer: status }));
   const client = await createMessageAttachmentUploadClient("general", { kind: "local" });
-  expect(fake.fetch.mock.calls[0][1].headers).toBeUndefined();
+  expect(fake.fetch).not.toHaveBeenCalled();
   const file = new File(["abcd"], "f.bin");
   await client.begin(file, "one", signal()); await client.data("handle", 0, file, signal());
   expect(fake.ticket).toHaveBeenCalledTimes(2);
-  expect(fake.fetch.mock.calls[2][0]).toBe("http://localhost:1234/api/message-attachment-transfers/handle/data?offset=0");
+  expect(fake.fetch.mock.calls[1][0]).toBe("http://localhost:1234/api/message-attachment-transfers/handle/data?offset=0");
 });
 test("old host uses legacy and refuses a ten-file selection whole", async () => {
   fake.capabilities = { transfer: false, limit: 8 };

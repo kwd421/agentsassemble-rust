@@ -1,4 +1,4 @@
-import { installRemoteWorkspace, closeRemoteWorkspace } from "../lib/remote/remoteWorkspace";
+import { installRemoteWorkspace, closeRemoteWorkspace, fetchPlainProductTransport } from "../lib/remote/remoteWorkspace";
 import { releaseResourceBlob } from "../lib/remote/remoteResources";
 import type { RemoteTransport } from "../lib/remote/remoteTransport";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -404,17 +404,21 @@ it.each([false, true])("uses preview only on an advertised encrypted channel (%s
   } finally { closeRemoteWorkspace(); }
 });
 
-it("learns plain desktop capability from a response and never probes an old host", async () => {
+it("learns plain desktop preview capability only from the settings probe", async () => {
   const image = { ...attachment, content_type: "image/png", size: 400000, is_image: true };
-  bridge.read.mockResolvedValue({ ...grant("preview-local"), http_base_url: "http://127.0.0.1:49255" });
-  const first = attachmentResponse(new Uint8Array(image.size), "image/png");
-  first.headers.set("x-agentsassemble-image-preview", "1");
-  const fetch = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(attachmentResponse(new Uint8Array(100), "image/webp"));
+  const origin = "http://127.0.0.1:49255";
+  bridge.read.mockResolvedValue({ ...grant("preview-local"), http_base_url: origin });
+  const originalResponse = attachmentResponse(new Uint8Array(image.size), "image/png");
+  originalResponse.headers.set("x-agentsassemble-image-preview", "1");
+  const settings = new Response("{}", { headers: { "x-agentsassemble-image-preview": "1" } });
+  const fetch = vi.fn().mockResolvedValueOnce(originalResponse).mockResolvedValueOnce(settings)
+    .mockResolvedValueOnce(attachmentResponse(new Uint8Array(100), "image/webp"));
   vi.stubGlobal("fetch", fetch);
   const original = await fetchMessageAttachmentBlob(image, "general", { kind: "local" }, "preview");
+  await fetchPlainProductTransport(`${origin}/api/room-settings?room_id=general`);
   const preview = await fetchMessageAttachmentBlob(image, "general", { kind: "local" }, "preview");
   expect(fetch.mock.calls.map(call => call[0])).toEqual([
-    `http://127.0.0.1:49255${image.url}`, `http://127.0.0.1:49255${image.url.replace("?view=1", "?preview=1")}`,
+    `${origin}${image.url}`, `${origin}/api/room-settings?room_id=general`, `${origin}${image.url.replace("?view=1", "?preview=1")}`,
   ]);
   releaseResourceBlob(original); releaseResourceBlob(preview);
   vi.unstubAllGlobals();

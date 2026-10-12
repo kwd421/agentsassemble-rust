@@ -53,6 +53,11 @@ export function supportsMessageAttachmentPreview(token: string, path: string): b
 
 export function fetchPlainProductTransport(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(path, init).then(response => {
+    // GET room-settings is the successful admission/probe response. Unrelated
+    // responses (including uploads, errors and redirects) cannot rewrite it.
+    if ((init.method ?? "GET").toUpperCase() !== "GET" ||
+        new URL(path, window.location.href).pathname !== "/api/room-settings" ||
+        !response.ok || response.redirected) return response;
     plainUploads.set(requestOrigin(path), {
       transfer: response.headers.get("x-agentsassemble-upload-transfer") === "1",
       limit: parseMessageAttachmentLimit(response.headers.get("x-agentsassemble-message-attachment-limit")),

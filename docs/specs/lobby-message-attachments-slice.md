@@ -1456,3 +1456,18 @@ Owners: schema_version, room_file_migration, archive_schema_changes, backup_poli
 backup_codec manifest validation. Acceptance: a nine-attachment historical event or
 receipt refuses; genuine old archives restore; current catalog/export agree and
 94 upgrade preserves data. No envelope format change or compatibility fallback.
+
+## Round-10 plain capability discovery (Low 1, 2026-10-13)
+
+Only a successful, non-redirected GET /api/room-settings response discovers plain
+host upload-transfer, attachment-count and image-preview capabilities. Other routes,
+methods and failures never change known capabilities. Each upload-client creation
+explicitly re-probes via its existing fetchRoomSettings admission read (native uses
+the purpose-bound preference ticket; remote uses its session). Remove the old
+GET /api/message-attachments 405 probe: it is not a successful admission response.
+Recreating the client re-probes the host; an existing client's capability snapshot
+remains stable for its requests. Secure transport's admitted capabilities stay with
+its existing owner. Owners: remoteWorkspace::fetchPlainProductTransport and
+createMessageAttachmentUploadClient. Acceptance: unrelated headerless/error responses
+preserve all three learned capabilities, while a fresh designated probe and newly
+created client can reflect an actual host capability change.
