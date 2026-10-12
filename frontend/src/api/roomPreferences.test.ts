@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { requestDesktopHostProductSurface } from "../lib/desktopBridge";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
-import { fetchRoomSettings, saveRoomSettings } from "./room";
+import { fetchRoomSettings, normalizeRoomGlobalSettings, saveRoomSettings, type ConversationMode } from "./room";
 
 const HOST_SURFACE = {
   revision: PRODUCT_SURFACE_REVISION,
@@ -16,7 +16,8 @@ const HOST_SURFACE = {
 
 function response(
   roomId = "general",
-  notifications: "all" | "mentions" | "mute" = "mentions"
+  notifications: "all" | "mentions" | "mute" = "mentions",
+  conversationMode: ConversationMode = "ordered"
 ) {
   return {
     room_id: roomId,
@@ -38,7 +39,7 @@ function response(
       channel_settings: {
         lobby: { notifications: "default", last_read_at: "cursor-1" },
       },
-      conversation_mode: "ordered",
+      conversation_mode: conversationMode,
       tool_mode: "chat",
       ordered_exclude_previous_speaker: true,
       channels: [],
@@ -52,7 +53,7 @@ describe("room preference HTTP authority", () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   });
 
-  it("uses a fresh purpose ticket and preference-only body for each desktop operation", async () => {
+  it.each(["ordered", "ambient", "free_access"] as const)("reads %s settings and keeps preference writes separate", async (mode) => {
     const invoke = vi
       .fn()
       .mockResolvedValueOnce(HOST_SURFACE)
@@ -70,13 +71,13 @@ describe("room preference HTTP authority", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(response()), {
+        new Response(JSON.stringify(response("general", "mentions", mode)), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(response("general", "mute")), {
+        new Response(JSON.stringify(response("general", "mute", mode)), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
@@ -95,6 +96,7 @@ describe("room preference HTTP authority", () => {
       identity: { deviceToken: "not-authority" },
     });
 
+    expect(normalizeRoomGlobalSettings(response("general", "mentions", mode).settings, "general")?.conversationMode).toBe(mode);
     expect(loaded.channelSettings.lobby.lastReadAt).toBe("cursor-1");
     expect(saved.appearance.notifications).toBe("mute");
     expect(invoke).toHaveBeenNthCalledWith(2, "runtime_preferences_read_ticket", {

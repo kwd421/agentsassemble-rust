@@ -293,6 +293,19 @@ export default function RoomSettingsModal({
                     <small>새 메시지가 오면 연결된 에이전트가 모두 방을 보고, 말할지 각자 정해요.</small>
                   </span>
                 </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="conversation-mode"
+                    checked={conversationMode === "free_access"}
+                    disabled={!routingSettingsReady}
+                    onChange={() => onConversationModeChange("free_access")}
+                  />
+                  <span className="preserve-words">
+                    <strong>자유 접속</strong>
+                    <small>방이 AI를 깨우지 않아요. 외부 AI만 필요할 때 들러서 읽고 써요. @멘션하면 그 AI에게 알림이 가요.</small>
+                  </span>
+                </label>
               </div>
               {conversationMode === "ordered" && (
                 // The row sits in a radio stack so `.dc-settings-section label`'s grid does not

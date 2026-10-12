@@ -55,6 +55,36 @@ pub(super) async fn route_message(
             targets
         }
         "ambient" => ambient_targets(event, &sessions),
+        "free_access" => {
+            crate::connector_mentions::record(transaction, event).await?;
+            if !chain_allows_turn(transaction, event).await? {
+                return Ok(());
+            }
+            sessions
+                .iter()
+                .filter(|(session, participant)| {
+                    !is_actor(session, event)
+                        && participant.status != ParticipantStatus::Kicked
+                        && !participant.muted
+                        && super::routing::mentions_target(
+                            event.content.as_deref().unwrap_or_default(),
+                            sessions
+                                .iter()
+                                .filter(|(s, _)| !is_actor(s, event))
+                                .map(|(s, _)| {
+                                    (s.public.session_id.as_str(), s.public.display_name.as_str())
+                                }),
+                            &session.public.session_id,
+                        )
+                })
+                .map(|(session, _)| {
+                    (
+                        session.public.session_id.clone(),
+                        RoomInputDeliveryKind::FreeAccessMention,
+                    )
+                })
+                .collect()
+        }
         _ => {
             return Err(rejected(
                 "stored_room_settings_invalid",
@@ -74,6 +104,8 @@ pub(crate) async fn remove_pending_input_reference(
     room_id: &str,
     event_id: &str,
 ) -> Result<(), PersistenceError> {
+    sqlx::query("DELETE FROM connector_mentions WHERE room_id=? AND seq=(SELECT seq FROM room_events WHERE room_id=? AND json_extract(event_json,'$.id')=?)")
+        .bind(room_id).bind(room_id).bind(event_id).execute(&mut **transaction).await?;
     for mut session in load_room_sessions(transaction, room_id).await? {
         let original_len = session.pending_inputs.len();
         session
@@ -142,6 +174,19 @@ pub(super) async fn assign_available_pending(
         prepared.push(prepare_assignment(transaction, room, settings, session).await?);
     }
     Ok(prepared)
+}
+
+// Count speech, not turns or routing events. System activity does not reset the chain.
+async fn chain_allows_turn(
+    tx: &mut Transaction<'_, Sqlite>,
+    event: &RoomEvent,
+) -> Result<bool, PersistenceError> {
+    if event.actor.participant_type != "agent" {
+        return Ok(true);
+    }
+    let actors = sqlx::query_scalar::<_, String>("SELECT json_extract(event_json,'$.actor.participant_type') FROM room_events WHERE room_id=? AND seq<? AND json_extract(event_json,'$.type')='message_final' AND json_extract(event_json,'$.actor.participant_type') IN ('agent','human') ORDER BY seq DESC LIMIT 12")
+        .bind(&event.room_id).bind(event.seq).fetch_all(&mut **tx).await?;
+    Ok(actors.len() < 12 || actors.iter().any(|actor| actor == "human"))
 }
 
 fn is_routable_message(event: &RoomEvent) -> Result<bool, PersistenceError> {
@@ -561,7 +606,7 @@ async fn prepare_assignment(
         room,
         &session,
         &session.pending_inputs,
-        settings.tool_mode == "tabletop",
+        settings,
     )
     .await?;
     let inflight = prepared_input.inflight_inputs;

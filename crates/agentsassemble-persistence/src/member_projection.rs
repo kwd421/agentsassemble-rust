@@ -216,7 +216,7 @@ pub(crate) async fn upgrade(
     pool: &sqlx::SqlitePool,
     version: &str,
 ) -> Result<(), PersistenceError> {
-    if matches!(version, "84" | "85" | "86" | "87" | "88") {
+    if matches!(version, "84" | "85" | "86" | "87" | "88" | "89") {
         return Ok(());
     }
     let mut tx = pool.begin().await?;

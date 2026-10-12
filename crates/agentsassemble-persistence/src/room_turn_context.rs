@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use agentsassemble_domain::{
     DurableAgentSession, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_ROOM_OBSERVATION_AGENT_IDS,
     MAX_ROOM_VIEW_CHARACTERS, QueuedRoomInput, Room, RoomEvent, RoomInputDeliveryKind,
-    has_visible_text, is_provider_input, is_room_observation_view, render_persona_context,
-    render_persona_context_parts,
+    RoomSettings, has_visible_text, is_provider_input, is_room_observation_view,
+    render_persona_context, render_persona_context_parts,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -36,8 +36,9 @@ pub(super) async fn prepare_room_input(
     room: &Room,
     session: &DurableAgentSession,
     pending_inputs: &[QueuedRoomInput],
-    tabletop_tools: bool,
+    settings: &RoomSettings,
 ) -> Result<PreparedRoomInput, PersistenceError> {
+    let tabletop_tools = settings.tool_mode == "tabletop";
     validate_provider_cursor(transaction, session).await?;
     let roster = load_room_roster(transaction, room, session).await?;
     let pending = load_pending_events(transaction, session, pending_inputs).await?;
@@ -91,10 +92,11 @@ pub(super) async fn prepare_room_input(
     let mode = match delivery_kind {
         RoomInputDeliveryKind::OrderedObservation => "Ordered",
         RoomInputDeliveryKind::AmbientObservation => "Ambient",
+        RoomInputDeliveryKind::FreeAccessMention => "Free access mention",
     };
     let session_instructions =
         persistent.then(|| render_room_rules(room, session, tabletop_tools, &fixed_persona));
-    let provider_input = render_observation_input(
+    let mut provider_input = render_observation_input(
         room,
         session,
         mode,
@@ -102,6 +104,19 @@ pub(super) async fn prepare_room_input(
         &persona_context,
         persistent,
     );
+    if delivery_kind == RoomInputDeliveryKind::FreeAccessMention
+        || settings.conversation_mode == "free_access"
+    {
+        provider_input.push_str(&format!(
+            "\nCurrent room conversation mode: {}.\n",
+            settings.conversation_mode
+        ));
+        provider_input.push_str(if delivery_kind == RoomInputDeliveryKind::FreeAccessMention {
+            "You were called because you were explicitly mentioned. In free_access, nobody prompts you otherwise.\n"
+        } else {
+            "This turn completes work queued before the mode changed. In free_access, new messages prompt you only when they explicitly mention you.\n"
+        });
+    }
     if !is_room_observation_view(&room_view)
         || !is_provider_input(&provider_input)
         || !is_provider_input(&format!(
@@ -263,7 +278,10 @@ fn bounded_pending_prefix<'a>(
         ));
     };
     for event in pending.iter().take(MAX_CONTEXT_MESSAGES) {
-        if event.input.delivery_kind != first.input.delivery_kind {
+        if event.input.delivery_kind != first.input.delivery_kind
+            || (first.input.delivery_kind == RoomInputDeliveryKind::FreeAccessMention
+                && !selected.is_empty())
+        {
             break;
         }
         selected.push(event);

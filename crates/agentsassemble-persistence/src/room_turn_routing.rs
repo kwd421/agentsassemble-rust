@@ -34,7 +34,7 @@ pub(crate) fn last_direct_target_for_names<'a>(
         .map(|(_, owner)| owner)
 }
 
-pub(super) fn mentions_target<'a>(
+pub(crate) fn mentions_target<'a>(
     content: &str,
     names: impl Iterator<Item = (&'a str, &'a str)>,
     target: &str,

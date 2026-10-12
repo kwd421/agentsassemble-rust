@@ -473,3 +473,6 @@ async fn stored_session(
     serde_json::from_str(&encoded)
         .unwrap_or_else(|error| panic!("decode stored session {session_id}: {error}"))
 }
+
+#[path = "free_access_tests.rs"]
+mod free_access_tests;

@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 88;
+pub const CURRENT_SCHEMA_VERSION: i64 = 89;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -196,6 +196,16 @@ async fn upgrade_member_schema(pool: &SqlitePool, version: &str) -> Result<(), P
         let mut tx = pool.begin().await?;
         sqlx::query("ALTER TABLE room_attendee_invites ADD COLUMN restore_parent_kind TEXT CHECK(restore_parent_kind IN ('human','operator'))").execute(&mut *tx).await?;
         sqlx::query("UPDATE runtime_metadata SET value='88' WHERE key='schema_version'")
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+    }
+    if current.parse::<i64>().is_ok_and(|v| v < 89) {
+        let mut tx = pool.begin().await?;
+        sqlx::query(crate::connector_mentions::DDL)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE runtime_metadata SET value='89' WHERE key='schema_version'")
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;

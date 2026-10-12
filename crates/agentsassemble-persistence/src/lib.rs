@@ -38,6 +38,7 @@ pub use attendee::ready::AttendeeRuntimeReady;
 pub use attendee::session::AttendeeSessionAuthorization;
 pub use attendee::tool_read::{AttendeeToolRead, AttendeeToolReadRequest, AttendeeToolReadResult};
 mod connector_admission;
+mod connector_mentions;
 mod connector_session;
 #[cfg(test)]
 mod connector_tests;

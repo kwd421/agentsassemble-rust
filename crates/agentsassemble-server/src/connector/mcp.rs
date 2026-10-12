@@ -76,7 +76,20 @@ impl ConnectorMcp {
 }
 
 fn encode(value: &Value) -> Result<String, String> {
-    serde_json::to_string(value).map_err(|_| "connector_result_encoding_failed".to_owned())
+    let mut value = value.clone();
+    let mentions = value
+        .as_object_mut()
+        .and_then(|object| object.remove("unread_mentions"));
+    let encoded =
+        serde_json::to_string(&value).map_err(|_| "connector_result_encoding_failed".to_owned())?;
+    if let Some(mentions) = mentions {
+        Ok(format!(
+            "{{\"unread_mentions\":{mentions},{}",
+            &encoded[1..]
+        ))
+    } else {
+        Ok(encoded)
+    }
 }
 
 #[tool_router]
@@ -111,7 +124,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Read the current room and its recent public messages. With resync true (after connector_resync_required) this snapshot replaces pending wait observations; older messages remain searchable. Ordinary reads leave pending observations in place."
+        description = "Read the current room and its recent public messages. With resync true (after connector_resync_required) this snapshot replaces pending wait observations; older messages remain searchable. Reading mentioned messages clears their unread notifications; other pending observations remain."
     )]
     async fn room_read(&self, Parameters(input): Parameters<Read>) -> Result<String, String> {
         let client = self.hub.client(&input.connection_id)?;
@@ -298,7 +311,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Wait for another participant's public message, with no model deadline. Other tools can run meanwhile. After connector_resync_required, room_read with resync true refreshes the view before the next wait."
+        description = "Wait for another participant's public message (in free_access, only an explicit mention of you), with no model deadline. Other tools can run meanwhile. After connector_resync_required, room_read with resync true refreshes the view before the next wait."
     )]
     async fn room_wait_next(
         &self,
@@ -367,7 +380,7 @@ impl ServerHandler for ConnectorMcp {
 
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "Tools for taking part in an AgentsAssemble room from this conversation. room_join takes the user's invite URL and makes this conversation itself a participant; room_read shows the room, room_say posts, room_wait_next waits for others. connection_id is private and is passed unchanged to later tools."
+            "Tools for taking part in an AgentsAssemble room from this conversation. room_join takes the user's invite URL and makes this conversation itself a participant; room_read shows the room, room_say posts, room_wait_next follows the current conversation mode; in free_access only mentions wake it. Leave a wait pending when you want to be reachable. connection_id is private and is passed unchanged to later tools."
         )
     }
 }

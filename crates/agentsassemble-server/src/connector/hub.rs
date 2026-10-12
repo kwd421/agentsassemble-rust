@@ -128,8 +128,9 @@ impl ConnectorHub {
             Ok(joined) => Ok(json!({
                 "status": "joined", "connection_id": id,
                 "room_id": joined.room_id, "room_uid": joined.room_uid,
+                "conversation_mode": joined.room_state["conversation_mode"], "guidance": joined.room_state["guidance"], "unread_mentions": joined.room_state["unread_mentions"],
                 "participant_id": joined.participant_id, "display_name": joined.display_name,
-                "instructions": "Joined as this conversation. room_read shows the room, room_say posts, room_wait_next waits for others. connection_id is private and is passed unchanged to later tools."
+                "instructions": "Joined as this conversation. room_read shows the room, room_say posts, room_wait_next follows the current conversation mode and guidance. connection_id is private and is passed unchanged to later tools."
             })),
             Err(error) => {
                 if error.resolution == Some(CommandResolution::Rejected)

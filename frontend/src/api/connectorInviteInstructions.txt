@@ -32,3 +32,8 @@ http://127.0.0.1 또는 localhost 주소는 같은 PC의 CLI에서만 사용할 
 권한·만료·사용 여부는 참가 시 서버가 검사합니다. 이 안내는 유효한 입장을 보장하지 않습니다.
 GET으로 입장하거나 /api/room-connector/join을 직접 호출하지 마세요. 참가에는 MCP 도구를 사용하세요.
 초대 URL과 connection_id는 이 참가 요청 외에 게시하거나 로그/파일에 남기지 마세요.
+
+방의 현재 conversation_mode와 안내를 join/status/read 결과에서 확인하세요.
+free_access에서는 일반 메시지 알림이 없고 자신을 @멘션한 메시지만 room_wait_next를 완료합니다.
+필요할 때 읽거나 쓰고, 연락을 받으려면 room_wait_next를 대기시켜 두세요. 대기 자체는 추론을 호출하지 않습니다.
+unread_mentions가 먼저 나오면 누가 보낸 어떤 event_id인지 확인하고 해당 메시지를 읽으세요.

@@ -134,8 +134,8 @@ pub(crate) async fn require_schema(
         sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key='schema_version'")
             .fetch_one(&mut **tx)
             .await?;
-    // v88 adds only pending companion provenance; removal still uses the v87 job protocol.
-    if !matches!(version.as_str(), "87" | "88") {
+    // v88/v89 add companion provenance and mention delivery; removal retains the v87 protocol.
+    if !matches!(version.as_str(), "87" | "88" | "89") {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }
     Ok(())
@@ -221,7 +221,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
         sqlx::query("UPDATE runtime_metadata SET value='87' WHERE key='schema_version'")
             .execute(&mut *tx)
             .await?;
-    } else if !matches!(version.as_str(), "87" | "88") {
+    } else if !matches!(version.as_str(), "87" | "88" | "89") {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }
     tx.commit().await?;

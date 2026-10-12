@@ -34,6 +34,7 @@ impl ConnectorClientError {
 
 #[derive(Clone, Serialize)]
 pub struct ConnectorJoined {
+    pub room_state: Value,
     pub room_id: String,
     pub room_uid: Uuid,
     pub participant_id: String,
@@ -160,9 +161,17 @@ impl RoomConnectorClient {
             return Err(ConnectorClientError::local("connector_closed"));
         }
         if let JoinState::Ready(session) = &*state {
-            let snapshot = self.get("read", &[], &session.bearer, false).await?;
+            let snapshot = self
+                .get(
+                    "read",
+                    &[("joining", "true".to_owned())],
+                    &session.bearer,
+                    false,
+                )
+                .await?;
             let mut joined = session.joined.clone();
             joined.last_seq = sequence(&snapshot)?;
+            joined.room_state = room_state(&snapshot);
             return Ok(joined);
         }
         if let JoinState::Pending(pending) = &mut *state {
@@ -174,10 +183,16 @@ impl RoomConnectorClient {
         }
         if let JoinState::Admitted(admission) = &*state {
             let snapshot = self
-                .get("read", &[], &admission.session_bearer, false)
+                .get(
+                    "read",
+                    &[("joining", "true".to_owned())],
+                    &admission.session_bearer,
+                    false,
+                )
                 .await?;
             let last_seq = sequence(&snapshot)?;
             let joined = ConnectorJoined {
+                room_state: room_state(&snapshot),
                 room_id: admission.room_id.clone(),
                 room_uid: admission.room_uid,
                 participant_id: admission.participant_id.clone(),
@@ -553,4 +568,8 @@ fn sequence(value: &Value) -> Result<i64, ConnectorClientError> {
         .and_then(Value::as_i64)
         .filter(|seq| *seq >= 0)
         .ok_or_else(|| ConnectorClientError::local("invalid_connector_cursor"))
+}
+
+fn room_state(snapshot: &Value) -> Value {
+    json!({"conversation_mode":snapshot["conversation_mode"],"guidance":snapshot["guidance"],"unread_mentions":snapshot["unread_mentions"]})
 }

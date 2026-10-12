@@ -17,6 +17,7 @@ static DICE_NOTATION: LazyLock<Regex> = LazyLock::new(|| {
 pub enum RoomInputDeliveryKind {
     OrderedObservation,
     AmbientObservation,
+    FreeAccessMention,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

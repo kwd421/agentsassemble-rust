@@ -385,7 +385,10 @@ impl From<RoomSettings> for RawRoomSettings {
 fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsError> {
     require_canonical_text(&raw.label, "label", ROOM_LABEL_LIMIT)?;
     require_canonical_text(&raw.topic, "topic", ROOM_TOPIC_LIMIT)?;
-    if !matches!(raw.conversation_mode.as_str(), "ordered" | "ambient") {
+    if !matches!(
+        raw.conversation_mode.as_str(),
+        "ordered" | "ambient" | "free_access"
+    ) {
         return Err(RoomSettingsError::bad_request(format!(
             "Unsupported conversation_mode: {}.",
             raw.conversation_mode

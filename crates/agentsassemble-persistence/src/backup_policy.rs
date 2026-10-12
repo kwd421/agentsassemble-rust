@@ -57,6 +57,7 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "attendee_connections"
         | "attendee_cleanup_controls"
         | "room_connector_uploads"
+        | "connector_mentions"
         | "prejoin_avatar_assets"
         | "provider_requests"
         | "provider_turn_executions"

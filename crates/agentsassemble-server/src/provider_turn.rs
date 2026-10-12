@@ -150,7 +150,9 @@ fn provider_request(
 ) -> ProviderTurnRequest {
     let room_observation = matches!(
         assignment.delivery_kind,
-        RoomInputDeliveryKind::OrderedObservation | RoomInputDeliveryKind::AmbientObservation
+        RoomInputDeliveryKind::OrderedObservation
+            | RoomInputDeliveryKind::AmbientObservation
+            | RoomInputDeliveryKind::FreeAccessMention
     )
     .then(|| ProviderRoomObservation {
         session_id: assignment.session.public.session_id.clone(),

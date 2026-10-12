@@ -282,6 +282,7 @@ async fn v83_upgrade_keeps_rooms_and_sender_deadline_survives_reopen() -> TestRe
     for sql in [
         "ALTER TABLE attendee_connections DROP COLUMN execution_os",
         "DROP TABLE central_member_removals",
+        "DROP TABLE connector_mentions",
         "ALTER TABLE room_attendee_invites DROP COLUMN restore_parent_kind",
         "DROP TABLE member_projection_outbox",
         "DROP TABLE member_projection_sender",

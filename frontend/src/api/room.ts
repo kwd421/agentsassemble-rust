@@ -39,7 +39,7 @@ import {
 
 export type { RoomChannel } from "./roomChannelCodec";
 
-export type ConversationMode = "ordered" | "ambient";
+export type ConversationMode = "ordered" | "ambient" | "free_access";
 export type RoomToolMode = "chat" | "tabletop";
 
 export type RoomGlobalAppearance = Omit<RoomAppearance, "notifications">;
@@ -291,7 +291,7 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
     !new Set(["default", "forest", "midnight", "ember", "custom"]).has(bannerPreset) ||
     !new Set(["all", "mentions", "mute"]).has(notifications) ||
     !new Set(["room", "read_only"]).has(inviteScope) ||
-    !new Set(["ordered", "ambient"]).has(conversationMode) ||
+    !new Set(["ordered", "ambient", "free_access"]).has(conversationMode) ||
     !new Set(["chat", "tabletop"]).has(toolMode) ||
     (payload.lobby_name !== undefined && (typeof payload.lobby_name !== "string" || !payload.lobby_name.trim())) ||
     typeof payload.ordered_exclude_previous_speaker !== "boolean"
@@ -347,7 +347,7 @@ export function normalizeRoomGlobalSettings(
     typeof appearance.icon_image_url !== "string" ||
     typeof appearance.icon_label !== "string" ||
     typeof appearance.invite_scope !== "string" ||
-    !["ordered", "ambient"].includes(String(payload.conversation_mode || "")) ||
+    !["ordered", "ambient", "free_access"].includes(String(payload.conversation_mode || "")) ||
     !["chat", "tabletop"].includes(String(payload.tool_mode || "")) ||
     typeof payload.ordered_exclude_previous_speaker !== "boolean" ||
     !Array.isArray(payload.channels)

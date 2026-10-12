@@ -57,7 +57,9 @@ impl AttendeeRuntime {
         self.session.input_up_to_seq = delivery.input_up_to_seq;
         let room_observation = matches!(
             delivery.input.delivery_kind,
-            RoomInputDeliveryKind::OrderedObservation | RoomInputDeliveryKind::AmbientObservation
+            RoomInputDeliveryKind::OrderedObservation
+                | RoomInputDeliveryKind::AmbientObservation
+                | RoomInputDeliveryKind::FreeAccessMention
         )
         .then(|| ProviderRoomObservation {
             session_id: start.session_id.clone(),

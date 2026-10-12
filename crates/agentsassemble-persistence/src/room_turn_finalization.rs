@@ -59,9 +59,14 @@ impl ProviderTurnFinalization<'_> {
             crate::ordered_turn_release::released_inputs(transaction, session).await?;
         let released = !released_ids.is_empty();
         let declined_source_event_id =
-            (matches!(self.disposition, ProviderTurnDisposition::Declined { .. }) && !released)
-                .then(|| session.active_source_event_id.clone())
-                .filter(|id| !id.is_empty());
+            (matches!(self.disposition, ProviderTurnDisposition::Declined { .. })
+                && !released
+                && !session.inflight_inputs.iter().any(|input| {
+                    input.delivery_kind
+                        == agentsassemble_domain::RoomInputDeliveryKind::FreeAccessMention
+                }))
+            .then(|| session.active_source_event_id.clone())
+            .filter(|id| !id.is_empty());
         let finished = turn_finished_event(
             transaction,
             session,

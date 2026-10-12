@@ -219,3 +219,6 @@ mod mcp_leave_retry;
 mod attachments;
 #[path = "connector_boundary/join_read_retry.rs"]
 mod join_read_retry;
+
+#[path = "connector_boundary/free_access.rs"]
+mod free_access;

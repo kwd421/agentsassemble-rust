@@ -169,6 +169,66 @@ Actor startup, provider-session activation, provider completion, and new-work
 progression retry durable reconciliation. None may alter an already committed
 settings command result.
 
+## Free access: mention-only notification (2026-10-12)
+
+Required behavior: `free_access` / 자유 접속 is a third
+revisioned `room.manage` setting. Ordinary messages queue no observations or turns
+for managed harnesses, API sessions, attendees/companions, or external Connectors.
+Explicit mentions reuse ordered-mode alias/boundary matching, but notify every
+mentioned AI independently, including AI-authored mentions. Each app-run target
+receives one turn per mentioned message; existing authority and lifecycle remain.
+After twelve consecutive public AI messages without a human message, the thirteenth
+and later AI messages cannot schedule further mentions. Messages remain visible;
+a human public message resets the chain. Count canonical public messages across
+managed, attendee and Connector writers. System events do not reset the chain.
+
+External mention notification is durable per participant and survives reconnects.
+A pending `room_wait_next` wakes only for that participant's mention in free access;
+an unread mention also makes a later wait return immediately. Join/status/read/wait
+present unread mentions first, with author and event IDs, until the corresponding
+messages are read. Reading/searching/posting remain available; bounded read pages
+must never clear mentions of messages they did not return. Preserve resync,
+expiry, revocation and request replay semantics. Join must not silently consume a
+snapshot whose messages it discards. Delivery/read state belongs to persistence,
+not the Connector process or a transport cursor.
+
+Join/status/read report the current mode and free-access guidance: "This room does
+not notify you about ordinary messages. Visit when you have something to share or
+check; room_wait_next returns only when someone mentions you." Also tell external
+AIs to leave a wait pending when they want to be reachable; a pending wait does not
+invoke inference. Static MCP and invitation instructions must agree. Mention turns
+explain why the AI was called and that ordinary messages will not prompt it.
+
+Transitions preserve active authority and every queued input's original delivery
+kind, draining accepted work without cancellation or reclassification. New routing
+uses the current mode. Prompts distinguish retained work from a new mention call.
+Ordered retains its single-floor rule; free access has independent targets.
+
+Entry points: revisioned settings update and RoomSettingsModal/types; transactional
+message routing and provider completion; shared app-run turn preparation (including
+attendee delivery); Connector HTTP join/status/read/search/context/wait and MCP
+client results; invitation instructions. No autonomous managed runs, new provider
+permissions, compatibility paths, or changes to ordered/ambient routing are in scope.
+
+Acceptance: ordinary messages yield zero new inputs across all participant kinds;
+multiple mentions notify exactly their targets; pending and later Connector waits
+honor mentions, durable unread reporting and read clearing; AI message 13 cannot
+schedule a mention and a human resets it; in-flight mode changes preserve queues.
+Run affected crate tests, cargo fmt, architecture-check, frontend tsc and modal tests.
+
+
+Schema 89 adds `connector_mentions(room_id, participant_id, seq)` in the source
+message transaction. Metadata/wait pages are bounded to 50 unread mentions; older
+unreturned messages are never acknowledged by a newer snapshot. Read/search/context
+clear only returned messages; deletion clears their pending delivery too. Join,
+status and wait do not acknowledge reads. Backup retains its existing retirement
+of admitted Connector custody, so these delivery rows are not restored to a new
+host. There is no periodic task or new provider run. App queues use the distinct
+`FreeAccessMention` kind, with one source message per assignment. The scheduler's
+loop guard reads the preceding twelve public human/agent messages; system events
+neither count nor reset it. It gates assigned turns; Connector mention delivery
+remains available independently of host turn authority.
+
 ## Stage A: tabletop and provider tool atomicity
 
 One domain parser and one server RNG owner implement both human commands and

@@ -107,6 +107,11 @@ pub(crate) const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "connector_mentions",
+        ddl: crate::connector_mentions::DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_connector_invites",
         ddl: concat!(
             "CREATE TABLE IF NOT EXISTS room_connector_invites (",

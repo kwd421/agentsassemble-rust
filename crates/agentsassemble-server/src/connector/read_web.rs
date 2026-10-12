@@ -17,6 +17,8 @@ const MESSAGE_LIMIT: usize = 50;
 pub(super) struct Cursor {
     #[serde(default)]
     after_seq: i64,
+    #[serde(default)]
+    joining: bool,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -59,7 +61,9 @@ pub(super) async fn status(
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    Ok(Json(json!(status)))
+    let mut value = json!(status);
+    enrich(&state, &authorization, &mut value, &[]).await?;
+    Ok(Json(value))
 }
 
 pub(super) async fn snapshot(
@@ -77,9 +81,15 @@ pub(super) async fn snapshot(
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    Ok(Json(
-        json!({"room":snapshot.room,"participants":snapshot.participants,"messages":messages(snapshot.events, authorization.principal(), false),"last_seq":snapshot.last_seq,"resync_required":snapshot.resume_gap}),
-    ))
+    let messages = messages(snapshot.events, authorization.principal(), false);
+    let read_ids = if cursor.joining {
+        Vec::new()
+    } else {
+        messages.iter().map(|event| event.id.clone()).collect()
+    };
+    let mut value = json!({"room":snapshot.room,"participants":snapshot.participants,"messages":messages,"last_seq":snapshot.last_seq,"resync_required":snapshot.resume_gap});
+    enrich(&state, &authorization, &mut value, &read_ids).await?;
+    Ok(Json(value))
 }
 
 pub(super) async fn search(
@@ -103,7 +113,14 @@ pub(super) async fn search(
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    Ok(Json(json!(result)))
+    let read_ids = result
+        .results
+        .iter()
+        .map(|message| message.event_id.clone())
+        .collect::<Vec<_>>();
+    let mut value = json!(result);
+    enrich(&state, &authorization, &mut value, &read_ids).await?;
+    Ok(Json(value))
 }
 
 pub(super) async fn context(
@@ -126,7 +143,14 @@ pub(super) async fn context(
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    Ok(Json(json!(result)))
+    let read_ids = result
+        .events
+        .iter()
+        .map(|event| event.id.clone())
+        .collect::<Vec<_>>();
+    let mut value = json!(result);
+    enrich(&state, &authorization, &mut value, &read_ids).await?;
+    Ok(Json(value))
 }
 
 pub(super) async fn vote(
@@ -182,8 +206,8 @@ pub(super) async fn wait(
             messages(snapshot.events, principal, true),
         )
     };
-    if !pending.is_empty() {
-        return Ok(Json(json!({"messages":pending,"last_seq":delivered})));
+    if let Some(value) = wait_result(&state, &authorization, pending, delivered).await? {
+        return Ok(Json(value));
     }
     let duration = (authorization.expires_at() - chrono::Utc::now())
         .to_std()
@@ -207,15 +231,63 @@ pub(super) async fn wait(
             }
             event = events.recv() => {
                 let event = event.map_err(|_| rejected(StatusCode::CONFLICT,"connector_resync_required"))?;
-                state.store.revalidate_connector_session(&authorization, chrono::Utc::now()).await.map_err(ConnectorHttpError::from_persistence)?;
                 if event.seq <= delivered { continue; }
                 if event.seq != delivered.saturating_add(1) { return Err(rejected(StatusCode::CONFLICT,"connector_resync_required")); }
                 delivered = event.seq;
                 let pending = messages(vec![event], principal, true);
-                if !pending.is_empty() { return Ok(Json(json!({"messages":pending,"last_seq":delivered}))); }
+                if let Some(value) = wait_result(&state, &authorization, pending, delivered).await? { return Ok(Json(value)); }
             }
         }
     }
+}
+
+async fn enrich(
+    state: &AppState,
+    authorization: &ConnectorSessionAuthorization,
+    value: &mut Value,
+    read_ids: &[String],
+) -> Result<(), ConnectorHttpError> {
+    let mut metadata = state
+        .store
+        .connector_mentions(authorization, read_ids)
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    for key in ["conversation_mode", "guidance", "unread_mentions"] {
+        value[key] = metadata[key].take();
+    }
+    Ok(())
+}
+
+async fn wait_result(
+    state: &AppState,
+    authorization: &ConnectorSessionAuthorization,
+    pending: Vec<RoomEvent>,
+    delivered: i64,
+) -> Result<Option<Value>, ConnectorHttpError> {
+    let mut metadata = state
+        .store
+        .connector_mentions(authorization, &[])
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    let mentions = metadata["mention_messages"].take();
+    if let Some(object) = metadata.as_object_mut() {
+        object.remove("mention_messages");
+    }
+    let pending = if metadata["conversation_mode"] == "free_access"
+        || mentions
+            .as_array()
+            .is_some_and(|messages| !messages.is_empty())
+    {
+        mentions
+    } else {
+        json!(pending)
+    };
+    if pending.as_array().is_none_or(Vec::is_empty) {
+        return Ok(None);
+    }
+    metadata["messages"] = pending;
+    metadata["last_seq"] = json!(delivered);
+    Ok(Some(metadata))
 }
 
 pub(super) async fn authorize_read(
