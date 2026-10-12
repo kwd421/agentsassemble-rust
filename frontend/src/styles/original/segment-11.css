@@ -146,6 +146,11 @@
   gap: 8px;
 }
 
+/* Short choices of the same kind sit side by side. */
+.dc-radio-stack--row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 /* Each choice is its own row card; the chosen one carries the accent. */
 .dc-radio-stack label {
   display: flex;

@@ -489,7 +489,7 @@ export default function RoomSettingsModal({
             <h3>저장 공간</h3>
             <div className="dc-settings-field">
               <p className="dc-settings-field-label">파일 하나 최대 크기</p>
-              <div className="dc-radio-stack">
+              <div className="dc-radio-stack dc-radio-stack--row">
                 {ROOM_FILE_LIMITS.map((limit) => <label key={limit}>
                   <input type="radio" name="room-file-limit" checked={storageSettings.attachmentFileLimitBytes === limit}
                     disabled={!routingSettingsReady} onChange={() => storageSettings.onChange({ attachmentFileLimitBytes: limit })} />
@@ -497,9 +497,9 @@ export default function RoomSettingsModal({
                 </label>)}
               </div>
             </div>
-            <div className="dc-settings-field">
+            <div className="dc-channel-settings-list">
               <label className="dc-channel-settings-row">
-                <span className="dc-settings-field-label">이 방의 저장 공간 한도</span>
+                <strong>이 방의 저장 공간 한도</strong>
                 <select value={storageSettings.attachmentStorageLimitBytes ?? ""} disabled={!routingSettingsReady}
                   onChange={(event) => storageSettings.onChange({ attachmentStorageLimitBytes: event.target.value === "" ? null : Number(event.target.value) })}>
                   <option value="">제한 없음</option>
