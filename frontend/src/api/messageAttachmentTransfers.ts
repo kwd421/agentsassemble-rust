@@ -15,6 +15,7 @@ export type TransferStatus = Readonly<{
 export class UploadFailure extends Error {
   constructor(readonly code: string, readonly retryable: boolean, readonly retryAfterMs?: number) {
     super(code);
+    if (retryAfterMs !== undefined) this.retryAfterMs = Math.min(5000, Math.max(1, retryAfterMs));
   }
 }
 export interface MessageAttachmentUploadClient {
@@ -41,11 +42,25 @@ function parseStatus(value: unknown): TransferStatus {
   }
   if (typeof status.handle !== "string" || !status.handle || status.handle.length > 128 ||
       typeof status.attachment_id !== "string" ||
-      Number(status.piece_size) > 64 * 1024 || Number(status.accepted_offset) > Number(status.declared_size)) throw new UploadFailure("invalid_upload_response", false);
+      (Number(status.piece_size) < 16 * 1024 || Number(status.piece_size) > 64 * 1024) || Number(status.accepted_offset) > Number(status.declared_size)) throw new UploadFailure("invalid_upload_response", false);
   messageAttachmentId(status.attachment_id as string);
   const attachment = status.attachment === null ? null : parseMessageAttachment(status.attachment);
   if (attachment && (attachment.id !== status.attachment_id || attachment.size !== status.declared_size || status.accepted_offset !== status.declared_size)) throw new UploadFailure("invalid_upload_response", false);
   return { ...status, attachment } as TransferStatus;
+}
+
+// The scheduler owns the transfer sequence; parsing owns individual wire shapes.
+export function validateTransferProgress(next: TransferStatus, pinned: TransferStatus | undefined,
+  size: number, lower: number, upper: number): TransferStatus {
+  if (next.declared_size !== size || next.piece_size < 16 * 1024 || next.piece_size > 64 * 1024 ||
+      !Number.isSafeInteger(next.piece_size) || !Number.isSafeInteger(next.accepted_offset) ||
+      next.accepted_offset < lower || next.accepted_offset > upper ||
+      pinned && (next.handle !== pinned.handle || next.attachment_id !== pinned.attachment_id ||
+        next.declared_size !== pinned.declared_size || next.piece_size !== pinned.piece_size) ||
+      next.attachment && (next.attachment.id !== next.attachment_id || next.attachment.size !== size || next.accepted_offset !== size)) {
+    throw new UploadFailure("invalid_upload_response", false);
+  }
+  return Object.freeze({ ...next });
 }
 
 // Prepare at room admission (never at file selection). Capability comes from this
@@ -56,7 +71,7 @@ export async function createMessageAttachmentUploadClient(
   signal?.throwIfAborted();
   const room = canonicalRoomId(roomId);
   const settingsAuthority = authority.kind === "remote" ? authority : {};
-  const settings = await fetchRoomSettings(room, settingsAuthority);
+  const settings = await fetchRoomSettings(room, settingsAuthority, signal);
   signal?.throwIfAborted();
   async function grant() {
     if (authority.kind === "local") {
@@ -105,7 +120,7 @@ export async function createMessageAttachmentUploadClient(
     get fileLimit() { return fileLimit; },
     begin: async (file, operationId, signal) => {
       signal.throwIfAborted();
-      const current = await fetchRoomSettings(room, settingsAuthority);
+      const current = await fetchRoomSettings(room, settingsAuthority, signal);
       signal.throwIfAborted();
       fileLimit = current.attachmentFileLimitBytes ?? MAX_ATTACHMENT_BYTES;
       preflight(file);

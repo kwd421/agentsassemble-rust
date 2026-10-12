@@ -36,12 +36,12 @@ function fixture() {
     transfer: true, limit: 10, fileLimit: 50 * 1024 * 1024, preflight: () => {},
     begin: vi.fn(async file => {
       const handle = `handle-${++next}`;
-      const status = { handle, attachment_id: `ma_${next.toString(16).padStart(32, "0")}`, piece_size: 4, expires_at: 9999999999, declared_size: file.size, accepted_offset: 0, attachment: null };
+      const status = { handle, attachment_id: `ma_${next.toString(16).padStart(32, "0")}`, piece_size: 65536, expires_at: 9999999999, declared_size: file.size, accepted_offset: 0, attachment: null };
       stored.set(handle, { status, bytes: "", file }); return { ...status };
     }),
     data: vi.fn(async (handle, offset, body) => {
       const entry = stored.get(handle)!;
-      expect(body).toBeInstanceOf(Blob); expect(body.size).toBeLessThanOrEqual(64 * 4);
+      expect(body).toBeInstanceOf(Blob); expect(body.size).toBeLessThanOrEqual(64 * 65536);
       expect(offset).toBe(entry.bytes.length);
       entry.bytes += await read(body); entry.status = { ...entry.status, accepted_offset: entry.bytes.length };
       return { ...entry.status };
@@ -171,6 +171,7 @@ test("new admission restarts incomplete files; stale completions/departure canno
   late.resolve(await begin(file(), "old-operation", new AbortController().signal)); await flush();
   expect(client.cancel).toHaveBeenCalledWith("handle-1"); expect(one(model).authority).toEqual(fresh);
   expect(failures).not.toContain("session_revoked");
+  expect(client.begin).toHaveBeenCalledTimes(2);
   expect(publish).toHaveBeenCalledTimes(1); expect(publish.mock.calls[0][0]).toEqual(fresh);
   const pending = gate<TransferStatus>(); client.begin = () => pending.promise;
   model.send(fresh, { text: "", files: [file()] }); await flush(); model.leaveRoom(fresh.roomId);
@@ -230,4 +231,53 @@ test("legacy host keeps its eight-file limit and uploads whole files one at a ti
   model.send(next, { text: "", files: [file("1"), file("2")] }); await flush();
   expect(old.legacy).toHaveBeenCalledTimes(2); expect(client.begin).not.toHaveBeenCalled(); expect(publish).toHaveBeenCalledTimes(1);
   expect(peak).toBe(1); model.close();
+});
+
+test("hostile transfer sequences fail boundedly and never publish a substituted file", async () => {
+  for (const mutate of [
+    (s: TransferStatus) => ({ ...s, handle: "redirected" }),
+    (s: TransferStatus) => ({ ...s, attachment_id: `ma_${"f".repeat(32)}` }),
+    (s: TransferStatus) => ({ ...s, declared_size: 9 }),
+    (s: TransferStatus) => ({ ...s, piece_size: 32768 }),
+    (s: TransferStatus) => ({ ...s, accepted_offset: 9 }),
+    (s: TransferStatus) => ({ ...s, accepted_offset: -1 }),
+    (s: TransferStatus) => s,
+  ]) {
+    const { model, client, stored, publish } = fixture();
+    client.data = vi.fn(async handle => mutate(stored.get(handle)!.status));
+    model.send(authority, { text: "", files: [file()] }); await flush();
+    expect(one(model)).toMatchObject({ phase: "failed", failure: { code: expect.stringMatching(/^(invalid_upload_response|upload_stalled)$/) } });
+    expect(vi.mocked(client.data).mock.calls.length).toBeLessThanOrEqual(8);
+    expect(publish).not.toHaveBeenCalled(); expect(one(model).files[0].attachment).toBeUndefined(); model.close();
+  }
+  for (const attack of ["beyond-request", "backwards"] as const) {
+    const { model, client, stored, publish } = fixture(); let calls = 0;
+    client.data = vi.fn(async (handle, _offset, body) => ({ ...stored.get(handle)!.status,
+      accepted_offset: attack === "beyond-request" ? body.size + 1 : ++calls === 1 ? 4 : 0 }));
+    model.send(authority, { text: "", files: [attack === "beyond-request" ? new File([new Uint8Array(1000000)], "large.bin") : file()] });
+    await flush();
+    expect(one(model)).toMatchObject({ phase: "failed", failure: { code: "invalid_upload_response" } });
+    expect(publish).not.toHaveBeenCalled(); model.close();
+  }
+  for (const attack of ["small-piece", "wrong-begin-size", "no-finish", "substituted-finish", "defer", "hung", "hung-data"] as const) {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { model, client, stored, publish } = fixture();
+    const begin = client.begin; const data = client.data;
+    if (attack === "small-piece" || attack === "wrong-begin-size") client.begin = async (...args) => ({ ...await begin(...args), ...(attack === "small-piece" ? { piece_size: 1 } : { declared_size: 9 }) });
+    if (attack === "no-finish") client.finish = vi.fn(async handle => stored.get(handle)!.status);
+    if (attack === "substituted-finish") {
+      const finish = client.finish;
+      client.finish = async (...args) => { const result = await finish(...args); return { ...result, attachment: { ...result.attachment!, id: `ma_${"f".repeat(32)}` } }; };
+    }
+    if (attack === "defer") client.begin = vi.fn(async () => { throw new UploadFailure("upload_deferred", true, Number.MAX_SAFE_INTEGER); });
+    if (attack === "hung") client.begin = vi.fn(() => new Promise<TransferStatus>(() => {}));
+    if (attack === "hung-data") client.data = vi.fn(() => new Promise<TransferStatus>(() => {}));
+    const id = model.send(authority, { text: "", files: [file()] }); await flush();
+    if (attack === "defer") { await vi.advanceTimersByTimeAsync(40000); await flush(); expect(client.begin).toHaveBeenCalledTimes(8); }
+    if (attack === "hung" || attack === "hung-data") { await vi.advanceTimersByTimeAsync(600000); await flush(); }
+    expect(one(model).phase).toBe("failed"); expect(publish).not.toHaveBeenCalled();
+    expect(one(model).files[0].attachment).toBeUndefined();
+    if (attack === "hung-data") { client.data = data; expect(model.retry(id)).toBe(true); await flush(); expect(one(model).phase).toBe("sent"); }
+    model.close(); vi.useRealTimers();
+  }
 });

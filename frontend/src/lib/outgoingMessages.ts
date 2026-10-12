@@ -1,4 +1,4 @@
-import { UploadFailure, type MessageAttachmentUploadClient, type TransferStatus } from "../api/messageAttachmentTransfers";
+import { UploadFailure, validateTransferProgress, type MessageAttachmentUploadClient, type TransferStatus } from "../api/messageAttachmentTransfers";
 import type { LobbyAttachmentRef } from "../api/messageAttachments";
 import { RoomSocketSayError, type RoomCommandAck, type RoomSayRequest } from "../roomSocketTypes";
 import type { RoomEvent } from "../types/generated/RoomEvent";
@@ -36,7 +36,7 @@ type Job = { abort: AbortController; done: Promise<void> };
 type FileState = {
   file: File; phase: OutgoingPhase; sentBytes: number; acceptedBytes: number;
   attachment?: LobbyAttachmentRef; failure?: OutgoingFailure;
-  transfer?: TransferStatus; operation: string; notBefore: number; job?: Job;
+  startedAt?: number; nonProgress?: number; transfer?: TransferStatus; operation: string; notBefore: number; job?: Job;
 };
 type MessageState = {
   id: string; authority: OutgoingAuthority; text: string; replyToEventId?: string;
@@ -97,7 +97,7 @@ export class OutgoingMessages {
       for (const file of message.files) {
         file.job?.abort.abort();
         if (file.attachment) continue;
-        file.transfer = undefined; file.operation = createSecureRequestId();
+        file.startedAt = undefined; file.nonProgress = 0; file.transfer = undefined; file.operation = createSecureRequestId();
         file.sentBytes = file.acceptedBytes = file.notBefore = 0;
         if (message.phase !== "failed") file.phase = "queued";
       }
@@ -169,6 +169,7 @@ export class OutgoingMessages {
     for (const file of message.files) {
       if (file.attachment || file.job) continue;
       file.phase = "queued"; file.failure = undefined; file.notBefore = 0;
+      file.startedAt = undefined; file.nonProgress = 0;
       if (!file.transfer) {
         if (cancelled) file.operation = createSecureRequestId();
         file.sentBytes = file.acceptedBytes = 0;
@@ -237,7 +238,7 @@ export class OutgoingMessages {
         const abort = new AbortController();
         this.active++; if (legacy) this.legacyActive++;
         // Start in a microtask so the job owns its cancellation before any network work.
-        const done = Promise.resolve().then(() => this.upload(message, file, uploads, authority, abort.signal)).finally(() => {
+        const done = Promise.resolve().then(() => this.upload(message, file, uploads, authority, abort)).finally(() => {
           file.job = undefined; this.active--; if (legacy) this.legacyActive--; this.changed();
         });
         file.job = { abort, done };
@@ -253,7 +254,24 @@ export class OutgoingMessages {
       if (!(error instanceof UploadFailure && ["upload_missing", "upload_already_finished"].includes(error.code))) throw error;
     }
   }
-  private async upload(message: MessageState, file: FileState, uploads: MessageAttachmentUploadClient, authority: OutgoingAuthority, signal: AbortSignal) {
+  private async upload(message: MessageState, file: FileState, uploads: MessageAttachmentUploadClient, authority: OutgoingAuthority, abort: AbortController) {
+    const signal = abort.signal;
+    file.startedAt ??= this.clock.now();
+    let deadline: unknown;
+    const stalled = () => new UploadFailure("upload_stalled", true);
+    const expiry = new Promise<never>((_, reject) => {
+      deadline = this.clock.setTimeout(() => { const error = stalled(); reject(error); abort.abort(error); },
+        Math.max(0, file.startedAt! + 10 * 60 * 1000 - this.clock.now()));
+    });
+    const response = <T>(pending: Promise<T>) => Promise.race([pending, expiry]);
+    const progress = (next: TransferStatus, lower: number, upper: number) => {
+      const checked = validateTransferProgress(next, transfer, file.file.size, lower, upper);
+      if (!valid()) return checked;
+      file.nonProgress = checked.accepted_offset > (transfer?.accepted_offset ?? 0) || checked.attachment ? 0 : (file.nonProgress ?? 0) + 1;
+      if (file.nonProgress >= 8 || this.clock.now() - file.startedAt! >= 10 * 60 * 1000) throw stalled();
+      file.transfer = checked;
+      return checked;
+    };
     let transfer = file.transfer;
     const valid = () => !signal.aborted && this.current(message) && sameAuthority(message.authority, authority);
     const update = (phase: OutgoingPhase) => {
@@ -266,11 +284,13 @@ export class OutgoingMessages {
       update("admitting");
       if (!uploads.transfer) {
         update("transferring"); file.sentBytes = file.file.size;
-        const attachment = await uploads.legacy(file.file, signal);
+        const attachment = await response(uploads.legacy(file.file, signal));
         if (valid()) { file.attachment = Object.freeze({ ...attachment }); file.acceptedBytes = file.file.size; update("ready"); }
         return;
       }
-      transfer = transfer ? await uploads.status(transfer.handle, signal) : await uploads.begin(file.file, file.operation, signal);
+      transfer = transfer
+        ? progress(await response(uploads.status(transfer.handle, signal)), transfer.accepted_offset, file.sentBytes)
+        : progress(await response(uploads.begin(file.file, file.operation, signal)), 0, 0);
       let recoveredOffset: number | undefined;
       while (valid()) {
         file.transfer = transfer; file.acceptedBytes = transfer.accepted_offset;
@@ -279,38 +299,48 @@ export class OutgoingMessages {
         const offset = transfer.accepted_offset;
         if (offset === file.file.size) {
           update("validating");
-          try { transfer = await uploads.finish(transfer.handle, signal); }
+          try { transfer = progress(await response(uploads.finish(transfer.handle, signal)), offset, offset); }
           catch (error) {
-            if (error instanceof UploadFailure && (!error.retryable || error.code === "upload_request_busy")) throw error;
-            transfer = await uploads.status(transfer.handle, signal);
+            if (error instanceof UploadFailure && (!error.retryable || ["upload_request_busy", "upload_stalled"].includes(error.code))) throw error;
+            transfer = progress(await response(uploads.status(transfer.handle, signal)), offset, offset);
             if (!transfer.attachment) throw error;
           }
         } else {
           update("transferring");
           const body = file.file.slice(offset, Math.min(file.file.size, offset + segmentBytes(file.file.size, transfer.piece_size)));
           file.sentBytes = Math.max(file.sentBytes, offset + body.size); this.changed();
-          try { transfer = await uploads.data(transfer.handle, offset, body, signal); }
+          try { transfer = progress(await response(uploads.data(transfer.handle, offset, body, signal)), offset, offset + body.size); }
           catch (error) {
-            if (recoveredOffset === offset || error instanceof UploadFailure && (!error.retryable || error.code === "upload_request_busy")) throw error;
+            if (recoveredOffset === offset || error instanceof UploadFailure && (!error.retryable || ["upload_request_busy", "upload_stalled"].includes(error.code))) throw error;
             recoveredOffset = offset;
-            transfer = await uploads.status(transfer.handle, signal);
+            transfer = progress(await response(uploads.status(transfer.handle, signal)), offset, offset + body.size);
           }
         }
       }
     } catch (error) {
-      if (!valid()) return;
+      if (!this.current(message) || !sameAuthority(message.authority, authority) || signal.aborted && signal.reason?.code !== "upload_stalled") return;
       if (error instanceof UploadFailure && ["upload_deferred", "upload_request_busy"].includes(error.code)) {
-        file.notBefore = this.clock.now() + (error.retryAfterMs ?? 250); update("deferred");
-      } else {
-        file.failure = failure(error); file.phase = "failed";
-        if (!message.failure || message.failure.retryable) message.failure = file.failure; message.phase = "failed"; this.changed();
+        file.nonProgress = (file.nonProgress ?? 0) + 1;
+        if (file.nonProgress < 8 && this.clock.now() - file.startedAt! < 10 * 60 * 1000) {
+          file.notBefore = this.clock.now() + (error.retryAfterMs ?? 250); update("deferred");
+          return;
+        }
+        error = stalled();
       }
+      file.failure = failure(error); file.phase = "failed";
+      if (!message.failure || message.failure.retryable) message.failure = file.failure; message.phase = "failed"; this.changed();
     } finally {
+      this.clock.clearTimeout(deadline);
       if (!valid() && transfer) {
         if (transfer.attachment && this.current(message) && sameAuthority(message.authority, authority) && message.phase === "cancelling") {
           file.attachment = Object.freeze({ ...transfer.attachment }); file.acceptedBytes = file.file.size; file.phase = "ready";
         }
-        try { await this.retire(transfer, uploads); }
+        try {
+          await this.retire(transfer, uploads);
+          if (signal.reason?.code === "upload_stalled" && this.current(message) && sameAuthority(message.authority, authority)) {
+            file.transfer = undefined; file.operation = createSecureRequestId();
+          }
+        }
         catch (error) {
           if (this.messages.get(message.id) === message && sameAuthority(message.authority, authority)) {
             message.failure = failure(error); this.changed();

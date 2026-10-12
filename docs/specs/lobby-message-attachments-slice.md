@@ -1404,3 +1404,20 @@ Negative preview receipts reserve capacity before decode, retain live failures a
 reclaim deleted originals under the existing 4,096 retained-asset bound. Formatting,
 diff checks and unchanged architecture gates pass; migrations and frontend UI are
 untouched. No packaged UI, real WAN or storage-busy fault injection is claimed.
+
+## Round-10 transfer response contract (High 1, 2026-10-13)
+
+The upload API response validator and host/person outgoing scheduler must pin the
+first successful begin's handle, attachment ID, declared size equal to the selected
+File size, and stable piece size between 16 and 64 KiB. Later data/status/finish
+responses retain those fields. Data and interrupted-data recovery may advance
+partially, only within the submitted byte range; no response may move backwards
+or skip unstaged bytes. Completion supplies the pinned attachment and exact size.
+Retry hints are capped at five seconds. Eight consecutive responses/defer attempts
+without byte or completion progress, or ten minutes including deferral/network
+waits, end with typed retryable upload_stalled; only the person starts another
+attempt. Invalid identity/range responses fail as invalid_upload_response, never
+publish substituted attachments. Existing cancellation and explicit retry remain.
+Entry points: createMessageAttachmentUploadClient, OutgoingMessages.upload/pump/retry.
+Acceptance: controlled hostile sequences fail boundedly without publication;
+interrupted multi-piece partial acceptance still resumes and publishes once.

@@ -462,23 +462,26 @@ type RoomSettingsUpdate = {
 
 export function fetchRoomSettings(
   roomId: string,
-  identity: RoomSettingsIdentity = {}
+  identity: RoomSettingsIdentity = {},
+  signal?: AbortSignal
 ): Promise<RoomSettings> {
   const request =
     identity.sessionToken
       ? requestSessionRoomPreferences(
           identity.sessionToken,
           identity.deviceToken,
-          `/api/room-settings${queryString({ room_id: roomId })}`
+          `/api/room-settings${queryString({ room_id: roomId })}`,
+          { signal }
         )
       : isDesktopWebview()
-      ? fetchDesktopRoomPreferences(roomId).then(async (response) => {
+      ? fetchDesktopRoomPreferences(roomId, { signal }).then(async (response) => {
           if (!response.ok) throw await responseError(response);
           return response.json() as Promise<unknown>;
         })
       : fetchJsonWithIdentity<unknown>(
           `/api/room-settings${queryString({ room_id: roomId })}`,
-          identity
+          identity,
+          signal
         );
   return request.then((payload) => parseRoomSettingsResponse(payload, roomId));
 }
