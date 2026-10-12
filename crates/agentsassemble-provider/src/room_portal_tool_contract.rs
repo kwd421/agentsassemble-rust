@@ -43,7 +43,9 @@ pub(crate) fn is_vote_tool(name: &str) -> bool {
 }
 
 pub(crate) fn is_available_provider_tool(name: &str, tabletop_tools: bool) -> bool {
-    (name == "set_message_pin" || PROVIDER_ROOM_TOOL_NAMES.contains(&name))
+    (name == "set_message_pin"
+        || agentsassemble_domain::DirectRoomAction::NAMES.contains(&name)
+        || PROVIDER_ROOM_TOOL_NAMES.contains(&name))
         && (tabletop_tools || !matches!(name, ROLL_DICE_TOOL | CHOOSE_RANDOM_TOOL))
 }
 

@@ -1,19 +1,19 @@
-use agentsassemble_persistence::{PersistenceError, ProviderMessageSearchAuthority, SqliteStore};
+use agentsassemble_persistence::{PersistenceError, ProviderMessageSearchAuthority};
 use agentsassemble_provider::{
     ProviderRoomToolCommand, ProviderRoomToolError, ProviderRoomToolRequest, ProviderRoomToolResult,
 };
-use tokio::sync::broadcast;
 
 use crate::provider_write_budget::ProviderWriteBudget;
 
 pub(crate) async fn handle_provider_room_tool(
-    store: &SqliteStore,
-    event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
+    owners: crate::room_runtime::RoomCommandOwners<'_>,
     room_id: &str,
     mut command: ProviderRoomToolCommand,
     write_budget: &mut ProviderWriteBudget,
     admission: &crate::principal_mutation_admission::PrincipalMutationAdmission,
 ) -> Option<crate::event_publication::PublicationAttempt> {
+    let store = owners.store;
+    let event_tx = owners.event_tx;
     if let Err(error) = command.begin_execution().await {
         command.complete(Err(error));
         return None;
@@ -27,12 +27,31 @@ pub(crate) async fn handle_provider_room_tool(
         execution_id: command.execution_id().into(),
     };
     match command.request().clone() {
-        ProviderRoomToolRequest::DelegatedPinAvailable => {
+        ProviderRoomToolRequest::DirectAction(request) => {
+            let execution = crate::room_runtime::delegated_direct::apply(
+                store,
+                owners.provider_adapter,
+                admission,
+                &delegated,
+                &request,
+            )
+            .await;
+            let publication =
+                crate::room_runtime::delegated_direct::publish(owners, &execution).await;
+            command.complete(
+                execution
+                    .reply
+                    .map(|outcome| ProviderRoomToolResult::DirectAction(outcome.result))
+                    .map_err(|failure| public_tool_error(failure.error)),
+            );
+            publication
+        }
+        ProviderRoomToolRequest::DelegatedActions => {
             command.complete(
                 store
-                    .delegated_pin_available(&delegated)
+                    .delegated_direct_actions(&delegated)
                     .await
-                    .map(ProviderRoomToolResult::DelegatedPinAvailable)
+                    .map(ProviderRoomToolResult::DelegatedActions)
                     .map_err(public_tool_error),
             );
             None

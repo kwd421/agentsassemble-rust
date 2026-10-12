@@ -260,6 +260,24 @@ impl RoomConnectorClient {
         .await
     }
 
+    /// Mutates through current director and owner authority with exact UUID replay.
+    /// # Errors
+    /// Preserves explicit authority rejections and transport uncertainty.
+    pub async fn execute_delegated_direct(
+        &self,
+        request: &agentsassemble_domain::DirectRoomAction,
+    ) -> Result<Value, ConnectorClientError> {
+        let session = self.session().await?;
+        self.request(
+            self.http
+                .post(self.endpoint("direct"))
+                .bearer_auth(&session.bearer)
+                .json(request)
+                .timeout(COMMAND_TIMEOUT),
+        )
+        .await
+    }
+
     /// Reads current public activity and open polls, including this participant's ballots.
     ///
     /// # Errors

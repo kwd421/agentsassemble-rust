@@ -5,6 +5,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct DelegatedDirectRequest {
+    pub turn_generation: u64,
+    pub execution_id: String,
+    pub request: Option<agentsassemble_domain::DirectRoomAction>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct DelegatedPinRequest {
     pub turn_generation: u64,
     pub execution_id: String,

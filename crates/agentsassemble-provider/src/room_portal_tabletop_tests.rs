@@ -48,7 +48,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
             .begin_execution()
             .await
             .expect("discovery authority");
-        command.complete(Ok(ProviderRoomToolResult::DelegatedPinAvailable(false)));
+        command.complete(Ok(ProviderRoomToolResult::DelegatedActions(Vec::new())));
     };
     tokio::join!(assert_tabletop_tool_catalog(client.as_ref()), discovery);
     let read = call_tool(client.as_ref(), "read_discussion", json!({})).await;

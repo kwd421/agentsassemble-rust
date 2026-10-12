@@ -11,6 +11,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use uuid::Uuid;
 
 enum Request {
+    Direct(crate::attendee::tool_wire::DelegatedDirectRequest),
     Pin(crate::attendee::tool_wire::DelegatedPinRequest),
     Read(AttendeeToolReadRequest),
     Random(AttendeeRandomRequest),
@@ -32,8 +33,18 @@ impl AttendeeToolCall {
             return Err(error);
         }
         let request = match command.request() {
-            ProviderRoomToolRequest::DelegatedPinAvailable
-            | ProviderRoomToolRequest::SetMessagePin(_) => {
+            ProviderRoomToolRequest::DelegatedActions
+            | ProviderRoomToolRequest::DirectAction(_) => {
+                Request::Direct(crate::attendee::tool_wire::DelegatedDirectRequest {
+                    turn_generation: command.turn_generation(),
+                    execution_id: command.execution_id().into(),
+                    request: match command.request() {
+                        ProviderRoomToolRequest::DirectAction(request) => Some(request.clone()),
+                        _ => None,
+                    },
+                })
+            }
+            ProviderRoomToolRequest::SetMessagePin(_) => {
                 Request::Pin(crate::attendee::tool_wire::DelegatedPinRequest {
                     turn_generation: command.turn_generation(),
                     execution_id: command.execution_id().into(),
@@ -93,16 +104,21 @@ impl AttendeeToolCall {
         connection: Uuid,
     ) -> Result<ProviderRoomToolResult, AttendeeClientError> {
         match &self.request {
+            Request::Direct(request) => {
+                let result = client
+                    .post("tool/direct", Some(connection), request)
+                    .await?;
+                if request.request.is_some() {
+                    Ok(ProviderRoomToolResult::DirectAction(result))
+                } else {
+                    serde_json::from_value(result)
+                        .map(ProviderRoomToolResult::DelegatedActions)
+                        .map_err(|_| invalid_response())
+                }
+            }
             Request::Pin(request) => {
                 let result = client.post("tool/pin", Some(connection), request).await?;
-                if request.request.is_some() {
-                    Ok(ProviderRoomToolResult::MessagePin(result))
-                } else {
-                    result
-                        .as_bool()
-                        .map(ProviderRoomToolResult::DelegatedPinAvailable)
-                        .ok_or_else(invalid_response)
-                }
+                Ok(ProviderRoomToolResult::MessagePin(result))
             }
             Request::Random(request) => client
                 .random(connection, request)

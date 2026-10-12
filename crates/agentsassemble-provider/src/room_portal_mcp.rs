@@ -69,11 +69,31 @@ impl RoomPortalMcp {
                 Ok(crate::room_portal_render::message_context(&context))
             }
             ProviderRoomToolResult::Random(_)
-            | ProviderRoomToolResult::DelegatedPinAvailable(_)
-            | ProviderRoomToolResult::MessagePin(_) => {
+            | ProviderRoomToolResult::DelegatedActions(_)
+            | ProviderRoomToolResult::MessagePin(_)
+            | ProviderRoomToolResult::DirectAction(_) => {
                 Err("The room tool owner returned a mismatched result.".to_owned())
             }
         }
+    }
+
+    async fn execute_direct_action(
+        &self,
+        request: agentsassemble_domain::DirectRoomAction,
+    ) -> Result<String, String> {
+        let (authority, reservation, ingress) = reserve_room_tool(&self.state)?;
+        let result = ingress
+            .submit(
+                authority,
+                ProviderRoomToolRequest::DirectAction(request),
+                reservation,
+            )
+            .await
+            .map_err(|error| format!("{}: {}", error.code, error.message))?;
+        let ProviderRoomToolResult::DirectAction(result) = result else {
+            return Err("Unexpected delegated action result.".into());
+        };
+        serde_json::to_string(&result).map_err(|_| "Action result encoding failed.".into())
     }
 
     fn stage_vote(&self, payload: &serde_json::Value) -> Result<String, String> {
@@ -108,6 +128,45 @@ fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservatio
 
 #[tool_router]
 impl RoomPortalMcp {
+    #[tool(
+        description = "Create a text channel on behalf of your owner. Requires current director role and owner authority."
+    )]
+    async fn create_text_channel(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::CreateTextChannel>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(agentsassemble_domain::DirectRoomAction::CreateTextChannel(
+            request,
+        ))
+        .await
+    }
+
+    #[tool(
+        description = "Rename a text channel at the expected settings revision on behalf of your owner. Requires current director role and owner authority."
+    )]
+    async fn rename_text_channel(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::RenameTextChannel>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(agentsassemble_domain::DirectRoomAction::RenameTextChannel(
+            request,
+        ))
+        .await
+    }
+
+    #[tool(
+        description = "Mute or unmute a participant on behalf of your owner. Requires current director role and owner authority."
+    )]
+    async fn set_participant_mute(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::SetParticipantMute>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(agentsassemble_domain::DirectRoomAction::SetParticipantMute(
+            request,
+        ))
+        .await
+    }
+
     #[tool(
         description = "Pin or unpin a room message on behalf of your owner. Only a current director AI whose owner can currently pin may use this tool; no operator rights are granted."
     )]
@@ -325,12 +384,12 @@ impl ServerHandler for RoomPortalMcp {
                 match ingress
                     .submit(
                         authority,
-                        ProviderRoomToolRequest::DelegatedPinAvailable,
+                        ProviderRoomToolRequest::DelegatedActions,
                         reservation,
                     )
                     .await
                 {
-                    Ok(ProviderRoomToolResult::DelegatedPinAvailable(value)) => value,
+                    Ok(ProviderRoomToolResult::DelegatedActions(value)) => value,
                     Ok(_) => {
                         return Err(rmcp::ErrorData::internal_error(
                             "Invalid delegation discovery result",
@@ -340,13 +399,18 @@ impl ServerHandler for RoomPortalMcp {
                     Err(error) => return Err(rmcp::ErrorData::internal_error(error.message, None)),
                 }
             }
-            Err(_) => false,
+            Err(_) => Vec::new(),
         };
         let tools = self
             .tool_router
             .list_all()
             .into_iter()
-            .filter(|tool| tool.name != "set_message_pin" || available)
+            .filter(|tool| {
+                let name = tool.name.as_ref();
+                !(name == "set_message_pin"
+                    || agentsassemble_domain::DirectRoomAction::NAMES.contains(&name))
+                    || available.iter().any(|action| action == name)
+            })
             .collect();
         Ok(rmcp::model::ListToolsResult::with_all_items(tools)
             .with_ttl_ms(0)

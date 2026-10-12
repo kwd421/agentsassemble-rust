@@ -12,7 +12,7 @@ async fn packaged_connector_cli_exposes_current_conversation_tools()
     let server = human_invite::start(store.clone()).await;
     let (mut child, client) = start_cli().await?;
     let tools = client.list_all_tools().await?;
-    assert_eq!(tools.len(), 18);
+    assert_eq!(tools.len(), 21);
     assert!(tools.iter().any(|tool| tool.name == "room_wait_next"));
     let mut links = Vec::new();
     for _ in 0..2 {

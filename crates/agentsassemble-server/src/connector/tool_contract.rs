@@ -185,3 +185,12 @@ pub(super) struct AttachmentUpload {
     #[serde(default)]
     pub(super) connection_id: String,
 }
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Direct<T> {
+    #[serde(default)]
+    pub(super) connection_id: String,
+    #[serde(flatten)]
+    pub(super) request: T,
+}

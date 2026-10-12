@@ -96,6 +96,55 @@ pub(super) async fn pin(
     Ok(Json(value))
 }
 
+pub(super) async fn direct(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<Value>, AttendeeHttpError> {
+    let fingerprint = purpose_bearer_fingerprint(request.headers(), ATTENDEE_SESSION_PREFIX)
+        .ok_or_else(|| {
+            AttendeeHttpError::rejected(StatusCode::UNAUTHORIZED, "attendee_credential_required")
+        })?;
+    let connection_id = connection_id(request.headers())?;
+    let body: crate::attendee::tool_wire::DelegatedDirectRequest =
+        decode_json_body(request, 16384).await?;
+    let session = match state
+        .store
+        .authorize_attendee_session(&fingerprint, chrono::Utc::now())
+        .await
+    {
+        Ok(session) => session,
+        Err(
+            agentsassemble_persistence::PersistenceError::CommandRejected { .. }
+            | agentsassemble_persistence::PersistenceError::ParticipantMissing
+            | agentsassemble_persistence::PersistenceError::RoomMissing,
+        ) if body.request.is_none() => return Ok(Json(json!([]))),
+        Err(error) => return Err(AttendeeHttpError::from_persistence(error)),
+    };
+    let authority = agentsassemble_persistence::DelegateRoomAuthority::Attendee {
+        session,
+        connection_id,
+        turn_generation: body.turn_generation,
+        execution_id: body.execution_id,
+    };
+    let value = if let Some(request) = body.request {
+        state
+            .rooms
+            .execute_delegated_direct(&authority, &request)
+            .await
+            .map_err(AttendeeHttpError::from_persistence)?
+            .result
+    } else {
+        json!(
+            state
+                .store
+                .delegated_direct_actions(&authority)
+                .await
+                .map_err(AttendeeHttpError::from_persistence)?
+        )
+    };
+    Ok(Json(value))
+}
+
 pub(super) async fn random(
     State(state): State<AppState>,
     request: Request,

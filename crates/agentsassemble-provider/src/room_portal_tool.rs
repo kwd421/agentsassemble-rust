@@ -20,8 +20,9 @@ pub struct ProviderRoomToolIngress {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolRequest {
-    DelegatedPinAvailable,
+    DelegatedActions,
     SetMessagePin(agentsassemble_domain::SetMessagePin),
+    DirectAction(agentsassemble_domain::DirectRoomAction),
     ReadRoomStatus { before_seq: i64 },
     Random(RoomRandomRequest),
     SearchMessages { query: String, cursor: String },
@@ -30,8 +31,9 @@ pub enum ProviderRoomToolRequest {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolResult {
-    DelegatedPinAvailable(bool),
+    DelegatedActions(Vec<String>),
     MessagePin(serde_json::Value),
+    DirectAction(serde_json::Value),
     ConversationStatus(agentsassemble_domain::ConversationStatus),
     Random(RoomRandomResult),
     SearchMessages(RoomMessageSearchPage),
@@ -152,8 +154,7 @@ impl ProviderRoomToolCommand {
                 })
         });
         self.reservation.resolve(
-            result.is_ok()
-                && !matches!(self.request, ProviderRoomToolRequest::DelegatedPinAvailable),
+            result.is_ok() && !matches!(self.request, ProviderRoomToolRequest::DelegatedActions),
         );
         self.resolved = true;
         if let Some(reply) = self.reply.take() {
@@ -181,8 +182,11 @@ fn response_matches(request: &ProviderRoomToolRequest, result: &ProviderRoomTool
     matches!(
         (request, result),
         (
-            ProviderRoomToolRequest::DelegatedPinAvailable,
-            ProviderRoomToolResult::DelegatedPinAvailable(_)
+            ProviderRoomToolRequest::DirectAction(_),
+            ProviderRoomToolResult::DirectAction(_)
+        ) | (
+            ProviderRoomToolRequest::DelegatedActions,
+            ProviderRoomToolResult::DelegatedActions(_)
         ) | (
             ProviderRoomToolRequest::SetMessagePin(_),
             ProviderRoomToolResult::MessagePin(_)

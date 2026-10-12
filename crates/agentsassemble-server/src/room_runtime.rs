@@ -35,6 +35,9 @@ use crate::{
 
 use crate::room_command_execution::CommandExecution;
 
+#[path = "delegated_direct_runtime.rs"]
+pub(crate) mod delegated_direct;
+
 #[path = "delegated_pin_runtime.rs"]
 pub(crate) mod delegated_pin;
 
@@ -97,14 +100,14 @@ struct RoomTaskContext {
     active_rooms: Arc<Mutex<HashMap<String, RoomHandle>>>,
 }
 
-struct RoomCommandOwners<'a> {
-    store: &'a SqliteStore,
-    provider_catalog: &'a ProviderCatalogService,
-    provider_adapter: &'a ProviderAdapter,
-    event_tx: &'a broadcast::Sender<RoomEvent>,
-    turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
-    ingress: &'a ProviderTurnIngress,
-    lifecycle_commands: &'a LifecycleCommandTracker,
+pub(crate) struct RoomCommandOwners<'a> {
+    pub(crate) store: &'a SqliteStore,
+    pub(crate) provider_catalog: &'a ProviderCatalogService,
+    pub(crate) provider_adapter: &'a ProviderAdapter,
+    pub(crate) event_tx: &'a broadcast::Sender<RoomEvent>,
+    pub(crate) turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
+    pub(crate) ingress: &'a ProviderTurnIngress,
+    pub(crate) lifecycle_commands: &'a LifecycleCommandTracker,
 }
 
 #[derive(Clone)]
@@ -645,8 +648,15 @@ async fn handle_room_input(
         }
         RoomInput::Tool(command) => {
             return crate::provider_room_tool_runtime::handle_provider_room_tool(
-                &context.store,
-                &context.event_tx,
+                RoomCommandOwners {
+                    store: &context.store,
+                    provider_catalog: &context.provider_catalog,
+                    provider_adapter: &context.provider_adapter,
+                    event_tx: &context.event_tx,
+                    turn_tasks,
+                    ingress: &context.ingress,
+                    lifecycle_commands: &context.lifecycle_commands,
+                },
                 &context.room_id,
                 command,
                 provider_write_budget,
@@ -699,6 +709,7 @@ async fn handle_room_mutation(
     mutation: RoomMutation,
 ) -> Option<PublicationAttempt> {
     match mutation {
+        RoomMutation::Delegated(command) => delegated_direct::execute(owners, command).await,
         RoomMutation::Command(command) => {
             Box::pin(handle_room_command(owners, session_revocations, command)).await
         }
@@ -850,6 +861,7 @@ enum RoomInput {
 }
 
 enum RoomMutation {
+    Delegated(delegated_direct::DelegatedCommand),
     Command(RoomCommand),
     HumanAdmission(HumanAdmissionCommand),
     ConnectorAdmission(connector::ConnectorAdmissionCommand),

@@ -72,6 +72,27 @@ async fn delegated_admission_shares_owner_and_delegate_windows_and_replay_is_fre
         request_id: Uuid::new_v4().to_string(),
     };
     let first = apply(&store, &admission, &delegates[0], &request).await?;
+    let direct = agentsassemble_domain::DirectRoomAction::CreateTextChannel(
+        agentsassemble_domain::CreateTextChannel {
+            request_id: Uuid::new_v4().to_string(),
+            name: "Planning".into(),
+        },
+    );
+    let provider = agentsassemble_provider::ProviderAdapter::new();
+    let created = super::super::delegated_direct::apply(
+        &store,
+        &provider,
+        &admission,
+        &delegates[0],
+        &direct,
+    )
+    .await
+    .reply
+    .map_err(|failure| failure.error)?;
+    assert_eq!(
+        created.event.extra["on_behalf_of_participant_id"],
+        LOCAL_OPERATOR_PARTICIPANT_ID
+    );
     // Ordinary human admission uses this same principal window. Exhaust it by
     // debiting distinct normal requests; the next AI cannot gain a separate allowance.
     for index in 0..10_000 {
@@ -89,6 +110,30 @@ async fn delegated_admission_shares_owner_and_delegate_windows_and_replay_is_fre
     let retry = apply(&store, &admission, &delegates[0], &request).await?;
     assert!(retry.deduplicated);
     assert_eq!(retry.result, first.result);
+    let replay = super::super::delegated_direct::apply(
+        &store,
+        &provider,
+        &admission,
+        &delegates[0],
+        &direct,
+    )
+    .await
+    .reply
+    .map_err(|failure| failure.error)?;
+    assert!(replay.deduplicated);
+    assert_eq!(replay.result, created.result);
+    for delegate in &delegates {
+        let next = agentsassemble_domain::DirectRoomAction::CreateTextChannel(
+            agentsassemble_domain::CreateTextChannel {
+                request_id: Uuid::new_v4().to_string(),
+                name: "Denied".into(),
+            },
+        );
+        assert!(matches!(super::super::delegated_direct::apply(
+            &store, &provider, &admission, delegate, &next,
+        ).await.reply.map_err(|failure| failure.error),
+            Err(PersistenceError::CommandRejected { code, .. }) if code == "write_budget_exceeded"));
+    }
     request.request_id = Uuid::new_v4().to_string();
     for delegate in &delegates {
         assert!(

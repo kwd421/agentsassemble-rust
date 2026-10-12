@@ -12,7 +12,7 @@ async fn app_owned_mcp_uses_current_ingress_and_original_invite_authority()
     let endpoint = format!("{}/mcp", server.base_url);
     let first = ().serve(StreamableHttpClientTransport::from_uri(endpoint.clone())).await?;
     let second = ().serve(StreamableHttpClientTransport::from_uri(endpoint.clone())).await?;
-    assert_eq!(first.list_all_tools().await?.len(), 18);
+    assert_eq!(first.list_all_tools().await?.len(), 21);
     let http = reqwest::Client::new();
     let init = json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"ingress-proof","version":"1"}}});
     for (origin, proxy, expected) in [

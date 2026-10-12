@@ -2,6 +2,13 @@
 
 ## Director delegation: remaining direct actions (slice 2)
 
+Continuation acceptance: finish lifecycle start/stop, all three transport surfaces,
+fresh action-specific discovery, shared owner/delegate budgets, and revocation/replay
+regressions. Channel/mute persistence landed in `3a9bf65a`; this is not yet a
+complete reachable flow. Runtime execution must retain mute interruption and ordered
+turn progression through the existing room actor. Lifecycle admission, pre-effect
+authorization and durable completion must retain exact delegated provenance.
+
 Required behavior: extend the existing pin delegation owner with
 `create_text_channel(name, request_id)`,
 `rename_text_channel(channel_id, name, expected_settings_revision, request_id)`,

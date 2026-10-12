@@ -98,7 +98,7 @@ async fn search_over_huge_messages_reaches_api_as_previews_instead_of_failing() 
             .begin_execution()
             .await
             .expect("discovery authority");
-        discovery.complete(Ok(ProviderRoomToolResult::DelegatedPinAvailable(false)));
+        discovery.complete(Ok(ProviderRoomToolResult::DelegatedActions(Vec::new())));
         let mut command = commands
             .recv()
             .await
@@ -186,7 +186,9 @@ async fn eligible_pin_is_discovered_after_api_launch_and_result_reaches_next_rou
             .begin_execution()
             .await
             .expect("discovery authority");
-        discovery.complete(Ok(ProviderRoomToolResult::DelegatedPinAvailable(true)));
+        discovery.complete(Ok(ProviderRoomToolResult::DelegatedActions(vec![
+            "set_message_pin".into(),
+        ])));
         let mut pin = commands.recv().await.expect("pin");
         pin.begin_execution().await.expect("pin authority");
         pin.complete(Ok(ProviderRoomToolResult::MessagePin(

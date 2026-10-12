@@ -252,16 +252,12 @@ async fn enrich(
     value["role"] = json!(participant.role);
     let allowed = state
         .store
-        .delegated_pin_available(
+        .delegated_direct_actions(
             &agentsassemble_persistence::DelegateRoomAuthority::Connector(authorization.clone()),
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    value["delegated_actions"] = if allowed {
-        json!(["set_message_pin"])
-    } else {
-        json!([])
-    };
+    value["delegated_actions"] = json!(allowed);
     let mut metadata = state
         .store
         .connector_mentions(authorization, read_ids, acknowledge_page)

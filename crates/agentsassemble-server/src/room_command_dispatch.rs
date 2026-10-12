@@ -233,6 +233,14 @@ async fn execute_participant_mute(
         Ok(mutation) => mutation,
         Err(error) => return CommandExecution::transactional_failure(error),
     };
+    finish_participant_mute(store, provider_adapter, mutation).await
+}
+
+pub(crate) async fn finish_participant_mute(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    mutation: agentsassemble_persistence::ParticipantMuteMutation,
+) -> CommandExecution {
     let effect = mutation.host_interrupt_effect.clone();
     let mut execution = CommandExecution::participant_mute(mutation);
     if let Some(effect) = effect {
@@ -246,7 +254,10 @@ async fn execute_participant_mute(
         .await
         {
             Ok(commit) => execution.extend_turn_commit(commit),
-            Err(error) => log_interrupt_error(&error, command, &effect),
+            Err(error) => tracing::error!(
+                code = crate::room_command_execution::persistence_error_code(&error),
+                "participant mute interruption remains pending reconciliation"
+            ),
         }
     }
     execution
@@ -364,19 +375,6 @@ async fn execute_participant_leave(store: &SqliteStore, command: &RoomCommand) -
         Ok(mutation) => CommandExecution::participant_leave(mutation),
         Err(error) => CommandExecution::transactional_failure(error),
     }
-}
-
-fn log_interrupt_error(
-    error: &PersistenceError,
-    command: &RoomCommand,
-    effect: &ProviderTurnInterruptEffect,
-) {
-    tracing::error!(
-        code = persistence_error_code(error),
-        room_id = command.principal.room_id,
-        session_id = effect.session_id,
-        "participant mute committed; exact provider interrupt remains quarantined"
-    );
 }
 
 fn log_agent_interrupt_error(

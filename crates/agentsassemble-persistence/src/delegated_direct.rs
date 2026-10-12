@@ -25,6 +25,7 @@ impl DelegatedRoomActionAuthority {
     }
     fn allows(&self, action: &str) -> bool {
         match action {
+            "set_message_pin" => true,
             "create_text_channel" | "rename_text_channel" => self.owner.capabilities.room_manage,
             "set_participant_mute" => self.owner.capabilities.participant_mute,
             _ => false,
@@ -50,15 +51,11 @@ impl SqliteStore {
             ) => None,
             Err(error) => return Err(error),
         };
-        let actions = [
-            "create_text_channel",
-            "rename_text_channel",
-            "set_participant_mute",
-        ]
-        .into_iter()
-        .filter(|action| proof.as_ref().is_some_and(|proof| proof.allows(action)))
-        .map(str::to_owned)
-        .collect();
+        let actions = std::iter::once("set_message_pin")
+            .chain(DirectRoomAction::NAMES.iter().copied())
+            .filter(|action| proof.as_ref().is_some_and(|proof| proof.allows(action)))
+            .map(str::to_owned)
+            .collect();
         tx.commit().await?;
         Ok(actions)
     }

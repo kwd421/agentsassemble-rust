@@ -25,6 +25,11 @@ pub enum DirectRoomAction {
     SetParticipantMute(SetParticipantMute),
 }
 impl DirectRoomAction {
+    pub const NAMES: &[&str] = &[
+        "create_text_channel",
+        "rename_text_channel",
+        "set_participant_mute",
+    ];
     #[must_use]
     pub fn request_id(&self) -> &str {
         match self {

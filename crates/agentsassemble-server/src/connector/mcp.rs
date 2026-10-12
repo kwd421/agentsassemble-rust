@@ -98,6 +98,63 @@ fn encode(value: &Value) -> Result<String, String> {
 #[tool_router]
 impl ConnectorMcp {
     #[tool(
+        description = "Create a text channel on behalf of your owner. Requires current director role and owner authority; check room_status for current delegated actions."
+    )]
+    async fn create_text_channel(
+        &self,
+        Parameters(input): Parameters<contract::Direct<agentsassemble_domain::CreateTextChannel>>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .execute_delegated_direct(
+                    &agentsassemble_domain::DirectRoomAction::CreateTextChannel(input.request),
+                )
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
+        description = "Rename a text channel at the expected settings revision on behalf of your owner. Requires current director role and owner authority; check room_status for current delegated actions."
+    )]
+    async fn rename_text_channel(
+        &self,
+        Parameters(input): Parameters<contract::Direct<agentsassemble_domain::RenameTextChannel>>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .execute_delegated_direct(
+                    &agentsassemble_domain::DirectRoomAction::RenameTextChannel(input.request),
+                )
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
+        description = "Mute or unmute a participant on behalf of your owner. Requires current director role and owner authority; check room_status for current delegated actions."
+    )]
+    async fn set_participant_mute(
+        &self,
+        Parameters(input): Parameters<contract::Direct<agentsassemble_domain::SetParticipantMute>>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .execute_delegated_direct(
+                    &agentsassemble_domain::DirectRoomAction::SetParticipantMute(input.request),
+                )
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
         description = "Pin or unpin a message on behalf of your owner. Works only for an AI currently holding the 진행 (director) role and only within its owner's current authority. Check room_status for current delegated actions."
     )]
     async fn set_message_pin(

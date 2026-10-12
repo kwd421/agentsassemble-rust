@@ -46,7 +46,7 @@ async fn mute(store: &SqliteStore, id: &str, muted: bool) -> TestResult {
     Ok(())
 }
 
-async fn call(client: &Client, name: &'static str, args: Value) -> Value {
+pub(super) async fn call(client: &Client, name: &'static str, args: Value) -> Value {
     let result = room_portal_fixture::call_tool(client, name, args).await;
     assert_ne!(result.is_error, Some(true), "{result:?}");
     serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap()
@@ -90,8 +90,17 @@ pub(super) async fn verify(
     if let Some(id) = &connection {
         let status = call(client, "room_status", json!({"connection_id":id})).await;
         assert_eq!(status["role"], "director");
-        assert_eq!(status["delegated_actions"], json!(["set_message_pin"]));
+        assert_eq!(
+            status["delegated_actions"],
+            json!([
+                "set_message_pin",
+                "create_text_channel",
+                "rename_text_channel",
+                "set_participant_mute"
+            ])
+        );
     }
+    verify_direct(client, store, delegate, connection.as_ref()).await?;
     let (first, retry) = tokio::join!(
         call(client, "set_message_pin", args.clone()),
         call(client, "set_message_pin", args.clone())
@@ -242,12 +251,112 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
     .await?;
     let rejoined = call(&client, "room_join", join).await;
     assert_eq!(rejoined["role"], "director");
-    assert_eq!(rejoined["delegated_actions"], json!(["set_message_pin"]));
+    assert_eq!(
+        rejoined["delegated_actions"],
+        json!([
+            "set_message_pin",
+            "create_text_channel",
+            "rename_text_channel",
+            "set_participant_mute"
+        ])
+    );
     store
         .revoke_operator_pairing(&manager, pairing.pairing_id)
         .await?;
     rejected(&client, json!({"connection_id":joined["connection_id"],"channel_id":"lobby","message_id":message,"pinned":true,"request_id":Uuid::new_v4()}), "owner_authority_unavailable").await;
     client.cancel().await?;
     server.stop().await;
+    Ok(())
+}
+
+async fn verify_direct(
+    client: &Client,
+    store: &SqliteStore,
+    delegate: &str,
+    connection: Option<&Value>,
+) -> TestResult {
+    let args = |mut value: Value| {
+        value["request_id"] = json!(Uuid::new_v4());
+        if let Some(connection) = connection {
+            value["connection_id"] = connection.clone();
+        }
+        value
+    };
+    let before = store.snapshot("general", 0, 200).await?.settings;
+    let create = args(json!({"name":"Planning"}));
+    let first = call(client, "create_text_channel", create.clone()).await;
+    assert_eq!(
+        first,
+        call(client, "create_text_channel", create.clone()).await
+    );
+    assert_eq!(first["status"], "succeeded");
+    let after = store.snapshot("general", 0, 200).await?.settings;
+    let revision = agentsassemble_domain::public_settings(&after)?.settings_revision;
+    let rename = args(
+        json!({"channel_id":first["target_id"],"name":"Renamed","expected_settings_revision":revision}),
+    );
+    let renamed = call(client, "rename_text_channel", rename.clone()).await;
+    assert_eq!(
+        renamed,
+        call(client, "rename_text_channel", rename.clone()).await
+    );
+    let mut changed = create;
+    changed["name"] = json!("Conflict");
+    let result = room_portal_fixture::call_tool(client, "create_text_channel", changed).await;
+    assert_eq!(result.is_error, Some(true));
+    assert!(
+        result.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .contains("command_conflict")
+    );
+    let muted = args(json!({"participant_id":LOCAL_OPERATOR_PARTICIPANT_ID,"muted":true}));
+    let receipt = call(client, "set_participant_mute", muted).await;
+    assert!(
+        store
+            .participant("general", LOCAL_OPERATOR_PARTICIPANT_ID)
+            .await?
+            .muted
+    );
+    for (name, request) in [
+        ("create_text_channel", args(json!({"name":"Denied"}))),
+        ("rename_text_channel", rename),
+        (
+            "set_participant_mute",
+            args(json!({"participant_id":LOCAL_OPERATOR_PARTICIPANT_ID,"muted":false})),
+        ),
+    ] {
+        let result = room_portal_fixture::call_tool(client, name, request).await;
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            result.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("owner_muted"),
+            "{result:?}"
+        );
+    }
+    mute(store, LOCAL_OPERATOR_PARTICIPANT_ID, false).await?;
+    let unmuted = call(
+        client,
+        "set_participant_mute",
+        args(json!({"participant_id":LOCAL_OPERATOR_PARTICIPANT_ID,"muted":false})),
+    )
+    .await;
+    for result in [first, renamed, receipt, unmuted] {
+        assert_eq!(result["event"]["actor_participant_id"], delegate);
+        assert_eq!(
+            result["event"]["on_behalf_of_participant_id"],
+            LOCAL_OPERATOR_PARTICIPANT_ID
+        );
+    }
+    let mut after = serde_json::to_value(store.snapshot("general", 0, 200).await?.settings)?;
+    let before = serde_json::to_value(before)?;
+    for field in ["channels"] {
+        after[field] = before[field].clone();
+    }
+    assert_eq!(before, after);
     Ok(())
 }
