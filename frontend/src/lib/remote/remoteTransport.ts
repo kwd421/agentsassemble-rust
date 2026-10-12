@@ -21,7 +21,7 @@ type HttpWait = {
   controller?: ReadableStreamDefaultController<Uint8Array<ArrayBuffer>>;
   chunks: Uint8Array<ArrayBuffer>[]; end: boolean; pulling: boolean;
   removeAbort: () => void; responded: boolean; releaseFrame?: () => void;
-  consumed?: () => void; stopUpload?: () => void;
+  uploadCredit: boolean; consumed?: () => void; stopUpload?: () => void;
 };
 
 function exact(frame: Record<string, unknown>, keys: string[]) {
@@ -36,6 +36,7 @@ export class RemoteTransport {
   private closed = false;
   private nextId = 1;
   private sending = Promise.resolve();
+  private uploadCredit = false;
   private uploading: Promise<unknown> = Promise.resolve();
   private receiving = Promise.resolve();
   private sendBytes = 0;
@@ -129,9 +130,9 @@ export class RemoteTransport {
     return next;
   }
   private sendBody(id: number, data: string, end: boolean): Promise<boolean> {
-    // One HTTP chunk across the channel until its receiver consumes it. Control
+    // One negotiated HTTP chunk across the channel until consumed. Control
     // frames and socket traffic retain their independent send path.
-    if (end) {
+    if (end || !this.http.get(id)?.uploadCredit) {
       const wait = this.http.get(id);
       if (!wait || wait.responded) return Promise.resolve(false);
       return this.send({ op: "data", id, data, end }).then(() => true);
@@ -162,14 +163,15 @@ export class RemoteTransport {
     const request = new Request(new URL(path, this.hello.origin), { ...init, body: undefined, headers: body.headers, credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" });
     if (init.body != null && ["GET", "HEAD"].includes(request.method)) throw new TypeError("GET/HEAD requests cannot have a body.");
     const id = this.allocate();
+    const uploadCredit = this.uploadCredit;
     const result = new Promise<Response>((resolve, reject) => {
       const abort = () => { this.cancelHttp(id, init.signal?.reason instanceof Error ? init.signal.reason : connectionEnded()); };
       init.signal?.addEventListener("abort", abort, { once: true });
-      this.http.set(id, { resolve, reject, chunks: [], end: false, pulling: false, responded: false,
+      this.http.set(id, { uploadCredit, resolve, reject, chunks: [], end: false, pulling: false, responded: false,
         removeAbort: () => init.signal?.removeEventListener("abort", abort) });
     });
     void (async () => {
-      await this.send({ op: "request", id, method: request.method, path, headers: [...request.headers] });
+      await this.send({ op: "request", id, method: request.method, path, headers: [...request.headers], ...(uploadCredit ? { upload_credit: true } : {}) });
       const reader = body.body?.getReader();
       const wait = this.http.get(id);
       if (wait) wait.stopUpload = () => { void reader?.cancel().catch(() => {}); };
@@ -225,6 +227,7 @@ export class RemoteTransport {
       exact(frame, ["op", "id", "status", "headers"]);
       if (wait.responded || !Number.isInteger(frame.status) || Number(frame.status) < 200 || Number(frame.status) > 599 || !Array.isArray(frame.headers)) throw connectionEnded();
       const headers = new Headers(frame.headers as [string, string][]); wait.responded = true;
+      if (headers.get("x-agentsassemble-upload-credit") === "1") this.uploadCredit = true;
       wait.stopUpload?.(); wait.consumed?.(); wait.consumed = undefined;
       const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
         start: controller => { wait.controller = controller; },

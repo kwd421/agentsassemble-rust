@@ -16,7 +16,9 @@ async function post(path, body, extra={}) {
   const value = await response.json();
   assert.equal(response.status, 200, `${path}: ${JSON.stringify(value)}`); return value;
 }
-const denied = await remote.fetch('/api/runtime/version'); assert.equal(denied.status, 403); await denied.text();
+const denied = await remote.fetch('/api/runtime/version'); assert.equal(denied.status, 403);
+// Advertisement stays inside headers; the transport still checks exact frame keys.
+assert.equal(denied.headers.get('x-agentsassemble-upload-credit'), '1'); await denied.text();
 const owner = await post('/api/central-owner/session', { grant_token:config.grant, generation:config.target.generation,
   device:{device_name:'Encrypted test',browser:'Node WebCrypto',os:'test'} });
 const root = {session_token:owner.session_token,generation:config.target.generation};

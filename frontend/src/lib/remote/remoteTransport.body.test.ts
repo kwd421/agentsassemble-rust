@@ -18,13 +18,14 @@ class Peer {
   static latest: Peer;
   static autoConsume = true;
   static echoBody = true;
+  static advertise = true;
   pendingCredits: number[] = [];
   receivedChunks = 0;
   onData?: () => void;
   readyState = 1; bufferedAmount = 0;
   onopen?: () => void; onmessage?: (event: { data: string | ArrayBuffer }) => void;
   onerror?: () => void; onclose?: () => void;
-  requests = new Map<number, { headers: [string, string][]; chunks: Uint8Array[] }>();
+  requests = new Map<number, { headers: [string, string][]; uploadCredit: boolean; chunks: Uint8Array[] }>();
   constructor() { Peer.latest = this; queueMicrotask(() => this.onopen?.()); }
   consume() { const id = this.pendingCredits.shift(); if (id !== undefined) this.emit({ op: "consumed", id }); }
   emit(frame: object) { queueMicrotask(() => this.onmessage?.({ data: encoder.encode(JSON.stringify(frame)).buffer })); }
@@ -32,7 +33,11 @@ class Peer {
     if (typeof record === "string") { queueMicrotask(() => this.onmessage?.({ data: "{}" })); return; }
     const frame = JSON.parse(decoder.decode(record));
     if (frame.op === "confirm") this.emit({ op: "ready" });
-    if (frame.op === "request") this.requests.set(frame.id, { headers: frame.headers, chunks: [] });
+    if (frame.op === "request") {
+      // Pre-ebec3b14 host's deny_unknown_fields request shape.
+      if (!Peer.advertise) expect(Object.keys(frame).sort()).toEqual(["headers", "id", "method", "op", "path"]);
+      this.requests.set(frame.id, { headers: frame.headers, uploadCredit: frame.upload_credit === true, chunks: [] });
+    }
     if (frame.op !== "data") return;
     const request = this.requests.get(frame.id)!;
     if (frame.data) {
@@ -41,14 +46,14 @@ class Peer {
       request.chunks.push(bytes);
     }
     if (!frame.end) {
-      this.receivedChunks++; this.pendingCredits.push(frame.id);
+      this.receivedChunks++; if (request.uploadCredit) this.pendingCredits.push(frame.id);
       if (Peer.autoConsume) this.consume();
       this.onData?.(); return;
     }
     let body = new Uint8Array(request.chunks.reduce((length, part) => length + part.length, 0));
     let offset = 0; for (const part of request.chunks) { body.set(part, offset); offset += part.length; }
     if (!Peer.echoBody) body = encoder.encode(JSON.stringify({ received: body.length }));
-    this.emit({ op: "response", id: frame.id, status: 200, headers: request.headers });
+    this.emit({ op: "response", id: frame.id, status: 200, headers: [...request.headers, ...(Peer.advertise ? [["x-agentsassemble-upload-credit", "1"]] : [])] });
     for (let start = 0; start < body.length; start += 64 * 1024)
       this.emit({ op: "data", id: frame.id, data: encodeBase64Url(body.slice(start, start + 64 * 1024)), end: false });
     this.emit({ op: "data", id: frame.id, data: "", end: true });
@@ -56,7 +61,7 @@ class Peer {
   close() { this.readyState = 3; }
 }
 const transports: RemoteTransport[] = [];
-afterEach(() => { for (const transport of transports.splice(0)) transport.close(); vi.unstubAllGlobals(); Peer.autoConsume = true; Peer.echoBody = true; });
+afterEach(() => { for (const transport of transports.splice(0)) transport.close(); vi.unstubAllGlobals(); Peer.autoConsume = true; Peer.echoBody = true; Peer.advertise = true; });
 async function connectWithoutRequestBody() {
   const BrowserRequest = Request;
   vi.stubGlobal("Request", class extends BrowserRequest {
@@ -102,6 +107,7 @@ const drained = () => new Promise<void>(resolve => {
 test("10 MiB uploads wait for receiver credit, including across concurrent requests", async () => {
   Peer.autoConsume = false; Peer.echoBody = false;
   const transport = await connectWithoutRequestBody(), peer = Peer.latest;
+  await (await transport.fetch("/api/runtime/version")).text();
   const payload = new Uint8Array(10 * 1024 * 1024).fill(79);
   const firstData = new Promise<void>(resolve => { peer.onData = resolve; });
   const first = transport.fetch("/api/uploads", { method: "POST", body: payload });
@@ -118,6 +124,7 @@ test("10 MiB uploads wait for receiver credit, including across concurrent reque
 test.each(["cancel", "early response"])("%s releases only its upload credit and reader", async reason => {
   Peer.autoConsume = false;
   const transport = await connectWithoutRequestBody(), peer = Peer.latest;
+  await (await transport.fetch("/api/runtime/version")).text();
   const firstData = new Promise<void>(resolve => { peer.onData = resolve; });
   const abort = new AbortController(); let cancelled = false;
   const body = new ReadableStream({
@@ -138,4 +145,30 @@ test.each(["cancel", "early response"])("%s releases only its upload credit and 
   expect(await outcome).toBe(reason === "cancel" ? "cancelled" : 408);
   expect(await (await second).text()).toBe("second");
   expect(cancelled).toBe(true); expect(transport.active).toBe(true);
+});
+
+test("unadvertised hosts receive old request frames and complete multiple body chunks without credits", async () => {
+  Peer.advertise = false; Peer.autoConsume = false;
+  const transport = await connectWithoutRequestBody();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const payload = new Uint8Array(2 * 64 * 1024 + 19).fill(79);
+    expect(new Uint8Array(await (await transport.fetch("/api/uploads", { method: "POST", body: payload })).arrayBuffer())).toEqual(payload);
+  }
+  expect(Peer.latest.pendingCredits).toEqual([]);
+  expect(transport.active).toBe(true);
+});
+
+test("advertisement does not change an in-flight unpaced request or a fresh channel", async () => {
+  Peer.autoConsume = false;
+  const transport = await connectWithoutRequestBody(), peer = Peer.latest;
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start(value) { controller = value; } });
+  const pending = transport.fetch("/api/uploads", { method: "POST", body, duplex: "half" } as RequestInit);
+  await (await transport.fetch("/api/runtime/version")).text();
+  controller.enqueue(new Uint8Array([79])); controller.close();
+  expect(await (await pending).text()).toBe("O");
+  expect(peer.pendingCredits).toEqual([]);
+  Peer.advertise = false;
+  const fresh = await connectWithoutRequestBody();
+  expect(await (await fresh.fetch("/api/uploads", { method: "POST", body: "fresh" })).text()).toBe("fresh");
 });

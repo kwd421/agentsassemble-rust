@@ -79,6 +79,8 @@ enum Frame {
         method: String,
         path: String,
         headers: Vec<(String, String)>,
+        #[serde(default)]
+        upload_credit: bool,
     },
     Data {
         id: u32,

@@ -14,7 +14,7 @@ async fn secure_upload_consumes_more_than_direction_capacity() {
         ended: false,
     };
     let (output, mut credits) = Output::new(global.clone(), cancel.clone());
-    let request = Request::new(request_body(rx, cancel, 1, output));
+    let request = Request::new(request_body(rx, cancel, 1, true, output));
     let collect = crate::http_api::decode_json_body::<String>(
         request,
         crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES,
@@ -80,9 +80,16 @@ async fn cancellation_releases_only_its_request_queue() {
         rx_a,
         cancel_a.clone(),
         1,
+        true,
         output.with_cancel(cancel_a.clone()),
     );
-    let body_b = request_body(rx_b, cancel_b.clone(), 2, output.with_cancel(cancel_b));
+    let body_b = request_body(
+        rx_b,
+        cancel_b.clone(),
+        2,
+        true,
+        output.with_cancel(cancel_b),
+    );
     let chunk = URL_SAFE_NO_PAD.encode(vec![b' '; CHUNK_BYTES]);
     for _ in 0..4 {
         assert!(a.push(&chunk, false, &budget).is_ok());
@@ -140,7 +147,7 @@ async fn virtual_upload_timeout_drops_its_queue_and_ignores_late_data() {
         cancel: cancel.clone(),
         ended: false,
     };
-    let body = request_body(rx, cancel, 1, output);
+    let body = request_body(rx, cancel, 1, true, output);
     let other_request = budget
         .charge(CHUNK_BYTES)
         .unwrap_or_else(|_| panic!("independent request"));
@@ -229,7 +236,7 @@ async fn lost_credit_path_cannot_complete_a_body_without_its_end_marker() {
             .push(&URL_SAFE_NO_PAD.encode(b"null"), false, &budget)
             .is_ok()
     );
-    let request = Request::new(request_body(rx, cancel, 1, output));
+    let request = Request::new(request_body(rx, cancel, 1, true, output));
     assert!(
         crate::http_api::decode_json_body::<serde_json::Value>(request, 1024)
             .await
@@ -239,4 +246,44 @@ async fn lost_credit_path_cannot_complete_a_body_without_its_end_marker() {
         global.available_permits(),
         crate::secure_queue::GLOBAL_BYTES
     );
+}
+
+#[tokio::test]
+async fn unpaced_request_releases_charges_without_credit_frames()
+-> Result<(), Box<dyn std::error::Error>> {
+    let global = Arc::new(Semaphore::new(crate::secure_queue::GLOBAL_BYTES));
+    let budget = Budget::new(global.clone());
+    let cancel = CancellationToken::new();
+    let (output, mut frames) = Output::new(global.clone(), cancel.clone());
+    let (tx, rx) = mpsc::channel(16);
+    let mut input = Input {
+        tx,
+        cancel: cancel.clone(),
+        ended: false,
+    };
+    let mut body = request_body(rx, cancel, 1, false, output).into_data_stream();
+    for _ in 0..16 {
+        assert!(
+            input
+                .push(
+                    &URL_SAFE_NO_PAD.encode(vec![79; CHUNK_BYTES]),
+                    false,
+                    &budget
+                )
+                .is_ok()
+        );
+        assert_eq!(
+            body.next().await.ok_or("missing chunk")??.len(),
+            CHUNK_BYTES
+        );
+        assert_eq!(
+            global.available_permits(),
+            crate::secure_queue::GLOBAL_BYTES
+        );
+    }
+    assert!(input.push("", true, &budget).is_ok());
+    assert!(body.next().await.ok_or("missing chunk")??.is_empty());
+    assert!(body.next().await.is_none());
+    assert!(frames.try_recv().is_err());
+    Ok(())
 }

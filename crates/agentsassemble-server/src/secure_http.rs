@@ -65,6 +65,7 @@ pub(crate) struct Start {
     pub(crate) method: String,
     pub(crate) path: String,
     pub(crate) headers: Vec<(String, String)>,
+    pub(crate) upload_credit: bool,
 }
 
 pub(crate) fn start(
@@ -92,6 +93,7 @@ pub(crate) fn start(
             rx,
             cancel.clone(),
             start.id,
+            start.upload_credit,
             output.with_cancel(cancel.clone()),
         ))
         .map_err(|_| ())?;
@@ -113,7 +115,7 @@ pub(crate) fn start(
         // Once dispatched, never abort a handler: its mutation may already own durable work.
         let response = crate::web::router(state).oneshot(request).await;
         let Ok(response) = response;
-        let headers = response
+        let mut headers = response
             .headers()
             .iter()
             .filter(|(name, _)| {
@@ -124,6 +126,7 @@ pub(crate) fn start(
             })
             .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.as_str(), value)))
             .collect::<Vec<_>>();
+        headers.push(("x-agentsassemble-upload-credit", "1"));
         if output.send(json!({"op":"response", "id":id, "status":response.status().as_u16(), "headers":headers})).await.is_err() { return; }
         let mut body = response.into_body().into_data_stream();
         loop {
@@ -157,6 +160,7 @@ fn request_body(
     rx: mpsc::Receiver<Part>,
     cancel: CancellationToken,
     id: u32,
+    upload_credit: bool,
     output: Output,
 ) -> Body {
     let stream = futures_util::stream::unfold(
@@ -187,7 +191,7 @@ fn request_body(
                         drop(charge);
                         Some((
                             Ok::<_, std::io::Error>(Bytes::from(bytes)),
-                            (rx, end, cancel, !end),
+                            (rx, end, cancel, upload_credit && !end),
                         ))
                     }
                     None => Some((

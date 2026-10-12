@@ -541,9 +541,9 @@ threat remains recorded above; neither review erased or downgraded it.
 Required behavior: encrypted virtual HTTP must receive the current 10 MiB file
 allowance (including its encoded envelope) without retaining consumed chunks'
 queue charges. Keep 64 KiB chunks, 512 KiB directional and 8 MiB global queues.
-Host consumption returns request-bound credit; browser uploads wait for it so
-concurrent senders cannot burst beyond transport admission. Cancellation and
-expiry release only the affected request, without aborting durable handler work.
+For negotiated requests, host consumption returns request-bound credit; browser
+uploads wait for it so concurrent senders cannot burst beyond transport admission.
+Cancellation and expiry release only the affected request, without aborting durable handler work.
 
 Authorized file collectors at message attachments, profile/appearance attachments,
 agent avatars, persona import (including central-owner routes), and connector
@@ -564,3 +564,32 @@ Verification: first reproduce queue exhaustion above 512 KiB; then prove a
 stalled/trickling bodies time out, progress past ten seconds succeeds, and
 cancelling one request preserves other queues. Use controlled polls/virtual time
 and browser protocol peers; report separately any unverified packaged flow.
+
+### Upload-credit capability across deployed versions
+
+This encrypted channel has no general version negotiation. Any future frame
+change must be capability-gated through an advertisement old peers already ignore;
+never send a new field or operation to a peer that has not advertised support.
+The host advertises `x-agentsassemble-upload-credit: 1` only inside virtual HTTP
+response headers, preserving the existing response frame and handshake shapes.
+The browser remembers support only for that channel and snapshots it at request
+creation: only after advertisement does it send `upload_credit: true` on a
+request and wait for request-bound `consumed` frames. An in-flight unpaced request
+must stay unpaced even if another response advertises support.
+
+Without that request opt-in the host emits no `consumed` frames, while still
+releasing consumed queue charges. New browsers with old hosts and old browsers
+with new hosts preserve pre-ebec3b14 small-body behavior without credit waits or
+unknown frames. The old side's failure above its 512 KiB allowance remains allowed.
+New/new channels retain paced 10 MiB uploads after advertisement. No probing,
+retry, persistent capability cache, queue-limit or user-interface changes.
+
+Affected owners are `secure_channel.rs` (strict request parser),
+`secure_channel_requests.rs` (dispatch), `secure_http.rs` (advertisement and body
+consumption), and `frontend/src/lib/remote/remoteTransport.ts` (channel capability
+and request pacing). Verify both skews, request-local opt-in, unchanged frame
+shapes, queue-charge release, and the existing encrypted 10 MiB regression.
+Pre-ebec3b14 evidence: `git show ebec3b14~1:frontend/src/lib/remote/remoteTransport.ts`
+accepts response headers via `new Headers` without a header-name allowlist;
+`git show ebec3b14~1:crates/agentsassemble-server/src/secure_channel.rs` uses
+`deny_unknown_fields`, so an unadvertised request must omit the new field entirely.

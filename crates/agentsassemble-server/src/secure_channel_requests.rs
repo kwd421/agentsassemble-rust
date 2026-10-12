@@ -81,12 +81,14 @@ impl Requests {
                 method,
                 path,
                 headers,
+                upload_credit,
             } => {
                 self.open_http(Start {
                     id,
                     method,
                     path,
                     headers,
+                    upload_credit,
                 })
                 .await
             }
