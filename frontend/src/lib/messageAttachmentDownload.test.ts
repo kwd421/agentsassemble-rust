@@ -10,6 +10,10 @@ vi.mock("./desktopBridge", () => ({
   saveDesktopMessageAttachment: desktopMock.save,
 }));
 
+import { createResourceUrl, revokeResourceUrl } from "./remote/remoteResources";
+import { installRemoteWorkspace, closeRemoteWorkspace } from "./remote/remoteWorkspace";
+import type { RemoteTransport } from "./remote/remoteTransport";
+
 import { startMessageAttachmentDownload } from "./messageAttachmentDownload";
 
 describe("messageAttachmentDownload", () => {
@@ -45,4 +49,25 @@ describe("messageAttachmentDownload", () => {
     expect(createObjectURL).not.toHaveBeenCalled();
     expect(anchorClick).not.toHaveBeenCalled();
   });
+  it("downloads an already displayed 50 MiB original without duplicating its resource reservation", async () => {
+    const callbacks = new Set<() => void>();
+    const transport = { hello: { origin: "https://download.test" }, active: true,
+      onClose: (callback: () => void) => { callbacks.add(callback); return () => callbacks.delete(callback); },
+      close: () => { transport.active = false; for (const callback of callbacks) callback(); }
+    };
+    installRemoteWorkspace({ transport: transport as unknown as RemoteTransport,
+      owner: { sessionToken: "download-owner" } as never, deviceToken: "device", clientId: "client" });
+    desktopMock.isDesktop.mockReturnValue(false);
+    createObjectURL.mockReturnValue("blob:displayed-original");
+    try {
+      const blob = new Blob([new Uint8Array(50 * 1024 * 1024)]);
+      const url = createResourceUrl(blob);
+      await startMessageAttachmentDownload(blob, "original.png", url);
+      expect(anchorClick).toHaveBeenCalledOnce();
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(revokeObjectURL).not.toHaveBeenCalled();
+      revokeResourceUrl(url);
+    } finally { closeRemoteWorkspace(); }
+  });
+
 });

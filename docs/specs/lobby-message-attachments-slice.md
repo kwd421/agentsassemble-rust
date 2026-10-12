@@ -945,6 +945,8 @@ the original view request with no probe/retry. The route variant is
 `/api/attachments/{id}?preview=1`; stored metadata and event JSON stay unchanged.
 Opening large fetches the original once, retaining the preview while it loads;
 downloads and all AI reads retain original bytes and their existing entry points.
+Browser image downloads reuse the already-owned original URL: a retained 50 MiB
+original must not be charged twice against the unchanged 64 MiB resource budget.
 
 At existing upload decode, generate static safe-raster previews with long side
 at most 1100 pixels and encoded size at most 256 KiB. Originals <=256 KiB and
@@ -979,6 +981,7 @@ retain private/no-store rules across plain desktop and encrypted channels.
 Entry owners: raster_assets, message_attachments/connector, message_attachment_reader,
 schema_version/archive_schema/backup_policy, profile_web/attachment_download/
 download_budget, transports, messageAttachments/read scheduler, LobbyAttachments.
+The shared messageAttachmentDownload transport owns browser/native save delivery.
 
 Acceptance: bounded large previews with alpha/orientation; small/animated exact
 originals; concurrent lazy generation once; identical access refusal and per-piece

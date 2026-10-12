@@ -92,8 +92,7 @@ describe("LobbyAttachments", () => {
     const file = attachment("b", false);
     createObjectURL
       .mockReturnValueOnce("blob:image")
-      .mockReturnValueOnce("blob:file")
-      .mockReturnValueOnce("blob:image-download");
+      .mockReturnValueOnce("blob:file");
     transfer.read.mockImplementation(
       async (value: LobbyAttachmentRef, ...args: unknown[]) => {
         const beforeDispatch = args[4] as (() => void) | undefined;
@@ -118,7 +117,7 @@ describe("LobbyAttachments", () => {
       image,
       "general",
       { kind: "local" },
-      "view",
+      "preview",
       expect.any(AbortSignal),
       expect.any(Function)
     );
@@ -139,7 +138,7 @@ describe("LobbyAttachments", () => {
     expect(screen.getByRole("dialog", { name: "a.png 이미지 미리보기" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "a.png 다운로드" }));
     await waitFor(() => expect(anchorClick).toHaveBeenCalledTimes(2));
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:image-download");
+    expect(revokeObjectURL).not.toHaveBeenCalledWith("blob:image");
   });
 
   it("keeps reads available after the production StrictMode effect reconnect", async () => {
@@ -324,4 +323,26 @@ describe("LobbyAttachments", () => {
     ]);
     expect(screen.getByRole("img", { name: "b.png" })).toBeTruthy();
   });
+  it("keeps the preview during large loading and fetches the original once across reopening and download", async () => {
+    const image = { ...attachment(), size: 400000 };
+    let complete!: (blob: Blob) => void;
+    createObjectURL.mockReturnValueOnce("blob:preview").mockReturnValueOnce("blob:original");
+    transfer.read.mockImplementation((_value, _room, _authority, mode) => mode === "preview"
+      ? Promise.resolve(new Blob(["small"], { type: "image/webp" }))
+      : new Promise<Blob>(resolve => { complete = resolve; }));
+    render(<LobbyAttachments attachments={[image]} scheduler={scheduler()} />);
+    act(() => intersectionObservers[0]?.emit(true));
+    await screen.findByRole("img", { name: "a.png" });
+    fireEvent.click(screen.getByRole("button", { name: "a.png 크게 보기" }));
+    await waitFor(() => expect(transfer.read).toHaveBeenCalledTimes(2));
+    expect(screen.getAllByRole("img").map(img => img.getAttribute("src"))).toEqual(["blob:preview", "blob:preview"]);
+    await act(async () => complete(new Blob([new Uint8Array(image.size)], { type: "image/png" })));
+    expect(screen.getAllByRole("img").map(img => img.getAttribute("src"))).toEqual(["blob:preview", "blob:original"]);
+    fireEvent.click(screen.getByRole("button", { name: "이미지 미리보기 닫기" }));
+    fireEvent.click(screen.getByRole("button", { name: "a.png 크게 보기" }));
+    fireEvent.click(screen.getByRole("button", { name: "a.png 다운로드" }));
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledOnce());
+    expect(transfer.read.mock.calls.map(call => call[3])).toEqual(["preview", "view"]);
+  });
+
 });

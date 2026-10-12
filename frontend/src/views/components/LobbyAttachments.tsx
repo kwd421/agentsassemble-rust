@@ -80,6 +80,8 @@ function LobbyImageAttachment({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const previewDialogRef = useRef<HTMLDivElement | null>(null);
   const previewBlobRef = useRef<Blob | null>(null);
+  const originalRef = useRef<{ controller: AbortController; promise: Promise<Blob>; url: string } | null>(null);
+  const [originalUrl, setOriginalUrl] = useState("");
   const [intersecting, setIntersecting] = useState(false);
   const [objectUrl, setObjectUrl] = useState("");
   const [error, setError] = useState("");
@@ -102,12 +104,13 @@ function LobbyImageAttachment({
 
   useLayoutEffect(() => {
     setObjectUrl("");
+    setOriginalUrl("");
     setOpen(false);
     if (!intersecting) return undefined;
     const controller = new AbortController();
     let createdUrl = "";
     setError("");
-    void scheduler.read(attachment, "view", controller.signal).then(
+    void scheduler.read(attachment, "preview", controller.signal).then(
       (blob) => {
         if (controller.signal.aborted) { releaseResourceBlob(blob); return; }
         previewBlobRef.current = blob;
@@ -122,17 +125,50 @@ function LobbyImageAttachment({
     );
     return () => {
       controller.abort();
+      originalRef.current?.controller.abort();
+      if (originalRef.current?.url) revokeResourceUrl(originalRef.current.url);
+      originalRef.current = null;
       previewBlobRef.current = null;
       if (createdUrl) revokeResourceUrl(createdUrl);
     };
   }, [attachment.id, intersecting, retry, scheduler]);
 
+  const loadOriginal = useCallback((): Promise<Blob> => {
+    const preview = previewBlobRef.current;
+    if (preview?.size === attachment.size && preview.type === attachment.content_type) {
+      return Promise.resolve(preview);
+    }
+    if (originalRef.current) return originalRef.current.promise;
+    const controller = new AbortController();
+    setError("");
+    const read = { controller, promise: scheduler.read(attachment, "view", controller.signal), url: "" };
+    read.promise = read.promise.then(blob => {
+      if (controller.signal.aborted) { releaseResourceBlob(blob); controller.signal.throwIfAborted(); }
+      try { read.url = createResourceUrl(blob); }
+      catch (errorValue) { releaseResourceBlob(blob); throw errorValue; }
+      setOriginalUrl(read.url);
+      return blob;
+    }).catch(errorValue => {
+      if (originalRef.current === read) {
+        originalRef.current = null;
+        if (!controller.signal.aborted) setError(errorValue instanceof Error ? errorValue.message : "이미지 불러오기 실패");
+      }
+      throw errorValue;
+    });
+    originalRef.current = read;
+    return read.promise;
+  }, [attachment, scheduler]);
+
+  useEffect(() => {
+    if (open) void loadOriginal().catch(() => {});
+  }, [open, loadOriginal]);
+
   async function downloadPreview() {
-    const blob = previewBlobRef.current;
-    if (!blob || downloading) return;
+    if (downloading) return;
     setDownloading(true);
     try {
-      await startMessageAttachmentDownload(blob, attachment.filename);
+      const blob = await loadOriginal();
+      await startMessageAttachmentDownload(blob, attachment.filename, originalRef.current?.url || objectUrl);
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : "첨부 다운로드 실패");
     } finally {
@@ -223,7 +259,7 @@ function LobbyImageAttachment({
           >
             <div className="flex items-center justify-between gap-3 border-b border-line/50 px-4 py-3">
               <p className="min-w-0 truncate text-[13px] font-black text-text-primary preserve-words">
-                {attachment.filename}
+                {error || attachment.filename}
               </p>
               <div className="flex shrink-0 items-center gap-2">
                 <button
@@ -249,7 +285,7 @@ function LobbyImageAttachment({
             </div>
             <div className="max-h-[calc(90vh-58px)] overflow-auto bg-black/32 p-3">
               <ResourceImage
-                src={objectUrl}
+                src={originalUrl || objectUrl}
                 alt={attachment.filename}
                 className="mx-auto max-h-[calc(90vh-90px)] max-w-full rounded-lg object-contain"
               />
