@@ -398,38 +398,41 @@ async fn read_attachment(
             &attachment_id,
         )
         .await?;
-        let (attachment, lease) = match authority {
-            RoomSessionHttpAuthority::LocalTicket(grant) => {
-                state
-                    .store
-                    .bound_message_attachment(
-                        &grant.room_id,
-                        &grant.principal_id,
-                        &grant.participant_id,
-                        &attachment_id,
-                        |principal, size| state.downloads.reserve(Some(principal), size),
-                    )
-                    .await?
-            }
-            RoomSessionHttpAuthority::Session(authorization) => {
-                state
-                    .store
-                    .bound_authorized_message_attachment(
-                        authorization.mutation_authority(),
-                        &attachment_id,
-                        |principal, size| state.downloads.reserve(Some(principal), size),
-                    )
-                    .await?
+        use agentsassemble_persistence::MessageAttachmentReadAuthority;
+        let authority = match authority {
+            RoomSessionHttpAuthority::LocalTicket(grant) => MessageAttachmentReadAuthority::Local {
+                room_id: grant.room_id,
+                user_id: grant.principal_id,
+                participant_id: grant.participant_id,
+            },
+            RoomSessionHttpAuthority::Session(session) => {
+                MessageAttachmentReadAuthority::Session(session)
             }
         };
-        let inline = inline_requested && attachment.metadata.is_image;
-        return attachment_response(
-            &attachment.metadata.filename,
-            &attachment.metadata.content_type,
-            lease.retain(attachment.content),
-            inline,
+        let (reader, lease) = state
+            .store
+            .open_message_attachment_reader(authority, &attachment_id, |principal| {
+                state.downloads.reserve_stream(principal)
+            })
+            .await?;
+        let metadata = reader.metadata().clone();
+        let (body, progress) =
+            crate::attachment_download::body(reader, lease, request.extensions().get());
+        let mut response = attachment_response(
+            &metadata.filename,
+            &metadata.content_type,
+            body,
+            inline_requested && metadata.is_image,
+        )?;
+        response.headers_mut().insert(
+            header::CONTENT_LENGTH,
+            HeaderValue::from_str(&metadata.size.to_string())
+                .map_err(|_| ProfileHttpError::internal())?,
         );
+        response.extensions_mut().insert(progress);
+        return Ok(response);
     }
+
     if attachment_id.starts_with(agentsassemble_domain::ROOM_APPEARANCE_ASSET_PREFIX) {
         if raw_query.as_deref() != Some(agentsassemble_domain::ROOM_APPEARANCE_REFERENCE_QUERY) {
             return Err(ProfileHttpError::bad_request(

@@ -4,11 +4,12 @@ use axum::body::Bytes;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
-// Two copies cover the SQLite result and response allocation while transferring.
-// Five 50 MiB files fit concurrently, with room for small images. One client's image
-// scheduler runs four reads, and room icons and the same person's other devices read
-// outside it; a refusal has no client retry, so the count leaves room for all of them.
-// Host bytes, not this count, bound memory.
+// Whole-value assets/AI retain their round-4 costs. Streams reserve a fixed
+// allowance for SQLx copies, a piece and Hyper's 256 KiB buffer with margin.
+// 32 streams leave room for ten files, visible images, icons and other devices;
+// their 32 MiB maximum shares the host envelope and principal weight with assets.
+const STREAM_BYTES: usize = 1024 * 1024;
+const PER_PRINCIPAL_STREAMS: usize = 32;
 const HOST_BYTES: usize = 512 * 1024 * 1024;
 const COPIES: usize = 2;
 const PER_PRINCIPAL: usize = 16;
@@ -18,7 +19,7 @@ pub(crate) const ERROR_CODE: &str = "attachment_download_budget_exhausted";
 #[derive(Clone)]
 pub(crate) struct Budget {
     bytes: Arc<Semaphore>,
-    principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize)>>>,
+    principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize, usize)>>>,
 }
 impl Default for Budget {
     fn default() -> Self {
@@ -30,9 +31,10 @@ impl Default for Budget {
 }
 pub(crate) struct Lease {
     _bytes: OwnedSemaphorePermit,
-    principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize)>>>,
+    principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize, usize)>>>,
     principal: Option<String>,
     weight: usize,
+    streamed: bool,
 }
 impl Drop for Lease {
     fn drop(&mut self) {
@@ -43,9 +45,13 @@ impl Drop for Lease {
         let count = principals
             .get_mut(principal)
             .expect("live download principal");
-        count.0 -= 1;
+        if self.streamed {
+            count.2 -= 1;
+        } else {
+            count.0 -= 1;
+        }
         count.1 -= self.weight;
-        if count.0 == 0 {
+        if count.0 == 0 && count.2 == 0 {
             principals.remove(principal);
         }
     }
@@ -57,12 +63,20 @@ fn exhausted() -> PersistenceError {
     }
 }
 impl Budget {
+    #[cfg(test)]
+    pub(crate) fn available(&self) -> usize {
+        self.bytes.available_permits()
+    }
     pub(crate) fn reserve(
         &self,
         principal: Option<&str>,
         size: usize,
     ) -> Result<Lease, PersistenceError> {
-        self.reserve_weight(principal, size.checked_mul(COPIES).ok_or_else(exhausted)?)
+        self.reserve_weight(
+            principal,
+            size.checked_mul(COPIES).ok_or_else(exhausted)?,
+            false,
+        )
     }
 
     pub(crate) fn reserve_encoded(
@@ -75,19 +89,28 @@ impl Budget {
             .checked_mul(8)
             .and_then(|n| n.checked_add(64 * 1024))
             .ok_or_else(exhausted)?;
-        self.reserve_weight(Some(principal), weight)
+        self.reserve_weight(Some(principal), weight, false)
+    }
+
+    pub(crate) fn reserve_stream(&self, principal: &str) -> Result<Lease, PersistenceError> {
+        self.reserve_weight(Some(principal), STREAM_BYTES, true)
     }
 
     fn reserve_weight(
         &self,
         principal: Option<&str>,
         weight: usize,
+        streamed: bool,
     ) -> Result<Lease, PersistenceError> {
         let weight = u32::try_from(weight).map_err(|_| exhausted())?;
         let mut principals = self.principals.lock();
         if principal.is_some_and(|p| {
-            let (count, used) = principals.get(p).copied().unwrap_or_default();
-            count >= PER_PRINCIPAL || used + weight as usize > PER_PRINCIPAL_BYTES
+            let (count, used, streams) = principals.get(p).copied().unwrap_or_default();
+            (if streamed {
+                streams >= PER_PRINCIPAL_STREAMS
+            } else {
+                count >= PER_PRINCIPAL
+            }) || used + weight as usize > PER_PRINCIPAL_BYTES
         }) {
             return Err(exhausted());
         }
@@ -98,7 +121,11 @@ impl Budget {
             .map_err(|_| exhausted())?;
         if let Some(principal) = principal {
             let usage = principals.entry(principal.to_owned()).or_default();
-            usage.0 += 1;
+            if streamed {
+                usage.2 += 1;
+            } else {
+                usage.0 += 1;
+            }
             usage.1 += weight as usize;
         }
         Ok(Lease {
@@ -106,6 +133,7 @@ impl Budget {
             principals: self.principals.clone(),
             principal: principal.map(str::to_owned),
             weight: weight as usize,
+            streamed,
         })
     }
 }
@@ -147,6 +175,32 @@ pub(crate) fn encoded_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn streamed_fairness_and_host_weight_release_on_drop() {
+        let budget = Budget::default();
+        let mut streams = Vec::new();
+        for principal in 0..16 {
+            for _ in 0..32 {
+                streams.push(budget.reserve_stream(&principal.to_string()).unwrap());
+            }
+            assert!(budget.reserve_stream(&principal.to_string()).is_err());
+        }
+        assert_eq!(budget.available(), 0);
+        assert!(budget.reserve_stream("another").is_err());
+        drop(streams);
+        assert_eq!(budget.available(), HOST_BYTES);
+        let streams = (0..10)
+            .map(|_| budget.reserve_stream("one").unwrap())
+            .collect::<Vec<_>>();
+        let images = (0..16)
+            .map(|_| budget.reserve(Some("one"), 65536).unwrap())
+            .collect::<Vec<_>>();
+        assert!(budget.reserve_encoded("one", 10 * 1024 * 1024).is_err());
+        drop(images);
+        assert!(budget.reserve_encoded("one", 10 * 1024 * 1024).is_ok());
+        drop(streams);
+        assert_eq!(budget.available(), HOST_BYTES);
+    }
     #[tokio::test]
     async fn encoded_downloads_retain_shared_weight_until_delivery_bytes_drop() {
         let budget = Budget::default();

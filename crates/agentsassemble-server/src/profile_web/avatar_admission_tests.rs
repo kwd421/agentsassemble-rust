@@ -282,37 +282,33 @@ async fn large_download_responses_enforce_host_and_principal_budgets_until_last_
         )
         .await
         .unwrap();
+    use futures_util::StreamExt;
     let mut responses = Vec::new();
-    for _ in 0..4 {
+    for _ in 0..32 {
         let response = read_message(&state, &attachment.id, &principal).await;
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CONTENT_LENGTH], "52428800");
         responses.push(response);
     }
     assert_download_busy(read_message(&state, &attachment.id, &principal).await).await;
-    let response = read_message(&state, &attachment.id, other.principal()).await;
-    assert_eq!(response.status(), StatusCode::OK);
-    responses.push(response);
-    assert_download_busy(read_message(&state, &attachment.id, other.principal()).await).await;
-    let bytes = body::to_bytes(responses.pop().unwrap().into_body(), 52428800)
-        .await
-        .unwrap();
+    let other_response = read_message(&state, &attachment.id, other.principal()).await;
+    assert_eq!(other_response.status(), StatusCode::OK);
+    let mut body = responses.pop().unwrap().into_body().into_data_stream();
+    let bytes = body.next().await.unwrap().unwrap();
+    assert_eq!(bytes.as_ref(), &[42; 65536]);
     let clone = bytes.clone();
-    drop(bytes);
-    assert_download_busy(read_message(&state, &attachment.id, other.principal()).await).await;
+    drop((bytes, body));
+    assert_download_busy(read_message(&state, &attachment.id, &principal).await).await;
     drop(clone);
-    assert_eq!(
-        read_message(&state, &attachment.id, other.principal())
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    drop(responses);
-    assert_eq!(
-        read_message(&state, &attachment.id, &principal)
-            .await
-            .status(),
-        StatusCode::OK
-    );
+    responses.push(read_message(&state, &attachment.id, &principal).await);
+    assert_eq!(responses.last().unwrap().status(), StatusCode::OK);
+    let host = state
+        .downloads
+        .reserve(None, (512 - 33) * 1024 * 1024 / 2)
+        .unwrap();
+    assert_download_busy(read_message(&state, &attachment.id, other.principal()).await).await;
+    drop((host, responses, other_response));
+    assert_eq!(state.downloads.available(), 512 * 1024 * 1024);
 }
 
 async fn read_message(

@@ -256,4 +256,5 @@ pub use room_runtime::{AttendeeOperation, AttendeeOperationResult};
 
 mod upload_body_budget;
 
+mod attachment_download;
 mod download_budget;

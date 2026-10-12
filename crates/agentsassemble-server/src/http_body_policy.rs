@@ -42,6 +42,84 @@ impl Policy {
 #[error("Request body progress deadline exceeded")]
 pub(crate) struct UploadTimeout;
 
+/// The same idle, minimum-progress window and ceiling govern outgoing file bodies.
+#[derive(Clone)]
+pub(crate) struct Progress(tokio::sync::watch::Sender<ProgressWindow>);
+
+#[derive(Clone, Copy)]
+struct ProgressWindow {
+    started: Instant,
+    last_data: Instant,
+    window_end: Instant,
+    bytes: usize,
+}
+impl ProgressWindow {
+    fn new(started: Instant) -> Self {
+        Self {
+            started,
+            last_data: started,
+            window_end: started + WINDOW,
+            bytes: 0,
+        }
+    }
+    fn deadline(&mut self) -> Result<Instant, UploadTimeout> {
+        let now = Instant::now();
+        if now >= self.started + UPLOAD_CEILING || now >= self.last_data + IDLE {
+            return Err(UploadTimeout);
+        }
+        while now >= self.window_end {
+            if self.bytes < MIN_PROGRESS {
+                return Err(UploadTimeout);
+            }
+            self.bytes = 0;
+            self.window_end += WINDOW;
+        }
+        Ok((self.started + UPLOAD_CEILING)
+            .min(self.last_data + IDLE)
+            .min(self.window_end))
+    }
+    fn accept(&mut self, bytes: usize) {
+        if bytes > 0 {
+            self.last_data = Instant::now();
+            self.bytes = self.bytes.saturating_add(bytes);
+        }
+    }
+}
+impl Progress {
+    pub(crate) fn new() -> Self {
+        Self(tokio::sync::watch::channel(ProgressWindow::new(Instant::now())).0)
+    }
+    pub(crate) fn accept(&self, bytes: usize) {
+        self.0.send_modify(|window| window.accept(bytes));
+    }
+    pub(crate) fn check(&self) -> Result<(), UploadTimeout> {
+        let mut result = Ok(());
+        self.0.send_if_modified(|window| {
+            result = window.deadline().map(|_| ());
+            false
+        });
+        result
+    }
+    pub(crate) async fn expired(&self) {
+        let mut changes = self.0.subscribe();
+        loop {
+            changes.borrow_and_update();
+            let mut result = Err(UploadTimeout);
+            self.0.send_if_modified(|window| {
+                result = window.deadline();
+                false
+            });
+            let Ok(deadline) = result else {
+                return;
+            };
+            tokio::select! {
+                () = tokio::time::sleep_until(deadline) => {},
+                _ = changes.changed() => {},
+            }
+        }
+    }
+}
+
 pub(crate) async fn apply(request: Request, next: Next) -> Response {
     next.run(wrap(request)).await
 }
@@ -55,28 +133,18 @@ fn wrap(request: Request) -> Request {
         (
             body.into_data_stream(),
             policy,
-            started,
-            started + WINDOW,
-            0usize,
+            ProgressWindow::new(started),
         ),
-        |(mut body, policy, mut last_data, mut window_end, mut progress)| async move {
+        |(mut body, policy, mut progress)| async move {
             loop {
                 let now = Instant::now();
                 let upload = policy.upload.load(Ordering::Relaxed);
                 let hard_end = policy.started + if upload { UPLOAD_CEILING } else { CONTROL };
-                if now >= hard_end || (upload && now >= last_data + IDLE) {
+                if now >= hard_end {
                     return Err(axum::Error::new(UploadTimeout));
                 }
-                if upload && now >= window_end {
-                    if progress < MIN_PROGRESS {
-                        return Err(axum::Error::new(UploadTimeout));
-                    }
-                    progress = 0;
-                    window_end += WINDOW;
-                    continue;
-                }
                 let deadline = if upload {
-                    hard_end.min(last_data + IDLE).min(window_end)
+                    progress.deadline().map_err(axum::Error::new)?
                 } else {
                     hard_end
                 };
@@ -85,14 +153,8 @@ fn wrap(request: Request) -> Request {
                     Ok(None) => return Ok(None),
                     Ok(Some(Err(error))) => return Err(error),
                     Ok(Some(Ok(bytes))) => {
-                        if !bytes.is_empty() {
-                            last_data = Instant::now();
-                            progress = progress.saturating_add(bytes.len());
-                        }
-                        return Ok(Some((
-                            bytes,
-                            (body, policy, last_data, window_end, progress),
-                        )));
+                        progress.accept(bytes.len());
+                        return Ok(Some((bytes, (body, policy, progress))));
                     }
                 }
             }

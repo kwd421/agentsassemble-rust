@@ -27,9 +27,20 @@ struct HttpConnectionAdmissionInner {
     owner: HttpAdmission,
     public_permit: Mutex<Option<OwnedSemaphorePermit>>,
     authenticated_wait: watch::Sender<bool>,
+    download: watch::Sender<Option<crate::http_body_policy::Progress>>,
 }
 
 pub(crate) struct AuthenticatedHttpWait(watch::Sender<bool>);
+
+pub(crate) struct DownloadHttpWait {
+    admission: HttpConnectionAdmission,
+    _wait: AuthenticatedHttpWait,
+}
+impl Drop for DownloadHttpWait {
+    fn drop(&mut self) {
+        self.admission.0.download.send_replace(None);
+    }
+}
 
 impl Drop for AuthenticatedHttpWait {
     fn drop(&mut self) {
@@ -60,6 +71,7 @@ impl HttpAdmission {
                 owner: self.clone(),
                 public_permit: Mutex::new(None),
                 authenticated_wait: watch::channel(false).0,
+                download: watch::channel(None).0,
             },
         )))
     }
@@ -74,6 +86,32 @@ impl HttpAdmission {
 }
 
 impl HttpConnectionAdmission {
+    pub(crate) fn retain_download(
+        &self,
+        progress: crate::http_body_policy::Progress,
+    ) -> DownloadHttpWait {
+        self.0.download.send_replace(Some(progress));
+        DownloadHttpWait {
+            admission: self.clone(),
+            _wait: self.retain_authenticated_wait(),
+        }
+    }
+
+    /// Runs beside the socket even when its writer no longer polls the body.
+    pub(crate) async fn download_expired(&self) {
+        let mut changes = self.0.download.subscribe();
+        loop {
+            let progress = changes.borrow_and_update().clone();
+            if let Some(progress) = progress {
+                tokio::select! {
+                    () = progress.expired() => return,
+                    _ = changes.changed() => {},
+                }
+            } else {
+                let _ = changes.changed().await;
+            }
+        }
+    }
     pub(crate) fn admit_virtual(&self) -> Option<Self> {
         let child = self.0.owner.admit()?;
         child.admit_public().then_some(child)

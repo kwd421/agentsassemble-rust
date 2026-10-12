@@ -45,6 +45,7 @@ pub(crate) async fn serve_connection(
     tokio::pin!(connection);
     let serving = async {
         tokio::select! {
+            () = admission_guard.download_expired() => Ok(()),
             () = shutdown.cancelled() => {
                 connection.as_mut().graceful_shutdown();
                 (&mut connection).await
@@ -60,6 +61,7 @@ pub(crate) async fn serve_connection(
             // retains its own session expiry/revocation/shutdown lifetime.
             connection.as_mut().graceful_shutdown();
             tokio::select! {
+                () = admission_guard.download_expired() => {},
                 result = &mut connection => {
                     if let Err(error) = result {
                         tracing::debug!(error = ?error, "Authenticated HTTP wait closed");
@@ -85,6 +87,78 @@ mod tests {
     use axum::routing::get;
     use std::sync::Arc;
     use tokio::{net::TcpListener, sync::Notify};
+
+    #[tokio::test]
+    async fn stalled_or_dropped_plain_socket_releases_stream_admission()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (store, metadata, _) =
+            crate::attachment_download::tests::fixture(50 * 1024 * 1024).await;
+        let downloads = crate::download_budget::Budget::default();
+        for stalled in [false, true] {
+            let store = store.clone();
+            let metadata = metadata.clone();
+            let budget = downloads.clone();
+            let app = Router::new().route(
+                "/download",
+                get(
+                    move |axum::Extension(admission): axum::Extension<HttpConnectionAdmission>| {
+                        let (store, metadata, budget) =
+                            (store.clone(), metadata.clone(), budget.clone());
+                        async move {
+                            crate::attachment_download::tests::response(
+                                &store,
+                                &metadata,
+                                &budget,
+                                Some(&admission),
+                            )
+                            .await
+                        }
+                    },
+                ),
+            );
+            let listener = TcpListener::bind("127.0.0.1:0").await?;
+            let address = listener.local_addr()?;
+            let mut client = TcpStream::connect(address).await?;
+            let (stream, peer) = listener.accept().await?;
+            let admission = crate::http_admission::HttpAdmission::default()
+                .admit()
+                .ok_or("admission")?;
+            let serving = tokio::spawn(serve_connection(
+                stream,
+                peer,
+                LocalIngress::from_listener(address).ok_or("listener")?,
+                PublicIngress::disabled(),
+                app,
+                admission,
+                CancellationToken::new(),
+            ));
+            client
+                .write_all(format!("GET /download HTTP/1.1\r\nHost: {address}\r\n\r\n").as_bytes())
+                .await?;
+            let mut headers = Vec::new();
+            while !headers.ends_with(b"\r\n\r\n") {
+                headers.push(client.read_u8().await?);
+            }
+            let mut first = vec![0; 65536];
+            client.read_exact(&mut first).await?;
+            assert_eq!(downloads.available(), 511 * 1024 * 1024);
+            if stalled {
+                tokio::time::pause();
+                tokio::time::advance(Duration::from_secs(31)).await;
+                serving.await?;
+                tokio::time::resume();
+                let mut remainder = Vec::new();
+                client.read_to_end(&mut remainder).await?;
+                assert!(first.len() + remainder.len() < 50 * 1024 * 1024);
+            } else {
+                drop(client);
+                tokio::time::timeout(Duration::from_secs(2), serving).await??;
+            }
+            assert_eq!(downloads.available(), 512 * 1024 * 1024);
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn only_the_active_authenticated_wait_outlives_the_absolute_deadline()

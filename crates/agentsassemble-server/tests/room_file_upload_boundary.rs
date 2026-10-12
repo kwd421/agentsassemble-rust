@@ -4,6 +4,94 @@ use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
+#[tokio::test]
+async fn ten_plain_large_downloads_are_exact_and_deletion_interrupts_a_stalled_body() -> TestResult
+{
+    let server = start_local().await;
+    set_limit(&server, 50 * 1024 * 1024, "stream-limit").await?;
+    let client = Client::new();
+    for size in [65536 + 19, 50 * 1024 * 1024] {
+        let bytes: Vec<u8> = (0..size).map(|n| (n % 251) as u8).collect();
+        let attachment = server
+            .store
+            .store_message_attachment(
+                &local_principal(),
+                "stream.bin",
+                "application/octet-stream",
+                bytes.clone(),
+            )
+            .await?;
+        let sent = server
+            .store
+            .execute_message(
+                &local_principal(),
+                &format!("bind-{size}"),
+                "message.send",
+                &json!({"content":"", "attachment_ids":[attachment.id]}),
+            )
+            .await?;
+        let mut downloads = Vec::new();
+        for _ in 0..if size > 1024 * 1024 { 10 } else { 1 } {
+            let ticket = issue_local_read_id(&server.tickets, &attachment.id).await;
+            let response = client
+                .get(format!("{}{}", server.base_url, attachment.download_url))
+                .bearer_auth(ticket)
+                .send()
+                .await?;
+            assert_private_attachment(&response, "application/octet-stream", "attachment");
+            assert_eq!(response.content_length(), Some(size as u64));
+            downloads.push(response);
+        }
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            server.store.execute_message(
+                &local_principal(),
+                &format!("unrelated-{size}"),
+                "message.send",
+                &json!({"content":"write with ten stalled responses"}),
+            ),
+        )
+        .await??;
+        for mut response in downloads {
+            let mut received = 0;
+            while let Some(piece) = response.chunk().await? {
+                assert_eq!(piece.as_ref(), &bytes[received..received + piece.len()]);
+                received += piece.len();
+            }
+            assert_eq!(received, size);
+        }
+        if size > 1024 * 1024 {
+            let ticket = issue_local_read_id(&server.tickets, &attachment.id).await;
+            let mut response = client
+                .get(format!("{}{}", server.base_url, attachment.download_url))
+                .bearer_auth(ticket)
+                .send()
+                .await?;
+            let first = response.chunk().await?.ok_or("first piece")?;
+            let mut received = first.len();
+            server
+                .store
+                .execute_message_mutation(
+                    &local_principal(),
+                    "delete-stream",
+                    "message.delete",
+                    &json!({"event_id":sent.event.id}),
+                )
+                .await?;
+            loop {
+                match response.chunk().await {
+                    Ok(Some(piece)) => received += piece.len(),
+                    Err(_) => break,
+                    Ok(None) => return Err("deleted stream completed successfully".into()),
+                }
+            }
+            assert!(received < size);
+        }
+    }
+    server.stop().await;
+    Ok(())
+}
+
 async fn set_limit(server: &LocalServer, limit: usize, request_id: &str) -> TestResult {
     let snapshot = server.store.snapshot("general", 0, 100).await?;
     server
