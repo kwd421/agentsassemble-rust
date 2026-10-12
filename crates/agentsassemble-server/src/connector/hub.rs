@@ -10,12 +10,8 @@ use crate::connector::client::{RoomConnectorClient, transport::normalize_server}
 
 pub(super) struct ConnectorHub {
     allowed_servers: Option<Vec<Url>>,
-    owned_runtime: Option<HostedRuntime>,
+    owned_runtime: Option<crate::AppState>,
     state: Mutex<HubState>,
-}
-struct HostedRuntime {
-    ingress: crate::public_ingress::PublicIngress,
-    store: agentsassemble_persistence::SqliteStore,
 }
 #[derive(Default)]
 struct HubState {
@@ -43,15 +39,51 @@ impl ConnectorHub {
         })
     }
 
-    pub(super) fn hosted(
-        ingress: crate::public_ingress::PublicIngress,
-        store: agentsassemble_persistence::SqliteStore,
-    ) -> Self {
+    pub(super) fn hosted(state: crate::AppState) -> Self {
         Self {
             allowed_servers: None,
-            owned_runtime: Some(HostedRuntime { ingress, store }),
+            owned_runtime: Some(state),
             state: Mutex::new(HubState::default()),
         }
+    }
+
+    pub(super) async fn upload(
+        &self,
+        input: super::contract::AttachmentUpload,
+        admission: Option<&crate::connector::mcp_web::RequestAdmission>,
+    ) -> Result<Value, String> {
+        let client = self.client(&input.connection_id)?;
+        if let Some(state) = &self.owned_runtime {
+            let fingerprint = client
+                .session_fingerprint()
+                .await
+                .map_err(|error| error.code)?;
+            let upload = crate::connector::web::attachments::upload_parsed(
+                state.clone(),
+                fingerprint,
+                crate::profile_web::EncodedAttachmentUpload {
+                    filename: input.filename,
+                    content_type: input.content_type,
+                    data_base64: input.data_base64,
+                },
+                admission,
+            );
+            // Preserve the connector client's close and uncertain-timeout semantics
+            // while storage retains its own lease if it has already started.
+            return tokio::select! {
+                () = client.cancellation.cancelled() => Err("connector_closed".into()),
+                result = tokio::time::timeout(crate::http_body_policy::UPLOAD_CEILING, upload) => {
+                    result.map_err(|_| "connector_transport_unresolved".to_owned())?
+                        .map(|value| value.0).map_err(|error| error.code.into_owned())
+                }
+            };
+        }
+        // Standalone HTTP/stdio have no host store or shared host upload pool.
+        // Keep their envelope until the authenticated remote upload completes.
+        client
+            .upload_attachment(&input.filename, &input.content_type, &input.data_base64)
+            .await
+            .map_err(|error| error.code)
     }
 
     fn remote(&self) -> bool {
@@ -68,12 +100,12 @@ impl ConnectorHub {
                 .map_err(|error| error.code);
         };
         let local = runtime
-            .ingress
+            .public_ingress()
             .local_url()
             .ok_or_else(|| "local_ingress_unavailable".to_owned())?;
         let local = normalize_server(&local).map_err(|error| error.code)?;
         let mut allowed = vec![local.clone()];
-        if let Some(ready) = runtime.ingress.ready_snapshot() {
+        if let Some(ready) = runtime.public_ingress().ready_snapshot() {
             allowed.push(normalize_server(&ready.public_url).map_err(|error| error.code)?);
         }
         RoomConnectorClient::new_hosted(invite, name, &allowed, local).map_err(|error| error.code)

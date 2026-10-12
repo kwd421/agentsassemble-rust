@@ -26,7 +26,8 @@ use hub::ConnectorHub;
 pub struct ConnectorMcp {
     hub: Arc<ConnectorHub>,
     tool_router: ToolRouter<Self>,
-    pub(crate) body_reservation: Option<Arc<crate::upload_body_budget::Reservation>>,
+    pub(super) envelopes: Arc<tokio::sync::Semaphore>,
+    pub(super) request_admission: Option<Arc<super::mcp_web::RequestAdmission>>,
 }
 
 impl ConnectorMcp {
@@ -38,18 +39,17 @@ impl ConnectorMcp {
         Ok(Self {
             hub: Arc::new(ConnectorHub::new(allowed_servers)?),
             tool_router: Self::tool_router(),
-            body_reservation: None,
+            envelopes: Arc::new(tokio::sync::Semaphore::new(2)),
+            request_admission: None,
         })
     }
 
-    pub(crate) fn hosted(
-        ingress: crate::public_ingress::PublicIngress,
-        store: agentsassemble_persistence::SqliteStore,
-    ) -> Self {
+    pub(crate) fn hosted(state: crate::AppState) -> Self {
         Self {
-            hub: Arc::new(ConnectorHub::hosted(ingress, store)),
+            hub: Arc::new(ConnectorHub::hosted(state)),
             tool_router: Self::tool_router(),
-            body_reservation: None,
+            envelopes: Arc::new(tokio::sync::Semaphore::new(2)),
+            request_admission: None,
         }
     }
 
@@ -231,10 +231,8 @@ impl ConnectorMcp {
     ) -> Result<String, String> {
         let value = self
             .hub
-            .client(&input.connection_id)?
-            .upload_attachment(&input.filename, &input.content_type, &input.data_base64)
-            .await
-            .map_err(|error| error.to_string())?;
+            .upload(input, self.request_admission.as_deref())
+            .await?;
         encode(&value)
     }
 
@@ -377,6 +375,37 @@ impl ConnectorMcp {
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for ConnectorMcp {
+    async fn call_tool(
+        &self,
+        request: rmcp::model::CallToolRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
+        let admission = self.request_admission.as_deref();
+        if request.name != "room_upload_attachment"
+            && let Some(admission) = admission
+        {
+            admission.release_envelope();
+        }
+        let call = self
+            .tool_router
+            .call(rmcp::handler::server::tool::ToolCallContext::new(
+                self, request, context,
+            ));
+        let result = if let Some(admission) = admission {
+            tokio::select! {
+                biased;
+                () = admission.cancellation.cancelled() => Err(rmcp::ErrorData::internal_error("request_cancelled", None)),
+                result = call => result,
+            }
+        } else {
+            call.await
+        };
+        if let Some(admission) = admission {
+            admission.release_envelope();
+        }
+        result
+    }
+
     // RMCP's generated tools/list uses async without suspension. Keep its router,
     // result builders and negotiated cache hints, with an immediately ready result.
     fn list_tools(

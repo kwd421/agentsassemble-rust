@@ -610,10 +610,30 @@ to this host bound. Existing queue gates and progress deadlines remain.
 The host budget is 512 MiB, charging four times the encoded bound for body, JSON,
 decoded bytes and storage copies; at 10 MiB this admits nine maximum-size requests
 across principals. At a future 50 MiB file setting it admits one maximum request
-without growing host memory. Small declared bodies share the same weighted budget. The hosted MCP envelope is
-also charged before RMCP decoding and held by its request service clones; its
-principal is inside JSON, so the authenticated inner upload applies the principal
-limit while the outer envelope applies the host-wide bound.
+without growing host memory. Small declared bodies share the same weighted budget.
+
+MCP correction: hosted and standalone HTTP `/mcp` use a separate, non-waiting
+two-envelope admission before RMCP parses JSON, bounded by the encoded-body
+limit for the existing AI 10 MiB file ceiling. This consumes none of the shared
+upload pool.
+Parsed non-upload calls release envelope admission before dispatch; in particular
+`room_wait_next` retains no body lease while waiting or queued on its cursor.
+Hosted attachment uploads resolve the private connection to current server-owned
+connector authority, right-size shared admission to the parsed payload, and
+transfer custody from the envelope to that principal's two-upload limit. Keep the
+applicable room-derived bound when known, without increasing the AI 10 MiB cap.
+The authenticated lease follows decoding and storage through completion/error;
+HTTP cancellation cancels detached tool work, while already-started storage keeps
+its lease only until that retained work ends. Standalone HTTP and stdio forward
+uploads to the existing authenticated HTTP owner; neither holds a host upload
+lease for non-upload calls. Stdio has no HTTP envelope reservation to transfer.
+No schema, provider, UI, retry or upload-uncertainty semantics change.
+Acceptance: concurrent small chunked waits from one connector cannot consume
+shared upload capacity or block another principal; authenticated MCP uploads obey
+the principal cap; cancellation releases admission after retained work ends; the
+separate pre-parse limit cannot be exceeded. Verify server crate tests, formatting
+and architecture gates. Entry owners: connector/mcp_web, mcp_transport, mcp,
+hub/client, attachment_web and upload_body_budget.
 Regression acceptance: concurrent slow bodies across one/many principals stay within
 admission, refusal changes no accounting, and success/error/timeout/cancellation
 return capacity on both transports, including uncooperative credit-free clients.

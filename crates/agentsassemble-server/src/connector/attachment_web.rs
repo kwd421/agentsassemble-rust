@@ -41,14 +41,7 @@ pub(super) async fn upload(
     request: Request,
 ) -> Result<Json<Value>, ConnectorHttpError> {
     let fingerprint = credential(&request, CONNECTOR_SESSION_PREFIX)?;
-    let authorization = state
-        .store
-        .authorize_connector_session(&fingerprint, chrono::Utc::now())
-        .await
-        .map_err(ConnectorHttpError::from_persistence)?;
-    if !authorization.principal().capabilities.message_send {
-        return Err(ConnectorHttpError::unauthorized());
-    }
+    let authorization = authorize_upload(&state, &fingerprint).await?;
     let (payload, reservation): (crate::profile_web::EncodedAttachmentUpload, _) =
         decode_upload_body(
             request,
@@ -58,6 +51,55 @@ pub(super) async fn upload(
             &authorization.principal().principal_id,
         )
         .await?;
+    store_upload(state, authorization, payload, reservation).await
+}
+
+pub(in crate::connector) async fn upload_parsed(
+    state: AppState,
+    fingerprint: [u8; 32],
+    payload: crate::profile_web::EncodedAttachmentUpload,
+    admission: Option<&crate::connector::mcp_web::RequestAdmission>,
+) -> Result<Json<Value>, ConnectorHttpError> {
+    let authorization = authorize_upload(&state, &fingerprint).await?;
+    // AI transfers remain capped at 10 MiB, at or below every current room
+    // policy (10/25/50 MiB). Persistence rechecks that policy at insertion.
+    let length = payload
+        .data_base64
+        .len()
+        .saturating_add(payload.filename.len())
+        .saturating_add(payload.content_type.len());
+    let (_, reservation) = state.upload_bodies.reserve_length(
+        Some(&authorization.principal().principal_id),
+        length,
+        MAX_BASE64_UPLOAD_BODY_BYTES,
+    )?;
+    if let Some(admission) = admission {
+        admission.release_envelope();
+    }
+    store_upload(state, authorization, payload, reservation).await
+}
+
+async fn authorize_upload(
+    state: &AppState,
+    fingerprint: &[u8; 32],
+) -> Result<agentsassemble_persistence::ConnectorSessionAuthorization, ConnectorHttpError> {
+    let authorization = state
+        .store
+        .authorize_connector_session(fingerprint, chrono::Utc::now())
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    if !authorization.principal().capabilities.message_send {
+        return Err(ConnectorHttpError::unauthorized());
+    }
+    Ok(authorization)
+}
+
+async fn store_upload(
+    state: AppState,
+    authorization: agentsassemble_persistence::ConnectorSessionAuthorization,
+    payload: crate::profile_web::EncodedAttachmentUpload,
+    reservation: crate::upload_body_budget::Reservation,
+) -> Result<Json<Value>, ConnectorHttpError> {
     let attachment = state
         .connections
         .clone()

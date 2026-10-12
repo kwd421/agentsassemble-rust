@@ -25,10 +25,7 @@ registered_routes! {
 
 pub(crate) fn routes(state: &AppState) -> Router<AppState> {
     mcp_routes()
-        .layer(Extension(ConnectorMcp::hosted(
-            state.public_ingress(),
-            state.store.clone(),
-        )))
+        .layer(Extension(ConnectorMcp::hosted(state.clone())))
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
             PRIVATE_NO_STORE.clone(),
@@ -37,7 +34,7 @@ pub(crate) fn routes(state: &AppState) -> Router<AppState> {
 
 async fn handle(
     State(state): State<AppState>,
-    Extension(mut connector): Extension<ConnectorMcp>,
+    Extension(connector): Extension<ConnectorMcp>,
     request: Request,
 ) -> Response {
     // This registered route is behind require_trusted_ingress. That owner has
@@ -47,44 +44,61 @@ async fn handle(
     let Some(host) = single_header(request.headers(), header::HOST) else {
         return StatusCode::FORBIDDEN.into_response();
     };
+    let host = host.to_owned();
     let origins = single_header(request.headers(), header::ORIGIN)
         .map(str::to_owned)
         .into_iter();
-    // MCP carries its private connection identity inside JSON. Bound the outer
-    // envelope before RMCP reads it; the authenticated upload route additionally
-    // owns the per-principal limit. Keep the outer lease in every service clone,
-    // including RMCP's detached request task after HTTP cancellation.
-    let (body_limit, reservation) = match state.upload_bodies.reserve(
-        None,
-        &request,
-        crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES,
-    ) {
-        Ok(admission) => admission,
-        Err(crate::upload_body_budget::Error::Exhausted) => {
-            return (
-                StatusCode::TOO_MANY_REQUESTS,
-                axum::Json(
-                    serde_json::json!({"error":{"code":crate::upload_body_budget::ERROR_CODE}}),
-                ),
-            )
-                .into_response();
-        }
-        Err(crate::upload_body_budget::Error::Body(_)) => {
-            return StatusCode::PAYLOAD_TOO_LARGE.into_response();
-        }
-    };
-    connector.body_reservation = Some(Arc::new(reservation));
-    let service = StreamableHttpService::new(
-        move || Ok(connector.clone()),
-        Arc::<LocalSessionManager>::default(),
+    serve_request(
+        connector,
+        request,
         StreamableHttpServerConfig::default()
             .with_legacy_session_mode(false)
             .with_json_response(true)
             .with_sse_keep_alive(None)
-            .with_allowed_hosts([host.to_owned()])
+            .with_allowed_hosts([host])
             .with_allowed_origins(origins)
-            .with_max_request_body_bytes(body_limit)
             .with_cancellation_token(state.shutdown.child_token()),
+    )
+    .await
+}
+
+/// Two bounded envelopes, independent of the host's authenticated upload pool.
+/// The permit moves out of every service clone together at tool dispatch/admission.
+pub(super) async fn serve_request(
+    mut connector: ConnectorMcp,
+    request: Request,
+    config: StreamableHttpServerConfig,
+) -> Response {
+    let Ok(permit) = connector.envelopes.clone().try_acquire_owned() else {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            axum::Json(serde_json::json!({"error":{"code":"mcp_envelope_budget_exhausted"}})),
+        )
+            .into_response();
+    };
+    let cancellation = config.cancellation_token.child_token();
+    let _disconnect = cancellation.clone().drop_guard();
+    connector.request_admission = Some(Arc::new(RequestAdmission {
+        envelope: parking_lot::Mutex::new(Some(permit)),
+        cancellation,
+    }));
+    let service = StreamableHttpService::new(
+        move || Ok(connector.clone()),
+        Arc::<LocalSessionManager>::default(),
+        config.with_max_request_body_bytes(crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES),
     );
     service.handle(request).await.map(Body::new)
 }
+
+pub(super) struct RequestAdmission {
+    envelope: parking_lot::Mutex<Option<tokio::sync::OwnedSemaphorePermit>>,
+    pub(super) cancellation: tokio_util::sync::CancellationToken,
+}
+impl RequestAdmission {
+    pub(super) fn release_envelope(&self) {
+        self.envelope.lock().take();
+    }
+}
+
+#[cfg(test)]
+mod tests;

@@ -22,7 +22,7 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use uuid::Uuid;
 
 #[path = "attachment_web.rs"]
-mod attachments;
+pub(crate) mod attachments;
 #[path = "read_web.rs"]
 mod read;
 
@@ -148,7 +148,7 @@ fn credential(request: &Request, prefix: &str) -> Result<[u8; 32], ConnectorHttp
 
 pub(crate) struct ConnectorHttpError {
     status: StatusCode,
-    code: std::borrow::Cow<'static, str>,
+    pub(super) code: std::borrow::Cow<'static, str>,
     resolution: CommandResolution,
 }
 

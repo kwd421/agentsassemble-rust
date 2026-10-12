@@ -1,13 +1,6 @@
-use std::sync::Arc;
-
 use rmcp::{
     ServiceExt,
-    transport::{
-        stdio,
-        streamable_http_server::{
-            StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
-        },
-    },
+    transport::{stdio, streamable_http_server::StreamableHttpServerConfig},
 };
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
@@ -50,23 +43,25 @@ pub async fn serve_remote(port: u16, allowed_servers: Vec<String>) -> anyhow::Re
     let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await?;
     let address = listener.local_addr()?;
     let cancellation = CancellationToken::new();
-    let factory = connector.clone();
-    let service = StreamableHttpService::new(
-        move || Ok(factory.clone()),
-        Arc::<LocalSessionManager>::default(),
-        StreamableHttpServerConfig::default()
-            .with_legacy_session_mode(false)
-            .with_json_response(true)
-            .with_sse_keep_alive(None)
-            .with_allowed_hosts([address.to_string(), format!("localhost:{}", address.port())])
-            .with_allowed_origins([
-                format!("http://{address}"),
-                format!("http://localhost:{}", address.port()),
-            ])
-            .with_max_request_body_bytes(crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES)
-            .with_cancellation_token(cancellation.child_token()),
-    );
-    let app = axum::Router::new().nest_service("/mcp", service);
+    let config = StreamableHttpServerConfig::default()
+        .with_legacy_session_mode(false)
+        .with_json_response(true)
+        .with_sse_keep_alive(None)
+        .with_allowed_hosts([address.to_string(), format!("localhost:{}", address.port())])
+        .with_allowed_origins([
+            format!("http://{address}"),
+            format!("http://localhost:{}", address.port()),
+        ])
+        .with_cancellation_token(cancellation.child_token());
+    let endpoint = connector.clone();
+    let app = axum::Router::new()
+        .route(
+            "/mcp",
+            axum::routing::any(move |request| {
+                super::super::mcp_web::serve_request(endpoint.clone(), request, config.clone())
+            }),
+        )
+        .layer(axum::middleware::from_fn(crate::http_body_policy::apply));
     let shutdown_connector = connector.clone();
     let shutdown_cancellation = cancellation.clone();
     let result = axum::serve(listener, app)

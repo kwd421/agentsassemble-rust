@@ -75,6 +75,15 @@ impl Budget {
             })
             .transpose()?
             .unwrap_or(maximum);
+        self.reserve_length(principal, length, maximum)
+    }
+
+    pub(crate) fn reserve_length(
+        &self,
+        principal: Option<&str>,
+        length: usize,
+        maximum: usize,
+    ) -> Result<(usize, Reservation), Error> {
         if length > maximum {
             return Err(BodyDecodeError::PayloadTooLarge.into());
         }

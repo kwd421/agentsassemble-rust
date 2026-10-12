@@ -86,7 +86,7 @@ pub struct RoomConnectorClient {
     state: Mutex<JoinState>,
     pending_command: Mutex<Option<PendingCommand>>,
     terminal_leave: parking_lot::Mutex<Option<TerminalLeave>>,
-    cancellation: CancellationToken,
+    pub(super) cancellation: CancellationToken,
 }
 
 impl RoomConnectorClient {
@@ -296,6 +296,15 @@ impl RoomConnectorClient {
         };
         serde_json::from_value(value)
             .map_err(|_| ConnectorClientError::local("invalid_attachment_response"))
+    }
+
+    pub(crate) async fn session_fingerprint(&self) -> Result<[u8; 32], ConnectorClientError> {
+        let session = self.session().await?;
+        crate::http_api::purpose_credential_fingerprint(
+            &session.bearer,
+            agentsassemble_persistence::CONNECTOR_SESSION_PREFIX,
+        )
+        .ok_or_else(|| ConnectorClientError::local("connector_session_unavailable"))
     }
 
     /// Creates a private pending attachment; a later message binds its returned ID.
