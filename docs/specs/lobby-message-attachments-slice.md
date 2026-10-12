@@ -111,6 +111,66 @@ No peak-RSS, paced WAN throughput, packaged UI or provider verification was run.
 SQLx piece bounds and Hyper's bounded writer establish the allocation envelope;
 client whole-Blob retention and the ACK throughput ceiling remain later slices.
 
+## Transfer rework: human upload owner (slice 3, 2026-10-13)
+
+Required entry points: authenticated begin/data/finish/status/cancel under
+`/api/message-attachment-transfers`, reached directly and through the existing
+encrypted virtual HTTP router. The legacy `/api/message-attachments` whole-file
+JSON route, connector/AI uploads and `message.send` publication stay unchanged.
+Advertise `x-agentsassemble-upload-transfer: 1` alongside the preview/upload-credit
+capabilities; binary encrypted records and client scheduling are later slices.
+
+Begin resolves the exact current writable human and room before accepting bytes.
+It rejects empty/oversized declarations, reserves declared bytes against room and
+host storage limits, and returns an opaque handle, future attachment ID, 64 KiB
+piece size and expiry. An operation ID identifies one transfer for that custody;
+repeated begin returns it, conflicting input is refused. Data consumes raw bytes
+incrementally, accepts only the next explicit offset and never exceeds declared
+length. Accepted offsets survive interrupted requests on this host process.
+Finish requires exact length, rechecks current authority, file limit and quota,
+then atomically exchanges reservation for ordinary one-hour pending custody.
+Non-images are never assembled. Safe rasters assemble only after acquiring the
+existing two-decoder budget, preserving format/dimension/allocation limits and
+upload-time preview generation. Finish is idempotent; status recovers its result.
+Cancellation, expiry, shutdown and authority/room loss remove incomplete bytes
+and release reservation. An app-owned 10-second sweep observes expiry and authority
+loss; each begin also performs cleanup. Finished receipts expire after one hour
+and are capped at 4,096 (capacity returns the same defer result). Incomplete identities cannot bind, read, count as retained
+files, export or restore. Finished publication remains solely `message.send`.
+
+Use connection-local, disk-backed SQLite TEMP metadata/piece tables on the existing
+single connection. They disappear on connection/process close, never enter the
+main-schema archive catalog or VACUUM export, and cannot be supplied by restore.
+There is no durable schema change. Piece transactions release the writer before
+network awaits; partial final pieces retain the exact accepted byte offset.
+All ordinary attachment insertion quota checks include live reservations.
+
+Admission allows three active transfers per human, 64 per host: one MiB fixed
+application/HTTP buffer allowance each, including bounded driver copies and HTTP
+receive buffers (64 MiB total). This conservative allowance is independent of file
+size. The legacy 512 MiB/four-copy pool stays intact: combined upload-buffer
+envelope 576 MiB, plus the unchanged encrypted 8 MiB queue pool, SQLite caches,
+metadata and raster working memory. At most two new raster assemblies add 100 MiB
+compressed input beside the existing two 72 MiB decoder allocation limits;
+decoder/preview working-set RSS is not claimed to equal those allocation limits.
+Begin contention returns structured `defer` with a retry hint, permitting ten
+client-queued files without treating capacity as upload failure. Data retains
+30 s idle / 64 KiB per 120 s / one-hour deadline semantics; server storage/credit
+waits are excluded from idle/minimum-progress time, not from the hard ceiling.
+
+Acceptance: exact 50 MiB non-image and raster transfer -> finish -> message bind,
+legacy metadata/preview parity; short/long declarations and gap/overlap/replay
+refusal; interrupted resume; repeated finish/status recovery; reservation races,
+cancel/expiry release and policy lowering; incomplete bind/read/backup exclusion;
+three admissions/fourth defer; bounded bodies on both transports and an unrelated
+room write completing while a request is stalled. Peak RSS and packaged UI remain
+separate measured acceptance; structural buffer tests must not claim those results.
+
+Open authority decision: existing encrypted-channel close ends its durable room
+session. Interrupted child requests retain the transfer while that authority is
+valid. Resuming on a newly admitted channel/session requires an explicit custody
+renewal rule; the full resume criterion is not closed until this is settled.
+
 ## Approved target contract after Phase 0B
 
 - This slice owns only attachments on the ordinary lobby `message_final` path. Custom

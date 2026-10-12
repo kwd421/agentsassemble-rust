@@ -109,6 +109,9 @@ async fn replace_database(
     let prepared = PreparedDatabase::from_path(temporary.path())?;
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
+        .after_connect(|connection, _| {
+            Box::pin(crate::message_upload::initialize_connection(connection))
+        })
         .connect_with(prepared.options.clone().create_if_missing(false))
         .await?;
     prepared.revalidate()?;

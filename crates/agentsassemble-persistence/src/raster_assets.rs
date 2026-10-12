@@ -114,6 +114,20 @@ pub(crate) async fn lazy_preview<T: Send + 'static>(
     .map_err(|_| decode_task_failed())?
 }
 
+pub(crate) async fn upload_preview(
+    content_type: &str,
+    content: Vec<u8>,
+    permit: tokio::sync::SemaphorePermit<'static>,
+) -> Result<Option<crate::raster_preview::Preview>, PersistenceError> {
+    let format = declared_image_format(content_type)?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        validate_preserved_blocking(format, &content, true)
+    })
+    .await
+    .map_err(|_| decode_task_failed())?
+}
+
 async fn decode_preserved(
     format: ImageFormat,
     content: Vec<u8>,

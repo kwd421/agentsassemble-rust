@@ -73,6 +73,9 @@ impl SqliteStore {
     async fn open_prepared(prepared: PreparedDatabase) -> Result<Self, PersistenceError> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
+            .after_connect(|connection, _| {
+                Box::pin(crate::message_upload::initialize_connection(connection))
+            })
             .idle_timeout(None)
             .max_lifetime(None)
             .connect_with(prepared.options.clone().create_if_missing(true))

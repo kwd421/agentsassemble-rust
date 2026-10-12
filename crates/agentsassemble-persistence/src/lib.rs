@@ -129,6 +129,8 @@ mod human_prejoin_attachments;
 mod human_session_authority;
 mod message_attachment_previews;
 mod message_attachments;
+mod message_upload;
+pub use message_upload::{MESSAGE_UPLOAD_PIECE_BYTES, MessageUploadAuthority, MessageUploadStatus};
 mod message_mutations;
 mod message_pins;
 mod message_replies;

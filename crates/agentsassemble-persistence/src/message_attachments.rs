@@ -54,7 +54,7 @@ pub(crate) const DDL: &str = concat!(
     "FOREIGN KEY(room_id, event_seq) REFERENCES room_events(room_id, seq) ON DELETE CASCADE)",
 );
 
-const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
+pub(crate) const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
 #[path = "connector_attachments.rs"]
 pub(crate) mod connector;
 #[path = "message_attachment_reader.rs"]
@@ -540,7 +540,7 @@ pub(crate) async fn bound_provider_attachment_in<T>(
     Ok(attachment)
 }
 
-async fn current_local_message_principal(
+pub(crate) async fn current_local_message_principal(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     user_id: &str,
@@ -663,7 +663,7 @@ fn upload_validation_limit(kind: ClientKind) -> usize {
     }
 }
 
-fn require_file_size(size: usize, limit: usize) -> Result<(), PersistenceError> {
+pub(crate) fn require_file_size(size: usize, limit: usize) -> Result<(), PersistenceError> {
     if size == 0 || size > limit {
         return Err(rejected(
             "attachment_too_large",
@@ -700,7 +700,7 @@ async fn prepare_message_attachment(
     })
 }
 
-async fn require_current_message_writer(
+pub(crate) async fn require_current_message_writer(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
 ) -> Result<(), PersistenceError> {
@@ -714,14 +714,13 @@ async fn require_current_message_writer(
     })
 }
 
-async fn store_pending_in_transaction(
+pub(crate) async fn require_storage_capacity(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
-    prepared: PreparedMessageAttachment,
-) -> Result<MessageAttachmentMetadata, PersistenceError> {
-    let now = Utc::now();
-    let created_at = now.timestamp();
-    let expires_at = (now + PENDING_ATTACHMENT_TTL).timestamp();
+    size: i64,
+) -> Result<(), PersistenceError> {
+    crate::message_upload::expire_in(transaction).await?;
+    let created_at = Utc::now().timestamp();
     sqlx::query("DELETE FROM room_connector_uploads WHERE expires_at <= ?")
         .bind(created_at)
         .execute(&mut **transaction)
@@ -730,22 +729,36 @@ async fn store_pending_in_transaction(
         .bind(created_at)
         .execute(&mut **transaction)
         .await?;
+
     let settings =
         crate::room_preferences::load_room_settings(transaction, &principal.room_id).await?;
     if principal.client_kind != ClientKind::RoomConnector {
-        require_file_size(prepared.content.len(), settings.attachment_file_limit_bytes)?;
+        require_file_size(size as usize, settings.attachment_file_limit_bytes)?;
     }
     if let Some(limit) = settings.attachment_storage_limit_bytes {
-        let used: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM room_message_attachments WHERE room_id = ? UNION ALL SELECT size FROM room_connector_uploads WHERE room_id = ?)")
-                .bind(&principal.room_id).bind(&principal.room_id).fetch_one(&mut **transaction).await?;
-        if u64::try_from(used + prepared.size).map_err(|_| invalid_attachment_state())? > limit {
+        let used: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM room_message_attachments WHERE room_id = ? UNION ALL SELECT size FROM room_connector_uploads WHERE room_id = ? UNION ALL SELECT size FROM temp.message_uploads WHERE room_id = ? AND finished=0)")
+                .bind(&principal.room_id).bind(&principal.room_id).bind(&principal.room_id).fetch_one(&mut **transaction).await?;
+        if u64::try_from(used + size).map_err(|_| invalid_attachment_state())? > limit {
             return Err(rejected(
                 "room_attachment_quota_reached",
                 "Room attachment storage limit reached.",
             ));
         }
     }
-    enforce_storage_replacement(transaction, None, prepared.size).await?;
+    enforce_storage_replacement(transaction, None, size).await?;
+
+    Ok(())
+}
+
+async fn store_pending_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    prepared: PreparedMessageAttachment,
+) -> Result<MessageAttachmentMetadata, PersistenceError> {
+    let now = Utc::now();
+    let created_at = now.timestamp();
+    let expires_at = (now + PENDING_ATTACHMENT_TTL).timestamp();
+    require_storage_capacity(transaction, principal, prepared.size).await?;
 
     let attachment_id = format!("{MESSAGE_ATTACHMENT_ID_PREFIX}{}", Uuid::new_v4().simple());
     if principal.client_kind == ClientKind::RoomConnector {
@@ -794,7 +807,7 @@ async fn store_pending_in_transaction(
     ))
 }
 
-fn normalize_content_type(value: &str, filename: &str) -> String {
+pub(crate) fn normalize_content_type(value: &str, filename: &str) -> String {
     let candidate = value
         .split(';')
         .next()
