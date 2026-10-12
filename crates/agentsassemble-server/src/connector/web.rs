@@ -24,7 +24,7 @@ use uuid::Uuid;
 #[path = "attachment_web.rs"]
 pub(crate) mod attachments;
 #[path = "read_web.rs"]
-mod read;
+pub(in crate::connector) mod read;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

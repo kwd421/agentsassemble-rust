@@ -310,10 +310,8 @@ impl ConnectorMcp {
     ) -> Result<rmcp::model::CallToolResult, String> {
         let attachment = self
             .hub
-            .client(&input.connection_id)?
-            .read_attachment(&input.attachment_id)
-            .await
-            .map_err(|error| error.to_string())?;
+            .read_attachment(input, self.request_admission.as_deref())
+            .await?;
         agentsassemble_provider::attachment_tool_result(&attachment)
     }
 

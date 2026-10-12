@@ -22,18 +22,35 @@ pub(super) async fn read(
     request: Request,
 ) -> Result<axum::response::Response, ConnectorHttpError> {
     let authorization = super::read::authorize_read(&state, request, 1).await?;
+    let (value, lease) = read_authorized(&state, &authorization, &query.attachment_id).await?;
+    crate::download_budget::encoded_response(&value, Some(lease))
+        .map_err(|error| ConnectorHttpError::from_persistence(error.into()))
+}
+
+pub(in crate::connector) async fn read_authorized(
+    state: &AppState,
+    authorization: &agentsassemble_persistence::ConnectorSessionAuthorization,
+    attachment_id: &str,
+) -> Result<
+    (
+        agentsassemble_provider::ProviderAttachment,
+        crate::download_budget::Lease,
+    ),
+    ConnectorHttpError,
+> {
     let (attachment, lease) = state
         .store
         .bound_authorized_message_attachment(
-            RoomMutationAuthority::ConnectorSession(&authorization),
-            &query.attachment_id,
+            RoomMutationAuthority::ConnectorSession(authorization),
+            attachment_id,
             |principal, size| state.downloads.reserve_encoded(principal, size),
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    let value = crate::provider_attachment_runtime::into_provider_attachment(attachment);
-    crate::download_budget::encoded_response(&value, Some(lease))
-        .map_err(|error| ConnectorHttpError::from_persistence(error.into()))
+    Ok((
+        crate::provider_attachment_runtime::into_provider_attachment(attachment),
+        lease,
+    ))
 }
 
 pub(super) async fn upload(

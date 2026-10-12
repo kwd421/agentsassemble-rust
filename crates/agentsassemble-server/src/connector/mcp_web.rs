@@ -105,17 +105,29 @@ pub(super) async fn serve_request(
         Err(response) => return response,
     };
     let cancellation = config.cancellation_token.child_token();
-    let _disconnect = cancellation.clone().drop_guard();
-    connector.request_admission = Some(Arc::new(RequestAdmission {
+    let admission = Arc::new(RequestAdmission {
         envelope: parking_lot::Mutex::new(Some(permit)),
+        downloads: parking_lot::Mutex::new(Vec::new()),
         cancellation,
-    }));
+    });
+    let custody = ResponseAdmission(admission.clone());
+    connector.request_admission = Some(admission.clone());
     let service = StreamableHttpService::new(
         move || Ok(connector.clone()),
         Arc::<LocalSessionManager>::default(),
         config.with_max_request_body_bytes(crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES),
     );
-    service.handle(request).await.map(Body::new)
+    let response = service.handle(request).await;
+    admission.release_envelope();
+    response.map(|body| {
+        let stream = Body::new(body).into_data_stream();
+        Body::from_stream(futures_util::stream::unfold(
+            (stream, custody),
+            |(mut stream, custody)| async move {
+                stream.next().await.map(|item| (item, (stream, custody)))
+            },
+        ))
+    })
 }
 
 // The endpoint is stateless: no authenticated MCP session/bearer is bound to the
@@ -211,11 +223,34 @@ fn envelope_error(status: StatusCode, code: &'static str) -> Response {
 
 pub(super) struct RequestAdmission {
     envelope: parking_lot::Mutex<Option<EnvelopeLease>>,
+    downloads: parking_lot::Mutex<Vec<crate::download_budget::Lease>>,
     pub(super) cancellation: tokio_util::sync::CancellationToken,
 }
 impl RequestAdmission {
+    pub(super) fn retain_download(
+        &self,
+        lease: crate::download_budget::Lease,
+    ) -> Result<(), String> {
+        let mut downloads = self.downloads.lock();
+        if self.cancellation.is_cancelled() {
+            return Err("request_cancelled".into());
+        }
+        downloads.push(lease);
+        Ok(())
+    }
+
     pub(super) fn release_envelope(&self) {
         self.envelope.lock().take();
+    }
+}
+
+// RMCP tasks may outlive handle(). Only outer body EOF/drop completes delivery.
+struct ResponseAdmission(Arc<RequestAdmission>);
+impl Drop for ResponseAdmission {
+    fn drop(&mut self) {
+        self.0.cancellation.cancel();
+        self.0.downloads.lock().clear();
+        self.0.release_envelope();
     }
 }
 

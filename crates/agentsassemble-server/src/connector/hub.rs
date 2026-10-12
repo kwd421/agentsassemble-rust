@@ -86,6 +86,43 @@ impl ConnectorHub {
             .map_err(|error| error.code)
     }
 
+    pub(super) async fn read_attachment(
+        &self,
+        input: super::contract::AttachmentRead,
+        admission: Option<&crate::connector::mcp_web::RequestAdmission>,
+    ) -> Result<agentsassemble_provider::ProviderAttachment, String> {
+        let client = self.client(&input.connection_id)?;
+        if let Some(state) = &self.owned_runtime {
+            let admission = admission.ok_or("mcp_request_admission_required")?;
+            let read = async {
+                let fingerprint = client.session_fingerprint().await.map_err(|e| e.code)?;
+                let authorization =
+                    crate::connector::web::read::authorize_read_fingerprint(state, &fingerprint, 1)
+                        .await
+                        .map_err(|e| e.code.into_owned())?;
+                let (attachment, lease) = crate::connector::web::attachments::read_authorized(
+                    state,
+                    &authorization,
+                    &input.attachment_id,
+                )
+                .await
+                .map_err(|e| e.code.into_owned())?;
+                admission.retain_download(lease)?;
+                Ok(attachment)
+            };
+            return tokio::select! {
+                () = client.cancellation.cancelled() => Err("connector_closed".into()),
+                result = tokio::time::timeout(crate::connector::client::COMMAND_TIMEOUT, read) => {
+                    result.map_err(|_| "connector_transport_unresolved".to_owned())?
+                }
+            };
+        }
+        client
+            .read_attachment(&input.attachment_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     fn remote(&self) -> bool {
         self.allowed_servers.is_some() || self.owned_runtime.is_some()
     }

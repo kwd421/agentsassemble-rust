@@ -334,9 +334,17 @@ pub(super) async fn authorize_read(
         &request,
         agentsassemble_persistence::CONNECTOR_SESSION_PREFIX,
     )?;
+    authorize_read_fingerprint(state, &fingerprint, requested_events).await
+}
+
+pub(in crate::connector) async fn authorize_read_fingerprint(
+    state: &AppState,
+    fingerprint: &[u8; 32],
+    requested_events: usize,
+) -> Result<ConnectorSessionAuthorization, ConnectorHttpError> {
     let authorization = state
         .store
-        .authorize_connector_session(&fingerprint, chrono::Utc::now())
+        .authorize_connector_session(fingerprint, chrono::Utc::now())
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
     if !state

@@ -352,3 +352,68 @@ async fn stalled_envelopes_leave_other_clients_capacity_and_expire_without_progr
             .is_ok()
     );
 }
+
+#[tokio::test]
+async fn hosted_attachment_holds_weight_through_outer_body_drop_and_eof() {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let fixture = Fixture::new().await;
+    let joined = fixture.join().await;
+    let content = vec![0xff; 128 * 1024];
+    let uploaded = result(
+        &call(
+            &fixture.connector,
+            "room_upload_attachment",
+            json!({
+                "connection_id":joined["connection_id"], "filename":"proof.bin",
+                "content_type":"application/octet-stream", "data_base64":STANDARD.encode(&content)
+            }),
+        )
+        .await,
+    );
+    let id = &uploaded["attachment"]["id"];
+    call(
+        &fixture.connector,
+        "room_say",
+        json!({
+            "connection_id":joined["connection_id"], "request_id":Uuid::new_v4().to_string(),
+            "content":"Published attachment", "attachment_ids":[id]
+        }),
+    )
+    .await;
+    let available = fixture.state.downloads.available();
+    for drain in [false, true] {
+        let response = serve_request(
+            fixture.connector.clone(),
+            request(Body::from(tool_body(
+                "room_read_attachment",
+                json!({
+                    "connection_id":joined["connection_id"], "attachment_id":id
+                }),
+            ))),
+            config(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let mut body = response.into_body().into_data_stream();
+        let first = body.next().await.expect("outer content").expect("body");
+        assert_eq!(
+            fixture.state.downloads.available(),
+            available - (content.len() * 8 + 65536)
+        );
+        if drain {
+            let mut encoded = first.to_vec();
+            while let Some(piece) = body.next().await {
+                encoded.extend_from_slice(&piece.expect("piece"));
+            }
+            let reply: Value = serde_json::from_slice(&encoded).expect("MCP response");
+            assert_ne!(reply["result"]["isError"], true);
+            let blob = reply["result"]["content"][1]["resource"]["blob"]
+                .as_str()
+                .expect("binary content");
+            assert_eq!(STANDARD.decode(blob).expect("base64"), content);
+        }
+        drop(body);
+        assert_eq!(fixture.state.downloads.available(), available);
+    }
+    fixture.stop().await;
+}

@@ -899,3 +899,15 @@ HTTP uses this same conservative bound; its body retains the final encoded bytes
 Storage remains the schema-93 bounded piece owner. Per-principal count/weight
 caps apply to these reservations too. Verify refusal before chunk selection and
 slow/drop lifetime on each route and a backpressured provider pipe. No wire change.
+
+## Round-5 hosted MCP download custody (2026-10-12)
+
+`room_read_attachment` on hosted `/mcp` must read through the owned runtime,
+using the same connector-session authorization, read-rate admission, published
+attachment reachability and encoded download budget as connector HTTP. Transfer
+the lease to request admission before building MCP content; the final RMCP body
+owns it until EOF/drop, including slow consumption and cancellation. Remote
+standalone MCP retains its authenticated HTTP boundary and timeout semantics.
+Acceptance: a published attachment read through the real hosted RMCP service
+holds shared download weight while its outer body is partly drained, releases on
+drop/EOF, and preserves exact MCP content. No frontend, wire or provider change.

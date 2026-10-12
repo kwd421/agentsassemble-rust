@@ -15,7 +15,7 @@ use transport::{parse_invite, read_response};
 use url::Url;
 use uuid::Uuid;
 
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
 #[error("{code}{suffix}", suffix = if .message.is_empty() { String::new() } else { format!(": {}", .message) })]
