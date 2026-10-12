@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, expect, test, vi } from "vitest";
 import { BODY_BINARY, BODY_BINARY_CONFIRMED, encodeBodyRecord, decodeBodyRecord } from "./remoteBodyRecord";
+import { BODY_WINDOW, BODY_WINDOW_CONFIRMED } from "./remoteCreditWindow";
 import { RemoteTransport } from "./remoteTransport";
 import { decodeCanonicalBase64Url, encodeBase64Url } from "../base64Url";
 // The shared setup registers dialog hooks even in this isolated HTTP-only worker.
@@ -21,6 +22,9 @@ class Peer {
   static echoBody = true;
   static advertise = true;
   static advertiseBinary = false;
+  static advertiseWindow = false;
+  pendingWindowCredits: { id: number; offset: number }[] = [];
+  windowConfirmed = false;
   binaryRequests = 0;
   confirmed = false;
   pendingCredits: number[] = [];
@@ -29,9 +33,9 @@ class Peer {
   readyState = 1; bufferedAmount = 0;
   onopen?: () => void; onmessage?: (event: { data: string | ArrayBuffer }) => void;
   onerror?: () => void; onclose?: () => void;
-  requests = new Map<number, { headers: [string, string][]; uploadCredit: boolean; binary: boolean; offered: boolean; offset: number; chunks: Uint8Array[] }>();
+  requests = new Map<number, { headers: [string, string][]; uploadCredit: boolean; window: boolean; offeredWindow: boolean; binary: boolean; offered: boolean; offset: number; chunks: Uint8Array[] }>();
   constructor() { Peer.latest = this; queueMicrotask(() => this.onopen?.()); }
-  consume() { const id = this.pendingCredits.shift(); if (id !== undefined) this.emit({ op: "consumed", id }); }
+  consume() { const credit = this.pendingWindowCredits.shift(); if (credit) { this.emit({ op: "credit", ...credit }); return; } const id = this.pendingCredits.shift(); if (id !== undefined) this.emit({ op: "consumed", id }); }
   emit(frame: object) { queueMicrotask(() => this.onmessage?.({ data: encoder.encode(JSON.stringify(frame)).buffer })); }
   send(record: string | ArrayBuffer) {
     if (typeof record === "string") { queueMicrotask(() => this.onmessage?.({ data: "{}" })); return; }
@@ -53,7 +57,7 @@ class Peer {
       if (!Peer.advertiseBinary) expect(mode).toBeNull();
       if (mode === "2") expect(this.confirmed).toBe(true);
       this.requests.set(frame.id, { headers: frame.headers, uploadCredit: frame.upload_credit === true,
-        binary: mode === "2", offered: mode === "1", offset: 0, chunks: [] });
+        window: new Headers(frame.headers).get(BODY_WINDOW) === "2", offeredWindow: new Headers(frame.headers).get(BODY_WINDOW) === "1", binary: mode === "2", offered: mode === "1", offset: 0, chunks: [] });
     }
     if (frame.op !== "data") return;
     const request = this.requests.get(frame.id)!;
@@ -63,7 +67,8 @@ class Peer {
       request.chunks.push(bytes);
     }
     if (!frame.end) {
-      this.receivedChunks++; if (request.uploadCredit) this.pendingCredits.push(frame.id);
+      this.receivedChunks++; if (request.window) this.pendingWindowCredits.push({ id: frame.id, offset: request.offset });
+      else if (request.uploadCredit) this.pendingCredits.push(frame.id);
       if (Peer.autoConsume) this.consume();
       this.onData?.(); return;
     }
@@ -71,6 +76,8 @@ class Peer {
     let offset = 0; for (const part of request.chunks) { body.set(part, offset); offset += part.length; }
     if (!Peer.echoBody) body = encoder.encode(JSON.stringify({ received: body.length }));
     const headers = request.headers.filter(([key]) => key !== BODY_BINARY);
+    if (Peer.advertiseWindow) headers.push([BODY_WINDOW, "1"]);
+    if (request.offeredWindow) { this.windowConfirmed = true; headers.push([BODY_WINDOW_CONFIRMED, "1"]); }
     if (Peer.advertiseBinary) headers.push([BODY_BINARY, "1"]);
     if (request.offered) { this.confirmed = true; headers.push([BODY_BINARY_CONFIRMED, "1"]); }
     this.emit({ op: "response", id: frame.id, status: 200, headers: [...headers, ...(Peer.advertise ? [["x-agentsassemble-upload-credit", "1"], ["x-agentsassemble-image-preview", "1"]] : [])] });
@@ -89,7 +96,7 @@ class Peer {
   close() { this.readyState = 3; }
 }
 const transports: RemoteTransport[] = [];
-afterEach(() => { for (const transport of transports.splice(0)) transport.close(); vi.unstubAllGlobals(); Peer.autoConsume = true; Peer.echoBody = true; Peer.advertise = true; Peer.advertiseBinary = false; });
+afterEach(() => { for (const transport of transports.splice(0)) transport.close(); vi.unstubAllGlobals(); Peer.autoConsume = true; Peer.echoBody = true; Peer.advertise = true; Peer.advertiseBinary = false; Peer.advertiseWindow = false; vi.useRealTimers(); });
 async function connectWithoutRequestBody() {
   const BrowserRequest = Request;
   vi.stubGlobal("Request", class extends BrowserRequest {
@@ -253,4 +260,53 @@ test.each(["gap", "wrong direction", "length", "unconfirmed"])("refuses %s binar
   peer.onmessage?.({data:record.buffer});
   await drained();
   expect(transport.active).toBe(false); await rejected;
+});
+
+
+test("three bodies share six pieces fairly; cancel reclaims its outstanding credit", async () => {
+  Peer.advertiseBinary = Peer.advertiseWindow = true; Peer.echoBody = false;
+  const transport = await connectWithoutRequestBody(), peer = Peer.latest;
+  await (await transport.fetch("/probe")).text(); await (await transport.fetch("/probe")).text();
+  Peer.autoConsume = false;
+  const abort = new AbortController();
+  const payload = new Uint8Array(8 * 64 * 1024);
+  const first = transport.fetch("/upload", {method:"POST", body:payload, signal:abort.signal}).catch(() => undefined);
+  const rest = [transport.fetch("/upload", {method:"POST", body:payload}), transport.fetch("/upload", {method:"POST", body:payload})];
+  await drained(); await drained();
+  expect(peer.pendingWindowCredits).toHaveLength(6);
+  expect([...peer.requests.values()].filter(r => r.window).every(r => r.chunks.length > 0)).toBe(true);
+  const cancelledId = peer.pendingWindowCredits[0].id;
+  abort.abort(); await first;
+  peer.pendingWindowCredits = peer.pendingWindowCredits.filter(c => c.id !== cancelledId);
+  Peer.autoConsume = true; while (peer.pendingWindowCredits.length) peer.consume();
+  for (const result of rest) expect((await (await result).json()).received).toBe(payload.length);
+  expect(transport.active).toBe(true);
+});
+
+test.each([0, 1, 65537, "replay"])("refuses invalid cumulative upload credit %s", async fault => {
+  Peer.advertiseBinary = Peer.advertiseWindow = true;
+  const transport = await connectWithoutRequestBody(), peer = Peer.latest;
+  await (await transport.fetch("/probe")).text(); await (await transport.fetch("/probe")).text();
+  Peer.autoConsume = false;
+  const pending = transport.fetch("/upload", {method:"POST", body:new Uint8Array(64 * 1024)}).catch(() => undefined);
+  await drained(); await drained(); const {id, offset} = peer.pendingWindowCredits[0];
+  if (fault === "replay") { peer.emit({op:"credit",id,offset}); peer.emit({op:"credit",id,offset}); }
+  else peer.emit({op:"credit",id,offset:fault});
+  await drained(); expect(transport.active).toBe(false); await pending;
+});
+
+
+test("unrelated responses cannot refresh a withheld upload-credit deadline", async () => {
+  vi.useFakeTimers(); Peer.advertiseBinary = Peer.advertiseWindow = true;
+  const transport = await connectWithoutRequestBody();
+  await (await transport.fetch("/probe")).text(); await (await transport.fetch("/probe")).text();
+  Peer.autoConsume = false;
+  const body = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(64 * 1024)); } });
+  const pending = transport.fetch("/upload", {method:"POST",body,duplex:"half"} as RequestInit).catch(() => undefined);
+  await drained();
+  await vi.advanceTimersByTimeAsync(15_000);
+  await (await transport.fetch("/probe")).text();
+  expect(transport.active).toBe(true);
+  await vi.advanceTimersByTimeAsync(15_000);
+  expect(transport.active).toBe(false); await pending;
 });

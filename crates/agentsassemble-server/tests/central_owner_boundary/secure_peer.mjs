@@ -5,10 +5,19 @@ const { RemoteTransport } = await import(pathToFileURL(process.env.AA_REMOTE_TRA
 const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
 const config = JSON.parse((await lines.next()).value);
 const NativeWebSocket = globalThis.WebSocket;
+let linkRtt = 0;
 // Test-only physical tunnel adapter; production crypto, multiplexing and HTTP are unchanged.
 globalThis.WebSocket = class extends NativeWebSocket {
   constructor(url) { assert.equal(String(url), `${config.target.origin.replace('https:', 'wss:')}/api/secure-channel`); super(`ws://${config.proxy}/api/secure-channel`); }
+  set onmessage(handler) { super.onmessage = handler ? event => { if(linkRtt) setTimeout(()=>handler(event),linkRtt/2); else handler(event); } : null; }
+  get onmessage() { return super.onmessage; }
+  send(bytes) { if(linkRtt) setTimeout(()=>super.send(bytes),linkRtt/2); else super.send(bytes); }
 };
+// The app's roomSocketClient sends a ping every three minutes; this direct
+// transport harness must do the same during the long paced measurements.
+const keptSockets=new Set();
+const keepalive=setInterval(()=>{for(const socket of keptSockets)if(socket.readyState===1)socket.send(JSON.stringify({op:'ping',nonce:crypto.randomUUID()}));},config.benchmark?3*60_000:1_000);
+keepalive.unref();
 const remote = await RemoteTransport.connect(config.target, 'owner');
 const headers = { 'content-type':'application/json', 'x-device-token':config.device };
 async function post(path, body, extra={}) {
@@ -70,6 +79,7 @@ const joined = await post('/api/central-owner/room', {...root,room_id:'secure-ro
 const ticket = await post('/api/session-tickets/socket',{device:{device_name:'Encrypted test',browser:'Node WebCrypto',os:'test'}},{authorization:`Bearer ${joined.session_token}`});
 const socket = remote.openSocket(ticket.ticket);
 const messages = [], waiters=[];
+keptSockets.add(socket);
 socket.onmessage = event => { const frame=JSON.parse(event.data); const waiter=waiters.shift(); if(waiter) waiter(frame); else messages.push(frame); };
 const receive = () => messages.length ? Promise.resolve(messages.shift()) : new Promise(resolve=>waiters.push(resolve));
 await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
@@ -132,6 +142,7 @@ assert.equal(memberTicketResponse.status,200); const memberTicket=await memberTi
 const memberSocket=member.openSocket(memberTicket.ticket);
 await new Promise((resolve,reject)=>{memberSocket.onopen=resolve;memberSocket.onerror=reject;});
 const memberFrames=[], memberWaiters=[];
+keptSockets.add(memberSocket);
 memberSocket.onmessage=e=>{const f=JSON.parse(e.data),w=memberWaiters.shift();if(w)w(f);else memberFrames.push(f);};
 const memberReceive=()=>memberFrames.length?Promise.resolve(memberFrames.shift()):new Promise(r=>memberWaiters.push(r));
 memberSocket.send(JSON.stringify({op:'subscribe',streams:['room_events'],resume_from_seq:0}));

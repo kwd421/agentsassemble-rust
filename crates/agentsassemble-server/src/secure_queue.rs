@@ -366,3 +366,7 @@ mod tests {
         assert_eq!(global.available_permits(), GLOBAL_BYTES);
     }
 }
+
+#[cfg(test)]
+#[path = "secure_window_tests.rs"]
+mod window_tests;

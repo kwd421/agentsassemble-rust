@@ -3,6 +3,8 @@ import { beginSecureHandshake, type SecureTarget, type SecurePurpose, type Serve
 
 import { BODY_BINARY, BODY_BINARY_CONFIRMED, encodeBodyRecord, decodeBodyRecord } from "./remoteBodyRecord.ts";
 
+import { BODY_WINDOW, BODY_WINDOW_CONFIRMED, CreditWindow, WINDOW_BYTES } from "./remoteCreditWindow.ts";
+
 export const REMOTE_CHUNK = 64 * 1024;
 const QUEUE_LIMIT = 512 * 1024;
 const encoder = new TextEncoder();
@@ -23,6 +25,7 @@ type HttpWait = {
   controller?: ReadableStreamDefaultController<Uint8Array<ArrayBuffer>>;
   chunks: Uint8Array<ArrayBuffer>[]; end: boolean; pulling: boolean;
   removeAbort: () => void; responded: boolean; releaseFrame?: () => void;
+  window: boolean; offeredWindow: boolean; consumedOffset: number;
   binary: boolean; offeredBinary: boolean; sendOffset: number; receiveOffset: number;
   uploadCredit: boolean; consumed?: () => void; stopUpload?: () => void;
 };
@@ -42,6 +45,10 @@ export class RemoteTransport {
   private uploadCredit = false;
   private binaryAvailable = false;
   private binaryConfirmed = false;
+  private windowAvailable = false;
+  private windowConfirmed = false;
+  private legacyBinaryChildren = new Set<number>();
+  private credits = new CreditWindow(() => this.close());
   private imagePreview = false;
   supportsImagePreview() { return this.imagePreview; }
   private uploading: Promise<unknown> = Promise.resolve();
@@ -65,9 +72,11 @@ export class RemoteTransport {
       this.receiving = this.receiving.then(async () => {
         try {
           const plaintext = await this.receiveCipher.open(record);
-          if (plaintext[0] === 2) await this.acceptBinary(plaintext);
-          else await this.accept(JSON.parse(decoder.decode(plaintext)));
-          await this.send({ op: "ack", sequence: this.acknowledged++ });
+          const sequence = this.acknowledged++;
+          let window = false;
+          if (plaintext[0] === 2) window = await this.acceptBinary(plaintext);
+          else { const frame = JSON.parse(decoder.decode(plaintext)); await this.accept(frame); window = frame.op === "credit" || frame.op === "cancelled"; }
+          if (!window) await this.send({ op: "ack", sequence });
         }
         finally { this.receiveBytes -= record.byteLength; }
       }).catch(() => this.close());
@@ -118,7 +127,7 @@ export class RemoteTransport {
   }
   close(error = connectionEnded()) {
     if (this.closed) return;
-    this.closed = true; this.wire.close(); this.ready?.reject(error); this.ready = null;
+    this.closed = true; this.credits.close(); this.wire.close(); this.ready?.reject(error); this.ready = null;
     for (const [id, wait] of this.http) { wait.reject(error); wait.controller?.error(error); this.removeHttp(id); }
     for (const socket of this.sockets.values()) socket.ended();
     this.sockets.clear(); this.bodyBytes = 0;
@@ -129,7 +138,7 @@ export class RemoteTransport {
     if (this.closed) return Promise.reject(connectionEnded());
     return this.sendBytesRecord(encoder.encode(JSON.stringify(frame)));
   }
-  private sendBytesRecord(bytes: Uint8Array<ArrayBuffer>): Promise<void> {
+  private sendBytesRecord(bytes: Uint8Array<ArrayBuffer>, emitted?: () => void): Promise<void> {
     if (this.closed) return Promise.reject(connectionEnded());
     if (bytes.length > 96 * 1024 || this.sendBytes + this.wire.bufferedAmount + bytes.length + 24 > QUEUE_LIMIT) {
       this.close(capacityError()); return Promise.reject(capacityError());
@@ -139,7 +148,7 @@ export class RemoteTransport {
       if (this.closed) throw connectionEnded();
       const record = await this.sendCipher.seal(bytes);
       if (this.closed || this.wire.readyState !== WebSocket.OPEN) throw connectionEnded();
-      this.wire.send(record);
+      this.wire.send(record); emitted?.();
     }).finally(() => { this.sendBytes -= bytes.length + 24; });
     this.sending = next.catch(() => this.close());
     return next;
@@ -148,10 +157,15 @@ export class RemoteTransport {
     const send = () => {
       const wait = this.http.get(id); if (!wait) return Promise.reject(connectionEnded());
       const result = wait.binary
-        ? this.sendBytesRecord(encodeBodyRecord(id, wait.sendOffset, bytes, end))
+        ? this.sendBytesRecord(encodeBodyRecord(id, wait.sendOffset, bytes, end), wait.window ? () => this.credits.emitted(id, wait.sendOffset) : undefined)
         : this.send({ op: "data", id, data: encodeBase64Url(bytes), end });
       wait.sendOffset += bytes.length; return result;
     };
+    if (this.http.get(id)?.window) return (async () => {
+      if (bytes.length && !await this.credits.reserve(id, bytes.length)) return false;
+      const wait = this.http.get(id); if (!wait || wait.responded) return false;
+      await send(); return true;
+    })();
     // One negotiated HTTP chunk across the channel until consumed. Control
     // frames and socket traffic retain their independent send path.
     if (end || !this.http.get(id)?.uploadCredit) {
@@ -187,11 +201,13 @@ export class RemoteTransport {
     const id = this.allocate();
     const uploadCredit = this.uploadCredit;
     const binary = this.binaryConfirmed;
+    const window = binary && this.windowConfirmed;
+    if (this.windowAvailable) request.headers.set(BODY_WINDOW, window ? "2" : "1");
     if (this.binaryAvailable) request.headers.set(BODY_BINARY, binary ? "2" : "1");
     const result = new Promise<Response>((resolve, reject) => {
       const abort = () => { this.cancelHttp(id, init.signal?.reason instanceof Error ? init.signal.reason : connectionEnded()); };
       init.signal?.addEventListener("abort", abort, { once: true });
-      this.http.set(id, { binary, offeredBinary: this.binaryAvailable && !binary, sendOffset: 0, receiveOffset: 0, uploadCredit, resolve, reject, chunks: [], end: false, pulling: false, responded: false,
+      this.http.set(id, { window, offeredWindow: this.windowAvailable && !window, consumedOffset: 0, binary, offeredBinary: this.binaryAvailable && !binary, sendOffset: 0, receiveOffset: 0, uploadCredit, resolve, reject, chunks: [], end: false, pulling: false, responded: false,
         removeAbort: () => init.signal?.removeEventListener("abort", abort) });
     });
     void (async () => {
@@ -214,6 +230,7 @@ export class RemoteTransport {
   }
   private removeHttp(id: number) {
     const wait = this.http.get(id); if (!wait) return;
+    this.credits.release(id);
     wait.stopUpload?.(); wait.consumed?.(); wait.consumed = undefined;
     wait.removeAbort(); wait.releaseFrame?.(); wait.releaseFrame = undefined; for (const chunk of wait.chunks) this.bodyBytes -= chunk.length;
     wait.chunks = []; this.http.delete(id);
@@ -227,7 +244,11 @@ export class RemoteTransport {
     const wait = this.http.get(id); if (!wait?.controller) return;
     if (wait.pulling && wait.chunks.length) {
       const chunk = wait.chunks.shift()!; this.bodyBytes -= chunk.length;
-      wait.pulling = false; wait.controller.enqueue(chunk); wait.releaseFrame?.(); wait.releaseFrame = undefined;
+      wait.pulling = false; wait.controller.enqueue(chunk);
+      if (wait.window) {
+        wait.consumedOffset += chunk.length;
+        void this.send({ op: "credit", id, offset: wait.consumedOffset }).catch(() => this.close());
+      } wait.releaseFrame?.(); wait.releaseFrame = undefined;
     }
     if (wait.end && !wait.chunks.length) { wait.controller.close(); this.removeHttp(id); }
   }
@@ -237,12 +258,21 @@ export class RemoteTransport {
     if (frame.op === "ready") { exact(frame, ["op"]); if (!this.ready) throw connectionEnded(); this.ready.resolve(); this.ready = null; return; }
     if (this.ready || !Number.isSafeInteger(frame.id) || Number(frame.id) < 1 || Number(frame.id) >= this.nextId) throw connectionEnded();
     const id = Number(frame.id);
+    if (frame.op === "cancelled") {
+      exact(frame, ["op", "id"]);
+      if (!this.windowConfirmed || this.http.has(id)) throw connectionEnded();
+      await this.send({ op: "cancel_confirm", id }); return;
+    }
     const wait = this.http.get(id), socket = this.sockets.get(id);
     if (!wait && !socket) return; // Terminal/cancelled child frames never revive it.
     if (frame.op === "error") {
       exact(frame, ["op", "id", "code"]);
       if (wait) this.cancelHttp(id, frame.code === "capacity" ? capacityError() : connectionEnded());
       if (socket) { socket.ended(); this.sockets.delete(id); }
+    } else if (frame.op === "credit" && wait) {
+      exact(frame, ["op", "id", "offset"]);
+      if (!wait.window) throw connectionEnded();
+      this.credits.credit(id, Number(frame.offset));
     } else if (frame.op === "consumed" && wait) {
       exact(frame, ["op", "id"]);
       if (!wait.consumed) { if (wait.responded) return; throw connectionEnded(); }
@@ -251,6 +281,11 @@ export class RemoteTransport {
       exact(frame, ["op", "id", "status", "headers"]);
       if (wait.responded || !Number.isInteger(frame.status) || Number(frame.status) < 200 || Number(frame.status) > 599 || !Array.isArray(frame.headers)) throw connectionEnded();
       const headers = new Headers(frame.headers as [string, string][]); wait.responded = true;
+      if (headers.get(BODY_WINDOW) === "1") this.windowAvailable = true;
+      if (headers.get(BODY_WINDOW_CONFIRMED) === "1") {
+        if (!wait.offeredWindow) throw connectionEnded(); this.windowConfirmed = true;
+        for (const [child, active] of this.http) if (active.binary && !active.window) this.legacyBinaryChildren.add(child);
+      }
       if (headers.get(BODY_BINARY) === "1") this.binaryAvailable = true;
       if (headers.get(BODY_BINARY_CONFIRMED) === "1") {
         if (!wait.offeredBinary) throw connectionEnded();
@@ -258,6 +293,7 @@ export class RemoteTransport {
       }
       if (headers.get("x-agentsassemble-upload-credit") === "1") this.uploadCredit = true;
       if (headers.get("x-agentsassemble-image-preview") === "1") this.imagePreview = true;
+      this.credits.release(id);
       wait.stopUpload?.(); wait.consumed?.(); wait.consumed = undefined;
       const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
         start: controller => { wait.controller = controller; },
@@ -292,15 +328,21 @@ export class RemoteTransport {
     const record = decodeBodyRecord(plaintext);
     if (record.id >= this.nextId) throw connectionEnded();
     const wait = this.http.get(record.id);
-    if (!wait) return;
+    if (!wait) {
+      const legacy = this.legacyBinaryChildren.has(record.id);
+      if (record.end) this.legacyBinaryChildren.delete(record.id);
+      return this.windowConfirmed && !legacy;
+    }
     if (!wait.binary || !wait.responded || wait.end || record.offset !== wait.receiveOffset) throw connectionEnded();
     wait.receiveOffset += record.bytes.length;
     this.bodyBytes += record.bytes.length;
-    if (this.bodyBytes + this.receiveBytes > QUEUE_LIMIT) throw capacityError();
-    const consumed = record.bytes.length ? new Promise<void>(resolve => { wait.releaseFrame = resolve; }) : Promise.resolve();
+    if (this.bodyBytes + this.receiveBytes > QUEUE_LIMIT || (wait.window && this.bodyBytes > WINDOW_BYTES)) throw capacityError();
+    const consumed = record.bytes.length && !wait.window ? new Promise<void>(resolve => { wait.releaseFrame = resolve; }) : Promise.resolve();
     if (record.bytes.length) wait.chunks.push(record.bytes);
     wait.end = record.end; this.pull(record.id);
     await consumed;
+    if (record.end) this.legacyBinaryChildren.delete(record.id);
+    return wait.window;
   }
   openSocket(ticket: string): RoomSocketConnection {
     const id = this.allocate();

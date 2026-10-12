@@ -50,7 +50,7 @@ async fn trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket()
         .spawn()?;
     let mut input = peer.stdin.take().ok_or("stdin")?;
     let mut output = BufReader::new(peer.stdout.take().ok_or("stdout")?).lines();
-    input.write_all(format!("{}\n",json!({"benchmark":std::env::var_os("AA_TRANSPORT_BENCHMARK").is_some(),"proxy":proxy_address.to_string(),"device":DEVICE,"grant":TOKEN,"late_grant":SECOND_TOKEN,"persona_png":base64::engine::general_purpose::STANDARD.encode(super::super::persona_library_boundary::png_card()),"target":{
+    input.write_all(format!("{}\n",json!({"benchmark":std::env::var_os("AA_TRANSPORT_BENCHMARK").is_some(),"rtt_ms":std::env::var("AA_TRANSPORT_RTT_MS").ok().and_then(|s|s.parse::<u64>().ok()).unwrap_or(0),"proxy":proxy_address.to_string(),"device":DEVICE,"grant":TOKEN,"late_grant":SECOND_TOKEN,"persona_png":base64::engine::general_purpose::STANDARD.encode(super::super::persona_library_boundary::png_card()),"target":{
         "server_id":info["server_id"],"registration_epoch":"secure-test-epoch","origin":ORIGIN,"generation":generation,
         "host_public_key_jwk":info["host_public_key_jwk"],"host_key_fingerprint":info["host_key_fingerprint"]}})).as_bytes()).await?;
     // Each existing work stage retains its 30-second harness deadline. The new

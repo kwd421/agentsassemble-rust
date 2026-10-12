@@ -81,6 +81,9 @@ async function verifyRoomFilePolicy({member, memberHeaders, memberSocket, member
     assert.equal(received, large.bytes.length);
     console.log(JSON.stringify({test_progress:'download_complete'}));
   }));
+  await verifyEncryptedCreditRejection(large.attachment);
+  const tiny = await member.fetch('/api/runtime/version');
+  await tiny.body.cancel(); // Router task can finish before this cancellation.
   const abort = new AbortController();
   const cancelled = await member.fetch(large.attachment.download_url, {headers:memberHeaders, signal:abort.signal});
   const reader = cancelled.body.getReader();

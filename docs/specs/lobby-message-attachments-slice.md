@@ -1172,6 +1172,36 @@ old-host originals only; large-open original once while showing preview. Verify
 affected crate tests, fmt, architecture-check, frontend tsc/vitest and report any
 remaining real packaged-client verification separately.
 
+## Slice-4 credit-window completion (2026-10-13)
+
+The earlier ACK-only checkpoint and its pending work above are historical.
+Both negotiated directions now use consumer-returned cumulative credit, shared
+384 KiB capacity, FIFO admission, bounded body shares, independent cancellation
+and the existing progress deadlines. Control ACKs retain their one-slot bound.
+Controlled-clock tests cover stalled bodies, withheld credit, cancellation behind
+control traffic and strict credit boundaries; the production WebCrypto harness
+replays legacy shapes in both version-skew directions and rejects malformed peers.
+Server unit suite: 189 passed, one pre-existing ignored. Frontend typecheck and
+20 affected tests pass; formatting and unchanged architecture gates pass.
+
+Measured aggregate MiB/s (one / ten 50 MiB bodies), with the benchmark command
+above and `AA_TRANSPORT_RTT_MS=50` or `100` for paced bidirectional delivery:
+
+| RTT | Upload legacy | Upload window | Download legacy | Download window |
+| --- | --- | --- | --- | --- |
+| Loopback | 73.96 / 68.53 | 131.18 / 125.90 | 18.28 / 18.67 | 315.91 / 320.16 |
+| 50 ms | 1.147 / 1.076 | 5.473 / 6.521 | 0.958 / 0.972 | 5.680 / 6.765 |
+| 100 ms | 0.573 / 0.576 | 2.894 / 3.459 | 0.543 / 0.540 | 2.972 / 3.546 |
+
+The loopback benchmark passed in 93.51 seconds. Both paced runs completed all
+byte-exact transfer stages, then failed unrelated room-control fixture cleanup
+because its socket expired during the long run. The harness now keeps both room
+sockets alive, exercising heartbeat delivery every second in the ordinary run;
+the ordinary encrypted integration passed in 19.44 seconds. The full paced
+benchmarks have not been repeated after that harness correction.
+These measurements simulate RTT over loopback; no WAN, disk throughput or packaged
+frontend verification is claimed.
+
 ## Round-6 encrypted queue cleanup (2026-10-13)
 
 The secure-channel writer must bound send and ACK waits for every outbound record,
