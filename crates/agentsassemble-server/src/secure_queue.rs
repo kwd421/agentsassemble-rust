@@ -120,6 +120,83 @@ impl Output {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test(start_paused = true)]
+    async fn unacknowledged_head_drops_cancelled_tail_and_both_charges() {
+        let global = Arc::new(Semaphore::new(GLOBAL_BYTES));
+        let closed = CancellationToken::new();
+        let (output, outgoing) = Output::new(global.clone(), closed.clone());
+        let (sent, mut records) = mpsc::unbounded_channel();
+        let sent = Box::pin(futures_util::sink::unfold(sent, |tx, record| async move {
+            tx.send(record).map_err(|_| ())?;
+            Ok::<_, ()>(tx)
+        }));
+        let (_ack, acknowledgements) = mpsc::channel(1);
+        let writer = tokio::spawn(crate::secure_channel::write_records(
+            sent,
+            |bytes| Ok(bytes.to_vec()),
+            outgoing,
+            acknowledgements,
+            closed.clone(),
+        ));
+        output
+            .send(serde_json::json!({"op":"response"}))
+            .await
+            .unwrap();
+        records.recv().await.unwrap(); // Non-progress head is waiting for its ACK.
+        let cancel = CancellationToken::new();
+        let download = output
+            .with_cancel(cancel.clone())
+            .with_progress(Some(crate::http_body_policy::Progress::new()));
+        for _ in 0..5 {
+            download
+                .send(serde_json::json!({"body":"x".repeat(CHUNK_BYTES)}))
+                .await
+                .unwrap();
+        }
+        cancel.cancel();
+        assert!(global.available_permits() < GLOBAL_BYTES);
+        assert!(output.budget.direction.available_permits() < DIRECTION_BYTES);
+        tokio::time::advance(crate::http_body_policy::IDLE).await;
+        writer.await.unwrap();
+        assert!(closed.is_cancelled());
+        assert_eq!(global.available_permits(), GLOBAL_BYTES);
+        assert_eq!(output.budget.direction.available_permits(), DIRECTION_BYTES);
+        assert!(records.recv().await.is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn timely_slow_acknowledgements_receive_a_fresh_record_deadline() {
+        let closed = CancellationToken::new();
+        let (output, outgoing) =
+            Output::new(Arc::new(Semaphore::new(GLOBAL_BYTES)), closed.clone());
+        let (sent, mut records) = mpsc::unbounded_channel();
+        let sent = Box::pin(futures_util::sink::unfold(sent, |tx, record| async move {
+            tx.send(record).map_err(|_| ())?;
+            Ok::<_, ()>(tx)
+        }));
+        let (ack, acknowledgements) = mpsc::channel(1);
+        let writer = tokio::spawn(crate::secure_channel::write_records(
+            sent,
+            |bytes| Ok(bytes.to_vec()),
+            outgoing,
+            acknowledgements,
+            closed.clone(),
+        ));
+        for sequence in 0..3 {
+            output
+                .send(serde_json::json!({"op":"response"}))
+                .await
+                .unwrap();
+            records.recv().await.unwrap();
+            tokio::time::advance(crate::http_body_policy::IDLE - std::time::Duration::from_secs(1))
+                .await;
+            assert!(!closed.is_cancelled());
+            ack.send(sequence).await.unwrap();
+        }
+        drop(output);
+        writer.await.unwrap();
+    }
+
     #[tokio::test]
     async fn aggregate_and_direction_capacity_release_and_cancel() {
         let global = Arc::new(Semaphore::new(GLOBAL_BYTES));

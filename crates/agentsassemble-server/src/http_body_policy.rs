@@ -12,7 +12,7 @@ use std::{
 use tokio::time::{Instant, timeout_at};
 
 const CONTROL: Duration = Duration::from_secs(10);
-const IDLE: Duration = Duration::from_secs(30);
+pub(crate) const IDLE: Duration = Duration::from_secs(30);
 const WINDOW: Duration = Duration::from_secs(120);
 const MIN_PROGRESS: usize = 64 * 1024;
 pub(crate) const UPLOAD_CEILING: Duration = Duration::from_secs(60 * 60);

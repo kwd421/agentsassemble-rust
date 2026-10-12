@@ -989,3 +989,16 @@ revocation; cascade cleanup; archive exclusion/historical restore/lazy regenerat
 old-host originals only; large-open original once while showing preview. Verify
 affected crate tests, fmt, architecture-check, frontend tsc/vitest and report any
 remaining real packaged-client verification separately.
+
+## Round-6 encrypted queue cleanup (2026-10-13)
+
+The secure-channel writer must bound send and ACK waits for every outbound record,
+including ordinary responses without download progress. Use the existing 30-second
+body idle bound per record; valid consumption/ACK advances to a fresh record deadline
+so healthy slow consumers are not limited by total channel duration. Expiry closes
+the channel and drops its entire buffered queue and direction/global charges, even
+when cancelled download records sit behind an unacknowledged ordinary response.
+Owners: `secure_channel.rs`, `secure_queue.rs`, `http_body_policy.rs`. Keep existing
+stop-and-wait and download progress/window/ceiling semantics. Acceptance: controlled
+clock regression proves cancelled records behind that head release both budgets;
+successive timely ACKs keep a slow consuming channel alive beyond one idle interval.
