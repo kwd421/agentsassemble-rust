@@ -12,43 +12,51 @@
 .dc-settings-modal {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  width: min(1100px, calc(100vw - 64px));
+  width: min(1040px, calc(100vw - 64px));
   height: min(760px, calc(100vh - 64px));
   margin: auto;
   overflow: hidden;
-  border-radius: 10px;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 12px;
   background: var(--color-chat-bg);
   box-shadow: 0 28px 120px rgba(0, 0, 0, 0.58);
 }
 
 .dc-settings-nav {
-  background: #202024;
-  padding: 64px 12px 24px;
+  border-right: 1px solid var(--color-panel-separator);
+  background: var(--color-sidebar);
+  padding: 56px 8px 24px;
 }
 
 .dc-settings-nav-label {
-  padding: 0 10px 10px;
+  padding: 0 10px 8px;
   color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 900;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .dc-settings-nav a {
   display: block;
-  border-radius: 4px;
-  padding: 8px 10px;
-  color: var(--color-text-muted);
-  font-size: 14px;
-  font-weight: 700;
+  margin: 1px 0;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--color-sidebar-text);
+  font-size: 16px;
+  font-weight: 500;
   text-decoration: none;
 }
 
 .dc-settings-nav a:hover,
 .dc-settings-nav a:focus-visible {
+  background: var(--color-sidebar-hover);
+  color: var(--color-text-secondary);
+  outline: none;
+}
+
+.dc-settings-nav a[aria-current="true"] {
   background: var(--color-sidebar-active);
   color: var(--color-text-primary);
-  outline: none;
 }
 
 .dc-settings-body {
@@ -66,8 +74,9 @@
 
 .dc-settings-titlebar h2 {
   color: var(--color-text-primary);
-  font-size: 24px;
-  font-weight: 900;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 24px;
 }
 
 .dc-settings-titlebar p,
@@ -80,31 +89,51 @@
 .dc-settings-close {
   display: grid;
   place-items: center;
-  gap: 5px;
+  gap: 6px;
   color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 900;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.dc-settings-close:hover {
+.dc-settings-close svg {
+  box-sizing: content-box;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  padding: 7px;
+}
+
+.dc-settings-close:hover,
+.dc-settings-close:focus-visible {
   color: var(--color-text-primary);
+  outline: none;
 }
 
 .dc-settings-section {
-  margin-top: 28px;
+  margin-top: 24px;
   display: grid;
-  gap: 12px;
+  gap: 16px;
   max-width: 720px;
+}
+
+/* Each later section starts under a hairline, so the long page reads as separate groups. */
+.dc-settings-section + .dc-settings-section {
+  margin-top: 40px;
+  border-top: 1px solid var(--color-panel-separator);
+  padding-top: 32px;
 }
 
 .dc-settings-section h3 {
   color: var(--color-text-primary);
   font-size: 16px;
-  font-weight: 900;
+  font-weight: 600;
+  line-height: 20px;
 }
 
 .dc-settings-section label {
   display: grid;
-  gap: 7px;
-  font-weight: 800;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }

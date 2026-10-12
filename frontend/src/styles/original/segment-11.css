@@ -1,7 +1,10 @@
 
 .dc-settings-section .ops-input {
   height: 40px;
-  padding: 0 10px;
+  padding: 0 12px;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 .dc-settings-preview {
@@ -39,14 +42,21 @@
 .dc-preset-grid button,
 .dc-upload-button {
   min-height: 40px;
-  border-radius: 4px;
-  background: var(--color-panel-soft);
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 800;
+  border: 1px solid rgba(151, 151, 159, 0.2);
+  border-radius: 8px;
+  background: rgba(151, 151, 159, 0.12);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dc-preset-grid button:hover,
+.dc-upload-button:hover {
+  background: rgba(151, 151, 159, 0.2);
 }
 
 .dc-preset-grid button[data-active="true"] {
+  border-color: var(--color-accent);
   background: var(--color-accent);
   color: #fff;
 }
@@ -73,25 +83,20 @@
 /* Settings labels are grids; an upload button stays one row: icon, then text. */
 .dc-settings-section label.dc-upload-button {
   display: inline-flex;
-  min-height: 44px;
-  border-radius: 8px;
-  background: #474851;
+  min-height: 40px;
   padding: 0 14px;
-  color: #fff;
+  color: var(--color-text-primary);
   font-size: 14px;
-  font-weight: 600;
-}
-
-.dc-settings-section label.dc-upload-button:hover {
-  background: #5d5e67;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .dc-channel-settings-list {
   display: grid;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-panel-border);
   border-radius: 8px;
-  background: #121214;
+  background: var(--color-panel);
 }
 
 .dc-channel-settings-row {
@@ -103,43 +108,125 @@
 }
 
 .dc-channel-settings-row + .dc-channel-settings-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--color-panel-separator);
 }
 
 .dc-channel-settings-row strong {
   display: block;
-  color: var(--color-text-secondary);
-  font-size: 13px;
+  color: var(--color-text-normal);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .dc-channel-settings-row small {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 .dc-channel-settings-row select {
-  min-height: 34px;
+  min-height: 36px;
   min-width: 0;
-  border-radius: 4px;
-  background: #121214;
-  padding: 0 9px;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 800;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  background: var(--color-server-rail);
+  padding: 0 10px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 .dc-radio-stack {
   display: grid;
-  gap: 9px;
+  gap: 8px;
 }
 
+/* Each choice is its own row card; the chosen one carries the accent. */
 .dc-radio-stack label {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  background: var(--color-panel);
+  padding: 10px 14px;
+  color: var(--color-text-normal);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.dc-radio-stack label:hover {
+  border-color: #474851;
+}
+
+.dc-radio-stack label:has(input:checked) {
+  border-color: var(--color-accent);
+  background: rgba(88, 101, 242, 0.1);
+}
+
+.dc-radio-stack label:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dc-radio-stack input[type="radio"],
+.dc-radio-stack input[type="checkbox"] {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  place-content: center;
+  margin: 0;
+  border: 2px solid #5d5e67;
+  background: transparent;
+  appearance: none;
+  cursor: inherit;
+}
+
+.dc-radio-stack input[type="radio"] {
+  border-radius: 50%;
+}
+
+.dc-radio-stack input[type="checkbox"] {
+  border-radius: 6px;
+}
+
+.dc-radio-stack input:checked {
+  border-color: var(--color-accent);
+}
+
+.dc-radio-stack input[type="radio"]:checked::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  content: "";
+}
+
+.dc-radio-stack input[type="checkbox"]:checked {
+  background: var(--color-accent);
+}
+
+.dc-radio-stack input[type="checkbox"]:checked::before {
+  width: 10px;
+  height: 6px;
+  border-bottom: 2px solid #fff;
+  border-left: 2px solid #fff;
+  content: "";
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.dc-radio-stack input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /* ---- custom channels (CH-5): sidebar + text/voice views + create modal --- */
@@ -310,7 +397,10 @@
 }
 
 .dc-settings-field-label {
-  font-weight: 800;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 /* Radio rows with descriptive captions wrap, not center-clip, the long text. */
@@ -320,8 +410,7 @@
 
 .dc-settings-field .dc-radio-stack input[type="radio"],
 .dc-settings-field .dc-radio-stack input[type="checkbox"] {
-  margin-top: 3px;
-  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 /* An option reads as a short name with a muted one-line explanation under it. */
@@ -333,21 +422,24 @@
 .dc-settings-field .dc-radio-stack strong {
   color: var(--color-text-primary);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .dc-settings-field .dc-radio-stack small {
   color: var(--color-text-muted);
   font-size: 13px;
-  line-height: 1.45;
+  font-weight: 400;
+  line-height: 18px;
 }
 
 .dc-settings-invite {
   width: fit-content;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 12px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
 }
 
 /* ----------------------------------------------------- view primitives ---- */
@@ -577,7 +669,7 @@
   background: var(--color-accent);
   color: #fff;
   border-radius: 8px;
-  font-weight: 700;
+  font-weight: 600;
   transition: background-color 140ms ease;
 }
 

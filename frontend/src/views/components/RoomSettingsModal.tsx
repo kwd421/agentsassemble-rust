@@ -99,6 +99,7 @@ export default function RoomSettingsModal({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [sectionInView, setSectionInView] = useState("settings-overview");
   const routingSettingsReady = settingsStatus === "ready";
   const preferenceSettingsReady = preferenceStatus === "ready";
   const routingSettingsMessage =
@@ -192,11 +193,11 @@ export default function RoomSettingsModal({
           display: "flex", justifyContent: "space-between", overflowX: "auto", padding: "12px 16px",
         } : undefined}>
           {!mobileViewport && <p className="dc-settings-nav-label preserve-words">{room.label}</p>}
-          <a href="#settings-overview" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>개요</a>
-          <a href="#settings-appearance" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>외형</a>
-          <a href="#settings-channels" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널</a>
-          <a href="#settings-notify" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>알림</a>
-          <a href="#settings-invite" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>초대</a>
+          <a href="#settings-overview" aria-current={sectionInView === "settings-overview" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>개요</a>
+          <a href="#settings-appearance" aria-current={sectionInView === "settings-appearance" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>외형</a>
+          <a href="#settings-channels" aria-current={sectionInView === "settings-channels" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널</a>
+          <a href="#settings-notify" aria-current={sectionInView === "settings-notify" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>알림</a>
+          <a href="#settings-invite" aria-current={sectionInView === "settings-invite" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>초대</a>
           {lifecycleController && !mobileViewport && <span className="dc-settings-nav-separator" aria-hidden />}
           {lifecycleController && (
             <button type="button" className="dc-settings-nav-danger" onClick={() => setDeleteOpen(true)}>
@@ -215,7 +216,15 @@ export default function RoomSettingsModal({
               <span>ESC</span>
             </button>
           </header>
-          <div ref={bodyRef} className="dc-settings-body chat-scroll" style={{ padding: mobileViewport ? "0 24px 32px" : "0 56px 72px" }}>
+          <div ref={bodyRef} className="dc-settings-body chat-scroll" onScroll={(event) => {
+            // The nav follows the section whose heading has reached the top third of the page.
+            const body = event.currentTarget;
+            const line = body.getBoundingClientRect().top + body.clientHeight / 3;
+            const sections = [...body.querySelectorAll<HTMLElement>("section[id^='settings-']")];
+            const current = sections.filter((section) => section.getBoundingClientRect().top <= line).pop() || sections[0];
+            const atEnd = body.scrollTop + body.clientHeight >= body.scrollHeight - 2;
+            setSectionInView((atEnd ? sections[sections.length - 1] : current)?.id || "settings-overview");
+          }} style={{ padding: mobileViewport ? "0 24px 32px" : "0 56px 72px" }}>
           <section id="settings-overview" className="dc-settings-section">
             <h3>개요</h3>
             <label>
@@ -491,6 +500,7 @@ export default function RoomSettingsModal({
 
           <section id="settings-invite" className="dc-settings-section">
             <h3>초대</h3>
+            <p className="dc-settings-field-label">초대 링크로 들어온 사람은</p>
             <div className="dc-radio-stack">
               <label>
                 <input
@@ -503,7 +513,7 @@ export default function RoomSettingsModal({
                     );
                   }}
                 />
-                초대 링크는 이 방만 표시
+                대화에 참여할 수 있어요
               </label>
               <label>
                 <input
@@ -516,7 +526,7 @@ export default function RoomSettingsModal({
                     );
                   }}
                 />
-                읽기 전용 초대처럼 표시
+                읽기만 할 수 있어요
               </label>
             </div>
             {canInvite && (
