@@ -59,7 +59,10 @@ export default function CustomChannelView({
   function replySource(eventId: string) {
     const source = transcript.events.find((event) => event.id === eventId);
     return { eventId, author: source ? participantProfiles[source.actor.participant_id]?.displayName || source.display_name || undefined : undefined,
-      text: source?.content || undefined, deleted: source?.message_deleted === true };
+      text: source?.content || undefined, deleted: source?.message_deleted === true,
+      avatar: source && { image: participantProfiles[source.actor.participant_id]?.avatarImageUrl,
+        label: participantProfiles[source.actor.participant_id]?.avatarLabel, participantType: source.actor.participant_type,
+        providerKind: participantProfiles[source.actor.participant_id]?.providerKind } };
   }
   const error = sendError.identity === identity ? sendError.message : "";
   const tooLong = [...value].length > MAX_TEXT_CHAT_CHARACTERS;

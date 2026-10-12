@@ -141,7 +141,7 @@
   align-items: center;
   gap: 4px;
   margin-bottom: 4px;
-  color: var(--color-text-secondary);
+  color: var(--color-text-normal);
   font-size: 14px;
   line-height: 18px;
   text-align: left;
@@ -160,9 +160,30 @@
   margin-top: -1px;
 }
 
+.dc-reply-preview-avatar {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dc-reply-preview-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .dc-reply-preview-author {
   flex-shrink: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
