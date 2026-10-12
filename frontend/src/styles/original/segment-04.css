@@ -398,10 +398,6 @@ body[data-sidebar-resizing="true"] {
   outline: none;
 }
 
-.dc-user-actions button[data-danger="true"] {
-  color: #ff6b6d;
-}
-
 .dc-profile-card {
   position: absolute;
   left: 0;

@@ -3,10 +3,7 @@ import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
-  Headphones,
   LogOut,
-  Mic,
-  MicOff,
   Pencil,
   Plus,
   Settings,
@@ -319,10 +316,6 @@ export default function UserPanel({
     );
   }
 
-  function updateProfileFlag(key: "micMuted" | "deafened", value: boolean) {
-    void persistProfile((currentProfile) => ({ ...currentProfile, [key]: value }));
-  }
-
   function setProfileStatus(status: UserProfile["status"]) {
     void persistProfile((currentProfile) => ({ ...currentProfile, status }));
     setStatusMenuOpen(false);
@@ -616,23 +609,6 @@ export default function UserPanel({
           </span>
         </button>
         <div className="dc-user-actions">
-          <button
-            type="button"
-            aria-label={profile.micMuted ? "마이크 음소거 해제" : "마이크 음소거"} data-tip={profile.micMuted ? "음소거 해제" : "음소거"}
-            aria-pressed={profile.micMuted}
-            data-danger={profile.micMuted}
-            onClick={() => updateProfileFlag("micMuted", !profile.micMuted)}
-          >
-            {profile.micMuted ? <MicOff size={16} /> : <Mic size={16} />}
-          </button>
-          <button
-            type="button"
-            aria-label={profile.deafened ? "헤드셋 켜기" : "헤드셋 끄기"} data-tip={profile.deafened ? "헤드셋 켜기" : "헤드셋 끄기"}
-            aria-pressed={profile.deafened}
-            onClick={() => updateProfileFlag("deafened", !profile.deafened)}
-          >
-            <Headphones size={16} />
-          </button>
           <button ref={settingsButtonRef} type="button" aria-label="사용자 설정" data-tip="사용자 설정" onClick={() => openSettings("account")}>
             <Settings size={16} />
           </button>

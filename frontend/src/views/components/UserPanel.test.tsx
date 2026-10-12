@@ -43,6 +43,17 @@ function snapshot(
   return { profile, revision, displayResourceBase };
 }
 
+// A quick profile mutation: pick a status from the profile card.
+function setStatus(container: HTMLElement, status: string) {
+  if (!container.querySelector(".dc-profile-status-options")) {
+    if (!container.querySelector(".dc-profile-menu-card")) {
+      fireEvent.click(container.querySelector(".dc-user-identity") as HTMLElement);
+    }
+    fireEvent.click(container.querySelector(".dc-profile-menu-card button[aria-expanded]") as HTMLElement);
+  }
+  fireEvent.click(container.querySelector(`.dc-profile-status-option[data-status="${status}"]`) as HTMLElement);
+}
+
 describe("UserPanel", () => {
   beforeEach(() => {
     apiMocks.fetchUserProfile.mockReset();
@@ -365,16 +376,12 @@ describe("UserPanel", () => {
     await waitFor(() =>
       expect(within(view.container).getByRole("button", { name: /SeiNel/ })).toBeTruthy()
     );
-    fireEvent.click(
-      within(view.container).getByRole("button", { name: "마이크 음소거 해제" })
-    );
-    fireEvent.click(
-      within(view.container).getByRole("button", { name: "헤드셋 끄기" })
-    );
+    setStatus(view.container, "idle");
+    setStatus(view.container, "dnd");
     await waitFor(() => expect(resolvers).toHaveLength(1));
     expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(1);
     expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
-      expect.objectContaining({ micMuted: false, deafened: false }),
+      expect.objectContaining({ status: "idle" }),
       1,
       { deviceToken: "device-token" }
     );
@@ -384,7 +391,7 @@ describe("UserPanel", () => {
         {
           ...DEFAULT_USER_PROFILE,
           displayName: "First Authority",
-          micMuted: false,
+          status: "idle",
           avatarImage: "/api/attachments/first_avatar?view=1",
         },
         "http://127.0.0.1:49171",
@@ -394,7 +401,7 @@ describe("UserPanel", () => {
     await waitFor(() => expect(resolvers).toHaveLength(2));
     expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(2);
     expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
-      expect.objectContaining({ micMuted: false, deafened: true }),
+      expect.objectContaining({ displayName: "First Authority", status: "dnd" }),
       2,
       { deviceToken: "device-token" }
     );
@@ -404,8 +411,7 @@ describe("UserPanel", () => {
         {
           ...DEFAULT_USER_PROFILE,
           displayName: "New Authority",
-          micMuted: false,
-          deafened: true,
+          status: "dnd",
           avatarImage: "/api/attachments/new_avatar?view=1",
         },
         "http://127.0.0.1:49172",
@@ -448,9 +454,7 @@ describe("UserPanel", () => {
     await waitFor(() =>
       expect(within(view.container).getByRole("button", { name: /SeiNel/ })).toBeTruthy()
     );
-    fireEvent.click(
-      within(view.container).getByRole("button", { name: "마이크 음소거 해제" })
-    );
+    setStatus(view.container, "idle");
     await waitFor(() => expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(1));
 
     view.rerender(
@@ -509,12 +513,8 @@ describe("UserPanel", () => {
     await waitFor(() =>
       expect(within(view.container).getByRole("button", { name: /SeiNel/ })).toBeTruthy()
     );
-    fireEvent.click(
-      within(view.container).getByRole("button", { name: "마이크 음소거 해제" })
-    );
-    fireEvent.click(
-      within(view.container).getByRole("button", { name: "헤드셋 끄기" })
-    );
+    setStatus(view.container, "idle");
+    setStatus(view.container, "dnd");
     await waitFor(() => expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(1));
 
     rejectSave?.(new Error("profile response lost"));
@@ -526,12 +526,10 @@ describe("UserPanel", () => {
     expect(apiMocks.fetchUserProfile).toHaveBeenCalledTimes(2);
     expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(
-      within(view.container).getByRole("button", { name: "헤드셋 끄기" })
-    );
+    setStatus(view.container, "dnd");
     await waitFor(() => expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(2));
     expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
-      expect.objectContaining({ displayName: "Recovered Authority", deafened: true }),
+      expect.objectContaining({ displayName: "Recovered Authority", status: "dnd" }),
       2,
       { sessionToken: "guest-session" }
     );
