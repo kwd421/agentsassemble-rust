@@ -344,6 +344,41 @@ immediately. Request cancellation drains the virtual ingress queue even while it
 consumer awaits storage. The channel alone owns its advertised reservation, so a
 pending durable mutation cannot retain it after channel closure.
 
+Round-9 correction contract (2026-10-13): in `secure_writer.rs`, an error with no
+outstanding body records retires nothing and remains ordinary ACK-controlled
+traffic. Immediate lazy-body authorization/storage failure and failure after all
+prior records were credited must reach the client, then allow more channel work
+or close cleanly with every charge released. Peer/timing-controlled writer input
+must not panic; unwind/abort must close the channel and release its admission and
+queue/window reservations. `secure_channel.rs`/`SecureClient` own admission closure.
+Code correction to the report: `Output::send` marks `op:error` ACK-controlled,
+and the writer's ACK branch precedes its cancellation-notice branch; the quoted
+`expect("cancel receipt")` is not reached by that error in the reviewed code.
+
+Both `remoteCreditWindow.ts` and the host writer measure the existing 30-second
+withheld-credit bound from emission of the oldest uncredited record of each body,
+not reservation/queueing or another body's credit. Partial cumulative credit
+advances to that body's next outstanding record; release removes its deadline.
+One timer/select deadline uses the earliest body deadline. Host expiry may retire
+an isolated stalled download with an ACK-controlled error while healthy work
+continues; withheld error ACK/cancel confirmation still closes within its bound.
+Acceptance: fake-clock cross-body credits, partial credit and local send backlog;
+body-stream errors before data/after full credit; abnormal writer cleanup. No gate,
+window size, wire protocol, provider or product UI change is needed.
+
+Round-9 verification: server library 194 passed / one existing ignored fixture;
+after removing the replaced idle helper, the three body-policy tests also pass.
+The production WebCrypto/router HTTP/SSE/room-socket integration passes (21.89 s).
+TypeScript and API/lib Vitest pass: 81 files / 488 tests with two workers. Earlier
+parallel-build runs timed out in the existing five-second transport tests; no
+timeout or gate was changed. Formatting, diff and architecture checks pass.
+Regressions exercise both stream-error boundaries, reader failure with continued
+channel use, queue-charge release on panic/abort, per-body/partial-credit expiry,
+and local backlog before emission. Credit rate/ceiling clocks start at first
+emission and exclude server gaps without outstanding records; source/upload
+absolute ceilings and all numeric gates stay unchanged. No packaged client,
+WAN/peak-RSS measurement, provider run or external re-review is claimed.
+
 Measured with `AA_TRANSPORT_BENCHMARK=1 cargo test -p agentsassemble-server --test
 integration central_owner_boundary::secure::trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket
 -- --nocapture`: loopback TCP proxy, production Node WebCrypto/RemoteTransport,

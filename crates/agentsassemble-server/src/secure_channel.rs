@@ -212,9 +212,11 @@ fn run(
             Output::new(state.secure_queue_budget.clone(), client.closed().clone());
         let (sender, mut receiver) = socket.split();
         let writer_client = client.clone();
+        let writer_lifetime = client.close_guard();
         let writer_budget = output.budget.clone();
         let (ack_tx, ack_rx) = tokio::sync::mpsc::channel::<crate::secure_queue::Feedback>(1);
         let writer = tokio::spawn(async move {
+            let _lifetime = writer_lifetime;
             write_records(
                 sender,
                 |bytes| crypto.send.seal(bytes).map_err(|_| ()),
@@ -224,7 +226,6 @@ fn run(
                 writer_budget,
             )
             .await;
-            writer_client.close();
         });
         let _ = output.send(json!({"op":"ready"})).await;
         let mut requests = Requests::new(

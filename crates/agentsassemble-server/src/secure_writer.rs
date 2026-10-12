@@ -6,10 +6,18 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
 
+struct Emitted {
+    at: Instant,
+    item: Queued,
+}
+struct Body {
+    consumed: u64,
+    records: VecDeque<Emitted>,
+}
 struct Retired {
     deadline: Instant,
     consumed: u64,
-    records: VecDeque<Queued>,
+    records: VecDeque<Emitted>,
     notice: Option<Queued>,
 }
 
@@ -21,15 +29,17 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
     closed: CancellationToken,
     budget: Budget,
 ) {
-    let mut sequence = 0;
+    let _close_on_exit = closed.clone().drop_guard();
+    let mut sequence = 0_u64;
     let mut headers = HashSet::new();
     let mut controls: VecDeque<(u64, Instant, Option<Queued>)> = VecDeque::new();
     let mut pending: VecDeque<Queued> = VecDeque::new();
-    let mut bodies: HashMap<u32, (u64, Instant, VecDeque<Queued>)> = HashMap::new();
+    let mut bodies: HashMap<u32, Body> = HashMap::new();
 
     let mut retired: HashMap<u32, Retired> = HashMap::new();
+    // This only selects channel closure versus an isolated body error; body
+    // deadlines always come from their own oldest emitted record.
     let mut last_credit = Instant::now();
-    let mut last_credit_id = None;
     let mut input_done = false;
     loop {
         pending.retain(|item| !item.cancel.is_cancelled());
@@ -40,16 +50,19 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
         }
         // Cancelled records release charges even while another record awaits ACK.
         if feedback.is_empty() {
-            for (_, _, records) in bodies.values_mut() {
-                records.retain(|item| !item.cancel.is_cancelled());
+            for body in bodies.values_mut() {
+                body.records
+                    .retain(|record| !record.item.cancel.is_cancelled());
             }
         }
-        bodies.retain(|_, (_, _, records)| !records.is_empty());
+        bodies.retain(|_, body| !body.records.is_empty());
         if let Some(index) = pending.iter().position(|item| {
             (controls.is_empty() || !item.ack)
                 && (item.window.is_none() || item.http.is_none_or(|id| headers.contains(&id)))
         }) {
-            let item = pending.remove(index).expect("queued");
+            let Some(item) = pending.remove(index) else {
+                break;
+            };
             let Ok(record) = seal(&item.bytes) else {
                 break;
             };
@@ -72,34 +85,57 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
                 if *offset > 0 && item.bytes.len() > 18 {
                     if bodies.is_empty() {
                         last_credit = Instant::now();
-                        last_credit_id = None;
                     }
+                    let length = item.bytes.len() - 18;
+                    let Some(consumed) = offset.checked_sub(length as u64) else {
+                        break;
+                    };
                     bodies
                         .entry(*id)
                         .or_insert_with(|| {
-                            (
-                                *offset - (item.bytes.len() - 18) as u64,
-                                Instant::now(),
-                                VecDeque::new(),
-                            )
+                            if let Some(progress) = &item.progress {
+                                progress.emitted();
+                            }
+                            Body {
+                                consumed,
+                                records: VecDeque::new(),
+                            }
                         })
-                        .2
-                        .push_back(item);
+                        .records
+                        .push_back(Emitted {
+                            at: Instant::now(),
+                            item,
+                        });
                 }
             } else if item.ack {
                 controls.push_back((sequence, Instant::now(), Some(item)));
             } else if let Some(id) = item.retire {
-                retired.get_mut(&id).expect("cancel receipt").notice = Some(item);
+                let Some(receipt) = retired.get_mut(&id) else {
+                    break;
+                };
+                receipt.notice = Some(item);
             }
-            sequence += 1;
+            let Some(next) = sequence.checked_add(1) else {
+                break;
+            };
+            sequence = next;
             // Read feedback before emitting the next queued record.
         }
-        if input_done && pending.is_empty() && controls.is_empty() && bodies.is_empty() {
+        if input_done
+            && pending.is_empty()
+            && controls.is_empty()
+            && bodies.is_empty()
+            && retired.is_empty()
+        {
             break;
         }
         let cancellations = pending
             .iter()
-            .chain(bodies.values().flat_map(|(_, _, r)| r.iter()))
+            .chain(
+                bodies
+                    .values()
+                    .flat_map(|body| body.records.iter().map(|record| &record.item)),
+            )
             .chain(controls.iter().filter_map(|(_, _, r)| r.as_ref()))
             .filter(|item| !item.cancel.is_cancelled())
             .map(|item| Box::pin(item.cancel.clone().cancelled_owned()))
@@ -115,17 +151,21 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
             .front()
             .map(|(_, at, _)| *at + crate::http_body_policy::IDLE)
             .into_iter()
-            .chain(
-                bodies
-                    .values()
-                    .map(|(_, at, _)| *at + crate::http_body_policy::IDLE),
-            )
+            .chain(bodies.values().filter_map(|body| {
+                body.records
+                    .front()
+                    .map(|record| record.at + crate::http_body_policy::IDLE)
+            }))
             .chain(retired.values().map(|receipt| receipt.deadline))
             .min()
             .unwrap_or_else(|| Instant::now() + crate::http_body_policy::IDLE);
         let expirations = bodies
             .values()
-            .filter_map(|(_, _, r)| r.front().and_then(|r| r.progress.clone()))
+            .filter_map(|body| {
+                body.records
+                    .front()
+                    .and_then(|record| record.item.progress.clone())
+            })
             .map(|progress| Box::pin(async move { progress.expired().await }))
             .collect::<Vec<_>>();
         let expired = async {
@@ -143,13 +183,14 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
                 Some(Feedback::Cancel { id, receipt }) => {
                     let receipt = receipt || headers.contains(&id) || bodies.contains_key(&id) || pending.iter().any(|item| item.http == Some(id) && (item.header || item.window.is_some()));
                     headers.remove(&id);
-                    let (consumed, _, records) = bodies.remove(&id).unwrap_or_else(|| (0, Instant::now(), VecDeque::new()));
-                    for item in &records { item.cancel.cancel(); }
+                    let body = bodies.remove(&id).unwrap_or_else(|| Body { consumed: 0, records: VecDeque::new() });
+                    let Body { consumed, records } = body;
+                    for record in &records { record.item.cancel.cancel(); }
                     pending.retain(|item| { if item.http == Some(id) || item.window.as_ref().is_some_and(|r| r.0 == id) { item.cancel.cancel(); false } else { true } });
                     for (_, _, item) in &mut controls { if item.as_ref().is_some_and(|r| r.http == Some(id)) { item.take(); } }
                     if receipt {
                         if retired.contains_key(&id) { continue; }
-                        let bytes = serde_json::to_vec(&serde_json::json!({"op":"cancelled","id":id})).expect("control");
+                        let Ok(bytes) = serde_json::to_vec(&serde_json::json!({"op":"cancelled","id":id})) else { break; };
                         let Ok(charge) = budget.charge(bytes.len() + 24) else { break; };
                         retired.insert(id, Retired { deadline: Instant::now() + crate::http_body_policy::IDLE, consumed, records, notice: None });
                         pending.push_back(Queued { http: None, header: false, ack: false, retire: Some(id), bytes, _charge: charge, window: None, cancel: closed.clone(), progress: None });
@@ -165,36 +206,37 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
                     if let Some(id) = item.and_then(|r| r.retire) { retired.remove(&id); }
                 }
                 Some(Feedback::Credit { id, offset }) => {
-                    let Some((consumed, at, records)) = bodies.get_mut(&id) else {
+                    let Some(body) = bodies.get_mut(&id) else {
                         if let Some(receipt) = retired.get_mut(&id) {
-                            if offset <= receipt.consumed || !receipt.records.iter().any(|r| r.window.as_ref().expect("window").1 == offset) { break; }
+                            if offset <= receipt.consumed || !receipt.records.iter().any(|r| r.item.window.as_ref().is_some_and(|window| window.1 == offset)) { break; }
                             receipt.consumed = offset;
-                            while receipt.records.front().is_some_and(|r| r.window.as_ref().expect("window").1 <= offset) { receipt.records.pop_front(); }
+                            while receipt.records.front().is_some_and(|r| r.item.window.as_ref().is_some_and(|window| window.1 <= offset)) { receipt.records.pop_front(); }
                             continue;
                         }
                         break;
                     };
-                    if offset <= *consumed || records.back().is_none_or(|r| offset > r.window.as_ref().expect("window").1) { break; }
-                    // Credits acknowledge whole records pulled by the virtual-body consumer.
-                    if !records.iter().any(|r| r.window.as_ref().expect("window").1 == offset) { break; }
-                    if let Some(progress) = records.front().and_then(|r| r.progress.as_ref()) { progress.accept((offset - *consumed) as usize); }
-                    while records.front().is_some_and(|r| r.window.as_ref().expect("window").1 <= offset) { records.pop_front(); }
-                    *consumed = offset; *at = Instant::now(); last_credit = *at; last_credit_id = Some(id);
+                    // Credits acknowledge whole emitted records, never queued capacity.
+                    if offset <= body.consumed || !body.records.iter().any(|r| r.item.window.as_ref().is_some_and(|window| window.1 == offset)) { break; }
+                    if let Some(progress) = body.records.front().and_then(|r| r.item.progress.as_ref()) { progress.accept((offset - body.consumed) as usize); }
+                    while body.records.front().is_some_and(|r| r.item.window.as_ref().is_some_and(|window| window.1 <= offset)) { body.records.pop_front(); }
+                    body.consumed = offset;
+                    last_credit = Instant::now();
                 }
                 None => break,
             },
             () = async { tokio::select! { () = tokio::time::sleep_until(deadline) => {}, () = expired => {} } }, if !controls.is_empty() || !bodies.is_empty() || !retired.is_empty() => {
                 if retired.values().any(|receipt| receipt.deadline <= Instant::now()) { break; }
-                let stalled = bodies.iter().filter(|(_, (_, at, r))| at.elapsed() >= crate::http_body_policy::IDLE || r.front().and_then(|r| r.progress.as_ref()).is_some_and(|p| p.check().is_err())).map(|(id, _)| *id).collect::<Vec<_>>();
-                let all_idle = bodies.values().all(|(_, at, r)| at.elapsed() >= crate::http_body_policy::IDLE || r.front().and_then(|r| r.progress.as_ref()).is_some_and(|p| p.idle()));
+                let stalled = bodies.iter().filter(|(_, body)| body.records.front().is_some_and(|record|
+                    record.at.elapsed() >= crate::http_body_policy::IDLE || record.item.progress.as_ref().is_some_and(|p| p.check().is_err())
+                )).map(|(id, _)| *id).collect::<Vec<_>>();
                 if controls.front().is_some_and(|(_, at, _)| at.elapsed() >= crate::http_body_policy::IDLE)
-                    || (!bodies.is_empty() && (last_credit.elapsed() >= crate::http_body_policy::IDLE || (all_idle && last_credit_id.is_none_or(|id| stalled.contains(&id))))) { break; }
+                    || (!bodies.is_empty() && last_credit.elapsed() >= crate::http_body_policy::IDLE) { break; }
                 for id in stalled {
                     headers.remove(&id);
-                    let (consumed, _, records) = bodies.remove(&id).expect("stalled body");
-                    for item in &records { item.cancel.cancel(); }
+                    let Some(Body { consumed, records }) = bodies.remove(&id) else { continue; };
+                    for record in &records { record.item.cancel.cancel(); }
                     retired.insert(id, Retired { deadline: Instant::now() + crate::http_body_policy::IDLE, consumed, records, notice: None });
-                    let bytes = serde_json::to_vec(&serde_json::json!({"op":"error","id":id,"code":"response_timeout"})).expect("control");
+                    let Ok(bytes) = serde_json::to_vec(&serde_json::json!({"op":"error","id":id,"code":"response_timeout"})) else { closed.cancel(); break; };
                     let Ok(charge) = budget.charge(bytes.len() + 24) else { closed.cancel(); break; };
                     pending.push_back(Queued { http: None, header: false, ack: true, retire: Some(id), bytes, _charge: charge, window: None, cancel: closed.clone(), progress: None });
                 }
@@ -204,9 +246,12 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
                     Some(mut item) => {
                         if let Some(id) = item.retire {
                             headers.remove(&id);
-                            if let Some((consumed, _, records)) = bodies.remove(&id) {
-                                for record in &records { record.cancel.cancel(); }
+                            if let Some(Body { consumed, records }) = bodies.remove(&id) {
+                                for record in &records { record.item.cancel.cancel(); }
                                 retired.insert(id, Retired { deadline: Instant::now() + crate::http_body_policy::IDLE, consumed, records, notice: None });
+                            } else if !retired.contains_key(&id) {
+                                // Nothing emitted remains charged: only the ordinary error ACK is due.
+                                item.retire = None; item.ack = true;
                             }
                             pending.retain(|record| { if record.http == Some(id) { record.cancel.cancel(); false } else { true } });
                             item.cancel = closed.clone(); item.http = None;

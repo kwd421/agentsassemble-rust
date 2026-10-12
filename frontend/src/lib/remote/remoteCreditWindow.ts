@@ -4,7 +4,7 @@ export const BODY_WINDOW_CONFIRMED = "x-agentsassemble-body-window-confirmed";
 export const WINDOW_BYTES = 384 * 1024;
 export class CreditWindow {
   private used = 0;
-  private sent = new Map<number, { sent: number; emitted: number; consumed: number; boundaries: number[] }>();
+  private sent = new Map<number, { sent: number; emitted: number; consumed: number; boundaries: { offset: number; at: number }[] }>();
   private waiting: { id: number; bytes: number; resolve: (accepted: boolean) => void }[] = [];
   private timer?: ReturnType<typeof setTimeout>;
   private timeout: () => void;
@@ -14,18 +14,23 @@ export class CreditWindow {
     const accepted = await new Promise<boolean>(resolve => { this.waiting.push({ id, bytes, resolve }); this.drain(); });
     return accepted;
   }
-  emitted(id: number, offset: number) { const body = this.sent.get(id); if (body && offset > body.emitted) { body.emitted = offset; body.boundaries.push(offset); } }
+  emitted(id: number, offset: number) {
+    const body = this.sent.get(id);
+    if (body && offset > body.emitted) {
+      body.emitted = offset; body.boundaries.push({ offset, at: performance.now() }); this.clock();
+    }
+  }
   credit(id: number, offset: number) {
     const body = this.sent.get(id);
-    if (!body || !Number.isSafeInteger(offset) || offset <= body.consumed || offset > body.emitted || !body.boundaries.includes(offset)) throw new Error("Invalid body credit");
-    this.used -= offset - body.consumed; body.consumed = offset; body.boundaries = body.boundaries.filter(end => end > offset);
+    if (!body || !Number.isSafeInteger(offset) || offset <= body.consumed || offset > body.emitted || !body.boundaries.some(end => end.offset === offset)) throw new Error("Invalid body credit");
+    this.used -= offset - body.consumed; body.consumed = offset; body.boundaries = body.boundaries.filter(end => end.offset > offset);
     this.clock(); this.drain();
   }
   release(id: number) {
     const body = this.sent.get(id);
     if (body) this.used -= body.sent - body.consumed;
     this.sent.delete(id);
-    if (!this.used) { clearTimeout(this.timer); this.timer = undefined; }
+    this.clock();
     this.waiting = this.waiting.filter(wait => { if (wait.id !== id) return true; wait.resolve(false); return false; });
     this.drain();
   }
@@ -44,12 +49,12 @@ export class CreditWindow {
       if (index < 0) return;
       const [wait] = this.waiting.splice(index, 1);
       this.used += wait.bytes; this.sent.get(wait.id)!.sent += wait.bytes;
-      if (!this.timer && this.used) this.clock();
       wait.resolve(true);
     }
   }
   private clock() {
     clearTimeout(this.timer);
-    this.timer = this.used ? setTimeout(this.timeout, 30_000) : undefined;
+    const oldest = Math.min(...[...this.sent.values()].map(body => body.boundaries[0]?.at ?? Infinity));
+    this.timer = oldest === Infinity ? undefined : setTimeout(this.timeout, Math.max(0, oldest + 30_000 - performance.now()));
   }
 }

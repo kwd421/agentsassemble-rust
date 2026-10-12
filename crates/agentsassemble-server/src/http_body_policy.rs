@@ -90,6 +90,7 @@ struct ProgressWindow {
     window_end: Instant,
     bytes: usize,
     paused: Option<Instant>,
+    emitted: bool,
 }
 impl ProgressWindow {
     fn new(started: Instant) -> Self {
@@ -99,6 +100,7 @@ impl ProgressWindow {
             window_end: started + WINDOW,
             bytes: 0,
             paused: None,
+            emitted: true,
         }
     }
     fn deadline(&mut self) -> Result<Instant, UploadTimeout> {
@@ -148,6 +150,26 @@ impl Progress {
     pub(crate) fn new() -> Self {
         Self(tokio::sync::watch::channel(ProgressWindow::new(Instant::now())).0)
     }
+    /// A peer cannot credit data until the writer emits its first record.
+    pub(crate) fn pending_credit() -> Self {
+        let mut window = ProgressWindow::new(Instant::now());
+        window.emitted = false;
+        Self(tokio::sync::watch::channel(window).0)
+    }
+    /// Called only when a body goes from no outstanding records to one emitted record.
+    pub(crate) fn emitted(&self) {
+        self.0.send_modify(|window| {
+            let now = Instant::now();
+            if !window.emitted {
+                *window = ProgressWindow::new(now);
+            } else {
+                // Source/encryption/queue waits with nothing to credit are server time.
+                window.window_end += now.saturating_duration_since(window.last_data);
+                window.last_data = now;
+                window.paused = None;
+            }
+        });
+    }
     pub(crate) fn accept(&self, bytes: usize) {
         self.0.send_modify(|window| {
             window.accept_at(bytes, window.paused.unwrap_or_else(Instant::now))
@@ -160,10 +182,6 @@ impl Progress {
         self.0
             .send_modify(|window| window.paused = Some(Instant::now()));
         ProgressWait(self.clone())
-    }
-    pub(crate) fn idle(&self) -> bool {
-        let window = self.0.borrow();
-        window.paused.is_none() && Instant::now() >= window.last_data + IDLE
     }
     pub(crate) fn check(&self) -> Result<(), UploadTimeout> {
         let mut result = Ok(());
@@ -266,7 +284,6 @@ mod credit_wait_tests {
         let wait = progress.server_wait();
         tokio::time::advance(IDLE * 2).await;
         assert!(progress.check().is_ok());
-        assert!(!progress.idle());
         drop(wait);
         assert!(progress.check().is_ok());
         let _wait = progress.server_wait();

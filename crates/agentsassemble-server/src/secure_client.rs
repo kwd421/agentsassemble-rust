@@ -20,6 +20,13 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct SecureClient(Arc<Custody>);
 
+pub(crate) struct CloseGuard(SecureClient);
+impl Drop for CloseGuard {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
+
 struct Custody {
     hello: SecureClientHello,
     binding: SecureSessionBinding,
@@ -64,6 +71,10 @@ impl SecureClient {
         let mut owner = self.0.owner.lock();
         self.0.closed.cancel();
         owner.take();
+    }
+
+    pub(crate) fn close_guard(&self) -> CloseGuard {
+        CloseGuard(self.clone())
     }
 
     pub(crate) fn adopt(

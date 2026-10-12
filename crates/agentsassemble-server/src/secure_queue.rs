@@ -150,7 +150,7 @@ impl Output {
             credit_progress: if self.windowed {
                 progress
                     .as_ref()
-                    .map(|_| crate::http_body_policy::Progress::new())
+                    .map(|_| crate::http_body_policy::Progress::pending_credit())
             } else {
                 None
             },

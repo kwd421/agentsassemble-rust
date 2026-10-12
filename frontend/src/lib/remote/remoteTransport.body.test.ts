@@ -330,3 +330,30 @@ test("Blob uploads pull bounded pieces into negotiated binary/credit records", a
   expect(slice).toHaveBeenCalledTimes(8); expect(peer.binaryRequests).toBeGreaterThan(8);
   expect(transport.active).toBe(true);
 });
+
+test.each([false, true])("response failure with earlier credited piece=%s fails the reader and preserves channel use", async priorPiece => {
+  Peer.advertiseBinary = Peer.advertiseWindow = true;
+  const transport = await connectWithoutRequestBody(), peer = Peer.latest;
+  await (await transport.fetch("/probe")).text(); await (await transport.fetch("/probe")).text();
+  const frames: Record<string, unknown>[] = [];
+  const send = peer.send.bind(peer);
+  vi.spyOn(peer, "send").mockImplementation(record => {
+    if (typeof record !== "string" && new Uint8Array(record)[0] !== 1) frames.push(JSON.parse(decoder.decode(record)));
+    send(record);
+  });
+  // A live request lets the peer keep its response body open until the chosen error.
+  const pending = transport.fetch("/download", { method: "POST", body: new ReadableStream(), duplex: "half" } as RequestInit);
+  await drained();
+  const id = [...peer.requests.keys()].at(-1)!;
+  peer.emit({ op: "response", id, status: 200, headers: [] });
+  const reader = (await pending).body!.getReader();
+  if (priorPiece) {
+    const piece = reader.read(); peer.emitBody(id, 0, new Uint8Array([17]), false);
+    expect((await piece).value).toEqual(new Uint8Array([17])); await drained();
+    expect(frames).toContainEqual({ op: "credit", id, offset: 1 });
+  }
+  const failed = reader.read().catch(error => error);
+  peer.emit({ op: "error", id, code: "response_failed" });
+  expect(await failed).toBeInstanceOf(Error); expect(transport.active).toBe(true);
+  await (await transport.fetch("/probe")).text(); expect(transport.active).toBe(true); transport.close();
+});

@@ -595,3 +595,7 @@ mod tests;
 #[cfg(test)]
 #[path = "secure_download_tests.rs"]
 mod download_tests;
+
+#[cfg(test)]
+#[path = "secure_writer_tests.rs"]
+mod writer_tests;
