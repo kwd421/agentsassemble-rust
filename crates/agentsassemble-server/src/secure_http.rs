@@ -34,16 +34,16 @@ pub(crate) struct Input {
 struct Part {
     bytes: Vec<u8>,
     end: bool,
-    _charge: Charge,
-}
-impl AsRef<[u8]> for Part {
-    fn as_ref(&self) -> &[u8] {
-        &self.bytes
-    }
+    charge: Charge,
 }
 
 impl Input {
     pub(crate) fn push(&mut self, data: &str, end: bool, budget: &Budget) -> Result<(), ()> {
+        // An early response/timeout has already dropped this request's receiver.
+        // In-flight child data must not tear down unrelated channel operations.
+        if self.tx.is_closed() {
+            return Ok(());
+        }
         if self.ended || data.len() > CHUNK_BYTES.div_ceil(3) * 4 {
             return Err(());
         }
@@ -53,11 +53,7 @@ impl Input {
         }
         let charge = budget.charge(bytes.len())?;
         self.tx
-            .try_send(Part {
-                bytes,
-                end,
-                _charge: charge,
-            })
+            .try_send(Part { bytes, end, charge })
             .map_err(|_| ())?;
         self.ended = end;
         Ok(())
@@ -89,35 +85,15 @@ pub(crate) fn start(
     let (method, uri, headers) = request_metadata(client, provenance, start)?;
     let (tx, rx) = mpsc::channel::<Part>(16);
     let cancel = client.closed().child_token();
-    let body_cancel = cancel.clone();
-    let stream = futures_util::stream::unfold(
-        (rx, false, body_cancel),
-        |(mut rx, ended, cancel)| async move {
-            if ended {
-                return None;
-            }
-            let next = tokio::select! { () = cancel.cancelled() => None, next = rx.recv() => next };
-            match next {
-                Some(part) => {
-                    let end = part.end;
-                    Some((
-                        Ok::<_, std::io::Error>(Bytes::from_owner(part)),
-                        (rx, end, cancel),
-                    ))
-                }
-                None => Some((
-                    Err(std::io::Error::other(
-                        "Encrypted request ended before its body completed",
-                    )),
-                    (rx, true, cancel),
-                )),
-            }
-        },
-    );
     let mut request = Request::builder()
         .method(method)
         .uri(uri)
-        .body(Body::from_stream(stream))
+        .body(request_body(
+            rx,
+            cancel.clone(),
+            start.id,
+            output.with_cancel(cancel.clone()),
+        ))
         .map_err(|_| ())?;
     *request.headers_mut() = headers;
     request.extensions_mut().insert(provenance.peer);
@@ -175,6 +151,56 @@ pub(crate) fn start(
         }
     };
     Ok((input, task))
+}
+
+fn request_body(
+    rx: mpsc::Receiver<Part>,
+    cancel: CancellationToken,
+    id: u32,
+    output: Output,
+) -> Body {
+    let stream = futures_util::stream::unfold(
+        (rx, false, cancel, false),
+        move |(mut rx, ended, cancel, credit)| {
+            let output = output.clone();
+            async move {
+                if ended {
+                    return None;
+                }
+                // Resumption means the bounded consumer has processed the prior chunk.
+                // A failed credit path is an incomplete body, never successful EOF.
+                let next = if credit
+                    && output
+                        .send(json!({"op":"consumed", "id":id}))
+                        .await
+                        .is_err()
+                {
+                    None
+                } else {
+                    tokio::select! { biased; () = cancel.cancelled() => None, next = rx.recv() => next }
+                };
+                match next {
+                    Some(part) => {
+                        let Part { bytes, end, charge } = part;
+                        // The HTTP consumer now owns these bytes under its body limit;
+                        // they are no longer retained in the encrypted ingress queue.
+                        drop(charge);
+                        Some((
+                            Ok::<_, std::io::Error>(Bytes::from(bytes)),
+                            (rx, end, cancel, !end),
+                        ))
+                    }
+                    None => Some((
+                        Err(std::io::Error::other(
+                            "Encrypted request ended before its body completed",
+                        )),
+                        (rx, true, cancel, false),
+                    )),
+                }
+            }
+        },
+    );
+    Body::from_stream(stream)
 }
 
 fn request_metadata(
@@ -247,3 +273,6 @@ fn request_metadata(
     }
     Ok((method, uri, headers))
 }
+
+#[cfg(test)]
+mod tests;

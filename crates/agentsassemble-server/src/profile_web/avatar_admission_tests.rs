@@ -113,10 +113,17 @@ async fn upload(state: &AppState, agent: bool, content: body::Body) -> Response 
         .header(header::AUTHORIZATION, format!("Bearer {}", ticket.ticket))
         .body(content)
         .unwrap_or_else(|error| panic!("request: {error:?}"));
+    let policy = axum::Extension(crate::http_body_policy::Policy::new());
     let result = if agent {
-        agent_avatar::upload(State(state.clone()), Path("missing".into()), request).await
+        agent_avatar::upload(
+            State(state.clone()),
+            Path("missing".into()),
+            policy,
+            request,
+        )
+        .await
     } else {
-        upload_attachment(State(state.clone()), request).await
+        upload_attachment(State(state.clone()), policy, request).await
     };
     result.into_response()
 }
@@ -163,10 +170,17 @@ async fn upload_authority_rejection_precedes_saturation() {
         .avatar_uploads
         .try_acquire_many(2)
         .unwrap_or_else(|error| panic!("saturate: {error:?}"));
-    let profile = upload_attachment(State(state.clone()), Request::new(body::Body::empty())).await;
+    let policy = axum::Extension(crate::http_body_policy::Policy::new());
+    let profile = upload_attachment(
+        State(state.clone()),
+        policy.clone(),
+        Request::new(body::Body::empty()),
+    )
+    .await;
     let agent = agent_avatar::upload(
         State(state.clone()),
         Path("missing".into()),
+        policy,
         Request::new(body::Body::empty()),
     )
     .await;

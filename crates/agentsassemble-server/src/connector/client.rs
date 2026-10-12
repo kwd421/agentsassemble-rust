@@ -282,7 +282,7 @@ impl RoomConnectorClient {
         let session = self.session().await?;
         self.request(self.http.post(self.endpoint("upload")).bearer_auth(&session.bearer)
             .json(&json!({"filename":filename,"content_type":content_type,"data_base64":data_base64}))
-            .timeout(COMMAND_TIMEOUT)).await
+            .timeout(crate::http_body_policy::UPLOAD_CEILING)).await
     }
 
     /// Explicitly replaces wait observation with a successfully read current snapshot.

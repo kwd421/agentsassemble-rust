@@ -15,9 +15,7 @@ use serde_json::{Value, json};
 use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tower_http::{
-    services::ServeDir, set_header::SetResponseHeaderLayer, timeout::RequestBodyDeadlineLayer,
-};
+use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer};
 
 use crate::{
     AppState, RoomShutdownError, TicketIssueError,
@@ -31,7 +29,6 @@ use crate::{
     ticket::{ConsumedSocketTicket, SocketTicketHint},
 };
 
-const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
 use agentsassemble_domain::runtime_shutdown::CONNECTION_DRAIN_TIMEOUT as TRACKED_SHUTDOWN_TIMEOUT;
 const ROOT_PATH: &str = "/";
 const APP_PREFIX: &str = "/app";
@@ -238,7 +235,7 @@ pub fn router(state: AppState) -> Router {
         state.google_accounts.configuration().enabled,
     );
     app.with_state(state)
-        .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
+        .layer(middleware::from_fn(crate::http_body_policy::apply))
         .layer(middleware::map_response(crate::security_headers::apply))
         .layer(SetResponseHeaderLayer::if_not_present(
             header::CONTENT_SECURITY_POLICY,

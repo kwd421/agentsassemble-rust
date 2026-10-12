@@ -1,5 +1,47 @@
 # Verification Contract
 
+## Encrypted upload queues and progress deadlines (2026-10-12)
+
+Before implementation, `cargo test -p agentsassemble-server --lib
+secure_upload_consumes_more_than_direction_capacity -- --nocapture` failed at
+chunk 8 (the ninth 64 KiB chunk), after the collector had polled the preceding
+512 KiB. `Bytes::from_owner(Part)` retained each queue charge until aggregate EOF.
+The secure receiver now transfers byte ownership to the bounded HTTP consumer and
+releases the queue charge. Request-bound `consumed` frames pace browser HTTP chunks
+across concurrent requests; terminal/late data cannot close an unrelated request.
+A failed credit path remains an incomplete-body error, not successful EOF.
+
+The router starts the short deadline before authorization. Authorized attachment,
+avatar, appearance, persona-import and connector-upload handlers explicitly select
+30-second nonempty-data idle, 64 KiB/120-second progress and 60-minute overall
+bounds. Control bodies retain ten seconds; connector upload clients permit the
+upload ceiling. No queue gates, asset limits, authorities, schema or UI changed.
+
+Verified on the final source:
+- `cargo test -p agentsassemble-server`: 155 library, 5 CLI and 195 integration
+  tests passed; 3 existing tests remained ignored. Regressions cover incremental
+  charge release, request-local cancellation, virtual HTTP 408/late-data isolation,
+  interrupted credit delivery, stalled/empty/trickling bodies, short control bounds,
+  progressing uploads across multiple windows and the overall ceiling.
+- The production TypeScript/WebCrypto transport against the Rust host uploaded a
+  10 MiB member file with an 11-second body pause, published it through the member
+  socket, and downloaded identical bytes. The fixture uses a local tunnel adapter
+  and a test central authority. Pending files correctly require publication before
+  this download path becomes available.
+- `cd frontend && npx tsc --noEmit -p .` and `npx vitest run
+  src/lib/remote/remoteTransport.body.test.ts src/lib/remote/remoteWorkspace.test.ts
+  src/lib/remote/remoteResources.test.ts`: passed, 8 tests.
+- `cargo fmt --all`, its `-- --check`, `make architecture-check` (including 19
+  policy/artifact tests), and `git diff --check`: passed. Existing ts-rs attribute
+  and source-size warnings remain.
+
+Cost/limits: byte ownership moves without another whole-body copy; each consumed
+HTTP chunk adds an encrypted credit plus the existing frame ACK, with one HTTP
+body chunk in flight per channel. WAN throughput/RSS and packaged UI were not
+measured. Long timeout cases use Tokio's paused clock. The ignored tests require
+an external restore fixture or real providers; no real providers, deployment or
+push were performed. The contract is in `specs/lobby-message-attachments-slice.md`.
+
 ## Restored-host completion and relaunch (2026-10-11)
 
 `restore_ready.rs::acknowledge_restored_endpoint` persisted Ready and removed

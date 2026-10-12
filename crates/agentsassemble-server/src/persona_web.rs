@@ -20,7 +20,7 @@ use crate::{
     AppState,
     http_api::{
         BodyDecodeError, MAX_BASE64_ENCODED_BYTES, MAX_BASE64_UPLOAD_BODY_BYTES, PRIVATE_NO_STORE,
-        consume_local_operator, decode_json_body, ensure_empty_body, exact_tauri_cors,
+        consume_local_operator, decode_upload_body, ensure_empty_body, exact_tauri_cors,
     },
 };
 
@@ -72,6 +72,7 @@ async fn list_personas(
 
 async fn import_persona(
     State(state): State<AppState>,
+    policy: axum::Extension<crate::http_body_policy::Policy>,
     request: Request,
 ) -> Result<Json<Value>, PersonaHttpError> {
     authorize(
@@ -85,9 +86,10 @@ async fn import_persona(
         .acquire()
         .await
         .map_err(|_| PersonaHttpError::internal())?;
-    let payload: PersonaImportRequest = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
-        .await
-        .map_err(PersonaHttpError::from_body)?;
+    let payload: PersonaImportRequest =
+        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy)
+            .await
+            .map_err(PersonaHttpError::from_body)?;
     let filename = clean_filename(&payload.filename).ok_or_else(PersonaHttpError::unsupported)?;
     let extension = filename
         .rsplit_once('.')

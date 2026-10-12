@@ -6,12 +6,13 @@ use agentsassemble_persistence::{RoomManagerAuthority, RoomSessionAuthorization}
 use super::{
     AppState, EncodedAttachmentUpload, Json, MAX_BASE64_UPLOAD_BODY_BYTES, Path, ProfileHttpError,
     Request, Response, State, avatar_admission, bearer_credential, decode_attachment_content,
-    decode_json_body, ensure_empty_body, json,
+    decode_upload_body, ensure_empty_body, json,
 };
 
 pub(super) async fn upload(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
+    policy: axum::Extension<crate::http_body_policy::Policy>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let token = bearer_credential(request.headers()).ok_or_else(ProfileHttpError::unauthorized)?;
@@ -40,9 +41,10 @@ pub(super) async fn upload(
         Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
     };
     let _permit = avatar_admission::acquire(&state.avatar_uploads)?;
-    let payload: EncodedAttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
-        .await
-        .map_err(ProfileHttpError::from_body)?;
+    let payload: EncodedAttachmentUpload =
+        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy)
+            .await
+            .map_err(ProfileHttpError::from_body)?;
     let content = decode_attachment_content(&payload.data_base64)?;
     let attachment = state
         .store

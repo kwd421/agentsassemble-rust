@@ -1,6 +1,6 @@
 //! Connector attachments share the browser's storage, validation and pending custody.
 use super::{AppState, ConnectorHttpError, credential};
-use crate::http_api::{MAX_BASE64_ENCODED_BYTES, MAX_BASE64_UPLOAD_BODY_BYTES, decode_json_body};
+use crate::http_api::{MAX_BASE64_ENCODED_BYTES, MAX_BASE64_UPLOAD_BODY_BYTES, decode_upload_body};
 use agentsassemble_persistence::{CONNECTOR_SESSION_PREFIX, RoomMutationAuthority};
 use axum::{
     Json,
@@ -37,6 +37,7 @@ pub(super) async fn read(
 
 pub(super) async fn upload(
     State(state): State<AppState>,
+    policy: axum::Extension<crate::http_body_policy::Policy>,
     request: Request,
 ) -> Result<Json<Value>, ConnectorHttpError> {
     let fingerprint = credential(&request, CONNECTOR_SESSION_PREFIX)?;
@@ -49,7 +50,7 @@ pub(super) async fn upload(
         return Err(ConnectorHttpError::unauthorized());
     }
     let payload: crate::profile_web::EncodedAttachmentUpload =
-        decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES).await?;
+        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy).await?;
     if payload.data_base64.len() > MAX_BASE64_ENCODED_BYTES {
         return Err(ConnectorHttpError::invalid());
     }

@@ -535,3 +535,32 @@ Critical 0 / High 0 / Medium 0 blocking / Low 0, with one accepted non-blocking
 Medium. Daybreaker Blue High independently returned the same final classification and
 approved all four commits and the cumulative range. The retained-capacity fairness
 threat remains recorded above; neither review erased or downgraded it.
+
+## Encrypted upload consumption and timing (2026-10-12)
+
+Required behavior: encrypted virtual HTTP must receive the current 10 MiB file
+allowance (including its encoded envelope) without retaining consumed chunks'
+queue charges. Keep 64 KiB chunks, 512 KiB directional and 8 MiB global queues.
+Host consumption returns request-bound credit; browser uploads wait for it so
+concurrent senders cannot burst beyond transport admission. Cancellation and
+expiry release only the affected request, without aborting durable handler work.
+
+Authorized file collectors at message attachments, profile/appearance attachments,
+agent avatars, persona import (including central-owner routes), and connector
+upload use 30 seconds without nonempty data, at least 64 KiB per 120-second
+window until completion, and a 60-minute total ceiling. Empty data/trailers do
+not reset progress. Control/JSON and preauthorization keep the ten-second bound;
+virtual HTTP uses the same policy. Size and timeout errors remain distinct.
+Connector upload clients must allow this server-owned upload lifetime.
+
+Owners/entry points: `secure_http.rs`, `secure_queue.rs`, `http_api.rs`, `web.rs`,
+the authorized upload handlers above, `connector/client.rs`, and browser
+`frontend/src/lib/remote/remoteTransport.ts`. No file-size, quota, storage, UI,
+provider, MCP-envelope or authority changes belong to this slice. Upload failures
+retain the existing uncertain-write/no-automatic-retry contract.
+
+Verification: first reproduce queue exhaustion above 512 KiB; then prove a
+10 MiB file envelope completes with released charges and unchanged gates,
+stalled/trickling bodies time out, progress past ten seconds succeeds, and
+cancelling one request preserves other queues. Use controlled polls/virtual time
+and browser protocol peers; report separately any unverified packaged flow.

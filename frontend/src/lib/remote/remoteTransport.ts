@@ -21,6 +21,7 @@ type HttpWait = {
   controller?: ReadableStreamDefaultController<Uint8Array<ArrayBuffer>>;
   chunks: Uint8Array<ArrayBuffer>[]; end: boolean; pulling: boolean;
   removeAbort: () => void; responded: boolean; releaseFrame?: () => void;
+  consumed?: () => void; stopUpload?: () => void;
 };
 
 function exact(frame: Record<string, unknown>, keys: string[]) {
@@ -35,6 +36,7 @@ export class RemoteTransport {
   private closed = false;
   private nextId = 1;
   private sending = Promise.resolve();
+  private uploading: Promise<unknown> = Promise.resolve();
   private receiving = Promise.resolve();
   private sendBytes = 0;
   private receiveBytes = 0;
@@ -126,6 +128,25 @@ export class RemoteTransport {
     this.sending = next.catch(() => this.close());
     return next;
   }
+  private sendBody(id: number, data: string, end: boolean): Promise<boolean> {
+    // One HTTP chunk across the channel until its receiver consumes it. Control
+    // frames and socket traffic retain their independent send path.
+    if (end) {
+      const wait = this.http.get(id);
+      if (!wait || wait.responded) return Promise.resolve(false);
+      return this.send({ op: "data", id, data, end }).then(() => true);
+    }
+    const sent = this.uploading.then(async () => {
+      const wait = this.http.get(id);
+      if (!wait || wait.responded) return false;
+      const consumed = new Promise<void>(resolve => { wait.consumed = resolve; });
+      await this.send({ op: "data", id, data, end });
+      await consumed;
+      return this.http.get(id) === wait && !wait.responded;
+    });
+    this.uploading = sent.catch(() => {});
+    return sent;
+  }
   private allocate() {
     if (this.closed) throw connectionEnded();
     if (this.http.size + this.sockets.size >= 32) throw capacityError();
@@ -150,21 +171,24 @@ export class RemoteTransport {
     void (async () => {
       await this.send({ op: "request", id, method: request.method, path, headers: [...request.headers] });
       const reader = body.body?.getReader();
+      const wait = this.http.get(id);
+      if (wait) wait.stopUpload = () => { void reader?.cancel().catch(() => {}); };
       try {
         if (reader) for (;;) {
-          if (!this.http.has(id)) { await reader.cancel(); return; }
+          if (!this.http.has(id) || wait?.responded) { await reader.cancel(); return; }
           const part = await reader.read(); if (part.done) break;
           for (let offset = 0; offset < part.value.byteLength; offset += REMOTE_CHUNK) {
-            await this.send({ op: "data", id, data: encodeBase64Url(part.value.slice(offset, offset + REMOTE_CHUNK)), end: false });
+            if (!await this.sendBody(id, encodeBase64Url(part.value.slice(offset, offset + REMOTE_CHUNK)), false)) return;
           }
         }
-        await this.send({ op: "data", id, data: "", end: true });
-      } finally { reader?.releaseLock(); }
+        await this.sendBody(id, "", true);
+      } finally { if (wait) wait.stopUpload = undefined; reader?.releaseLock(); }
     })().catch(error => this.cancelHttp(id, error instanceof Error ? error : connectionEnded()));
     return result;
   }
   private removeHttp(id: number) {
     const wait = this.http.get(id); if (!wait) return;
+    wait.stopUpload?.(); wait.consumed?.(); wait.consumed = undefined;
     wait.removeAbort(); wait.releaseFrame?.(); wait.releaseFrame = undefined; for (const chunk of wait.chunks) this.bodyBytes -= chunk.length;
     wait.chunks = []; this.http.delete(id);
   }
@@ -193,10 +217,15 @@ export class RemoteTransport {
       exact(frame, ["op", "id", "code"]);
       if (wait) this.cancelHttp(id, frame.code === "capacity" ? capacityError() : connectionEnded());
       if (socket) { socket.ended(); this.sockets.delete(id); }
+    } else if (frame.op === "consumed" && wait) {
+      exact(frame, ["op", "id"]);
+      if (!wait.consumed) { if (wait.responded) return; throw connectionEnded(); }
+      const consumed = wait.consumed; wait.consumed = undefined; consumed();
     } else if (frame.op === "response" && wait) {
       exact(frame, ["op", "id", "status", "headers"]);
       if (wait.responded || !Number.isInteger(frame.status) || Number(frame.status) < 200 || Number(frame.status) > 599 || !Array.isArray(frame.headers)) throw connectionEnded();
       const headers = new Headers(frame.headers as [string, string][]); wait.responded = true;
+      wait.stopUpload?.(); wait.consumed?.(); wait.consumed = undefined;
       const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
         start: controller => { wait.controller = controller; },
         pull: () => { wait.pulling = true; this.pull(id); },

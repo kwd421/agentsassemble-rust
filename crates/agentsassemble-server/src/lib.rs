@@ -130,6 +130,7 @@ mod guest_identity_recovery_web;
 mod guest_recovery_attempts;
 mod http_admission;
 mod http_api;
+mod http_body_policy;
 mod http_transport;
 mod human_admission_runtime;
 mod human_browser_credential;

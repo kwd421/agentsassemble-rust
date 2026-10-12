@@ -15,7 +15,8 @@ use crate::{
     AppState, ConsumedProfileTicket,
     http_api::{
         BodyDecodeError, DEVICE_CREDENTIAL_HEADER, MAX_BASE64_UPLOAD_BODY_BYTES, PRIVATE_NO_STORE,
-        bearer_credential, decode_json_body, ensure_empty_body, exact_tauri_cors,
+        bearer_credential, decode_json_body, decode_upload_body, ensure_empty_body,
+        exact_tauri_cors,
     },
     room_session_http_authority::{
         RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
@@ -151,6 +152,7 @@ async fn update_profile(
 
 async fn upload_attachment(
     State(state): State<AppState>,
+    policy: axum::Extension<crate::http_body_policy::Policy>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let authority =
@@ -168,9 +170,10 @@ async fn upload_attachment(
         ));
     }
     let _permit = avatar_admission::acquire(&state.avatar_uploads)?;
-    let payload: AttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
-        .await
-        .map_err(ProfileHttpError::from_body)?;
+    let payload: AttachmentUpload =
+        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy)
+            .await
+            .map_err(ProfileHttpError::from_body)?;
     let authority = match authority {
         AttachmentUploadAuthority::Operator(session)
             if payload.purpose.trim() == "profile_avatar" && session.is_central_owner() =>
@@ -200,6 +203,7 @@ async fn upload_attachment(
 
 async fn upload_message_attachment(
     State(state): State<AppState>,
+    policy: axum::Extension<crate::http_body_policy::Policy>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let authority = resolve_message_attachment_upload_authority(
@@ -208,9 +212,10 @@ async fn upload_message_attachment(
         request.extensions().get(),
     )
     .await?;
-    let payload: EncodedAttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
-        .await
-        .map_err(ProfileHttpError::from_body)?;
+    let payload: EncodedAttachmentUpload =
+        decode_upload_body(request, MAX_BASE64_UPLOAD_BODY_BYTES, &policy)
+            .await
+            .map_err(ProfileHttpError::from_body)?;
     let content = decode_attachment_content(&payload.data_base64)?;
     let attachment = match authority {
         RoomSessionHttpAuthority::LocalTicket(grant) => {

@@ -108,6 +108,16 @@ pub(crate) async fn decode_json_body<T: serde::de::DeserializeOwned>(
     serde_json::from_slice(&encoded).map_err(|_| BodyDecodeError::InvalidJson)
 }
 
+/// Called only after the upload handler has resolved its existing authority.
+pub(crate) async fn decode_upload_body<T: serde::de::DeserializeOwned>(
+    request: Request,
+    limit: usize,
+    policy: &crate::http_body_policy::Policy,
+) -> Result<T, BodyDecodeError> {
+    policy.authorize_upload()?;
+    decode_json_body(request, limit).await
+}
+
 pub(crate) async fn decode_optional_json_body<T: serde::de::DeserializeOwned>(
     request: Request,
     limit: usize,
@@ -132,7 +142,9 @@ async fn read_body(request: Request, limit: usize) -> Result<axum::body::Bytes, 
 fn classify_body_read_error(error: &axum::Error) -> BodyDecodeError {
     let mut cause: &(dyn std::error::Error + 'static) = error;
     loop {
-        if cause.is::<tower_http::timeout::TimeoutError>() {
+        if cause.is::<tower_http::timeout::TimeoutError>()
+            || cause.is::<crate::http_body_policy::UploadTimeout>()
+        {
             return BodyDecodeError::RequestTimeout;
         }
         let Some(source) = cause.source() else {

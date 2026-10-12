@@ -100,6 +100,22 @@ const challenge=await memberPost(member,'/api/room-invite/member-challenge',{inv
 const preflight=await memberPost(member,'/api/room-invite/admission',{invite_token:invitation.join_code}); assert.equal(preflight.room_id,'secure-room');
 const memberJoined=await memberPost(member,'/api/room-invite/member-join',{invite_token:invitation.join_code,challenge_id:challenge.challenge_id,grant_token:'aamg1.'+'A'.repeat(43),request_id:crypto.randomUUID(),client_id:'secure-member-client'});
 assert.equal(memberJoined.status,'admitted');
+// Production WebCrypto -> virtual HTTP -> authorized collector -> durable asset.
+// Pause after the first body bytes: this also exceeds the old router deadline.
+const fileBytes = Buffer.alloc(10 * 1024 * 1024, 79);
+const encodedUpload = new TextEncoder().encode(JSON.stringify({filename:'large.txt',content_type:'text/plain',data_base64:fileBytes.toString('base64')}));
+const uploadStarted = performance.now();
+let uploadOffset = 0;
+const slowUpload = new ReadableStream({ async pull(controller) {
+  if (uploadOffset === 64 * 1024) await new Promise(resolve => setTimeout(resolve, 11_000));
+  if (uploadOffset >= encodedUpload.length) { controller.close(); return; }
+  controller.enqueue(encodedUpload.slice(uploadOffset, uploadOffset + 64 * 1024)); uploadOffset += 64 * 1024;
+} });
+const memberHeaders = {'content-type':'application/json','x-device-token':memberDevice,authorization:`Bearer ${memberJoined.session_token}`};
+const uploadedResponse = await member.fetch('/api/message-attachments',{method:'POST',headers:memberHeaders,body:slowUpload,duplex:'half'});
+const uploaded = await uploadedResponse.json();
+assert.equal(uploadedResponse.status,200); assert.equal(uploaded.attachment.size,fileBytes.length);
+assert.ok(performance.now() - uploadStarted > 10_000);
 for (const credential of [memberJoined.session_token, owner.session_token]) {
   for (const path of ['/api/central-owner/personas','/api/central-owner/personas/Harbor-Guide/thumbnail','/api/central-owner/personas/import']) {
     const rejected = await member.fetch(path, { method:path.endsWith('/import')?'POST':'GET', headers:{...personaHeaders,authorization:`Bearer ${credential}`} });
@@ -118,8 +134,10 @@ const memberReceive=()=>memberFrames.length?Promise.resolve(memberFrames.shift()
 memberSocket.send(JSON.stringify({op:'subscribe',streams:['room_events'],resume_from_seq:0}));
 for(let i=0;i<10;i++){if((await memberReceive()).op==='snapshot')break;}
 const memberMessage=crypto.randomUUID();
-memberSocket.send(JSON.stringify({op:'command',request_id:memberMessage,action:'message.send',payload:{content:'retained member text'}}));
+memberSocket.send(JSON.stringify({op:'command',request_id:memberMessage,action:'message.send',payload:{content:'retained member text',attachment_ids:[uploaded.attachment.id]}}));
 for(let i=0;i<10;i++){const f=await memberReceive();if(f.op==='ack'&&f.request_id===memberMessage){assert.ok(f.accepted);break;}}
+const downloaded = await member.fetch(uploaded.attachment.download_url,{headers:memberHeaders});
+assert.equal(downloaded.status,200); assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),fileBytes);
 memberSocket.close(); // Keep this admitted channel idle while a second device connects.
 const reconnect=await RemoteTransport.connect(config.target,'member_connect');
 const connectChallenge=await memberPost(reconnect,'/api/member-connect/challenge',{});
