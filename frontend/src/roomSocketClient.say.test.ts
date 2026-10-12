@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "./types/generated/MESSAGE_ATTACHMENTS_WIRE";
 import type { LobbyAttachmentRef } from "./api/messageAttachments";
 import { RoomSocketSayError } from "./roomSocketClient";
 import {
@@ -95,7 +96,7 @@ describe("room socket message attachments", () => {
     for (const attachments of [
       [valid, valid],
       [{ ...valid, id: "ma_invalid" }],
-      Array.from({ length: 9 }, (_, index) => attachment(index.toString(16))),
+      Array.from({ length: MAX_MESSAGE_ATTACHMENTS_PER_EVENT + 1 }, (_, index) => attachment(index.toString(16))),
     ]) {
       await expect(handle.say({ message: "blocked", attachments })).rejects.toBeInstanceOf(
         RoomSocketSayError

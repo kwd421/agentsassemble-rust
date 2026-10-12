@@ -5,7 +5,6 @@ import {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -14,21 +13,17 @@ import {
 } from "react";
 import type { LucideIcon } from "lucide-react";
 import { AtSign, FileText, Paperclip, Plus, Send, Smile, Sparkles, Trash2, X } from "lucide-react";
-import {
-  uploadLobbyAttachment,
-  type LobbyAttachmentRef,
-  type LobbyEvent,
-} from "../../api";
+import type { LobbyEvent } from "../../api";
 import { useRoomSocket } from "../../RoomSocketContext";
 import { RoomSocketSayError } from "../../roomSocketClient";
 import {
-  MAX_ATTACHMENTS_PER_EVENT,
   lobbySubmitFailureDraft,
   lobbySubmitSuccessDraft,
   selectLobbyAttachmentFiles,
 } from "../../lib/lobbyComposerModel";
 import { isUnauthorizedApiError } from "../../lib/apiErrors";
 import type { RoomPostingMode } from "../../lib/roomGuestPosting";
+import type { OutgoingDraft } from "../../lib/outgoingMessages";
 import type { Mentionable } from "../../lib/mentionComposerModel";
 import { parseVoteCommand } from "../../lib/votePoll";
 import MentionInput from "./MentionInput";
@@ -52,7 +47,7 @@ type ComposerAccessory = {
 
 type LobbyComposerDraft = {
   message: string;
-  pendingAttachments: LobbyAttachmentRef[];
+  pendingAttachments: StagedFile[];
   retry?: () => Promise<unknown>;
   retryReplyToEventId?: string;
 };
@@ -69,19 +64,16 @@ function localPreviewKind(contentType: string): LocalAttachmentPreview["kind"] |
   return null;
 }
 
-type AttachmentUploadOperation = {
-  controller: AbortController;
-};
+// A file waits in the draft as a local File; nothing is sent until the message is.
+type StagedFile = { id: string; filename: string; file: File };
 
-function requireCurrentAttachmentUpload(
-  operation: AttachmentUploadOperation,
-  current: AttachmentUploadOperation | null
-) {
-  operation.controller.signal.throwIfAborted();
-  if (operation !== current) {
-    throw new DOMException("Attachment upload retired.", "AbortError");
-  }
-}
+/** What the composer needs from the room's outgoing-message owner. */
+export type ComposerOutgoing = {
+  ready: boolean;
+  limit: number;
+  check(file: File): string;
+  send(draft: OutgoingDraft): void;
+};
 
 const ATTACHMENT_ERROR_MS = 5000;
 
@@ -110,12 +102,12 @@ export default function LobbyComposer({
   mentionables = [],
   disabledReason,
   roomSessionToken = "",
-  roomDeviceToken = "",
   postingMode = "host",
   onGuestSessionExpired,
   replyTo,
   onCancelReply,
   onReplySent,
+  outgoing,
 }: {
   meetingId: string;
   onPosted: (events: LobbyEvent[]) => void;
@@ -123,18 +115,17 @@ export default function LobbyComposer({
   mentionables?: Mentionable[];
   disabledReason?: string;
   roomSessionToken?: string;
-  roomDeviceToken?: string;
   postingMode?: RoomPostingMode;
   onGuestSessionExpired?: () => void;
   replyTo?: ReplySource;
   onCancelReply?: () => void;
   onReplySent?: (eventId: string) => void;
+  outgoing?: ComposerOutgoing;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (replyTo) inputRef.current?.focus(); }, [replyTo?.eventId]);
   const restoreFocusAfterSubmitRef = useRef(false);
-  const activeUploadOperation = useRef<AttachmentUploadOperation | null>(null);
   const commandListId = useId();
   const emojiListId = useId();
   const toolsListId = useId();
@@ -159,7 +150,6 @@ export default function LobbyComposer({
   }, [toolsOpen]);
   const [draftsByRoom, setDraftsByRoom] = useState<Record<string, LobbyComposerDraft>>({});
   const [busy, setBusy] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   // Attachment problems (too large, too many, upload failed) are a passing notice:
   // they clear on their own, unlike a send failure that the draft depends on.
@@ -182,18 +172,18 @@ export default function LobbyComposer({
   const message = activeDraft.message;
   const pendingAttachments = activeDraft.pendingAttachments;
   const disabled = Boolean(disabledReason);
-  const canUploadAttachments =
+  const attachmentLimit = outgoing?.limit ?? 0;
+  const canUploadAttachments = Boolean(outgoing?.ready) && (
     postingMode === "host" ||
-    (postingMode === "guest" && Boolean(roomSessionToken.trim()));
-  const canSubmit = Boolean(message.trim() || pendingAttachments.length) && !busy && !uploading && !disabled;
+    (postingMode === "guest" && Boolean(roomSessionToken.trim())));
+  const canSubmit = Boolean(message.trim() || pendingAttachments.length) && !busy && !disabled;
   const matchingCommands = matchingComposerCommands(message);
   const commandMenuOpen =
     !disabled &&
     !busy &&
     matchingCommands.length > 0 &&
     dismissedCommandMessage !== message;
-  // Thumbnails of attachments that are uploaded but not sent yet, made from the local
-  // file so nothing is read back from the server.
+  // Thumbnails of staged files, made from the local file.
   const [localPreviews, setLocalPreviews] = useState<Record<string, LocalAttachmentPreview>>({});
   const localPreviewsRef = useRef(localPreviews);
   localPreviewsRef.current = localPreviews;
@@ -248,8 +238,8 @@ export default function LobbyComposer({
 
   function setPendingAttachments(
     update:
-      | LobbyAttachmentRef[]
-      | ((current: LobbyAttachmentRef[]) => LobbyAttachmentRef[])
+      | StagedFile[]
+      | ((current: StagedFile[]) => StagedFile[])
   ) {
     setDraftsByRoom((previous) => {
       const current = previous[meetingId] || EMPTY_LOBBY_COMPOSER_DRAFT;
@@ -273,15 +263,6 @@ export default function LobbyComposer({
     setVoteDialogOpen(false);
     setEmojiOpen(false);
   }, [meetingId]);
-
-  useLayoutEffect(() => {
-    setUploading(false);
-    return () => {
-      const operation = activeUploadOperation.current;
-      activeUploadOperation.current = null;
-      operation?.controller.abort();
-    };
-  }, [disabledReason, meetingId, postingMode, roomSessionToken, roomDeviceToken]);
 
   useEffect(() => {
     if (busy || !restoreFocusAfterSubmitRef.current) return;
@@ -308,11 +289,11 @@ export default function LobbyComposer({
     if (accessory.insertText) insertText(accessory.insertText);
   }
 
-  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     if (disabled || !canUploadAttachments) return;
     const selected = Array.from(event.currentTarget.files || []);
     event.currentTarget.value = "";
-    await uploadFiles(selected);
+    uploadFiles(selected);
   }
 
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
@@ -321,77 +302,56 @@ export default function LobbyComposer({
     // Files on the clipboard (a copied image or screenshot) become attachments; the
     // text of a paste that carries no file is left to the textarea.
     event.preventDefault();
-    if (disabled || busy || uploading) return;
+    if (disabled || busy) return;
     if (!canUploadAttachments) {
       setAttachmentError("이 방에서는 파일을 첨부할 수 없어요.");
       return;
     }
-    void uploadFiles(pasted);
+    uploadFiles(pasted);
   }
 
-  async function uploadFiles(selected: File[]) {
-    if (!selected.length) return;
+  function uploadFiles(selected: File[]) {
+    if (!selected.length || !outgoing) return;
 
-    const { accepted: filesToUpload, tooMany } = selectLobbyAttachmentFiles(
+    const { accepted, tooMany } = selectLobbyAttachmentFiles(
       pendingAttachments.length,
-      selected
+      selected,
+      outgoing.limit
     );
     if (tooMany) {
       setTooManyOpen(true);
       return;
     }
-    setAttachmentError("");
-
-    const operation: AttachmentUploadOperation = {
-      controller: new AbortController(),
-    };
-    activeUploadOperation.current = operation;
-    setUploading(true);
-    try {
-      const uploaded: LobbyAttachmentRef[] = [];
-      const previews: Record<string, LocalAttachmentPreview> = {};
-      for (const file of filesToUpload) {
-        const attachment = await uploadLobbyAttachment(file, {
-          roomId: meetingId,
-          sessionToken: roomSessionToken,
-          deviceToken: roomDeviceToken,
-          signal: operation.controller.signal,
-          beforeDispatch: () =>
-            requireCurrentAttachmentUpload(operation, activeUploadOperation.current),
-        });
-        uploaded.push(attachment);
-        const kind = localPreviewKind(file.type);
-        if (kind) previews[attachment.id] = { kind, url: createResourceUrl(file) };
-      }
-      requireCurrentAttachmentUpload(operation, activeUploadOperation.current);
-      setLocalPreviews((current) => ({ ...current, ...previews }));
-      setPendingAttachments((current) =>
-        [...current, ...uploaded].slice(0, MAX_ATTACHMENTS_PER_EVENT)
-      );
-    } catch (errorValue) {
-      if (
-        activeUploadOperation.current === operation &&
-        !operation.controller.signal.aborted
-      ) {
-        setAttachmentError(errorValue instanceof Error ? errorValue.message : "첨부 업로드 실패");
-      }
-    } finally {
-      if (activeUploadOperation.current === operation) {
-        activeUploadOperation.current = null;
-        setUploading(false);
-      }
+    // One file that cannot be sent refuses the selection, with its reason.
+    const refusal = accepted.map((file) => outgoing.check(file)).find(Boolean);
+    if (refusal) {
+      setAttachmentError(refusal);
+      return;
     }
+    setAttachmentError("");
+    const staged = accepted.map((file) => ({
+      id: crypto.randomUUID(),
+      filename: file.name || "attachment.bin",
+      file,
+    }));
+    const previews: Record<string, LocalAttachmentPreview> = {};
+    for (const item of staged) {
+      const kind = localPreviewKind(item.file.type);
+      if (kind) previews[item.id] = { kind, url: createResourceUrl(item.file) };
+    }
+    setLocalPreviews((current) => ({ ...current, ...previews }));
+    setPendingAttachments((current) => [...current, ...staged]);
   }
 
   function removePendingAttachment(attachmentId: string) {
-    if (disabled || busy || uploading) return;
+    if (disabled || busy) return;
     setPendingAttachments((current) =>
       current.filter((attachment) => attachment.id !== attachmentId)
     );
   }
 
   async function handleSubmit() {
-    if (disabled || busy || uploading) return;
+    if (disabled || busy) return;
     const draftMessage = message;
     const draftAttachments = pendingAttachments;
     const trimmed = draftMessage.trim();
@@ -416,15 +376,33 @@ export default function LobbyComposer({
       if (voteCommand) replyToEventId = undefined;
       const sayRequest = {
         message: voteCommand ? "" : trimmed,
-        attachments: draftAttachments,
+        attachments: [],
         kind: voteCommand ? ("vote" as const) : ("message" as const),
         voteQuestion: voteCommand?.question || "",
         voteOptions: voteCommand?.options || [],
         replyToEventId,
       };
+      if (draftAttachments.length > 0) {
+        // A message with files leaves the composer at once and uploads as an
+        // outgoing message; the room shows its progress.
+        if (!outgoing) throw new Error("이 방에서는 파일을 첨부할 수 없어요.");
+        outgoing.send({
+          text: sayRequest.message,
+          replyToEventId: sayRequest.replyToEventId,
+          files: draftAttachments.map((item) => item.file),
+          request: voteCommand
+            ? { kind: "vote", voteQuestion: sayRequest.voteQuestion, voteOptions: sayRequest.voteOptions }
+            : undefined,
+        });
+        const cleared = lobbySubmitSuccessDraft<StagedFile>();
+        setMessage(cleared.message);
+        setPendingAttachments(cleared.pendingAttachments);
+        if (sayRequest.replyToEventId) onReplySent?.(sayRequest.replyToEventId);
+        return;
+      }
       const payload = activeDraft.retry && activeDraft.retryReplyToEventId === sayRequest.replyToEventId
         ? (await activeDraft.retry(), { events: [] })
-        : submitMessage && !sayRequest.replyToEventId && sayRequest.kind === "message" && sayRequest.attachments.length === 0
+        : submitMessage && !sayRequest.replyToEventId && sayRequest.kind === "message"
           ? { events: await submitMessage(sayRequest.message) }
           : roomSocket?.ready()
             ? await roomSocket.say(sayRequest)
@@ -434,7 +412,7 @@ export default function LobbyComposer({
                   "socket_not_ready"
                 )
               );
-      const cleared = lobbySubmitSuccessDraft<LobbyAttachmentRef>();
+      const cleared = lobbySubmitSuccessDraft<StagedFile>();
       setMessage(cleared.message);
       setPendingAttachments(cleared.pendingAttachments);
       if (sayRequest.replyToEventId) onReplySent?.(sayRequest.replyToEventId);
@@ -468,10 +446,27 @@ export default function LobbyComposer({
   }
 
   async function submitVote(value: VoteComposerValue) {
-    if (disabled || busy || uploading) {
+    if (disabled || busy) {
       throw new Error("지금은 투표를 만들 수 없어요.");
     }
-    const key = JSON.stringify([meetingId, value, pendingAttachments]);
+    if (pendingAttachments.length > 0) {
+      if (!outgoing) throw new Error("이 방에서는 파일을 첨부할 수 없어요.");
+      outgoing.send({
+        text: "",
+        files: pendingAttachments.map((item) => item.file),
+        request: {
+          kind: "vote",
+          voteQuestion: value.question,
+          voteOptions: value.options,
+          voteDurationSeconds: value.durationSeconds,
+        },
+      });
+      const cleared = lobbySubmitSuccessDraft<StagedFile>();
+      setMessage(cleared.message);
+      setPendingAttachments(cleared.pendingAttachments);
+      return;
+    }
+    const key = JSON.stringify([meetingId, value]);
     if (voteRetry.current?.key !== key) voteRetry.current = null;
     setBusy(true);
     setError("");
@@ -489,13 +484,13 @@ export default function LobbyComposer({
         ? (await voteRetry.current.retry(), { events: [] })
         : await roomSocket.say({
         message: "",
-        attachments: pendingAttachments,
+        attachments: [],
         kind: "vote",
         voteQuestion: value.question,
         voteOptions: value.options,
         voteDurationSeconds: value.durationSeconds,
       });
-      const cleared = lobbySubmitSuccessDraft<LobbyAttachmentRef>();
+      const cleared = lobbySubmitSuccessDraft<StagedFile>();
       setMessage(cleared.message);
       setPendingAttachments(cleared.pendingAttachments);
       onPosted(payload.events || (payload.event ? [payload.event] : []));
@@ -549,8 +544,8 @@ export default function LobbyComposer({
   }
 
   const composerTools = [
-    { id: "attachment", label: "첨부 추가", title: `첨부 ${pendingAttachments.length}/${MAX_ATTACHMENTS_PER_EVENT}`, icon: Paperclip,
-      disabled: disabled || !canUploadAttachments || busy || uploading || pendingAttachments.length >= MAX_ATTACHMENTS_PER_EVENT,
+    { id: "attachment", label: "첨부 추가", title: `첨부 ${pendingAttachments.length}/${attachmentLimit}`, icon: Paperclip,
+      disabled: disabled || !canUploadAttachments || busy || pendingAttachments.length >= attachmentLimit,
       run: () => fileInputRef.current?.click() },
     ...COMPOSER_ACCESSORIES.map(accessory => ({ id: accessory.id, label: `채팅 ${accessory.label}`, title: accessory.title, icon: accessory.icon,
       disabled: busy || disabled, run: () => handleAccessoryClick(accessory) })),
@@ -606,7 +601,7 @@ export default function LobbyComposer({
                 <button
                   type="button"
                   onClick={() => removePendingAttachment(attachment.id)}
-                  disabled={busy || uploading}
+                  disabled={busy}
                   className="dc-upload-card-remove"
                   aria-label={`${attachment.filename} 첨부 제거`}
                   data-tip="첨부 제거"
@@ -636,7 +631,7 @@ export default function LobbyComposer({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           className="dc-composer-input"
-          placeholder={disabledReason || (uploading ? "첨부 업로드 중..." : "#general에 메시지 보내기")}
+          placeholder={disabledReason || "#general에 메시지 보내기"}
           disabled={busy || disabled}
           mentionables={mentionables}
           ariaLabel="채팅 입력"
@@ -723,7 +718,7 @@ export default function LobbyComposer({
       </div>
       </section>
       {tooManyOpen && (
-        <UploadLimitDialog limit={MAX_ATTACHMENTS_PER_EVENT} onClose={() => setTooManyOpen(false)} />
+        <UploadLimitDialog limit={attachmentLimit} onClose={() => setTooManyOpen(false)} />
       )}
       {voteDialogOpen && (
         <VoteComposerDialog

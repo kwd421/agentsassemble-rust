@@ -20,6 +20,8 @@ export class UploadFailure extends Error {
 export interface MessageAttachmentUploadClient {
   readonly limit: number;
   readonly transfer: boolean;
+  /** The room's per-file limit as last seen; refreshed at every begin. */
+  readonly fileLimit: number;
   preflight(file: File): void;
   begin(file: File, operationId: string, signal: AbortSignal): Promise<TransferStatus>;
   data(handle: string, offset: number, body: Blob, signal: AbortSignal): Promise<TransferStatus>;
@@ -100,6 +102,7 @@ export async function createMessageAttachmentUploadClient(
   const target = (handle: string) => `/${encodeURIComponent(handle)}`;
   return {
     limit: capabilities.limit, transfer: capabilities.transfer, preflight,
+    get fileLimit() { return fileLimit; },
     begin: async (file, operationId, signal) => {
       signal.throwIfAborted();
       const current = await fetchRoomSettings(room, settingsAuthority);

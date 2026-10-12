@@ -5,7 +5,11 @@ import type { RoomEvent } from "../types/generated/RoomEvent";
 import { createSecureRequestId } from "./secureRequestId";
 
 export type OutgoingAuthority = Readonly<{ roomId: string; participantId: string; generation: number }>;
-export type OutgoingDraft = Readonly<{ text: string; replyToEventId?: string; files: readonly File[] }>;
+export type OutgoingDraft = Readonly<{
+  text: string; replyToEventId?: string; files: readonly File[];
+  /** Everything else of the publication (for example a vote's question and options). */
+  request?: Readonly<Omit<RoomSayRequest, "message" | "attachments" | "replyToEventId">>;
+}>;
 export type OutgoingPhase = "queued" | "admitting" | "deferred" | "transferring" | "validating" | "ready" | "sending" | "sent" | "cancelling" | "cancelled" | "failed" | "outcome_unknown";
 export type OutgoingFailure = Readonly<{ code: string; retryable: boolean }>;
 export type OutgoingFile = Readonly<{
@@ -36,6 +40,7 @@ type FileState = {
 };
 type MessageState = {
   id: string; authority: OutgoingAuthority; text: string; replyToEventId?: string;
+  request?: OutgoingDraft["request"];
   files: FileState[]; phase: OutgoingPhase; failure?: OutgoingFailure; eventId?: string;
   retryPublication?: () => Promise<RoomCommandAck>;
   publicationStarted?: boolean;
@@ -106,7 +111,7 @@ export class OutgoingMessages {
     draft.files.forEach(file => room.uploads.preflight(file));
     const id = createSecureRequestId();
     this.messages.set(id, {
-      id, authority: room.authority, text: draft.text, replyToEventId: draft.replyToEventId, phase: "queued",
+      id, authority: room.authority, text: draft.text, replyToEventId: draft.replyToEventId, request: draft.request, phase: "queued",
       files: draft.files.map(file => ({ file, phase: "queued", sentBytes: 0, acceptedBytes: 0, operation: createSecureRequestId(), notBefore: 0 })),
     });
     this.changed();
@@ -317,7 +322,7 @@ export class OutgoingMessages {
     message.phase = "sending"; message.publicationStarted = true;
     try {
       const pending = message.retryPublication ? message.retryPublication() : this.options.publish(authority, {
-        message: message.text, replyToEventId: message.replyToEventId,
+        ...message.request, message: message.text, replyToEventId: message.replyToEventId,
         attachments: message.files.map(file => file.attachment!),
       });
       this.changed();

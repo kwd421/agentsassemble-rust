@@ -41,6 +41,17 @@ import { useLobbyHistory } from "./lobby/useLobbyHistory";
 import { useVisibleReadCursor } from "./lobby/useVisibleReadCursor";
 import { projectRoomEventsToTimeline } from "../lib/roomEventProjection";
 import { useRoomSocket } from "../RoomSocketContext";
+import { useOutgoingMessages } from "./lobby/useOutgoingMessages";
+import OutgoingUploadCard from "./components/OutgoingUploadCard";
+import MessageRow from "./components/MessageRow";
+
+// An outgoing row keeps the time it was sent at, for as long as it is shown.
+const outgoingTimes = new Map<string, string>();
+function outgoingStartedAt(id: string) {
+  let time = outgoingTimes.get(id);
+  if (!time) { time = new Date().toISOString(); outgoingTimes.set(id, time); }
+  return time;
+}
 import {
   useRoomMessageSearch,
   type RoomMessageSearchController,
@@ -195,6 +206,11 @@ export default function LobbyView({
         : { kind: "local" },
     [postingMode, roomSessionToken, roomDeviceToken]
   );
+  const outgoing = useOutgoingMessages({
+    roomUid, roomId: activeRoom.meetingId, participantId: viewerParticipantId,
+    authority: canPostMessages ? messageAttachmentAuthority : undefined,
+    socket: roomSocket, events: visibleEvents,
+  });
   const messageAttachmentReadScheduler = useMemo(
     () => messageAttachmentReadOwner.forAuthority(
       activeRoom.meetingId,
@@ -668,6 +684,28 @@ export default function LobbyView({
             );
           })
         )}
+        {outgoing.messages.map((message, index) => {
+          const self = participantProfiles[viewerParticipantId];
+          const failed = message.phase === "failed" || message.phase === "outcome_unknown";
+          return (
+            <MessageRow key={`outgoing-${message.id}`} eventId={`outgoing-${message.id}`}
+              author={self?.displayName || "나"} createdAt={outgoingStartedAt(message.id)}
+              participantType="human" avatarLabel={self?.avatarLabel} avatarImage={self?.avatarImageUrl}
+              showHeader={index === 0}>
+              {message.text && <div className="dc-message-body preserve-words">{message.text}</div>}
+              <OutgoingUploadCard
+                phase={message.phase === "failed" ? "failed" : message.phase === "outcome_unknown" ? "unknown"
+                  : message.phase === "sending" || message.phase === "sent" ? "sending" : "uploading"}
+                fileCount={message.files.length}
+                bytesDone={message.acceptedBytes} bytesTotal={message.totalBytes}
+                error={failed ? outgoing.failureText(message) : undefined}
+                onCancel={() => outgoing.cancel(message.id)}
+                onRetry={failed && (message.phase === "outcome_unknown" || message.failure?.retryable) ? () => outgoing.retry(message.id) : undefined}
+                onDiscard={() => outgoing.discard(message.id)}
+              />
+            </MessageRow>
+          );
+        })}
         {/* Thoughts and work in progress stay in the message body, where the reply will appear. */}
         {typingIndicators.map((indicator) => {
           const key = indicator.participantId || indicator.displayName;
@@ -703,8 +741,8 @@ export default function LobbyView({
           submitMessage={submitMessage}
           mentionables={mentionables}
           roomSessionToken={roomSessionToken}
-          roomDeviceToken={roomDeviceToken}
           postingMode={postingMode}
+          outgoing={outgoing}
           disabledReason={!canPostMessages ? composerDisabledReason : undefined}
           onGuestSessionExpired={onGuestSessionExpired}
         />

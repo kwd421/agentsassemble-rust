@@ -7,27 +7,14 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { useLayoutEffect } from "react";
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { RoomSocketProvider } from "../../RoomSocketContext";
 import {
   RoomSocketSayError,
   type RoomSocketHandle,
 } from "../../roomSocketClient";
-import LobbyComposer from "./LobbyComposer";
-
-const apiMocks = vi.hoisted(() => ({
-  uploadLobbyAttachment: vi.fn(),
-}));
-
-vi.mock("../../api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../api")>();
-  return {
-    ...actual,
-    uploadLobbyAttachment: apiMocks.uploadLobbyAttachment,
-  };
-});
+import LobbyComposer, { type ComposerOutgoing } from "./LobbyComposer";
 
 describe("LobbyComposer", () => {
   it("sends the selected reply and does not reuse its uncertain request after changing the source", async () => {
@@ -48,10 +35,6 @@ describe("LobbyComposer", () => {
     expect(say).toHaveBeenLastCalledWith(expect.objectContaining({ message: "reply", replyToEventId: "second" }));
   });
   afterEach(() => cleanup());
-
-  beforeEach(() => {
-    apiMocks.uploadLobbyAttachment.mockReset();
-  });
 
   it("offers emoji without placeholder gift, GIF, or sticker controls", () => {
     render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} />);
@@ -127,296 +110,6 @@ describe("LobbyComposer", () => {
     expect(input.value).toBe("");
   });
 
-  it("uploads attachments from a writable public room session", async () => {
-    apiMocks.uploadLobbyAttachment.mockResolvedValue({
-      id: "attachment-a",
-      filename: "map.png",
-      content_type: "image/png",
-      size: 3,
-      is_image: true,
-      url: "/api/rooms/room-a/attachments/attachment-a",
-      download_url: "/api/rooms/room-a/attachments/attachment-a/download",
-    });
-    render(
-      <LobbyComposer
-        meetingId="room-a"
-        onPosted={vi.fn()}
-        postingMode="guest"
-        roomSessionToken="aas1.public-session"
-        roomDeviceToken="browser-device"
-      />
-    );
-
-    expect(
-      (screen.getByLabelText("첨부 추가") as HTMLButtonElement).disabled
-    ).toBe(false);
-    const file = new File(["map"], "map.png", { type: "image/png" });
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-      target: { files: [file] },
-    });
-
-    await waitFor(() =>
-      expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledWith(
-        file,
-        expect.objectContaining({
-          roomId: "room-a",
-          sessionToken: "aas1.public-session",
-          deviceToken: "browser-device",
-          signal: expect.any(AbortSignal),
-          beforeDispatch: expect.any(Function),
-        })
-      )
-    );
-    expect(await screen.findByText("map.png")).toBeTruthy();
-  });
-
-  it("refuses a selection that does not fit in one message instead of attaching part of it", async () => {
-    HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) { this.open = true; };
-    HTMLDialogElement.prototype.close ??= function close(this: HTMLDialogElement) { this.open = false; };
-    render(
-      <LobbyComposer
-        meetingId="room-a"
-        onPosted={vi.fn()}
-        postingMode="guest"
-        roomSessionToken="aas1.public-session"
-        roomDeviceToken="browser-device"
-      />
-    );
-    const files = Array.from({ length: 40 }, (_, index) => new File(["x"], `${index}.txt`, { type: "text/plain" }));
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), { target: { files } });
-
-    fireEvent.click(await screen.findByRole("button", { name: "알겠어요", hidden: true }));
-    expect(apiMocks.uploadLobbyAttachment).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "알겠어요", hidden: true })).toBeNull();
-  });
-
-  it("shows a local preview of an image or video before it is sent", async () => {
-    const createObjectURL = vi.fn((file: File) => `blob:preview-${file.name}`);
-    const revokeObjectURL = vi.fn();
-    const original = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL };
-    Object.assign(URL, { createObjectURL, revokeObjectURL });
-    onTestFinished(() => {
-      Object.assign(URL, original);
-    });
-    const attachment = (id: string, filename: string, contentType: string) => ({
-      id,
-      filename,
-      content_type: contentType,
-      size: 3,
-      is_image: contentType.startsWith("image/"),
-      url: `/api/rooms/room-a/attachments/${id}`,
-      download_url: `/api/rooms/room-a/attachments/${id}/download`,
-    });
-    apiMocks.uploadLobbyAttachment
-      .mockResolvedValueOnce(attachment("attachment-a", "map.png", "image/png"))
-      .mockResolvedValueOnce(attachment("attachment-b", "clip.mp4", "video/mp4"))
-      .mockResolvedValueOnce(attachment("attachment-c", "notes.txt", "text/plain"));
-    const { container } = render(
-      <LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="host" />
-    );
-
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-      target: {
-        files: [
-          new File(["map"], "map.png", { type: "image/png" }),
-          new File(["mp4"], "clip.mp4", { type: "video/mp4" }),
-          new File(["txt"], "notes.txt", { type: "text/plain" }),
-        ],
-      },
-    });
-
-    expect(await screen.findByText("notes.txt")).toBeTruthy();
-    expect(container.querySelector("img[src='blob:preview-map.png']")).toBeTruthy();
-    expect(container.querySelector("video[src='blob:preview-clip.mp4']")).toBeTruthy();
-    expect(createObjectURL).toHaveBeenCalledTimes(2);
-
-    fireEvent.click(screen.getByLabelText("map.png 첨부 제거"));
-    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview-map.png"));
-    expect(container.querySelector("img[src='blob:preview-map.png']")).toBeNull();
-  });
-
-  it("clears an attachment error on its own and on request", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    onTestFinished(() => {
-      vi.useRealTimers();
-    });
-    const tooLarge = "메시지 첨부는 1바이트 이상 10MiB 이하여야 합니다.";
-    apiMocks.uploadLobbyAttachment.mockRejectedValue(new Error(tooLarge));
-    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="host" />);
-    const pick = () =>
-      fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-        target: { files: [new File(["x"], "big.mov", { type: "video/quicktime" })] },
-      });
-
-    pick();
-    expect(await screen.findByText(tooLarge)).toBeTruthy();
-    await act(() => vi.advanceTimersByTimeAsync(5000));
-    expect(screen.queryByText(tooLarge)).toBeNull();
-
-    pick();
-    expect(await screen.findByText(tooLarge)).toBeTruthy();
-    fireEvent.click(screen.getByLabelText("알림 닫기"));
-    expect(screen.queryByText(tooLarge)).toBeNull();
-  });
-
-  it("attaches a pasted image and leaves a text paste to the input", async () => {
-    apiMocks.uploadLobbyAttachment.mockResolvedValue({
-      id: "attachment-a",
-      filename: "image.png",
-      content_type: "image/png",
-      size: 3,
-      is_image: true,
-      url: "/api/rooms/room-a/attachments/attachment-a",
-      download_url: "/api/rooms/room-a/attachments/attachment-a/download",
-    });
-    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="host" />);
-    const input = screen.getByLabelText("채팅 입력");
-
-    fireEvent.paste(input, { clipboardData: { files: [], getData: () => "plain text" } });
-    expect(apiMocks.uploadLobbyAttachment).not.toHaveBeenCalled();
-
-    const image = new File(["png"], "image.png", { type: "image/png" });
-    fireEvent.paste(input, { clipboardData: { files: [image], getData: () => "" } });
-
-    await waitFor(() =>
-      expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledWith(
-        image,
-        expect.objectContaining({ roomId: "room-a" })
-      )
-    );
-    expect(await screen.findByText("image.png")).toBeTruthy();
-  });
-
-  it.each([
-    ["room", { meetingId: "room-b", postingMode: "guest" as const, roomSessionToken: "aas1.session-a" }],
-    ["session", { meetingId: "room-a", postingMode: "guest" as const, roomSessionToken: "aas1.session-b" }],
-    ["authority", { meetingId: "room-a", postingMode: "host" as const, roomSessionToken: "aas1.session-a" }],
-    ["role", { meetingId: "room-a", postingMode: "guest" as const, roomSessionToken: "aas1.session-a", disabledReason: "읽기 전용" }],
-    ["device", { meetingId: "room-a", postingMode: "guest" as const, roomSessionToken: "aas1.session-a", roomDeviceToken: "new-device" }],
-    ["unmount", null],
-  ])("retires a delayed attachment upload on %s change", async (_label, nextProps) => {
-    apiMocks.uploadLobbyAttachment.mockImplementation(
-      (_file, options: { signal: AbortSignal }) =>
-        new Promise((_resolve, reject) => {
-          options.signal.addEventListener(
-            "abort",
-            () => reject(options.signal.reason),
-            { once: true }
-          );
-        })
-    );
-    const view = render(
-      <LobbyComposer
-        meetingId="room-a"
-        onPosted={vi.fn()}
-        postingMode="guest"
-        roomSessionToken="aas1.session-a"
-      />
-    );
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-      target: { files: [new File(["map"], "map.png", { type: "image/png" })] },
-    });
-    await waitFor(() => expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledOnce());
-    const options = apiMocks.uploadLobbyAttachment.mock.calls[0]?.[1] as {
-      signal: AbortSignal;
-      beforeDispatch: () => void;
-    };
-
-    if (nextProps) {
-      view.rerender(<LobbyComposer {...nextProps} onPosted={vi.fn()} />);
-    } else {
-      view.unmount();
-    }
-
-    await waitFor(() => expect(options.signal.aborted).toBe(true));
-    expect(options.beforeDispatch).toThrow();
-    if (nextProps) expect(screen.queryByText("map.png")).toBeNull();
-  });
-
-  it("retires the previous upload before authority-change layout observers run", async () => {
-    apiMocks.uploadLobbyAttachment.mockImplementation(
-      (_file, options: { signal: AbortSignal }) =>
-        new Promise((_resolve, reject) => {
-          options.signal.addEventListener(
-            "abort",
-            () => reject(options.signal.reason),
-            { once: true }
-          );
-        })
-    );
-    function LayoutProbe({
-      meetingId,
-      inspect,
-    }: {
-      meetingId: string;
-      inspect: () => void;
-    }) {
-      useLayoutEffect(inspect, [inspect, meetingId]);
-      return <LobbyComposer meetingId={meetingId} onPosted={vi.fn()} />;
-    }
-    const view = render(
-      <LayoutProbe meetingId="room-a" inspect={() => {}} />
-    );
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-      target: { files: [new File(["map"], "map.png", { type: "image/png" })] },
-    });
-    await waitFor(() => expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledOnce());
-    const options = apiMocks.uploadLobbyAttachment.mock.calls[0]?.[1] as {
-      signal: AbortSignal;
-      beforeDispatch: () => void;
-    };
-    const inspect = vi.fn(() => {
-      expect(options.signal.aborted).toBe(true);
-      expect(options.beforeDispatch).toThrow();
-    });
-
-    view.rerender(<LayoutProbe meetingId="room-b" inspect={inspect} />);
-
-    expect(inspect).toHaveBeenCalledOnce();
-  });
-
-  it("keeps message and attachment drafts owned by their room", async () => {
-    apiMocks.uploadLobbyAttachment.mockResolvedValue({
-      id: "attachment-a",
-      filename: "map.png",
-      content_type: "image/png",
-      size: 3,
-      is_image: true,
-      url: "/api/rooms/room-a/attachments/attachment-a",
-      download_url: "/api/rooms/room-a/attachments/attachment-a/download",
-    });
-    const view = render(
-      <LobbyComposer meetingId="room-a" onPosted={vi.fn()} />
-    );
-
-    fireEvent.change(screen.getByLabelText("채팅 입력"), {
-      target: { value: "room A draft" },
-    });
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-      target: {
-        files: [new File(["map"], "map.png", { type: "image/png" })],
-      },
-    });
-    expect(await screen.findByText("map.png")).toBeTruthy();
-
-    view.rerender(
-      <LobbyComposer meetingId="room-b" onPosted={vi.fn()} />
-    );
-    expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe("");
-    expect(screen.queryByText("map.png")).toBeNull();
-    fireEvent.change(screen.getByLabelText("채팅 입력"), {
-      target: { value: "room B draft" },
-    });
-
-    view.rerender(
-      <LobbyComposer meetingId="room-a" onPosted={vi.fn()} />
-    );
-    expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe(
-      "room A draft"
-    );
-    expect(screen.getByText("map.png")).toBeTruthy();
-  });
-
   it("retries the original uncertain draft and creates a new intent only after editing", async () => {
     const retry = vi.fn().mockRejectedValueOnce(new Error("still offline")).mockResolvedValue({});
     const say = vi.fn().mockRejectedValueOnce(new RoomSocketSayError("uncertain", "outcome_unknown", retry))
@@ -443,70 +136,6 @@ describe("LobbyComposer", () => {
     await waitFor(() => expect(input.value).toBe(""));
     expect(retry).toHaveBeenCalledTimes(2);
     expect(say).toHaveBeenLastCalledWith(expect.objectContaining({ message: "new edited message" }));
-  });
-
-  it("keeps text and attachments after the canonical socket rejects the send", async () => {
-    const id = `ma_${"a".repeat(32)}`;
-    const uploaded = {
-      id,
-      filename: "map.png",
-      content_type: "image/png",
-      size: 3,
-      is_image: true,
-      url: `/api/attachments/${id}?view=1`,
-      download_url: `/api/attachments/${id}?download=1`,
-    };
-    apiMocks.uploadLobbyAttachment.mockResolvedValue(uploaded);
-    const say = vi.fn().mockRejectedValue(
-      new RoomSocketSayError("attachment unavailable", "attachment_unavailable")
-    );
-    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
-    render(
-      <RoomSocketProvider socket={socket}>
-        <LobbyComposer meetingId="room-a" onPosted={vi.fn()} />
-      </RoomSocketProvider>
-    );
-
-    fireEvent.change(screen.getByLabelText("채팅 입력"), {
-      target: { value: "keep this draft" },
-    });
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-      target: { files: [new File(["map"], "map.png", { type: "image/png" })] },
-    });
-    await screen.findByText("map.png");
-    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
-
-    expect(await screen.findByText("attachment unavailable")).toBeTruthy();
-    expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe(
-      "keep this draft"
-    );
-    expect(screen.getByText("map.png")).toBeTruthy();
-    expect(say).toHaveBeenCalledWith(expect.objectContaining({
-      message: "keep this draft",
-      attachments: [uploaded],
-    }));
-  });
-
-  it("keeps attachment upload blocked for a read-only public room session", () => {
-    render(
-      <LobbyComposer
-        meetingId="room-a"
-        onPosted={vi.fn()}
-        postingMode="guest"
-        roomSessionToken="aas1.read-only-session"
-        disabledReason="읽기 전용 초대예요."
-      />
-    );
-
-    expect(
-      (screen.getByLabelText("첨부 추가") as HTMLButtonElement).disabled
-    ).toBe(true);
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-      target: {
-        files: [new File(["map"], "map.png", { type: "image/png" })],
-      },
-    });
-    expect(apiMocks.uploadLobbyAttachment).not.toHaveBeenCalled();
   });
 
   it("discovers and opens the vote command without sending chat", async () => {
@@ -613,86 +242,184 @@ describe("LobbyComposer", () => {
     expect(say).toHaveBeenCalledTimes(1);
   });
 
-  it("submits the validated vote and clears its staged attachment", async () => {
-    const id = `ma_${"a".repeat(32)}`;
-    const uploaded = {
-      id,
-      filename: "map.png",
-      content_type: "image/png",
-      size: 3,
-      is_image: true,
-      url: `/api/attachments/${id}?view=1`,
-      download_url: `/api/attachments/${id}?download=1`,
-    };
-    apiMocks.uploadLobbyAttachment.mockResolvedValue(uploaded);
-    const say = vi.fn().mockResolvedValue({ events: [] });
-    const onPosted = vi.fn();
-    const socket = {
-      ready: () => true,
-      say,
-    } as unknown as RoomSocketHandle;
-    render(
-      <RoomSocketProvider socket={socket}>
-        <LobbyComposer meetingId="room-a" onPosted={onPosted} />
-      </RoomSocketProvider>
+  // Files are staged locally and travel with the message; the fake stands in for the
+  // room's outgoing-message owner.
+  function outgoingFake(overrides: Partial<ComposerOutgoing> = {}): ComposerOutgoing {
+    return { ready: true, limit: 10, check: () => "", send: vi.fn(), ...overrides };
+  }
+  function pick(...files: File[]) {
+    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), { target: { files } });
+  }
+  const png = (name = "map.png") => new File(["map"], name, { type: "image/png" });
+
+  it("stages picked files without sending anything and lets one be removed", async () => {
+    const outgoing = outgoingFake();
+    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoing} />);
+
+    pick(png(), new File(["txt"], "notes.txt", { type: "text/plain" }));
+    expect(await screen.findByText("map.png")).toBeTruthy();
+    expect(screen.getByText("notes.txt")).toBeTruthy();
+    expect(outgoing.send).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText("map.png 첨부 제거"));
+    expect(screen.queryByText("map.png")).toBeNull();
+    expect(screen.getByText("notes.txt")).toBeTruthy();
+  });
+
+  it("refuses a selection that does not fit in one message instead of attaching part of it", async () => {
+    HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) { this.open = true; };
+    HTMLDialogElement.prototype.close ??= function close(this: HTMLDialogElement) { this.open = false; };
+    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoingFake({ limit: 8 })} />);
+
+    pick(...Array.from({ length: 9 }, (_, index) => new File(["x"], `${index}.txt`, { type: "text/plain" })));
+    fireEvent.click(await screen.findByRole("button", { name: "알겠어요", hidden: true }));
+    expect(screen.queryByText("0.txt")).toBeNull();
+  });
+
+  it("refuses a selection with a file the room cannot take, and the notice clears on its own", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => { vi.useRealTimers(); });
+    const tooLarge = "파일은 최대 10MB까지 올릴 수 있어요.";
+    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()}
+      outgoing={outgoingFake({ check: (file) => file.name === "big.bin" ? tooLarge : "" })} />);
+
+    pick(png(), new File(["x"], "big.bin"));
+    expect(screen.getByText(tooLarge)).toBeTruthy();
+    expect(screen.queryByText("map.png")).toBeNull();
+    act(() => { vi.advanceTimersByTime(6000); });
+    expect(screen.queryByText(tooLarge)).toBeNull();
+  });
+
+  it("shows a local preview of an image or video before it is sent", async () => {
+    const createObjectURL = vi.fn((file: File) => `blob:preview-${file.name}`);
+    const revokeObjectURL = vi.fn();
+    const original = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL };
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    onTestFinished(() => {
+      Object.assign(URL, original);
+    });
+    const { container } = render(
+      <LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="host" outgoing={outgoingFake()} />
     );
 
-    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
-      target: { files: [new File(["map"], "map.png", { type: "image/png" })] },
-    });
+    pick(png(), new File(["mp4"], "clip.mp4", { type: "video/mp4" }), new File(["txt"], "notes.txt", { type: "text/plain" }));
+
+    expect(await screen.findByText("notes.txt")).toBeTruthy();
+    expect(container.querySelector("img[src='blob:preview-map.png']")).toBeTruthy();
+    expect(container.querySelector("video[src='blob:preview-clip.mp4']")).toBeTruthy();
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByLabelText("map.png 첨부 제거"));
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview-map.png"));
+    expect(container.querySelector("img[src='blob:preview-map.png']")).toBeNull();
+  });
+
+  it("stages a pasted image and leaves a text paste to the input", async () => {
+    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoingFake()} />);
+    const input = screen.getByLabelText("채팅 입력");
+
+    expect(fireEvent.paste(input, { clipboardData: { files: [] } })).toBe(true);
+    expect(fireEvent.paste(input, { clipboardData: { files: [png("shot.png")] } })).toBe(false);
+    expect(await screen.findByText("shot.png")).toBeTruthy();
+  });
+
+  it("keeps message and staged files owned by their room", async () => {
+    const outgoing = outgoingFake();
+    const { rerender } = render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoing} />);
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "for room a" } });
+    pick(png());
     await screen.findByText("map.png");
 
-    fireEvent.change(screen.getByLabelText("채팅 입력"), {
-      target: { value: "/vote" },
-    });
+    rerender(<LobbyComposer meetingId="room-b" onPosted={vi.fn()} outgoing={outgoing} />);
+    expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe("");
+    expect(screen.queryByText("map.png")).toBeNull();
+
+    rerender(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoing} />);
+    expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe("for room a");
+    expect(screen.getByText("map.png")).toBeTruthy();
+  });
+
+  it("hands a message with files to the outgoing owner and frees the composer at once", async () => {
+    const outgoing = outgoingFake();
+    const say = vi.fn();
+    const onReplySent = vi.fn();
+    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
+    render(
+      <RoomSocketProvider socket={socket}>
+        <LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoing}
+          replyTo={{ eventId: "source", author: "Host", text: "hi" }} onReplySent={onReplySent} />
+      </RoomSocketProvider>
+    );
+    const file = png();
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: " here it is " } });
+    pick(file);
+    await screen.findByText("map.png");
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+
+    await waitFor(() => expect(outgoing.send).toHaveBeenCalledTimes(1));
+    expect(outgoing.send).toHaveBeenCalledWith({ text: "here it is", replyToEventId: "source", files: [file], request: undefined });
+    expect(say).not.toHaveBeenCalled();
+    expect(onReplySent).toHaveBeenCalledWith("source");
+    expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe("");
+    expect(screen.queryByText("map.png")).toBeNull();
+  });
+
+  it("keeps the text and the staged files when the outgoing owner refuses the message", async () => {
+    const outgoing = outgoingFake({ send: vi.fn(() => { throw new Error("잠시 후 다시 시도해 주세요."); }) });
+    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoing} />);
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "keep this draft" } });
+    pick(png());
+    await screen.findByText("map.png");
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+
+    expect(await screen.findByText("잠시 후 다시 시도해 주세요.")).toBeTruthy();
+    expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe("keep this draft");
+    expect(screen.getByText("map.png")).toBeTruthy();
+  });
+
+  it("keeps attaching blocked for a read-only session and until the room's owner is ready", () => {
+    const outgoing = outgoingFake();
+    const { rerender } = render(
+      <LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="guest"
+        roomSessionToken="aas1.read-only-session" disabledReason="읽기 전용 초대예요." outgoing={outgoing} />
+    );
+    expect((screen.getByLabelText("첨부 추가") as HTMLButtonElement).disabled).toBe(true);
+    pick(png());
+    expect(screen.queryByText("map.png")).toBeNull();
+
+    rerender(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoingFake({ ready: false })} />);
+    expect((screen.getByLabelText("첨부 추가") as HTMLButtonElement).disabled).toBe(true);
+    rerender(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoing} />);
+    expect((screen.getByLabelText("첨부 추가") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("sends a vote's staged files with the vote through the outgoing owner", async () => {
+    const outgoing = outgoingFake();
+    const say = vi.fn().mockResolvedValue({ events: [] });
+    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
+    render(
+      <RoomSocketProvider socket={socket}>
+        <LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoing} />
+      </RoomSocketProvider>
+    );
+    const file = png();
+    pick(file);
+    await screen.findByText("map.png");
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "/vote" } });
     fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
     const dialog = await screen.findByRole("dialog", { name: "투표 만들기" });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "질문" }), { target: { value: "어느 길로 갈까요?" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "선택지 1" }), { target: { value: "북쪽" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "선택지 2" }), { target: { value: "남쪽" } });
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "투표 기간 (분)" }), { target: { value: "15" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "만들기" }));
 
-    expect(
-      (within(dialog).getByRole("button", {
-        name: "선택지 1 제거",
-      }) as HTMLButtonElement).disabled
-    ).toBe(true);
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "질문" }), {
-      target: { value: "어느 길로 갈까요?" },
-    });
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "선택지 1" }), {
-      target: { value: "북쪽" },
-    });
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "만들기" })
-    );
-
-    expect((await within(dialog).findByRole("alert")).textContent).toContain(
-      "모든 선택지에 이름을 입력해 주세요."
-    );
+    await waitFor(() => expect(outgoing.send).toHaveBeenCalledWith({
+      text: "", files: [file],
+      request: { kind: "vote", voteQuestion: "어느 길로 갈까요?", voteOptions: ["북쪽", "남쪽"], voteDurationSeconds: 900 },
+    }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "투표 만들기" })).toBeNull());
     expect(say).not.toHaveBeenCalled();
-
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "선택지 2" }), {
-      target: { value: "남쪽" },
-    });
-    fireEvent.change(
-      within(dialog).getByRole("spinbutton", { name: "투표 기간 (분)" }),
-      { target: { value: "15" } }
-    );
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "만들기" })
-    );
-
-    await waitFor(() =>
-      expect(say).toHaveBeenCalledWith({
-        message: "",
-        attachments: [uploaded],
-        kind: "vote",
-        voteQuestion: "어느 길로 갈까요?",
-        voteOptions: ["북쪽", "남쪽"],
-        voteDurationSeconds: 900,
-      })
-    );
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "투표 만들기" })).toBeNull()
-    );
     expect(screen.queryByText("map.png")).toBeNull();
-    expect(onPosted).toHaveBeenCalledWith([]);
   });
 });

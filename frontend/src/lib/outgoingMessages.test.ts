@@ -33,7 +33,7 @@ function fixture() {
   const stored = new Map<string, { status: TransferStatus; bytes: string; file: File }>();
   let next = 0;
   const client: MessageAttachmentUploadClient = {
-    transfer: true, limit: 10, preflight: () => {},
+    transfer: true, limit: 10, fileLimit: 50 * 1024 * 1024, preflight: () => {},
     begin: vi.fn(async file => {
       const handle = `handle-${++next}`;
       const status = { handle, attachment_id: `ma_${next.toString(16).padStart(32, "0")}`, piece_size: 4, expires_at: 9999999999, declared_size: file.size, accepted_offset: 0, attachment: null };
