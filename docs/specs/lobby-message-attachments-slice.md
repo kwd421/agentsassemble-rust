@@ -122,7 +122,8 @@ Expose immutable snapshots/subscription, identity (client ID, room, person and
 authority generation), message/file states, sent/accepted/total bytes, cancellation,
 retry and discard. Publication uses the existing socket owner only after all files
 finish, retaining completed attachments on retry and its same-request retry callback
-when publication is uncertain. Delivery reconciles by the confirmed event ID.
+when publication is uncertain. Delivery reconciles a `message_final` by room,
+participant and the complete ordered attachment ID list, including before ACK.
 
 Affected owners: `frontend/src/api/messageAttachmentTransfers.ts`,
 `frontend/src/lib/outgoingMessages.ts`, `lobbyComposerModel.ts`, remote transport
@@ -145,14 +146,21 @@ uncertainty, partial failure/retry, cancel, stale authority, skew and bounded bo
 run affected Rust tests, bindings, TypeScript, api/lib Vitest and architecture gates.
 Packaged UX and peak RSS remain unverified until UI integration.
 
-Slice-5 implementation is paused at the outgoing model's publication boundary:
-`message.send` cannot cancel an already-dispatched request, while the required
-whole-outgoing cancellation includes `sending`. Owner decision is pending on
-making `sending` non-cancellable versus a separate host cancellation contract.
-Do not imply cancellation can retract a committed publication. Existing `say()`
-also discards the event acknowledgement; model wiring must use existing `command`
-with the message payload and retain its same-request uncertain-outcome retry.
-The API/capability prerequisite can be verified independently while this is open.
+Owner decisions (2026-10-13): cancellation ends at publication dispatch;
+`sending` is non-cancellable and has no host cancellation contract. Inject the
+acknowledged `socket.command("message.send", roomMessagePayload(request))` path,
+not `say()` (which discards ACK). Lost ACK enters `outcome_unknown`, never an
+automatic new publication. Delivery resolves it; explicit retry retains the same
+attachments and uses the socket's exact-request retry callback when supplied.
+Definite refusals expose a typed code: muted/temporary transport failures allow
+retry, while read-only/revoked authority, invalid content and expired attachments
+are final. The host owns pending-attachment TTL; `attachment_unavailable` is final.
+This owner handles file messages only, never text-only sends. Re-admission to the
+same participant with a new generation restarts incomplete files from zero;
+late old work is ignored. Room departure/signout cancels pre-publication work and
+detaches already-dispatched work, without claiming to retract publication.
+The UI must share one model per host/person, admit current room upload clients,
+feed validated room events, and call leave/close at membership/signout boundaries.
 Provider consumers now admit ten context/observation IDs and ten distinct reads;
 the existing two attempts at 10 MiB each raise the read byte budget 160 -> 200 MiB.
 
@@ -163,9 +171,23 @@ passed, including 50 MiB transfer/resume/finish/bind and capability discovery.
 TypeScript and `vitest run src/api src/lib` passed 79 files / 474 tests. Earlier
 concurrent runs hit the existing five-second transport-test timeout; a two-worker
 run and the final default run after Rust checks completed passed without timeout
-or gate changes. Formatting, diff and architecture checks pass. No outgoing model,
-scheduler or model acceptance tests are implemented pending the decision above;
-no packaged UI, peak RSS or desktop streaming-sink acceptance is claimed.
+or gate changes. Formatting, diff and architecture checks pass. At that prerequisite
+checkpoint the outgoing model/scheduler remained pending the publication decision;
+no packaged UI, peak RSS or desktop streaming-sink acceptance was claimed.
+
+Headless completion: `OutgoingMessages` now owns admission, immutable snapshots,
+subscriptions, send/cancel/retry/discard, room delivery and leave/signout cleanup.
+Submitted bytes are the file's dispatched high-water offset; accepted bytes come
+only from host receipts (legacy has only final acceptance). Retryable owner busy
+returns to the queue after 250 ms when it has no host hint. Re-admission drops an
+old socket's retry closure and explicit retry uses the newly injected publication
+owner. Completed attachments remain pending until binding or the host's TTL.
+Retry reuses the begin operation ID when its response was lost; cancellation or
+re-admission starts a new operation. A cancelled final failure stays non-retryable.
+TypeScript and API/lib Vitest, including ten model regressions, pass;
+`cargo fmt --all`, diff and architecture checks pass.
+No Rust/type bindings changed in this completion. Composer/timeline wiring,
+packaged UX, peak RSS and native streaming save remain outside this task.
 
 ## Transfer rework: human upload owner (slice 3, 2026-10-13)
 
