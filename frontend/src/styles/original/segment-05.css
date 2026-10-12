@@ -400,7 +400,7 @@
   height: 32px;
   place-items: center;
   border-radius: 8px;
-  color: var(--color-text-secondary);
+  color: var(--color-interactive);
   transition:
     background-color 120ms ease,
     color 120ms ease;
@@ -553,7 +553,7 @@
   align-items: center;
   gap: 12px;
   margin: 24px 0 8px;
-  color: var(--color-text-muted);
+  color: var(--color-interactive);
   font-size: 12px;
   font-weight: 600;
 }

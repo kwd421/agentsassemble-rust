@@ -12,7 +12,7 @@
   --color-sidebar: #121214;
   --color-sidebar-hover: #1f1f23;
   --color-sidebar-active: #2c2c30;
-  --color-sidebar-text: #94959c;
+  --color-sidebar-text: #8a8b91;
   --color-sidebar-text-active: #fbfbfb;
   --color-chat-bg: #1a1a1e;
   --color-chat-hover: #29292d;
@@ -25,7 +25,9 @@
   --color-text-primary: #fbfbfb;
   --color-text-normal: #efeff1;
   --color-text-secondary: #b4b5bb;
-  --color-text-muted: #94959c;
+  --color-text-muted: #8a8b91;
+  /* Icons and labels that are controls at rest: a step brighter than muted text. */
+  --color-interactive: #9fa0a6;
   --color-accent: #5865f2;
   --color-accent-hover: #4752c4;
   --color-accent-soft: #404bb5;
