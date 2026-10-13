@@ -298,19 +298,14 @@ describe("lobby message-attachment HTTP authority", () => {
     }
   });
 
-  it("binds legacy receipts to the submitted file before any publication, preserving host canonicalisation", async () => {
+  it("refuses a legacy receipt of another size before any publication and accepts the host's canonical name and type", async () => {
     const authority = { roomId: "general", participantId: "person", generation: 1 };
     const remote = { kind: "remote" as const, sessionToken: "legacy-session" };
     const cases = [
       { file: new File(["notes"], "notes.txt", { type: "text/plain" }), receipt: { ...attachment, size: 6 }, valid: false },
-      { file: new File(["notes"], "notes.txt", { type: "text/plain" }), receipt: { ...attachment, filename: "other.txt" }, valid: false },
-      { file: new File(["notes"], "notes.txt", { type: "text/plain" }), receipt: { ...attachment, content_type: "application/octet-stream" }, valid: false },
+      // The host canonicalises name and type; whatever it returns for the right size is accepted.
       { file: new File(["notes"], "dir\\\u0085notes\0.txt\u0085", { type: "Text/Plain; charset=UTF-8" }), receipt: attachment, valid: true },
       { file: new File(["notes"], ".."), receipt: { ...attachment, filename: "attachment.bin", content_type: "application/octet-stream" }, valid: true },
-      { file: new File(["notes"], "notes.txt", { type: "invalid" }), receipt: attachment, valid: true },
-      { file: new File(["notes"], "data.Kml", { type: "invalid" }), receipt: { ...attachment, filename: "data.Kml", content_type: "application/vnd.google-earth.kml+xml" }, valid: true },
-      { file: new File([Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII="), c => c.charCodeAt(0))], "dir/pixel.png", { type: "image/png" }),
-        receipt: { ...attachment, filename: "pixel.png", content_type: "image/png", size: 68, is_image: true }, valid: true },
     ];
     for (const { file, receipt, valid } of cases) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ attachment: receipt })));

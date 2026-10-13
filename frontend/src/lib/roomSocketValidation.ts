@@ -16,9 +16,6 @@ import type { RoomAppearance } from "../types/generated/RoomAppearance";
 import type { RoomChannel } from "../types/generated/RoomChannel";
 import type { RoomSnapshot } from "../types/generated/RoomSnapshot";
 import { MAX_MESSAGE_CHARACTERS } from "../types/generated/ROOM_MESSAGE_WIRE";
-import { VOTE_OPTION_CHARACTER_LIMIT, VOTE_QUESTION_CHARACTER_LIMIT } from "../types/generated/VOTE_WIRE";
-import { VOTE_CASE_FOLD } from "../types/generated/VOTE_CASE_FOLD";
-import { trimRustWhitespace } from "./rustWhitespace";
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreateAckProjectionsAreCoherent,
@@ -334,29 +331,11 @@ function channelHistoryResultIsValid(
 
 // Match the domain's clean_message, including Rust White_Space (not JS trim's
 // BOM handling) and Unicode scalar truncation rather than UTF-16 code units.
-function canonicalMessageContent(content: string, limit: number = MAX_MESSAGE_CHARACTERS): string {
+function canonicalMessageContent(content: string): string {
   const whitespace = "[\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
   const normalized = content.replace(/\0/g, "").replace(/\r\n?/g, "\n")
     .replace(new RegExp(`^${whitespace}+|${whitespace}+$`, "g"), "");
-  return Array.from(normalized).slice(0, limit).join("");
-}
-
-function voteCreationAckMatches(event: Record<string, unknown>, payload: Record<string, unknown>): boolean {
-  if (typeof payload.vote_question !== "string" || !Array.isArray(payload.vote_options)) return false;
-  const seen = new Set<string>();
-  const options: string[] = [];
-  for (const value of payload.vote_options) {
-    if (typeof value !== "string") return false;
-    const option = canonicalMessageContent(value, VOTE_OPTION_CHARACTER_LIMIT);
-    const visible = [...option].some(character => trimRustWhitespace(character) !== "" && !/[\p{Cc}\p{Cf}]/u.test(character));
-    const folded = [...option].map(character => VOTE_CASE_FOLD[character] ?? character).join("");
-    if (!visible || seen.has(folded)) continue;
-    seen.add(folded); options.push(option);
-  }
-  return event.vote_question === canonicalMessageContent(payload.vote_question, VOTE_QUESTION_CHARACTER_LIMIT) &&
-    event.vote_duration_seconds === (payload.vote_duration_seconds === undefined ? 0 : payload.vote_duration_seconds) &&
-    Array.isArray(event.vote_options) && event.vote_options.length === options.length &&
-    event.vote_options.every((option, index) => option === options[index]);
+  return Array.from(normalized).slice(0, MAX_MESSAGE_CHARACTERS).join("");
 }
 
 function messageSendAckMatches(event: Record<string, unknown>, payload: Record<string, unknown>, participant: string): boolean {
@@ -367,12 +346,15 @@ function messageSendAckMatches(event: Record<string, unknown>, payload: Record<s
   if (event.message_kind !== kind || !Array.isArray(attachments) || !Array.isArray(ids) ||
       attachments.length !== ids.length || attachments.some((attachment, index) => !isRecord(attachment) || attachment.id !== ids[index]) ||
       (event.reply_to_event_id ?? undefined) !== payload.reply_to_event_id) return false;
-  // The host owns its rooms and can fabricate events; actor/choice receipts cannot
-  // prove honesty. Keep cast/withdraw/close anonymous and check the public marker.
+  // Cast/withdraw/close deliberately remove the actor and ballot choice before
+  // persistence and public projection; publicRoomEventIsValid checks that marker.
+  // Vote ACKs are not bound further to the command: the host owns its rooms and can
+  // fabricate any event, so receipts would not prove honesty, and mirroring its
+  // question/option canonicalisation here would risk refusing genuine ACKs.
   if (isVoteTransitionKind(kind)) return event.content === "" && event.vote_id === payload.vote_id;
   if (!isRecord(event.actor) || event.actor.participant_id !== participant) return false;
   if (kind === "message") return typeof payload.content === "string" && event.content === canonicalMessageContent(payload.content);
-  return kind === "vote" && event.content === "" && voteCreationAckMatches(event, payload);
+  return kind === "vote" && event.content === "";
 }
 
 export function commandAckResultIsValid(

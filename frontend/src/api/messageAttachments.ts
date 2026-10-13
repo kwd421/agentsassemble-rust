@@ -16,7 +16,6 @@ import {
 } from "../lib/strictJsonContract";
 import { isUnicodeScalarString } from "../lib/unicodeScalarString";
 import { trimRustWhitespace } from "../lib/rustWhitespace";
-import { MESSAGE_ATTACHMENT_MIME_GUESSES, MIME_EXTENSION_CASE_FOLD } from "../types/generated/MESSAGE_ATTACHMENT_MIME_GUESSES";
 import { UploadFailure } from "./uploadFailure";
 import { MAX_ATTACHMENT_BYTES, MAX_ROOM_FILE_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 import {
@@ -129,23 +128,10 @@ function parseUploadResponse(value: unknown, file: File): LobbyAttachmentRef {
   const envelope = strictRecord(value, "로비 메시지 첨부 업로드");
   assertExactKeys(envelope, ["attachment"], "로비 메시지 첨부 업로드");
   const attachment = parseMessageAttachment(envelope.attachment);
-  // Match canonical_message_attachment_filename and normalize_content_type;
-  // safe raster validation preserves this metadata and the original bytes.
-  const basename = (file.name || "attachment.bin").replace(/\\/g, "/").split("/").at(-1)!;
-  const cleaned = trimRustWhitespace([...trimRustWhitespace(basename.replace(/\p{Cc}/gu, ""))]
-    .slice(0, MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS).join(""));
-  const filename = !cleaned || cleaned === "." || cleaned === ".." ? "attachment.bin" : cleaned;
-  const candidate = trimRustWhitespace((file.type || "application/octet-stream").split(";")[0])
-    .replace(/[A-Z]/g, character => character.toLowerCase());
-  const dot = filename.lastIndexOf(".");
-  const extension = dot > 0 ? [...filename.slice(dot + 1)].map(character => MIME_EXTENSION_CASE_FOLD[character] ?? character).join("") : "";
-  const contentType = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(candidate) &&
-    new TextEncoder().encode(candidate).byteLength <= MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES
-    ? candidate : Object.hasOwn(MESSAGE_ATTACHMENT_MIME_GUESSES, extension)
-      ? MESSAGE_ATTACHMENT_MIME_GUESSES[extension] : "application/octet-stream";
-  if (attachment.size !== file.size || attachment.filename !== filename || attachment.content_type !== contentType) {
-    throw new UploadFailure("invalid_upload_response", false);
-  }
+  // The receipt must at least be for a file of the submitted size. The host's name and
+  // type canonicalisation is not mirrored here: a mirror that drifted would refuse
+  // genuine uploads on older hosts, and a host owns the content of its own rooms.
+  if (attachment.size !== file.size) throw new UploadFailure("invalid_upload_response", false);
   return attachment;
 }
 

@@ -1430,17 +1430,15 @@ existing identity/range checks and recovery of genuine lost replies remain uncha
 Acceptance: successful finish with attachment:null fails immediately; failed/lost
 finish may still recover its pinned completed attachment through status.
 
-Round-11 legacy receipt correction: uploadMessageAttachment must bind the returned
-size to the submitted File and the filename/content_type to the host's request
-canonicalisation: last path component, control removal, Rust whitespace trim,
-120 Unicode scalars and attachment.bin for unsafe/empty names; MIME parameters
-removed, Rust trim and ASCII lowercase, or mime_guess for invalid types. Safe
-PNG/JPEG/GIF/WebP validation preserves original bytes, name and MIME type (only
-the preview is derived). Generate MIME lookup data from the host's library.
-A mismatch is a final invalid_upload_response and OutgoingMessages never publishes
-it. Genuine legacy hosts remain supported without transfer advertisement.
-Acceptance: different size/name/type refuses without publication; canonical names,
-default names, normalized/guessed MIME types and preserved raster receipts pass.
+Round-11 legacy receipt correction (reviewer-of-record decision): uploadMessageAttachment
+accepts a legacy receipt only when its size equals the submitted file's size; a mismatch is
+invalid_upload_response and nothing is published. The host's filename and content-type
+canonicalisation is deliberately NOT mirrored in the client: a mirror that drifted from an
+older host would refuse genuine uploads, and a host is the authority for its own rooms.
+Scope for client-side checks against a hostile or faulty host: no unbounded loops, requests
+or memory; nothing crossing hosts, accounts, rooms or authority generations; no automatic
+duplicate publication; cheap consistency checks where the client holds both sides. Vote
+ACKs (creation and anonymous transitions) are not bound further for the same reason.
 
 ## Round-10 publication ACK contract (High 2 validator, 2026-10-13)
 
@@ -1449,27 +1447,16 @@ reply target and complete ordered attachment IDs, and the expected actor for ord
 messages and vote creation. Rust MessageSend uses clean_message (NUL removal, CRLF/CR
 normalization, Rust whitespace trim, Unicode-character truncation); compare that
 canonical value, preserving honest sends with raw whitespace/newlines. Vote creation
-has empty content and also matches the canonical question, ordered options and
-duration (omission means zero), using vote.rs clean_message limits, visible-text
-filtering and caseless deduplication. Generate case-fold data from the host library.
-Vote cast/withdraw/close are deliberately anonymous public markers:
+has empty content. Vote cast/withdraw/close are deliberately anonymous public markers:
 projection::privacy_minimized_vote_transition clears the actor and ballot choice.
 Those ACKs require the same vote kind/ID, empty content, no reply or attachments,
 and the existing canonical anonymous event validation, rather than exposing identity.
-Round-11 reviewer-of-record scope decision: the host is the authority for its own
-rooms; a host lying to its own participants is outside the threat model because
-it can fabricate any event. Do not add private actor/choice receipts for anonymous
-vote cast/withdraw/close. Clients must prevent host-driven resource exhaustion and
-unbounded loops, cross-host/account/room/generation leakage or actions, and automatic
-duplicate publication; perform cheap consistency checks when both sides are present.
 room.random.* validation remains unchanged. Invalid ACKs follow the socket's existing
 contract-violation path. The UI-owned hook remains untouched: OutgoingMessage.eventId
 is solely the validated ACK event or the exact event matched by observe.
 Owner/entry point: roomSocketValidation::commandAckResultIsValid, used by roomSocketClient.
 Acceptance: actor/content/reply/ordered-ID mismatches refuse; real canonical messages,
-vote creation/anonymous transitions and random responses remain valid. Round-11
-acceptance: different creation question/options/duration refuses; genuine normalized,
-truncated, invisible-option-filtered and case-fold-deduplicated commands pass.
+vote creation/anonymous transitions and random responses remain valid.
 
 ## Round-10 archive attachment semantics (Medium 2, 2026-10-13)
 

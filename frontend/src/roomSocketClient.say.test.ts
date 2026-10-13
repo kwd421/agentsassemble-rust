@@ -138,7 +138,7 @@ describe("room socket message attachments", () => {
       resolution: "committed",
       request_id: createCommand.request_id,
       action: "message.send",
-      result: { event: { ...event(1), content: "", message_kind: "vote", vote_question: "Ship it?", vote_options: ["Yes", "No"], vote_duration_seconds: 300, attachments: [attachment("a")] }, event_seq: 1 },
+      result: { event: { ...event(1), content: "", message_kind: "vote", vote_question: "Ship it?", vote_options: ["Yes", "No"], attachments: [attachment("a")] }, event_seq: 1 },
     });
     await expect(create).resolves.toEqual({ events: [] });
 
