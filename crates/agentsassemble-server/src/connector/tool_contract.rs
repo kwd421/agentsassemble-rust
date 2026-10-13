@@ -188,6 +188,16 @@ pub(super) struct AttachmentUpload {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct AttachmentPathUpload {
+    /// Path to a regular file inside the CLI working folder.
+    pub(super) path: String,
+    pub(super) content_type: String,
+    #[serde(default)]
+    pub(super) connection_id: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Direct<T> {
     #[serde(default)]
     pub(super) connection_id: String,

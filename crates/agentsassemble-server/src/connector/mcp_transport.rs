@@ -9,10 +9,29 @@ use super::ConnectorMcp;
 
 /// Runs one current conversation over stdin/stdout until EOF or interrupt.
 ///
+/// The working folder is the CLI's startup directory unless overridden; path
+/// confinement for uploads and saved reads is bound to that folder.
+///
 /// # Errors
 /// Reports MCP initialization or transport task failure.
-pub async fn serve_stdio() -> anyhow::Result<()> {
-    let connector = ConnectorMcp::new(None).map_err(anyhow::Error::msg)?;
+pub async fn serve_stdio(workspace: Option<std::path::PathBuf>) -> anyhow::Result<()> {
+    let workspace = workspace
+        .map(Ok)
+        .unwrap_or_else(std::env::current_dir)
+        .map_err(|error| anyhow::anyhow!("connector workspace unavailable: {error}"))?
+        .canonicalize()
+        .map_err(|error| anyhow::anyhow!("connector workspace unavailable: {error}"))?;
+    let identity = agentsassemble_domain::stable_identity_hash(
+        &same_file::Handle::from_path(&workspace)
+            .map_err(|error| anyhow::anyhow!("connector workspace unavailable: {error}"))?,
+    );
+    let workspace = workspace
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("connector workspace unavailable"))?
+        .to_owned();
+    let connector = ConnectorMcp::new(None)
+        .map_err(anyhow::Error::msg)?
+        .with_workspace(workspace, identity);
     let result = async {
         let running = connector.clone().serve(stdio()).await?;
         let cancellation = running.cancellation_token();

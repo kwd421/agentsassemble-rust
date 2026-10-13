@@ -37,7 +37,11 @@ enum RoomCommand {
     /// Join a provider-bound invitation read privately from stdin.
     Attend(attendee::Attend),
     /// Connect the current external AI conversation using MCP over stdin/stdout.
-    ConnectorMcp,
+    ConnectorMcp {
+        /// Working folder for path uploads and saved reads; defaults to the startup directory.
+        #[arg(long)]
+        workspace: Option<std::path::PathBuf>,
+    },
     /// Serve loopback MCP for remote AI conversations through a user-owned tunnel.
     ConnectorMcpRemote {
         #[arg(long, default_value_t = 8788)]
@@ -82,8 +86,8 @@ async fn run(command: Command) -> anyhow::Result<()> {
             command: RoomCommand::Attend(args),
         } => attendee::run(args).await,
         Command::Room {
-            command: RoomCommand::ConnectorMcp,
-        } => serve_stdio().await,
+            command: RoomCommand::ConnectorMcp { workspace },
+        } => serve_stdio(workspace).await,
         Command::Room {
             command:
                 RoomCommand::ConnectorMcpRemote {

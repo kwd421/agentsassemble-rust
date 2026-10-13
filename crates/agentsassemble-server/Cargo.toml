@@ -40,6 +40,7 @@ rand.workspace = true
 ring.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+same-file.workspace = true
 sha2.workspace = true
 subtle.workspace = true
 sysinfo.workspace = true

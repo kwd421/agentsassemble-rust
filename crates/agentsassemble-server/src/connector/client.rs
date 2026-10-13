@@ -5,6 +5,8 @@ use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+#[path = "client_files.rs"]
+pub mod files;
 #[path = "client_transport.rs"]
 pub(crate) mod transport;
 use sha2::{Digest, Sha256};
@@ -42,6 +44,10 @@ pub struct ConnectorJoined {
     pub participant_id: String,
     pub display_name: String,
     pub last_seq: i64,
+    /// Whether the host speaks the chunked attachment-transfer endpoints.
+    /// Older hosts omit this and keep the previous inline-only behaviour.
+    #[serde(default)]
+    pub attachment_transfers: bool,
 }
 
 #[derive(Deserialize)]
@@ -50,6 +56,8 @@ struct Admission {
     room_id: String,
     room_uid: Uuid,
     participant_id: String,
+    #[serde(default)]
+    attachment_transfers: bool,
 }
 struct PendingJoin {
     request_id: Uuid,
@@ -200,6 +208,7 @@ impl RoomConnectorClient {
                 participant_id: admission.participant_id.clone(),
                 display_name: self.display_name.clone(),
                 last_seq,
+                attachment_transfers: admission.attachment_transfers,
             };
             *state = JoinState::Ready(Arc::new(Session {
                 bearer: admission.session_bearer.clone(),
@@ -233,6 +242,166 @@ impl RoomConnectorClient {
         } else {
             false
         }
+    }
+
+    /// Whether the host advertised chunked attachment transfers at join.
+    /// Without the advertisement the client keeps the previous inline-only behaviour.
+    pub async fn attachment_transfers(&self) -> bool {
+        match &*self.state.lock().await {
+            JoinState::Ready(session) => session.joined.attachment_transfers,
+            _ => false,
+        }
+    }
+
+    /// Begins one client-streamed upload; the host checks the current room
+    /// limit and quota before any file byte is sent.
+    ///
+    /// # Errors
+    /// Returns missing admission, transport, custody or response failures.
+    pub async fn upload_begin(&self, request: &Value) -> Result<Value, ConnectorClientError> {
+        let session = self.session().await?;
+        self.request(
+            self.http
+                .post(self.endpoint("tool/upload/begin"))
+                .bearer_auth(&session.bearer)
+                .json(request)
+                .timeout(COMMAND_TIMEOUT),
+        )
+        .await
+    }
+
+    /// Streams one file body at the accepted offset without holding it in memory.
+    ///
+    /// # Errors
+    /// Returns transport, custody, offset-conflict or interruption failures.
+    pub async fn upload_data(
+        &self,
+        handle: &str,
+        offset: usize,
+        body: reqwest::Body,
+    ) -> Result<Value, ConnectorClientError> {
+        let session = self.session().await?;
+        let operation = format!("tool/upload/{handle}/data");
+        let request = self
+            .http
+            .post(self.endpoint(&operation))
+            .bearer_auth(&session.bearer)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .query(&[("offset", offset.to_string())])
+            .body(body);
+        tokio::select! {
+            () = self.cancellation.cancelled() => Err(ConnectorClientError::local("connector_closed")),
+            response = transport::read_response(request, transport::RESPONSE_LIMIT) => response,
+        }
+    }
+
+    /// Finishes one client-streamed upload into a pending attachment receipt.
+    ///
+    /// # Errors
+    /// Returns transport, custody or validation failures.
+    pub async fn upload_finish(&self, handle: &str) -> Result<Value, ConnectorClientError> {
+        let session = self.session().await?;
+        let operation = format!("tool/upload/{handle}/finish");
+        self.request(
+            self.http
+                .post(self.endpoint(&operation))
+                .bearer_auth(&session.bearer)
+                .timeout(COMMAND_TIMEOUT),
+        )
+        .await
+    }
+
+    /// Discards one incomplete client-streamed upload in its exact custody.
+    ///
+    /// # Errors
+    /// Returns transport failures; custody failures are already terminal.
+    pub async fn upload_cancel(&self, handle: &str) -> Result<(), ConnectorClientError> {
+        let session = self.session().await?;
+        let operation = format!("tool/upload/{handle}");
+        let value = self
+            .request(
+                self.http
+                    .delete(self.endpoint(&operation))
+                    .bearer_auth(&session.bearer)
+                    .timeout(COMMAND_TIMEOUT),
+            )
+            .await?;
+        if value.get("cancelled").and_then(Value::as_bool) == Some(true) {
+            Ok(())
+        } else {
+            Err(ConnectorClientError::local("invalid_connector_response"))
+        }
+    }
+
+    /// Streams one large published attachment without holding it in memory.
+    ///
+    /// # Errors
+    /// Returns transport, custody, budget or response failures.
+    pub async fn download_attachment(
+        &self,
+        attachment_id: &str,
+    ) -> Result<
+        (
+            agentsassemble_persistence::MessageAttachmentMetadata,
+            impl futures_util::Stream<Item = Result<axum::body::Bytes, ConnectorClientError>> + Send,
+        ),
+        ConnectorClientError,
+    > {
+        use futures_util::StreamExt;
+        let session = self.session().await?;
+        let mut response = self
+            .http
+            .get(self.endpoint("tool/attachment/download"))
+            .bearer_auth(&session.bearer)
+            .query(&[("attachment_id", attachment_id.to_owned())])
+            .send()
+            .await
+            .map_err(|_| ConnectorClientError::local("connector_transport_unresolved"))?;
+        if !response.status().is_success() {
+            let mut body = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| ConnectorClientError::local("connector_transport_unresolved"))?
+            {
+                if body.len().saturating_add(chunk.len()) > 16 * 1024 {
+                    return Err(ConnectorClientError::local("invalid_connector_response"));
+                }
+                body.extend_from_slice(&chunk);
+            }
+            let value: Value = serde_json::from_slice(&body)
+                .map_err(|_| ConnectorClientError::local("invalid_connector_response"))?;
+            let (code, resolution) = crate::room_client_transport::remote_rejection(
+                &value,
+                "connector_remote_rejection",
+            );
+            return Err(ConnectorClientError {
+                message: preserved_message(&value, &code),
+                code,
+                resolution,
+            });
+        }
+        let headers = response.headers().clone();
+        let metadata: agentsassemble_persistence::MessageAttachmentMetadata =
+            header_value(&headers, "x-attachment-metadata")
+                .and_then(|value| {
+                    base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        value.as_bytes(),
+                    )
+                    .ok()
+                })
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .filter(
+                    |metadata: &agentsassemble_persistence::MessageAttachmentMetadata| {
+                        metadata.id == attachment_id
+                    },
+                )
+                .ok_or_else(|| ConnectorClientError::local("invalid_connector_response"))?;
+        let stream = response.bytes_stream().map(|next| {
+            next.map_err(|_| ConnectorClientError::local("connector_transport_unresolved"))
+        });
+        Ok((metadata, stream))
     }
 
     /// Reads the current public view without consuming pending-message observation.
@@ -615,6 +784,33 @@ fn sequence(value: &Value) -> Result<i64, ConnectorClientError> {
         .and_then(Value::as_i64)
         .filter(|seq| *seq >= 0)
         .ok_or_else(|| ConnectorClientError::local("invalid_connector_cursor"))
+}
+
+fn header_value(headers: &reqwest::header::HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+}
+
+fn preserved_message(value: &Value, code: &str) -> String {
+    if code.starts_with("upload_")
+        || matches!(
+            code,
+            "attachment_too_large"
+                | "attachment_download_budget_exhausted"
+                | "permission_denied"
+                | "room_attachment_quota_reached"
+                | "workspace_file_failed"
+        )
+    {
+        value["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    } else {
+        String::new()
+    }
 }
 
 fn room_state(snapshot: &Value) -> Value {

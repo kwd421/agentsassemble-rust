@@ -16,9 +16,10 @@ mod contract;
 mod hub;
 #[path = "mcp_transport.rs"]
 pub mod transport;
+use super::client::files::{ConnectorFileContext, download_to_workspace, upload_path};
 use contract::{
-    AttachmentRead, AttachmentUpload, Choose, Connection, Context, Join, Leave, Read, Roll, Say,
-    Search, VoteCast, VoteCreate, VoteMutation, VoteTarget,
+    AttachmentPathUpload, AttachmentRead, AttachmentUpload, Choose, Connection, Context, Join,
+    Leave, Read, Roll, Say, Search, VoteCast, VoteCreate, VoteMutation, VoteTarget,
 };
 use hub::ConnectorHub;
 
@@ -28,6 +29,7 @@ pub struct ConnectorMcp {
     tool_router: ToolRouter<Self>,
     pub(super) envelopes: super::mcp_web::EnvelopeBudget,
     pub(super) request_admission: Option<Arc<super::mcp_web::RequestAdmission>>,
+    files: Option<Arc<ConnectorFileContext>>,
 }
 
 impl ConnectorMcp {
@@ -41,6 +43,7 @@ impl ConnectorMcp {
             tool_router: Self::tool_router(),
             envelopes: super::mcp_web::EnvelopeBudget::default(),
             request_admission: None,
+            files: None,
         })
     }
 
@@ -50,7 +53,18 @@ impl ConnectorMcp {
             tool_router: Self::tool_router(),
             envelopes: super::mcp_web::EnvelopeBudget::default(),
             request_admission: None,
+            files: None,
         }
+    }
+
+    /// Binds the CLI working folder for path uploads and saved large reads.
+    /// Hosted and HTTP connectors keep `None` and have no file access.
+    pub fn with_workspace(mut self, workspace: String, identity: String) -> Self {
+        self.files = Some(Arc::new(ConnectorFileContext {
+            workspace,
+            identity,
+        }));
+        self
     }
 
     /// Cancels owned room transports without stopping any external provider process.
@@ -323,12 +337,30 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Read a published room attachment by ID from room_read, search or context. Returns image, text or binary MCP content."
+        description = "Read a published room attachment by ID from room_read, search or context. Up to 10 MiB is inline image, text or binary MCP content; on the stdio CLI larger published files (up to the current room limit) are saved atomically under .agentsassemble-attachments and return a path instead. Read-only agents and hosted connector reads receive attachment_too_large with actual and allowed sizes."
     )]
     async fn room_read_attachment(
         &self,
         Parameters(input): Parameters<AttachmentRead>,
     ) -> Result<rmcp::model::CallToolResult, String> {
+        if let Some(files) = self.files.as_ref() {
+            let client = self.hub.client(&input.connection_id)?;
+            match client.read_attachment(&input.attachment_id).await {
+                Ok(attachment) => {
+                    return agentsassemble_provider::attachment_tool_result(&attachment);
+                }
+                Err(error)
+                    if error.code == "attachment_too_large" && client.attachment_transfers().await =>
+                {
+                    // Older hosts omit the transfer capability and keep the inline refusal.
+                    let saved = download_to_workspace(&client, files, &input.attachment_id)
+                        .await
+                        .map_err(|error| error.code)?;
+                    return agentsassemble_provider::attachment_tool_result(&saved);
+                }
+                Err(error) => return Err(error.code),
+            }
+        }
         let attachment = self
             .hub
             .read_attachment(input, self.request_admission.as_deref())
@@ -337,7 +369,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Upload base64 file bytes as a private pending attachment (10 MiB maximum). Use the returned attachment.id in room_say attachment_ids to publish. Unsent uploads expire; a timed-out upload has an uncertain result."
+        description = "Upload base64 file bytes as a private pending attachment (10 MiB maximum). Use the returned attachment.id in room_say attachment_ids to publish. For larger files up to the current room limit, run the stdio CLI and use room_upload_attachment_from_path instead. Unsent uploads expire; a timed-out upload has an uncertain result."
     )]
     async fn room_upload_attachment(
         &self,
@@ -348,6 +380,24 @@ impl ConnectorMcp {
             .upload(input, self.request_admission.as_deref())
             .await?;
         encode(&value)
+    }
+
+    #[tool(
+        description = "Upload a regular file from a path inside the CLI working folder as a private pending attachment. Uses the current room per-file limit (10/25/50 MiB), storage quota and three-active-transfers-per-principal admission; confinement rejects escapes, symlinks out, non-regular files and named pipes without blocking. Only the stdio CLI has working-folder access; hosted and HTTP connectors refuse with an explicit error, as do hosts without the transfer capability. Use the returned attachment.id in room_say attachment_ids to publish within one hour. Unsent uploads expire; a timed-out upload has an uncertain result."
+    )]
+    async fn room_upload_attachment_from_path(
+        &self,
+        Parameters(input): Parameters<AttachmentPathUpload>,
+    ) -> Result<String, String> {
+        let files = self
+            .files
+            .as_ref()
+            .ok_or_else(|| "connector_file_access_unavailable".to_owned())?;
+        let client = self.hub.client(&input.connection_id)?;
+        let attachment = upload_path(&client, files, &input.path, &input.content_type)
+            .await
+            .map_err(|error| error.code)?;
+        encode(&json!({"attachment": attachment}))
     }
 
     #[tool(description = "Create a single-choice room poll.")]
