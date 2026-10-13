@@ -1,0 +1,154 @@
+//! The exact human decides; the transaction claims and executes the stored channel delta.
+use crate::delegated_confirmation::{rejected, settings_in};
+use crate::delegated_confirmation_lifecycle::{
+    finish_in, item, load_in, receipt, refresh_in, validate_in,
+};
+use crate::{CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore};
+use agentsassemble_domain::{
+    ClientKind, ConfirmationDecision, ConfirmationState, ConfirmedRoomAction, DecideDelegatedAction,
+};
+use serde_json::{Value, json};
+use sqlx::Row;
+
+impl SqliteStore {
+    /// Claims one immutable request and executes through the human settings gate.
+    /// # Errors
+    /// Rejects non-owners and conflicting decisions; action failures become terminal receipts.
+    pub async fn decide_delegated_action(
+        &self,
+        authority: RoomMutationAuthority<'_>,
+        decision: &DecideDelegatedAction,
+    ) -> Result<CommandOutcome, PersistenceError> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let principal = authority.resolve(&mut tx).await?.into_owned();
+        let row = load_in(&mut tx, &principal.room_id, &decision.confirmation_id).await?;
+        let request = item(&row)?;
+        let (_, human) = crate::authority::load_active_membership(
+            &mut tx,
+            &principal.room_id,
+            &principal.participant_id,
+        )
+        .await?;
+        if principal.client_kind != ClientKind::Browser
+            || human.participant_type != "human"
+            || principal.participant_id != request.owner_participant_id
+        {
+            return Err(rejected(
+                "permission_denied",
+                "Only the exact human owner may decide.",
+            ));
+        }
+        let encoded = serde_json::to_string(decision)?;
+        let first_seq =
+            crate::room_event_sequence::next_sequence(&mut tx, &principal.room_id).await?;
+        let deduplicated = if let Some(previous) = row.get::<Option<String>, _>("decision_json") {
+            if previous != encoded {
+                return Err(rejected(
+                    "request_conflict",
+                    "This confirmation already has another decision.",
+                ));
+            }
+            true
+        } else {
+            sqlx::query("UPDATE delegated_action_requests SET decision_json=? WHERE room_id=? AND confirmation_id=?")
+                .bind(encoded).bind(&principal.room_id).bind(&decision.confirmation_id).execute(&mut *tx).await?;
+            refresh_in(&mut tx, &principal.room_id, &row).await?;
+            let current = load_in(&mut tx, &principal.room_id, &decision.confirmation_id).await?;
+            if current.get::<&str, _>("state") == "pending" {
+                if decision.decision == ConfirmationDecision::Decline {
+                    finish_in(&mut tx, &principal.room_id, &row, ConfirmationState::Declined, &json!({"status":"rejected","code":"confirmation_declined","retryable":false})).await?;
+                } else {
+                    sqlx::query("SAVEPOINT confirmed_action")
+                        .execute(&mut *tx)
+                        .await?;
+                    let execution = async {
+                        let proof = validate_in(&mut tx, &principal.room_id, &row).await?;
+                        let ConfirmedRoomAction::DeleteTextChannel(action) = &request.action;
+                        let mut settings = settings_in(&mut tx, &principal.room_id).await?;
+                        if agentsassemble_domain::public_settings(&settings)?.settings_revision != action.expected_settings_revision {
+                            return Err(rejected("target_changed", "The target settings changed before approval."));
+                        }
+                        crate::room_channels::require_text_channel(&mut tx, &principal.room_id, &action.channel_id).await?;
+                        settings.channels.retain(|c| c.id != action.channel_id);
+                        let delta = json!({"expected_revision":action.expected_settings_revision,"channels":settings.channels});
+                        let mut outcome = crate::room_settings::update_settings_in(&mut tx, &proof.owner, &delta).await?;
+                        let mut event = crate::delegated_pin::attributed_action_event(&mut tx, proof.attribution(), &action.request_id, "delete_text_channel", &action.channel_id, "deleted a text channel and its messages").await?;
+                        event.extra.insert("confirmation_id".into(), json!(request.confirmation_id));
+                        crate::room_turns::support::insert_event(&mut tx, &event).await?;
+                        outcome.events.push(event.clone());
+                        crate::delegated_event_attribution::attribute_since(&mut tx, &proof.delegate, &proof.owner.participant_id, first_seq, &mut outcome.events).await?;
+                        for canonical in &mut outcome.events {
+                            canonical.extra.insert("confirmation_id".into(),json!(request.confirmation_id));
+                            sqlx::query("UPDATE room_events SET event_json=? WHERE room_id=? AND seq=?")
+                                .bind(serde_json::to_string(canonical)?).bind(&principal.room_id).bind(canonical.seq).execute(&mut *tx).await?;
+                        }
+                        Ok::<Value,PersistenceError>(json!({"status":"succeeded","request_id":action.request_id,"action":"delete_text_channel","target_id":action.channel_id,"confirmation_id":request.confirmation_id,"event_id":event.id}))
+                    }.await;
+                    match execution {
+                        Ok(result) => {
+                            sqlx::query("RELEASE confirmed_action")
+                                .execute(&mut *tx)
+                                .await?;
+                            finish_in(
+                                &mut tx,
+                                &principal.room_id,
+                                &row,
+                                ConfirmationState::Succeeded,
+                                &result,
+                            )
+                            .await?;
+                        }
+                        Err(PersistenceError::CommandRejected { code, message }) => {
+                            sqlx::query("ROLLBACK TO confirmed_action")
+                                .execute(&mut *tx)
+                                .await?;
+                            sqlx::query("RELEASE confirmed_action")
+                                .execute(&mut *tx)
+                                .await?;
+                            finish_in(&mut tx, &principal.room_id, &row, ConfirmationState::Failed, &json!({"status":"rejected","code":code,"message":message,"retryable":false})).await?;
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
+            }
+            false
+        };
+        let current = load_in(&mut tx, &principal.room_id, &decision.confirmation_id).await?;
+        let result = serde_json::to_value(agentsassemble_domain::DelegatedActionDecisionAck {
+            confirmation_id: decision.confirmation_id.clone(),
+            state: item(&current)?.state,
+            receipt: receipt(&current)?,
+        })?;
+        let events: Vec<String> = sqlx::query_scalar(
+            "SELECT event_json FROM room_events WHERE room_id=? AND seq>=? ORDER BY seq",
+        )
+        .bind(&principal.room_id)
+        .bind(first_seq)
+        .fetch_all(&mut *tx)
+        .await?;
+        let mut events = events
+            .into_iter()
+            .map(|e| serde_json::from_str(&e))
+            .collect::<Result<Vec<agentsassemble_domain::RoomEvent>, _>>()?;
+        // Repeats return the recorded ACK, without republishing any events.
+        let event = if let Some(event) = events.last() {
+            event.clone()
+        } else {
+            let encoded: String = sqlx::query_scalar("SELECT event_json FROM room_events WHERE room_id=? AND json_extract(event_json,'$.delegated_action_request.confirmation_id')=? ORDER BY seq DESC LIMIT 1")
+                .bind(&principal.room_id).bind(&decision.confirmation_id).fetch_one(&mut *tx).await?;
+            serde_json::from_str(&encoded)?
+        };
+        authority.record_success(&mut tx).await?;
+        tx.commit().await?;
+        self.notify_room_directory_changed();
+        if deduplicated {
+            events.clear();
+        }
+        Ok(CommandOutcome {
+            result,
+            event,
+            events,
+            deduplicated,
+        })
+    }
+}

@@ -367,3 +367,6 @@ async fn assert_direct_rejections(
         );
     }
 }
+
+#[path = "delegated_confirmation_tests.rs"]
+mod confirmations;

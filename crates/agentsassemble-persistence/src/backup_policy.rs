@@ -66,6 +66,7 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "connector_mentions"
         | "connector_mention_overflow"
         | "prejoin_avatar_assets"
+        | "delegated_action_requests"
         | "provider_requests"
         | "provider_turn_executions"
         | "provider_turn_effects"

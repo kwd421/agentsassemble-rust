@@ -26,7 +26,9 @@ impl DelegatedRoomActionAuthority {
     fn allows(&self, action: &str) -> bool {
         match action {
             "set_message_pin" => true,
-            "create_text_channel" | "rename_text_channel" => self.owner.capabilities.room_manage,
+            "create_text_channel" | "rename_text_channel" | "request_delete_text_channel" => {
+                self.owner.capabilities.room_manage
+            }
             "set_participant_mute" => self.owner.capabilities.participant_mute,
             "start_agent" | "stop_agent" => self.owner.capabilities.agent_control,
             _ => false,

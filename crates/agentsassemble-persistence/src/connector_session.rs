@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Persistence-issued current-session AI provenance; never a human or managed Agent Session.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ConnectorSessionAuthorization {
     principal: AuthenticatedPrincipal,
     fingerprint: [u8; 32],

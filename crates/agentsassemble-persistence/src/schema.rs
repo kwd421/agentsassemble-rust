@@ -8,6 +8,11 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 pub(crate) const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "delegated_action_requests",
+        ddl: crate::delegated_confirmation::DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "connector_message_delivery",
         ddl: crate::connector_delivery::DDL,
         infrastructure: false,

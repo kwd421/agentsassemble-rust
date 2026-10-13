@@ -8,7 +8,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 /// Persistence-issued attendee provenance; never interchangeable with a human or managed runtime.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct AttendeeSessionAuthorization {
     pub(crate) fingerprint: [u8; 32],
     pub(crate) room_uid: Uuid,

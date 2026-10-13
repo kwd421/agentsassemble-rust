@@ -168,3 +168,6 @@ pub use vote::{
 
 mod delegated_actions;
 pub use delegated_actions::*;
+
+mod delegated_confirmation;
+pub use delegated_confirmation::*;

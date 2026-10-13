@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{CommandOutcome, PersistenceError, SqliteStore};
 
 /// Authenticated AI custody supplied by the transport owner, never tool arguments.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum DelegateRoomAuthority {
     Provider {
         room_id: String,
@@ -39,7 +39,7 @@ impl DelegateRoomAuthority {
         }
     }
 
-    fn delegate_id(&self) -> &str {
+    pub(crate) fn delegate_id(&self) -> &str {
         match self {
             Self::Provider { session_id, .. } => session_id,
             Self::Attendee { session, .. } => &session.principal().participant_id,
@@ -47,7 +47,7 @@ impl DelegateRoomAuthority {
         }
     }
 
-    async fn resolve(
+    pub(crate) async fn resolve(
         &self,
         tx: &mut Transaction<'_, Sqlite>,
     ) -> Result<AuthenticatedPrincipal, PersistenceError> {

@@ -1,5 +1,51 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
+## Director delegation: owner confirmation (slice 3, required behaviour)
+
+RoomPortal managed/API and attendee/companion calls and connector MCP calls support
+`request_delete_text_channel(channel_id, expected_settings_revision, request_id)`;
+`start_agent(agent_id, request_id)` remains direct for `meeting_read_only` and requests
+confirmation for workspace-write/full-access. Nothing is mutated or reserved before
+approval. Role assignment, provider approvals and slice-4 actions stay unreachable.
+
+The host persists a typed immutable request with normalised parameters and resolved
+defaults, room incarnation, exact owner provenance, delegate/session/execution binding,
+request UUID, target revisions, creation, expiry and state. Five-minute expiry is
+shortened by either authority's deadline. Exact retries return the same request/current
+state/receipt; changed payload or decision conflicts. No hashes beyond existing command
+admission conventions. Pending requests are capped per owner/room and rate-limited;
+creation debits existing write/admission budgets of both identities, with no retry debit.
+
+Only the exact authenticated human owner receives requested/updated events and pending
+snapshot entries. The stored action, current target name, AI and owner identities,
+consequences and expiry are the decision surface. Channel deletion uses the settings
+owner: its message text is blanked/deleted, pins and search records removed and channel
+ID retired; event sequence/actor records are retained. Do not promise physical erasure.
+Only that human may approve/decline; another operator, guest or AI cannot substitute.
+One transaction claims and validates the immutable decision, both current authorities,
+provenance and unchanged targets (`target_changed`), then uses the same human mutation
+core or reserves the existing lifecycle operation. Concurrent approvals execute once;
+exact decisions replay receipts. Declined, expired, cancelled and failed are terminal;
+uncertain external effects remain executing and reconcile through existing lifecycle
+custody, never blind replay. Completion events name the AI, on-behalf-of owner and
+confirmation ID; pending/declined details remain owner-private. AI retries receive only
+status/receipt, without private owner request data or secrets.
+
+Portal/attendee requests end with their exact turn/connection. Connector requests have
+no execution lifetime: they bind only to their session/participant and terminate on
+owner decision, expiry or loss of session authority/role/membership. Do not invent a
+connector execution protocol. Persist non-bearer references only; no session swapping.
+New schema/table follows the normal version migration and archive catalog. Requests
+and their private events are ephemeral and excluded from backups/server moves.
+
+Frontend work is restricted to generated wire types, socket validation and projection;
+views/styles/app are owned elsewhere. Expose pending owner requests, typed decision
+and ACK. Acceptance: non-mutation, exact owner-only approval/delivery/reconnect,
+payload/target binding, concurrent exactly-once, authority revocation, explicit decline/
+expiry/turn cancellation, archive exclusion and both actions across all three surfaces.
+Run affected crate tests, fmt, architecture-check, generated TS checks and affected
+Vitest; server integration uses `--test-threads=2`. This is acceptance, not completion.
+
 ## Round-4 delegated event attribution (2026-10-12)
 
 Channel create/rename, mute/unmute, pin and agent start/stop on managed provider,

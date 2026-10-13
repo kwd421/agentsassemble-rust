@@ -1,5 +1,11 @@
 # Agent Session vertical slice
 
+Slice 3 adds owner-confirmed text-channel deletion and execution-capable existing-agent
+start on managed, attendee and connector tools. Exact lifetime, owner-only socket
+projection, approval transaction, replay, attribution and archive exclusion are owned
+by the slice-3 section in local-authority-surface-admission-moderation-slice.md; earlier
+slice exclusions below describe their historical scope, not this required acceptance.
+
 ## Director direct actions: slice 2 acceptance
 
 Slice 2 adds channel create/rename, participant mute/unmute and agent start/stop to managed/API RoomPortal. Start is direct only for `meeting_read_only`; other permissions require the owner confirmation error without side effects. Shared lifecycle preparation, effect authorization, completion/recovery and room attribution remain mandatory.

@@ -1,5 +1,11 @@
 # External AI admission and bridges
 
+Slice 3 adds owner-confirmed text-channel deletion and execution-capable existing-agent
+start on managed, attendee and connector tools. Exact lifetime, owner-only socket
+projection, approval transaction, replay, attribution and archive exclusion are owned
+by the slice-3 section in local-authority-surface-admission-moderation-slice.md; earlier
+slice exclusions below describe their historical scope, not this required acceptance.
+
 ## Director direct actions: slice 2 acceptance
 
 Slice 2 extends attendee/companion and connector delegated actions with channel create/rename, mute/unmute, start/stop. Portal discovery is action-specific and fresh; connector discovery stays static and room_join/room_status report current availability. Every transport enforces current exact owner and AI authority at call time.

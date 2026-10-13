@@ -155,6 +155,14 @@ pub fn room_event_is_owner_only(event: &RoomEvent) -> bool {
 }
 
 fn event_is_visible_to(event: &RoomEvent, principal: &AuthenticatedPrincipal) -> bool {
+    if matches!(
+        event.event_type.as_str(),
+        "delegated_action_requested" | "delegated_action_updated"
+    ) {
+        return principal.client_kind == crate::ClientKind::Browser
+            && event.extra.get("owner_id").and_then(Value::as_str)
+                == Some(principal.participant_id.as_str());
+    }
     let participant = event.participant_id.as_deref().unwrap_or_default();
     let owner = event
         .extra

@@ -91,6 +91,7 @@ pub struct RoomSnapshotData {
     pub settings: RoomSettings,
     pub participants: Vec<Participant>,
     pub agent_sessions: Vec<AgentSession>,
+    pub delegated_action_requests: Vec<agentsassemble_domain::DelegatedActionRequest>,
     pub provider_requests: Vec<agentsassemble_domain::PendingProviderRequest>,
     pub events: Vec<RoomEvent>,
     pub oldest_seq: i64,
@@ -291,6 +292,11 @@ impl SqliteStore {
         } else {
             None
         };
+        let delegated_action_requests = crate::delegated_confirmation_lifecycle::snapshot_in(
+            &mut transaction,
+            principal.as_deref(),
+        )
+        .await?;
         let provider_requests =
             crate::provider_requests::snapshot_pending_in(&mut transaction, principal.as_deref())
                 .await?;
@@ -358,6 +364,7 @@ impl SqliteStore {
             participants,
             agent_sessions,
             provider_requests,
+            delegated_action_requests,
             events,
             oldest_seq,
             last_seq,

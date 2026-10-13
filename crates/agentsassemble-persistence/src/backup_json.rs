@@ -35,6 +35,24 @@ pub(crate) fn event(value: Value) -> Result<RoomEvent, PersistenceError> {
     if event.v != 1 || event.seq < 1 || event.room_id.is_empty() || event.id.is_empty() {
         return Err(invalid());
     }
+    if matches!(
+        event.event_type.as_str(),
+        "delegated_action_requested" | "delegated_action_updated" | "delegated_action_outcome"
+    ) {
+        event.event_type = "event_hidden".into();
+        event.actor = agentsassemble_domain::Actor {
+            participant_id: String::new(),
+            participant_type: String::new(),
+        };
+        event.participant_id = None;
+        event.participant_type = None;
+        event.actor_id = None;
+        event.actor_type = None;
+        event.display_name = None;
+        event.content = None;
+        event.message_kind = None;
+        event.extra.clear();
+    }
     let executor = event.extra.get("actor_participant_id");
     let owner = event.extra.get("on_behalf_of_participant_id");
     if executor.is_some() || owner.is_some() {
@@ -107,6 +125,7 @@ pub(crate) fn event(value: Value) -> Result<RoomEvent, PersistenceError> {
             | "expires_at"
             | "owner_id"
             | "visibility"
+            | "confirmation_id"
             | "provider_request_id"
             | "state"
             | "operation"

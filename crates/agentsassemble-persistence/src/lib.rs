@@ -329,3 +329,7 @@ pub use secure_session::SecureSessionBinding;
 mod backup_authority_tests;
 
 mod connector_delivery;
+
+mod delegated_confirmation;
+mod delegated_confirmation_decision;
+mod delegated_confirmation_lifecycle;

@@ -74,5 +74,12 @@
     "version": 95,
     "remove": [],
     "add": []
+  },
+  {
+    "version": 96,
+    "remove": [],
+    "add": [
+      "CREATE TABLE IF NOT EXISTS delegated_action_requests (room_id TEXT NOT NULL, confirmation_id TEXT NOT NULL, owner_id TEXT NOT NULL, delegate_id TEXT NOT NULL, request_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending','declined','expired','cancelled','executing','succeeded','failed')), binding_json TEXT NOT NULL, request_json TEXT NOT NULL, decision_json TEXT, receipt_json TEXT, PRIMARY KEY(room_id,confirmation_id), UNIQUE(room_id,delegate_id,request_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE) STRICT"
+    ]
   }
 ]

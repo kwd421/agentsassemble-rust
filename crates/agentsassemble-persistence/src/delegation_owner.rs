@@ -213,6 +213,58 @@ impl OwnerBinding {
     }
 }
 
+// Immutable non-bearer owner reference and its current authority deadline.
+pub(crate) async fn confirmation_provenance(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    delegate_id: &str,
+) -> Result<(serde_json::Value, Option<chrono::DateTime<chrono::Utc>>), PersistenceError> {
+    if let Some(row) = sqlx::query("SELECT parent_fingerprint,creator_id,owner_participant_id,room_uid FROM room_attendee_invites WHERE room_id=? AND participant_id=? AND parent_fingerprint IS NOT NULL")
+        .bind(room_id).bind(delegate_id).fetch_optional(&mut **tx).await? {
+        let fingerprint: Vec<u8> = row.get("parent_fingerprint");
+        let (_, expiry) = crate::attendee::session::resolve_parent(tx, room_id, &fingerprint, chrono::Utc::now()).await?;
+        return Ok((serde_json::json!({"parent_fingerprint":fingerprint,
+            "creator_id":row.get::<String,_>("creator_id"),
+            "owner_participant_id":row.get::<String,_>("owner_participant_id"),
+            "room_uid":row.get::<String,_>("room_uid")}), expiry));
+    }
+    let encoded: String = sqlx::query_scalar("SELECT binding_json FROM ai_owner_bindings WHERE room_id=? AND subject_kind='participant' AND subject_id=?")
+        .bind(room_id).bind(delegate_id).fetch_optional(&mut **tx).await?.ok_or_else(unavailable)?;
+    let binding: OwnerBinding = serde_json::from_str(&encoded)?;
+    let expiry = match &binding.reference {
+        OwnerReference::Local { .. } | OwnerReference::ServerOwner { .. } => None,
+        OwnerReference::Human { fingerprint } => {
+            let crate::human_session_authority::ResolvedHumanSession::Live {
+                authorization, ..
+            } = crate::human_session_authority::resolve_human_session(
+                tx,
+                fingerprint,
+                Some(room_id),
+                chrono::Utc::now(),
+            )
+            .await?
+            else {
+                return Err(unavailable());
+            };
+            Some(authorization.expires_at())
+        }
+        OwnerReference::Operator {
+            fingerprint,
+            device,
+            origin,
+        } => crate::operator_pairing::resolve_operator_session(
+            tx,
+            fingerprint,
+            device,
+            origin,
+            chrono::Utc::now(),
+        )
+        .await?
+        .expires_at(),
+    };
+    Ok((serde_json::to_value(binding)?, expiry))
+}
+
 // The invitation owns the reference until admission. Missing historical references stay missing.
 pub(crate) async fn admit_binding(
     tx: &mut Transaction<'_, Sqlite>,

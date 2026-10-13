@@ -1,5 +1,11 @@
 # Custom text channels and ephemeral side chat
 
+Slice 3 adds owner-confirmed text-channel deletion and execution-capable existing-agent
+start on managed, attendee and connector tools. Exact lifetime, owner-only socket
+projection, approval transaction, replay, attribution and archive exclusion are owned
+by the slice-3 section in local-authority-surface-admission-moderation-slice.md; earlier
+slice exclusions below describe their historical scope, not this required acceptance.
+
 ## Director direct actions: slice 2 acceptance
 
 Slice 2 adds strict create/rename tools through the same settings-update owner. Construct only a channel delta from current settings; preserve all other settings, name/count limits, retirement and expected revision checks. No delete tool.
