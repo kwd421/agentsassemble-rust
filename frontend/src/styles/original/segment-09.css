@@ -224,6 +224,77 @@
   outline: none;
 }
 
+/* The owner's AI asks before doing something risky on their behalf. */
+.dc-delegated-action {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--color-panel-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 8px;
+  background: var(--color-panel-soft);
+  padding: 12px 12px 12px 14px;
+}
+
+.dc-delegated-action-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-accent);
+}
+
+.dc-delegated-action-main {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+
+.dc-delegated-action-summary {
+  color: var(--color-text-normal);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.dc-delegated-action-summary strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.dc-delegated-action-note {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.dc-delegated-action-note[data-tone="error"] {
+  color: #f57976;
+}
+
+.dc-delegated-action-ack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  color: var(--color-text-normal);
+  font-size: 14px;
+}
+
+.dc-delegated-action-buttons {
+  display: flex;
+  flex-shrink: 0;
+  align-self: center;
+  gap: 8px;
+}
+
+.dc-accent-button[data-danger] {
+  background: var(--color-danger);
+}
+
+.dc-accent-button[data-danger]:hover:not(:disabled) {
+  background: #c73639;
+}
+
 .dc-upload-limit-dialog {
   position: fixed;
   inset: 0;
