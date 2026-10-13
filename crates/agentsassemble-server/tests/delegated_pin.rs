@@ -96,6 +96,7 @@ pub(super) async fn verify(
             status["delegated_actions"],
             json!([
                 "set_message_pin",
+                "request_delete_text_channel",
                 "create_text_channel",
                 "rename_text_channel",
                 "set_participant_mute",
@@ -262,6 +263,7 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
         rejoined["delegated_actions"],
         json!([
             "set_message_pin",
+            "request_delete_text_channel",
             "create_text_channel",
             "rename_text_channel",
             "set_participant_mute",
@@ -269,6 +271,7 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
             "stop_agent"
         ])
     );
+    confirmation_socket::verify(&server, &client, &joined["connection_id"]).await?;
     store
         .revoke_operator_pairing(&manager, pairing.pairing_id)
         .await?;
@@ -367,6 +370,45 @@ async fn verify_direct(
             LOCAL_OPERATOR_PARTICIPANT_ID
         );
     }
+    let settings = store.snapshot("general", 0, 200).await?.settings;
+    let delete = args(
+        json!({"channel_id":settings.channels[0].id,"expected_settings_revision":agentsassemble_domain::public_settings(&settings)?.settings_revision}),
+    );
+    let pending = call(client, "request_delete_text_channel", delete.clone()).await;
+    assert_eq!(pending["status"], "pending_confirmation");
+    assert_eq!(settings, store.snapshot("general", 0, 200).await?.settings);
+    assert_eq!(
+        pending,
+        call(client, "request_delete_text_channel", delete.clone()).await
+    );
+    let decision = agentsassemble_domain::DecideDelegatedAction {
+        confirmation_id: pending["confirmation_id"].as_str().unwrap().into(),
+        decision: agentsassemble_domain::ConfirmationDecision::Approve,
+    };
+    let receipt = store
+        .decide_delegated_action(
+            RoomMutationAuthority::TrustedPrincipal(&operator()),
+            &decision,
+        )
+        .await?;
+    assert_eq!(receipt.result["state"], "succeeded");
+    assert_eq!(
+        call(client, "request_delete_text_channel", delete).await,
+        receipt.result["receipt"]
+    );
+    let completed = store.snapshot("general", 0, 200).await?;
+    assert!(completed.settings.channels.is_empty());
+    for event in completed
+        .events
+        .iter()
+        .filter(|e| e.extra.get("confirmation_id") == Some(&json!(decision.confirmation_id)))
+    {
+        assert_eq!(event.actor.participant_id, delegate);
+        assert_eq!(
+            event.extra["on_behalf_of_participant_id"],
+            LOCAL_OPERATOR_PARTICIPANT_ID
+        );
+    }
     let mut after = serde_json::to_value(store.snapshot("general", 0, 200).await?.settings)?;
     let before = serde_json::to_value(before)?;
     for field in ["channels"] {
@@ -405,3 +447,6 @@ async fn reject_direct_tools(client: &Client, connection: Option<&Value>, code: 
         );
     }
 }
+
+#[path = "delegated_confirmation_socket.rs"]
+mod confirmation_socket;

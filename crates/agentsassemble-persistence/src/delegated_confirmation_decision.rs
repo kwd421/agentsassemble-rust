@@ -1,8 +1,6 @@
 //! The exact human decides; the transaction claims and executes the stored channel delta.
 use crate::delegated_confirmation::{rejected, settings_in};
-use crate::delegated_confirmation_lifecycle::{
-    finish_in, item, load_in, receipt, refresh_in, validate_in,
-};
+use crate::delegated_confirmation_lifecycle::{finish_in, item, load_in, receipt, validate_in};
 use crate::{CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore};
 use agentsassemble_domain::{
     ClientKind, ConfirmationDecision, ConfirmationState, ConfirmedRoomAction, DecideDelegatedAction,
@@ -52,7 +50,18 @@ impl SqliteStore {
         } else {
             sqlx::query("UPDATE delegated_action_requests SET decision_json=? WHERE room_id=? AND confirmation_id=?")
                 .bind(encoded).bind(&principal.room_id).bind(&decision.confirmation_id).execute(&mut *tx).await?;
-            refresh_in(&mut tx, &principal.room_id, &row).await?;
+            if row.get::<&str, _>("state") == "pending"
+                && row.get::<i64, _>("expires_at") <= chrono::Utc::now().timestamp_millis()
+            {
+                finish_in(
+                    &mut tx,
+                    &principal.room_id,
+                    &row,
+                    ConfirmationState::Expired,
+                    &json!({"status":"rejected","code":"confirmation_expired","retryable":false}),
+                )
+                .await?;
+            }
             let current = load_in(&mut tx, &principal.room_id, &decision.confirmation_id).await?;
             if current.get::<&str, _>("state") == "pending" {
                 if decision.decision == ConfirmationDecision::Decline {
@@ -78,7 +87,7 @@ impl SqliteStore {
                         outcome.events.push(event.clone());
                         crate::delegated_event_attribution::attribute_since(&mut tx, &proof.delegate, &proof.owner.participant_id, first_seq, &mut outcome.events).await?;
                         for canonical in &mut outcome.events {
-                            canonical.extra.insert("confirmation_id".into(),json!(request.confirmation_id));
+                            for key in ["action", "target_id", "request_id", "confirmation_id"] { canonical.extra.insert(key.into(),event.extra[key].clone()); }
                             sqlx::query("UPDATE room_events SET event_json=? WHERE room_id=? AND seq=?")
                                 .bind(serde_json::to_string(canonical)?).bind(&principal.room_id).bind(canonical.seq).execute(&mut *tx).await?;
                         }
@@ -105,7 +114,29 @@ impl SqliteStore {
                             sqlx::query("RELEASE confirmed_action")
                                 .execute(&mut *tx)
                                 .await?;
-                            finish_in(&mut tx, &principal.room_id, &row, ConfirmationState::Failed, &json!({"status":"rejected","code":code,"message":message,"retryable":false})).await?;
+                            let ended = matches!(
+                                code.as_bytes(),
+                                b"role_required"
+                                    | b"owner_muted"
+                                    | b"owner_not_permitted"
+                                    | b"owner_authority_unavailable"
+                                    | b"owner_scope_read_only"
+                                    | b"delegate_authority_expired"
+                                    | b"stale_provider_turn"
+                                    | b"session_revoked"
+                                    | b"bridge_connection_replaced"
+                            );
+                            let state = if ended {
+                                ConfirmationState::Cancelled
+                            } else {
+                                ConfirmationState::Failed
+                            };
+                            let code = if ended {
+                                std::borrow::Cow::Borrowed("confirmation_cancelled")
+                            } else {
+                                code
+                            };
+                            finish_in(&mut tx, &principal.room_id, &row, state, &json!({"status":"rejected","code":code,"message":message,"retryable":false})).await?;
                         }
                         Err(error) => return Err(error),
                     }

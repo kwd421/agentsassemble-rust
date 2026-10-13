@@ -23,6 +23,7 @@ request!(StopAgent { agent_id: String });
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectRoomAction {
+    RequestDeleteTextChannel(crate::DeleteTextChannel),
     CreateTextChannel(CreateTextChannel),
     RenameTextChannel(RenameTextChannel),
     SetParticipantMute(SetParticipantMute),
@@ -31,6 +32,7 @@ pub enum DirectRoomAction {
 }
 impl DirectRoomAction {
     pub const NAMES: &[&str] = &[
+        "request_delete_text_channel",
         "create_text_channel",
         "rename_text_channel",
         "set_participant_mute",
@@ -40,6 +42,7 @@ impl DirectRoomAction {
     #[must_use]
     pub fn request_id(&self) -> &str {
         match self {
+            Self::RequestDeleteTextChannel(r) => &r.request_id,
             Self::CreateTextChannel(r) => &r.request_id,
             Self::RenameTextChannel(r) => &r.request_id,
             Self::SetParticipantMute(r) => &r.request_id,
@@ -50,6 +53,7 @@ impl DirectRoomAction {
     #[must_use]
     pub const fn name(&self) -> &'static str {
         match self {
+            Self::RequestDeleteTextChannel(_) => "request_delete_text_channel",
             Self::CreateTextChannel(_) => "create_text_channel",
             Self::RenameTextChannel(_) => "rename_text_channel",
             Self::SetParticipantMute(_) => "set_participant_mute",

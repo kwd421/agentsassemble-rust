@@ -443,6 +443,18 @@ async fn verify_room_turn_publication(first_status: &str) {
             .count(),
         1
     );
+    // Tool mutations have their own committed stream frames. Drain their known
+    // high water before measuring the next command's existing ACK frame bound.
+    loop {
+        let frame = receive_json(&mut socket).await;
+        assert_eq!(frame["op"], "event");
+        if frame["latest_seq"]
+            .as_i64()
+            .is_some_and(|seq| seq >= snapshot.last_seq)
+        {
+            break;
+        }
+    }
     send_command(
         &mut socket,
         "room-message-2",

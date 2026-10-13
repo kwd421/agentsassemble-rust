@@ -29,7 +29,9 @@ exact decisions replay receipts. Declined, expired, cancelled and failed are ter
 uncertain external effects remain executing and reconcile through existing lifecycle
 custody, never blind replay. Completion events name the AI, on-behalf-of owner and
 confirmation ID; pending/declined details remain owner-private. AI retries receive only
-status/receipt, without private owner request data or secrets.
+status/receipt, without private owner request data or secrets. The existing
+`read_room_status`/`room_status` observation includes up to 16 correlated outcomes
+for that AI alone; ordinary room context does not render arbitrary event payloads.
 
 Portal/attendee requests end with their exact turn/connection. Connector requests have
 no execution lifetime: they bind only to their session/participant and terminate on

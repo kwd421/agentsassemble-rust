@@ -29,7 +29,7 @@ describe("owned provider request projection", () => {
     const closed = { ...baseEvent, seq: 2, id: "closed", type: "provider_request_closed", provider_request_id: pendingRequest.request.provider_request_id, state: "failed" } as RoomEvent;
     act(() => { handlers.onRoomEvents?.([{ ...closed, owner_id: "other" } as RoomEvent]); });
     expect(result.current.providerRequests).toHaveLength(1);
-    act(() => { handlers.onRoomSnapshot?.({ ...snapshot, snapshot_mode: "resume", provider_requests: [] }, "http://127.0.0.1:43123"); });
+    act(() => { handlers.onRoomSnapshot?.({ ...snapshot, snapshot_mode: "resume", delegated_action_requests: [], provider_requests: [] }, "http://127.0.0.1:43123"); });
     expect(result.current.providerRequests).toEqual([]);
     const opened = { ...baseEvent, seq: 3, id: "open", type: "provider_request_opened", session_id: "session", provider_request: pendingRequest.request, expires_at: pendingRequest.expires_at } as unknown as RoomEvent;
     act(() => { handlers.onRoomEvents?.([opened]); });

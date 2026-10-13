@@ -59,3 +59,20 @@ pub struct DelegatedActionDecisionAck {
     pub state: ConfirmationState,
     pub receipt: serde_json::Value,
 }
+
+/// Owner-private fields of requested/updated room event envelopes.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct DelegatedActionRequestEvent {
+    pub visibility: String,
+    pub owner_id: String,
+    pub delegated_action_request: DelegatedActionRequest,
+}
+
+/// Correlated, secret-free outcome available to the originating AI in room status.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegatedActionOutcome {
+    pub request_id: String,
+    pub confirmation_id: String,
+    pub state: ConfirmationState,
+    pub receipt: serde_json::Value,
+}

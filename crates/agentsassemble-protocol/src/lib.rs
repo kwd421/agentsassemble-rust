@@ -111,6 +111,8 @@ impl RoomStream {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 pub enum RoomAction {
+    #[serde(rename = "delegated_action.decide")]
+    DelegatedActionDecide,
     #[serde(rename = "provider.request.resolve")]
     ProviderRequestResolve,
     #[serde(rename = "side_chat.send")]
@@ -177,7 +179,8 @@ impl RoomAction {
         !matches!(self, Self::RoomClose | Self::RoomArchive | Self::RoomDelete)
     }
 
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 30] = [
+        Self::DelegatedActionDecide,
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
@@ -212,6 +215,7 @@ impl RoomAction {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::DelegatedActionDecide => "delegated_action.decide",
             Self::ProviderRequestResolve => "provider.request.resolve",
             Self::SideChatSend => "side_chat.send",
             Self::ChannelMessageSend => "channel.message.send",
@@ -415,6 +419,7 @@ pub struct RoomSnapshot {
     pub room_settings: PublicRoomSettings,
     pub participants: Vec<Participant>,
     pub agent_sessions: Vec<AgentSession>,
+    pub delegated_action_requests: Vec<agentsassemble_domain::DelegatedActionRequest>,
     pub active_turns: Vec<Value>,
     pub events: Vec<RoomEvent>,
     pub oldest_seq: i64,

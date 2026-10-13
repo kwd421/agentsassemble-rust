@@ -148,6 +148,7 @@ async fn verify_status_tool(
     let status = agentsassemble_domain::ConversationStatus {
         observed_at: "2026-09-22T00:00:00Z".into(),
         agents: Vec::new(),
+        delegated_action_outcomes: vec![],
         open_votes: Vec::new(),
         next_before_seq: 0,
     };

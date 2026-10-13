@@ -136,6 +136,12 @@ impl SqliteStore {
         let proof =
             DelegatedRoomActionAuthority::direct(&mut tx, authority, request.name()).await?;
         crate::agent_lifecycle_authority::authorize_control(&proof.owner)?;
+        crate::delegated_confirmation_lifecycle::reject_confirmation_identity(
+            &mut tx,
+            authority,
+            request.request_id(),
+        )
+        .await?;
         let payload = json!({"agent_id":agent_id,"_delegation":Attribution {
             actor_participant_id: proof.delegate.participant_id.clone(),
             on_behalf_of_participant_id: proof.owner.participant_id.clone(),

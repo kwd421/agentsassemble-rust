@@ -507,8 +507,25 @@ fn spawn_room_task(
             publish_durable_room_events(&context.store, &context.event_tx, &context.room_id).await;
         let mut publication_retry = PublicationRetry::new(startup_publication);
         let mut provider_write_budget = ProviderWriteBudget::new();
+        let mut confirmation_deadline = match context
+            .store
+            .reconcile_delegated_confirmations(&context.room_id)
+            .await
+        {
+            Ok(deadline) => deadline,
+            Err(error) => {
+                tracing::error!(%error, "confirmation startup reconciliation failed");
+                return;
+            }
+        };
         loop {
             let input = tokio::select! {
+                () = async {
+                    if let Some(deadline) = confirmation_deadline {
+                        let delay = (deadline - chrono::Utc::now()).to_std().unwrap_or_default();
+                        tokio::time::sleep(delay).await;
+                    } else { std::future::pending::<()>().await; }
+                } => RoomInput::Publication,
                 () = context.cancellation.cancelled() => {
                     abort_provider_turns(&mut turn_tasks).await;
                     break;
@@ -577,7 +594,7 @@ fn spawn_room_task(
                     RoomInput::ProviderRecovery(Box::new(assignment))
                 }
             };
-            let retry_exhausted =
+            let mut retry_exhausted =
                 handle_room_input(&context, &mut turn_tasks, &mut provider_write_budget, input)
                     .await
                     .is_some_and(|publication| publication_retry.record(publication));
@@ -590,6 +607,23 @@ fn spawn_room_task(
                 abort_provider_turns(&mut turn_tasks).await;
                 break;
             }
+            confirmation_deadline = match context
+                .store
+                .reconcile_delegated_confirmations(&context.room_id)
+                .await
+            {
+                Ok(deadline) => deadline,
+                Err(error) => {
+                    tracing::error!(%error, room_id = %context.room_id, "confirmation reconciliation failed; room owner is stopping");
+                    abort_provider_turns(&mut turn_tasks).await;
+                    break;
+                }
+            };
+            // Reconciliation commits private transitions after the action's publication.
+            retry_exhausted |= publication_retry.record(
+                publish_durable_room_events(&context.store, &context.event_tx, &context.room_id)
+                    .await,
+            );
             if retry_exhausted {
                 tracing::error!(
                     room_id = %context.room_id,

@@ -91,6 +91,12 @@ impl SqliteStore {
                 "A delegate cannot mute its bound human owner.",
             ));
         }
+        crate::delegated_confirmation_lifecycle::reject_confirmation_identity(
+            &mut tx,
+            authority,
+            request.request_id(),
+        )
+        .await?;
         let payload = serde_json::to_value(request)?;
         let hash = canonical_payload_hash(
             &json!({"request":payload,"owner":proof.owner.participant_id,"delegate":proof.delegate.participant_id}),
@@ -122,7 +128,9 @@ impl SqliteStore {
         let first_seq =
             crate::room_event_sequence::next_sequence(&mut tx, authority.room_id()).await?;
         let (mut mutation, target, description) = match request {
-            DirectRoomAction::StartAgent(_) | DirectRoomAction::StopAgent(_) => {
+            DirectRoomAction::RequestDeleteTextChannel(_)
+            | DirectRoomAction::StartAgent(_)
+            | DirectRoomAction::StopAgent(_) => {
                 return Err(rejected("bad_request", "Use the lifecycle mutation owner."));
             }
             DirectRoomAction::CreateTextChannel(_) | DirectRoomAction::RenameTextChannel(_) => {

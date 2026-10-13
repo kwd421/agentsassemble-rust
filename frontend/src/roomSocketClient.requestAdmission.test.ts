@@ -23,7 +23,7 @@ it("admits all request bodies together only after completion and resets partial 
   expect(handle.ready()).toBe(false); expect(onRoomSnapshot).not.toHaveBeenCalled();
   sockets[1].receiveRaw(next.rawSnapshot); await flushPromises();
   expect(handle.ready()).toBe(true);
-  expect(onRoomSnapshot).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ provider_requests: [body] }), expect.any(String));
+  expect(onRoomSnapshot).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ delegated_action_requests: [], provider_requests: [body] }), expect.any(String));
   handle.close();
 });
 

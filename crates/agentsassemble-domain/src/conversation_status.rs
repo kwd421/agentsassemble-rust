@@ -18,6 +18,7 @@ pub struct AgentActivity {
 pub struct ConversationStatus {
     pub observed_at: String,
     pub agents: Vec<AgentActivity>,
+    pub delegated_action_outcomes: Vec<crate::DelegatedActionOutcome>,
     pub open_votes: Vec<VoteSummary>,
     /// Continue with this cursor even when a page contains only expired polls.
     pub next_before_seq: i64,

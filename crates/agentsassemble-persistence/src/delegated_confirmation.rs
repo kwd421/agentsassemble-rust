@@ -72,6 +72,22 @@ impl SqliteStore {
         let proof =
             DelegatedRoomActionAuthority::direct(&mut tx, authority, "request_delete_text_channel")
                 .await?;
+        crate::command_admission::existing_request_identity(
+            &mut tx,
+            authority.room_id(),
+            &proof.delegate.principal_id,
+            &request.request_id,
+            "request_delete_text_channel",
+            &agentsassemble_domain::canonical_payload_hash(&serde_json::to_value(request)?),
+        )
+        .await
+        .map_err(|error| match error {
+            PersistenceError::CommandConflict => rejected(
+                "request_conflict",
+                "This request ID already identifies another action.",
+            ),
+            other => other,
+        })?;
         let current = settings_in(&mut tx, authority.room_id()).await?;
         if public_settings(&current)?.settings_revision != request.expected_settings_revision {
             return Err(rejected("target_changed", "Room settings have changed."));
@@ -109,9 +125,15 @@ impl SqliteStore {
         {
             expiry = expiry.min(bound);
         }
-        let (pending, recent): (i64, i64) = sqlx::query_as("SELECT COALESCE(SUM(state='pending'),0),COALESCE(SUM(created_at>?),0) FROM delegated_action_requests WHERE room_id=? AND owner_id=?")
-            .bind((now - chrono::Duration::minutes(1)).timestamp_millis()).bind(authority.room_id()).bind(&proof.owner.participant_id).fetch_one(&mut *tx).await?;
-        if pending >= 4 || recent >= 8 {
+        let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND owner_id=? AND state='pending'").bind(authority.room_id()).bind(&proof.owner.participant_id).fetch_one(&mut *tx).await?;
+        let recent: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND owner_id=? AND created_at>?").bind(authority.room_id()).bind(&proof.owner.participant_id).bind((now - chrono::Duration::minutes(1)).timestamp_millis()).fetch_one(&mut *tx).await?;
+        let room_pending: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND state='pending'",
+        )
+        .bind(authority.room_id())
+        .fetch_one(&mut *tx)
+        .await?;
+        if pending >= 4 || room_pending >= 16 || recent >= 8 {
             return Ok((
                 json!({"status":"rejected","code":"rate_limited","message":"Owner confirmation limit reached.","retryable":true,"retry_after_ms":60000}),
                 None,

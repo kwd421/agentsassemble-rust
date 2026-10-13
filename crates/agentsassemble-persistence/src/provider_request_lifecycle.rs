@@ -99,6 +99,12 @@ pub(crate) async fn reconcile_session_in(
     session: &AgentSession,
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
+    crate::delegated_confirmation_lifecycle::reconcile_session_in(
+        tx,
+        &session.room_id,
+        &session.session_id,
+    )
+    .await?;
     let rows = sqlx::query("SELECT * FROM provider_requests WHERE room_id=? AND session_id=? AND state IN ('open','resolving')")
         .bind(&session.room_id).bind(&session.session_id)
         .fetch_all(&mut **tx).await?;

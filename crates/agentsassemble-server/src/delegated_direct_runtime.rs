@@ -74,6 +74,38 @@ pub(crate) async fn execute_with_reply(
     request: &DirectRoomAction,
     reply: impl FnOnce(Result<serde_json::Value, PersistenceError>),
 ) -> Option<crate::event_publication::PublicationAttempt> {
+    if let DirectRoomAction::RequestDeleteTextChannel(delete) = request {
+        let result = async {
+            let _inflight = admission.acquire_inflight()?;
+            let (result, debits) = owners
+                .store
+                .request_delegated_channel_delete(authority, delete, |owner, delegate, bytes| {
+                    charge_request(admission, authority, request, owner, delegate, bytes)
+                })
+                .await?;
+            if let Some(debits) = debits {
+                for debit in debits {
+                    debit.resolve();
+                }
+            }
+            Ok(result)
+        }
+        .await;
+        let publication = if result.is_ok() {
+            Some(
+                crate::event_publication::publish_durable_room_events(
+                    owners.store,
+                    owners.event_tx,
+                    authority.room_id(),
+                )
+                .await,
+            )
+        } else {
+            None
+        };
+        reply(result);
+        return publication;
+    }
     let (reserved, mut progress) = tokio::sync::mpsc::unbounded_channel();
     let execution = apply(
         owners.store,
@@ -163,17 +195,7 @@ pub(crate) async fn apply(
         Err(error) => return CommandExecution::transactional_failure(error).into(),
     };
     let charge = |owner: &str, delegate: &str, bytes| {
-        let hash = canonical_payload_hash(&json!({"delegate":delegate,"request":request}));
-        let identity = MutationIdentity::new(
-            authority.room_id(),
-            request.request_id(),
-            request.name(),
-            &hash,
-        );
-        Ok([
-            admission.charge(owner, identity, bytes)?,
-            admission.charge(delegate, identity, bytes)?,
-        ])
+        charge_request(admission, authority, request, owner, delegate, bytes)
     };
     if matches!(
         request,
@@ -252,4 +274,25 @@ pub(crate) async fn apply(
         }
         Err(error) => CommandExecution::transactional_failure(error).into(),
     }
+}
+
+fn charge_request(
+    admission: &PrincipalMutationAdmission,
+    authority: &DelegateRoomAuthority,
+    request: &DirectRoomAction,
+    owner: &str,
+    delegate: &str,
+    bytes: usize,
+) -> Result<[crate::principal_mutation_admission::MutationDebit; 2], PersistenceError> {
+    let hash = canonical_payload_hash(&json!({"delegate":delegate,"request":request}));
+    let identity = MutationIdentity::new(
+        authority.room_id(),
+        request.request_id(),
+        request.name(),
+        &hash,
+    );
+    Ok([
+        admission.charge(owner, identity, bytes)?,
+        admission.charge(delegate, identity, bytes)?,
+    ])
 }

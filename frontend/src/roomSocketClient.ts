@@ -1,3 +1,4 @@
+import { createDelegatedActionProjection, registerDelegatedActionProjection, applyDelegatedActionEvents } from "./lib/delegatedActionProjection";
 import { remoteSessionTransport } from "./lib/remote/remoteWorkspace";
 import type { RoomSocketConnection } from "./lib/remote/remoteTransport";
 import { parsePublicRoom } from "./lib/roomLifecycleContract";
@@ -127,6 +128,7 @@ export function openRoomSocket(
   const requestTicket = dependencies.getTicket || getWsTicket;
   const createSocket = dependencies.createSocket || ((url: string) => new WebSocket(url));
   const pending = new Map<string, PendingRoomCommand>();
+  const confirmations = createDelegatedActionProjection();
 
   function sendPending() {
     sendPendingForConnection?.();
@@ -285,6 +287,7 @@ export function openRoomSocket(
       );
     }
     lastSeq = nextSeq;
+    confirmations.replace(applyDelegatedActionEvents(confirmations.read(), freshEvents));
     handlers.onRoomEvents?.(freshEvents);
   }
 
@@ -502,6 +505,7 @@ export function openRoomSocket(
               "snapshot_rejected"
             );
           }
+          confirmations.replace(snapshot.delegated_action_requests);
           acceptedRoomUid = snapshot.room.room_uid;
           lastSeq = snapshot.last_seq;
           freshSnapshotRequested = false;
@@ -732,7 +736,7 @@ export function openRoomSocket(
       }
       let requestId: string;
       try {
-        requestId = providerRequestId ?? createSecureRequestId();
+        requestId = providerRequestId ?? (action === "delegated_action.decide" ? String(payload.confirmation_id) : createSecureRequestId());
       } catch {
         reject(new RoomSocketSayError(
           "Secure request identity is unavailable.",
@@ -775,10 +779,11 @@ export function openRoomSocket(
 
   void connect();
 
-  return {
+  const handle: RoomSocketHandle = {
     close: () => {
       const closingSocket = socket;
       closed = true;
+      confirmations.replace([]);
       stopKeepaliveForConnection?.();
       stopKeepaliveForConnection = null;
       connectionGeneration += 1;
@@ -803,4 +808,6 @@ export function openRoomSocket(
       return { events: [] };
     },
   };
+  registerDelegatedActionProjection(handle, confirmations);
+  return handle;
 }

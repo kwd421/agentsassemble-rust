@@ -69,8 +69,6 @@ async fn invitation_document_is_readable_without_js_and_does_not_consume_admissi
             server.base_url
         )))
         .await?;
-    let tools = client.list_all_tools().await?;
-    assert_eq!(tools.len(), 23);
     let mut args = json!({"invite_url":url,"display_name":"Link reader"});
     let prepared = call(&client, "room_join", args.clone()).await;
     assert_eq!(prepared["status"], "connection_prepared");

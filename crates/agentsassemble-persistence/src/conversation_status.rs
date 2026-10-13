@@ -71,6 +71,10 @@ pub(crate) async fn read_in(
     Ok(ConversationStatus {
         observed_at: chrono::Utc::now().to_rfc3339(),
         agents,
+        delegated_action_outcomes: crate::delegated_confirmation_lifecycle::outcomes_in(
+            tx, principal,
+        )
+        .await?,
         open_votes,
         next_before_seq,
     })

@@ -21,6 +21,16 @@ pub(crate) async fn execute_command(
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> CommandExecution {
+    if command.action == RoomAction::DelegatedActionDecide {
+        let result = match serde_json::from_value::<agentsassemble_domain::DecideDelegatedAction>(command.payload.clone()) {
+            Ok(decision) if command.request_id == decision.confirmation_id => store.decide_delegated_action(command.mutation_authority(), &decision).await,
+            _ => Err(PersistenceError::CommandRejected {code:"bad_request".into(),message:"Use the confirmation ID as the decision request ID and an exact decision payload.".into()}),
+        };
+        return match result {
+            Ok(outcome) => CommandExecution::success(outcome),
+            Err(error) => CommandExecution::transactional_failure(error),
+        };
+    }
     if let Some(RoomCommandSession::Browser(authorization)) = &command.session
         && requires_session_dispatch(authorization, command.action)
     {
@@ -107,6 +117,7 @@ pub(crate) async fn execute_command(
         | RoomAction::ChannelHistory
         | RoomAction::RoomVoteSummary
         | RoomAction::SideChatSend
+        | RoomAction::DelegatedActionDecide
         | RoomAction::ProviderRequestResolve => misrouted_durable_command(command.action),
     }
 }

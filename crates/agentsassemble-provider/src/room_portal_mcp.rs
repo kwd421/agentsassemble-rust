@@ -165,6 +165,19 @@ impl RoomPortalMcp {
     }
 
     #[tool(
+        description = "Request deletion of a text channel and its message text, pins and search records. Nothing changes until the exact human owner approves within five minutes. Retry the same request ID to read its outcome."
+    )]
+    async fn request_delete_text_channel(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::DeleteTextChannel>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(
+            agentsassemble_domain::DirectRoomAction::RequestDeleteTextChannel(request),
+        )
+        .await
+    }
+
+    #[tool(
         description = "Rename a text channel at the expected settings revision on behalf of your owner. Requires current director role and owner authority."
     )]
     async fn rename_text_channel(

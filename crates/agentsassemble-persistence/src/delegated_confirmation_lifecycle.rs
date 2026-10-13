@@ -103,9 +103,7 @@ pub(crate) async fn retry_in(
     let Some(row) = sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND request_id=?")
         .bind(authority.room_id()).bind(authority.delegate_id()).bind(request_id).fetch_optional(&mut **tx).await? else { return Ok(None); };
     let binding: Binding = serde_json::from_str(row.get("binding_json"))?;
-    if item(&row)?.action != *action
-        || serde_json::to_value(&binding.authority)? != serde_json::to_value(authority)?
-    {
+    if item(&row)?.action != *action || !binding.authority.same_binding(authority) {
         return Err(rejected(
             "request_conflict",
             "Request identity is bound to a different action or execution.",
@@ -142,6 +140,7 @@ pub(crate) async fn finish_in(
     // Only the correlated outcome reaches the AI; the owner card never does.
     let mut event = base_event(tx, room_id, &request, "delegated_action_outcome").await?;
     event.participant_id = Some(request.delegate_participant_id.clone());
+    event.participant_type = Some("agent".into());
     event.extra = [
         ("visibility".into(), json!("owner")),
         ("owner_id".into(), json!(request.delegate_participant_id)),
@@ -200,12 +199,13 @@ pub(crate) async fn event_in(
         },
     )
     .await?;
-    event.extra = [
-        ("visibility".into(), json!("owner")),
-        ("owner_id".into(), json!(request.owner_participant_id)),
-        ("delegated_action_request".into(), json!(request)),
-    ]
-    .into();
+    event.extra = serde_json::from_value(serde_json::to_value(
+        agentsassemble_domain::DelegatedActionRequestEvent {
+            visibility: "owner".into(),
+            owner_id: request.owner_participant_id.clone(),
+            delegated_action_request: request.clone(),
+        },
+    )?)?;
     crate::room_turns::support::insert_event(tx, &event).await
 }
 
@@ -218,15 +218,7 @@ pub(crate) async fn snapshot_in(
     };
     let rows = sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND owner_id=? AND state='pending'")
         .bind(&p.room_id).bind(&p.participant_id).fetch_all(&mut **tx).await?;
-    let mut requests = Vec::new();
-    for row in rows {
-        refresh_in(tx, &p.room_id, &row).await?;
-        let current = load_in(tx, &p.room_id, row.get("confirmation_id")).await?;
-        if current.get::<&str, _>("state") == "pending" {
-            requests.push(item(&current)?);
-        }
-    }
-    Ok(requests)
+    rows.iter().map(item).collect()
 }
 
 impl SqliteStore {
@@ -252,4 +244,97 @@ impl SqliteStore {
         tx.commit().await?;
         Ok(deadline.and_then(DateTime::from_timestamp_millis))
     }
+}
+
+pub(crate) async fn reconcile_session_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    delegate_id: &str,
+) -> Result<(), PersistenceError> {
+    let rows = sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND state='pending'").bind(room_id).bind(delegate_id).fetch_all(&mut **tx).await?;
+    for row in rows {
+        refresh_in(tx, room_id, &row).await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn outcomes_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+) -> Result<Vec<agentsassemble_domain::DelegatedActionOutcome>, PersistenceError> {
+    let rows = sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND state!='pending' ORDER BY created_at DESC LIMIT 16")
+        .bind(&principal.room_id).bind(&principal.participant_id).fetch_all(&mut **tx).await?;
+    rows.iter()
+        .map(|row| {
+            Ok(agentsassemble_domain::DelegatedActionOutcome {
+                request_id: row.get("request_id"),
+                confirmation_id: row.get("confirmation_id"),
+                state: item(row)?.state,
+                receipt: receipt(row)?,
+            })
+        })
+        .collect()
+}
+
+pub(crate) async fn cancel_execution_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    delegate_id: &str,
+    generation: u64,
+    execution_id: &str,
+) -> Result<Vec<RoomEvent>, PersistenceError> {
+    let first = crate::room_event_sequence::next_sequence(tx, room_id).await?;
+    let rows = sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND state='pending'").bind(room_id).bind(delegate_id).fetch_all(&mut **tx).await?;
+    for row in rows {
+        let binding: Binding = serde_json::from_str(row.get("binding_json"))?;
+        let matches = match binding.authority {
+            DelegateRoomAuthority::Provider {
+                turn_generation,
+                execution_id: bound,
+                ..
+            }
+            | DelegateRoomAuthority::Attendee {
+                turn_generation,
+                execution_id: bound,
+                ..
+            } => turn_generation == generation && bound == execution_id,
+            DelegateRoomAuthority::Connector(_) => false,
+        };
+        if matches {
+            finish_in(
+                tx,
+                room_id,
+                &row,
+                ConfirmationState::Cancelled,
+                &json!({"status":"rejected","code":"confirmation_cancelled","retryable":false}),
+            )
+            .await?;
+        }
+    }
+    let events: Vec<String> = sqlx::query_scalar(
+        "SELECT event_json FROM room_events WHERE room_id=? AND seq>=? ORDER BY seq",
+    )
+    .bind(room_id)
+    .bind(first)
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(events
+        .iter()
+        .map(|event| serde_json::from_str(event))
+        .collect::<Result<_, _>>()?)
+}
+
+pub(crate) async fn reject_confirmation_identity(
+    tx: &mut Transaction<'_, Sqlite>,
+    authority: &DelegateRoomAuthority,
+    request_id: &str,
+) -> Result<(), PersistenceError> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND request_id=?)").bind(authority.room_id()).bind(authority.delegate_id()).bind(request_id).fetch_one(&mut **tx).await?;
+    if exists {
+        return Err(rejected(
+            "request_conflict",
+            "This request ID already identifies a confirmation action.",
+        ));
+    }
+    Ok(())
 }

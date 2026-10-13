@@ -436,6 +436,7 @@ where
         room_settings: settings,
         participants: snapshot_data.participants,
         agent_sessions: snapshot_data.agent_sessions,
+        delegated_action_requests: snapshot_data.delegated_action_requests,
         active_turns: Vec::new(),
         events: snapshot_data
             .events

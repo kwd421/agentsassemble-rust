@@ -52,6 +52,9 @@ pub(crate) fn event(value: Value) -> Result<RoomEvent, PersistenceError> {
         event.content = None;
         event.message_kind = None;
         event.extra.clear();
+        event
+            .extra
+            .insert("visibility".into(), serde_json::json!("owner"));
     }
     let executor = event.extra.get("actor_participant_id");
     let owner = event.extra.get("on_behalf_of_participant_id");
@@ -240,7 +243,7 @@ pub(crate) fn receipt(mut value: Value) -> Result<Value, PersistenceError> {
     let object = value.as_object_mut().ok_or_else(invalid)?;
     for (field, value) in object {
         match field.as_str() {
-            "target_id" | "event_id" => {
+            "target_id" | "event_id" | "confirmation_id" | "channel_id" => {
                 strict::<String>(value.clone())?;
             }
 

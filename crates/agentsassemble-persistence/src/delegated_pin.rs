@@ -47,6 +47,51 @@ impl DelegateRoomAuthority {
         }
     }
 
+    pub(crate) fn same_binding(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Provider {
+                    room_id: a,
+                    session_id: b,
+                    turn_id: c,
+                    input_up_to_seq: d,
+                    turn_generation: e,
+                    execution_id: f,
+                },
+                Self::Provider {
+                    room_id: g,
+                    session_id: h,
+                    turn_id: i,
+                    input_up_to_seq: j,
+                    turn_generation: k,
+                    execution_id: l,
+                },
+            ) => (a, b, c, d, e, f) == (g, h, i, j, k, l),
+            (
+                Self::Attendee {
+                    session: a,
+                    connection_id: b,
+                    turn_generation: c,
+                    execution_id: d,
+                },
+                Self::Attendee {
+                    session: e,
+                    connection_id: f,
+                    turn_generation: g,
+                    execution_id: h,
+                },
+            ) => {
+                a.session_fingerprint() == e.session_fingerprint()
+                    && a.room_uid() == e.room_uid()
+                    && (b, c, d) == (f, g, h)
+            }
+            (Self::Connector(a), Self::Connector(b)) => {
+                a.session_fingerprint() == b.session_fingerprint() && a.room_uid() == b.room_uid()
+            }
+            _ => false,
+        }
+    }
+
     pub(crate) async fn resolve(
         &self,
         tx: &mut Transaction<'_, Sqlite>,
@@ -179,6 +224,12 @@ impl SqliteStore {
         let hash = canonical_payload_hash(&payload);
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let proof = DelegatedRoomActionAuthority::pin(&mut tx, authority).await?;
+        crate::delegated_confirmation_lifecycle::reject_confirmation_identity(
+            &mut tx,
+            authority,
+            &request.request_id,
+        )
+        .await?;
         let delegate = &proof.delegate;
         if let Some(outcome) = crate::command_admission::inspect_non_lifecycle_command(
             &mut tx,

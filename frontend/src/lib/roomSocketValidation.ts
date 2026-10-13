@@ -1,3 +1,4 @@
+import { delegatedActionRequestsAreValid, delegatedActionEventIsValid, delegatedActionAckIsValid } from "./delegatedActionProjection";
 import { roomAttachmentPolicyIsValid } from "./roomAttachmentPolicy";
 import { providerRequestEventIsValid } from "./providerRequestProjection";
 import { anonymizedParticipant } from "./participantAnonymization";
@@ -87,6 +88,7 @@ const GENERATED_SNAPSHOT_KEYS = [
   "room_settings",
   "participants",
   "agent_sessions",
+  "delegated_action_requests",
   "active_turns",
   "events",
   "oldest_seq",
@@ -248,6 +250,7 @@ export function publicRoomEventIsValid(value: unknown, expectedRoomId: string): 
     ) &&
     isSequence(value.seq) &&
     value.seq > 0 &&
+    delegatedActionEventIsValid(value as unknown as RoomEvent) &&
     providerRequestEventIsValid(value as unknown as RoomEvent) &&
     eventProjectionIsValid(value as unknown as RoomEvent)
   );
@@ -366,6 +369,7 @@ export function commandAckResultIsValid(
   expectedRequestId?: string
 ): boolean {
   if (!isRecord(result)) return false;
+  if (action === "delegated_action.decide") return delegatedActionAckIsValid(payload, result);
   if (action === "provider.request.resolve") {
     try {
       assertExactKeys(result, ["provider_request_id", "event_id"], "provider response ACK");
@@ -569,6 +573,7 @@ export function snapshotValidationError(
     !Array.isArray(value.participants) ||
     !Array.isArray(value.agent_sessions) ||
     !pendingProviderRequestsAreValid(value.provider_requests) ||
+    !delegatedActionRequestsAreValid(value.delegated_action_requests) ||
     !Array.isArray(value.active_turns) ||
     !Array.isArray(value.events) ||
     !providerCatalogIsValid(value.provider_catalog) ||
