@@ -72,15 +72,7 @@ function ownerFor(key: string, hostId: string, personId: string): Owner {
     if (sweeping) return;
     sweeping = true;
     try {
-      for (const [roomId, room] of [...owner.rooms]) {
-        if (room.socket) continue;
-        for (const message of owner.snapshot) {
-          if (message.authority.roomId === roomId && (message.phase === "sent" || message.phase === "cancelled")) {
-            void owner.model.discard(message.id);
-          }
-        }
-        forget(key, owner, roomId);
-      }
+      for (const [roomId, room] of [...owner.rooms]) if (!room.socket) sweep(key, owner, roomId);
     } finally { sweeping = false; }
   });
   owners.set(key, owner);
@@ -95,6 +87,15 @@ function forget(key: string, owner: Owner, roomId: string) {
   owner.model.leaveRoom(roomId);
   owner.rooms.delete(roomId);
   if (owner.rooms.size === 0 && owners.get(key) === owner) { owner.model.close(); owners.delete(key); }
+}
+// A room without a watching view: its finished rows have nothing left to clear them.
+function sweep(key: string, owner: Owner, roomId: string) {
+  for (const message of owner.model.snapshot()) {
+    if (message.authority.roomId === roomId && (message.phase === "sent" || message.phase === "cancelled")) {
+      void owner.model.discard(message.id);
+    }
+  }
+  forget(key, owner, roomId);
 }
 function leave(key: string, roomId: string) {
   const owner = owners.get(key);
@@ -136,7 +137,9 @@ export type OutgoingController = {
   discard(id: string): void;
 };
 
-export function useOutgoingMessages({ roomId, participantId, authority, socket, events }: {
+export function useOutgoingMessages({ roomUid, roomId, participantId, authority, socket, events }: {
+  /** The room's lifetime: a recreated room with the same id is a different room. */
+  roomUid: string;
   roomId: string;
   participantId: string;
   authority: MessageAttachmentAuthority | undefined;
@@ -146,7 +149,7 @@ export function useOutgoingMessages({ roomId, participantId, authority, socket, 
   const hostId = !authority || !participantId ? ""
     : authority.kind === "remote" ? sessionHostOrigin(authority.sessionToken) : "local";
   const key = hostId ? `${hostId}\n${participantId}` : "";
-  const principal = hostId && authority ? JSON.stringify([participantId, authority]) : "";
+  const principal = hostId && authority ? JSON.stringify([roomUid, participantId, authority]) : "";
   const identity = principal ? `${principal}#${socketId(socket)}` : "";
   const [admitted, setAdmitted] = useState(0);
   const lastKey = useRef("");
@@ -188,7 +191,8 @@ export function useOutgoingMessages({ roomId, participantId, authority, socket, 
     return () => {
       controller.abort();
       if (entry.socket === socket) entry.socket = null;
-      forget(key, owner, roomId);
+      // Unless the effect re-enters at once, the room is now unwatched: clear what is finished.
+      queueMicrotask(() => { if (!entry.socket && owners.get(key) === owner) sweep(key, owner, roomId); });
     };
     // `authority` is covered by `identity`.
     // eslint-disable-next-line react-hooks/exhaustive-deps

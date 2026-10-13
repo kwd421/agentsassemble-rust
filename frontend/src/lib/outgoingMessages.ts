@@ -13,7 +13,8 @@ export type OutgoingDraft = Readonly<{
 export type OutgoingPhase = "queued" | "admitting" | "deferred" | "transferring" | "validating" | "ready" | "sending" | "sent" | "cancelling" | "cancelled" | "failed" | "outcome_unknown";
 export type OutgoingFailure = Readonly<{ code: string; retryable: boolean }>;
 export type OutgoingFile = Readonly<{
-  file: File; phase: OutgoingPhase; sentBytes: number; acceptedBytes: number;
+  /** Present only until the host has stored the file; publication needs just the receipt. */
+  file?: File; name: string; phase: OutgoingPhase; sentBytes: number; acceptedBytes: number;
   totalBytes: number; attachment?: LobbyAttachmentRef; failure?: OutgoingFailure;
 }>;
 export type OutgoingMessage = Readonly<{
@@ -34,7 +35,7 @@ export type OutgoingOptions = {
 };
 type Job = { abort: AbortController; done: Promise<void> };
 type FileState = {
-  file: File; phase: OutgoingPhase; sentBytes: number; acceptedBytes: number;
+  file?: File; name: string; size: number; phase: OutgoingPhase; sentBytes: number; acceptedBytes: number;
   attachment?: LobbyAttachmentRef; failure?: OutgoingFailure;
   startedAt?: number; nonProgress?: number; transfer?: TransferStatus; operation: string; notBefore: number; job?: Job;
 };
@@ -90,8 +91,10 @@ export class OutgoingMessages {
       message.authority = Object.freeze({ ...authority });
       // Dispatched publication is never repeated by admission, even if its old ACK is lost.
       if (message.phase === "sending" || message.phase === "outcome_unknown") {
+        // The exact request cannot be replayed on the new socket, and a fresh one could
+        // publish the message twice: only delivery can still resolve it.
         message.phase = "outcome_unknown"; message.retryPublication = undefined;
-        message.failure = { code: "outcome_unknown", retryable: true };
+        message.failure = { code: "outcome_unknown", retryable: false };
         continue;
       }
       for (const file of message.files) {
@@ -113,7 +116,7 @@ export class OutgoingMessages {
     const id = createSecureRequestId();
     this.messages.set(id, {
       id, authority: room.authority, text: draft.text, replyToEventId: draft.replyToEventId, request: draft.request, phase: "queued",
-      files: draft.files.map(file => ({ file, phase: "queued", sentBytes: 0, acceptedBytes: 0, operation: createSecureRequestId(), notBefore: 0 })),
+      files: draft.files.map(file => ({ file, name: file.name, size: file.size, phase: "queued", sentBytes: 0, acceptedBytes: 0, operation: createSecureRequestId(), notBefore: 0 })),
     });
     this.changed();
     return id;
@@ -122,8 +125,8 @@ export class OutgoingMessages {
   snapshot(): readonly OutgoingMessage[] {
     return Object.freeze([...this.messages.values()].map(message => {
       const files = Object.freeze(message.files.map(file => Object.freeze({
-        file: file.file, phase: file.phase, sentBytes: file.sentBytes, acceptedBytes: file.acceptedBytes,
-        totalBytes: file.file.size, attachment: file.attachment, failure: file.failure && Object.freeze({ ...file.failure }),
+        file: file.file, name: file.name, phase: file.phase, sentBytes: file.sentBytes, acceptedBytes: file.acceptedBytes,
+        totalBytes: file.size, attachment: file.attachment, failure: file.failure && Object.freeze({ ...file.failure }),
       })));
       return Object.freeze({
         id: message.id, hostId: this.options.hostId, personId: this.options.personId,
@@ -163,7 +166,7 @@ export class OutgoingMessages {
 
   retry(id: string): boolean {
     const message = this.messages.get(id);
-    if (!message || !this.current(message) || !(message.phase === "cancelled" && message.failure?.retryable !== false || message.phase === "outcome_unknown" || message.phase === "failed" && message.failure?.retryable)) return false;
+    if (!message || !this.current(message) || !(message.phase === "cancelled" && message.failure?.retryable !== false || message.phase === "outcome_unknown" && message.retryPublication || message.phase === "failed" && message.failure?.retryable)) return false;
     const cancelled = message.phase === "cancelled";
     message.phase = "queued"; message.failure = undefined;
     for (const file of message.files) {
@@ -279,7 +282,7 @@ export class OutgoingMessages {
     });
     const response = <T>(pending: Promise<T>) => Promise.race([pending, expiry]);
     const progress = (next: TransferStatus, lower: number, upper: number) => {
-      const checked = validateTransferProgress(next, transfer, file.file.size, lower, upper);
+      const checked = validateTransferProgress(next, transfer, file.size, lower, upper);
       if (!valid()) return checked;
       file.nonProgress = checked.accepted_offset > (transfer?.accepted_offset ?? 0) || checked.attachment ? 0 : (file.nonProgress ?? 0) + 1;
       if (file.nonProgress >= 8 || this.clock.now() - file.startedAt! >= 10 * 60 * 1000) throw stalled();
@@ -287,6 +290,11 @@ export class OutgoingMessages {
       return checked;
     };
     let transfer = file.transfer;
+    const source = file.file;
+    if (!source) return;
+    const pin = (attachment: LobbyAttachmentRef) => {
+      file.attachment = Object.freeze({ ...attachment }); file.acceptedBytes = file.size; file.file = undefined;
+    };
     const valid = () => !signal.aborted && this.current(message) && sameAuthority(message.authority, authority);
     const update = (phase: OutgoingPhase) => {
       file.phase = phase;
@@ -297,21 +305,21 @@ export class OutgoingMessages {
       if (!valid()) return;
       update("admitting");
       if (!uploads.transfer) {
-        update("transferring"); file.sentBytes = file.file.size;
-        const attachment = await response(uploads.legacy(file.file, signal));
-        if (valid()) { file.attachment = Object.freeze({ ...attachment }); file.acceptedBytes = file.file.size; update("ready"); }
+        update("transferring"); file.sentBytes = file.size;
+        const attachment = await response(uploads.legacy(source, signal));
+        if (valid()) { pin(attachment); update("ready"); }
         return;
       }
       transfer = transfer
         ? progress(await response(uploads.status(transfer.handle, signal)), transfer.accepted_offset, file.sentBytes)
-        : progress(await response(uploads.begin(file.file, file.operation, signal)), 0, 0);
+        : progress(await response(uploads.begin(source, file.operation, signal)), 0, 0);
       let recoveredOffset: number | undefined;
       while (valid()) {
         file.transfer = transfer; file.acceptedBytes = transfer.accepted_offset;
         file.sentBytes = Math.max(file.sentBytes, file.acceptedBytes);
-        if (transfer.attachment) { file.attachment = Object.freeze({ ...transfer.attachment }); update("ready"); return; }
+        if (transfer.attachment) { pin(transfer.attachment); update("ready"); return; }
         const offset = transfer.accepted_offset;
-        if (offset === file.file.size) {
+        if (offset === file.size) {
           update("validating");
           try {
             const finished = await response(uploads.finish(transfer.handle, signal));
@@ -325,7 +333,7 @@ export class OutgoingMessages {
           }
         } else {
           update("transferring");
-          const body = file.file.slice(offset, Math.min(file.file.size, offset + segmentBytes(file.file.size, transfer.piece_size)));
+          const body = source.slice(offset, Math.min(file.size, offset + segmentBytes(file.size, transfer.piece_size)));
           file.sentBytes = Math.max(file.sentBytes, offset + body.size); this.changed();
           try { transfer = progress(await response(uploads.data(transfer.handle, offset, body, signal)), offset, offset + body.size); }
           catch (error) {
@@ -351,7 +359,7 @@ export class OutgoingMessages {
       this.clock.clearTimeout(deadline);
       if (!valid() && transfer) {
         if (transfer.attachment && this.current(message) && sameAuthority(message.authority, authority) && message.phase === "cancelling") {
-          file.attachment = Object.freeze({ ...transfer.attachment }); file.acceptedBytes = file.file.size; file.phase = "ready";
+          pin(transfer.attachment); file.phase = "ready";
         }
         try {
           await this.retire(transfer, uploads);
@@ -387,8 +395,9 @@ export class OutgoingMessages {
     } catch (error) {
       if (!this.current(message) || !sameAuthority(message.authority, authority) || (message.phase as OutgoingPhase) === "sent") return;
       if (!(error instanceof RoomSocketSayError) || error.category === "outcome_unknown") {
-        message.phase = "outcome_unknown"; message.failure = { code: "outcome_unknown", retryable: true };
         message.retryPublication = error instanceof RoomSocketSayError ? error.retry : undefined;
+        message.phase = "outcome_unknown";
+        message.failure = { code: "outcome_unknown", retryable: Boolean(message.retryPublication) };
       } else { message.phase = "failed"; message.failure = failure(error); }
     }
     this.changed();

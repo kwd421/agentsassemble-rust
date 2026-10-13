@@ -52,7 +52,8 @@ export function supportsMessageAttachmentPreview(token: string, path: string): b
 }
 
 export function fetchPlainProductTransport(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(path, init).then(response => {
+  // A host must not be able to send this request's credentials or body elsewhere.
+  return fetch(path, { ...init, redirect: "error", referrerPolicy: "no-referrer" }).then(response => {
     // GET room-settings is the successful admission/probe response. Unrelated
     // responses (including uploads, errors and redirects) cannot rewrite it.
     if ((init.method ?? "GET").toUpperCase() !== "GET" ||

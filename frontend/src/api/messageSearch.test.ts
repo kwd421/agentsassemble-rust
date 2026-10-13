@@ -258,7 +258,7 @@ describe("lobby message-search HTTP authority", () => {
     ]);
     for (const [, init] of fetchMock.mock.calls) {
       expect(init).toEqual({
-        cache: "no-store",
+        cache: "no-store", redirect: "error", referrerPolicy: "no-referrer",
         headers: { Authorization: `Bearer ${sessionToken}`,
           ...(deviceToken ? { "X-Device-Token": deviceToken } : {}),
         },

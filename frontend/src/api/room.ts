@@ -21,6 +21,7 @@ import {
   postJsonServerOperator,
   postJsonWithIdentity,
   queryString,
+  readBoundedJson,
   responseError,
 } from "./http";
 import {
@@ -539,7 +540,7 @@ async function requestSessionRoomPreferences(
   if (deviceToken) headers.set("X-Device-Token", deviceToken);
   const response = await fetchProductTransport(url, { ...init, cache: "no-store", headers });
   if (!response.ok) throw await responseError(response);
-  return response.json();
+  return readBoundedJson(response);
 }
 
 export function createRoom(

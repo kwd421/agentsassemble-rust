@@ -6,7 +6,7 @@ import { messageAttachmentId } from "../lib/messageAttachmentId";
 import { canonicalRoomId } from "../lib/canonicalRoomId";
 import { strictRecord, assertExactKeys } from "../lib/strictJsonContract";
 import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
-import { isPrivateNoStoreResponse } from "./http";
+import { isPrivateNoStoreResponse, readBoundedJson } from "./http";
 import { UploadFailure } from "./uploadFailure";
 export { UploadFailure } from "./uploadFailure";
 
@@ -97,7 +97,7 @@ export async function createMessageAttachmentUploadClient(
     if (body !== undefined) headers.set("Content-Type", typeof body === "string" ? "application/json" : "application/octet-stream");
     const response = await fetchProductTransport(`${resolved.base}/api/message-attachment-transfers${path}`, { method, headers, body, cache: "no-store", signal });
     if (!isPrivateNoStoreResponse(response, "application/json")) throw new UploadFailure("invalid_upload_response", false);
-    const value = await response.json();
+    const value = await readBoundedJson(response);
     if (!response.ok) {
       const error = strictRecord(value, "upload error");
       if (typeof error.code !== "string") throw new UploadFailure("invalid_upload_response", false);
@@ -122,7 +122,13 @@ export async function createMessageAttachmentUploadClient(
     finish: async (handle, signal) => parseStatus(await request(`${target(handle)}/finish`, "POST", signal)),
     status: async (handle, signal) => parseStatus(await request(target(handle), "GET", signal)),
     cancel: async handle => {
-      const result = strictRecord(await request(target(handle), "DELETE"), "upload cancel");
+      // Cleanup must not hold a slot or a file forever when the host never answers.
+      const deadline = new AbortController();
+      const timer = setTimeout(() => deadline.abort(new UploadFailure("upload_cancel_timeout", true)), 10_000);
+      let response: unknown;
+      try { response = await request(target(handle), "DELETE", deadline.signal); }
+      finally { clearTimeout(timer); }
+      const result = strictRecord(response, "upload cancel");
       assertExactKeys(result, ["cancelled"], "upload cancel");
       if (result.cancelled !== true) throw new UploadFailure("invalid_upload_response", false);
     },

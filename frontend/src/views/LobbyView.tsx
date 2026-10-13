@@ -207,7 +207,7 @@ export default function LobbyView({
     [postingMode, roomSessionToken, roomDeviceToken]
   );
   const outgoing = useOutgoingMessages({
-    roomId: activeRoom.meetingId, participantId: viewerParticipantId,
+    roomUid, roomId: activeRoom.meetingId, participantId: viewerParticipantId,
     authority: canPostMessages ? messageAttachmentAuthority : undefined,
     socket: roomSocket, events: visibleEvents,
   });
@@ -700,7 +700,7 @@ export default function LobbyView({
                 bytesDone={message.acceptedBytes} bytesTotal={message.totalBytes}
                 error={failed ? outgoing.failureText(message) : undefined}
                 onCancel={message.phase === "sending" || message.phase === "sent" ? undefined : () => outgoing.cancel(message.id)}
-                onRetry={failed && (message.phase === "outcome_unknown" || message.failure?.retryable) ? () => outgoing.retry(message.id) : undefined}
+                onRetry={failed && message.failure?.retryable ? () => outgoing.retry(message.id) : undefined}
                 onDiscard={() => outgoing.discard(message.id)}
               />
             </MessageRow>

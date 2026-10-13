@@ -223,7 +223,7 @@ describe("room preference HTTP authority", () => {
     ).rejects.toThrow("Read-only room sessions cannot change preferences.");
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith("/api/room-settings", {
-      cache: "no-store",
+      cache: "no-store", redirect: "error", referrerPolicy: "no-referrer",
       method: "POST",
       headers: expect.any(Headers),
       body: JSON.stringify({

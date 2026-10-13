@@ -348,7 +348,7 @@ describe("browser session WebSocket ticket routing", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith("/api/session-tickets/socket", {
-      cache: "no-store",
+      cache: "no-store", redirect: "error", referrerPolicy: "no-referrer",
       method: "POST",
       headers: {
         Authorization: `Bearer ${sessionToken}`,

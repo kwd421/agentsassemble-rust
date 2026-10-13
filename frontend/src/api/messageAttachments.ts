@@ -28,6 +28,7 @@ import {
 import {
   fileToBase64,
   isPrivateNoStoreResponse,
+  readBoundedJson,
   responseError,
 } from "./http";
 import type { RoomHttpAuthority } from "./roomHttpAuthority";
@@ -212,7 +213,7 @@ export async function uploadMessageAttachment(
   });
   if (!response.ok) throw await responseError(response);
   if (!isPrivateNoStoreResponse(response, "application/json")) invalidResponse();
-  return parseUploadResponse(await response.json(), file);
+  return parseUploadResponse(await readBoundedJson(response), file);
 }
 
 export async function fetchMessageAttachmentBlob(

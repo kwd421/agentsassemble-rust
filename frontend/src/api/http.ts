@@ -303,9 +303,33 @@ export async function deleteJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
+/** Control responses are small; a host cannot make the client buffer an endless one. */
+export const MAX_CONTROL_RESPONSE_BYTES = 1024 * 1024;
+export async function readBoundedText(response: Response, limit = MAX_CONTROL_RESPONSE_BYTES): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return response.text();
+  const decoder = new TextDecoder();
+  let size = 0; let text = "";
+  try {
+    for (;;) {
+      const part = await reader.read();
+      if (part.done) break;
+      size += part.value.length;
+      if (size > limit) throw new Error("서버 응답이 너무 커요.");
+      text += decoder.decode(part.value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+}
+export async function readBoundedJson(response: Response, limit = MAX_CONTROL_RESPONSE_BYTES): Promise<unknown> {
+  return response.body ? JSON.parse(await readBoundedText(response, limit)) : response.json();
+}
+
 export async function responseError(res: Response): Promise<ApiError> {
   const fallback = `${res.status} ${res.statusText}`;
-  const text = await res.text().catch(() => "");
+  const text = await readBoundedText(res).catch(() => "");
   if (!text) return new ApiError(res.status, fallback);
   try {
     const payload = JSON.parse(text) as {

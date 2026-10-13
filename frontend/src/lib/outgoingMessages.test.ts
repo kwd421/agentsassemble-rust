@@ -299,3 +299,16 @@ test("a suspended room starts and publishes nothing until it is admitted again",
   model.admit({ ...authority, generation: 2 }, client); client.data = data; await flush();
   expect(one(model).phase).toBe("sent"); expect(publish).toHaveBeenCalledTimes(1); model.close();
 });
+
+test("a publication interrupted by re-admission is never re-sent, and stored files are released", async () => {
+  const { model, client, publish } = fixture();
+  const pending = gate<RoomCommandAck>();
+  publish.mockImplementationOnce(() => pending.promise);
+  const id = model.send(authority, { text: "", files: [file()] }); await flush();
+  expect(one(model).phase).toBe("sending");
+  expect(one(model).files[0].file).toBeUndefined();
+  model.suspend(authority.roomId); model.admit({ ...authority, generation: 2 }, client); await flush();
+  expect(one(model)).toMatchObject({ phase: "outcome_unknown", failure: { retryable: false } });
+  expect(model.retry(id)).toBe(false); await flush();
+  expect(publish).toHaveBeenCalledTimes(1); model.close();
+});

@@ -12,7 +12,7 @@ describe("private side-chat HTTP cut", () => {
     const authority = { kind: "remote" as const, sessionToken: "session", deviceToken: "device" };
     const signal = new AbortController().signal;
     await expect(fetchSideChatSnapshot("general", "uid", authority, signal)).resolves.toEqual(data);
-    expect(fetch).toHaveBeenCalledWith("/api/side-chat?room_id=general", { signal, cache: "no-store", headers: { Authorization: "Bearer session", "X-Device-Token": "device" } });
+    expect(fetch).toHaveBeenCalledWith("/api/side-chat?room_id=general", { signal, cache: "no-store", redirect: "error", referrerPolicy: "no-referrer", headers: { Authorization: "Bearer session", "X-Device-Token": "device" } });
     fetch.mockResolvedValue(new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", "Cache-Control": "public" } }));
     await expect(fetchSideChatSnapshot("general", "uid", authority, signal)).rejects.toThrow("보호 설정");
   });
