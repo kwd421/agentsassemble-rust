@@ -195,14 +195,12 @@ impl AttendeeExecution {
                         content,
                         target_agent_id,
                         reply_to_event_id,
-                    } if attachment_ids.is_empty() => AttendeeTurnOutcome::Message {
+                    } => AttendeeTurnOutcome::Message {
                         content,
                         target_agent_id,
                         reply_to_event_id,
+                        attachment_ids,
                     },
-                    ProviderTurnOutcome::Message { .. } => {
-                        return Err(AttendeeClientError::local("workspace_upload_unavailable"));
-                    }
                     ProviderTurnOutcome::Declined { reason_code } => {
                         AttendeeTurnOutcome::Declined { reason_code }
                     }

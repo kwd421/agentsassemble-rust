@@ -11,6 +11,8 @@ mod socket;
 mod socket_protocol;
 #[path = "tool_web.rs"]
 mod tool;
+#[path = "transfer_web.rs"]
+mod transfer;
 
 use crate::{
     AppState,
@@ -52,6 +54,11 @@ registered_routes! {
         same_origin_public "/api/room-attendee/interrupt" => post(interrupt::report),
         same_origin_public "/api/room-attendee/leave" => post(cleanup::leave),
         same_origin_public "/api/room-attendee/tool/read" => post(tool::read),
+        same_origin_public "/api/room-attendee/tool/upload/begin" => post(transfer::begin),
+        same_origin_public "/api/room-attendee/tool/upload/{handle}/data" => post(transfer::data),
+        same_origin_public "/api/room-attendee/tool/upload/{handle}/finish" => post(transfer::finish),
+        same_origin_public "/api/room-attendee/tool/upload/{handle}" => delete(transfer::cancel),
+        same_origin_public "/api/room-attendee/tool/attachment/download" => get(transfer::download),
         same_origin_public "/api/room-attendee/tool/direct" => post(tool::direct),
         same_origin_public "/api/room-attendee/tool/pin" => post(tool::pin),
         same_origin_public "/api/room-attendee/tool/random" => post(tool::random),
@@ -99,6 +106,7 @@ async fn join(
         "provider_kind": authority.provider_kind(),
         "expires_at": authority.expires_at(),
         "deduplicated": admitted.deduplicated,
+        "attachment_transfers": true,
     })))
 }
 
@@ -127,6 +135,21 @@ impl AttendeeHttpError {
             code: code.into(),
             resolution: CommandResolution::Rejected,
             message: None,
+        }
+    }
+
+    pub(super) fn from_profile(error: crate::profile_web::ProfileHttpError) -> Self {
+        let (status, code, message) = error.into_http_parts();
+        let resolution = if code == "upload_interrupted" {
+            CommandResolution::Unresolved
+        } else {
+            CommandResolution::Rejected
+        };
+        Self {
+            status,
+            code,
+            resolution,
+            message: Some(message),
         }
     }
 

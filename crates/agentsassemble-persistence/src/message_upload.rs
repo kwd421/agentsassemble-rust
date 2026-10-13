@@ -19,6 +19,7 @@ pub enum MessageUploadAuthority {
     },
     Session(Box<RoomSessionAuthorization>),
     Provider(Box<crate::ProviderFileAuthority>),
+    Attendee(Box<crate::AttendeeFileAuthority>),
 }
 
 impl MessageUploadAuthority {
@@ -26,6 +27,7 @@ impl MessageUploadAuthority {
     pub fn identity(&self) -> (&str, &str, &str) {
         match self {
             Self::Provider(p) => (&p.room_id, &p.session_id, &p.participant_id),
+            Self::Attendee(a) => (&a.room_id, &a.session_id, &a.participant_id),
             Self::Local {
                 room_id,
                 user_id,
@@ -43,6 +45,7 @@ impl MessageUploadAuthority {
             && match (self, other) {
                 (Self::Local { .. }, Self::Local { .. }) => true,
                 (Self::Provider(a), Self::Provider(b)) => a == b,
+                (Self::Attendee(a), Self::Attendee(b)) => a == b,
                 (Self::Session(a), Self::Session(b)) => {
                     a.session_fingerprint() == b.session_fingerprint()
                 }
@@ -55,6 +58,7 @@ impl MessageUploadAuthority {
     ) -> Result<AuthenticatedPrincipal, PersistenceError> {
         match self {
             Self::Provider(p) => p.resolve(tx).await,
+            Self::Attendee(a) => a.resolve(tx).await,
             Self::Local {
                 room_id,
                 user_id,

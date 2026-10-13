@@ -65,6 +65,7 @@ async fn attendee_report_replacement_and_response_loss_preserve_one_canonical_co
         content: "Changed result".to_owned(),
         target_agent_id: String::new(),
         reply_to_event_id: None,
+        attachment_ids: Vec::new(),
     };
     assert!(matches!(
         store
@@ -203,6 +204,7 @@ pub(crate) async fn assigned_report() -> Result<
             content: "Exact external result".to_owned(),
             target_agent_id: String::new(),
             reply_to_event_id: None,
+            attachment_ids: Vec::new(),
         },
     };
     Ok((store, connection, report, now))

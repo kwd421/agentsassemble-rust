@@ -849,6 +849,11 @@ impl ProfileHttpError {
             message: "Persistence operation failed.".to_owned(),
         }
     }
+
+    /// Moves the wire rejection triple to another transport owner without new fallbacks.
+    pub(crate) fn into_http_parts(self) -> (StatusCode, std::borrow::Cow<'static, str>, String) {
+        (self.status, self.code, self.message)
+    }
 }
 
 impl From<PersistenceError> for ProfileHttpError {

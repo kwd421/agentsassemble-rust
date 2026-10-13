@@ -34,6 +34,9 @@ pub enum AttendeeTurnOutcome {
         target_agent_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reply_to_event_id: Option<String>,
+        /// Pending upload IDs from the attendee transfer endpoints, bound on publish.
+        #[serde(default)]
+        attachment_ids: Vec<String>,
     },
     Vote {
         payload: Value,
@@ -163,6 +166,7 @@ async fn apply_report(
             content,
             target_agent_id,
             reply_to_event_id,
+            attachment_ids,
         } => {
             completion::complete_message(
                 tx,
@@ -172,7 +176,7 @@ async fn apply_report(
                 content,
                 target_agent_id,
                 reply_to_event_id.as_deref(),
-                &[],
+                attachment_ids,
             )
             .await
         }

@@ -53,6 +53,67 @@ impl ProviderFileAuthority {
         )
     }
 }
+
+/// Attendee upload custody: the same room/quota/turn checks as managed runs,
+/// resolved through the attendee's admission instead of a server-owned runtime.
+#[derive(Clone, PartialEq, Eq)]
+pub struct AttendeeFileAuthority {
+    pub room_id: String,
+    pub session_id: String,
+    pub participant_id: String,
+    pub session_fingerprint: [u8; 32],
+    pub connection_id: uuid::Uuid,
+    pub turn_generation: u64,
+    pub execution_id: String,
+}
+
+impl AttendeeFileAuthority {
+    pub(crate) async fn resolve(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+    ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+        let connection = crate::attendee::connection::authorize_current_in(
+            tx,
+            &self.session_fingerprint,
+            self.connection_id,
+            chrono::Utc::now(),
+        )
+        .await?;
+        let session = crate::attendee::tool_authority::load_turn_in(
+            tx,
+            &connection,
+            self.turn_generation,
+            &self.execution_id,
+        )
+        .await?;
+        if session.public.room_id != self.room_id
+            || session.public.session_id != self.session_id
+            || session.public.participant_id != self.participant_id
+        {
+            return Err(crate::room_turns::support::rejected(
+                "stale_provider_turn",
+                "The attendee turn no longer matches its upload custody.",
+            ));
+        }
+        if !matches!(
+            session.public.permission_mode.as_str(),
+            "workspace_write" | "full_access"
+        ) {
+            return Err(crate::room_turns::support::rejected(
+                "permission_denied",
+                "This agent has no workspace file access.",
+            ));
+        }
+        let participant =
+            crate::room_turns::support::load_participant(tx, &self.room_id, &self.participant_id)
+                .await?;
+        crate::room_turns::support::provider_room_principal(
+            &session,
+            &participant,
+            InviteScope::ReadWrite,
+        )
+    }
+}
 impl SqliteStore {
     /// Load the configured workspace only under the current attachment-turn custody.
     /// # Errors

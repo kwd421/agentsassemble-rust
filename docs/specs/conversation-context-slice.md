@@ -103,7 +103,17 @@ staging. `cargo fmt --all -- --check`, `make architecture-check` (19 policy test
 and `git diff --check` pass. Earlier overlapping runs hit shared fixture
 lease/peer failures; the isolated server rerun passed. No real provider, packaged UI or
 Windows verification. Existing human raster finish still buffers encoded images;
-transfer buffering remains bounded. Attendee (b) and connector (c) are pending;
+transfer buffering remains bounded. Attendee (b) budgets verified at their owners before implementation: path
+uploads share the provider portal's existing 32 successful-room-tool-results
+per-turn admission and ten-attachments-per-message limit; reads share ten
+distinct IDs, two attempts each and 200 MiB successful aggregate bytes,
+including saved-path reads; host transfer admission (three active transfers
+per principal, one-hour pending expiry, quota reserved at begin) and the shared
+download budget (encoded/stream leases) are the same owners as managed.
+Affected entry points for (b): attendee `UploadAttachment` client tool and
+attachment read, host `tool/upload/*` + `tool/attachment/download` transfer
+endpoints, `AttendeeTurnOutcome::Message` attachment IDs, join capability flag.
+Attendee (b) and connector (c) are pending;
 the attendee's inherited path-upload entry currently refuses explicitly.
 
 ## Verification matrix

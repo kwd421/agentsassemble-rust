@@ -291,6 +291,7 @@ async fn publish_external_result(
             content: "External queue result".to_owned(),
             target_agent_id: String::new(),
             reply_to_event_id: None,
+            attachment_ids: Vec::new(),
         },
     };
     let result = rooms

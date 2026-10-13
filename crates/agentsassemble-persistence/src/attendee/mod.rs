@@ -7,6 +7,9 @@ pub(crate) mod cleanup_tests;
 pub(crate) mod connection;
 #[cfg(test)]
 pub(crate) mod connection_tests;
+#[cfg(test)]
+#[path = "file_parity_tests.rs"]
+pub(crate) mod file_parity_tests;
 pub(crate) mod interrupt;
 #[cfg(test)]
 pub(crate) mod interrupt_tests;
