@@ -30,6 +30,65 @@ pub struct ParticipantRemovalMutation {
     pub cleanup: Option<RoomRuntimeCleanupKey>,
 }
 
+/// What one committed participant removal produced, shared by the owner's own kick
+/// and the owner-confirmed delegated removal. `event` is the canonical removal event
+/// and the last entry of `events`.
+pub(crate) struct ParticipantRemovalCommit {
+    pub events: Vec<RoomEvent>,
+    pub event: RoomEvent,
+    pub participant: Participant,
+    pub revoked_session_fingerprints: Vec<[u8; 32]>,
+    pub cleanup: Option<RoomRuntimeCleanupKey>,
+}
+
+/// Commits one participant removal inside the caller's transaction: the state
+/// transition, access revocation, canonical event and durable runtime-cleanup
+/// reservation. The owner's own kick and the delegated removal share this core.
+/// # Errors
+/// Rejects an exported or already-removed target; propagates storage failures.
+pub(crate) async fn removal_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    target_id: &str,
+    status: ParticipantStatus,
+    event_type: &str,
+) -> Result<ParticipantRemovalCommit, PersistenceError> {
+    let mut participant = load_participant(transaction, &principal.room_id, target_id).await?;
+    require_removal_transition(participant.status, status)?;
+    let mut events = Vec::new();
+    let cleanup = if participant.participant_type == "agent"
+        && !crate::connector_session::owns_participant(transaction, &principal.room_id, target_id)
+            .await?
+    {
+        let mut session = load_session(transaction, &principal.room_id, target_id).await?;
+        request_runtime_cleanup(transaction, &mut session).await?;
+        events.push(session_state_event(transaction, &session).await?);
+        Some(RoomRuntimeCleanupKey {
+            room_id: principal.room_id.clone(),
+            session_id: target_id.to_owned(),
+        })
+    } else {
+        None
+    };
+    let revoked_session_fingerprints =
+        revoke_participant_access(transaction, &principal.room_id, target_id).await?;
+    participant.status = status;
+    participant.updated_at = Utc::now();
+    save_participant_exact(transaction, &principal.room_id, target_id, &participant).await?;
+    crate::member_projection::participant_changed(transaction, &principal.room_id, target_id)
+        .await?;
+    let event = removal_event(transaction, principal, &participant, event_type).await?;
+    insert_event(transaction, &event).await?;
+    events.push(event.clone());
+    Ok(ParticipantRemovalCommit {
+        events,
+        event,
+        participant,
+        revoked_session_fingerprints,
+        cleanup,
+    })
+}
+
 impl SqliteStore {
     /// Commits exact participant removal and access revocation before runtime cleanup.
     ///
@@ -68,49 +127,13 @@ impl SqliteStore {
                 cleanup: None,
             });
         }
-        let mut participant =
-            load_participant(&mut transaction, &principal.room_id, &target_id).await?;
-        require_removal_transition(participant.status, status)?;
-        let mut events = Vec::new();
-        let cleanup = if participant.participant_type == "agent"
-            && !crate::connector_session::owns_participant(
-                &mut transaction,
-                &principal.room_id,
-                &target_id,
-            )
-            .await?
-        {
-            let mut session =
-                load_session(&mut transaction, &principal.room_id, &target_id).await?;
-            request_runtime_cleanup(&mut transaction, &mut session).await?;
-            events.push(session_state_event(&mut transaction, &session).await?);
-            Some(RoomRuntimeCleanupKey {
-                room_id: principal.room_id.clone(),
-                session_id: target_id.clone(),
-            })
-        } else {
-            None
-        };
-        let revoked_session_fingerprints =
-            revoke_participant_access(&mut transaction, &principal.room_id, &target_id).await?;
-        participant.status = status;
-        participant.updated_at = Utc::now();
-        save_participant_exact(
-            &mut transaction,
-            &principal.room_id,
-            &target_id,
-            &participant,
-        )
-        .await?;
-        crate::member_projection::participant_changed(
-            &mut transaction,
-            &principal.room_id,
-            &target_id,
-        )
-        .await?;
-        let event = removal_event(&mut transaction, principal, &participant, event_type).await?;
-        insert_event(&mut transaction, &event).await?;
-        events.push(event.clone());
+        let ParticipantRemovalCommit {
+            events,
+            event,
+            participant,
+            revoked_session_fingerprints,
+            cleanup,
+        } = removal_in(&mut transaction, principal, &target_id, status, event_type).await?;
         let result = json!({
             "participant": participant,
             "revoked_sessions": revoked_session_fingerprints.len(),
@@ -171,7 +194,7 @@ fn removal_action(action: &str) -> Result<(ParticipantStatus, &'static str), Per
     }
 }
 
-fn authorized_removal_target(
+pub(crate) fn authorized_removal_target(
     principal: &AuthenticatedPrincipal,
     payload: &Value,
 ) -> Result<String, PersistenceError> {
