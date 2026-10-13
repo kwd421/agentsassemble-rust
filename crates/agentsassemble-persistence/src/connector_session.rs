@@ -172,7 +172,7 @@ pub(crate) async fn revalidate_in(
     record.authorize(&expected.fingerprint, now)
 }
 
-pub(super) async fn authorize_in(
+pub(crate) async fn authorize_in(
     tx: &mut Transaction<'_, Sqlite>,
     fingerprint: &[u8; 32],
     now: DateTime<Utc>,

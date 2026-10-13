@@ -741,6 +741,7 @@ pub(crate) async fn require_storage_capacity(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
     size: i64,
+    enforce_current_limit: bool,
 ) -> Result<(), PersistenceError> {
     crate::message_upload::expire_in(transaction).await?;
     let created_at = Utc::now().timestamp();
@@ -755,7 +756,10 @@ pub(crate) async fn require_storage_capacity(
 
     let settings =
         crate::room_preferences::load_room_settings(transaction, &principal.room_id).await?;
-    if principal.client_kind != ClientKind::RoomConnector {
+    // The inline connector path is pre-capped at 10 MiB, at or below every room
+    // setting, so it keeps its existing exemption; the chunked transfer path
+    // declares larger sizes and is held to the current room limit like everyone.
+    if principal.client_kind != ClientKind::RoomConnector || enforce_current_limit {
         require_file_size(size as usize, settings.attachment_file_limit_bytes)?;
     }
     if let Some(limit) = settings.attachment_storage_limit_bytes {
@@ -781,7 +785,7 @@ async fn store_pending_in_transaction(
     let now = Utc::now();
     let created_at = now.timestamp();
     let expires_at = (now + PENDING_ATTACHMENT_TTL).timestamp();
-    require_storage_capacity(transaction, principal, prepared.size).await?;
+    require_storage_capacity(transaction, principal, prepared.size, false).await?;
 
     let attachment_id = format!("{MESSAGE_ATTACHMENT_ID_PREFIX}{}", Uuid::new_v4().simple());
     if matches!(

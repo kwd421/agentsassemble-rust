@@ -20,6 +20,7 @@ pub enum MessageUploadAuthority {
     Session(Box<RoomSessionAuthorization>),
     Provider(Box<crate::ProviderFileAuthority>),
     Attendee(Box<crate::AttendeeFileAuthority>),
+    Connector(Box<crate::ConnectorFileAuthority>),
 }
 
 impl MessageUploadAuthority {
@@ -28,6 +29,7 @@ impl MessageUploadAuthority {
         match self {
             Self::Provider(p) => (&p.room_id, &p.session_id, &p.participant_id),
             Self::Attendee(a) => (&a.room_id, &a.session_id, &a.participant_id),
+            Self::Connector(c) => (&c.room_id, &c.participant_id, &c.participant_id),
             Self::Local {
                 room_id,
                 user_id,
@@ -46,6 +48,7 @@ impl MessageUploadAuthority {
                 (Self::Local { .. }, Self::Local { .. }) => true,
                 (Self::Provider(a), Self::Provider(b)) => a == b,
                 (Self::Attendee(a), Self::Attendee(b)) => a == b,
+                (Self::Connector(a), Self::Connector(b)) => a == b,
                 (Self::Session(a), Self::Session(b)) => {
                     a.session_fingerprint() == b.session_fingerprint()
                 }
@@ -59,6 +62,7 @@ impl MessageUploadAuthority {
         match self {
             Self::Provider(p) => p.resolve(tx).await,
             Self::Attendee(a) => a.resolve(tx).await,
+            Self::Connector(c) => c.resolve(tx).await,
             Self::Local {
                 room_id,
                 user_id,
@@ -159,7 +163,13 @@ impl SqliteStore {
             return Ok(result);
         }
         attachments::require_file_size(size, agentsassemble_domain::MAX_ROOM_FILE_BYTES)?;
-        attachments::require_storage_capacity(&mut tx, &p, size as i64).await?;
+        attachments::require_storage_capacity(
+            &mut tx,
+            &p,
+            size as i64,
+            matches!(authority, MessageUploadAuthority::Connector(_)),
+        )
+        .await?;
         let handle = Uuid::new_v4().simple().to_string();
         let id = format!("ma_{}", Uuid::new_v4().simple());
         let expiry = Utc::now().timestamp() + 3600;
@@ -310,7 +320,13 @@ impl SqliteStore {
             .bind(handle)
             .execute(&mut *tx)
             .await?;
-        attachments::require_storage_capacity(&mut tx, &p, original.declared_size as i64).await?;
+        attachments::require_storage_capacity(
+            &mut tx,
+            &p,
+            original.declared_size as i64,
+            matches!(authority, MessageUploadAuthority::Connector(_)),
+        )
+        .await?;
         let created = Utc::now().timestamp();
         let participant_owned = matches!(
             p.client_kind,

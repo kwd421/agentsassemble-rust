@@ -46,6 +46,8 @@ pub use attendee::ready::AttendeeRuntimeReady;
 pub use attendee::session::AttendeeSessionAuthorization;
 pub use attendee::tool_read::{AttendeeToolRead, AttendeeToolReadRequest, AttendeeToolReadResult};
 mod connector_admission;
+#[cfg(test)]
+mod connector_file_parity_tests;
 mod connector_mentions;
 mod connector_session;
 #[cfg(test)]
@@ -131,6 +133,7 @@ mod message_attachment_previews;
 mod message_attachments;
 mod provider_file;
 pub use provider_file::AttendeeFileAuthority;
+pub use provider_file::ConnectorFileAuthority;
 pub use provider_file::ProviderFileAuthority;
 mod message_upload;
 pub use message_upload::{MESSAGE_UPLOAD_PIECE_BYTES, MessageUploadAuthority, MessageUploadStatus};

@@ -25,6 +25,8 @@ use uuid::Uuid;
 pub(crate) mod attachments;
 #[path = "read_web.rs"]
 pub(in crate::connector) mod read;
+#[path = "transfer_web.rs"]
+mod transfer;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -52,6 +54,11 @@ registered_routes! {
         same_origin_public "/api/room-connector/status" => get(read::status),
         same_origin_public "/api/room-connector/attachment" => get(attachments::read),
         same_origin_public "/api/room-connector/upload" => post(attachments::upload),
+        same_origin_public "/api/room-connector/tool/upload/begin" => post(transfer::begin),
+        same_origin_public "/api/room-connector/tool/upload/{handle}/data" => post(transfer::data),
+        same_origin_public "/api/room-connector/tool/upload/{handle}/finish" => post(transfer::finish),
+        same_origin_public "/api/room-connector/tool/upload/{handle}" => delete(transfer::cancel),
+        same_origin_public "/api/room-connector/tool/attachment/download" => get(transfer::download),
         same_origin_public "/api/room-connector/join" => post(join),
         same_origin_public "/api/room-connector/direct" => post(direct),
         same_origin_public "/api/room-connector/pin" => post(pin),
@@ -81,7 +88,7 @@ async fn join(
         .map_err(ConnectorHttpError::from_persistence)?;
     let authority = &admitted.authorization;
     Ok(Json(
-        json!({"session_bearer":admitted.session_bearer,"room_id":authority.principal().room_id,"room_uid":authority.room_uid(),"participant_id":authority.principal().participant_id,"expires_at":authority.expires_at(),"deduplicated":admitted.deduplicated}),
+        json!({"session_bearer":admitted.session_bearer,"room_id":authority.principal().room_id,"room_uid":authority.room_uid(),"participant_id":authority.principal().participant_id,"expires_at":authority.expires_at(),"deduplicated":admitted.deduplicated,"attachment_transfers":true}),
     ))
 }
 
@@ -195,6 +202,20 @@ impl ConnectorHttpError {
     }
     pub(crate) fn from_persistence(error: PersistenceError) -> Self {
         Self::from_failure(&CommandFailure::transactional(error))
+    }
+    pub(in crate::connector) fn from_profile(error: crate::profile_web::ProfileHttpError) -> Self {
+        let (status, code, message) = error.into_http_parts();
+        let resolution = if code == "upload_interrupted" {
+            CommandResolution::Unresolved
+        } else {
+            CommandResolution::Rejected
+        };
+        Self {
+            status,
+            code,
+            resolution,
+            message: Some(message),
+        }
     }
     fn from_failure(failure: &CommandFailure) -> Self {
         let (status, code) = match &failure.error {

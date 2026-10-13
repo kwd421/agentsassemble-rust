@@ -12,6 +12,7 @@ pub enum MessageAttachmentReadAuthority {
     },
     Session(Box<RoomSessionAuthorization>),
     Provider(Box<crate::ProviderFileAuthority>),
+    Connector(Box<crate::ConnectorFileAuthority>),
 }
 
 /// Immutable response metadata and authority; each read uses a new short transaction.
@@ -39,8 +40,21 @@ impl MessageAttachmentReadAuthority {
             .await?;
             return Ok((metadata, authority.session_id.clone()));
         }
+        if let Self::Connector(authority) = self {
+            // Saved connector reads follow the shared reader policy: already-bound
+            // files up to 50 MiB stream even when the upload policy was lowered.
+            let principal = authority.read_principal(tx).await?;
+            let metadata = read_bound_message_metadata(
+                tx,
+                &principal.room_id,
+                id,
+                agentsassemble_domain::MAX_ROOM_FILE_BYTES,
+            )
+            .await?;
+            return Ok((metadata, principal.principal_id.clone()));
+        }
         let (room_id, principal_id) = match self {
-            Self::Provider(_) => unreachable!(),
+            Self::Provider(_) | Self::Connector(_) => unreachable!("early return above"),
             Self::Local {
                 room_id,
                 user_id,

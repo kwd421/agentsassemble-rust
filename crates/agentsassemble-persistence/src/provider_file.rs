@@ -129,3 +129,69 @@ impl SqliteStore {
         Ok(session)
     }
 }
+
+/// Connector transfer custody: the same current room limit, quota and streaming
+/// reader as the other AI surfaces, resolved through the connector's session
+/// instead of a server-owned turn. The inline base64 path keeps its own fixed
+/// 10 MiB bound and never uses this authority.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ConnectorFileAuthority {
+    pub session_fingerprint: [u8; 32],
+    pub room_id: String,
+    pub participant_id: String,
+}
+
+impl ConnectorFileAuthority {
+    pub(crate) async fn resolve(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+    ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+        let current = crate::connector_session::authorize_in(
+            tx,
+            &self.session_fingerprint,
+            chrono::Utc::now(),
+        )
+        .await?;
+        let principal = current.principal();
+        if principal.room_id != self.room_id || principal.participant_id != self.participant_id {
+            return Err(crate::room_turns::support::rejected(
+                "stale_connector_session",
+                "The connector session no longer matches its transfer custody.",
+            ));
+        }
+        if !principal.capabilities.message_send {
+            return Err(crate::room_turns::support::rejected(
+                "permission_denied",
+                "This connector session cannot publish room attachments.",
+            ));
+        }
+        crate::message_attachments::require_current_message_writer(tx, principal).await?;
+        Ok(principal.clone())
+    }
+
+    pub(crate) async fn read_principal(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+    ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+        let current = crate::connector_session::authorize_in(
+            tx,
+            &self.session_fingerprint,
+            chrono::Utc::now(),
+        )
+        .await?;
+        let principal = current.principal();
+        if principal.room_id != self.room_id || principal.participant_id != self.participant_id {
+            return Err(crate::room_turns::support::rejected(
+                "stale_connector_session",
+                "The connector session no longer matches its transfer custody.",
+            ));
+        }
+        if !principal.capabilities.room_history {
+            return Err(crate::room_turns::support::rejected(
+                "permission_denied",
+                "This connector session cannot read message history.",
+            ));
+        }
+        Ok(principal.clone())
+    }
+}

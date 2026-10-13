@@ -75,8 +75,8 @@ per ID, and 200 MiB successful aggregate bytes; these include saved-path reads.
 Path uploads use the existing 32 successful-room-tool-results per-turn admission
 and ten attachments per-message limit. Room-owned tracked file tasks release
 the command loop during disk I/O and retire on turn response loss or shutdown.
-Attendee and connector budgets must be verified at their owners before
-their surfaces are implemented. No schema or frontend change is intended.
+Attendee and connector budgets were verified at their owners before
+their surfaces were implemented. No schema or frontend change is intended.
 Code evidence: the human reader admits already-bound files up to 50 MiB even
 when upload policy was subsequently lowered. Saved AI reads follow that shared
 reader policy; the current room setting is enforced by the upload owner.
@@ -117,8 +117,28 @@ Attendee (b) landed: client path uploads stream through the host transfer
 owner with pre-read limit/quota admission and publish through report IDs;
 large reads save byte-exact into `.agentsassemble-attachments` on the client
 machine; read-only agents and older hosts keep the explicit refusal.
-Connector (c) is pending; the hosted connector keeps inline base64 upload at
-10 MiB until the CLI surface lands.
+Connector (c) budgets verified at their owners before implementation: path
+uploads share the host upload owner's three-active-transfers-per-principal
+admission (per connector participant identity), one-hour pending expiry and
+quota reserved at begin; the current room per-file limit (10/25/50 MiB) is
+enforced at begin and finish on the new transfer path, while the inline
+base64 path keeps its fixed 10 MiB bound and its existing exemption. Reads at
+or below 10 MiB stay inline; larger reads stream through
+`message_attachment_reader` (50 MiB shared reader policy, authority
+revalidated per piece) under a stream lease from the shared download budget
+(1 MiB fixed weight; per principal 16 concurrent encoded, 32 streams,
+400 MiB weight; host-wide 512 MiB) reserved at open before any byte flows.
+Read calls charge one history event against the existing socket-admission
+window (per principal 10 requests/1,000 events per 10 s). Affected entry
+points for (c): connector `room_upload_attachment_from_path` CLI tool and
+`room_read_attachment` saved reads, `RoomConnectorClient` transfer methods,
+host `/api/room-connector/tool/upload/*` +
+`/api/room-connector/tool/attachment/download` transfer endpoints,
+`MessageUploadAuthority::Connector` / connector reader authority, join
+`attachment_transfers` capability flag, `room_say` attachment IDs. The
+hosted/HTTP connector keeps inline base64 upload at 10 MiB and directs larger
+uploads to the CLI; older hosts omit the capability flag and keep inline
+behaviour.
 
 ## Verification matrix
 
