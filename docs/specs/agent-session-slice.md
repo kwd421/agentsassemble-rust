@@ -56,10 +56,25 @@ configuration core as the owner's own `agent.configure`, retaining its
 `runtime_profile_conflict` (stop before reconfiguring) and `provider_mismatch`
 failures, with the AI named on behalf of the owner and the confirmation id. The AI
 receipt carries only status, ids and the configuration event id; the changed
-model/permission/folder reach only the owner card. Confirmed agent removal and human kicks go through the same
-participant-removal gate as the owner's own kick, never the owner themself, the host,
-or anyone the owner could not remove; removal ends the target's session and revokes
-access exactly as today, and the card states that consequence. Confirmed HUMAN room
+model/permission/folder reach only the owner card.
+
+Confirmed agent removal (`request_remove_agent(request_id, agent_id)`) runs on the
+managed/API and attendee/companion RoomPortal and connector MCP entries next to the
+other confirmed actions. The AI schema carries only the request UUID and the target
+agent id: no acknowledgement and no target identity can be supplied. The request
+binds the target agent's creation identity server-side and changes nothing. Approval
+revalidates owner and delegate authority and the target: a missing target, a replaced
+agent or an already-removed one refuses with `target_changed`. Execution runs the same
+participant-removal core as the owner's own kick of an agent — the owner's
+`room.manage` gate, the canonical-owner protection and the existing runtime cleanup —
+with the AI named on behalf of the owner and the confirmation id; the agent's session
+ends, its access is revoked and a running runtime is stopped, and its consequence
+cannot be undone. The AI receipt carries only status, ids and the removal event id;
+the owner card carries the target name and states that consequence. Confirmed human
+kicks go through the same participant-removal gate as the owner's own kick, never the
+owner themself, the host, or anyone the owner could not remove; removal ends the
+target's session and revokes access exactly as today, and the card states that
+consequence. Confirmed HUMAN room
 invites bind scope, uses and expiry; the link/credential reaches only the owner
 through the existing owner-only delivery and the AI learns only that an invite was
 created. Companion, attendee and connector invites are not delegable. Role

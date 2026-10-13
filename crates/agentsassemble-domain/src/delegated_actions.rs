@@ -101,6 +101,25 @@ pub struct RequestReconfigureAgent {
     pub workspace: Option<String>,
 }
 
+// Director-requested agent removal. The schema carries only the request identity and
+// the target agent id: the target's current creation identity is bound on the server
+// and a missing, replaced or already-removed agent refuses `target_changed`.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+    ts_rs::TS,
+)]
+#[serde(deny_unknown_fields)]
+pub struct RequestRemoveAgent {
+    pub request_id: String,
+    pub agent_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectRoomAction {
@@ -112,6 +131,7 @@ pub enum DirectRoomAction {
     StopAgent(StopAgent),
     RequestCreateAgent(RequestCreateAgent),
     RequestReconfigureAgent(RequestReconfigureAgent),
+    RequestRemoveAgent(RequestRemoveAgent),
 }
 impl DirectRoomAction {
     pub const NAMES: &[&str] = &[
@@ -123,6 +143,7 @@ impl DirectRoomAction {
         "stop_agent",
         "request_create_agent",
         "request_reconfigure_agent",
+        "request_remove_agent",
     ];
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -135,6 +156,7 @@ impl DirectRoomAction {
             Self::StopAgent(r) => &r.request_id,
             Self::RequestCreateAgent(r) => &r.request_id,
             Self::RequestReconfigureAgent(r) => &r.request_id,
+            Self::RequestRemoveAgent(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -148,6 +170,7 @@ impl DirectRoomAction {
             Self::StopAgent(_) => "stop_agent",
             Self::RequestCreateAgent(_) => "request_create_agent",
             Self::RequestReconfigureAgent(_) => "request_reconfigure_agent",
+            Self::RequestRemoveAgent(_) => "request_remove_agent",
         }
     }
 }

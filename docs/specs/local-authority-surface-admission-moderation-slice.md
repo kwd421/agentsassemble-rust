@@ -13,9 +13,14 @@ creation core after approval with the full-access acknowledgement rule.
 (model, reasoning, permission level, working folder) plus the catalog revision,
 binds the agent's current configuration revision and the resolved resulting profile,
 and executes that same configuration core after approval; the AI schema carries no
-acknowledgement and no configuration revision. Nothing is mutated or reserved before
+acknowledgement and no configuration revision.
+`request_remove_agent(request_id, agent_id)` carries only the target agent id, binds
+that agent's creation identity, and executes the same participant-removal core as the
+owner's own kick of an agent (its `room.manage` gate, canonical-owner protection and
+existing runtime cleanup) after approval; a missing, replaced or already-removed
+target refuses with `target_changed`. Nothing is mutated or reserved before
 approval. Role assignment, provider approvals and the remaining slice-4 actions
-(remove, kick, invite) stay unreachable.
+(kick, invite) stay unreachable.
 
 The host persists a typed immutable request with normalised parameters and resolved
 defaults, room incarnation, exact owner provenance, delegate/session/execution binding,

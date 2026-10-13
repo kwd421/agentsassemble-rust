@@ -105,7 +105,8 @@ pub(super) async fn verify(
                 "start_agent",
                 "stop_agent",
                 "request_create_agent",
-                "request_reconfigure_agent"
+                "request_reconfigure_agent",
+                "request_remove_agent"
             ])
         );
     }
@@ -195,6 +196,75 @@ pub(super) async fn verify(
         let tools = client.list_all_tools().await?;
         assert!(!tools.iter().any(|tool| tool.name == "set_message_pin"));
     }
+    Ok(())
+}
+
+// The shared connector flow above already spends the owner's eight confirmations per
+// room and minute, so the removal pass runs on the connector entry with its own
+// fresh budget instead of overrunning that limit.
+#[tokio::test]
+async fn connector_remove_agent_uses_a_fresh_owner_budget() -> TestResult {
+    let (store, _) = human_invite::fixture(InviteScope::ReadWrite).await;
+    let directory = tempfile::tempdir()?;
+    let catalog = crate::support::provider_fixture::with_agent_write_permissions(
+        crate::support::provider_fixture::agent_catalog(directory.path(), None),
+    );
+    let server = human_invite::start_with_public_mcp_and_catalog(
+        store.clone(),
+        "https://remove.example.test",
+        "remove-fixture-proxy-0000000000000001",
+        catalog,
+    )
+    .await;
+    let client = ()
+        .serve(StreamableHttpClientTransport::from_uri(format!(
+            "{}/mcp",
+            server.base_url
+        )))
+        .await?;
+    let manager = RoomManagerAuthority::Local(
+        store
+            .authorize_local_room_manager(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await?,
+    );
+    let now = chrono::Utc::now();
+    let _pairing = store
+        .create_operator_pairing(&manager, &[81; 32], "https://remove.example.test", now)
+        .await?;
+    let paired = store
+        .redeem_operator_pairing(&[81; 32], &[82; 32], "https://remove.example.test", now)
+        .await?;
+    let invite = store
+        .create_connector_invite(
+            &RoomManagerAuthority::Operator(Box::new(paired.authorization)),
+            Uuid::new_v4(),
+            InviteScope::ReadWrite,
+            chrono::Utc::now(),
+        )
+        .await?;
+    let mut join = json!({"invite_url":format!("{}/join?token={}",server.base_url,invite.invite_bearer),"display_name":"Director"});
+    join["connection_id"] = call(&client, "room_join", join.clone()).await["connection_id"].clone();
+    let joined = call(&client, "room_join", join.clone()).await;
+    role(
+        &store,
+        joined["participant_id"].as_str().unwrap(),
+        "director",
+    )
+    .await?;
+    remove_tools::verify(
+        &client,
+        &store,
+        joined["participant_id"].as_str().unwrap(),
+        Some(&joined["connection_id"]),
+        (&server.base_url, server.state()),
+    )
+    .await?;
+    client.cancel().await?;
+    server.stop().await;
     Ok(())
 }
 
@@ -290,7 +360,8 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
             "start_agent",
             "stop_agent",
             "request_create_agent",
-            "request_reconfigure_agent"
+            "request_reconfigure_agent",
+            "request_remove_agent"
         ])
     );
     confirmation_socket::verify(&server, &client, &joined["connection_id"]).await?;
@@ -454,6 +525,9 @@ mod create_tools;
 
 #[path = "delegated_reconfigure_tools.rs"]
 mod reconfigure_tools;
+
+#[path = "delegated_remove_tools.rs"]
+mod remove_tools;
 
 async fn reject_direct_tools(client: &Client, connection: Option<&Value>, code: &str) {
     for (name, mut payload) in [

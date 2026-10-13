@@ -260,6 +260,38 @@ pub(crate) async fn execute_with_reply(
         reply(result);
         return publication;
     }
+    if let DirectRoomAction::RequestRemoveAgent(params) = request {
+        let result = async {
+            let _inflight = admission.acquire_inflight()?;
+            let (result, debits) = owners
+                .store
+                .request_delegated_agent_removal(authority, params, |owner, delegate, bytes| {
+                    charge_request(admission, authority, request, owner, delegate, bytes)
+                })
+                .await?;
+            if let Some(debits) = debits {
+                for debit in debits {
+                    debit.resolve();
+                }
+            }
+            Ok(result)
+        }
+        .await;
+        let publication = if result.is_ok() {
+            Some(
+                crate::event_publication::publish_durable_room_events(
+                    owners.store,
+                    owners.event_tx,
+                    authority.room_id(),
+                )
+                .await,
+            )
+        } else {
+            None
+        };
+        reply(result);
+        return publication;
+    }
     if let DirectRoomAction::StartAgent(start) = request {
         let result = async {
             let _inflight = admission.acquire_inflight()?;

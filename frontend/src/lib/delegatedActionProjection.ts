@@ -50,6 +50,12 @@ export function parseDelegatedActionRequest(value: unknown): DelegatedActionRequ
       if (params[key] !== undefined && typeof params[key] !== "string") throw new Error("Invalid confirmed reconfiguration params");
     }
     assertAgentDraft(action.draft, "confirmed reconfiguration draft");
+  } else if (action.action === "remove_agent") {
+    assertExactKeys(action, ["action", "request_id", "agent_id", "params", "expected_created_at"], "confirmed agent removal");
+    if (["request_id", "agent_id"].some((k) => typeof action[k] !== "string" || !action[k]) || typeof action.expected_created_at !== "string" || !Number.isFinite(Date.parse(action.expected_created_at))) throw new Error("Invalid confirmed removal identity");
+    const params = strictRecord(action.params, "confirmed removal params");
+    assertExactKeys(params, ["request_id", "agent_id"], "confirmed removal params");
+    if (params.request_id !== action.request_id || params.agent_id !== action.agent_id) throw new Error("Invalid confirmed removal params");
   } else { throw new Error("Unsupported confirmed action"); }
   return r as unknown as DelegatedActionRequest;
 }

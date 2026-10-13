@@ -191,6 +191,19 @@ impl RoomPortalMcp {
     }
 
     #[tool(
+        description = "Request removal of an existing agent from the room on behalf of your owner. Nothing changes until the exact human owner approves within five minutes; approval ends that agent's session, revokes its access and stops a running runtime. Retry the same request ID to read the outcome. Requires current director role and current owner room-manage authority."
+    )]
+    async fn request_remove_agent(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::RequestRemoveAgent>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(agentsassemble_domain::DirectRoomAction::RequestRemoveAgent(
+            request,
+        ))
+        .await
+    }
+
+    #[tool(
         description = "Request deletion of a text channel and its message text, pins and search records. Nothing changes until the exact human owner approves within five minutes. Retry the same request ID to read its outcome."
     )]
     async fn request_delete_text_channel(

@@ -260,6 +260,11 @@ async fn guest_pin_rechecks_scope_and_disconnect_of_the_exact_parent_on_retry() 
         execution_id: turn.authority.execution_id,
     };
     assert_direct_rejections(&store, &authority, "owner_not_permitted").await;
+    // Agent removal is not available to an owner without room-manage authority, and
+    // the refused request stores nothing.
+    assert!(
+        matches!(store.request_delegated_agent_removal::<()>(&authority, &agentsassemble_domain::RequestRemoveAgent { request_id: Uuid::new_v4().to_string(), agent_id: "missing".into() }, |_, _, _| Ok(())).await, Err(PersistenceError::CommandRejected { code, .. }) if code == "owner_not_permitted")
+    );
     assert_eq!(
         store.delegated_direct_actions(&authority).await?,
         vec!["set_message_pin"]

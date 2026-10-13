@@ -16,6 +16,7 @@ pub enum ConfirmedRoomAction {
     StartAgent(ConfirmedAgentStart),
     CreateAgent(ConfirmedAgentCreate),
     ReconfigureAgent(ConfirmedAgentReconfigure),
+    RemoveAgent(ConfirmedAgentRemove),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -135,6 +136,17 @@ pub struct ConfirmedAgentReconfigure {
     pub expected_configuration_revision: String,
     pub draft: crate::AgentSessionDraft,
 }
+/// Owner-confirmed agent removal. `params` are the AI-supplied request identity and
+/// target id as received; `expected_created_at` seals the target agent's creation
+/// identity, so a missing, replaced or already-removed agent refuses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmedAgentRemove {
+    pub request_id: String,
+    pub agent_id: String,
+    pub params: crate::RequestRemoveAgent,
+    pub expected_created_at: DateTime<Utc>,
+}
 impl ConfirmedRoomAction {
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -143,6 +155,7 @@ impl ConfirmedRoomAction {
             Self::StartAgent(r) => &r.request_id,
             Self::CreateAgent(r) => &r.request_id,
             Self::ReconfigureAgent(r) => &r.request_id,
+            Self::RemoveAgent(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -152,6 +165,7 @@ impl ConfirmedRoomAction {
             Self::StartAgent(_) => "start_agent",
             Self::CreateAgent(_) => "request_create_agent",
             Self::ReconfigureAgent(_) => "request_reconfigure_agent",
+            Self::RemoveAgent(_) => "request_remove_agent",
         }
     }
 }

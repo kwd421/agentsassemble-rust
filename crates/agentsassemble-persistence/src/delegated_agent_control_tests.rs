@@ -495,3 +495,6 @@ mod confirmed_create;
 
 #[path = "delegated_confirmed_reconfigure_tests.rs"]
 mod confirmed_reconfigure;
+
+#[path = "delegated_confirmed_remove_tests.rs"]
+mod confirmed_remove;

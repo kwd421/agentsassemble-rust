@@ -69,4 +69,19 @@ describe("owner confirmation socket projection", () => {
     if (changed.action.action === "reconfigure_agent") delete (changed.action as Record<string, unknown>).expected_configuration_revision;
     expect(() => parseDelegatedActionRequest(changed)).toThrow();
   });
+  it("parses a bound agent-removal request so the owner card can render who is removed", () => {
+    const removed: DelegatedActionRequest = {
+      ...request,
+      action: {
+        action: "remove_agent", request_id: request.confirmation_id, agent_id: "codex-old",
+        params: { request_id: request.confirmation_id, agent_id: "codex-old" },
+        expected_created_at: "2026-10-13T00:00:00Z",
+      },
+      target_name: "Oldtimer",
+    };
+    expect(parseDelegatedActionRequest(structuredClone(removed))).toEqual(removed);
+    const changed = structuredClone(removed);
+    if (changed.action.action === "remove_agent") delete (changed.action as Record<string, unknown>).expected_created_at;
+    expect(() => parseDelegatedActionRequest(changed)).toThrow();
+  });
 });

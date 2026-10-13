@@ -133,6 +133,20 @@ impl SqliteStore {
                                 sqlx::query("UPDATE delegated_action_requests SET state='executing',request_json=? WHERE room_id=? AND confirmation_id=?").bind(serde_json::to_string(&executing)?).bind(&principal.room_id).bind(&request.confirmation_id).execute(&mut *tx).await?;
                                 Ok(json!({"status":"in_progress","request_id":reconfigure.request_id,"action":"reconfigure_agent","target_id":reconfigure.agent_id,"confirmation_id":request.confirmation_id}))
                             }
+                            ConfirmedRoomAction::RemoveAgent(remove) => {
+                                // Both authorities are revalidated now, then the owner's own
+                                // removal core runs in this transaction with the target's
+                                // creation identity re-bound.
+                                let proof = validate_in(&mut tx, &principal.room_id, &row).await?;
+                                crate::delegated_confirmed_remove::remove_agent_in(
+                                    &mut tx,
+                                    &proof,
+                                    &request,
+                                    remove,
+                                    first_seq,
+                                )
+                                .await
+                            }
                         }
                     }.await;
                     match execution {
@@ -239,6 +253,6 @@ fn requires_full_access_acknowledgement(action: &ConfirmedRoomAction) -> bool {
         ConfirmedRoomAction::ReconfigureAgent(reconfigure) => {
             reconfigure.draft.permission_mode == "full_access"
         }
-        ConfirmedRoomAction::DeleteTextChannel(_) => false,
+        ConfirmedRoomAction::RemoveAgent(_) | ConfirmedRoomAction::DeleteTextChannel(_) => false,
     }
 }
