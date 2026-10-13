@@ -5,8 +5,12 @@
 RoomPortal managed/API and attendee/companion calls and connector MCP calls support
 `request_delete_text_channel(channel_id, expected_settings_revision, request_id)`;
 `start_agent(agent_id, request_id)` remains direct for `meeting_read_only` and requests
-confirmation for workspace-write/full-access. Nothing is mutated or reserved before
-approval. Role assignment, provider approvals and slice-4 actions stay unreachable.
+confirmation for workspace-write/full-access. `request_create_agent` carries the
+owner's own `agent.create` fields except acknowledgement, start intent and session
+identity, binds the catalog-selected stopped-agent draft, and executes that same
+creation core after approval with the full-access acknowledgement rule. Nothing is mutated or reserved before
+approval. Role assignment, provider approvals and the remaining slice-4 actions
+(reconfigure, remove, kick, invite) stay unreachable.
 
 The host persists a typed immutable request with normalised parameters and resolved
 defaults, room incarnation, exact owner provenance, delegate/session/execution binding,

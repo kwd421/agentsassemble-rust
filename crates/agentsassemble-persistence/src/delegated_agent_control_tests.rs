@@ -489,3 +489,6 @@ fn assert_executor(events: &[agentsassemble_domain::RoomEvent], actor: &str) -> 
 
 #[path = "delegated_confirmed_agent_tests.rs"]
 mod confirmed;
+
+#[path = "delegated_confirmed_create_tests.rs"]
+mod confirmed_create;

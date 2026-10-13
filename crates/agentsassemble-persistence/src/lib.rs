@@ -338,3 +338,7 @@ mod delegated_confirmation_decision;
 mod delegated_confirmation_lifecycle;
 
 mod delegated_confirmed_agent;
+mod delegated_confirmed_create;
+pub use delegated_confirmed_create::{
+    ApprovedCreateDrive, create_execution_payload, create_selection_payload,
+};

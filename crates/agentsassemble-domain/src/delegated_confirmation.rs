@@ -14,6 +14,7 @@ pub struct DeleteTextChannel {
 pub enum ConfirmedRoomAction {
     DeleteTextChannel(DeleteTextChannel),
     StartAgent(ConfirmedAgentStart),
+    CreateAgent(ConfirmedAgentCreate),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -108,12 +109,24 @@ pub struct ConfirmedAgentStart {
     pub expected_configuration_revision: String,
     pub expected_created_at: DateTime<Utc>,
 }
+/// Owner-confirmed stopped-agent creation. `params` are the AI-supplied fields as
+/// received; `draft` is the catalog-selected stopped session bound at request time,
+/// including every server-resolved default and the deterministic agent identity.
+/// No provider credential appears here; the draft carries only session authority.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmedAgentCreate {
+    pub request_id: String,
+    pub params: crate::RequestCreateAgent,
+    pub draft: crate::AgentSessionDraft,
+}
 impl ConfirmedRoomAction {
     #[must_use]
     pub fn request_id(&self) -> &str {
         match self {
             Self::DeleteTextChannel(r) => &r.request_id,
             Self::StartAgent(r) => &r.request_id,
+            Self::CreateAgent(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -121,6 +134,7 @@ impl ConfirmedRoomAction {
         match self {
             Self::DeleteTextChannel(_) => "request_delete_text_channel",
             Self::StartAgent(_) => "start_agent",
+            Self::CreateAgent(_) => "request_create_agent",
         }
     }
 }

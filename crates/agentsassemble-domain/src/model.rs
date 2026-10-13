@@ -531,7 +531,8 @@ impl DurableAgentSession {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct AgentSessionDraft {
     pub agent_id: String,
     pub display_name: String,

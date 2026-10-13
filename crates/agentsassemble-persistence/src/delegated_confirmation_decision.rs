@@ -37,13 +37,12 @@ impl SqliteStore {
             ));
         }
         if decision.decision == ConfirmationDecision::Approve
-            && let ConfirmedRoomAction::StartAgent(start) = &request.action
-            && start.configuration.permission_mode == "full_access"
+            && requires_full_access_acknowledgement(&request.action)
             && decision.full_access_acknowledged != Some(true)
         {
             return Err(rejected(
                 "full_access_acknowledgement_required",
-                "Approving this full-access start requires the owner's explicit acknowledgement.",
+                "Approving this full-access agent requires the owner's explicit acknowledgement.",
             ));
         }
         let encoded = serde_json::to_string(decision)?;
@@ -114,6 +113,15 @@ impl SqliteStore {
                                     crate::AgentStartPlan::Start(effect)=>Ok(json!({"status":"in_progress","request_id":control.request_id(),"action":"start_agent","target_id":control.payload()["agent_id"],"confirmation_id":request.confirmation_id,"operation_id":effect.operation_id})),
                                     crate::AgentStartPlan::Outcome(outcome)=>Ok(outcome.result),
                                 }
+                            }
+                            ConfirmedRoomAction::CreateAgent(create) => {
+                                // Both authorities are revalidated now; the room actor
+                                // performs the catalog-selected creation after commit.
+                                let proof = validate_in(&mut tx, &principal.room_id, &row).await?;
+                                crate::agent_lifecycle_authority::authorize_control(&proof.owner)?;
+                                let mut executing = request.clone(); executing.state = ConfirmationState::Executing;
+                                sqlx::query("UPDATE delegated_action_requests SET state='executing',request_json=? WHERE room_id=? AND confirmation_id=?").bind(serde_json::to_string(&executing)?).bind(&principal.room_id).bind(&request.confirmation_id).execute(&mut *tx).await?;
+                                Ok(json!({"status":"in_progress","request_id":create.request_id,"action":"create_agent","target_id":create.draft.agent_id,"confirmation_id":request.confirmation_id}))
                             }
                         }
                     }.await;
@@ -209,5 +217,15 @@ impl SqliteStore {
             events,
             deduplicated,
         })
+    }
+}
+
+fn requires_full_access_acknowledgement(action: &ConfirmedRoomAction) -> bool {
+    match action {
+        ConfirmedRoomAction::StartAgent(start) => {
+            start.configuration.permission_mode == "full_access"
+        }
+        ConfirmedRoomAction::CreateAgent(create) => create.draft.permission_mode == "full_access",
+        ConfirmedRoomAction::DeleteTextChannel(_) => false,
     }
 }

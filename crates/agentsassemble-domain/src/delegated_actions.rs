@@ -20,6 +20,53 @@ request!(SetParticipantMute {
 request!(StartAgent { agent_id: String });
 request!(StopAgent { agent_id: String });
 
+// Director-requested stopped-agent creation. The schema mirrors the owner's own
+// agent.create fields except server-owned identity and intent: no agent_id,
+// full_access_acknowledgement, start/start_now or session_id can be supplied.
+// Creation is always stopped; starting is the separate existing-agent action.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+    ts_rs::TS,
+)]
+#[serde(deny_unknown_fields)]
+pub struct RequestCreateAgent {
+    pub request_id: String,
+    pub provider_id: String,
+    pub catalog_revision: String,
+    pub display_name: String,
+    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub service_tier: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub variant: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub permission_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub persona_card_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub provider_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub max_output_tokens: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectRoomAction {
@@ -29,6 +76,7 @@ pub enum DirectRoomAction {
     SetParticipantMute(SetParticipantMute),
     StartAgent(StartAgent),
     StopAgent(StopAgent),
+    RequestCreateAgent(RequestCreateAgent),
 }
 impl DirectRoomAction {
     pub const NAMES: &[&str] = &[
@@ -38,6 +86,7 @@ impl DirectRoomAction {
         "set_participant_mute",
         "start_agent",
         "stop_agent",
+        "request_create_agent",
     ];
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -48,6 +97,7 @@ impl DirectRoomAction {
             Self::SetParticipantMute(r) => &r.request_id,
             Self::StartAgent(r) => &r.request_id,
             Self::StopAgent(r) => &r.request_id,
+            Self::RequestCreateAgent(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -59,6 +109,7 @@ impl DirectRoomAction {
             Self::SetParticipantMute(_) => "set_participant_mute",
             Self::StartAgent(_) => "start_agent",
             Self::StopAgent(_) => "stop_agent",
+            Self::RequestCreateAgent(_) => "request_create_agent",
         }
     }
 }

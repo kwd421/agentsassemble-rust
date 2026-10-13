@@ -1,7 +1,10 @@
 # Agent Session vertical slice
 
 Slice 3 adds owner-confirmed text-channel deletion and execution-capable existing-agent
-start on managed, attendee and connector tools. Exact lifetime, owner-only socket
+start on managed, attendee and connector tools. Slice 4 adds the remaining
+owner-confirmed actions on the same three surfaces through the same confirmation
+mechanism: create an agent, reconfigure an agent, remove an agent, kick a human
+participant, and create a HUMAN room invite. Exact lifetime, owner-only socket
 projection, approval transaction, replay, attribution and archive exclusion are owned
 by the slice-3 section in local-authority-surface-admission-moderation-slice.md; earlier
 slice exclusions below describe their historical scope, not this required acceptance.
@@ -17,6 +20,34 @@ full-access target additionally requires the exact human owner's explicit
 `full_access_acknowledged: true` inside the approval decision; without it approval is
 refused with `full_access_acknowledgement_required` and the request stays pending.
 The AI has no approval path and can never supply the acknowledgement.
+
+Confirmed agent creation (`request_create_agent`) accepts the owner's own
+`agent.create` fields except `full_access_acknowledged`, `start`/`start_now` and
+`session_id`, which the AI schema cannot supply: creation is always stopped, and a
+separate existing-agent start (with its own confirmation when execution-capable)
+launches it. The request path runs the same catalog selection as the owner's own
+create against the owner's authority (a guest's AI gets only the guest's authority),
+binds the normalized parameters and every server-resolved default including the
+deterministic agent identity in an immutable stored draft, and changes nothing. The
+agent belongs to the owner, never the AI. Approval revalidates both authorities and
+re-runs the same selection: a changed catalog or a draft mismatch refuses with
+`target_changed`, and a `full_access` draft needs the owner's explicit acknowledgement
+in the decision. Execution then runs the same creation core as the owner's own
+create, with the AI named on behalf of the owner and the confirmation id. Provider
+credentials are never part of the request, the owner card, events or AI-visible
+results; AI receipts carry only status, ids and the creation event id.
+
+Confirmed agent reconfiguration binds the agent's configuration revision at request
+time and refuses with `target_changed` when it moved; raising to `full_access` needs
+the acknowledgement. Confirmed agent removal and human kicks go through the same
+participant-removal gate as the owner's own kick, never the owner themself, the host,
+or anyone the owner could not remove; removal ends the target's session and revokes
+access exactly as today, and the card states that consequence. Confirmed HUMAN room
+invites bind scope, uses and expiry; the link/credential reaches only the owner
+through the existing owner-only delivery and the AI learns only that an invite was
+created. Companion, attendee and connector invites are not delegable. Role
+assignment, server move/backup/restore, account/device/credential actions, provider
+approval answers, room deletion and everything unlisted stay unreachable.
 
 Affected entry points: the existing `start_agent` director tool on managed/API
 RoomPortal, attendee/companion RoomPortal and connector MCP/HTTP. Conversation-only
