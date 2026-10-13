@@ -804,6 +804,7 @@ fn completed(
         provider_turn_id,
         provider_session_id: None,
         outcome: ProviderTurnOutcome::Message {
+            attachment_ids: Vec::new(),
             content,
             target_agent_id: String::new(),
             reply_to_event_id: None,

@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub(crate) const READ_DISCUSSION_TOOL: &str = "read_discussion";
 pub(crate) const READ_ROOM_STATUS_TOOL: &str = "read_room_status";
 pub(crate) const READ_ATTACHMENT_TOOL: &str = "read_attachment";
+pub(crate) const UPLOAD_ATTACHMENT_TOOL: &str = "upload_attachment";
 pub(crate) const SEARCH_MESSAGES_TOOL: &str = "search_messages";
 pub(crate) const READ_MESSAGE_CONTEXT_TOOL: &str = "read_message_context";
 pub(crate) const PUBLISH_MESSAGE_TOOL: &str = "publish_message";
@@ -15,10 +16,11 @@ pub(crate) const CLOSE_VOTE_TOOL: &str = "close_vote";
 pub(crate) const ROLL_DICE_TOOL: &str = "roll_dice";
 pub(crate) const CHOOSE_RANDOM_TOOL: &str = "choose_random";
 
-pub(crate) const PROVIDER_ROOM_TOOL_NAMES: [&str; 13] = [
+pub(crate) const PROVIDER_ROOM_TOOL_NAMES: [&str; 14] = [
     READ_ROOM_STATUS_TOOL,
     READ_DISCUSSION_TOOL,
     READ_ATTACHMENT_TOOL,
+    UPLOAD_ATTACHMENT_TOOL,
     SEARCH_MESSAGES_TOOL,
     READ_MESSAGE_CONTEXT_TOOL,
     PUBLISH_MESSAGE_TOOL,
@@ -54,13 +56,19 @@ pub(crate) fn is_terminal_provider_tool(name: &str) -> bool {
 }
 
 pub(crate) fn is_replay_unsafe_provider_tool(name: &str) -> bool {
-    is_terminal_provider_tool(name) || matches!(name, ROLL_DICE_TOOL | CHOOSE_RANDOM_TOOL)
+    is_terminal_provider_tool(name)
+        || matches!(
+            name,
+            ROLL_DICE_TOOL | CHOOSE_RANDOM_TOOL | UPLOAD_ATTACHMENT_TOOL
+        )
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PublishMessage {
     pub(super) content: String,
+    #[serde(default)]
+    pub(super) attachment_ids: Vec<String>,
     /// Optionally reply to an earlier lobby event UUID from discussion or context.
     #[serde(default)]
     pub(super) reply_to_event_id: Option<String>,
@@ -94,6 +102,14 @@ pub(super) struct CastVote {
 #[serde(deny_unknown_fields)]
 pub(super) struct VoteTarget {
     pub(super) vote_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct UploadAttachment {
+    pub(super) path: String,
+    #[serde(default)]
+    pub(super) content_type: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]

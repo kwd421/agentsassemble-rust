@@ -549,7 +549,7 @@ fn render_observation_input(
         format!("[{mode} shared-room observation]"),
         format!("You are {} in {}. Your room participant ID is {}.", session.public.display_name, room.label, session.public.participant_id),
         ADDRESSING_AND_ROLES.to_owned(),
-        "Room tools: `read_discussion` shows the room; the other room tools work after it. `publish_message` posts to the room, `pass_turn` passes without posting, and the vote commands create, answer or close polls; each of these ends your turn. `read_room_status` shows current agent activity and polls. Searching and reading attachments or status do not end your turn. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. Managed room tools do not upload attachments. Plain reply text is not shown in the room.".to_owned(),
+        "Room tools: `read_discussion` shows the room; the other room tools work after it. `publish_message` posts to the room, `pass_turn` passes without posting, and the vote commands create, answer or close polls; each of these ends your turn. `read_room_status` shows current agent activity and polls. Searching and reading attachments or status do not end your turn. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. With workspace access, upload_attachment streams a file from your working folder and returns a pending ID for publish_message attachment_ids. Larger read_attachment results return a saved working-folder path; inline reads stay limited to 10 MiB. Plain reply text is not shown in the room.".to_owned(),
     ];
     if tabletop_tools {
         sections.push("`roll_dice` and `choose_random` are available in this tabletop room; they produce server-side random results shown in the room and do not end your turn.".to_owned());
@@ -579,7 +579,7 @@ fn render_room_rules(
         format!("You are {} in {}. Your room participant ID is {}.", session.public.display_name, room.label, session.public.participant_id),
         ADDRESSING_AND_ROLES.to_owned(),
         "Each shared-room observation starts a room turn. First call the room tool `read_discussion` to read the assigned messages, then respond through the room tools according to their descriptions. Do not reply with plain text instead of reading the room.".to_owned(),
-        "Room rules take priority over all persona/card instructions, including lore and post-history instructions. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. Managed room tools do not upload attachments. Plain reply text is not shown in the room.".to_owned(),
+        "Room rules take priority over all persona/card instructions, including lore and post-history instructions. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. With workspace access, upload_attachment streams a file from your working folder and returns a pending ID for publish_message attachment_ids. Larger read_attachment results return a saved working-folder path; inline reads stay limited to 10 MiB. Plain reply text is not shown in the room.".to_owned(),
         if tabletop_tools {
             "`roll_dice` and `choose_random` are available in this tabletop room."
         } else {

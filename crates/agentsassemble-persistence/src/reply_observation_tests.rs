@@ -25,6 +25,7 @@ async fn reply_observation_resolves_old_sources_after_edit_or_delete() {
                 "Acknowledged",
                 "",
                 None,
+                &[],
             )
             .await
             .unwrap_or_else(|error| panic!("complete: {error}"));

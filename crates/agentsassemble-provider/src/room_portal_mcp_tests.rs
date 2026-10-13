@@ -112,6 +112,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
             "read_room_status".to_owned(),
             "roll_dice".to_owned(),
             "search_messages".to_owned(),
+            "upload_attachment".to_owned(),
             "withdraw_vote".to_owned(),
         ])
     );
@@ -149,6 +150,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
             .finish_observation("turn-1", 7)
             .unwrap_or_else(|error| panic!("finish room observation: {error}")),
         ProviderTurnOutcome::Message {
+            attachment_ids: Vec::new(),
             content: "canonical reply".to_owned(),
             target_agent_id: String::new(),
             reply_to_event_id: Some("11111111-1111-4111-8111-111111111111".to_owned()),

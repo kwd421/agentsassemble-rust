@@ -771,8 +771,8 @@ fn profile_authority(ticket: ConsumedProfileTicket) -> Result<ProfileAuthority, 
 pub(crate) struct ProfileHttpError {
     extra: serde_json::Map<String, serde_json::Value>,
     status: StatusCode,
-    code: std::borrow::Cow<'static, str>,
-    message: String,
+    pub(crate) code: std::borrow::Cow<'static, str>,
+    pub(crate) message: String,
 }
 
 impl ProfileHttpError {

@@ -500,6 +500,7 @@ impl OpenCodeDriver {
             provider_turn_id: message.id,
             provider_session_id: Some(attached.to_owned()),
             outcome: ProviderTurnOutcome::Message {
+                attachment_ids: Vec::new(),
                 content: message.content,
                 target_agent_id: String::new(),
                 reply_to_event_id: None,

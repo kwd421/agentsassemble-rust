@@ -263,6 +263,7 @@ async fn commit_completed_provider_result(
         .await?;
     match &result.outcome {
         ProviderTurnOutcome::Message {
+            attachment_ids,
             content,
             target_agent_id,
             reply_to_event_id,
@@ -275,6 +276,7 @@ async fn commit_completed_provider_result(
                     content,
                     target_agent_id,
                     reply_to_event_id.as_deref(),
+                    attachment_ids,
                 )
                 .await
         }

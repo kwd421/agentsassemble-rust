@@ -153,6 +153,7 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
 
 fn image_attachment() -> ProviderAttachment {
     ProviderAttachment {
+        path: None,
         id: ATTACHMENT_ID.to_owned(),
         filename: "diagram.png".to_owned(),
         content_type: "image/png".to_owned(),
@@ -204,6 +205,7 @@ async fn pending_attachment_read_blocks_terminal_action_and_finish() {
     assert_eq!(early.is_error, Some(true));
     assert!(portal.finish_observation("turn-pending", 8).is_err());
     command.complete(Ok(ProviderAttachment {
+        path: None,
         id: ATTACHMENT_ID.to_owned(),
         filename: "notes.txt".to_owned(),
         content_type: "text/plain".to_owned(),
@@ -247,6 +249,7 @@ async fn assert_response_validation_and_generic_resource(
         .await
         .unwrap_or_else(|| panic!("receive second exact attachment command"));
     command.complete(Ok(ProviderAttachment {
+        path: None,
         id: ATTACHMENT_ID.to_owned(),
         filename: "wrong.bin".to_owned(),
         content_type: "application/octet-stream".to_owned(),
@@ -269,6 +272,7 @@ async fn assert_response_validation_and_generic_resource(
         .await
         .unwrap_or_else(|| panic!("receive retried attachment command"));
     command.complete(Ok(ProviderAttachment {
+        path: None,
         id: SECOND_ATTACHMENT_ID.to_owned(),
         filename: "notes.txt".to_owned(),
         content_type: "text/plain".to_owned(),
@@ -300,6 +304,7 @@ async fn assert_response_validation_and_generic_resource(
         .await
         .unwrap_or_else(|| panic!("receive binary attachment command"));
     command.complete(Ok(ProviderAttachment {
+        path: None,
         id: THIRD_ATTACHMENT_ID.to_owned(),
         filename: "payload.bin".to_owned(),
         content_type: "application/octet-stream".to_owned(),

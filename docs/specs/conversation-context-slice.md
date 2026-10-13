@@ -74,7 +74,8 @@ Existing managed read budgets remain ten distinct IDs per turn, two attempts
 per ID, and 200 MiB successful aggregate bytes; these include saved-path reads.
 Path uploads use the existing 32 successful-room-tool-results per-turn admission
 and ten attachments per-message limit. Room-owned tracked file tasks release
-the command loop during disk I/O and retire on turn response loss or shutdown. Attendee and connector budgets must be verified at their owners before
+the command loop during disk I/O and retire on turn response loss or shutdown.
+Attendee and connector budgets must be verified at their owners before
 their surfaces are implemented. No schema or frontend change is intended.
 Code evidence: the human reader admits already-bound files up to 50 MiB even
 when upload policy was subsequently lowered. Saved AI reads follow that shared
@@ -90,6 +91,20 @@ symlink escapes, non-files, conversation-only permission and exhausted quota fai
 large saved reads are byte-exact and read-only reads fail with the specific code;
 reader/writer seams demonstrate bounded transfer. Real-provider and packaged
 verification remain separate from controlled test evidence.
+
+Managed surface (a): implemented with controlled native MCP/server verification.
+`cargo test -p agentsassemble-persistence -p agentsassemble-provider -p
+agentsassemble-server` exercised the affected suites; final isolated `cargo test
+-p agentsassemble-server` passed (529 persistence, 305 provider, 196 server
+library, 5 server binary and 204 integration tests; four existing ignored tests).
+The native fixture uploads, publishes and reads exact 30 MiB data. Source-reader
+probes cover 64 KiB bounds and pre-read admission; cancellation/shutdown releases
+staging. `cargo fmt --all -- --check`, `make architecture-check` (19 policy tests)
+and `git diff --check` pass. Earlier overlapping runs hit shared fixture
+lease/peer failures; the isolated server rerun passed. No real provider, packaged UI or
+Windows verification. Existing human raster finish still buffers encoded images;
+transfer buffering remains bounded. Attendee (b) and connector (c) are pending;
+the attendee's inherited path-upload entry currently refuses explicitly.
 
 ## Verification matrix
 

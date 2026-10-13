@@ -40,6 +40,8 @@ pub enum ProviderTurnOutcome {
         target_agent_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reply_to_event_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachment_ids: Vec<String>,
     },
     Declined {
         reason_code: String,
@@ -94,6 +96,7 @@ pub(super) enum StagedOutcome {
         content: String,
         target_agent_id: String,
         reply_to_event_id: Option<String>,
+        attachment_ids: Vec<String>,
     },
     Declined {
         receipt_generation: Uuid,
@@ -387,13 +390,15 @@ impl RoomPortal {
                 content,
                 target_agent_id,
                 reply_to_event_id,
+                attachment_ids,
             } if *staged_generation == receipt_generation
-                && canonical_message(content).is_some()
+                && (canonical_message(content).is_some() || !attachment_ids.is_empty())
                 && (target_agent_id.is_empty()
                     || active.authority.allowed_agent_ids.contains(target_agent_id)) =>
             {
                 ProviderTurnOutcome::Message {
-                    content: canonical_message(content).ok_or(RoomPortalError::OutcomeInvalid)?,
+                    attachment_ids: attachment_ids.clone(),
+                    content: content.clone(),
                     target_agent_id: target_agent_id.clone(),
                     reply_to_event_id: reply_to_event_id.clone(),
                 }

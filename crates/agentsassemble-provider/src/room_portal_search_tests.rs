@@ -114,6 +114,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
             .finish_observation("turn-search", 9)
             .unwrap_or_else(|error| panic!("finish search observation: {error}")),
         ProviderTurnOutcome::Message {
+            attachment_ids: Vec::new(),
             content: "found it".to_owned(),
             target_agent_id: String::new(),
             reply_to_event_id: None,

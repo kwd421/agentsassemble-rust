@@ -163,6 +163,7 @@ async fn assert_replacement_turn(
             "done",
             "",
             None,
+            &[],
         )
         .await
         .unwrap_or_else(|error| panic!("complete old persona turn: {error}"));

@@ -218,6 +218,7 @@ impl SqliteStore {
         content: &str,
         target_agent_id: &str,
         reply_to_event_id: Option<&str>,
+        attachment_ids: &[String],
     ) -> Result<AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let commit = completion::complete_message(
@@ -228,6 +229,7 @@ impl SqliteStore {
             content,
             target_agent_id,
             reply_to_event_id,
+            attachment_ids,
         )
         .await?;
         transaction.commit().await?;

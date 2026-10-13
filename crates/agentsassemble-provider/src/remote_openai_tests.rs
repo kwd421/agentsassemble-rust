@@ -354,6 +354,7 @@ async fn routed_custom_response_preserves_selection_and_reaches_room_publication
         assert_eq!(
             outcome,
             Ok(ProviderTurnOutcome::Message {
+                attachment_ids: Vec::new(),
                 content: "Bounded room reply".to_owned(),
                 target_agent_id: String::new(),
                 reply_to_event_id: None,
@@ -428,6 +429,7 @@ async fn a_tool_this_room_does_not_offer_is_answered_and_the_turn_continues() {
     assert_eq!(
         outcome,
         Ok(ProviderTurnOutcome::Message {
+            attachment_ids: Vec::new(),
             content: "Bounded room reply".to_owned(),
             target_agent_id: String::new(),
             reply_to_event_id: None,

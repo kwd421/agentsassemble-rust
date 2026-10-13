@@ -105,6 +105,7 @@ async fn ordered_quarantine_hands_off_once_and_late_success_does_not_publish() {
             "DUPLICATE LATE ANSWER",
             "",
             None,
+            &[],
         )
         .await
         .unwrap_or_else(|error| panic!("test operation: {error}"));
@@ -127,6 +128,7 @@ async fn ordered_quarantine_hands_off_once_and_late_success_does_not_publish() {
             "@Host the answer",
             "",
             None,
+            &[],
         )
         .await
         .unwrap_or_else(|error| panic!("test operation: {error}"));
@@ -298,7 +300,8 @@ async fn ordered_recovery_stop_resume_uses_fresh_generation_without_reusing_hand
                 authority(&start, "resume-result", None),
                 "stale answer",
                 "",
-                None
+                None,
+                &[],
             )
             .await
             .is_err()
@@ -435,6 +438,7 @@ async fn ordered_recovery_mixed_observation_keeps_addressed_input_after_late_suc
             "Initial answer",
             "",
             None,
+            &[],
         )
         .await?;
     assert_eq!(batch.next_assignments[0].session.inflight_inputs.len(), 2);
@@ -452,6 +456,7 @@ async fn ordered_recovery_mixed_observation_keeps_addressed_input_after_late_suc
             "Mixed late answer",
             "",
             None,
+            &[],
         )
         .await?;
     assert!(!event_types(&late.events).contains(&"message_final"));

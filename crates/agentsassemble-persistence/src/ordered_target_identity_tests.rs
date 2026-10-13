@@ -45,6 +45,7 @@ async fn addressed_input_keeps_immutable_target_after_rename() -> TestResult {
             "The original target's answer",
             "",
             None,
+            &[],
         )
         .await?;
     assert_eq!(
@@ -92,6 +93,7 @@ async fn renamed_target_without_alias_reuse_is_not_handed_off() -> TestResult {
             "The original target's answer",
             "",
             None,
+            &[],
         )
         .await?;
     assert!(event_types(&late.events).contains(&"message_final"));

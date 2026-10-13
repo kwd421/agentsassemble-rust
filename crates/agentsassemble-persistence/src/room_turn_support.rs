@@ -324,6 +324,7 @@ pub(super) async fn agent_final_event(
     content: String,
     target_agent_id: &str,
     reply_to_event_id: Option<&str>,
+    attachment_ids: &[String],
 ) -> Result<RoomEvent, PersistenceError> {
     session.inflight_inputs.first().ok_or_else(|| {
         rejected(
@@ -366,7 +367,35 @@ pub(super) async fn agent_final_event(
             .extra
             .insert("reply_to_event_id".to_owned(), json!(id));
     }
+    let participant = load_participant(
+        transaction,
+        &session.public.room_id,
+        &session.public.participant_id,
+    )
+    .await?;
+    let principal = provider_room_principal(session, &participant, InviteScope::ReadWrite)?;
+    let now = Utc::now().timestamp();
+    let attachments = crate::message_attachments::prepare_message_attachment_bindings(
+        transaction,
+        &principal,
+        attachment_ids,
+        now,
+    )
+    .await?;
+    if !attachments.is_empty() {
+        event
+            .extra
+            .insert("attachments".into(), serde_json::to_value(attachments)?);
+    }
     insert_event(transaction, &event).await?;
+    crate::message_attachments::bind_message_attachments(
+        transaction,
+        &principal,
+        attachment_ids,
+        event.seq,
+        now,
+    )
+    .await?;
     Ok(event)
 }
 

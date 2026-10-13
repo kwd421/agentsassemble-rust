@@ -27,6 +27,13 @@ pub(crate) async fn handle_provider_room_tool(
         execution_id: command.execution_id().into(),
     };
     match command.request().clone() {
+        ProviderRoomToolRequest::UploadAttachment { .. } => {
+            command.complete(Err(ProviderRoomToolError {
+                code: "room_tool_invalid".into(),
+                message: "File operations require the room file owner.".into(),
+            }));
+            None
+        }
         ProviderRoomToolRequest::DirectAction(request) => {
             crate::room_runtime::delegated_direct::execute_with_reply(
                 owners,

@@ -10,6 +10,7 @@ fn assert_message(completed: &super::ProviderTurnCompleted, expected: &str) {
     assert_eq!(
         completed.outcome,
         ProviderTurnOutcome::Message {
+            attachment_ids: Vec::new(),
             content: expected.to_owned(),
             target_agent_id: String::new(),
             reply_to_event_id: None,

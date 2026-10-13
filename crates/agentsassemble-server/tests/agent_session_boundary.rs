@@ -331,16 +331,26 @@ async fn verify_room_turn_publication(first_status: &str) {
     .await
     .unwrap_or_else(|error| panic!("open room-turn store: {error}"));
     bootstrap(&store).await;
-    let catalog = agent_catalog(directory.path(), Some(fixture.as_bytes()));
+    let mut catalog = agent_catalog(directory.path(), Some(fixture.as_bytes()));
+    if first_status == "completed" {
+        catalog.providers[0]
+            .controls
+            .iter_mut()
+            .find(|c| c.key == "permission_mode")
+            .unwrap()
+            .options
+            .push(agentsassemble_domain::ProviderControlOption {
+                value: "workspace_write".into(),
+                label: "Workspace write".into(),
+                metadata: Default::default(),
+            });
+    }
     let server = start(store, catalog).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let snapshot = receive_json(&mut socket).await;
-    let attachment_ids = if first_status == "completed" {
-        managed_tools::prepare(&server, &mut socket, &snapshot).await
-    } else {
-        Vec::new()
-    };
+    let attachment_ids =
+        managed_tools::prepare(&server, &mut socket, &snapshot, directory.path()).await;
     send_create(
         &mut socket,
         "create-room-turn-agent",
@@ -350,7 +360,7 @@ async fn verify_room_turn_publication(first_status: &str) {
             "display_name": "Terra",
             "workspace": directory.path(),
             "model": "gpt-5.6-terra",
-            "permission_mode": "meeting_read_only",
+            "permission_mode": if first_status == "completed" { "workspace_write" } else { "meeting_read_only" },
             "start_now": false,
         }),
     )
@@ -380,6 +390,7 @@ async fn verify_room_turn_publication(first_status: &str) {
     let endpoint = room_portal_fixture::wait_for_value(&portal_endpoint, "endpoint").await;
     let token = room_portal_fixture::wait_for_value(&portal_token, "token").await;
     if first_status != "completed" {
+        managed_tools::verify_read_only_files(&endpoint, &token, &attachment_ids[1]).await;
         room_portal_fixture::publish(&endpoint, &token, "must not publish").await;
         std::fs::write(&release_first, b"release")
             .unwrap_or_else(|error| panic!("release unsuccessful room turn: {error}"));
@@ -405,10 +416,11 @@ async fn verify_room_turn_publication(first_status: &str) {
         server.stop().await;
         return;
     }
-    managed_tools::verify(
+    let uploaded = managed_tools::verify(
         &endpoint,
         &token,
         &attachment_ids[0],
+        &attachment_ids[1],
         &server.state.store,
         session_id,
         server.state.rooms.subscribe("general").await,
@@ -439,7 +451,7 @@ async fn verify_room_turn_publication(first_status: &str) {
     )
     .await;
     let _second_ack = receive_command_ack(&mut socket).await;
-    let first_view = room_portal_fixture::publish(&endpoint, &token, "first room answer").await;
+    let first_view = managed_tools::publish_with_file(&endpoint, &token, &uploaded).await;
     let second_turn_seen = turn_seen.clone();
     let second_endpoint = endpoint.clone();
     let second_token = token.clone();
@@ -469,6 +481,36 @@ async fn verify_room_turn_publication(first_status: &str) {
         }
     }
     assert_eq!(provider_finals, ["first room answer", "second room answer"]);
+    let snapshot = server
+        .state
+        .store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap();
+    let first = snapshot
+        .events
+        .iter()
+        .find(|e| e.content.as_deref() == Some("first room answer"))
+        .unwrap();
+    assert_eq!(first.extra["attachments"][0]["id"], uploaded);
+    let (reader, ()) = server
+        .state
+        .store
+        .open_message_attachment_reader(
+            agentsassemble_persistence::MessageAttachmentReadAuthority::Local {
+                room_id: "general".into(),
+                user_id: LOCAL_OPERATOR_USER_ID.into(),
+                participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.into(),
+            },
+            &uploaded,
+            |_| Ok(()),
+        )
+        .await
+        .unwrap();
+    for sequence in 0..480 {
+        assert_eq!(reader.read_piece(sequence).await.unwrap(), vec![71; 65536]);
+    }
+
     let second_view = second_portal
         .await
         .unwrap_or_else(|error| panic!("join second portal turn: {error}"));

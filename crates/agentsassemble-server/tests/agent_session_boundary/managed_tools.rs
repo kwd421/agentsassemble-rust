@@ -10,12 +10,13 @@ pub(super) async fn prepare<S>(
     server: &RunningServer,
     socket: &mut RoomSocketPeer<S>,
     snapshot: &Value,
+    workspace: &Path,
 ) -> Vec<String>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     send_command(socket, "managed-tools-mode", "room.settings.update", &json!({
-        "expected_revision":snapshot["room_settings"]["settings_revision"], "tool_mode":"tabletop"
+        "expected_revision":snapshot["room_settings"]["settings_revision"], "tool_mode":"tabletop", "attachment_file_limit_bytes":50*1024*1024
     })).await;
     let _ = receive_command_ack(socket).await;
     let attachment = server
@@ -31,17 +32,36 @@ where
         )
         .await
         .unwrap_or_else(|error| panic!("managed attachment: {error}"));
-    vec![attachment.id]
+    let mut source = std::fs::File::create(workspace.join("managed-large.bin")).unwrap();
+    use std::io::Write;
+    for _ in 0..480 {
+        source.write_all(&[71; 65536]).unwrap();
+    }
+    let large = server
+        .state
+        .store
+        .store_local_message_attachment(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+            "large-context.bin",
+            "application/octet-stream",
+            vec![71; 30 * 1024 * 1024],
+        )
+        .await
+        .unwrap();
+    vec![attachment.id, large.id]
 }
 
 pub(super) async fn verify(
     endpoint: &str,
     token: &str,
     attachment_id: &str,
+    large_attachment_id: &str,
     store: &SqliteStore,
     delegate: &str,
     events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
-) {
+) -> String {
     let client = ()
         .serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
@@ -98,6 +118,33 @@ pub(super) async fn verify(
             .map(|text| text.text.as_str()),
         Some("managed attachment proof")
     );
+    let large = room_portal_fixture::call_tool(
+        &client,
+        "read_attachment",
+        json!({"attachment_id":large_attachment_id}),
+    )
+    .await;
+    assert_ne!(large.is_error, Some(true), "{large:?}");
+    let output: Value = serde_json::from_str(&large.content[1].as_text().unwrap().text).unwrap();
+    let saved = output["path"].as_str().unwrap();
+    let mut file = std::fs::File::open(saved).unwrap();
+    use std::io::Read;
+    let mut piece = [0; 65536];
+    for _ in 0..480 {
+        file.read_exact(&mut piece).unwrap();
+        assert_eq!(piece, [71; 65536]);
+    }
+    assert_eq!(file.read(&mut piece).unwrap(), 0);
+    let uploaded = room_portal_fixture::call_tool(
+        &client,
+        "upload_attachment",
+        json!({"path":"managed-large.bin","content_type":"application/octet-stream"}),
+    )
+    .await;
+    assert_ne!(uploaded.is_error, Some(true), "{uploaded:?}");
+    let uploaded: Value =
+        serde_json::from_str(&uploaded.content[0].as_text().unwrap().text).unwrap();
+    assert_eq!(uploaded["size"], 30 * 1024 * 1024);
     crate::delegated_pin::verify(&client, store, delegate, event_id, None, events)
         .await
         .unwrap();
@@ -105,4 +152,60 @@ pub(super) async fn verify(
         .cancel()
         .await
         .unwrap_or_else(|error| panic!("close managed MCP: {error}"));
+    uploaded["id"].as_str().unwrap().to_owned()
+}
+
+pub(super) async fn publish_with_file(endpoint: &str, token: &str, id: &str) -> String {
+    let client = ()
+        .serve(StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
+        ))
+        .await
+        .unwrap();
+    let read = room_portal_fixture::call_tool(&client, "read_discussion", json!({})).await;
+    let result = room_portal_fixture::call_tool(
+        &client,
+        "publish_message",
+        json!({"content":"first room answer","attachment_ids":[id]}),
+    )
+    .await;
+    assert_ne!(result.is_error, Some(true), "{result:?}");
+    let view = read.content[0].as_text().unwrap().text.clone();
+    client.cancel().await.unwrap();
+    view
+}
+
+pub(super) async fn verify_read_only_files(endpoint: &str, token: &str, id: &str) {
+    let client = ()
+        .serve(StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
+        ))
+        .await
+        .unwrap();
+    room_portal_fixture::call_tool(&client, "read_discussion", json!({})).await;
+    let read =
+        room_portal_fixture::call_tool(&client, "read_attachment", json!({"attachment_id":id}))
+            .await;
+    assert_eq!(read.is_error, Some(true));
+    let refusal = &read.content[0].as_text().unwrap().text;
+    assert!(
+        refusal.contains("attachment_too_large")
+            && refusal.contains("31457280")
+            && refusal.contains("10485760")
+    );
+    let upload = room_portal_fixture::call_tool(
+        &client,
+        "upload_attachment",
+        json!({"path":"managed-large.bin"}),
+    )
+    .await;
+    assert_eq!(upload.is_error, Some(true));
+    assert!(
+        upload.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .contains("permission_denied")
+    );
+    client.cancel().await.unwrap();
 }

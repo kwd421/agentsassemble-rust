@@ -49,6 +49,7 @@ async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
     assert_eq!(
         turn.outcome,
         crate::ProviderTurnOutcome::Message {
+            attachment_ids: Vec::new(),
             content: "Hello from Cursor".to_owned(),
             target_agent_id: String::new(),
             reply_to_event_id: None,
@@ -86,6 +87,7 @@ async fn tool_only_completion_is_reserved_for_room_publication_validation() {
             assert_eq!(
                 turn.outcome,
                 crate::ProviderTurnOutcome::Message {
+                    attachment_ids: Vec::new(),
                     content: String::new(),
                     target_agent_id: String::new(),
                     reply_to_event_id: None,

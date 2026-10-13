@@ -311,6 +311,7 @@ async fn assert_tool_only_portal_outcome(request: &crate::ProviderTurnRequest, d
             }
         } else {
             ProviderTurnOutcome::Message {
+                attachment_ids: Vec::new(),
                 content: "Published reply".to_owned(),
                 target_agent_id: String::new(),
                 reply_to_event_id: None,

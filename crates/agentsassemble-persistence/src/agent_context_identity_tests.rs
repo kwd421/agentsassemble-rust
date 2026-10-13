@@ -76,6 +76,7 @@ async fn role_changes_reach_live_status_and_next_api_context_without_authority_c
                 "Acknowledged.",
                 "",
                 None,
+                &[],
             )
             .await?;
         assert!(completed.next_assignments.is_empty());

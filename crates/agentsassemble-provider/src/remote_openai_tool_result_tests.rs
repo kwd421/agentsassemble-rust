@@ -65,6 +65,7 @@ async fn attachment_results_reach_api_and_preserve_turn_completion() {
         let id = "ma_00000000000000000000000000000001".to_owned();
         let (ingress, mut commands) = ProviderAttachmentReadIngress::channel(1);
         let attachment = ProviderAttachment {
+            path: None,
             id: id.clone(), filename: "controlled.txt".to_owned(),
             content_type: content_type.to_owned(), size: content.len(), is_image, content: content.into(),
         };

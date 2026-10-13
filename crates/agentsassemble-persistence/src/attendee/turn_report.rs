@@ -172,6 +172,7 @@ async fn apply_report(
                 content,
                 target_agent_id,
                 reply_to_event_id.as_deref(),
+                &[],
             )
             .await
         }

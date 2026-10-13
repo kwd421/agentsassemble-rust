@@ -216,6 +216,7 @@ impl AcpClient {
                 if !output.trim().is_empty() || room_observation =>
             {
                 ProviderTurnOutcome::Message {
+                    attachment_ids: Vec::new(),
                     content: output,
                     target_agent_id: String::new(),
                     reply_to_event_id: None,

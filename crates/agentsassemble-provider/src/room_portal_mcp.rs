@@ -12,12 +12,12 @@ use serde_json::json;
 use crate::room_attachment::attachment_tool_result;
 use crate::room_portal::{
     ActiveObservation, PortalState, ProviderRoomToolRequest, ProviderRoomToolResult, StagedOutcome,
-    canonical_message, require_current_receipt, reserve_attachment_read, reserve_room_tool,
-    reserve_tabletop_tool, valid_decline_reason,
+    require_current_receipt, reserve_attachment_read, reserve_room_tool, reserve_tabletop_tool,
+    valid_decline_reason,
 };
 use crate::room_portal_tool_contract::{
     CastVote, ChooseRandom, CreateVote, PassTurn, PublishMessage, ReadAttachment,
-    ReadMessageContext, ReadRoomStatus, RollDice, SearchMessages, VoteTarget,
+    ReadMessageContext, ReadRoomStatus, RollDice, SearchMessages, UploadAttachment, VoteTarget,
 };
 
 #[derive(Debug, Clone)]
@@ -68,7 +68,8 @@ impl RoomPortalMcp {
             ProviderRoomToolResult::MessageContext(context) => {
                 Ok(crate::room_portal_render::message_context(&context))
             }
-            ProviderRoomToolResult::Random(_)
+            ProviderRoomToolResult::UploadAttachment(_)
+            | ProviderRoomToolResult::Random(_)
             | ProviderRoomToolResult::DelegatedActions(_)
             | ProviderRoomToolResult::MessagePin(_)
             | ProviderRoomToolResult::DirectAction(_) => {
@@ -241,7 +242,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Read a room attachment by its ID, as listed in the room view or around a search result. Does not end your turn."
+        description = "Read a room attachment by ID. Up to 10 MiB is inline; larger published files (up to 50 MiB) are saved atomically in your writable working folder and return a path. Read-only agents receive attachment_too_large. Per turn: 10 distinct IDs, 2 attempts each, 200 MiB total successful reads. Does not end your turn."
     )]
     async fn read_attachment(
         &self,
@@ -265,6 +266,31 @@ impl RoomPortalMcp {
         let result = attachment_tool_result(&attachment)?;
         reservation.complete(attachment.size)?;
         Ok(result)
+    }
+
+    #[tool(
+        description = "Upload a regular file from a path inside your working folder as a pending room attachment. Requires workspace access. Uses the current room per-file limit (10/25/50 MiB), storage quota and three-active-transfers-per-principal admission. Pass the returned ID in publish_message attachment_ids within one hour. Does not end your turn."
+    )]
+    async fn upload_attachment(
+        &self,
+        Parameters(input): Parameters<UploadAttachment>,
+    ) -> Result<String, String> {
+        let (authority, reservation, ingress) = reserve_room_tool(&self.state)?;
+        let result = ingress
+            .submit(
+                authority,
+                ProviderRoomToolRequest::UploadAttachment {
+                    path: input.path,
+                    content_type: input.content_type,
+                },
+                reservation,
+            )
+            .await
+            .map_err(|error| format!("{}: {}", error.code, error.message))?;
+        let ProviderRoomToolResult::UploadAttachment(result) = result else {
+            return Err("Unexpected upload result.".into());
+        };
+        Ok(result.to_string())
     }
 
     #[tool(description = "Search the room's full message history. Does not end your turn.")]
@@ -291,7 +317,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Post a message to the room, optionally handing the floor to one agent by its ID. Ends your turn."
+        description = "Post a message and optional attachment_ids returned by upload_attachment to the room, optionally handing the floor to one agent by its ID. Ends your turn."
     )]
     fn publish_message(
         &self,
@@ -302,8 +328,11 @@ impl RoomPortalMcp {
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
         let active = terminal_observation(&mut state)?;
-        let content = canonical_message(&input.content)
-            .ok_or_else(|| "The room publication is invalid.".to_owned())?;
+        let message = agentsassemble_domain::MessageSend::from_payload(
+            &json!({"content":input.content,"attachment_ids":input.attachment_ids}),
+        )
+        .map_err(|error| error.message)?;
+        let content = message.content;
         if input.reply_to_event_id.as_ref().is_some_and(|id| {
             uuid::Uuid::parse_str(id).map_or(true, |parsed| parsed.to_string() != *id)
         }) {
@@ -321,6 +350,7 @@ impl RoomPortalMcp {
         active.outcome = Some(StagedOutcome::Message {
             receipt_generation: active.turn_generation,
             content,
+            attachment_ids: message.attachment_ids,
             target_agent_id,
             reply_to_event_id: input.reply_to_event_id,
         });

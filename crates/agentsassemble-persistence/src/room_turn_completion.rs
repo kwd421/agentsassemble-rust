@@ -16,8 +16,8 @@ use crate::{
     room_event_sequence::next_sequence,
 };
 use agentsassemble_domain::{
-    AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, InviteScope, MAX_MESSAGE_CHARACTERS,
-    VoteCommand, clean_message, has_visible_text, redact_persisted_diagnostic_text,
+    AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, InviteScope, VoteCommand,
+    clean_message, has_visible_text, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 
@@ -29,6 +29,7 @@ pub(super) async fn complete_message(
     content: &str,
     target_agent_id: &str,
     reply_to_event_id: Option<&str>,
+    attachment_ids: &[String],
 ) -> Result<AgentTurnCommit, PersistenceError> {
     let ProviderTurnAuthority {
         turn_id,
@@ -37,13 +38,17 @@ pub(super) async fn complete_message(
         ..
     } = authority;
     validate_identifier(provider_turn_id, "provider_turn_invalid")?;
-    let content = clean_message(content, MAX_MESSAGE_CHARACTERS);
-    if !has_visible_text(&content) {
+    let content = clean_message(content, agentsassemble_domain::MAX_MESSAGE_CHARACTERS);
+    if !has_visible_text(&content) && attachment_ids.is_empty() {
         return Err(rejected(
             "provider_turn_output_missing",
             "The provider turn completed without a room-visible final message.",
         ));
     }
+    agentsassemble_domain::MessageSend::from_payload(
+        &serde_json::json!({"content":content,"attachment_ids":attachment_ids}),
+    )
+    .map_err(|error| rejected(error.code, &error.message))?;
     let (room, settings) = load_active_room(transaction, room_id).await?;
     let mut session = load_session(transaction, room_id, session_id).await?;
     require_active_turn(&session, turn_id)?;
@@ -77,6 +82,7 @@ pub(super) async fn complete_message(
         content,
         target_agent_id,
         reply_to_event_id,
+        attachment_ids,
     )
     .await?;
     let commit = ProviderTurnFinalization {

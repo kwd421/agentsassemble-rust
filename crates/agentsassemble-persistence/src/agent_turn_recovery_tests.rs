@@ -346,6 +346,7 @@ async fn prepared_stop_suppresses_a_late_ordinary_provider_final() {
             "This final lost the stop linearization race.",
             "",
             None,
+            &[],
         )
         .await;
     assert!(matches!(

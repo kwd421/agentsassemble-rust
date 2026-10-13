@@ -18,6 +18,8 @@ pub struct ProviderAttachment {
     pub content_type: String,
     pub size: usize,
     pub is_image: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
     #[serde(with = "private_bytes")]
     pub content: bytes::Bytes,
 }
@@ -34,8 +36,14 @@ impl ProviderAttachment {
             && !self.content_type.is_empty()
             && self.content_type.len() <= MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES
             && !self.content_type.chars().any(char::is_control)
-            && (1..=MAX_ATTACHMENT_BYTES).contains(&self.size)
-            && self.content.len() == self.size
+            && if let Some(path) = &self.path {
+                (MAX_ATTACHMENT_BYTES + 1..=agentsassemble_domain::MAX_ROOM_FILE_BYTES)
+                    .contains(&self.size)
+                    && std::path::Path::new(path).is_absolute()
+                    && self.content.is_empty()
+            } else {
+                (1..=MAX_ATTACHMENT_BYTES).contains(&self.size) && self.content.len() == self.size
+            }
     }
 }
 
@@ -60,6 +68,12 @@ pub fn attachment_tool_result(attachment: &ProviderAttachment) -> Result<CallToo
     let metadata = serde_json::to_string(&descriptor)
         .map_err(|_| "The room attachment metadata could not be encoded.".to_owned())?;
     let metadata = ContentBlock::text(metadata);
+    if let Some(path) = &attachment.path {
+        return Ok(CallToolResult::success(vec![
+            metadata,
+            ContentBlock::text(serde_json::json!({"path":path}).to_string()),
+        ]));
+    }
     if !attachment.is_image
         && let Ok(text) = std::str::from_utf8(&attachment.content)
     {
@@ -211,6 +225,13 @@ impl ProviderAttachmentReadCommand {
     #[must_use]
     pub fn attachment_id(&self) -> &str {
         &self.attachment_id
+    }
+
+    /// Resolves when the requesting turn/transport drops its response custody.
+    pub async fn cancelled(&mut self) {
+        if let Some(reply) = self.reply.as_mut() {
+            reply.closed().await;
+        }
     }
 
     pub fn complete(mut self, result: Result<ProviderAttachment, ProviderAttachmentReadError>) {

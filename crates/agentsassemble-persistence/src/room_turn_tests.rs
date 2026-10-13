@@ -34,6 +34,8 @@ mod message_search_provider_tests;
 mod ordered_recovery_tests;
 #[path = "persona_turn_tests.rs"]
 mod persona_turn_tests;
+#[path = "provider_file_parity_tests.rs"]
+mod provider_file_parity_tests;
 #[path = "provider_turn_completion_recovery_tests.rs"]
 mod provider_turn_completion_recovery_tests;
 #[path = "provider_turn_mute_tests.rs"]
@@ -158,6 +160,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             "First provider final",
             "",
             Some(&first.outcome.event.id),
+            &[],
         )
         .await
         .unwrap_or_else(|error| panic!("complete first provider turn: {error}"));
@@ -200,6 +203,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             "must not publish",
             "",
             None,
+            &[],
         )
         .await
     else {
@@ -240,7 +244,6 @@ fn assert_turn_tool_instructions(assignment: &super::AgentTurnAssignment) {
     assert!(!provider_input.contains("`publish_message` posts to the room"));
     assert!(!provider_input.contains("read_room_status"));
     assert!(provider_input.contains("unavailable outside tabletop mode"));
-    assert!(provider_input.contains("do not upload attachments"));
 }
 
 #[tokio::test]
@@ -275,6 +278,7 @@ async fn completed_turn_keeps_the_attached_provider_session_identity() {
             "Native session attached",
             "",
             None,
+            &[],
         )
         .await
         .unwrap_or_else(|error| panic!("commit first provider final: {error}"));
@@ -309,6 +313,7 @@ async fn completed_turn_keeps_the_attached_provider_session_identity() {
             "must roll back",
             "",
             None,
+            &[],
         )
         .await
     else {

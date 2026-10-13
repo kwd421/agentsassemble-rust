@@ -72,7 +72,9 @@ impl AttachmentReadReservation {
                     .successful_bytes
                     .checked_add(size)
                     .ok_or_else(|| "The room attachment byte limit was exceeded.".to_owned())?;
-                if !(1..=MAX_ATTACHMENT_BYTES).contains(&size) || next_bytes > byte_limit {
+                if !(1..=agentsassemble_domain::MAX_ROOM_FILE_BYTES).contains(&size)
+                    || next_bytes > byte_limit
+                {
                     Err("The room attachment read result is invalid.".to_owned())
                 } else {
                     *active
@@ -251,6 +253,24 @@ mod tests {
             drop(reservation);
         }
         assert!(reserve_attachment_read(&failed, ATTACHMENT_ID).is_err());
+    }
+
+    #[test]
+    fn large_saved_reads_share_the_original_aggregate_budget() {
+        let state = fixture_state();
+        for id in [ATTACHMENT_ID, "ma_22222222222222222222222222222222"] {
+            for _ in 0..2 {
+                let (_, _, mut read) = reserve_attachment_read(&state, id).unwrap();
+                read.complete(agentsassemble_domain::MAX_ROOM_FILE_BYTES)
+                    .unwrap();
+            }
+        }
+        let (_, _, mut next) =
+            reserve_attachment_read(&state, "ma_33333333333333333333333333333333").unwrap();
+        assert!(
+            next.complete(1).is_err(),
+            "saved-path results cannot exceed the unchanged aggregate budget"
+        );
     }
 
     #[test]

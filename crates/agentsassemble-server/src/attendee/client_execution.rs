@@ -191,14 +191,18 @@ impl AttendeeExecution {
                 }
                 let outcome = match result.outcome {
                     ProviderTurnOutcome::Message {
+                        attachment_ids,
                         content,
                         target_agent_id,
                         reply_to_event_id,
-                    } => AttendeeTurnOutcome::Message {
+                    } if attachment_ids.is_empty() => AttendeeTurnOutcome::Message {
                         content,
                         target_agent_id,
                         reply_to_event_id,
                     },
+                    ProviderTurnOutcome::Message { .. } => {
+                        return Err(AttendeeClientError::local("workspace_upload_unavailable"));
+                    }
                     ProviderTurnOutcome::Declined { reason_code } => {
                         AttendeeTurnOutcome::Declined { reason_code }
                     }

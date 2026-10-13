@@ -166,7 +166,7 @@ impl AppState {
             provider_adapter.clone(),
         );
         let downloads = rooms.downloads.clone();
-        let uploads = crate::message_upload::Service::new(store.clone());
+        let uploads = rooms.uploads.clone();
         Ok(Self {
             rooms,
             store,

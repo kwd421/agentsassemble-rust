@@ -246,6 +246,7 @@ async fn provider_reads_an_attachment_shown_before_the_message_that_asks_about_i
             "A text file.",
             "",
             None,
+            &[],
         )
         .await
         .unwrap_or_else(|error| panic!("finish Flash turn: {error}"));
@@ -317,6 +318,7 @@ async fn provider_reads_an_older_attachment_outside_its_room_view() {
             "Kept.",
             "",
             None,
+            &[],
         )
         .await
         .unwrap_or_else(|error| panic!("finish first turn: {error}"));
@@ -603,6 +605,7 @@ async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
             "held complete",
             "",
             None,
+            &[],
         )
         .await?;
     let first = &committed.next_assignments[0];
@@ -621,6 +624,7 @@ async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
             "first complete",
             "",
             None,
+            &[],
         )
         .await?;
     let second = &committed.next_assignments[0];

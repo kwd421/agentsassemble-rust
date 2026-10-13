@@ -88,6 +88,9 @@ enum RoomPublicationWake {
 
 struct RoomTaskContext {
     downloads: crate::download_budget::Budget,
+    uploads: crate::message_upload::Service,
+    file_tasks: tokio_util::task::TaskTracker,
+    file_cancellation: CancellationToken,
     principal_mutations: PrincipalMutationAdmission,
     room_id: String,
     store: SqliteStore,
@@ -114,6 +117,7 @@ pub(crate) struct RoomCommandOwners<'a> {
 #[derive(Clone)]
 pub struct RoomRuntime {
     pub(crate) downloads: crate::download_budget::Budget,
+    pub(crate) uploads: crate::message_upload::Service,
     store: SqliteStore,
     provider_catalog: ProviderCatalogService,
     provider_adapter: ProviderAdapter,
@@ -139,6 +143,7 @@ impl RoomRuntime {
     ) -> Self {
         Self {
             downloads: crate::download_budget::Budget::default(),
+            uploads: crate::message_upload::Service::new(store.clone()),
             store,
             provider_catalog,
             provider_adapter,
@@ -452,6 +457,9 @@ impl RoomRuntime {
         let task = spawn_room_task(
             RoomTaskContext {
                 downloads: self.downloads.clone(),
+                uploads: self.uploads.clone(),
+                file_tasks: tokio_util::task::TaskTracker::new(),
+                file_cancellation: self.cancellation.child_token(),
                 principal_mutations: self.principal_mutations.clone(),
                 room_id: room_id.to_owned(),
                 store,
@@ -589,6 +597,9 @@ fn spawn_room_task(
                 );
             }
         }
+        context.file_cancellation.cancel();
+        context.file_tasks.close();
+        context.file_tasks.wait().await;
     })
 }
 
@@ -651,6 +662,22 @@ async fn handle_room_input(
             .await;
         }
         RoomInput::Tool(command) => {
+            if matches!(
+                command.request(),
+                agentsassemble_provider::ProviderRoomToolRequest::UploadAttachment { .. }
+            ) {
+                let store = context.store.clone();
+                let uploads = context.uploads.clone();
+                let room_id = context.room_id.clone();
+                let cancellation = context.file_cancellation.clone();
+                context.file_tasks.spawn(async move {
+                    tokio::select! {
+                        () = cancellation.cancelled() => {},
+                        () = crate::provider_attachment_runtime::handle_provider_attachment_upload(&store, &uploads, &room_id, command) => {},
+                    }
+                });
+                return None;
+            }
             return crate::provider_room_tool_runtime::handle_provider_room_tool(
                 RoomCommandOwners {
                     store: &context.store,
@@ -669,13 +696,16 @@ async fn handle_room_input(
             .await;
         }
         RoomInput::Attachment(command) => {
-            crate::provider_attachment_runtime::handle_provider_attachment_read(
-                &context.store,
-                &context.room_id,
-                &context.downloads,
-                command,
-            )
-            .await;
+            let store = context.store.clone();
+            let room_id = context.room_id.clone();
+            let downloads = context.downloads.clone();
+            let cancellation = context.file_cancellation.clone();
+            context.file_tasks.spawn(async move {
+                tokio::select! {
+                    () = cancellation.cancelled() => {},
+                    () = crate::provider_attachment_runtime::handle_provider_attachment_read(&store, &room_id, &downloads, command) => {},
+                }
+            });
         }
         RoomInput::ProviderRecovery(recovery) => {
             return Some(

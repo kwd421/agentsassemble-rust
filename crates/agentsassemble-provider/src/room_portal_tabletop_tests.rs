@@ -103,6 +103,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
             .finish_observation("turn-tabletop", 9)
             .unwrap_or_else(|error| panic!("finish tabletop observation: {error}")),
         ProviderTurnOutcome::Message {
+            attachment_ids: Vec::new(),
             content: "after the roll".to_owned(),
             target_agent_id: String::new(),
             reply_to_event_id: None,
@@ -138,6 +139,7 @@ async fn assert_tabletop_tool_catalog(client: &RoomClient) {
             "read_room_status".to_owned(),
             "roll_dice".to_owned(),
             "search_messages".to_owned(),
+            "upload_attachment".to_owned(),
             "withdraw_vote".to_owned(),
         ])
     );

@@ -33,6 +33,14 @@ impl AttendeeToolCall {
             return Err(error);
         }
         let request = match command.request() {
+            ProviderRoomToolRequest::UploadAttachment { .. } => {
+                let error = ProviderRoomToolError {
+                    code: "workspace_upload_unavailable".into(),
+                    message: "Attendee path uploads are not yet implemented.".into(),
+                };
+                command.complete(Err(error.clone()));
+                return Err(error);
+            }
             ProviderRoomToolRequest::DelegatedActions
             | ProviderRoomToolRequest::DirectAction(_) => {
                 Request::Direct(crate::attendee::tool_wire::DelegatedDirectRequest {

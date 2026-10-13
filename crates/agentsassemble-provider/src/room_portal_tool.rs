@@ -20,6 +20,7 @@ pub struct ProviderRoomToolIngress {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolRequest {
+    UploadAttachment { path: String, content_type: String },
     DelegatedActions,
     SetMessagePin(agentsassemble_domain::SetMessagePin),
     DirectAction(agentsassemble_domain::DirectRoomAction),
@@ -31,6 +32,7 @@ pub enum ProviderRoomToolRequest {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolResult {
+    UploadAttachment(serde_json::Value),
     DelegatedActions(Vec<String>),
     MessagePin(serde_json::Value),
     DirectAction(serde_json::Value),
@@ -142,6 +144,13 @@ impl ProviderRoomToolCommand {
         self.reservation.begin_execution()
     }
 
+    /// Resolves when the requesting turn/transport drops its response custody.
+    pub async fn cancelled(&mut self) {
+        if let Some(reply) = self.reply.as_mut() {
+            reply.closed().await;
+        }
+    }
+
     pub fn complete(mut self, result: Result<ProviderRoomToolResult, ProviderRoomToolError>) {
         let result = result.and_then(|result| {
             response_matches(&self.request, &result)
@@ -182,6 +191,9 @@ fn response_matches(request: &ProviderRoomToolRequest, result: &ProviderRoomTool
     matches!(
         (request, result),
         (
+            ProviderRoomToolRequest::UploadAttachment { .. },
+            ProviderRoomToolResult::UploadAttachment(_)
+        ) | (
             ProviderRoomToolRequest::DirectAction(_),
             ProviderRoomToolResult::DirectAction(_)
         ) | (
