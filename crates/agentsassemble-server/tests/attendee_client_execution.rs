@@ -37,6 +37,18 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     // This controlled transport exercises the API/local persona contract. Real harness
     // registrations retain their separate selection-time persona rejection.
     fixture_catalog.providers[0].catalog_group = "api".to_owned();
+    // The file-parity flow needs the workspace permission the real CLI offers.
+    for control in &mut fixture_catalog.providers[0].controls {
+        if control.key == "permission_mode" {
+            control
+                .options
+                .push(agentsassemble_domain::ProviderControlOption {
+                    value: "workspace_write".to_owned(),
+                    label: "Workspace".to_owned(),
+                    metadata: std::collections::BTreeMap::default(),
+                });
+        }
+    }
     let catalog = ProviderCatalogService::fixed(fixture_catalog);
     let (store, invite) = attendee::fixture().await?;
     let server = human_invite::start(store.clone()).await;
@@ -84,6 +96,10 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     assert!(!execution.matches_delivery(&assignment));
     let endpoint = room_portal_fixture::wait_for_value(&endpoint, "endpoint").await;
     let token = room_portal_fixture::wait_for_value(&token, "token").await;
+    let canonical = std::fs::canonicalize(directory.path())?;
+    let workspace = canonical.to_str().ok_or("workspace not UTF-8")?.to_owned();
+    let identity =
+        agentsassemble_domain::stable_identity_hash(&same_file::Handle::from_path(&canonical)?);
     tool_relay::verify(
         &client,
         replacement.connection_id(),
@@ -93,6 +109,8 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
         server.state().rooms.subscribe("general").await,
         &mut tools_rx,
         (&attachment_id, &large_id, &mut attachments_rx),
+        &workspace,
+        &identity,
     )
     .await?;
     let view =
@@ -250,7 +268,8 @@ async fn prepare_runtime(
             &Uuid::new_v4().to_string(),
             &json!({
                 "provider":"codex", "catalog_revision":catalog.snapshot().catalog_revision,
-                "display_name":"External Execution", "workspace":workspace, "persona_card_id":"local-guide"
+                "display_name":"External Execution", "workspace":workspace, "persona_card_id":"local-guide",
+                "permission_mode":"workspace_write"
             }),
         )
         .await?

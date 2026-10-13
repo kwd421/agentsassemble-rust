@@ -2,7 +2,7 @@
 use super::{
     AttendeeClientError, ProviderAttachmentReadIngress, ProviderRoomToolIngress, RoomAttendeeClient,
 };
-use crate::AttendeeToolCall;
+use crate::{AttendeeFileContext, AttendeeToolCall};
 use agentsassemble_provider::{
     ProviderAttachmentReadCommand, ProviderAttachmentReadError, ProviderRoomToolCommand,
     ProviderRoomToolError,
@@ -44,6 +44,7 @@ impl Tools {
         &mut self,
         client: &RoomAttendeeClient,
         connection: Uuid,
+        files: &AttendeeFileContext,
     ) -> Result<(), AttendeeClientError> {
         tokio::select! {
             Some(command) = self.tool_rx.recv(), if self.tool.is_none() => {
@@ -53,7 +54,7 @@ impl Tools {
             Some(command) = self.attachment_rx.recv(), if self.attachment.is_none() => self.attachment = Some(command),
             result = async {
                 match &self.tool {
-                    Some(tool) => tool.execute(client, connection).await,
+                    Some(tool) => tool.execute(client, connection, files).await,
                     None => std::future::pending().await,
                 }
             } => {
@@ -70,7 +71,11 @@ impl Tools {
             }
             result = async {
                 match &self.attachment {
-                    Some(command) => client.read_provider_attachment(connection, command).await,
+                    Some(command) => {
+                        client
+                            .read_provider_attachment(connection, command, files)
+                            .await
+                    }
                     None => std::future::pending().await,
                 }
             } => {

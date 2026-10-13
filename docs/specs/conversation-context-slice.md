@@ -113,8 +113,12 @@ download budget (encoded/stream leases) are the same owners as managed.
 Affected entry points for (b): attendee `UploadAttachment` client tool and
 attachment read, host `tool/upload/*` + `tool/attachment/download` transfer
 endpoints, `AttendeeTurnOutcome::Message` attachment IDs, join capability flag.
-Attendee (b) and connector (c) are pending;
-the attendee's inherited path-upload entry currently refuses explicitly.
+Attendee (b) landed: client path uploads stream through the host transfer
+owner with pre-read limit/quota admission and publish through report IDs;
+large reads save byte-exact into `.agentsassemble-attachments` on the client
+machine; read-only agents and older hosts keep the explicit refusal.
+Connector (c) is pending; the hosted connector keeps inline base64 upload at
+10 MiB until the CLI surface lands.
 
 ## Verification matrix
 

@@ -119,7 +119,7 @@ mod account_web;
 mod local_attendee;
 mod local_attendee_web;
 pub use attendee::client_shutdown::shutdown_attendee;
-pub use attendee::client_tools::AttendeeToolCall;
+pub use attendee::client_tools::{AttendeeFileContext, AttendeeToolCall};
 pub use attendee::tool_wire::AttendeeToolReadResponse;
 pub use local_attendee::{LocalAttendeeError, LocalAttendeeService};
 mod connection_admission;

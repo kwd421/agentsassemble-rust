@@ -60,6 +60,10 @@ pub struct AttendeeJoined {
     pub participant_id: String,
     pub provider_kind: String,
     pub expires_at: DateTime<Utc>,
+    /// Whether the host speaks the chunked attachment-transfer endpoints.
+    /// Older hosts omit this and keep the previous inline-only behaviour.
+    #[serde(default)]
+    pub attachment_transfers: bool,
 }
 
 #[derive(Deserialize)]
@@ -192,6 +196,184 @@ impl RoomAttendeeClient {
         self.invite_bearer.clear();
         self.pending.client_secret.clear();
         Ok(joined)
+    }
+
+    /// Whether the host advertised chunked attachment transfers at join.
+    /// Without the advertisement the client keeps the previous inline-only behaviour.
+    #[must_use]
+    pub fn attachment_transfers(&self) -> bool {
+        self.admission
+            .as_ref()
+            .is_some_and(|admission| admission.joined.attachment_transfers)
+    }
+
+    /// Begins one client-streamed upload under the current turn; the host checks
+    /// the current room limit and quota before any file byte is sent.
+    ///
+    /// # Errors
+    /// Returns missing admission, transport, custody or response failures.
+    pub async fn upload_begin(
+        &self,
+        connection: Uuid,
+        request: &Value,
+    ) -> Result<Value, AttendeeClientError> {
+        self.post("tool/upload/begin", Some(connection), request)
+            .await
+    }
+
+    /// Streams one file body at the accepted offset without holding it in memory.
+    ///
+    /// # Errors
+    /// Returns transport, custody, offset-conflict or interruption failures.
+    pub async fn upload_data(
+        &self,
+        connection: Uuid,
+        handle: &str,
+        offset: usize,
+        turn_generation: u64,
+        execution_id: &str,
+        body: reqwest::Body,
+    ) -> Result<Value, AttendeeClientError> {
+        let operation = format!("tool/upload/{handle}/data");
+        let request = self
+            .http
+            .post(self.endpoint(&operation)?)
+            .bearer_auth(self.bearer()?)
+            .header("x-attendee-connection-id", connection.to_string())
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .query(&[
+                ("offset", offset.to_string()),
+                ("turn_generation", turn_generation.to_string()),
+                ("execution_id", execution_id.to_owned()),
+            ])
+            .body(body);
+        read_response(request).await
+    }
+
+    /// Finishes one client-streamed upload into a pending attachment receipt.
+    ///
+    /// # Errors
+    /// Returns transport, custody or validation failures.
+    pub async fn upload_finish(
+        &self,
+        connection: Uuid,
+        handle: &str,
+        turn_generation: u64,
+        execution_id: &str,
+    ) -> Result<Value, AttendeeClientError> {
+        let operation = format!("tool/upload/{handle}/finish");
+        let mut url = self.endpoint(&operation)?;
+        url.query_pairs_mut()
+            .append_pair("turn_generation", &turn_generation.to_string())
+            .append_pair("execution_id", execution_id);
+        let request = self
+            .http
+            .post(url)
+            .bearer_auth(self.bearer()?)
+            .header("x-attendee-connection-id", connection.to_string());
+        read_response(request).await
+    }
+
+    /// Discards one incomplete client-streamed upload in its exact custody.
+    ///
+    /// # Errors
+    /// Returns transport failures; custody failures are already terminal.
+    pub async fn upload_cancel(
+        &self,
+        connection: Uuid,
+        handle: &str,
+        turn_generation: u64,
+        execution_id: &str,
+    ) -> Result<(), AttendeeClientError> {
+        let operation = format!("tool/upload/{handle}");
+        let mut url = self.endpoint(&operation)?;
+        url.query_pairs_mut()
+            .append_pair("turn_generation", &turn_generation.to_string())
+            .append_pair("execution_id", execution_id);
+        let request = self
+            .http
+            .delete(url)
+            .bearer_auth(self.bearer()?)
+            .header("x-attendee-connection-id", connection.to_string());
+        let value = read_response(request).await?;
+        committed(&value)
+    }
+
+    /// Streams one large published attachment without holding it in memory.
+    ///
+    /// # Errors
+    /// Returns transport, custody, budget or response failures.
+    pub async fn download_attachment(
+        &self,
+        connection: Uuid,
+        attachment_id: &str,
+        turn_generation: u64,
+        execution_id: &str,
+    ) -> Result<
+        (
+            agentsassemble_persistence::MessageAttachmentMetadata,
+            impl futures_util::Stream<Item = Result<axum::body::Bytes, AttendeeClientError>> + Send,
+        ),
+        AttendeeClientError,
+    > {
+        use futures_util::StreamExt;
+        let url = self.endpoint("tool/attachment/download")?;
+        let mut response = self
+            .http
+            .get(url)
+            .bearer_auth(self.bearer()?)
+            .header("x-attendee-connection-id", connection.to_string())
+            .query(&[
+                ("attachment_id", attachment_id.to_owned()),
+                ("turn_generation", turn_generation.to_string()),
+                ("execution_id", execution_id.to_owned()),
+            ])
+            .send()
+            .await
+            .map_err(|_| AttendeeClientError::local("attendee_transport_unresolved"))?;
+        if !response.status().is_success() {
+            let mut body = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| AttendeeClientError::local("attendee_transport_unresolved"))?
+            {
+                if body.len().saturating_add(chunk.len()) > 16 * 1024 {
+                    return Err(AttendeeClientError::local("invalid_attendee_response"));
+                }
+                body.extend_from_slice(&chunk);
+            }
+            let value: Value = serde_json::from_slice(&body)
+                .map_err(|_| AttendeeClientError::local("invalid_attendee_response"))?;
+            let (code, resolution) =
+                room_client_transport::remote_rejection(&value, "attendee_remote_rejection");
+            return Err(AttendeeClientError {
+                message: preserved_message(&value, &code),
+                code,
+                resolution,
+            });
+        }
+        let headers = response.headers().clone();
+        let metadata: agentsassemble_persistence::MessageAttachmentMetadata =
+            header_value(&headers, "x-attachment-metadata")
+                .and_then(|value| {
+                    base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        value.as_bytes(),
+                    )
+                    .ok()
+                })
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .filter(
+                    |metadata: &agentsassemble_persistence::MessageAttachmentMetadata| {
+                        metadata.id == attachment_id
+                    },
+                )
+                .ok_or_else(|| AttendeeClientError::local("invalid_attendee_response"))?;
+        let stream = response.bytes_stream().map(|next| {
+            next.map_err(|_| AttendeeClientError::local("attendee_transport_unresolved"))
+        });
+        Ok((metadata, stream))
     }
 
     /// Reads only this attendee's pending exact runtime cleanup, even after ordinary expiry.
@@ -333,20 +515,37 @@ async fn read_response(request: reqwest::RequestBuilder) -> Result<Value, Attend
         let (code, resolution) =
             room_client_transport::remote_rejection(&value, "attendee_remote_rejection");
         return Err(AttendeeClientError {
-            message: if matches!(
-                code.as_ref(),
-                "attachment_too_large" | "attachment_download_budget_exhausted"
-            ) {
-                value["error"]["message"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_owned()
-            } else {
-                String::new()
-            },
+            message: preserved_message(&value, &code),
             code,
             resolution,
         });
     }
     Ok(value)
+}
+
+fn header_value(headers: &reqwest::header::HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+}
+
+fn preserved_message(value: &Value, code: &str) -> String {
+    if code.starts_with("upload_")
+        || matches!(
+            code,
+            "attachment_too_large"
+                | "attachment_download_budget_exhausted"
+                | "permission_denied"
+                | "room_attachment_quota_reached"
+                | "workspace_file_failed"
+        )
+    {
+        value["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    } else {
+        String::new()
+    }
 }

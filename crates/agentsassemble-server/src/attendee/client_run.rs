@@ -130,6 +130,7 @@ impl Session<'_> {
         let connection = socket.connection_id();
         keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
+            let files = self.file_context();
             if let Some(request) = &self.pending
                 && sent != Some(request.request_id())
             {
@@ -163,7 +164,7 @@ impl Session<'_> {
                     self.requests.clear();
                     self.pending = Some(self.ready_request().await?);
                 }
-                result = self.tools.step(self.client, connection) => result?,
+                result = self.tools.step(self.client, connection, &files) => result?,
             }
         }
     }
@@ -287,6 +288,14 @@ impl Session<'_> {
             }
         }
         Ok(())
+    }
+
+    fn file_context(&self) -> crate::AttendeeFileContext {
+        crate::AttendeeFileContext {
+            workspace: self.runtime.session.workspace.clone(),
+            identity: self.runtime.session.workspace_identity.clone(),
+            permission_mode: self.runtime.session.public.permission_mode.clone(),
+        }
     }
 
     fn next_report(&self) -> Option<Request> {
