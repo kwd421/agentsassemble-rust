@@ -264,7 +264,13 @@ impl RoomPortalMcp {
                 }
             })?;
         let result = attachment_tool_result(&attachment)?;
-        reservation.complete(attachment.size)?;
+        if let Err(error) = reservation.complete(attachment.size) {
+            // Over the turn's byte budget: the agent gets no path, so the copy must not stay.
+            if let Some(path) = &attachment.path {
+                crate::room_file_workspace::discard_saved_attachment(path);
+            }
+            return Err(error);
+        }
         Ok(result)
     }
 
