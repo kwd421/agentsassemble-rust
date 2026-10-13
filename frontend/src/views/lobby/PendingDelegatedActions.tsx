@@ -42,6 +42,9 @@ function describe(request: DelegatedActionRequest): { summary: string; consequen
       fullAccess: draft.permission_mode === "full_access",
     };
   }
+  if (action.action === "remove_agent") {
+    return { summary: `${request.target_name} 에이전트를 내보내려고 해요`, consequence: "실행 중이면 멈추고, 되돌릴 수 없어요.", destructive: true };
+  }
   return { summary: `${request.target_name}에 대한 작업을 하려고 해요` };
 }
 
