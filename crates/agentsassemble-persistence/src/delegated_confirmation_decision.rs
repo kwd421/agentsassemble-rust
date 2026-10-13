@@ -123,6 +123,16 @@ impl SqliteStore {
                                 sqlx::query("UPDATE delegated_action_requests SET state='executing',request_json=? WHERE room_id=? AND confirmation_id=?").bind(serde_json::to_string(&executing)?).bind(&principal.room_id).bind(&request.confirmation_id).execute(&mut *tx).await?;
                                 Ok(json!({"status":"in_progress","request_id":create.request_id,"action":"create_agent","target_id":create.draft.agent_id,"confirmation_id":request.confirmation_id}))
                             }
+                            ConfirmedRoomAction::ReconfigureAgent(reconfigure) => {
+                                // Both authorities are revalidated now; the room actor
+                                // re-resolves the catalog and runs the configuration core
+                                // after commit, binding the target's configuration revision.
+                                let proof = validate_in(&mut tx, &principal.room_id, &row).await?;
+                                crate::agent_lifecycle_authority::authorize_control(&proof.owner)?;
+                                let mut executing = request.clone(); executing.state = ConfirmationState::Executing;
+                                sqlx::query("UPDATE delegated_action_requests SET state='executing',request_json=? WHERE room_id=? AND confirmation_id=?").bind(serde_json::to_string(&executing)?).bind(&principal.room_id).bind(&request.confirmation_id).execute(&mut *tx).await?;
+                                Ok(json!({"status":"in_progress","request_id":reconfigure.request_id,"action":"reconfigure_agent","target_id":reconfigure.agent_id,"confirmation_id":request.confirmation_id}))
+                            }
                         }
                     }.await;
                     match execution {
@@ -226,6 +236,9 @@ fn requires_full_access_acknowledgement(action: &ConfirmedRoomAction) -> bool {
             start.configuration.permission_mode == "full_access"
         }
         ConfirmedRoomAction::CreateAgent(create) => create.draft.permission_mode == "full_access",
+        ConfirmedRoomAction::ReconfigureAgent(reconfigure) => {
+            reconfigure.draft.permission_mode == "full_access"
+        }
         ConfirmedRoomAction::DeleteTextChannel(_) => false,
     }
 }

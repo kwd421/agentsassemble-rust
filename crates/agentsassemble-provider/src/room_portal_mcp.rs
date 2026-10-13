@@ -178,6 +178,19 @@ impl RoomPortalMcp {
     }
 
     #[tool(
+        description = "Request reconfiguration of an existing stopped agent owned by your owner (model, reasoning, permission level, working folder). Nothing changes until the exact human owner approves within five minutes; the approval re-validates the target and a resulting full-access configuration needs the owner's explicit acknowledgement in the decision. Retry the same request ID to read the outcome. Requires current director role and current owner agent-control authority."
+    )]
+    async fn request_reconfigure_agent(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::RequestReconfigureAgent>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(
+            agentsassemble_domain::DirectRoomAction::RequestReconfigureAgent(request),
+        )
+        .await
+    }
+
+    #[tool(
         description = "Request deletion of a text channel and its message text, pins and search records. Nothing changes until the exact human owner approves within five minutes. Retry the same request ID to read its outcome."
     )]
     async fn request_delete_text_channel(

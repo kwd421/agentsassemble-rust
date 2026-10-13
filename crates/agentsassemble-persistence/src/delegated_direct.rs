@@ -30,7 +30,7 @@ impl DelegatedRoomActionAuthority {
                 self.owner.capabilities.room_manage
             }
             "set_participant_mute" => self.owner.capabilities.participant_mute,
-            "start_agent" | "stop_agent" | "request_create_agent" => {
+            "start_agent" | "stop_agent" | "request_create_agent" | "request_reconfigure_agent" => {
                 self.owner.capabilities.agent_control
             }
             _ => false,
@@ -133,6 +133,7 @@ impl SqliteStore {
             DirectRoomAction::RequestDeleteTextChannel(_)
             | DirectRoomAction::StartAgent(_)
             | DirectRoomAction::RequestCreateAgent(_)
+            | DirectRoomAction::RequestReconfigureAgent(_)
             | DirectRoomAction::StopAgent(_) => {
                 return Err(rejected("bad_request", "Use the lifecycle mutation owner."));
             }

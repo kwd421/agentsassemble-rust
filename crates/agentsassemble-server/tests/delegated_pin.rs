@@ -104,7 +104,8 @@ pub(super) async fn verify(
                 "set_participant_mute",
                 "start_agent",
                 "stop_agent",
-                "request_create_agent"
+                "request_create_agent",
+                "request_reconfigure_agent"
             ])
         );
     }
@@ -288,7 +289,8 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
             "set_participant_mute",
             "start_agent",
             "stop_agent",
-            "request_create_agent"
+            "request_create_agent",
+            "request_reconfigure_agent"
         ])
     );
     confirmation_socket::verify(&server, &client, &joined["connection_id"]).await?;
@@ -324,6 +326,9 @@ async fn verify_direct(
     };
     lifecycle_tools::verify(client, store, delegate, connection, events, owner).await?;
     create_tools::verify(client, store, delegate, connection, owner).await?;
+    if connection.is_some() {
+        reconfigure_tools::verify(client, store, delegate, connection, owner).await?;
+    }
     let before = store.snapshot("general", 0, 200).await?.settings;
     let create = args(json!({"name":"Planning"}));
     let first = call(client, "create_text_channel", create.clone()).await;
@@ -446,6 +451,9 @@ mod lifecycle_tools;
 
 #[path = "delegated_create_tools.rs"]
 mod create_tools;
+
+#[path = "delegated_reconfigure_tools.rs"]
+mod reconfigure_tools;
 
 async fn reject_direct_tools(client: &Client, connection: Option<&Value>, code: &str) {
     for (name, mut payload) in [

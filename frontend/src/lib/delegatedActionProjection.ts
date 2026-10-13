@@ -37,14 +37,29 @@ export function parseDelegatedActionRequest(value: unknown): DelegatedActionRequ
       if (params[key] !== undefined && typeof params[key] !== "string") throw new Error("Invalid confirmed creation params");
     }
     if (params.max_output_tokens !== undefined && (!Number.isSafeInteger(params.max_output_tokens) || Number(params.max_output_tokens) < 0)) throw new Error("Invalid confirmed creation params");
-    const draft = strictRecord(action.draft, "confirmed creation draft");
-    const draftStrings = ["agent_id", "display_name", "provider_kind", "runtime_kind", "connection_kind", "executable", "executable_identity", "workspace", "workspace_identity", "provider_endpoint", "model", "reasoning_effort", "service_tier", "variant", "execution_harness", "permission_mode", "catalog_revision", "persona_card_id", "runtime_profile_key", "transport"];
-    assertExactKeys(draft, [...draftStrings, "max_output_tokens"], "confirmed creation draft");
-    if (draftStrings.some((k) => typeof draft[k] !== "string")) throw new Error("Invalid confirmed creation draft");
-    if (["agent_id", "display_name", "provider_kind", "runtime_kind", "model", "permission_mode", "catalog_revision", "runtime_profile_key", "transport"].some((k) => !draft[k])) throw new Error("Invalid confirmed creation draft");
-    if (!Number.isSafeInteger(draft.max_output_tokens) || Number(draft.max_output_tokens) < 0) throw new Error("Invalid confirmed creation draft");
+    assertAgentDraft(action.draft, "confirmed creation draft");
+  } else if (action.action === "reconfigure_agent") {
+    assertExactKeys(action, ["action", "request_id", "agent_id", "params", "expected_configuration_revision", "draft"], "confirmed agent reconfiguration");
+    if (["request_id", "agent_id", "expected_configuration_revision"].some((k) => typeof action[k] !== "string" || !action[k])) throw new Error("Invalid confirmed reconfiguration identity");
+    const params = strictRecord(action.params, "confirmed reconfiguration params");
+    const required = ["request_id", "agent_id", "catalog_revision"];
+    const optional = ["model", "reasoning_effort", "permission_mode", "workspace"];
+    if (required.some((k) => typeof params[k] !== "string" || !params[k])) throw new Error("Invalid confirmed reconfiguration params");
+    if (Object.keys(params).some((k) => ![...required, ...optional].includes(k))) throw new Error("Invalid confirmed reconfiguration params");
+    for (const key of ["model", "reasoning_effort", "permission_mode", "workspace"]) {
+      if (params[key] !== undefined && typeof params[key] !== "string") throw new Error("Invalid confirmed reconfiguration params");
+    }
+    assertAgentDraft(action.draft, "confirmed reconfiguration draft");
   } else { throw new Error("Unsupported confirmed action"); }
   return r as unknown as DelegatedActionRequest;
+}
+function assertAgentDraft(value: unknown, label: string) {
+  const draft = strictRecord(value, label);
+  const strings = ["agent_id", "display_name", "provider_kind", "runtime_kind", "connection_kind", "executable", "executable_identity", "workspace", "workspace_identity", "provider_endpoint", "model", "reasoning_effort", "service_tier", "variant", "execution_harness", "permission_mode", "catalog_revision", "persona_card_id", "runtime_profile_key", "transport"];
+  assertExactKeys(draft, [...strings, "max_output_tokens"], label);
+  if (strings.some((k) => typeof draft[k] !== "string")) throw new Error(`Invalid ${label}`);
+  if (["agent_id", "display_name", "provider_kind", "runtime_kind", "model", "permission_mode", "catalog_revision", "runtime_profile_key", "transport"].some((k) => !draft[k])) throw new Error(`Invalid ${label}`);
+  if (!Number.isSafeInteger(draft.max_output_tokens) || Number(draft.max_output_tokens) < 0) throw new Error(`Invalid ${label}`);
 }
 export function delegatedActionRequestsAreValid(value: unknown): boolean {
   try { if (!Array.isArray(value)) return false; value.forEach(parseDelegatedActionRequest); return true; } catch { return false; }

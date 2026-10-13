@@ -48,4 +48,25 @@ describe("owner confirmation socket projection", () => {
     if (missing.action.action === "create_agent") delete (missing.action.draft as Record<string, unknown>).model;
     expect(() => parseDelegatedActionRequest(missing)).toThrow();
   });
+  it("parses a bound agent-reconfiguration request so the owner card can render the changed profile", () => {
+    const reconfigured: DelegatedActionRequest = {
+      ...request,
+      action: {
+        action: "reconfigure_agent", request_id: request.confirmation_id, agent_id: "codex-new",
+        params: { request_id: request.confirmation_id, agent_id: "codex-new", catalog_revision: "catalog-1", model: "gpt-5.6-terra", permission_mode: "workspace_write" },
+        expected_configuration_revision: "profile",
+        draft: {
+          agent_id: "codex-new", display_name: "Newcomer", provider_kind: "codex_live_session", runtime_kind: "live_cli", connection_kind: "native_cli_bridge",
+          executable: "/bin/codex", executable_identity: "exe", workspace: "/tmp/room", workspace_identity: "ws", provider_endpoint: "", model: "gpt-5.6-terra",
+          reasoning_effort: "medium", service_tier: "default", variant: "", execution_harness: "builtin", permission_mode: "workspace_write", max_output_tokens: 0,
+          catalog_revision: "catalog-1", persona_card_id: "", runtime_profile_key: "profile-next", transport: "stdio_jsonl",
+        },
+      },
+      target_name: "Newcomer",
+    };
+    expect(parseDelegatedActionRequest(structuredClone(reconfigured))).toEqual(reconfigured);
+    const changed = structuredClone(reconfigured);
+    if (changed.action.action === "reconfigure_agent") delete (changed.action as Record<string, unknown>).expected_configuration_revision;
+    expect(() => parseDelegatedActionRequest(changed)).toThrow();
+  });
 });

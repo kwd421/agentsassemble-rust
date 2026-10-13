@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionDraft,
-    AgentSessionStatus, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
-    canonical_payload_hash,
+    AgentSessionStatus, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
+    RoomEvent, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -78,35 +78,8 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(outcome);
         }
-        let mut session =
-            load_session(&mut transaction, &principal.room_id, &draft.agent_id).await?;
-        require_stopped_profile(&session)?;
-        if session.runtime_profile_key != expected_profile_key {
-            return Err(rejected(
-                "runtime_profile_changed",
-                "The Agent Session runtime profile changed while it was being validated.",
-            ));
-        }
-        if session.public.provider_kind != draft.provider_kind
-            || session.public.runtime_kind != draft.runtime_kind
-        {
-            return Err(rejected(
-                "provider_mismatch",
-                "An existing Agent Session cannot change provider kind.",
-            ));
-        }
-
-        let persona_card =
-            resolve_persona_selection(&mut transaction, &draft.persona_card_id).await?;
-        apply_draft(&mut session, draft, persona_card);
-        save_session(&mut transaction, &session).await?;
-        let participant = load_participant(
-            &mut transaction,
-            &principal.room_id,
-            &session.public.participant_id,
-        )
-        .await?;
-        let event = append_state_event(&mut transaction, principal, &session.public).await?;
+        let (session, participant, event) =
+            configure_session_in(&mut transaction, principal, expected_profile_key, draft).await?;
         let events = vec![event.clone()];
         let result = json!({
             "status": "configured",
@@ -129,6 +102,44 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(outcome)
     }
+}
+
+/// The stopped-session configuration mutation shared by the human command and the
+/// delegated confirmation drive. Callers own authorization, admission and replay.
+pub(crate) async fn configure_session_in(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+    expected_profile_key: &str,
+    draft: &AgentSessionDraft,
+) -> Result<(DurableAgentSession, Participant, RoomEvent), PersistenceError> {
+    let mut session = load_session(transaction, &principal.room_id, &draft.agent_id).await?;
+    require_stopped_profile(&session)?;
+    if session.runtime_profile_key != expected_profile_key {
+        return Err(rejected(
+            "runtime_profile_changed",
+            "The Agent Session runtime profile changed while it was being validated.",
+        ));
+    }
+    if session.public.provider_kind != draft.provider_kind
+        || session.public.runtime_kind != draft.runtime_kind
+    {
+        return Err(rejected(
+            "provider_mismatch",
+            "An existing Agent Session cannot change provider kind.",
+        ));
+    }
+
+    let persona_card = resolve_persona_selection(transaction, &draft.persona_card_id).await?;
+    apply_draft(&mut session, draft, persona_card);
+    save_session(transaction, &session).await?;
+    let participant = load_participant(
+        transaction,
+        &principal.room_id,
+        &session.public.participant_id,
+    )
+    .await?;
+    let event = append_state_event(transaction, principal, &session.public).await?;
+    Ok((session, participant, event))
 }
 
 fn apply_draft(
@@ -207,7 +218,9 @@ fn required_agent_id(payload: &Value) -> Result<String, PersistenceError> {
     Ok(value.to_owned())
 }
 
-fn require_stopped_profile(session: &DurableAgentSession) -> Result<(), PersistenceError> {
+pub(crate) fn require_stopped_profile(
+    session: &DurableAgentSession,
+) -> Result<(), PersistenceError> {
     crate::room_runtime_cleanup::require_server_custody(session)?;
     let stopped = !session.public.enabled
         && matches!(

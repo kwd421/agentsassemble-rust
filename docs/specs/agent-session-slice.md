@@ -37,9 +37,26 @@ create, with the AI named on behalf of the owner and the confirmation id. Provid
 credentials are never part of the request, the owner card, events or AI-visible
 results; AI receipts carry only status, ids and the creation event id.
 
-Confirmed agent reconfiguration binds the agent's configuration revision at request
-time and refuses with `target_changed` when it moved; raising to `full_access` needs
-the acknowledgement. Confirmed agent removal and human kicks go through the same
+Confirmed agent reconfiguration (`request_reconfigure_agent(request_id, agent_id,
+catalog_revision, model?, reasoning_effort?, permission_mode?, workspace?)`) runs on
+the managed/API and attendee/companion RoomPortal and connector MCP entries next to
+`request_create_agent`. The AI schema carries no acknowledgement and no configuration
+revision: the existing sealed runtime profile key is private projection the AI can
+never read, so the request binds the agent's current configuration revision
+server-side at request time together with the catalog-resolved resulting profile
+(model, reasoning, permission level, working folder and every server-resolved
+default). Omitted change fields keep the current profile through the owner's own
+`agent.configure` selection merge; provider/runtime identity cannot change. Pending
+changes nothing. Approval revalidates owner and delegate authority and the target: a
+moved revision or missing target refuses with `target_changed`, and a resulting
+`full_access` configuration needs the owner's explicit acknowledgement in the
+decision — the same trigger as the confirmed full-access start and create, which
+covers every raise to `full_access`. Execution runs the same stopped-session
+configuration core as the owner's own `agent.configure`, retaining its
+`runtime_profile_conflict` (stop before reconfiguring) and `provider_mismatch`
+failures, with the AI named on behalf of the owner and the confirmation id. The AI
+receipt carries only status, ids and the configuration event id; the changed
+model/permission/folder reach only the owner card. Confirmed agent removal and human kicks go through the same
 participant-removal gate as the owner's own kick, never the owner themself, the host,
 or anyone the owner could not remove; removal ends the target's session and revokes
 access exactly as today, and the card states that consequence. Confirmed HUMAN room

@@ -890,6 +890,13 @@ async fn handle_room_command(
         &mut execution,
     )
     .await;
+    delegated_direct::drive_approved_confirmed_reconfigure(
+        store,
+        provider_catalog,
+        &command,
+        &mut execution,
+    )
+    .await;
     let CommandExecution {
         reply,
         committed_events,

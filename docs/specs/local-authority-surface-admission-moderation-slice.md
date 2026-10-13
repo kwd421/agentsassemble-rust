@@ -8,9 +8,14 @@ RoomPortal managed/API and attendee/companion calls and connector MCP calls supp
 confirmation for workspace-write/full-access. `request_create_agent` carries the
 owner's own `agent.create` fields except acknowledgement, start intent and session
 identity, binds the catalog-selected stopped-agent draft, and executes that same
-creation core after approval with the full-access acknowledgement rule. Nothing is mutated or reserved before
+creation core after approval with the full-access acknowledgement rule.
+`request_reconfigure_agent` carries the owner's own `agent.configure` change fields
+(model, reasoning, permission level, working folder) plus the catalog revision,
+binds the agent's current configuration revision and the resolved resulting profile,
+and executes that same configuration core after approval; the AI schema carries no
+acknowledgement and no configuration revision. Nothing is mutated or reserved before
 approval. Role assignment, provider approvals and the remaining slice-4 actions
-(reconfigure, remove, kick, invite) stay unreachable.
+(remove, kick, invite) stay unreachable.
 
 The host persists a typed immutable request with normalised parameters and resolved
 defaults, room incarnation, exact owner provenance, delegate/session/execution binding,

@@ -45,6 +45,7 @@ pub(crate) async fn validate_in(
         ConfirmedRoomAction::DeleteTextChannel(_) => "request_delete_text_channel",
         ConfirmedRoomAction::StartAgent(_) => "start_agent",
         ConfirmedRoomAction::CreateAgent(_) => "request_create_agent",
+        ConfirmedRoomAction::ReconfigureAgent(_) => "request_reconfigure_agent",
     };
     let proof = DelegatedRoomActionAuthority::direct(tx, &binding.authority, name).await?;
     let (reference, _) = crate::delegation_owner::confirmation_provenance(

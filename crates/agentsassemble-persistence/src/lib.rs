@@ -342,3 +342,7 @@ mod delegated_confirmed_create;
 pub use delegated_confirmed_create::{
     ApprovedCreateDrive, create_execution_payload, create_selection_payload,
 };
+mod delegated_confirmed_reconfigure;
+pub use delegated_confirmed_reconfigure::{
+    ApprovedReconfigureDrive, reconfigure_execution_payload, reconfigure_selection_payload,
+};

@@ -2,8 +2,9 @@ use agentsassemble_domain::{
     AgentSessionDraft, ConfirmationState, DirectRoomAction, canonical_payload_hash,
 };
 use agentsassemble_persistence::{
-    ApprovedCreateDrive, DelegateRoomAuthority, PersistenceError, SqliteStore,
-    create_execution_payload, create_selection_payload,
+    ApprovedCreateDrive, ApprovedReconfigureDrive, DelegateRoomAuthority, PersistenceError,
+    SqliteStore, create_execution_payload, create_selection_payload, reconfigure_execution_payload,
+    reconfigure_selection_payload,
 };
 use agentsassemble_provider::ProviderCatalogService;
 use serde_json::{Value, json};
@@ -158,6 +159,81 @@ pub(crate) async fn execute_with_reply(
                     .map(str::to_owned)
             {
                 let drive = drive_approved_create(
+                    owners.store,
+                    owners.provider_catalog,
+                    authority.room_id(),
+                    &confirmation_id,
+                )
+                .await?;
+                result = drive.receipt;
+            }
+            Ok(result)
+        }
+        .await;
+        let publication = if result.is_ok() {
+            Some(
+                crate::event_publication::publish_durable_room_events(
+                    owners.store,
+                    owners.event_tx,
+                    authority.room_id(),
+                )
+                .await,
+            )
+        } else {
+            None
+        };
+        reply(result);
+        return publication;
+    }
+    if let DirectRoomAction::RequestReconfigureAgent(params) = request {
+        let result = async {
+            let _inflight = admission.acquire_inflight()?;
+            let (owner, session) = owners
+                .store
+                .delegated_reconfigure_candidate(authority, &params.agent_id)
+                .await?;
+            let selection = owners
+                .provider_catalog
+                .validate_configuration(
+                    authority.room_id(),
+                    &owner.principal_id,
+                    &params.request_id,
+                    &session,
+                    &reconfigure_selection_payload(params),
+                )
+                .await
+                .map_err(|error| PersistenceError::CommandRejected {
+                    code: error.code.into(),
+                    message: error.message,
+                })?;
+            let draft: AgentSessionDraft = selection.into();
+            let (mut result, debits) = owners
+                .store
+                .request_delegated_agent_reconfigure(
+                    authority,
+                    params,
+                    &session.runtime_profile_key,
+                    &draft,
+                    |owner, delegate, bytes| {
+                        charge_request(admission, authority, request, owner, delegate, bytes)
+                    },
+                )
+                .await?;
+            if let Some(debits) = debits {
+                for debit in debits {
+                    debit.resolve();
+                }
+            }
+            // An approved-but-undriven reconfiguration (owner approved while a drive
+            // was lost) completes idempotently here; the receipt is the recorded state.
+            if result.get("status").and_then(Value::as_str) == Some("in_progress")
+                && result.get("action").and_then(Value::as_str) == Some("reconfigure_agent")
+                && let Some(confirmation_id) = result
+                    .get("confirmation_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            {
+                let drive = drive_approved_reconfigure(
                     owners.store,
                     owners.provider_catalog,
                     authority.room_id(),
@@ -493,6 +569,165 @@ pub(crate) async fn drive_approved_create(
             &owner_reference,
         )
         .await
+}
+
+/// Re-runs the owner's catalog selection and target binding for an approved
+/// reconfiguration, then drives its configuration core. A moved configuration
+/// revision, missing target or catalog drift refuses with `target_changed`;
+/// execution itself is idempotent, so lost drives safely retry the same receipt.
+pub(crate) async fn drive_approved_reconfigure(
+    store: &SqliteStore,
+    provider_catalog: &ProviderCatalogService,
+    room_id: &str,
+    confirmation_id: &str,
+) -> Result<ApprovedReconfigureDrive, PersistenceError> {
+    let (request, owner_reference, receipt) = store
+        .approved_reconfigure_snapshot(room_id, confirmation_id)
+        .await?;
+    if request.state != ConfirmationState::Executing {
+        return Ok(ApprovedReconfigureDrive {
+            state: request.state,
+            event_id: receipt
+                .get("event_id")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            receipt,
+            new_events: Vec::new(),
+        });
+    }
+    let agentsassemble_domain::ConfirmedRoomAction::ReconfigureAgent(reconfigure) = &request.action
+    else {
+        return Err(PersistenceError::CommandRejected {
+            code: "bad_request".into(),
+            message: "An agent reconfiguration is required.".into(),
+        });
+    };
+    let Some(owner_principal_id) = owner_reference.get("user_id").and_then(Value::as_str) else {
+        return Err(PersistenceError::CommandRejected {
+            code: "owner_authority_unavailable".into(),
+            message: "The bound owner's authority is unavailable.".into(),
+        });
+    };
+    let current = match store
+        .delegated_reconfigure_session(room_id, &reconfigure.agent_id)
+        .await
+    {
+        Ok(session) => session,
+        Err(_) => {
+            return store
+                .fail_approved_agent_reconfigure(
+                    room_id,
+                    confirmation_id,
+                    "target_changed",
+                    "The target agent no longer exists.",
+                )
+                .await;
+        }
+    };
+    if current.runtime_profile_key != reconfigure.expected_configuration_revision {
+        return store
+            .fail_approved_agent_reconfigure(
+                room_id,
+                confirmation_id,
+                "target_changed",
+                "The target agent configuration changed before approval.",
+            )
+            .await;
+    }
+    let selection = match provider_catalog
+        .validate_configuration(
+            room_id,
+            owner_principal_id,
+            &reconfigure.request_id,
+            &current,
+            &reconfigure_selection_payload(&reconfigure.params),
+        )
+        .await
+    {
+        Ok(selection) => selection,
+        Err(error) => {
+            return store
+                .fail_approved_agent_reconfigure(
+                    room_id,
+                    confirmation_id,
+                    "target_changed",
+                    &error.message,
+                )
+                .await;
+        }
+    };
+    let fresh: AgentSessionDraft = selection.into();
+    if fresh != reconfigure.draft {
+        return store
+            .fail_approved_agent_reconfigure(
+                room_id,
+                confirmation_id,
+                "target_changed",
+                "The catalog selection changed before approval.",
+            )
+            .await;
+    }
+    store
+        .drive_approved_agent_reconfigure(
+            room_id,
+            confirmation_id,
+            &fresh,
+            &reconfigure_execution_payload(&reconfigure.params, &request),
+            &owner_reference,
+        )
+        .await
+}
+
+/// An approved confirmed reconfiguration reserved only its decision in the approval
+/// transaction; re-resolve the catalog and drive the configuration core with its
+/// attributed events.
+pub(crate) async fn drive_approved_confirmed_reconfigure(
+    store: &SqliteStore,
+    provider_catalog: &ProviderCatalogService,
+    command: &RoomCommand,
+    execution: &mut CommandExecution,
+) {
+    if command.action != agentsassemble_protocol::RoomAction::DelegatedActionDecide {
+        return;
+    }
+    let Ok(outcome) = &execution.reply else {
+        return;
+    };
+    if outcome.deduplicated
+        || outcome.result.get("state").and_then(Value::as_str) != Some("executing")
+        || outcome
+            .result
+            .get("receipt")
+            .and_then(|receipt| receipt.get("action"))
+            .and_then(Value::as_str)
+            != Some("reconfigure_agent")
+    {
+        return;
+    }
+    let Some(confirmation_id) = outcome
+        .result
+        .get("confirmation_id")
+        .and_then(Value::as_str)
+    else {
+        return;
+    };
+    let confirmation_id = confirmation_id.to_owned();
+    let drive = drive_approved_reconfigure(
+        store,
+        provider_catalog,
+        &command.principal.room_id,
+        &confirmation_id,
+    )
+    .await;
+    match drive {
+        Ok(drive) => {
+            execution.committed_events.extend(drive.new_events);
+        }
+        Err(error) => {
+            // Uncertain effects stay executing; the AI retry re-drives the receipt.
+            tracing::warn!(error = ?error, room_id = %command.principal.room_id, confirmation_id, "approved confirmed reconfiguration did not complete");
+        }
+    }
 }
 
 /// An approved confirmed creation reserved only its decision in the approval

@@ -67,6 +67,40 @@ pub struct RequestCreateAgent {
     pub max_output_tokens: Option<u64>,
 }
 
+// Director-requested agent reconfiguration. The schema carries only the mutable
+// change fields the owner's own `agent.configure` accepts: no acknowledgement and no
+// configuration revision can be supplied (the sealed runtime profile key is private
+// projection), so the request binds the agent's current configuration revision on the
+// server and refuses `target_changed` when it moved before execution.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+    ts_rs::TS,
+)]
+#[serde(deny_unknown_fields)]
+pub struct RequestReconfigureAgent {
+    pub request_id: String,
+    pub agent_id: String,
+    pub catalog_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub permission_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workspace: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectRoomAction {
@@ -77,6 +111,7 @@ pub enum DirectRoomAction {
     StartAgent(StartAgent),
     StopAgent(StopAgent),
     RequestCreateAgent(RequestCreateAgent),
+    RequestReconfigureAgent(RequestReconfigureAgent),
 }
 impl DirectRoomAction {
     pub const NAMES: &[&str] = &[
@@ -87,6 +122,7 @@ impl DirectRoomAction {
         "start_agent",
         "stop_agent",
         "request_create_agent",
+        "request_reconfigure_agent",
     ];
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -98,6 +134,7 @@ impl DirectRoomAction {
             Self::StartAgent(r) => &r.request_id,
             Self::StopAgent(r) => &r.request_id,
             Self::RequestCreateAgent(r) => &r.request_id,
+            Self::RequestReconfigureAgent(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -110,6 +147,7 @@ impl DirectRoomAction {
             Self::StartAgent(_) => "start_agent",
             Self::StopAgent(_) => "stop_agent",
             Self::RequestCreateAgent(_) => "request_create_agent",
+            Self::RequestReconfigureAgent(_) => "request_reconfigure_agent",
         }
     }
 }
