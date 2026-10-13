@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
+import { TEST_SERVER_PRODUCT_SURFACE, testServerProductSurfaceDigest } from "../test/serverProductSurface";
 
 import {
   bindRoomDirectoryAuthority,
@@ -255,7 +255,7 @@ describe("room directory contracts", () => {
           ...authority,
           server_product_surface: {
             ...surface,
-            digest: "d1a4716e55db92d7177cdbf074173074421d60c4fba967fc1247d27636acfb9e",
+            digest: await testServerProductSurfaceDigest([]),
             websocket_streams: [],
           },
         }),

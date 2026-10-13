@@ -180,7 +180,6 @@ impl RoomAction {
     }
 
     pub const ALL: [Self; 30] = [
-        Self::DelegatedActionDecide,
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
@@ -192,6 +191,7 @@ impl RoomAction {
         Self::AgentStop,
         Self::ChannelHistory,
         Self::ChannelMessageSend,
+        Self::DelegatedActionDecide,
         Self::MessageDelete,
         Self::MessageEdit,
         Self::MessageSend,
@@ -703,6 +703,13 @@ mod tests {
             surface
                 .websocket_actions
                 .contains(&super::RoomAction::RoomVoteSummary)
+        );
+        // Clients refuse a surface whose action names are not strictly ascending.
+        assert!(
+            surface
+                .websocket_actions
+                .windows(2)
+                .all(|pair| pair[0].as_str() < pair[1].as_str())
         );
         assert_eq!(surface.digest.len(), 64);
         assert!(matches!(
