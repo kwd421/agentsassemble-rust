@@ -324,7 +324,7 @@ test("keeps a one-use entrance when durable credential custody fails", async ({ 
   await page.goto("/pair?token=aap1_pairing-token");
 
   await expect(page).toHaveURL(/\/pair\?token=aap1_pairing-token$/);
-  await expect(page.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeVisible();
+  await expect(page.getByRole("main", { name: "앱 시작 실패" })).toBeVisible();
 });
 
 test("keeps a one-use entrance when durable client-id custody fails", async ({ page }) => {
@@ -341,7 +341,7 @@ test("keeps a one-use entrance when durable client-id custody fails", async ({ p
   await page.goto("/join?token=invite-token");
 
   await expect(page).toHaveURL(/\/join\?token=invite-token$/);
-  await expect(page.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeVisible();
+  await expect(page.getByRole("main", { name: "앱 시작 실패" })).toBeVisible();
 });
 
 test("retains recovery while consuming its URL secret", async ({ page }) => {
@@ -400,7 +400,7 @@ test("keeps the composer usable at 768–1100px with members open", async ({ pag
     await page.setViewportSize({ width, height: 800 });
     const panel = page.getByTestId("room-right-panel");
     await expect(panel).toBeVisible();
-    await expect(panel.getByRole("region", { name: "동반 AI 초대" })).toBeVisible();
+    await expect(panel.getByRole("region", { name: "방 연결 정보" })).toBeVisible();
     await expect(panel).toHaveCSS("position", "absolute");
     expect((await input.boundingBox())!.width).toBeGreaterThan(0);
     await page.getByRole("button", { name: "멤버 목록 닫기" }).click();
