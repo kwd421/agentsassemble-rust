@@ -19,8 +19,22 @@ function describe(request: DelegatedActionRequest): { summary: string; consequen
       fullAccess,
     };
   }
+  if (action.action === "create_agent") {
+    const { display_name, model, permission_mode, workspace } = action.draft;
+    return {
+      summary: `${display_name} 에이전트를 만들려고 해요`,
+      consequence: [model, PERMISSION_LABELS[permission_mode] ?? permission_mode, workspace].filter(Boolean).join(" · "),
+      fullAccess: permission_mode === "full_access",
+    };
+  }
   return { summary: `${request.target_name}에 대한 작업을 하려고 해요` };
 }
+
+const PERMISSION_LABELS: Record<string, string> = {
+  meeting_read_only: "대화 전용",
+  workspace_write: "작업 폴더 쓰기",
+  full_access: "전체 액세스",
+};
 
 function failure(error: unknown): string {
   const code = error instanceof RoomSocketSayError ? error.category : "";
