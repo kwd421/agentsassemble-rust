@@ -154,7 +154,7 @@ fn historical_settings(value: &Value, version: i64) -> Result<(), PersistenceErr
 
 fn historical_receipt(value: &Value, version: i64, event: bool) -> Result<(), PersistenceError> {
     if event
-        && version < 95
+        && version < 94
         && value
             .get("attachments")
             .and_then(Value::as_array)

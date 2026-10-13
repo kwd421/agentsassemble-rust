@@ -1465,19 +1465,22 @@ truncated, invisible-option-filtered and case-fold-deduplicated commands pass.
 
 ## Round-10 archive attachment semantics (Medium 2, 2026-10-13)
 
-Ten-attachment publication requires schema/archive semantic version 95. The live
+Current ten-attachment publication uses schema/archive semantic version 95. The live
 94→95 upgrade changes only metadata, transactionally after room_file_migration
 source-graph validation; no DDL or product data changes. The archive catalog adds
-95 with unchanged DDL. Decode source versions 87–94 with at most eight attachments
-per event, including nested events in command/create/delete receipts; version 95
-uses the current ten-attachment domain contract. Current export/backup manifests
+95 with unchanged DDL. Decode source versions 87–93 with at most eight attachments
+per event, including nested events in command/create/delete receipts; versions 94–95
+use the current ten-attachment domain contract. Round-11 correction: genuine builds
+between dd63ea26 (ten-file limit) and 17683150 (schema 95) exported schema-94
+ten-attachment events, so source 94 must restore them. Current export/backup manifests
 carry 95. Previous binaries only support through 94, so their existing manifest
 validation rejects 95 before preflight or writing database payload bytes, even
 when the first incompatible event occurs much later. Keep every genuine historical
 catalog restorable and preserve existing local state during metadata-only upgrade.
 Owners: schema_version, room_file_migration, archive_schema_changes, backup_policy,
-backup_codec manifest validation. Acceptance: a nine-attachment historical event or
-receipt refuses; genuine old archives restore; current catalog/export agree and
+backup_codec manifest validation. Acceptance: a nine-attachment source-87–93 event or
+receipt refuses; a transitional-94 fixture with ten bound attachments prepares and
+restores unchanged; genuine old archives restore; current catalog/export agree and
 94 upgrade preserves data. No envelope format change or compatibility fallback.
 
 ## Round-10 plain capability discovery (Low 1, 2026-10-13)

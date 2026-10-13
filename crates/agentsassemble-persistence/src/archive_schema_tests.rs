@@ -143,8 +143,8 @@ async fn product_seed(
         .store_message_attachment(&principal, "pending.png", "image/png", png.into_inner())
         .await?;
     let mut ids = vec![format!("ma_{}", "a".repeat(32))];
-    // The new catalog carries a genuine ten-file event, not just a relabelled row.
-    if version >= 95 {
+    // Transitional schema-94 builds already allowed ten files before schema 95.
+    if version >= 94 {
         for _ in 1..10 {
             ids.push(
                 store
@@ -586,9 +586,33 @@ async fn delegated_archives_restore_and_refuse_contradictory_executors()
 }
 
 #[tokio::test]
+async fn transitional_94_ten_attachment_archive_restores_unchanged()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let (source, manifest) = archive(directory.path(), 94).await?;
+    let destination = tempfile::tempdir()?;
+    let mut job =
+        crate::restore_job::RestoreJob::begin(&destination.path().join("runtime.sqlite3"))?;
+    job.prepare(&source, manifest).await?;
+    assert_eq!(
+        job.journal().phase,
+        crate::restore_job::RestorePhase::Prepared
+    );
+    let restored = job.stage().join("runtime.sqlite3");
+    assert_product_rows(&source, &restored).await?;
+    let mut connection = open_input(&restored).await?;
+    let count: i64 = sqlx::query_scalar("SELECT json_array_length(event_json,'$.attachments') FROM room_events WHERE json_extract(event_json,'$.content')='Historical searchable message'")
+        .fetch_one(&mut connection).await?;
+    assert_eq!(count, 10);
+    connection.close().await?;
+    job.cancel()?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn historical_attachment_count_refuses_events_and_nested_receipts()
 -> Result<(), Box<dyn std::error::Error>> {
-    for version in 87..=94 {
+    for version in 87..=93 {
         let directory = tempfile::tempdir()?;
         let (source, _) = archive(directory.path(), version).await?;
         let mut connection =
