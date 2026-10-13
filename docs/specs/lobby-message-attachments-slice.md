@@ -1422,6 +1422,18 @@ Entry points: createMessageAttachmentUploadClient, OutgoingMessages.upload/pump/
 Acceptance: controlled hostile sequences fail boundedly without publication;
 interrupted multi-piece partial acceptance still resumes and publishes once.
 
+Round-11 legacy receipt correction: uploadMessageAttachment must bind the returned
+size to the submitted File and the filename/content_type to the host's request
+canonicalisation: last path component, control removal, Rust whitespace trim,
+120 Unicode scalars and attachment.bin for unsafe/empty names; MIME parameters
+removed, Rust trim and ASCII lowercase, or mime_guess for invalid types. Safe
+PNG/JPEG/GIF/WebP validation preserves original bytes, name and MIME type (only
+the preview is derived). Generate MIME lookup data from the host's library.
+A mismatch is a final invalid_upload_response and OutgoingMessages never publishes
+it. Genuine legacy hosts remain supported without transfer advertisement.
+Acceptance: different size/name/type refuses without publication; canonical names,
+default names, normalized/guessed MIME types and preserved raster receipts pass.
+
 ## Round-10 publication ACK contract (High 2 validator, 2026-10-13)
 
 message.send ACKs must match the sent command's canonical kind, normalized content,

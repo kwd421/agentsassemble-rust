@@ -7,17 +7,13 @@ import { canonicalRoomId } from "../lib/canonicalRoomId";
 import { strictRecord, assertExactKeys } from "../lib/strictJsonContract";
 import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 import { isPrivateNoStoreResponse } from "./http";
+import { UploadFailure } from "./uploadFailure";
+export { UploadFailure } from "./uploadFailure";
 
 export type TransferStatus = Readonly<{
   handle: string; attachment_id: string; piece_size: number; expires_at: number;
   declared_size: number; accepted_offset: number; attachment: LobbyAttachmentRef | null;
 }>;
-export class UploadFailure extends Error {
-  constructor(readonly code: string, readonly retryable: boolean, readonly retryAfterMs?: number) {
-    super(code);
-    if (retryAfterMs !== undefined) this.retryAfterMs = Math.min(5000, Math.max(1, retryAfterMs));
-  }
-}
 export interface MessageAttachmentUploadClient {
   readonly limit: number;
   readonly transfer: boolean;

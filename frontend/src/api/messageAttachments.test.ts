@@ -24,6 +24,8 @@ import {
   uploadMessageAttachment,
   type LobbyAttachmentRef,
 } from "./messageAttachments";
+import { OutgoingMessages } from "../lib/outgoingMessages";
+import type { MessageAttachmentUploadClient } from "./messageAttachmentTransfers";
 
 const attachmentId = `ma_${"a".repeat(32)}`;
 const attachment: LobbyAttachmentRef = {
@@ -78,7 +80,8 @@ describe("lobby message-attachment HTTP authority", () => {
 
   it("preflights against freshly resolved room policy before reading file bytes", async () => {
     const file = new File([new Uint8Array(25 * 1024 * 1024)], "large.bin");
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ attachment: { ...attachment, size: file.size } }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ attachment: { ...attachment, filename: file.name,
+      content_type: "application/octet-stream", size: file.size } }));
     vi.stubGlobal("fetch", fetchMock);
     const authority = { kind: "remote" as const, sessionToken: "aas1.session" };
     await expect(uploadMessageAttachment(file, "general", authority)).rejects.toThrow("파일은 최대 10MB까지 올릴 수 있어요.");
@@ -292,6 +295,43 @@ describe("lobby message-attachment HTTP authority", () => {
           { kind: "local" }
         )
       ).rejects.toThrow("응답 계약");
+    }
+  });
+
+  it("binds legacy receipts to the submitted file before any publication, preserving host canonicalisation", async () => {
+    const authority = { roomId: "general", participantId: "person", generation: 1 };
+    const remote = { kind: "remote" as const, sessionToken: "legacy-session" };
+    const cases = [
+      { file: new File(["notes"], "notes.txt", { type: "text/plain" }), receipt: { ...attachment, size: 6 }, valid: false },
+      { file: new File(["notes"], "notes.txt", { type: "text/plain" }), receipt: { ...attachment, filename: "other.txt" }, valid: false },
+      { file: new File(["notes"], "notes.txt", { type: "text/plain" }), receipt: { ...attachment, content_type: "application/octet-stream" }, valid: false },
+      { file: new File(["notes"], "dir\\\u0085notes\0.txt\u0085", { type: "Text/Plain; charset=UTF-8" }), receipt: attachment, valid: true },
+      { file: new File(["notes"], ".."), receipt: { ...attachment, filename: "attachment.bin", content_type: "application/octet-stream" }, valid: true },
+      { file: new File(["notes"], "notes.txt", { type: "invalid" }), receipt: attachment, valid: true },
+      { file: new File(["notes"], "data.Kml", { type: "invalid" }), receipt: { ...attachment, filename: "data.Kml", content_type: "application/vnd.google-earth.kml+xml" }, valid: true },
+      { file: new File([Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII="), c => c.charCodeAt(0))], "dir/pixel.png", { type: "image/png" }),
+        receipt: { ...attachment, filename: "pixel.png", content_type: "image/png", size: 68, is_image: true }, valid: true },
+    ];
+    for (const { file, receipt, valid } of cases) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ attachment: receipt })));
+      const publish = vi.fn(async () => ({ op: "ack" as const, accepted: true as const, request_id: "request",
+        action: "message.send", resolution: "committed" as const, deduplicated: false }));
+      const model = new OutgoingMessages({ hostId: "legacy-host", personId: "person", publish });
+      const unexpectedTransfer = async (): Promise<never> => { throw new Error("legacy host used transfer route"); };
+      model.admit(authority, { transfer: false, limit: 8, fileLimit: 10485760, preflight() {},
+        begin: unexpectedTransfer, data: unexpectedTransfer, finish: unexpectedTransfer,
+        status: unexpectedTransfer, cancel: unexpectedTransfer,
+        legacy: (selected: File, signal: AbortSignal) => uploadMessageAttachment(selected, "general", remote, undefined, signal),
+      } satisfies MessageAttachmentUploadClient);
+      model.send(authority, { text: "", files: [file] });
+      await vi.waitFor(() => expect(model.snapshot()[0].phase).toBe(valid ? "sent" : "failed"));
+      if (valid) expect(publish).toHaveBeenCalledOnce();
+      else {
+        expect(model.snapshot()[0].failure).toEqual({ code: "invalid_upload_response", retryable: false });
+        expect(model.snapshot()[0].files[0].attachment).toBeUndefined();
+        expect(publish).not.toHaveBeenCalled();
+      }
+      model.close();
     }
   });
 
