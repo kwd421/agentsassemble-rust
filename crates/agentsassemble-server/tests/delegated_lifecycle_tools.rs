@@ -9,6 +9,7 @@ pub(super) async fn verify(
     delegate: &str,
     connection: Option<&Value>,
     events: &mut tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+    owner: (&str, &agentsassemble_server::AppState),
 ) -> TestResult {
     let directory = tempfile::tempdir()?;
     let mut catalog = crate::support::provider_fixture::agent_catalog(directory.path(), None);
@@ -55,19 +56,80 @@ pub(super) async fn verify(
         let request = args(id);
         if mode != "meeting_read_only" {
             let before = store.snapshot("general", 0, 200).await?;
-            let result = room_portal_fixture::call_tool(client, "start_agent", request).await;
-            assert_eq!(result.is_error, Some(true));
+            let pending = call(client, "start_agent", request.clone()).await;
+            assert_eq!(pending["status"], "pending_confirmation");
+            let confirmation_id = pending["confirmation_id"]
+                .as_str()
+                .ok_or("missing confirmation")?;
+            assert_eq!(pending, call(client, "start_agent", request.clone()).await);
+            let after = store.snapshot("general", 0, 200).await?;
+            assert_eq!(before.agent_sessions, after.agent_sessions);
+            assert!(after.last_seq > before.last_seq);
+            let mut changed = request.clone();
+            changed["agent_id"] = json!("other-agent");
+            let conflict = room_portal_fixture::call_tool(client, "start_agent", changed).await;
+            assert_eq!(conflict.is_error, Some(true));
             assert!(
-                result.content[0]
+                conflict.content[0]
                     .as_text()
                     .unwrap()
                     .text
-                    .contains("owner_confirmation_required"),
-                "{result:?}"
+                    .contains("request_conflict"),
+                "{conflict:?}"
             );
-            let after = store.snapshot("general", 0, 200).await?;
-            assert_eq!(before.agent_sessions, after.agent_sessions);
-            assert_eq!(before.last_seq, after.last_seq);
+            if mode == "full_access" {
+                let refused =
+                    super::decide_on_socket(owner, confirmation_id, "approve", None).await;
+                assert_eq!(refused["op"], "nack", "{refused}");
+                assert_eq!(
+                    refused["error"]["code"], "full_access_acknowledgement_required",
+                    "{refused}"
+                );
+            }
+            // The owner approves through the room socket, so the room actor drives the
+            // reserved start through the same gate as the owner's own start.
+            let ack = super::decide_on_socket(
+                owner,
+                confirmation_id,
+                "approve",
+                Some(mode == "full_access"),
+            )
+            .await;
+            assert_eq!(ack["op"], "ack", "{ack}");
+            let receipt = &ack["result"];
+            assert_eq!(receipt["state"], "executing");
+            // The room actor drives the approved start at once; the retry observes the
+            // recorded in-progress receipt or the already completed success.
+            let retried = call(client, "start_agent", request.clone()).await;
+            assert!(
+                retried == receipt["receipt"] || retried["status"] == "succeeded",
+                "{retried} vs {receipt}"
+            );
+            let started = complete(client, "start_agent", request.clone(), events).await?;
+            assert_eq!(started["status"], "succeeded");
+            assert_eq!(started["confirmation_id"], confirmation_id);
+            assert_eq!(
+                store
+                    .snapshot("general", 0, 200)
+                    .await?
+                    .agent_sessions
+                    .iter()
+                    .find(|agent| agent.session_id == id)
+                    .ok_or("missing started agent")?
+                    .runtime_status,
+                agentsassemble_domain::AgentRuntimeStatus::Idle
+            );
+            for event in started["events"].as_array().unwrap() {
+                assert_eq!(event["actor"]["participant_id"], delegate);
+                assert_eq!(event["actor"]["participant_type"], "agent");
+                assert_eq!(event["actor_id"], delegate);
+                assert_eq!(event["actor_type"], "agent");
+                assert_eq!(
+                    event["on_behalf_of_participant_id"],
+                    LOCAL_OPERATOR_PARTICIPANT_ID
+                );
+                assert_eq!(event["confirmation_id"], confirmation_id);
+            }
             continue;
         }
         let started = complete(client, "start_agent", request.clone(), events).await?;

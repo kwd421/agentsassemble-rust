@@ -61,6 +61,7 @@ pub(super) async fn verify(
     store: &SqliteStore,
     delegate: &str,
     events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+    owner: (&str, &agentsassemble_server::AppState),
 ) -> String {
     let client = ()
         .serve(StreamableHttpClientTransport::from_config(
@@ -145,7 +146,7 @@ pub(super) async fn verify(
     let uploaded: Value =
         serde_json::from_str(&uploaded.content[0].as_text().unwrap().text).unwrap();
     assert_eq!(uploaded["size"], 30 * 1024 * 1024);
-    crate::delegated_pin::verify(&client, store, delegate, event_id, None, events)
+    crate::delegated_pin::verify(&client, store, delegate, event_id, None, events, owner)
         .await
         .unwrap();
     client

@@ -98,7 +98,7 @@ fn encode(value: &Value) -> Result<String, String> {
 #[tool_router]
 impl ConnectorMcp {
     #[tool(
-        description = "Start an existing conversation-only (meeting_read_only) agent. Workspace-write and full-access starts require the owner confirmation unavailable in these tools. Requires current director role and current owner agent-control authority."
+        description = "Start an existing agent on behalf of your owner. Conversation-only agents start directly; workspace-write and full-access targets need the exact human owner's confirmation within five minutes and nothing changes before approval. Retry the same request ID on this session to read the outcome. Requires current director role and current owner agent-control authority."
     )]
     async fn start_agent(
         &self,

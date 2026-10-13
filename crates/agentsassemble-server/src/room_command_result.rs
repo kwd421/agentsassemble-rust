@@ -100,6 +100,8 @@ pub(crate) fn ended_session_authority(error: &PersistenceError) -> Option<(&str,
                     | b"delegate_authority_expired"
                     | b"stale_provider_turn"
                     | b"owner_confirmation_required"
+                    | b"target_changed"
+                    | b"bridge_connection_replaced"
             ) =>
         {
             Some((code.as_ref(), message))

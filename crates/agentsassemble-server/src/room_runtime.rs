@@ -846,7 +846,7 @@ async fn handle_room_command(
         &command.request_id,
         command.action.as_str(),
     );
-    let execution = match lifecycle_guard {
+    let mut execution = match lifecycle_guard {
         None => CommandExecution::unresolved_failure(PersistenceError::CommandUnresolved {
             code: "runtime_recovery_in_progress".into(),
             message: "The exact lifecycle request is currently owned by server recovery. Retry the same request.".to_owned(),
@@ -875,6 +875,14 @@ async fn handle_room_command(
     {
         debit.resolve();
     }
+    delegated_direct::drive_approved_confirmed_start(
+        store,
+        provider_adapter,
+        lifecycle_commands,
+        &command,
+        &mut execution,
+    )
+    .await;
     let CommandExecution {
         reply,
         committed_events,

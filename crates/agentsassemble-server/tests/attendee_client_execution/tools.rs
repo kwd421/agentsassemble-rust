@@ -27,6 +27,7 @@ pub(super) async fn verify(
     ),
     workspace: &str,
     identity: &str,
+    owner: (&str, &agentsassemble_server::AppState),
 ) -> TestResult {
     let files = AttendeeFileContext {
         workspace: workspace.to_owned(),
@@ -47,6 +48,7 @@ pub(super) async fn verify(
     let delegate = store.snapshot("general", 0, 200).await?.agent_sessions[0]
         .participant_id
         .clone();
+    let owner = (owner.0.to_owned(), owner.1.clone());
     let mut native = tokio::spawn(async move {
         let client = ()
             .serve(transport)
@@ -133,9 +135,17 @@ pub(super) async fn verify(
         assert_eq!(escape.is_error, Some(true));
         let message = &escape.content[0].as_text().unwrap().text;
         assert!(message.contains("workspace_file_failed"));
-        crate::delegated_pin::verify(&client, &store, &delegate, event_id, None, events)
-            .await
-            .unwrap();
+        crate::delegated_pin::verify(
+            &client,
+            &store,
+            &delegate,
+            event_id,
+            None,
+            events,
+            (&owner.0, &owner.1),
+        )
+        .await
+        .unwrap();
         let _ = client.cancel().await;
     });
     for index in 0..4 {

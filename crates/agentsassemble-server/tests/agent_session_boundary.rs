@@ -424,6 +424,7 @@ async fn verify_room_turn_publication(first_status: &str) {
         &server.state.store,
         session_id,
         server.state.rooms.subscribe("general").await,
+        (&server.base_url, &server.state),
     )
     .await;
     let snapshot = server

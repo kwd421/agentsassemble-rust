@@ -3,8 +3,10 @@ use agentsassemble_persistence::{DelegateRoomAuthority, PersistenceError, Sqlite
 use serde_json::json;
 use tokio::sync::oneshot;
 
-use super::{RoomCommandOwners, RoomMutation, RoomRuntime};
+use super::{RoomCommand, RoomCommandOwners, RoomMutation, RoomRuntime};
+use crate::lifecycle_command_tracker::LifecycleCommandTracker;
 use crate::principal_mutation_admission::{MutationIdentity, PrincipalMutationAdmission};
+use crate::room_agent_lifecycle_runtime::{LifecycleCommand, execute_agent_start};
 use crate::room_command_execution::CommandExecution;
 
 pub(super) struct DelegatedCommand {
@@ -105,6 +107,48 @@ pub(crate) async fn execute_with_reply(
         };
         reply(result);
         return publication;
+    }
+    if let DirectRoomAction::StartAgent(start) = request {
+        let result = async {
+            let _inflight = admission.acquire_inflight()?;
+            let pending = owners
+                .store
+                .request_delegated_agent_start(authority, start, |owner, delegate, bytes| {
+                    charge_request(admission, authority, request, owner, delegate, bytes)
+                })
+                .await?;
+            match pending {
+                Some((result, debits)) => {
+                    if let Some(debits) = debits {
+                        for debit in debits {
+                            debit.resolve();
+                        }
+                    }
+                    Ok(Some(result))
+                }
+                None => Ok(None),
+            }
+        }
+        .await;
+        match result {
+            Ok(Some(result)) => {
+                let publication = Some(
+                    crate::event_publication::publish_durable_room_events(
+                        owners.store,
+                        owners.event_tx,
+                        authority.room_id(),
+                    )
+                    .await,
+                );
+                reply(Ok(result));
+                return publication;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                reply(Err(error));
+                return None;
+            }
+        }
     }
     let (reserved, mut progress) = tokio::sync::mpsc::unbounded_channel();
     let execution = apply(
@@ -295,4 +339,78 @@ fn charge_request(
         admission.charge(owner, identity, bytes)?,
         admission.charge(delegate, identity, bytes)?,
     ])
+}
+
+/// An approved confirmed agent start reserved its lifecycle operation inside the
+/// decision transaction; drive it through the same gate the owner's own start uses.
+/// The owner's ACK still reports the durable in-progress receipt; completion,
+/// failure and recovery travel through the existing lifecycle custody.
+pub(crate) async fn drive_approved_confirmed_start(
+    store: &SqliteStore,
+    provider_adapter: &agentsassemble_provider::ProviderAdapter,
+    lifecycle_commands: &LifecycleCommandTracker,
+    command: &RoomCommand,
+    execution: &mut CommandExecution,
+) {
+    if command.action != agentsassemble_protocol::RoomAction::DelegatedActionDecide {
+        return;
+    }
+    let Ok(outcome) = &execution.reply else {
+        return;
+    };
+    if outcome.deduplicated
+        || outcome
+            .result
+            .get("state")
+            .and_then(serde_json::Value::as_str)
+            != Some("executing")
+        || outcome
+            .result
+            .get("receipt")
+            .and_then(|receipt| receipt.get("action"))
+            .and_then(serde_json::Value::as_str)
+            != Some("start_agent")
+    {
+        return;
+    }
+    let Some(confirmation_id) = outcome
+        .result
+        .get("confirmation_id")
+        .and_then(serde_json::Value::as_str)
+    else {
+        return;
+    };
+    let confirmation_id = confirmation_id.to_owned();
+    let control = match store
+        .confirmed_agent_start(&command.principal.room_id, &confirmation_id)
+        .await
+    {
+        Ok(control) => control,
+        Err(error) => {
+            tracing::error!(error = ?error, room_id = %command.principal.room_id, "approved confirmed start could not load its reserved control");
+            return;
+        }
+    };
+    let Some(_guard) = lifecycle_commands.try_claim(
+        &control.principal().room_id,
+        &control.principal().principal_id,
+        control.request_id(),
+        "agent.start",
+    ) else {
+        // Server recovery owns the reserved command; it reconciles the effect.
+        return;
+    };
+    let lifecycle = LifecycleCommand::delegated(
+        &control,
+        agentsassemble_protocol::RoomAction::AgentStart,
+        None,
+    );
+    let driven = execute_agent_start(store, provider_adapter, &lifecycle).await;
+    execution.committed_events.extend(driven.committed_events);
+    execution.assignments.extend(driven.assignments);
+    if let Err(failure) = driven.reply {
+        // Terminal failures are already recorded in the confirmation receipt;
+        // uncertain effects stay executing under lifecycle reconciliation.
+        tracing::warn!(error = ?failure.error, room_id = %command.principal.room_id, confirmation_id, "approved confirmed start did not complete");
+    }
 }

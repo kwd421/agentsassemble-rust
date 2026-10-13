@@ -111,6 +111,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
         (&attachment_id, &large_id, &mut attachments_rx),
         &workspace,
         &identity,
+        (&server.base_url, server.state()),
     )
     .await?;
     let view =

@@ -1,9 +1,10 @@
-use crate::support::{human_invite, room_portal_fixture};
+use crate::support::{human_invite, local_socket, room_portal_fixture};
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID,
 };
 use agentsassemble_persistence::{RoomManagerAuthority, RoomMutationAuthority, SqliteStore};
+use agentsassemble_server::AppState;
 use rmcp::{ServiceExt, model::CallToolRequestParams, transport::StreamableHttpClientTransport};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -75,6 +76,7 @@ pub(super) async fn verify(
     message: &str,
     connection: Option<Value>,
     mut events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+    owner: (&str, &AppState),
 ) -> TestResult {
     let mut args = json!({"channel_id":"lobby","message_id":message,"pinned":true,"request_id":Uuid::new_v4()});
     if let Some(connection) = &connection {
@@ -105,7 +107,15 @@ pub(super) async fn verify(
             ])
         );
     }
-    verify_direct(client, store, delegate, connection.as_ref(), &mut events).await?;
+    verify_direct(
+        client,
+        store,
+        delegate,
+        connection.as_ref(),
+        &mut events,
+        owner,
+    )
+    .await?;
     let (first, retry) = tokio::join!(
         call(client, "set_message_pin", args.clone()),
         call(client, "set_message_pin", args.clone())
@@ -249,6 +259,7 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
         &message,
         Some(joined["connection_id"].clone()),
         server.state().rooms.subscribe("general").await,
+        (&server.base_url, server.state()),
     )
     .await?;
     role(
@@ -293,6 +304,7 @@ async fn verify_direct(
     delegate: &str,
     connection: Option<&Value>,
     events: &mut tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+    owner: (&str, &AppState),
 ) -> TestResult {
     let args = |mut value: Value| {
         value["request_id"] = json!(Uuid::new_v4());
@@ -301,7 +313,7 @@ async fn verify_direct(
         }
         value
     };
-    lifecycle_tools::verify(client, store, delegate, connection, events).await?;
+    lifecycle_tools::verify(client, store, delegate, connection, events, owner).await?;
     let before = store.snapshot("general", 0, 200).await?.settings;
     let create = args(json!({"name":"Planning"}));
     let first = call(client, "create_text_channel", create.clone()).await;
@@ -451,3 +463,33 @@ async fn reject_direct_tools(client: &Client, connection: Option<&Value>, code: 
 
 #[path = "delegated_confirmation_socket.rs"]
 mod confirmation_socket;
+
+/// Approves or refuses through the owner's room socket, so the decision travels the
+/// production room-actor path (including driving an approved confirmed start).
+pub(super) async fn decide_on_socket(
+    owner: (&str, &AppState),
+    confirmation_id: &str,
+    decision: &str,
+    acknowledged: Option<bool>,
+) -> Value {
+    let (base_url, state) = owner;
+    let mut socket = local_socket::connect(base_url, state, "general").await;
+    assert_eq!(socket.subscribe(0).await["op"], "subscribed");
+    assert_eq!(socket.receive_json().await["op"], "snapshot");
+    let mut payload = json!({"confirmation_id": confirmation_id, "decision": decision});
+    if let Some(acknowledged) = acknowledged {
+        payload["full_access_acknowledged"] = json!(acknowledged);
+    }
+    socket
+        .send_json(&json!({"op":"command","request_id":confirmation_id,"action":"delegated_action.decide","payload":payload}))
+        .await;
+    loop {
+        let frame = socket
+            .receive_json_with_timeout(std::time::Duration::from_secs(30))
+            .await;
+        if frame["op"] == "ack" || frame["op"] == "nack" {
+            socket.close().await;
+            return frame;
+        }
+    }
+}

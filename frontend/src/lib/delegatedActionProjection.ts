@@ -15,8 +15,17 @@ export function parseDelegatedActionRequest(value: unknown): DelegatedActionRequ
   }
   if (!states.includes(String(r.state)) || typeof r.created_at !== "string" || !Number.isFinite(Date.parse(r.created_at)) || typeof r.expires_at !== "string" || !Number.isFinite(Date.parse(r.expires_at))) throw new Error("Invalid confirmation lifetime");
   const action = strictRecord(r.action, "confirmed action");
-  assertExactKeys(action, ["action", "request_id", "channel_id", "expected_settings_revision"], "confirmed action");
-  if (action.action !== "delete_text_channel" || ["request_id", "channel_id", "expected_settings_revision"].some((k) => typeof action[k] !== "string" || !action[k])) throw new Error("Invalid confirmed action");
+  if (action.action === "delete_text_channel") {
+    assertExactKeys(action, ["action", "request_id", "channel_id", "expected_settings_revision"], "confirmed action");
+    if (["request_id", "channel_id", "expected_settings_revision"].some((k) => typeof action[k] !== "string" || !action[k])) throw new Error("Invalid confirmed channel action");
+  } else if (action.action === "start_agent") {
+    assertExactKeys(action, ["action", "request_id", "agent_id", "configuration", "expected_configuration_revision", "expected_created_at"], "confirmed agent start");
+    if (["request_id", "agent_id"].some((k) => typeof action[k] !== "string" || !action[k]) || typeof action.expected_configuration_revision !== "string" || typeof action.expected_created_at !== "string" || !Number.isFinite(Date.parse(action.expected_created_at))) throw new Error("Invalid confirmed agent identity");
+    const config = strictRecord(action.configuration, "confirmed agent configuration");
+    const strings = ["provider_kind", "runtime_kind", "connection_kind", "model", "reasoning_effort", "service_tier", "variant", "execution_harness", "permission_mode", "catalog_revision", "persona_card_id", "transport", "working_folder"];
+    assertExactKeys(config, [...strings, "max_output_tokens"], "confirmed agent configuration");
+    if (strings.some((k) => typeof config[k] !== "string") || !Number.isSafeInteger(config.max_output_tokens) || Number(config.max_output_tokens) < 0) throw new Error("Invalid confirmed agent configuration");
+  } else { throw new Error("Unsupported confirmed action"); }
   return r as unknown as DelegatedActionRequest;
 }
 export function delegatedActionRequestsAreValid(value: unknown): boolean {
