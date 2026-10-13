@@ -199,6 +199,20 @@ export class OutgoingMessages {
     this.changed();
   }
 
+  /**
+   * Retire a room's authority at once, before its replacement is known: in-flight
+   * transfers are aborted and nothing of the room starts or publishes until `admit`
+   * names the new generation. Messages stay, so the same person can continue.
+   */
+  suspend(roomId: string): void {
+    if (!this.rooms.delete(roomId)) return;
+    for (const message of this.messages.values()) {
+      if (message.authority.roomId !== roomId) continue;
+      for (const file of message.files) file.job?.abort.abort();
+    }
+    this.changed();
+  }
+
   leaveRoom(roomId: string): void {
     for (const message of this.messages.values()) {
       if (message.authority.roomId !== roomId) continue;

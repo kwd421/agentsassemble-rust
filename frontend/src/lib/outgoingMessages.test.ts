@@ -281,3 +281,17 @@ test("hostile transfer sequences fail boundedly and never publish a substituted 
     model.close(); vi.useRealTimers();
   }
 });
+
+test("a suspended room starts and publishes nothing until it is admitted again", async () => {
+  const { model, client, publish } = fixture();
+  const held = gate<TransferStatus>(); const data = client.data;
+  client.data = vi.fn<MessageAttachmentUploadClient["data"]>(async (...args) => { await held.promise; return data(...args); });
+  model.send(authority, { text: "", files: [file("a.bin"), file("b.bin"), file("c.bin"), file("d.bin")] }); await flush();
+  const begun = vi.mocked(client.begin).mock.calls.length;
+  model.suspend(authority.roomId); held.resolve(undefined as never); await flush();
+  expect(vi.mocked(client.begin).mock.calls.length).toBe(begun);
+  expect(publish).not.toHaveBeenCalled();
+  expect(() => model.send(authority, { text: "", files: [file()] })).toThrow();
+  model.admit({ ...authority, generation: 2 }, client); client.data = data; await flush();
+  expect(one(model).phase).toBe("sent"); expect(publish).toHaveBeenCalledTimes(1); model.close();
+});

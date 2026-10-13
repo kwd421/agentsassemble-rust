@@ -17,14 +17,16 @@ import { roomMessagePayload } from "../../lib/roomMessagePayload";
 import { RoomSocketSayError, type RoomSocketHandle } from "../../roomSocketTypes";
 import type { RoomEvent } from "../../types/generated/RoomEvent";
 
-// One owner per host: its scheduler shares the three upload slots across every room
-// the person has open there. A room is registered under it with the exact authority
+// One owner per host and person: its scheduler shares the three upload slots across
+// every room that person has open there. A room is registered under it with the exact authority
 // generation it was admitted with; a publication is dispatched only through that
 // generation's socket, so nothing admitted before a reconnect, a re-admission or an
 // account change can speak through what replaced it. Uploads keep running while the
 // person looks at another room; a message that finishes then waits as a retryable
 // failure, because publishing needs the room's socket.
 type RoomEntry = {
+  /** Who is acting (participant and HTTP authority); a change means another person or session. */
+  principal: string;
   identity: string;
   generation: number;
   socket: RoomSocketHandle | null;
@@ -48,13 +50,13 @@ function socketId(socket: RoomSocketHandle | null): number {
   return id;
 }
 
-function ownerFor(hostId: string): Owner {
-  const existing = owners.get(hostId);
+function ownerFor(key: string, hostId: string, personId: string): Owner {
+  const existing = owners.get(key);
   if (existing) return existing;
   const owner: Owner = {
     rooms: new Map(), generations: 0, snapshot: NONE,
     model: new OutgoingMessages({
-      hostId, personId: "viewer",
+      hostId, personId,
       publish: (authority, request) => {
         const room = owner.rooms.get(authority.roomId);
         return room?.authority && room.generation === authority.generation && room.socket?.ready()
@@ -63,19 +65,42 @@ function ownerFor(hostId: string): Owner {
       },
     }),
   };
-  owner.model.subscribe(() => { owner.snapshot = owner.model.snapshot(); });
-  owners.set(hostId, owner);
+  let sweeping = false;
+  owner.model.subscribe(() => {
+    owner.snapshot = owner.model.snapshot();
+    // Rooms nobody is looking at: finished rows have no view left to clear them.
+    if (sweeping) return;
+    sweeping = true;
+    try {
+      for (const [roomId, room] of [...owner.rooms]) {
+        if (room.socket) continue;
+        for (const message of owner.snapshot) {
+          if (message.authority.roomId === roomId && (message.phase === "sent" || message.phase === "cancelled")) {
+            void owner.model.discard(message.id);
+          }
+        }
+        forget(key, owner, roomId);
+      }
+    } finally { sweeping = false; }
+  });
+  owners.set(key, owner);
   return owner;
 }
 // A room nobody is looking at, with nothing left to send, is forgotten; an owner
 // without rooms is closed.
-function forget(hostId: string, owner: Owner, roomId: string) {
+function forget(key: string, owner: Owner, roomId: string) {
   const room = owner.rooms.get(roomId);
   if (!room || room.socket) return;
   if (owner.model.snapshot().some((message) => message.authority.roomId === roomId)) return;
   owner.model.leaveRoom(roomId);
   owner.rooms.delete(roomId);
-  if (owner.rooms.size === 0 && owners.get(hostId) === owner) { owner.model.close(); owners.delete(hostId); }
+  if (owner.rooms.size === 0 && owners.get(key) === owner) { owner.model.close(); owners.delete(key); }
+}
+function leave(key: string, roomId: string) {
+  const owner = owners.get(key);
+  if (!owner?.rooms.has(roomId)) return;
+  owner.model.leaveRoom(roomId); owner.rooms.delete(roomId);
+  if (owner.rooms.size === 0) { owner.model.close(); owners.delete(key); }
 }
 // Ending the remote workspace (sign-out, another account or server) ends everything queued under it.
 let seenWorkspace = remoteWorkspaceSnapshot();
@@ -120,28 +145,29 @@ export function useOutgoingMessages({ roomId, participantId, authority, socket, 
 }): OutgoingController {
   const hostId = !authority || !participantId ? ""
     : authority.kind === "remote" ? sessionHostOrigin(authority.sessionToken) : "local";
-  const identity = hostId && authority ? JSON.stringify([participantId, authority, socketId(socket)]) : "";
+  const key = hostId ? `${hostId}\n${participantId}` : "";
+  const principal = hostId && authority ? JSON.stringify([participantId, authority]) : "";
+  const identity = principal ? `${principal}#${socketId(socket)}` : "";
   const [admitted, setAdmitted] = useState(0);
-  const lastHost = useRef("");
+  const lastKey = useRef("");
 
   useEffect(() => {
-    if (!hostId || !identity || !authority) {
-      // Authority is gone (read-only, removed, signed out): nothing of this room may still be sent.
-      const previous = owners.get(lastHost.current);
-      if (previous?.rooms.has(roomId)) {
-        previous.model.leaveRoom(roomId); previous.rooms.delete(roomId);
-        if (previous.rooms.size === 0) { previous.model.close(); owners.delete(lastHost.current); }
-      }
-      return undefined;
-    }
-    lastHost.current = hostId;
-    const owner = ownerFor(hostId);
+    // Another person, another host, or no authority at all (read-only, removed, signed
+    // out): nothing the previous one queued for this room may still be sent.
+    if (lastKey.current && lastKey.current !== key) leave(lastKey.current, roomId);
+    lastKey.current = key;
+    if (!key || !identity || !authority) return undefined;
+    const owner = ownerFor(key, hostId, participantId);
     let room = owner.rooms.get(roomId);
-    if (!room) { room = { identity: "", generation: 0, socket: null }; owner.rooms.set(roomId, room); }
+    if (!room) { room = { principal, identity: "", generation: 0, socket: null }; owner.rooms.set(roomId, room); }
     const entry = room;
     if (entry.identity !== identity) {
-      // Retire the previous generation at once; publishing waits for the new admission.
-      entry.identity = identity; entry.generation = ++owner.generations;
+      // Retire the previous generation at once, in the model too: its transfers stop and
+      // nothing starts or publishes until the new admission. The same person keeps the
+      // queued messages across a new socket; a different session starts clean.
+      if (entry.principal !== principal) owner.model.leaveRoom(roomId);
+      else owner.model.suspend(roomId);
+      entry.principal = principal; entry.identity = identity; entry.generation = ++owner.generations;
       entry.authority = undefined; entry.uploads = undefined;
     }
     entry.socket = socket;
@@ -149,7 +175,7 @@ export function useOutgoingMessages({ roomId, participantId, authority, socket, 
     if (!entry.authority) {
       const generation = entry.generation;
       void createMessageAttachmentUploadClient(roomId, authority, controller.signal).then((client) => {
-        if (controller.signal.aborted || entry.generation !== generation || owners.get(hostId) !== owner) return;
+        if (controller.signal.aborted || entry.generation !== generation || owners.get(key) !== owner) return;
         entry.uploads = client;
         entry.authority = { roomId, participantId, generation };
         owner.model.admit(entry.authority, client);
@@ -162,13 +188,13 @@ export function useOutgoingMessages({ roomId, participantId, authority, socket, 
     return () => {
       controller.abort();
       if (entry.socket === socket) entry.socket = null;
-      forget(hostId, owner, roomId);
+      forget(key, owner, roomId);
     };
     // `authority` is covered by `identity`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostId, identity, roomId, participantId, socket]);
+  }, [key, identity, roomId, socket]);
 
-  const owner = hostId ? owners.get(hostId) : undefined;
+  const owner = key ? owners.get(key) : undefined;
   const entry = owner?.rooms.get(roomId);
   const uploads = entry?.authority && entry.generation === admitted ? entry.uploads : undefined;
   const all = useSyncExternalStore(
