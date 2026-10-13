@@ -8,12 +8,13 @@ use crate::delegated_pin::DelegatedRoomActionAuthority;
 use crate::{DelegateRoomAuthority, PersistenceError, RoomMutationAuthority, SqliteStore};
 
 pub struct DelegatedAgentControl {
-    authority: DelegateRoomAuthority,
-    principal: AuthenticatedPrincipal,
-    owner_id: String,
-    request_id: String,
-    action: &'static str,
-    payload: Value,
+    pub(crate) authority: DelegateRoomAuthority,
+    pub(crate) principal: AuthenticatedPrincipal,
+    pub(crate) owner_id: String,
+    pub(crate) request_id: String,
+    pub(crate) action: &'static str,
+    pub(crate) payload: Value,
+    pub(crate) confirmation_id: Option<String>,
 }
 
 impl DelegatedAgentControl {
@@ -80,6 +81,9 @@ impl AgentControlAuthority<'_> {
                 {
                     return Err(invalid());
                 }
+                if control.confirmation_id.is_some() {
+                    return crate::delegated_confirmed_agent::authorize_in(tx, control).await;
+                }
                 let name = direct_name(action)?;
                 let proof =
                     DelegatedRoomActionAuthority::direct(tx, &control.authority, name).await?;
@@ -109,8 +113,10 @@ impl AgentControlAuthority<'_> {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Attribution {
-    actor_participant_id: String,
+    pub(crate) actor_participant_id: String,
     pub(crate) on_behalf_of_participant_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) confirmation_id: Option<String>,
 }
 
 impl SqliteStore {
@@ -145,6 +151,7 @@ impl SqliteStore {
         let payload = json!({"agent_id":agent_id,"_delegation":Attribution {
             actor_participant_id: proof.delegate.participant_id.clone(),
             on_behalf_of_participant_id: proof.owner.participant_id.clone(),
+            confirmation_id: None,
         }});
         let identity = crate::command_admission::existing_request_identity(
             &mut tx,
@@ -177,6 +184,7 @@ impl SqliteStore {
                 request_id: request.request_id().into(),
                 action,
                 payload,
+                confirmation_id: None,
             },
             debit,
         ))
@@ -253,7 +261,7 @@ pub(crate) async fn store_control_result(
             &attribution.on_behalf_of_participant_id,
         )
         .await?;
-        let event = crate::delegated_pin::attributed_action_event(
+        let mut event = crate::delegated_pin::attributed_action_event(
             tx,
             crate::delegated_pin::ActionAttribution {
                 room_id: &principal.room_id,
@@ -272,6 +280,9 @@ pub(crate) async fn store_control_result(
             },
         )
         .await?;
+        if let Some(id) = &attribution.confirmation_id {
+            event.extra.insert("confirmation_id".into(), json!(id));
+        }
         for canonical in &mut events {
             canonical.actor.clone_from(&event.actor);
             canonical.actor_id.clone_from(&event.actor_id);
@@ -285,6 +296,9 @@ pub(crate) async fn store_control_result(
             ] {
                 canonical.extra.insert(key.into(), event.extra[key].clone());
             }
+            if let Some(id) = &attribution.confirmation_id {
+                canonical.extra.insert("confirmation_id".into(), json!(id));
+            }
             sqlx::query("UPDATE room_events SET event_json=? WHERE room_id=? AND seq=?")
                 .bind(serde_json::to_string(canonical)?)
                 .bind(&principal.room_id)
@@ -297,6 +311,20 @@ pub(crate) async fn store_control_result(
         result = json!({"status":"succeeded", "request_id":request_id, "action":name,
             "target_id":control_agent_id(payload)?, "event_id":event.id, "event":event, "events":events});
     }
+    if let Some(id) = payload
+        .get("_delegation")
+        .and_then(|a| a.get("confirmation_id"))
+    {
+        result["confirmation_id"] = id.clone();
+    }
+    crate::delegated_confirmed_agent::complete_in(
+        tx,
+        &principal.room_id,
+        payload,
+        agentsassemble_domain::ConfirmationState::Succeeded,
+        &agentsassemble_domain::public_value_for_principal(&result, principal)?,
+    )
+    .await?;
     crate::agent_lifecycle_events::store_result(
         tx,
         principal,

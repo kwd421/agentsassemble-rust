@@ -103,82 +103,93 @@ impl SqliteStore {
             .iter()
             .find(|c| c.id == request.channel_id)
             .ok_or_else(|| rejected("channel_not_found", "Text channel is unavailable."))?;
-        let now = Utc::now();
-        let room = crate::authority::load_active_room(&mut tx, authority.room_id()).await?;
-        let (owner_reference, owner_expiry) = crate::delegation_owner::confirmation_provenance(
-            &mut tx,
-            authority.room_id(),
-            authority.delegate_id(),
-        )
-        .await?;
-        let mut expiry = now + chrono::Duration::minutes(5);
-        for bound in [
-            owner_expiry,
-            match authority {
-                DelegateRoomAuthority::Provider { .. } => None,
-                DelegateRoomAuthority::Attendee { session, .. } => Some(session.expires_at()),
-                DelegateRoomAuthority::Connector(session) => Some(session.expires_at()),
-            },
-        ]
-        .into_iter()
-        .flatten()
-        {
-            expiry = expiry.min(bound);
-        }
-        let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND owner_id=? AND state='pending'").bind(authority.room_id()).bind(&proof.owner.participant_id).fetch_one(&mut *tx).await?;
-        let recent: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND owner_id=? AND created_at>?").bind(authority.room_id()).bind(&proof.owner.participant_id).bind((now - chrono::Duration::minutes(1)).timestamp_millis()).fetch_one(&mut *tx).await?;
-        let room_pending: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND state='pending'",
-        )
-        .bind(authority.room_id())
-        .fetch_one(&mut *tx)
-        .await?;
-        if pending >= 4 || room_pending >= 16 || recent >= 8 {
-            return Ok((
-                json!({"status":"rejected","code":"rate_limited","message":"Owner confirmation limit reached.","retryable":true,"retry_after_ms":60000}),
-                None,
-            ));
-        }
-        let item = DelegatedActionRequest {
-            confirmation_id: Uuid::new_v4().to_string(),
-            owner_participant_id: proof.owner.participant_id.clone(), owner_display_name: proof.owner.display_name.clone(),
-            delegate_participant_id: proof.delegate.participant_id.clone(), delegate_display_name: proof.delegate.display_name.clone(),
-            action, target_name: target.name.clone(),
-            consequences: "Deletes the channel and its message text, pins and search records. Event sequence and actor records are retained.".into(),
-            created_at: now, expires_at: expiry, state: ConfirmationState::Pending,
-        };
-        let binding = Binding {
-            room_uid: room.room_uid,
-            authority: authority.clone(),
-            owner_reference,
-        };
-        let encoded = serde_json::to_string(&item)?;
-        let bytes = crate::room_write_budget::command_size(
-            &request.request_id,
-            "request_delete_text_channel",
-            &serde_json::to_value(request)?,
-        )?;
-        crate::room_write_budget::reserve_room_write_budget(&mut tx, authority.room_id(), bytes)
-            .await?;
-        let debit = admit(
-            &proof.owner.principal_id,
-            &proof.delegate.principal_id,
-            bytes,
-        )?;
-        sqlx::query("INSERT INTO delegated_action_requests(room_id,confirmation_id,owner_id,delegate_id,request_id,created_at,expires_at,state,binding_json,request_json) VALUES(?,?,?,?,?,?,?,'pending',?,?)")
-            .bind(authority.room_id()).bind(&item.confirmation_id).bind(&item.owner_participant_id).bind(&item.delegate_participant_id).bind(&request.request_id)
-            .bind(now.timestamp_millis()).bind(expiry.timestamp_millis()).bind(serde_json::to_string(&binding)?).bind(encoded).execute(&mut *tx).await?;
-        crate::delegated_confirmation_lifecycle::event_in(
-            &mut tx,
-            authority.room_id(),
-            &item,
-            true,
-        )
-        .await?;
+        let result = create_in(&mut tx, authority, &proof, action, target.name.clone(), "Deletes the channel and its message text, pins and search records. Event sequence and actor records are retained.", admit).await?;
         tx.commit().await?;
-        Ok((
-            json!({"status":"pending_confirmation","request_id":request.request_id,"confirmation_id":item.confirmation_id,"expires_at":expiry}),
-            Some(debit),
-        ))
+        Ok(result)
     }
+}
+
+pub(crate) async fn create_in<A>(
+    tx: &mut Transaction<'_, Sqlite>,
+    authority: &DelegateRoomAuthority,
+    proof: &DelegatedRoomActionAuthority,
+    action: ConfirmedRoomAction,
+    target_name: String,
+    consequences: &str,
+    admit: impl FnOnce(&str, &str, usize) -> Result<A, PersistenceError>,
+) -> Result<(Value, Option<A>), PersistenceError> {
+    let now = Utc::now();
+    let room = crate::authority::load_active_room(tx, authority.room_id()).await?;
+    let (owner_reference, owner_expiry) = crate::delegation_owner::confirmation_provenance(
+        tx,
+        authority.room_id(),
+        authority.delegate_id(),
+    )
+    .await?;
+    let mut expiry = now + chrono::Duration::minutes(5);
+    for bound in [
+        owner_expiry,
+        match authority {
+            DelegateRoomAuthority::Provider { .. } => None,
+            DelegateRoomAuthority::Attendee { session, .. } => Some(session.expires_at()),
+            DelegateRoomAuthority::Connector(session) => Some(session.expires_at()),
+        },
+    ]
+    .into_iter()
+    .flatten()
+    {
+        expiry = expiry.min(bound);
+    }
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND owner_id=? AND state='pending'").bind(authority.room_id()).bind(&proof.owner.participant_id).fetch_one(&mut **tx).await?;
+    let recent: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND owner_id=? AND created_at>?").bind(authority.room_id()).bind(&proof.owner.participant_id).bind((now - chrono::Duration::minutes(1)).timestamp_millis()).fetch_one(&mut **tx).await?;
+    let room_pending: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM delegated_action_requests WHERE room_id=? AND state='pending'",
+    )
+    .bind(authority.room_id())
+    .fetch_one(&mut **tx)
+    .await?;
+    if pending >= 4 || room_pending >= 16 || recent >= 8 {
+        return Ok((
+            json!({"status":"rejected","code":"rate_limited","message":"Owner confirmation limit reached.","retryable":true,"retry_after_ms":60000}),
+            None,
+        ));
+    }
+    let item = DelegatedActionRequest {
+        confirmation_id: Uuid::new_v4().to_string(),
+        owner_participant_id: proof.owner.participant_id.clone(),
+        owner_display_name: proof.owner.display_name.clone(),
+        delegate_participant_id: proof.delegate.participant_id.clone(),
+        delegate_display_name: proof.delegate.display_name.clone(),
+        action: action.clone(),
+        target_name: target_name,
+        consequences: consequences.into(),
+        created_at: now,
+        expires_at: expiry,
+        state: ConfirmationState::Pending,
+    };
+    let binding = Binding {
+        room_uid: room.room_uid,
+        authority: authority.clone(),
+        owner_reference,
+    };
+    let encoded = serde_json::to_string(&item)?;
+    let bytes = crate::room_write_budget::command_size(
+        action.request_id(),
+        action.name(),
+        &serde_json::to_value(&action)?,
+    )?;
+    crate::room_write_budget::reserve_room_write_budget(tx, authority.room_id(), bytes).await?;
+    let debit = admit(
+        &proof.owner.principal_id,
+        &proof.delegate.principal_id,
+        bytes,
+    )?;
+    sqlx::query("INSERT INTO delegated_action_requests(room_id,confirmation_id,owner_id,delegate_id,request_id,created_at,expires_at,state,binding_json,request_json) VALUES(?,?,?,?,?,?,?,'pending',?,?)")
+            .bind(authority.room_id()).bind(&item.confirmation_id).bind(&item.owner_participant_id).bind(&item.delegate_participant_id).bind(action.request_id())
+            .bind(now.timestamp_millis()).bind(expiry.timestamp_millis()).bind(serde_json::to_string(&binding)?).bind(encoded).execute(&mut **tx).await?;
+    crate::delegated_confirmation_lifecycle::event_in(tx, authority.room_id(), &item, true).await?;
+    Ok((
+        json!({"status":"pending_confirmation","request_id":item.action.request_id(),"confirmation_id":item.confirmation_id,"expires_at":expiry}),
+        Some(debit),
+    ))
 }

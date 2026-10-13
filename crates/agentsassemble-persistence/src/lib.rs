@@ -333,3 +333,5 @@ mod connector_delivery;
 mod delegated_confirmation;
 mod delegated_confirmation_decision;
 mod delegated_confirmation_lifecycle;
+
+mod delegated_confirmed_agent;

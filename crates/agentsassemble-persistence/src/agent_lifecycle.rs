@@ -113,18 +113,38 @@ impl SqliteStore {
         payload: &Value,
         command_action: &'static str,
     ) -> Result<AgentStartPlan, PersistenceError> {
-        let authority = authority.into();
-        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let plan = self
+            .prepare_agent_launch_in(
+                &mut tx,
+                authority.into(),
+                request_id,
+                payload,
+                command_action,
+            )
+            .await?;
+        tx.commit().await?;
+        Ok(plan)
+    }
+
+    pub(crate) async fn prepare_agent_launch_in(
+        &self,
+        transaction: &mut Transaction<'_, Sqlite>,
+        authority: crate::AgentControlAuthority<'_>,
+        request_id: &str,
+        payload: &Value,
+        command_action: &'static str,
+    ) -> Result<AgentStartPlan, PersistenceError> {
         let resolved = authority
-            .resolve(&mut transaction, request_id, command_action, payload)
+            .resolve(transaction, request_id, command_action, payload)
             .await?;
         let principal = &resolved;
         let (agent_id, start_requested) = launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let operation_id = lifecycle_operation_id(principal, request_id, command_action);
-        active_room_for_principal(&mut transaction, principal).await?;
+        active_room_for_principal(transaction, principal).await?;
         if let Some(outcome) = existing_command(
-            &mut transaction,
+            transaction,
             &principal.room_id,
             &principal.principal_id,
             request_id,
@@ -133,8 +153,7 @@ impl SqliteStore {
         )
         .await?
         {
-            authority.record_success(&mut transaction).await?;
-            transaction.commit().await?;
+            authority.record_success(transaction).await?;
             return Ok(AgentStartPlan::Outcome(Box::new(outcome)));
         }
         let reservation = LifecycleReservation::new(
@@ -145,14 +164,13 @@ impl SqliteStore {
             &agent_id,
             &operation_id,
         );
-        self.claim_lifecycle_command(&mut transaction, &reservation, payload, true)
+        self.claim_lifecycle_command(transaction, &reservation, payload, true)
             .await?;
-        let mut session =
-            load_launch_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        let mut session = load_launch_session(transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
         if session.public.recovery_required
             && crate::provider_turn_execution::blocking_execution_exists(
-                &mut transaction,
+                transaction,
                 &principal.room_id,
                 &agent_id,
             )
@@ -163,8 +181,7 @@ impl SqliteStore {
                 "Retire the quarantined provider execution before resuming this session.",
             ));
         }
-        let mut participant =
-            load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
+        let mut participant = load_participant(transaction, &principal.room_id, &agent_id).await?;
         if participant.status == ParticipantStatus::Exported {
             return Err(rejected(
                 "participant_exported",
@@ -188,9 +205,9 @@ impl SqliteStore {
             require_readdable(&session, &participant)?;
         }
         if !start_requested {
-            finish_lifecycle_command(&mut transaction, &reservation).await?;
+            finish_lifecycle_command(transaction, &reservation).await?;
             let outcome = commit_readd_listing(
-                &mut transaction,
+                transaction,
                 principal,
                 request_id,
                 payload_hash,
@@ -198,15 +215,13 @@ impl SqliteStore {
                 &mut participant,
             )
             .await?;
-            authority.record_success(&mut transaction).await?;
-            transaction.commit().await?;
+            authority.record_success(transaction).await?;
             return Ok(AgentStartPlan::Outcome(Box::new(outcome)));
         }
         if !incomplete {
             prepare_launch_session(&mut session, &operation_id);
         }
-        save_session(&mut transaction, &session).await?;
-        transaction.commit().await?;
+        save_session(transaction, &session).await?;
         Ok(AgentStartPlan::Start(Box::new(AgentStartEffect {
             operation_id,
             session,

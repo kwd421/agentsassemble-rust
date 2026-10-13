@@ -255,7 +255,9 @@ pub(crate) async fn reject_lifecycle_command(
     .fetch_optional(&mut **transaction)
     .await?
     .ok_or_else(invalid_reservation)?;
-    Ok(serde_json::from_str(&payload)?)
+    let payload: Value = serde_json::from_str(&payload)?;
+    crate::delegated_confirmed_agent::complete_in(transaction,&reservation.principal.room_id,&payload,agentsassemble_domain::ConfirmationState::Failed,&serde_json::json!({"status":"rejected","code":failure_code,"message":failure_message,"retryable":false})).await?;
+    Ok(payload)
 }
 
 pub(crate) fn stored_rejection(failure_code: String, failure_message: String) -> PersistenceError {

@@ -4,7 +4,15 @@ use agentsassemble_domain::{Actor, AuthenticatedPrincipal, RoomEvent};
 use serde_json::{Value, json};
 use sqlx::{Sqlite, Transaction};
 
-fn attribute(event: &mut RoomEvent, principal: &AuthenticatedPrincipal, owner_id: &str) {
+fn attribute(
+    event: &mut RoomEvent,
+    principal: &AuthenticatedPrincipal,
+    owner_id: &str,
+    confirmation_id: Option<&str>,
+) {
+    if let Some(id) = confirmation_id {
+        event.extra.insert("confirmation_id".into(), json!(id));
+    }
     event.actor = Actor {
         participant_id: principal.participant_id.clone(),
         participant_type: "agent".into(),
@@ -30,6 +38,7 @@ pub(crate) async fn attribute_since(
     tx: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
     owner_id: &str,
+    confirmation_id: Option<&str>,
     first_seq: i64,
     returned: &mut [RoomEvent],
 ) -> Result<(), PersistenceError> {
@@ -44,7 +53,7 @@ pub(crate) async fn attribute_since(
     .await?;
     for encoded in rows {
         let mut event: RoomEvent = serde_json::from_str(&encoded)?;
-        attribute(&mut event, principal, owner_id);
+        attribute(&mut event, principal, owner_id, confirmation_id);
         sqlx::query("UPDATE room_events SET event_json=? WHERE room_id=? AND seq=?")
             .bind(serde_json::to_string(&event)?)
             .bind(&principal.room_id)
@@ -53,7 +62,7 @@ pub(crate) async fn attribute_since(
             .await?;
     }
     for event in returned {
-        attribute(event, principal, owner_id);
+        attribute(event, principal, owner_id, confirmation_id);
     }
     Ok(())
 }
@@ -72,6 +81,7 @@ pub(crate) async fn control_events(
             tx,
             principal,
             &attribution.on_behalf_of_participant_id,
+            attribution.confirmation_id.as_deref(),
             first_seq,
             returned,
         )

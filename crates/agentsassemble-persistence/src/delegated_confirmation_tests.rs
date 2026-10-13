@@ -85,6 +85,7 @@ async fn confirmation_is_immutable_owner_private_and_executes_once() -> TestResu
             .ok_or("confirmation")?
             .into(),
         decision: ConfirmationDecision::Approve,
+        full_access_acknowledged: None,
     };
     crate::human_admission_store::tests::insert_invite(
         &store,
@@ -295,6 +296,7 @@ async fn declines_expiry_changed_target_and_revoked_authority_are_terminal() -> 
             } else {
                 ConfirmationDecision::Approve
             },
+            full_access_acknowledged: None,
         };
         let receipt = store
             .decide_delegated_action(

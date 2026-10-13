@@ -384,6 +384,7 @@ async fn verify_direct(
     let decision = agentsassemble_domain::DecideDelegatedAction {
         confirmation_id: pending["confirmation_id"].as_str().unwrap().into(),
         decision: agentsassemble_domain::ConfirmationDecision::Approve,
+        full_access_acknowledged: None,
     };
     let receipt = store
         .decide_delegated_action(

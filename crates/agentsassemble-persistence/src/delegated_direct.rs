@@ -208,6 +208,7 @@ impl SqliteStore {
             &mut tx,
             &proof.delegate,
             &proof.owner.participant_id,
+            None,
             first_seq,
             &mut mutation.outcome.events,
         )

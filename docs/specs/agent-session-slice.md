@@ -6,6 +6,24 @@ projection, approval transaction, replay, attribution and archive exclusion are 
 by the slice-3 section in local-authority-surface-admission-moderation-slice.md; earlier
 slice exclusions below describe their historical scope, not this required acceptance.
 
+Confirmed existing-agent starts bind all stored launch controls and the resolved folder,
+creation identity, target name and the existing sealed runtime profile key. The code
+has no separate configuration revision: use that existing identity plus the typed
+snapshot, without adding a new hash. Approval reserves the normal lifecycle command
+in the decision transaction; its owner rechecks original owner/delegate authority and
+configuration before effects. Once accepted, expiry applies to pending decisions;
+uncertain effects stay executing under existing reconciliation. Approving a
+full-access target additionally requires the exact human owner's explicit
+`full_access_acknowledged: true` inside the approval decision; without it approval is
+refused with `full_access_acknowledgement_required` and the request stays pending.
+The AI has no approval path and can never supply the acknowledgement.
+
+Affected entry points: the existing `start_agent` director tool on managed/API
+RoomPortal, attendee/companion RoomPortal and connector MCP/HTTP. Conversation-only
+targets start directly; workspace-write/full-access targets return
+`pending_confirmation` without mutation or reservation, and the AI reads the outcome
+by retrying the same request ID.
+
 ## Director direct actions: slice 2 acceptance
 
 Slice 2 adds channel create/rename, participant mute/unmute and agent start/stop to managed/API RoomPortal. Start is direct only for `meeting_read_only`; other permissions require the owner confirmation error without side effects. Shared lifecycle preparation, effect authorization, completion/recovery and room attribution remain mandatory.

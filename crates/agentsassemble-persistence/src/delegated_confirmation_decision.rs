@@ -36,6 +36,16 @@ impl SqliteStore {
                 "Only the exact human owner may decide.",
             ));
         }
+        if decision.decision == ConfirmationDecision::Approve
+            && let ConfirmedRoomAction::StartAgent(start) = &request.action
+            && start.configuration.permission_mode == "full_access"
+            && decision.full_access_acknowledged != Some(true)
+        {
+            return Err(rejected(
+                "full_access_acknowledgement_required",
+                "Approving this full-access start requires the owner's explicit acknowledgement.",
+            ));
+        }
         let encoded = serde_json::to_string(decision)?;
         let first_seq =
             crate::room_event_sequence::next_sequence(&mut tx, &principal.room_id).await?;
@@ -71,8 +81,9 @@ impl SqliteStore {
                         .execute(&mut *tx)
                         .await?;
                     let execution = async {
+                        match &request.action {
+                            ConfirmedRoomAction::DeleteTextChannel(action) => {
                         let proof = validate_in(&mut tx, &principal.room_id, &row).await?;
-                        let ConfirmedRoomAction::DeleteTextChannel(action) = &request.action;
                         let mut settings = settings_in(&mut tx, &principal.room_id).await?;
                         if agentsassemble_domain::public_settings(&settings)?.settings_revision != action.expected_settings_revision {
                             return Err(rejected("target_changed", "The target settings changed before approval."));
@@ -85,13 +96,26 @@ impl SqliteStore {
                         event.extra.insert("confirmation_id".into(), json!(request.confirmation_id));
                         crate::room_turns::support::insert_event(&mut tx, &event).await?;
                         outcome.events.push(event.clone());
-                        crate::delegated_event_attribution::attribute_since(&mut tx, &proof.delegate, &proof.owner.participant_id, first_seq, &mut outcome.events).await?;
+                        crate::delegated_event_attribution::attribute_since(&mut tx, &proof.delegate, &proof.owner.participant_id, Some(&request.confirmation_id), first_seq, &mut outcome.events).await?;
                         for canonical in &mut outcome.events {
                             for key in ["action", "target_id", "request_id", "confirmation_id"] { canonical.extra.insert(key.into(),event.extra[key].clone()); }
                             sqlx::query("UPDATE room_events SET event_json=? WHERE room_id=? AND seq=?")
                                 .bind(serde_json::to_string(canonical)?).bind(&principal.room_id).bind(canonical.seq).execute(&mut *tx).await?;
                         }
                         Ok::<Value,PersistenceError>(json!({"status":"succeeded","request_id":action.request_id,"action":"delete_text_channel","target_id":action.channel_id,"confirmation_id":request.confirmation_id,"event_id":event.id}))
+                            }
+                            ConfirmedRoomAction::StartAgent(_) => {
+                                let mut executing = request.clone(); executing.state = ConfirmationState::Executing;
+                                sqlx::query("UPDATE delegated_action_requests SET state='executing',request_json=? WHERE room_id=? AND confirmation_id=?").bind(serde_json::to_string(&executing)?).bind(&principal.room_id).bind(&request.confirmation_id).execute(&mut *tx).await?;
+                                let row=load_in(&mut tx,&principal.room_id,&request.confirmation_id).await?;
+                                let control=crate::delegated_confirmed_agent::control_in(&mut tx,&principal.room_id,&row).await?;
+                                let plan=self.prepare_agent_launch_in(&mut tx,crate::AgentControlAuthority::Delegated(&control),control.request_id(),control.payload(),"agent.start").await?;
+                                match plan {
+                                    crate::AgentStartPlan::Start(effect)=>Ok(json!({"status":"in_progress","request_id":control.request_id(),"action":"start_agent","target_id":control.payload()["agent_id"],"confirmation_id":request.confirmation_id,"operation_id":effect.operation_id})),
+                                    crate::AgentStartPlan::Outcome(outcome)=>Ok(outcome.result),
+                                }
+                            }
+                        }
                     }.await;
                     match execution {
                         Ok(result) => {
@@ -102,7 +126,11 @@ impl SqliteStore {
                                 &mut tx,
                                 &principal.room_id,
                                 &row,
-                                ConfirmationState::Succeeded,
+                                if result["status"] == "in_progress" {
+                                    ConfirmationState::Executing
+                                } else {
+                                    ConfirmationState::Succeeded
+                                },
                                 &result,
                             )
                             .await?;
