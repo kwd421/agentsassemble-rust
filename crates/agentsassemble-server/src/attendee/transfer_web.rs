@@ -317,10 +317,22 @@ pub(super) async fn download(
         turn_generation: query.turn_generation,
         execution_id: query.execution_id.clone(),
     };
+    let custody = AttendeeFileAuthority {
+        room_id: session.public.room_id.clone(),
+        session_id: session.public.session_id.clone(),
+        participant_id: session.public.participant_id.clone(),
+        session_fingerprint: fingerprint,
+        connection_id: connection,
+        turn_generation: query.turn_generation,
+        execution_id: query.execution_id.clone(),
+    };
     let (reader, lease) = state
         .store
         .open_message_attachment_reader(
-            MessageAttachmentReadAuthority::Provider(Box::new(authority)),
+            MessageAttachmentReadAuthority::Attendee {
+                attendee: Box::new(custody),
+                provider: Box::new(authority),
+            },
             &query.attachment_id,
             |principal| state.downloads.reserve_stream(principal),
         )

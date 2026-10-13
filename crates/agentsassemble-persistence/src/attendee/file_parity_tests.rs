@@ -176,7 +176,18 @@ async fn attendee_upload_uses_current_limits_participant_custody_and_streamed_re
     };
     let (reader, ()) = store
         .open_message_attachment_reader(
-            MessageAttachmentReadAuthority::Provider(Box::new(read_authority)),
+            MessageAttachmentReadAuthority::Attendee {
+                attendee: Box::new(AttendeeFileAuthority {
+                    room_id: "general".into(),
+                    session_id: agent_session_id.clone(),
+                    participant_id: participant_id.clone(),
+                    session_fingerprint: *session.session_fingerprint(),
+                    connection_id: connection.connection_id(),
+                    turn_generation: next.turn_generation,
+                    execution_id: next.execution_id.clone(),
+                }),
+                provider: Box::new(read_authority),
+            },
             &completed.attachment_id,
             |_| Ok(()),
         )
@@ -211,6 +222,49 @@ async fn attendee_upload_uses_current_limits_participant_custody_and_streamed_re
         matches!(store.begin_message_upload(&custody, "conversation-refused", "refused.bin", "application/octet-stream", 1).await, Err(PersistenceError::CommandRejected { code, .. }) if code=="permission_denied")
     );
     set_permission_mode(&store, &agent_session_id, "workspace_write").await?;
+    // A replaced connection stops an already-open large reader on the next piece.
+    assert_eq!(reader.read_piece(0).await?, piece);
+    let replacement = store
+        .claim_attendee_connection(&session, Uuid::new_v4(), None, now)
+        .await?
+        .authorization;
+    assert!(reader.read_piece(0).await.is_err());
+    let custody = MessageUploadAuthority::Attendee(Box::new(AttendeeFileAuthority {
+        room_id: "general".into(),
+        session_id: agent_session_id.clone(),
+        participant_id: participant_id.clone(),
+        session_fingerprint: *session.session_fingerprint(),
+        connection_id: replacement.connection_id(),
+        turn_generation: next.turn_generation,
+        execution_id: next.execution_id.clone(),
+    }));
+    let (current_reader, ()) = store
+        .open_message_attachment_reader(
+            MessageAttachmentReadAuthority::Attendee {
+                attendee: Box::new(AttendeeFileAuthority {
+                    room_id: "general".into(),
+                    session_id: agent_session_id.clone(),
+                    participant_id: participant_id.clone(),
+                    session_fingerprint: *session.session_fingerprint(),
+                    connection_id: replacement.connection_id(),
+                    turn_generation: next.turn_generation,
+                    execution_id: next.execution_id.clone(),
+                }),
+                provider: Box::new(ProviderFileAuthority {
+                    room_id: "general".into(),
+                    session_id: agent_session_id.clone(),
+                    participant_id: participant_id.clone(),
+                    turn_id: next.turn_id.clone(),
+                    input_up_to_seq: second.input_up_to_seq,
+                    turn_generation: next.turn_generation,
+                    execution_id: next.execution_id.clone(),
+                }),
+            },
+            &completed.attachment_id,
+            |_| Ok(()),
+        )
+        .await?;
+    assert_eq!(current_reader.read_piece(0).await?, piece);
     // Per-piece authority rejects an ended turn, even for an already-open large reader.
     let encoded: String = sqlx::query_scalar(
         "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
@@ -227,7 +281,7 @@ async fn attendee_upload_uses_current_limits_participant_custody_and_streamed_re
     .bind(&agent_session_id)
     .execute(&store.pool)
     .await?;
-    assert!(reader.read_piece(0).await.is_err());
+    assert!(current_reader.read_piece(0).await.is_err());
     assert!(
         store
             .append_message_upload(&custody, &transfer.handle, 0, &piece)

@@ -12,6 +12,12 @@ pub enum MessageAttachmentReadAuthority {
     },
     Session(Box<RoomSessionAuthorization>),
     Provider(Box<crate::ProviderFileAuthority>),
+    /// Attendee downloads keep their connection custody alongside the turn's
+    /// provider metadata authority; both are revalidated for each piece.
+    Attendee {
+        attendee: Box<crate::AttendeeFileAuthority>,
+        provider: Box<crate::ProviderFileAuthority>,
+    },
     Connector(Box<crate::ConnectorFileAuthority>),
 }
 
@@ -40,6 +46,17 @@ impl MessageAttachmentReadAuthority {
             .await?;
             return Ok((metadata, authority.session_id.clone()));
         }
+        if let Self::Attendee { attendee, provider } = self {
+            let principal = attendee.resolve(tx).await?;
+            let metadata = super::provider_attachment_metadata_in(
+                tx,
+                provider.read_authority(),
+                id,
+                agentsassemble_domain::MAX_ROOM_FILE_BYTES,
+            )
+            .await?;
+            return Ok((metadata, principal.principal_id));
+        }
         if let Self::Connector(authority) = self {
             // Saved connector reads follow the shared reader policy: already-bound
             // files up to 50 MiB stream even when the upload policy was lowered.
@@ -54,7 +71,9 @@ impl MessageAttachmentReadAuthority {
             return Ok((metadata, principal.principal_id.clone()));
         }
         let (room_id, principal_id) = match self {
-            Self::Provider(_) | Self::Connector(_) => unreachable!("early return above"),
+            Self::Provider(_) | Self::Attendee { .. } | Self::Connector(_) => {
+                unreachable!("early return above")
+            }
             Self::Local {
                 room_id,
                 user_id,
