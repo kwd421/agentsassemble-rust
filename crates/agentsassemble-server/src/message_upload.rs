@@ -101,6 +101,8 @@ impl Service {
                 false
             };
             if expired || lost || shutdown || entry.cancel.is_cancelled() {
+                // Wake a stalled data owner before waiting for its state lock.
+                entry.cancel.cancel();
                 let mut current = entry.current.lock().await;
                 if !expired
                     && !shutdown
@@ -110,7 +112,6 @@ impl Service {
                 {
                     continue; // Racing cleanup cannot retire a completed terminal receipt.
                 }
-                entry.cancel.cancel();
                 if self.store.discard_message_upload(&handle).await.is_err() {
                     tracing::error!("Upload cleanup storage failed");
                     continue;
@@ -264,6 +265,57 @@ impl Service {
         }
         Ok(entry.status.clone())
     }
+    /// The local source is not polled until size/quota/admission accept begin.
+    pub(crate) async fn file(
+        &self,
+        authority: MessageUploadAuthority,
+        filename: String,
+        content_type: String,
+        size: usize,
+        source: impl tokio::io::AsyncRead + Send + Unpin + 'static,
+    ) -> Result<agentsassemble_persistence::MessageAttachmentMetadata, ProfileHttpError> {
+        let status = self
+            .begin(
+                authority.clone(),
+                uuid::Uuid::new_v4().to_string(),
+                filename,
+                content_type,
+                size,
+            )
+            .await?;
+        // A local one-call transfer has no client-held resume handle.
+        // Lost response custody retires staging through the existing cleanup owner.
+        let cancel_on_drop = self
+            .entry(&authority, &status.handle)
+            .await?
+            .cancel
+            .clone()
+            .drop_guard();
+        let source =
+            tokio_util::io::ReaderStream::with_capacity(source, MESSAGE_UPLOAD_PIECE_BYTES);
+        if let Err(error) = self
+            .data(
+                authority.clone(),
+                status.handle.clone(),
+                0,
+                Body::from_stream(source),
+                Policy::new(),
+            )
+            .await
+        {
+            self.cancel(authority, status.handle).await?;
+            return Err(error);
+        }
+        // Finish owns raster failure cleanup and the canonical pending receipt.
+        let attachment = self
+            .finish(authority, status.handle)
+            .await?
+            .attachment
+            .ok_or_else(|| error("upload_incomplete"))?;
+        let _ = cancel_on_drop.disarm();
+        Ok(attachment)
+    }
+
     pub(crate) async fn status(
         &self,
         authority: MessageUploadAuthority,

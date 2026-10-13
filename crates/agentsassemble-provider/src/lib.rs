@@ -73,6 +73,7 @@ mod remote_https;
 mod remote_openai;
 mod remote_openai_spec;
 mod room_attachment;
+mod room_file_workspace;
 mod room_portal;
 mod room_portal_mcp;
 mod room_portal_mcp_transport;
@@ -97,6 +98,7 @@ mod unix_custody;
 mod unix_process_tree;
 mod vercel;
 mod workspace_files;
+pub use room_file_workspace::{WorkspaceAttachmentSink, open_workspace_attachment};
 mod workspace_tools;
 
 pub use catalog_service::{CatalogRefreshError, CatalogShutdownError, ProviderCatalogService};

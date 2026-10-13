@@ -48,6 +48,49 @@ Feature commits and actual desktop/MCP/Codex execution are recorded below.
 - Non-goals: nested thread channels, enforced speaking order, model behavior rules,
   new AI providers, redesigning existing panels, and public hosting changes.
 
+## AI file parity (2026-10-13, required behavior)
+
+An AI participant has the same current room per-file limit (10, 25 or 50 MiB)
+and storage quota as a human, for uploads and reads. Managed portal, attendee
+client and connector stdio gain a workspace-path upload producing pending IDs
+publishable through their existing say tools. Hosted connector retains inline
+base64 upload at 10 MiB and directs larger uploads to the CLI. Conversation-only
+agents reject workspace operations explicitly. Resolve symlinks and `..` inside
+the configured workspace; accept regular files only, check declared size before
+reading bytes, and reserve quota at begin. Reuse `message_upload` begin/data/finish,
+canonicalization, raster validation, previews, chunk storage and one-hour expiry.
+Reuse the existing three-active-transfers-per-principal admission.
+
+Reads at or below 10 MiB retain their inline representation. Larger reads up to
+the current room limit stream through `message_attachment_reader` and
+`download_budget` into an atomically published host-chosen workspace subfolder,
+returning its path. Never overwrite outside that subfolder. Read-only agents and
+hosted connector return `attachment_too_large` with actual and allowed sizes.
+Authorization is revalidated per piece; cancellation/failure must not publish a
+partial file. Transfer buffers stay bounded; existing raster validation is owned
+by the human upload finish operation.
+
+Existing managed read budgets remain ten distinct IDs per turn, two attempts
+per ID, and 200 MiB successful aggregate bytes; these include saved-path reads.
+Path uploads use the existing 32 successful-room-tool-results per-turn admission
+and ten attachments per-message limit. Room-owned tracked file tasks release
+the command loop during disk I/O and retire on turn response loss or shutdown. Attendee and connector budgets must be verified at their owners before
+their surfaces are implemented. No schema or frontend change is intended.
+Code evidence: the human reader admits already-bound files up to 50 MiB even
+when upload policy was subsequently lowered. Saved AI reads follow that shared
+reader policy; the current room setting is enforced by the upload owner.
+
+Affected entry points: managed `upload_attachment` / `read_attachment` /
+`publish_message`, provider command ingress/runtime and canonical turn completion;
+attendee room tools and client transfer; connector MCP, stdio client and HTTP
+transfer. Implement and verify managed first, then attendee, then connector.
+Acceptance per surface: 30 MiB in a 50 MiB room uploads byte-exact, binds and
+counts toward quota; 10 MiB-room rejection occurs before source reading; escapes,
+symlink escapes, non-files, conversation-only permission and exhausted quota fail;
+large saved reads are byte-exact and read-only reads fail with the specific code;
+reader/writer seams demonstrate bounded transfer. Real-provider and packaged
+verification remain separate from controlled test evidence.
+
 ## Verification matrix
 
 | Flow | Required evidence |

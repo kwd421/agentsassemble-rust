@@ -18,12 +18,14 @@ pub enum MessageUploadAuthority {
         participant_id: String,
     },
     Session(Box<RoomSessionAuthorization>),
+    Provider(Box<crate::ProviderFileAuthority>),
 }
 
 impl MessageUploadAuthority {
     #[must_use]
     pub fn identity(&self) -> (&str, &str, &str) {
         match self {
+            Self::Provider(p) => (&p.room_id, &p.session_id, &p.participant_id),
             Self::Local {
                 room_id,
                 user_id,
@@ -40,6 +42,7 @@ impl MessageUploadAuthority {
         self.identity() == other.identity()
             && match (self, other) {
                 (Self::Local { .. }, Self::Local { .. }) => true,
+                (Self::Provider(a), Self::Provider(b)) => a == b,
                 (Self::Session(a), Self::Session(b)) => {
                     a.session_fingerprint() == b.session_fingerprint()
                 }
@@ -51,6 +54,7 @@ impl MessageUploadAuthority {
         tx: &mut Transaction<'_, Sqlite>,
     ) -> Result<AuthenticatedPrincipal, PersistenceError> {
         match self {
+            Self::Provider(p) => p.resolve(tx).await,
             Self::Local {
                 room_id,
                 user_id,
@@ -304,18 +308,32 @@ impl SqliteStore {
             .await?;
         attachments::require_storage_capacity(&mut tx, &p, original.declared_size as i64).await?;
         let created = Utc::now().timestamp();
-        sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,filename,content_type,size,is_safe_image,created_at,state,expires_at) VALUES(?,?,?,?,?,?,?,?,'pending',?)")
+        let participant_owned = matches!(
+            p.client_kind,
+            agentsassemble_domain::ClientKind::AgentBridge
+                | agentsassemble_domain::ClientKind::RoomConnector
+        );
+        if participant_owned {
+            sqlx::query("INSERT INTO room_connector_uploads(attachment_id,room_id,participant_id,filename,content_type,size,is_safe_image,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)")
+                .bind(&original.attachment_id).bind(&p.room_id).bind(&p.participant_id).bind(&filename)
+                .bind(&content_type).bind(original.declared_size as i64).bind(is_image).bind(created).bind(created+3600)
+                .execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO room_connector_upload_chunks(attachment_id,sequence,content) SELECT ?,sequence,content FROM temp.message_upload_pieces WHERE handle=?")
+                .bind(&original.attachment_id).bind(handle).execute(&mut *tx).await?;
+        } else {
+            sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,filename,content_type,size,is_safe_image,created_at,state,expires_at) VALUES(?,?,?,?,?,?,?,?,'pending',?)")
             .bind(&original.attachment_id).bind(&p.room_id).bind(&p.principal_id).bind(&filename)
             .bind(&content_type).bind(original.declared_size as i64).bind(is_image).bind(created).bind(created+3600)
             .execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO room_message_attachment_chunks(attachment_id,sequence,content) SELECT ?,sequence,content FROM temp.message_upload_pieces WHERE handle=?")
+            sqlx::query("INSERT INTO room_message_attachment_chunks(attachment_id,sequence,content) SELECT ?,sequence,content FROM temp.message_upload_pieces WHERE handle=?")
             .bind(&original.attachment_id).bind(handle).execute(&mut *tx).await?;
+        }
         if is_image {
             crate::message_attachment_previews::store(
                 &mut tx,
                 &original.attachment_id,
                 preview,
-                false,
+                participant_owned,
             )
             .await?;
         }

@@ -192,7 +192,10 @@ pub(crate) async fn prepare_message_attachment_bindings(
     attachment_ids: &[String],
     now: i64,
 ) -> Result<Vec<MessageAttachmentMetadata>, PersistenceError> {
-    if principal.client_kind == ClientKind::RoomConnector {
+    if matches!(
+        principal.client_kind,
+        ClientKind::RoomConnector | ClientKind::AgentBridge
+    ) {
         return connector::prepare(transaction, principal, attachment_ids, now).await;
     }
     let mut attachments = Vec::with_capacity(attachment_ids.len());
@@ -235,7 +238,10 @@ pub(crate) async fn bind_message_attachments(
     event_seq: i64,
     now: i64,
 ) -> Result<(), PersistenceError> {
-    if principal.client_kind == ClientKind::RoomConnector {
+    if matches!(
+        principal.client_kind,
+        ClientKind::RoomConnector | ClientKind::AgentBridge
+    ) {
         return connector::bind(transaction, principal, attachment_ids, event_seq, now).await;
     }
     for attachment_id in attachment_ids {
@@ -486,9 +492,24 @@ pub(crate) async fn bound_provider_attachment_in<T>(
     attachment_id: &str,
     admit: impl FnOnce(&str, usize) -> Result<T, PersistenceError>,
 ) -> Result<(MessageAttachment, T), PersistenceError> {
-    if !is_message_attachment_id(attachment_id) {
-        return Err(message_attachment_missing());
-    }
+    let metadata = provider_attachment_metadata_in(
+        transaction,
+        authority,
+        attachment_id,
+        MAX_ATTACHMENT_BYTES,
+    )
+    .await?;
+    let lease = admit(authority.session_id, metadata.size)?;
+    let content = crate::room_file_content::RoomFileContent::Message
+        .collect(transaction, attachment_id, metadata.size)
+        .await?;
+    Ok((MessageAttachment { metadata, content }, lease))
+}
+
+pub(crate) async fn provider_file_session_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    authority: ProviderAttachmentReadAuthority<'_>,
+) -> Result<agentsassemble_domain::DurableAgentSession, PersistenceError> {
     let session = load_session(transaction, authority.room_id, authority.session_id).await?;
     let participant = load_participant(
         transaction,
@@ -516,6 +537,16 @@ pub(crate) async fn bound_provider_attachment_in<T>(
     {
         return Err(stale_provider_turn());
     }
+    Ok(session)
+}
+
+pub(crate) async fn provider_attachment_metadata_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    authority: ProviderAttachmentReadAuthority<'_>,
+    attachment_id: &str,
+    read_limit: usize,
+) -> Result<MessageAttachmentMetadata, PersistenceError> {
+    let session = provider_file_session_in(transaction, authority).await?;
     // An agent in the room may read any attachment of a current message posted up to its
     // turn's input, as it can read those messages themselves.
     let event_seq = sqlx::query_scalar::<_, i64>(
@@ -529,15 +560,7 @@ pub(crate) async fn bound_provider_attachment_in<T>(
     if event_seq > session.input_up_to_seq {
         return Err(message_attachment_missing());
     }
-    let attachment = read_bound_message_attachment(
-        transaction,
-        authority.room_id,
-        attachment_id,
-        MAX_ATTACHMENT_BYTES,
-        |size| admit(&session.public.session_id, size),
-    )
-    .await?;
-    Ok(attachment)
+    read_bound_message_metadata(transaction, authority.room_id, attachment_id, read_limit).await
 }
 
 pub(crate) async fn current_local_message_principal(
@@ -761,7 +784,10 @@ async fn store_pending_in_transaction(
     require_storage_capacity(transaction, principal, prepared.size).await?;
 
     let attachment_id = format!("{MESSAGE_ATTACHMENT_ID_PREFIX}{}", Uuid::new_v4().simple());
-    if principal.client_kind == ClientKind::RoomConnector {
+    if matches!(
+        principal.client_kind,
+        ClientKind::RoomConnector | ClientKind::AgentBridge
+    ) {
         return connector::store(
             transaction,
             principal,

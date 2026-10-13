@@ -11,6 +11,7 @@ pub enum MessageAttachmentReadAuthority {
         participant_id: String,
     },
     Session(Box<RoomSessionAuthorization>),
+    Provider(Box<crate::ProviderFileAuthority>),
 }
 
 /// Immutable response metadata and authority; each read uses a new short transaction.
@@ -28,7 +29,18 @@ impl MessageAttachmentReadAuthority {
         tx: &mut Transaction<'_, Sqlite>,
         id: &str,
     ) -> Result<(MessageAttachmentMetadata, String), PersistenceError> {
+        if let Self::Provider(authority) = self {
+            let metadata = super::provider_attachment_metadata_in(
+                tx,
+                authority.read_authority(),
+                id,
+                agentsassemble_domain::MAX_ROOM_FILE_BYTES,
+            )
+            .await?;
+            return Ok((metadata, authority.session_id.clone()));
+        }
         let (room_id, principal_id) = match self {
+            Self::Provider(_) => unreachable!(),
             Self::Local {
                 room_id,
                 user_id,

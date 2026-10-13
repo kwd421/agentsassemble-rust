@@ -360,3 +360,155 @@ async fn invalid_finish_is_terminal_but_policy_refusal_can_retry() -> TestResult
     );
     Ok(())
 }
+
+struct BoundedSource {
+    remaining: usize,
+    reads: Arc<AtomicBool>,
+}
+impl tokio::io::AsyncRead for BoundedSource {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        self.reads.store(true, Ordering::Relaxed);
+        assert!(
+            buffer.remaining() <= MESSAGE_UPLOAD_PIECE_BYTES,
+            "whole-file source buffer"
+        );
+        let count = self.remaining.min(buffer.remaining());
+        let piece = [17; MESSAGE_UPLOAD_PIECE_BYTES];
+        buffer.put_slice(&piece[..count]);
+        self.remaining -= count;
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+#[tokio::test]
+async fn local_file_stream_is_bounded_and_begin_rejects_before_source_read() -> TestResult {
+    let (service, auth, principal) = fixture().await;
+    let reads = Arc::new(AtomicBool::new(false));
+    let size = 30 * 1024 * 1024;
+    let metadata = service
+        .file(
+            auth.clone(),
+            "large.bin".into(),
+            "application/octet-stream".into(),
+            size,
+            BoundedSource {
+                remaining: size,
+                reads: reads.clone(),
+            },
+        )
+        .await
+        .map_err(|_| "upload failed")?;
+    assert!(reads.load(Ordering::Relaxed));
+    service
+        .store
+        .execute_message(
+            &principal,
+            "source-bind",
+            "message.send",
+            &serde_json::json!({"content":"", "attachment_ids":[metadata.id]}),
+        )
+        .await?;
+    let (reader, ()) = service
+        .store
+        .open_message_attachment_reader(
+            agentsassemble_persistence::MessageAttachmentReadAuthority::Local {
+                room_id: principal.room_id.clone(),
+                user_id: principal.principal_id.clone(),
+                participant_id: principal.participant_id.clone(),
+            },
+            &metadata.id,
+            |_| Ok(()),
+        )
+        .await?;
+    for sequence in 0..size / MESSAGE_UPLOAD_PIECE_BYTES {
+        assert_eq!(
+            reader.read_piece(sequence).await?,
+            vec![17; MESSAGE_UPLOAD_PIECE_BYTES]
+        );
+    }
+    let snapshot = service.store.snapshot("general", 0, 100).await?;
+    service.store.execute_room_settings_update(agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal), "source-small-limit", &serde_json::json!({"expected_revision":agentsassemble_domain::public_settings(&snapshot.settings)?.settings_revision,"attachment_file_limit_bytes":10*1024*1024})).await?;
+    reads.store(false, Ordering::Relaxed);
+    assert!(
+        service
+            .file(
+                auth,
+                "large.bin".into(),
+                "application/octet-stream".into(),
+                size,
+                BoundedSource {
+                    remaining: size,
+                    reads: reads.clone()
+                }
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        !reads.load(Ordering::Relaxed),
+        "source read before size admission"
+    );
+    Ok(())
+}
+
+struct StalledSource(Option<tokio::sync::oneshot::Sender<()>>);
+impl tokio::io::AsyncRead for StalledSource {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        _: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        if let Some(started) = self.0.take() {
+            let _ = started.send(());
+        }
+        std::task::Poll::Pending
+    }
+}
+#[tokio::test]
+async fn abandoned_local_file_call_releases_private_transfer_admission() -> TestResult {
+    let (service, authority, _) = fixture().await;
+    let (started, entered) = tokio::sync::oneshot::channel();
+    let owner = service.clone();
+    let auth = authority.clone();
+    let task = tokio::spawn(async move {
+        owner
+            .file(
+                auth,
+                "abandoned.bin".into(),
+                "application/octet-stream".into(),
+                30 * 1024 * 1024,
+                StalledSource(Some(started)),
+            )
+            .await
+    });
+    entered.await?;
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    // Begin's existing cleanup reclaims the abandoned call before counting leases.
+    for n in 0..3 {
+        begin(&service, &authority, &format!("after-abandon-{n}"), 1).await?;
+    }
+    service.cleanup(true).await;
+    let (started, entered) = tokio::sync::oneshot::channel();
+    let owner = service.clone();
+    let auth = authority.clone();
+    let task = tokio::spawn(async move {
+        owner
+            .file(
+                auth,
+                "shutdown.bin".into(),
+                "application/octet-stream".into(),
+                1,
+                StalledSource(Some(started)),
+            )
+            .await
+    });
+    entered.await?;
+    // The barrier fixes the stalled-body state; this timeout only guards deadlock.
+    tokio::time::timeout(Duration::from_secs(1), service.cleanup(true)).await?;
+    assert!(task.await?.is_err());
+    Ok(())
+}
