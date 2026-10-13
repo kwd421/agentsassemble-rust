@@ -1422,6 +1422,14 @@ Entry points: createMessageAttachmentUploadClient, OutgoingMessages.upload/pump/
 Acceptance: controlled hostile sequences fail boundedly without publication;
 interrupted multi-piece partial acceptance still resumes and publishes once.
 
+Round-11 finish-success correction (Low 1): OutgoingMessages.upload must require
+the pinned attachment immediately in a successful finish result. Missing attachment
+fails once as final invalid_upload_response, without another finish or status call
+and without publication. Status recovery is reserved for lost/failed finish responses;
+existing identity/range checks and recovery of genuine lost replies remain unchanged.
+Acceptance: successful finish with attachment:null fails immediately; failed/lost
+finish may still recover its pinned completed attachment through status.
+
 Round-11 legacy receipt correction: uploadMessageAttachment must bind the returned
 size to the submitted File and the filename/content_type to the host's request
 canonicalisation: last path component, control removal, Rust whitespace trim,

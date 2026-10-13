@@ -277,6 +277,10 @@ test("hostile transfer sequences fail boundedly and never publish a substituted 
     if (attack === "hung" || attack === "hung-data") { await vi.advanceTimersByTimeAsync(600000); await flush(); }
     expect(one(model).phase).toBe("failed"); expect(publish).not.toHaveBeenCalled();
     expect(one(model).files[0].attachment).toBeUndefined();
+    if (attack === "no-finish") {
+      expect(one(model).failure).toEqual({ code: "invalid_upload_response", retryable: false });
+      expect(client.finish).toHaveBeenCalledOnce(); expect(client.status).not.toHaveBeenCalled();
+    }
     if (attack === "hung-data") { client.data = data; expect(model.retry(id)).toBe(true); await flush(); expect(one(model).phase).toBe("sent"); }
     model.close(); vi.useRealTimers();
   }

@@ -313,7 +313,11 @@ export class OutgoingMessages {
         const offset = transfer.accepted_offset;
         if (offset === file.file.size) {
           update("validating");
-          try { transfer = progress(await response(uploads.finish(transfer.handle, signal)), offset, offset); }
+          try {
+            const finished = await response(uploads.finish(transfer.handle, signal));
+            if (!finished.attachment) throw new UploadFailure("invalid_upload_response", false);
+            transfer = progress(finished, offset, offset);
+          }
           catch (error) {
             if (error instanceof UploadFailure && (!error.retryable || ["upload_request_busy", "upload_stalled"].includes(error.code))) throw error;
             transfer = progress(await response(uploads.status(transfer.handle, signal)), offset, offset);
