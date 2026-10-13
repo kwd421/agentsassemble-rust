@@ -27,6 +27,21 @@ function describe(request: DelegatedActionRequest): { summary: string; consequen
       fullAccess: permission_mode === "full_access",
     };
   }
+  if (action.action === "reconfigure_agent") {
+    // Only what the AI asked to change is listed; the values are the ones the host resolved.
+    const { params, draft } = action;
+    const changes = [
+      params.model !== undefined && draft.model,
+      params.reasoning_effort !== undefined && draft.reasoning_effort,
+      params.permission_mode !== undefined && (PERMISSION_LABELS[draft.permission_mode] ?? draft.permission_mode),
+      params.workspace !== undefined && draft.workspace,
+    ].filter(Boolean);
+    return {
+      summary: `${draft.display_name} 에이전트 설정을 바꾸려고 해요`,
+      consequence: changes.join(" · ") || undefined,
+      fullAccess: draft.permission_mode === "full_access",
+    };
+  }
   return { summary: `${request.target_name}에 대한 작업을 하려고 해요` };
 }
 
