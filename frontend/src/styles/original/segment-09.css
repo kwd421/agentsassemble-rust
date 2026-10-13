@@ -256,9 +256,11 @@
   line-height: 20px;
 }
 
-.dc-delegated-action-summary strong {
-  color: var(--color-text-primary);
+.dc-delegated-action-from {
+  color: var(--color-text-secondary);
+  font-size: 12px;
   font-weight: 600;
+  line-height: 16px;
 }
 
 .dc-delegated-action-note {

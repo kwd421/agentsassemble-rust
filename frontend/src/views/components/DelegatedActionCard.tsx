@@ -4,7 +4,7 @@ import { ShieldQuestion } from "lucide-react";
 export type DelegatedActionCardProps = {
   /** The AI that is asking. */
   delegateName: string;
-  /** What it wants to do, as one sentence ending the way "…하려고 해요" does. */
+  /** What it wants to do, as one sentence ("#기획 채널을 지우려고 해요"). */
   summary: string;
   /** What will happen that the owner should know before allowing it. */
   consequence?: string;
@@ -40,7 +40,8 @@ export default function DelegatedActionCard({ delegateName, summary, consequence
     <section className="dc-delegated-action" aria-label={`${delegateName}의 확인 요청`}>
       <ShieldQuestion size={24} className="dc-delegated-action-icon" aria-hidden="true" />
       <div className="dc-delegated-action-main">
-        <p className="dc-delegated-action-summary preserve-words"><strong>{delegateName}</strong>{summary}</p>
+        <p className="dc-delegated-action-from preserve-words">{delegateName}의 요청</p>
+        <p className="dc-delegated-action-summary preserve-words">{summary}</p>
         {consequence && <p className="dc-delegated-action-note preserve-words">{consequence}</p>}
         {fullAccess && (
           <label className="dc-delegated-action-ack">

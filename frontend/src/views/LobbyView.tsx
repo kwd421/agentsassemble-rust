@@ -42,6 +42,7 @@ import { useVisibleReadCursor } from "./lobby/useVisibleReadCursor";
 import { projectRoomEventsToTimeline } from "../lib/roomEventProjection";
 import { useRoomSocket } from "../RoomSocketContext";
 import { useOutgoingMessages } from "./lobby/useOutgoingMessages";
+import PendingDelegatedActions from "./lobby/PendingDelegatedActions";
 import OutgoingUploadCard from "./components/OutgoingUploadCard";
 import MessageRow from "./components/MessageRow";
 
@@ -724,6 +725,7 @@ export default function LobbyView({
       {/* Composer */}
       <div className="relative shrink-0 px-2 pb-2">
         <TypingLine indicators={typingIndicators} />
+        <PendingDelegatedActions socket={roomSocket} viewerParticipantId={viewerParticipantId} />
         {!pinnedToLatest && visibleEvents.length > 0 && (
           <div className="dc-old-history-notice" role="status">
             <span>오래된 메시지를 보고 있어요</span>
