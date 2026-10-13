@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handshakeFrames, openHarness, flushPromises } from "./test/roomSocketHarness";
-import { decideDelegatedAction, readDelegatedActionRequests } from "./lib/delegatedActionProjection";
+import { decideDelegatedAction, parseDelegatedActionRequest, readDelegatedActionRequests } from "./lib/delegatedActionProjection";
 import type { DelegatedActionRequest } from "./types/generated/DelegatedActionRequest";
 
 const request: DelegatedActionRequest = {
@@ -27,5 +27,25 @@ describe("owner confirmation socket projection", () => {
     socket.receive({ op: "event", stream: "room_events", latest_seq: 1, events: [{ v: 1, id: "event", room_id: "general", seq: 1, created_at: request.created_at, type: "delegated_action_updated", actor: { participant_id: "ai", participant_type: "agent" }, visibility: "owner", owner_id: request.owner_participant_id, delegated_action_request: { ...request, state: "declined" } }] });
     expect(readDelegatedActionRequests(handle)).toEqual([]);
     handle.close();
+  });
+  it("parses a bound agent-creation request so the owner card can render it", () => {
+    const created: DelegatedActionRequest = {
+      ...request,
+      action: {
+        action: "create_agent", request_id: request.confirmation_id,
+        params: { request_id: request.confirmation_id, provider_id: "codex", catalog_revision: "catalog-1", display_name: "Newcomer", workspace: "/tmp/room", permission_mode: "workspace_write" },
+        draft: {
+          agent_id: "codex-new", display_name: "Newcomer", provider_kind: "codex_live_session", runtime_kind: "live_cli", connection_kind: "native_cli_bridge",
+          executable: "/bin/codex", executable_identity: "exe", workspace: "/tmp/room", workspace_identity: "ws", provider_endpoint: "", model: "gpt-5.6-terra",
+          reasoning_effort: "medium", service_tier: "default", variant: "", execution_harness: "builtin", permission_mode: "workspace_write", max_output_tokens: 0,
+          catalog_revision: "catalog-1", persona_card_id: "", runtime_profile_key: "profile", transport: "stdio_jsonl",
+        },
+      },
+      target_name: "Newcomer",
+    };
+    expect(parseDelegatedActionRequest(structuredClone(created))).toEqual(created);
+    const missing = structuredClone(created);
+    if (missing.action.action === "create_agent") delete (missing.action.draft as Record<string, unknown>).model;
+    expect(() => parseDelegatedActionRequest(missing)).toThrow();
   });
 });

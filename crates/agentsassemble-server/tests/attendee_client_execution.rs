@@ -37,21 +37,12 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     // This controlled transport exercises the API/local persona contract. Real harness
     // registrations retain their separate selection-time persona rejection.
     fixture_catalog.providers[0].catalog_group = "api".to_owned();
-    // The file-parity flow needs the workspace permission the real CLI offers.
-    for control in &mut fixture_catalog.providers[0].controls {
-        if control.key == "permission_mode" {
-            control
-                .options
-                .push(agentsassemble_domain::ProviderControlOption {
-                    value: "workspace_write".to_owned(),
-                    label: "Workspace".to_owned(),
-                    metadata: std::collections::BTreeMap::default(),
-                });
-        }
-    }
-    let catalog = ProviderCatalogService::fixed(fixture_catalog);
+    // The file-parity flow needs the workspace permission the real CLI offers, and
+    // delegated creation binds full-access selections against the same catalog.
+    let fixture_catalog = provider_fixture::with_agent_write_permissions(fixture_catalog);
+    let catalog = ProviderCatalogService::fixed(fixture_catalog.clone());
     let (store, invite) = attendee::fixture().await?;
-    let server = human_invite::start(store.clone()).await;
+    let server = human_invite::start_with_catalog(store.clone(), fixture_catalog).await;
     let url = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
     let mut client = RoomAttendeeClient::new(&url, "codex", "External Execution")?;
     let (mut human, attachment_id, large_id) = send_input(&server, &store).await?;

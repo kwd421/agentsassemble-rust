@@ -272,6 +272,15 @@ pub async fn start_with_public_mcp(store: SqliteStore, origin: &str, proxy: &str
     start_configured(store, ProviderCatalog::default(), Some((origin, proxy))).await
 }
 
+pub async fn start_with_public_mcp_and_catalog(
+    store: SqliteStore,
+    origin: &str,
+    proxy: &str,
+    catalog: ProviderCatalog,
+) -> RunningServer {
+    start_configured(store, catalog, Some((origin, proxy))).await
+}
+
 async fn start_configured(
     store: SqliteStore,
     catalog: ProviderCatalog,

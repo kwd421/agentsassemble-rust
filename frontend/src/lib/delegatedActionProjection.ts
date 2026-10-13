@@ -25,6 +25,24 @@ export function parseDelegatedActionRequest(value: unknown): DelegatedActionRequ
     const strings = ["provider_kind", "runtime_kind", "connection_kind", "model", "reasoning_effort", "service_tier", "variant", "execution_harness", "permission_mode", "catalog_revision", "persona_card_id", "transport", "working_folder"];
     assertExactKeys(config, [...strings, "max_output_tokens"], "confirmed agent configuration");
     if (strings.some((k) => typeof config[k] !== "string") || !Number.isSafeInteger(config.max_output_tokens) || Number(config.max_output_tokens) < 0) throw new Error("Invalid confirmed agent configuration");
+  } else if (action.action === "create_agent") {
+    assertExactKeys(action, ["action", "request_id", "params", "draft"], "confirmed agent creation");
+    if (typeof action.request_id !== "string" || !action.request_id) throw new Error("Invalid confirmed creation identity");
+    const params = strictRecord(action.params, "confirmed creation params");
+    const required = ["request_id", "provider_id", "catalog_revision", "display_name", "workspace"];
+    const optional = ["model", "reasoning_effort", "service_tier", "variant", "permission_mode", "persona_card_id", "provider_endpoint", "max_output_tokens"];
+    if (required.some((k) => typeof params[k] !== "string" || !params[k])) throw new Error("Invalid confirmed creation params");
+    if (Object.keys(params).some((k) => ![...required, ...optional].includes(k))) throw new Error("Invalid confirmed creation params");
+    for (const key of ["model", "reasoning_effort", "service_tier", "variant", "permission_mode", "persona_card_id", "provider_endpoint"]) {
+      if (params[key] !== undefined && typeof params[key] !== "string") throw new Error("Invalid confirmed creation params");
+    }
+    if (params.max_output_tokens !== undefined && (!Number.isSafeInteger(params.max_output_tokens) || Number(params.max_output_tokens) < 0)) throw new Error("Invalid confirmed creation params");
+    const draft = strictRecord(action.draft, "confirmed creation draft");
+    const draftStrings = ["agent_id", "display_name", "provider_kind", "runtime_kind", "connection_kind", "executable", "executable_identity", "workspace", "workspace_identity", "provider_endpoint", "model", "reasoning_effort", "service_tier", "variant", "execution_harness", "permission_mode", "catalog_revision", "persona_card_id", "runtime_profile_key", "transport"];
+    assertExactKeys(draft, [...draftStrings, "max_output_tokens"], "confirmed creation draft");
+    if (draftStrings.some((k) => typeof draft[k] !== "string")) throw new Error("Invalid confirmed creation draft");
+    if (["agent_id", "display_name", "provider_kind", "runtime_kind", "model", "permission_mode", "catalog_revision", "runtime_profile_key", "transport"].some((k) => !draft[k])) throw new Error("Invalid confirmed creation draft");
+    if (!Number.isSafeInteger(draft.max_output_tokens) || Number(draft.max_output_tokens) < 0) throw new Error("Invalid confirmed creation draft");
   } else { throw new Error("Unsupported confirmed action"); }
   return r as unknown as DelegatedActionRequest;
 }

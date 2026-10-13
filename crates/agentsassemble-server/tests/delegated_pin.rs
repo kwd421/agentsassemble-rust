@@ -103,7 +103,8 @@ pub(super) async fn verify(
                 "rename_text_channel",
                 "set_participant_mute",
                 "start_agent",
-                "stop_agent"
+                "stop_agent",
+                "request_create_agent"
             ])
         );
     }
@@ -199,10 +200,17 @@ pub(super) async fn verify(
 #[tokio::test]
 async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() -> TestResult {
     let (store, _) = human_invite::fixture(InviteScope::ReadWrite).await;
-    let server = human_invite::start_with_public_mcp(
+    // Delegated creation validates against this catalog, so it carries the same
+    // write permissions the other surfaces bind.
+    let directory = tempfile::tempdir()?;
+    let catalog = crate::support::provider_fixture::with_agent_write_permissions(
+        crate::support::provider_fixture::agent_catalog(directory.path(), None),
+    );
+    let server = human_invite::start_with_public_mcp_and_catalog(
         store.clone(),
         "https://pin.example.test",
         "pin-fixture-proxy-00000000000000001",
+        catalog,
     )
     .await;
     let client = ()
@@ -279,7 +287,8 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
             "rename_text_channel",
             "set_participant_mute",
             "start_agent",
-            "stop_agent"
+            "stop_agent",
+            "request_create_agent"
         ])
     );
     confirmation_socket::verify(&server, &client, &joined["connection_id"]).await?;
@@ -314,6 +323,7 @@ async fn verify_direct(
         value
     };
     lifecycle_tools::verify(client, store, delegate, connection, events, owner).await?;
+    create_tools::verify(client, store, delegate, connection, owner).await?;
     let before = store.snapshot("general", 0, 200).await?.settings;
     let create = args(json!({"name":"Planning"}));
     let first = call(client, "create_text_channel", create.clone()).await;
@@ -433,6 +443,9 @@ async fn verify_direct(
 
 #[path = "delegated_lifecycle_tools.rs"]
 mod lifecycle_tools;
+
+#[path = "delegated_create_tools.rs"]
+mod create_tools;
 
 async fn reject_direct_tools(client: &Client, connection: Option<&Value>, code: &str) {
     for (name, mut payload) in [

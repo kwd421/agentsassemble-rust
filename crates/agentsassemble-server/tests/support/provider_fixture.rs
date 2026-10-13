@@ -125,3 +125,29 @@ pub fn agent_catalog(root: &Path, fixture_override: Option<&[u8]>) -> ProviderCa
         }],
     }
 }
+
+/// Extends a fixture catalog with the workspace permissions the real CLI offers,
+/// so delegation tests can bind write-capable and full-access selections.
+pub fn with_agent_write_permissions(mut catalog: ProviderCatalog) -> ProviderCatalog {
+    for control in catalog
+        .providers
+        .iter_mut()
+        .flat_map(|provider| provider.controls.iter_mut())
+    {
+        if control.key == "permission_mode" {
+            for (value, label) in [
+                ("workspace_write", "Workspace"),
+                ("full_access", "Full access"),
+            ] {
+                if !control.options.iter().any(|option| option.value == value) {
+                    control.options.push(ProviderControlOption {
+                        value: value.to_owned(),
+                        label: label.to_owned(),
+                        metadata: BTreeMap::default(),
+                    });
+                }
+            }
+        }
+    }
+    catalog
+}

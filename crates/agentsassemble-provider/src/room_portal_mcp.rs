@@ -165,6 +165,19 @@ impl RoomPortalMcp {
     }
 
     #[tool(
+        description = "Request creation of a stopped agent owned by your owner. Nothing is created until the exact human owner approves within five minutes; the approval re-validates the catalog selection and a full-access choice needs the owner's explicit acknowledgement in the decision. Starting the new agent later is a separate step. Retry the same request ID to read the outcome. Requires current director role and current owner agent-control authority."
+    )]
+    async fn request_create_agent(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::RequestCreateAgent>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(agentsassemble_domain::DirectRoomAction::RequestCreateAgent(
+            request,
+        ))
+        .await
+    }
+
+    #[tool(
         description = "Request deletion of a text channel and its message text, pins and search records. Nothing changes until the exact human owner approves within five minutes. Retry the same request ID to read its outcome."
     )]
     async fn request_delete_text_channel(

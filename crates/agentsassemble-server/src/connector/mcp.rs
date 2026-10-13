@@ -169,6 +169,25 @@ impl ConnectorMcp {
     }
 
     #[tool(
+        description = "Request creation of a stopped agent owned by your owner. Nothing is created until the exact human owner approves within five minutes; the approval re-validates the catalog selection and a full-access choice needs the owner's explicit acknowledgement in the decision. Starting the new agent later is a separate step. Retry the same request ID on this session to read the outcome."
+    )]
+    async fn request_create_agent(
+        &self,
+        Parameters(input): Parameters<contract::Direct<agentsassemble_domain::RequestCreateAgent>>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .execute_delegated_direct(
+                    &agentsassemble_domain::DirectRoomAction::RequestCreateAgent(input.request),
+                )
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
         description = "Request deletion of a text channel and its message text, pins and search records. Only the exact human owner may approve within five minutes. Nothing changes before approval. Retry the same request ID on this session to read the outcome."
     )]
     async fn request_delete_text_channel(

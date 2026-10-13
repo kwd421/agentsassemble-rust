@@ -333,15 +333,24 @@ async fn verify_room_turn_publication(first_status: &str) {
     bootstrap(&store).await;
     let mut catalog = agent_catalog(directory.path(), Some(fixture.as_bytes()));
     if first_status == "completed" {
-        catalog.providers[0]
+        let permissions = catalog.providers[0]
             .controls
             .iter_mut()
             .find(|c| c.key == "permission_mode")
-            .unwrap()
+            .unwrap();
+        permissions
             .options
             .push(agentsassemble_domain::ProviderControlOption {
                 value: "workspace_write".into(),
                 label: "Workspace write".into(),
+                metadata: Default::default(),
+            });
+        // Delegated creation binds full-access selections on this completed path.
+        permissions
+            .options
+            .push(agentsassemble_domain::ProviderControlOption {
+                value: "full_access".into(),
+                label: "Full access".into(),
                 metadata: Default::default(),
             });
     }
