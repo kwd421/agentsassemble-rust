@@ -139,6 +139,7 @@ name = "agentsassemble-protocol"
 version = "0.1.0"
 dependencies = [
  "agentsassemble-domain",
+ "caseless",
  "mime_guess",
  "serde",
  "serde_json",
