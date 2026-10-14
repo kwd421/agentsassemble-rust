@@ -107,7 +107,8 @@ pub(super) async fn verify(
                 "request_create_agent",
                 "request_reconfigure_agent",
                 "request_remove_agent",
-                "request_kick_participant"
+                "request_kick_participant",
+                "request_create_invite"
             ])
         );
     }
@@ -424,7 +425,8 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
             "request_create_agent",
             "request_reconfigure_agent",
             "request_remove_agent",
-            "request_kick_participant"
+            "request_kick_participant",
+            "request_create_invite"
         ])
     );
     confirmation_socket::verify(&server, &client, &joined["connection_id"]).await?;
@@ -594,6 +596,9 @@ mod remove_tools;
 
 #[path = "delegated_kick_tools.rs"]
 mod kick_tools;
+
+#[path = "delegated_invite_tools.rs"]
+mod invite_tools;
 
 async fn reject_direct_tools(client: &Client, connection: Option<&Value>, code: &str) {
     for (name, mut payload) in [

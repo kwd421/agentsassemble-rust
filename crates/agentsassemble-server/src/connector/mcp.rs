@@ -251,6 +251,25 @@ impl ConnectorMcp {
     }
 
     #[tool(
+        description = "Request creation of a HUMAN room invite on behalf of your owner. Nothing changes until the exact human owner approves within five minutes; the approval mints the invite under the owner's own authority and shows the link to that owner only. The link, join code and invite id are never returned to you. Companion, attendee and connector invites cannot be requested. Retry the same request ID on this session to read the outcome."
+    )]
+    async fn request_create_invite(
+        &self,
+        Parameters(input): Parameters<contract::Direct<agentsassemble_domain::RequestCreateInvite>>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .execute_delegated_direct(
+                    &agentsassemble_domain::DirectRoomAction::RequestCreateInvite(input.request),
+                )
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
         description = "Request deletion of a text channel and its message text, pins and search records. Only the exact human owner may approve within five minutes. Nothing changes before approval. Retry the same request ID on this session to read the outcome."
     )]
     async fn request_delete_text_channel(

@@ -366,6 +366,12 @@ pub(crate) async fn execute_with_reply(
             }
         }
     }
+    if let DirectRoomAction::RequestCreateInvite(params) = request {
+        return crate::delegated_invite_runtime::request(
+            owners, admission, authority, request, params, reply,
+        )
+        .await;
+    }
     let (reserved, mut progress) = tokio::sync::mpsc::unbounded_channel();
     let execution = apply(
         owners.store,
@@ -536,7 +542,7 @@ pub(crate) async fn apply(
     }
 }
 
-fn charge_request(
+pub(crate) fn charge_request(
     admission: &PrincipalMutationAdmission,
     authority: &DelegateRoomAuthority,
     request: &DirectRoomAction,

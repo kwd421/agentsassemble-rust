@@ -25,8 +25,20 @@ same participant-removal core and the same live-session revocation follow-up as 
 owner's own kick of a human (its `room.manage` gate, canonical-owner protection and
 host/operator protection) after approval; a missing, replaced, re-admitted or
 already-removed target refuses with `target_changed`, and an AI target, the owner,
-the host and anyone the owner could not remove are refused at request time. Role
-assignment, provider approvals and invite creation stay unreachable.
+the host and anyone the owner could not remove are refused at request time.
+`request_create_invite(request_id, display_name, invite_scope, ttl_seconds,
+max_uses)` carries only the owner's own human-invite fields, runs the owner's own
+invite-policy validation at request time and again at approval, binds the normalised
+policy, and mints after approval through the same `create_human_invite_for_manager`
+core under the owner's own `RoomManagerAuthority` (local-bootstrap lineage or the
+exact operator session re-resolved from the stored owner binding); a human
+guest/member owner, a companion delegate or any owner whose provenance cannot be
+re-resolved as that authority is refused with `owner_authority_unavailable` at
+request time and never queued. The link, token and join code reach only the bound
+owner and only in the live approval acknowledgement, exactly once; they never enter
+a room event, the stored request, receipt, command replay, log or AI result, and the
+AI learns only that an invite was created. Companion, attendee and connector invite
+creation is not delegable. Role assignment and provider approvals stay unreachable.
 
 The host persists a typed immutable request with normalised parameters and resolved
 defaults, room incarnation, exact owner provenance, delegate/session/execution binding,

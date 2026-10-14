@@ -217,6 +217,19 @@ impl RoomPortalMcp {
     }
 
     #[tool(
+        description = "Request creation of a HUMAN room invite on behalf of your owner. Nothing changes until the exact human owner approves within five minutes; the approval mints the invite under the owner's own authority and shows the link to that owner only. The link, join code and invite id are never returned to you. Companion, attendee and connector invites cannot be requested. Retry the same request ID to read the outcome. Requires current director role and current owner room-manage authority."
+    )]
+    async fn request_create_invite(
+        &self,
+        Parameters(request): Parameters<agentsassemble_domain::RequestCreateInvite>,
+    ) -> Result<String, String> {
+        self.execute_direct_action(
+            agentsassemble_domain::DirectRoomAction::RequestCreateInvite(request),
+        )
+        .await
+    }
+
+    #[tool(
         description = "Request deletion of a text channel and its message text, pins and search records. Nothing changes until the exact human owner approves within five minutes. Retry the same request ID to read its outcome."
     )]
     async fn request_delete_text_channel(

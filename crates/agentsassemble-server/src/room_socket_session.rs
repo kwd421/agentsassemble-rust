@@ -163,7 +163,18 @@ pub(crate) async fn run<S>(
                                 final_leave_tx.send_replace(None);
                             }
                             match outcome {
-                                Ok(outcome) => {
+                                Ok(mut outcome) => {
+                                    // A decision on a human room invite mints its
+                                    // credential here, after the decision committed, and
+                                    // returns the link only in this owner acknowledgement.
+                                    if action_name == "delegated_action.decide" {
+                                        crate::delegated_invite_runtime::drive_approved_confirmed_invite(
+                                            &state,
+                                            &principal.room_id,
+                                            &mut outcome,
+                                        )
+                                        .await;
+                                    }
                                     let frame = ServerFrame::Ack(CommandAck {
                                         request_id,
                                         accepted: true,

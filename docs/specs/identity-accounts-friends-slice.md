@@ -17,7 +17,15 @@ Historical records without provable binding fail `owner_authority_unavailable`.
 Extend the archive-schema catalog with the normal schema migration and preserve
 restoration of every supported archive version. Authority references are ephemeral backup data: restoration never revives
 old session custody and restored AIs need a fresh authenticated binding. Existing
-private invite delivery is unchanged; creating any invite on behalf of an owner is not part of this slice.
+private invite delivery is unchanged. Delegated creation of a HUMAN room invite is
+defined by the director delegation contract in
+`local-authority-surface-admission-moderation-slice.md`: it resolves the stored owner
+binding into the owner's own `RoomManagerAuthority` (local-bootstrap lineage or the
+exact operator session) inside the write transaction and mints through the same owner
+core, and companion, attendee and connector invites stay non-delegable. The resulting
+link/token/join code is delivered only in the bound owner's live approval
+acknowledgement, exactly once, and is never persisted to the request, receipt, command
+replay, room events or AI-visible results.
 
 
 ## UI audit functional corrections (2026-10-11)

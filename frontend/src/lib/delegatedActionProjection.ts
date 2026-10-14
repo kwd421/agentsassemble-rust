@@ -62,6 +62,16 @@ export function parseDelegatedActionRequest(value: unknown): DelegatedActionRequ
     const params = strictRecord(action.params, "confirmed kick params");
     assertExactKeys(params, ["request_id", "participant_id"], "confirmed kick params");
     if (params.request_id !== action.request_id || params.participant_id !== action.participant_id) throw new Error("Invalid confirmed kick params");
+  } else if (action.action === "create_human_invite") {
+    assertExactKeys(action, ["action", "request_id", "params"], "confirmed human invite");
+    if (typeof action.request_id !== "string" || !action.request_id) throw new Error("Invalid confirmed invite identity");
+    const params = strictRecord(action.params, "confirmed invite params");
+    assertExactKeys(params, ["request_id", "invite_scope", "ttl_seconds", "max_uses"], "confirmed invite params", ["display_name"]);
+    if (params.request_id !== action.request_id) throw new Error("Invalid confirmed invite params");
+    if (params.display_name !== undefined && typeof params.display_name !== "string") throw new Error("Invalid confirmed invite params");
+    if (params.invite_scope !== "read_write" && params.invite_scope !== "read_only") throw new Error("Invalid confirmed invite scope");
+    if (!Number.isSafeInteger(params.ttl_seconds) || Number(params.ttl_seconds) <= 0) throw new Error("Invalid confirmed invite lifetime");
+    if (!Number.isSafeInteger(params.max_uses) || Number(params.max_uses) < 0) throw new Error("Invalid confirmed invite uses");
   } else { throw new Error("Unsupported confirmed action"); }
   return r as unknown as DelegatedActionRequest;
 }
@@ -92,8 +102,16 @@ export function applyDelegatedActionEvents(previous: readonly DelegatedActionReq
 }
 export function delegatedActionAckIsValid(payload: Record<string, unknown>, result: Record<string, unknown>): boolean {
   try {
-    assertExactKeys(result, ["confirmation_id", "state", "receipt"], "delegated decision ACK");
-    return result.confirmation_id === payload.confirmation_id && states.includes(String(result.state)) && typeof result.receipt === "object" && result.receipt !== null;
+    assertExactKeys(result, ["confirmation_id", "state", "receipt"], "delegated decision ACK", ["invite"]);
+    if (result.confirmation_id !== payload.confirmation_id || !states.includes(String(result.state)) || typeof result.receipt !== "object" || result.receipt === null) return false;
+    if (result.invite !== undefined) {
+      const invite = strictRecord(result.invite, "delegated invite");
+      assertExactKeys(invite, ["invite_id", "invite_token", "join_code", "join_url", "display_name", "invite_scope", "max_uses", "expires_at"], "delegated invite");
+      if (["invite_id", "invite_token", "join_code", "join_url", "display_name", "invite_scope", "expires_at"].some((key) => typeof invite[key] !== "string" || !invite[key])) return false;
+      if (!Number.isSafeInteger(invite.max_uses) || Number(invite.max_uses) < 0) return false;
+      if (!Number.isFinite(Date.parse(String(invite.expires_at)))) return false;
+    }
+    return true;
   } catch { return false; }
 }
 

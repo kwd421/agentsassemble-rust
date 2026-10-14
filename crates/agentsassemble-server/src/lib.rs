@@ -182,6 +182,7 @@ pub use attendee::client_run::run_attendee_session;
 pub use attendee::client_runtime::{AttendeeExecution, AttendeeInterrupt, AttendeeRuntime};
 pub use attendee::client_socket::AttendeeSocket;
 pub use attendee::wire::{AttendeeSocketFailure, AttendeeSocketFrame, AttendeeSocketRequest};
+mod delegated_invite_runtime;
 mod room_command_admission;
 mod room_command_dispatch;
 mod room_command_execution;

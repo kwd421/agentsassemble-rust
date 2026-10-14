@@ -78,10 +78,19 @@ so a missing, replaced, re-admitted or already-removed person refuses with
 `target_changed`. Removal ends the target's room sessions — their live browser
 session is closed by the same revocation broadcast the owner's own kick sends — and
 revokes their access exactly as today; the agents and companions they own are not
-touched. The card carries the target name and states that consequence. Confirmed HUMAN room
-invites bind scope, uses and expiry; the link/credential reaches only the owner
-through the existing owner-only delivery and the AI learns only that an invite was
-created. Companion, attendee and connector invites are not delegable. Role
+touched. The card carries the target name and states that consequence. Confirmed HUMAN
+room invites (`request_create_invite(request_id, display_name, invite_scope, ttl_seconds,
+max_uses)`) accept only the owner's own human-invite fields, validate the policy at
+request time and again at approval, and bind it so approval cannot mint a different
+scope, use limit or expiry. Approval mints through the same
+`create_human_invite_for_manager` core under the owner's own `RoomManagerAuthority`;
+a guest's or member's AI, a companion delegate and any owner whose provenance cannot
+be re-resolved as that authority are refused with `owner_authority_unavailable` at
+request time and never queued. The link, token and join code reach only the bound
+owner, only in the live acknowledgement of the owner's own decision, exactly once,
+and are never in a room event, stored request, receipt, command replay, log or AI
+result (which reports only status, request id and confirmation id). Companion,
+attendee and connector invites are not delegable. Role
 assignment, server move/backup/restore, account/device/credential actions, provider
 approval answers, room deletion and everything unlisted stay unreachable.
 
