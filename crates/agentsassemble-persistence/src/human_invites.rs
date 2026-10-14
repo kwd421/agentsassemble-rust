@@ -60,34 +60,8 @@ impl SqliteStore {
         authority: &RoomManagerAuthority,
         invite: NewHumanInvite,
     ) -> Result<HumanInvite, PersistenceError> {
-        validate_new_human_invite(&invite)?;
-        let invite_id = fingerprint_hex_prefix(&invite.signed_token_fingerprint);
-        let signed_token_fingerprint = invite.signed_token_fingerprint;
-        let join_code_fingerprint = invite.join_code_fingerprint;
         let mut transaction = self.pool.begin().await?;
-        let current = authority.resolve(&mut transaction).await?;
-        let row = sqlx::query(
-            "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?) RETURNING invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at",
-        )
-        .bind(invite_id)
-        .bind(signed_token_fingerprint.as_slice())
-        .bind(join_code_fingerprint.as_slice())
-        .bind(&current.room_id)
-        .bind(invite.base_participant_id)
-        .bind(invite.display_name)
-        .bind(invite_scope_text(invite.invite_scope))
-        .bind(invite.max_uses)
-        .bind(invite.expires_at.timestamp_micros())
-        .bind(&current.user_id)
-        .bind(invite.created_at.timestamp_micros())
-        .fetch_one(&mut *transaction)
-        .await?;
-        let stored = decode_human_invite(&row)?;
-        if stored.signed_token_fingerprint != signed_token_fingerprint
-            || stored.join_code_fingerprint != join_code_fingerprint
-        {
-            return Err(PersistenceError::InvalidHumanInvite);
-        }
+        let stored = create_human_invite_in(&mut transaction, authority, invite).await?;
         transaction.commit().await?;
         Ok(stored)
     }
@@ -178,6 +152,49 @@ impl SqliteStore {
         .map(decode_human_invite)
         .collect()
     }
+}
+
+/// Creates one canonical human invite inside the caller's transaction under current
+/// room-manager authority. Both the owner's own HTTP creation and an approved delegated
+/// invitation call this exact core, so validation, authority resolution and the stored
+/// row shape are identical.
+///
+/// # Errors
+///
+/// Fails on invalid invite input, stale manager authority, conflicts, or database errors.
+pub(crate) async fn create_human_invite_in(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    authority: &RoomManagerAuthority,
+    invite: NewHumanInvite,
+) -> Result<HumanInvite, PersistenceError> {
+    validate_new_human_invite(&invite)?;
+    let invite_id = fingerprint_hex_prefix(&invite.signed_token_fingerprint);
+    let signed_token_fingerprint = invite.signed_token_fingerprint;
+    let join_code_fingerprint = invite.join_code_fingerprint;
+    let current = authority.resolve(transaction).await?;
+    let row = sqlx::query(
+        "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?) RETURNING invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at",
+    )
+    .bind(invite_id)
+    .bind(signed_token_fingerprint.as_slice())
+    .bind(join_code_fingerprint.as_slice())
+    .bind(&current.room_id)
+    .bind(invite.base_participant_id)
+    .bind(invite.display_name)
+    .bind(invite_scope_text(invite.invite_scope))
+    .bind(invite.max_uses)
+    .bind(invite.expires_at.timestamp_micros())
+    .bind(&current.user_id)
+    .bind(invite.created_at.timestamp_micros())
+    .fetch_one(&mut **transaction)
+    .await?;
+    let stored = decode_human_invite(&row)?;
+    if stored.signed_token_fingerprint != signed_token_fingerprint
+        || stored.join_code_fingerprint != join_code_fingerprint
+    {
+        return Err(PersistenceError::InvalidHumanInvite);
+    }
+    Ok(stored)
 }
 
 fn validate_new_human_invite(invite: &NewHumanInvite) -> Result<(), PersistenceError> {
