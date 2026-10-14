@@ -45,6 +45,9 @@ function describe(request: DelegatedActionRequest): { summary: string; consequen
   if (action.action === "remove_agent") {
     return { summary: `${request.target_name} 에이전트를 내보내려고 해요`, consequence: "실행 중이면 멈추고, 되돌릴 수 없어요.", destructive: true };
   }
+  if (action.action === "kick_participant") {
+    return { summary: `${request.target_name} 님을 방에서 내보내려고 해요`, consequence: "접속이 바로 끊기고, 되돌릴 수 없어요.", destructive: true };
+  }
   return { summary: `${request.target_name}에 대한 작업을 하려고 해요` };
 }
 
