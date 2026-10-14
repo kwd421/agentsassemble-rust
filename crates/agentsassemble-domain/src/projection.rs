@@ -62,6 +62,7 @@ pub fn public_event_for_principal(
     event: &RoomEvent,
     principal: &AuthenticatedPrincipal,
 ) -> RoomEvent {
+    let owner_card = delegated_action_request_card(event);
     let mut projected = event.clone();
     projected.extra.retain(|key, _| !is_private_key(key));
     projected.extra.values_mut().for_each(project_value);
@@ -72,6 +73,11 @@ pub fn public_event_for_principal(
             projected
                 .extra
                 .insert("visibility".to_owned(), json!("owner"));
+            if let Some(card) = owner_card {
+                projected
+                    .extra
+                    .insert("delegated_action_request".to_owned(), card.clone());
+            }
         }
         return projected;
     }
@@ -142,6 +148,24 @@ fn is_private_key(key: &str) -> bool {
     PRIVATE_PUBLIC_KEYS.contains(&key)
 }
 
+/// Returns the stored confirmation card of the two delegated confirmation event types.
+///
+/// The card's catalog-selected draft and request params carry authority fields that
+/// `PRIVATE_PUBLIC_KEYS` removes from every other projection. These two event types are
+/// delivered to exactly one viewer - the bound owner's browser client, per
+/// `event_is_visible_to` - whose client validates the whole request, so the owner-only
+/// branch below restores the stored request verbatim for that viewer alone. Every other
+/// viewer still receives `event_hidden` with nothing from the card.
+fn delegated_action_request_card(event: &RoomEvent) -> Option<&Value> {
+    if !matches!(
+        event.event_type.as_str(),
+        "delegated_action_requested" | "delegated_action_updated"
+    ) {
+        return None;
+    }
+    event.extra.get("delegated_action_request")
+}
+
 /// Returns whether an event is restricted to its owning principal.
 #[must_use]
 pub fn room_event_is_owner_only(event: &RoomEvent) -> bool {
@@ -205,11 +229,15 @@ pub fn privacy_minimized_vote_transition(mut event: RoomEvent) -> RoomEvent {
 mod tests {
     use std::collections::BTreeMap;
 
-    use chrono::Utc;
+    use chrono::{Duration, Utc};
     use serde_json::json;
 
     use super::{public_event_for_principal, public_value_for_principal};
-    use crate::{Actor, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, RoomEvent};
+    use crate::{
+        Actor, AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind,
+        ConfirmationState, ConfirmedAgentCreate, ConfirmedRoomAction, DelegatedActionRequest,
+        InviteScope, RequestCreateAgent, RoomEvent,
+    };
 
     fn principal(id: &str) -> AuthenticatedPrincipal {
         AuthenticatedPrincipal {
@@ -253,6 +281,168 @@ mod tests {
                 ("workspace".to_owned(), json!("/private/workspace")),
             ]),
         }
+    }
+
+    fn agent_bridge(id: &str) -> AuthenticatedPrincipal {
+        let mut bridge = principal(id);
+        bridge.client_kind = ClientKind::AgentBridge;
+        bridge.capabilities =
+            CapabilitySet::for_principal(ClientKind::AgentBridge, InviteScope::ReadWrite, false);
+        bridge
+    }
+
+    fn delegated_create_card() -> DelegatedActionRequest {
+        DelegatedActionRequest {
+            confirmation_id: "confirmation-1".to_owned(),
+            owner_participant_id: "participant-owner".to_owned(),
+            owner_display_name: "Owner".to_owned(),
+            delegate_participant_id: "participant-director".to_owned(),
+            delegate_display_name: "Director".to_owned(),
+            action: ConfirmedRoomAction::CreateAgent(ConfirmedAgentCreate {
+                request_id: "request-1".to_owned(),
+                params: RequestCreateAgent {
+                    request_id: "request-1".to_owned(),
+                    provider_id: "codex".to_owned(),
+                    catalog_revision: "catalog-1".to_owned(),
+                    display_name: "Researcher".to_owned(),
+                    workspace: "/private/workspace".to_owned(),
+                    model: Some("gpt-5".to_owned()),
+                    reasoning_effort: None,
+                    service_tier: None,
+                    variant: None,
+                    permission_mode: Some("default".to_owned()),
+                    persona_card_id: None,
+                    provider_endpoint: Some("https://provider.internal".to_owned()),
+                    max_output_tokens: None,
+                },
+                draft: AgentSessionDraft {
+                    agent_id: "agent-1".to_owned(),
+                    display_name: "Researcher".to_owned(),
+                    provider_kind: "codex".to_owned(),
+                    runtime_kind: "cli".to_owned(),
+                    connection_kind: "local".to_owned(),
+                    executable: "/private/bin/codex".to_owned(),
+                    executable_identity: "/private/bin/codex".to_owned(),
+                    workspace: "/private/workspace".to_owned(),
+                    workspace_identity: "/private/workspace-identity".to_owned(),
+                    provider_endpoint: "https://provider.internal".to_owned(),
+                    model: "gpt-5".to_owned(),
+                    reasoning_effort: "medium".to_owned(),
+                    service_tier: "default".to_owned(),
+                    variant: "default".to_owned(),
+                    execution_harness: "cli".to_owned(),
+                    permission_mode: "default".to_owned(),
+                    max_output_tokens: 8192,
+                    catalog_revision: "catalog-1".to_owned(),
+                    persona_card_id: "persona-1".to_owned(),
+                    runtime_profile_key: "runtime-profile-key-1".to_owned(),
+                    transport: "stdio".to_owned(),
+                },
+            }),
+            target_name: "Researcher".to_owned(),
+            consequences: "Creates a stopped agent.".to_owned(),
+            created_at: Utc::now(),
+            expires_at: Utc::now() + Duration::seconds(60),
+            state: ConfirmationState::Pending,
+        }
+    }
+
+    fn delegated_action_event() -> RoomEvent {
+        let card = delegated_create_card();
+        RoomEvent {
+            v: 1,
+            id: "event-2".to_owned(),
+            seq: 8,
+            created_at: Utc::now(),
+            room_id: "room".to_owned(),
+            event_type: "delegated_action_requested".to_owned(),
+            actor: Actor {
+                participant_id: "participant-director".to_owned(),
+                participant_type: "agent".to_owned(),
+            },
+            participant_id: Some("participant-owner".to_owned()),
+            participant_type: Some("human".to_owned()),
+            actor_id: Some("participant-director".to_owned()),
+            actor_type: Some("agent".to_owned()),
+            display_name: None,
+            content: None,
+            message_kind: None,
+            extra: serde_json::from_value(json!({
+                "visibility": "owner",
+                "owner_id": "participant-owner",
+                "delegated_action_request": card,
+            }))
+            .unwrap_or_else(|error| panic!("delegated action event: {error}")),
+        }
+    }
+
+    #[test]
+    fn delegated_action_card_reaches_only_the_bound_owner_browser() {
+        let event = delegated_action_event();
+        let stored = event.extra["delegated_action_request"].clone();
+
+        let projected = public_event_for_principal(&event, &principal("owner"));
+        assert_eq!(projected.event_type, "delegated_action_requested");
+        assert_eq!(projected.extra["delegated_action_request"], stored);
+        let draft = &projected.extra["delegated_action_request"]["action"]["draft"];
+        assert_eq!(draft["workspace"], json!("/private/workspace"));
+        assert_eq!(draft["executable"], json!("/private/bin/codex"));
+        assert_eq!(draft["runtime_profile_key"], json!("runtime-profile-key-1"));
+
+        for viewer in [
+            principal("viewer"),
+            agent_bridge("director"),
+            agent_bridge("owner"),
+        ] {
+            let hidden = public_event_for_principal(&event, &viewer);
+            assert_eq!(
+                hidden.event_type, "event_hidden",
+                "viewer {}",
+                viewer.principal_id
+            );
+            assert_eq!(hidden.extra.len(), 1);
+            let serialized = serde_json::to_string(&hidden)
+                .unwrap_or_else(|error| panic!("serialize hidden event: {error}"));
+            for secret in [
+                "/private/workspace",
+                "/private/bin/codex",
+                "/private/workspace-identity",
+                "runtime-profile-key-1",
+                "https://provider.internal",
+            ] {
+                assert!(
+                    !serialized.contains(secret),
+                    "{secret} leaked to {}",
+                    viewer.principal_id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn non_delegated_owner_event_still_strips_the_card_keys() {
+        let mut event = owner_event();
+        event.extra.insert(
+            "delegated_action_request".to_owned(),
+            json!({
+                "owner_participant_id": "participant-owner",
+                "action": {
+                    "action": "create_agent",
+                    "draft": {
+                        "workspace": "/private/workspace",
+                        "runtime_profile_key": "runtime-profile-key-1",
+                        "model": "gpt-5"
+                    }
+                }
+            }),
+        );
+
+        let projected = public_event_for_principal(&event, &principal("owner"));
+        assert_eq!(projected.event_type, "message_final");
+        let draft = &projected.extra["delegated_action_request"]["action"]["draft"];
+        assert!(draft.get("workspace").is_none());
+        assert!(draft.get("runtime_profile_key").is_none());
+        assert_eq!(draft["model"], json!("gpt-5"));
     }
 
     #[test]
