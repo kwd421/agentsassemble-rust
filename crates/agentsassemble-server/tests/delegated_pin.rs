@@ -106,7 +106,8 @@ pub(super) async fn verify(
                 "stop_agent",
                 "request_create_agent",
                 "request_reconfigure_agent",
-                "request_remove_agent"
+                "request_remove_agent",
+                "request_kick_participant"
             ])
         );
     }
@@ -269,6 +270,67 @@ async fn connector_remove_agent_uses_a_fresh_owner_budget() -> TestResult {
 }
 
 #[tokio::test]
+async fn connector_kick_participant_uses_a_fresh_owner_budget() -> TestResult {
+    let (store, _) = human_invite::fixture(InviteScope::ReadWrite).await;
+    let server = human_invite::start_with_public_mcp(
+        store.clone(),
+        "https://kick.example.test",
+        "kick-fixture-proxy-0000000000000001",
+    )
+    .await;
+    let client = ()
+        .serve(StreamableHttpClientTransport::from_uri(format!(
+            "{}/mcp",
+            server.base_url
+        )))
+        .await?;
+    let manager = RoomManagerAuthority::Local(
+        store
+            .authorize_local_room_manager(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await?,
+    );
+    let now = chrono::Utc::now();
+    let _pairing = store
+        .create_operator_pairing(&manager, &[91; 32], "https://kick.example.test", now)
+        .await?;
+    let paired = store
+        .redeem_operator_pairing(&[91; 32], &[92; 32], "https://kick.example.test", now)
+        .await?;
+    let invite = store
+        .create_connector_invite(
+            &RoomManagerAuthority::Operator(Box::new(paired.authorization)),
+            Uuid::new_v4(),
+            InviteScope::ReadWrite,
+            chrono::Utc::now(),
+        )
+        .await?;
+    let mut join = json!({"invite_url":format!("{}/join?token={}",server.base_url,invite.invite_bearer),"display_name":"Director"});
+    join["connection_id"] = call(&client, "room_join", join.clone()).await["connection_id"].clone();
+    let joined = call(&client, "room_join", join.clone()).await;
+    role(
+        &store,
+        joined["participant_id"].as_str().unwrap(),
+        "director",
+    )
+    .await?;
+    kick_tools::verify(
+        &client,
+        &store,
+        joined["participant_id"].as_str().unwrap(),
+        Some(&joined["connection_id"]),
+        (&server.base_url, server.state()),
+    )
+    .await?;
+    client.cancel().await?;
+    server.stop().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() -> TestResult {
     let (store, _) = human_invite::fixture(InviteScope::ReadWrite).await;
     // Delegated creation validates against this catalog, so it carries the same
@@ -361,7 +423,8 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
             "stop_agent",
             "request_create_agent",
             "request_reconfigure_agent",
-            "request_remove_agent"
+            "request_remove_agent",
+            "request_kick_participant"
         ])
     );
     confirmation_socket::verify(&server, &client, &joined["connection_id"]).await?;
@@ -528,6 +591,9 @@ mod reconfigure_tools;
 
 #[path = "delegated_remove_tools.rs"]
 mod remove_tools;
+
+#[path = "delegated_kick_tools.rs"]
+mod kick_tools;
 
 async fn reject_direct_tools(client: &Client, connection: Option<&Value>, code: &str) {
     for (name, mut payload) in [

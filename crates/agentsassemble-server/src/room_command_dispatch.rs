@@ -23,11 +23,17 @@ pub(crate) async fn execute_command(
 ) -> CommandExecution {
     if command.action == RoomAction::DelegatedActionDecide {
         let result = match serde_json::from_value::<agentsassemble_domain::DecideDelegatedAction>(command.payload.clone()) {
-            Ok(decision) if command.request_id == decision.confirmation_id => store.decide_delegated_action(command.mutation_authority(), &decision).await,
+            Ok(decision) if command.request_id == decision.confirmation_id => store.decide_delegated_action_with_revocations(command.mutation_authority(), &decision).await,
             _ => Err(PersistenceError::CommandRejected {code:"bad_request".into(),message:"Use the confirmation ID as the decision request ID and an exact decision payload.".into()}),
         };
         return match result {
-            Ok(outcome) => CommandExecution::success(outcome),
+            // An approved kick closes the removed person's live session through the same
+            // post-commit broadcast the owner's own kick uses.
+            Ok((outcome, revoked)) => {
+                let mut execution = CommandExecution::success(outcome);
+                execution.revoked_human_sessions = revoked;
+                execution
+            }
             Err(error) => CommandExecution::transactional_failure(error),
         };
     }

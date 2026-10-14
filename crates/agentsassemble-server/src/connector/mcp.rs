@@ -230,6 +230,27 @@ impl ConnectorMcp {
     }
 
     #[tool(
+        description = "Request removal of a human participant from the room on behalf of your owner. Nothing changes until the exact human owner approves within five minutes; approval ends that person's access and closes their live room session. The owner themself, the host, an AI and anyone your owner could not remove are refused. Retry the same request ID on this session to read the outcome."
+    )]
+    async fn request_kick_participant(
+        &self,
+        Parameters(input): Parameters<
+            contract::Direct<agentsassemble_domain::RequestKickParticipant>,
+        >,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .execute_delegated_direct(
+                    &agentsassemble_domain::DirectRoomAction::RequestKickParticipant(input.request),
+                )
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
         description = "Request deletion of a text channel and its message text, pins and search records. Only the exact human owner may approve within five minutes. Nothing changes before approval. Retry the same request ID on this session to read the outcome."
     )]
     async fn request_delete_text_channel(
