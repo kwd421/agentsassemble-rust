@@ -84,4 +84,19 @@ describe("owner confirmation socket projection", () => {
     if (changed.action.action === "remove_agent") delete (changed.action as Record<string, unknown>).expected_created_at;
     expect(() => parseDelegatedActionRequest(changed)).toThrow();
   });
+  it("parses a bound participant-kick request so the owner card can render who is removed and the consequence", () => {
+    const kicked: DelegatedActionRequest = {
+      ...request,
+      action: {
+        action: "kick_participant", request_id: request.confirmation_id, participant_id: "guest-1",
+        params: { request_id: request.confirmation_id, participant_id: "guest-1" },
+        expected_created_at: "2026-10-13T00:00:00Z",
+      },
+      target_name: "Guest", consequences: "Removes the person Guest from the room",
+    };
+    expect(parseDelegatedActionRequest(structuredClone(kicked))).toEqual(kicked);
+    const changed = structuredClone(kicked);
+    if (changed.action.action === "kick_participant") delete (changed.action.params as Record<string, unknown>).participant_id;
+    expect(() => parseDelegatedActionRequest(changed)).toThrow();
+  });
 });

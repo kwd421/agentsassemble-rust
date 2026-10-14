@@ -71,10 +71,14 @@ with the AI named on behalf of the owner and the confirmation id; the agent's se
 ends, its access is revoked and a running runtime is stopped, and its consequence
 cannot be undone. The AI receipt carries only status, ids and the removal event id;
 the owner card carries the target name and states that consequence. Confirmed human
-kicks go through the same participant-removal gate as the owner's own kick, never the
-owner themself, the host, or anyone the owner could not remove; removal ends the
-target's session and revokes access exactly as today, and the card states that
-consequence. Confirmed HUMAN room
+kicks (`request_kick_participant(request_id, participant_id)`) go through the same
+participant-removal gate as the owner's own kick, never the owner themself, the host,
+an AI, or anyone the owner could not remove, and bind the target's current identity
+so a missing, replaced, re-admitted or already-removed person refuses with
+`target_changed`. Removal ends the target's room sessions — their live browser
+session is closed by the same revocation broadcast the owner's own kick sends — and
+revokes their access exactly as today; the agents and companions they own are not
+touched. The card carries the target name and states that consequence. Confirmed HUMAN room
 invites bind scope, uses and expiry; the link/credential reaches only the owner
 through the existing owner-only delivery and the AI learns only that an invite was
 created. Companion, attendee and connector invites are not delegable. Role

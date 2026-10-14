@@ -17,6 +17,30 @@ impl SqliteStore {
         authority: RoomMutationAuthority<'_>,
         decision: &DecideDelegatedAction,
     ) -> Result<CommandOutcome, PersistenceError> {
+        Ok(self
+            .decide_delegated_action_inner(authority, decision)
+            .await?
+            .0)
+    }
+
+    /// The same decision, also returning the live human sessions it revoked so the room
+    /// actor closes them exactly as it closes the owner's own kick.
+    /// # Errors
+    /// Same as `decide_delegated_action`.
+    pub async fn decide_delegated_action_with_revocations(
+        &self,
+        authority: RoomMutationAuthority<'_>,
+        decision: &DecideDelegatedAction,
+    ) -> Result<(CommandOutcome, Vec<[u8; 32]>), PersistenceError> {
+        self.decide_delegated_action_inner(authority, decision)
+            .await
+    }
+
+    async fn decide_delegated_action_inner(
+        &self,
+        authority: RoomMutationAuthority<'_>,
+        decision: &DecideDelegatedAction,
+    ) -> Result<(CommandOutcome, Vec<[u8; 32]>), PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let principal = authority.resolve(&mut tx).await?.into_owned();
         let row = load_in(&mut tx, &principal.room_id, &decision.confirmation_id).await?;
@@ -48,6 +72,7 @@ impl SqliteStore {
         let encoded = serde_json::to_string(decision)?;
         let first_seq =
             crate::room_event_sequence::next_sequence(&mut tx, &principal.room_id).await?;
+        let mut revoked: Vec<[u8; 32]> = Vec::new();
         let deduplicated = if let Some(previous) = row.get::<Option<String>, _>("decision_json") {
             if previous != encoded {
                 return Err(rejected(
@@ -147,6 +172,23 @@ impl SqliteStore {
                                 )
                                 .await
                             }
+                            ConfirmedRoomAction::KickParticipant(kick) => {
+                                // Both authorities are revalidated now, then the owner's own
+                                // removal core runs in this transaction with the target's
+                                // admission identity re-bound.
+                                let proof = validate_in(&mut tx, &principal.room_id, &row).await?;
+                                let (result, fingerprints) =
+                                    crate::delegated_confirmed_kick::kick_participant_in(
+                                        &mut tx,
+                                        &proof,
+                                        &request,
+                                        kick,
+                                        first_seq,
+                                    )
+                                    .await?;
+                                revoked = fingerprints;
+                                Ok(result)
+                            }
                         }
                     }.await;
                     match execution {
@@ -235,12 +277,15 @@ impl SqliteStore {
         if deduplicated {
             events.clear();
         }
-        Ok(CommandOutcome {
-            result,
-            event,
-            events,
-            deduplicated,
-        })
+        Ok((
+            CommandOutcome {
+                result,
+                event,
+                events,
+                deduplicated,
+            },
+            revoked,
+        ))
     }
 }
 
@@ -253,6 +298,8 @@ fn requires_full_access_acknowledgement(action: &ConfirmedRoomAction) -> bool {
         ConfirmedRoomAction::ReconfigureAgent(reconfigure) => {
             reconfigure.draft.permission_mode == "full_access"
         }
-        ConfirmedRoomAction::RemoveAgent(_) | ConfirmedRoomAction::DeleteTextChannel(_) => false,
+        ConfirmedRoomAction::RemoveAgent(_)
+        | ConfirmedRoomAction::DeleteTextChannel(_)
+        | ConfirmedRoomAction::KickParticipant(_) => false,
     }
 }

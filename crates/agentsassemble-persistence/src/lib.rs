@@ -346,4 +346,5 @@ mod delegated_confirmed_reconfigure;
 pub use delegated_confirmed_reconfigure::{
     ApprovedReconfigureDrive, reconfigure_execution_payload, reconfigure_selection_payload,
 };
+mod delegated_confirmed_kick;
 mod delegated_confirmed_remove;

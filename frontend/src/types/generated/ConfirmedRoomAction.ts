@@ -3,6 +3,7 @@ import type { ConfirmedAgentCreate } from "./ConfirmedAgentCreate.js";
 import type { ConfirmedAgentReconfigure } from "./ConfirmedAgentReconfigure.js";
 import type { ConfirmedAgentRemove } from "./ConfirmedAgentRemove.js";
 import type { ConfirmedAgentStart } from "./ConfirmedAgentStart.js";
+import type { ConfirmedParticipantKick } from "./ConfirmedParticipantKick.js";
 import type { DeleteTextChannel } from "./DeleteTextChannel.js";
 
-export type ConfirmedRoomAction = { "action": "delete_text_channel" } & DeleteTextChannel | { "action": "start_agent" } & ConfirmedAgentStart | { "action": "create_agent" } & ConfirmedAgentCreate | { "action": "reconfigure_agent" } & ConfirmedAgentReconfigure | { "action": "remove_agent" } & ConfirmedAgentRemove;
+export type ConfirmedRoomAction = { "action": "delete_text_channel" } & DeleteTextChannel | { "action": "start_agent" } & ConfirmedAgentStart | { "action": "create_agent" } & ConfirmedAgentCreate | { "action": "reconfigure_agent" } & ConfirmedAgentReconfigure | { "action": "remove_agent" } & ConfirmedAgentRemove | { "action": "kick_participant" } & ConfirmedParticipantKick;

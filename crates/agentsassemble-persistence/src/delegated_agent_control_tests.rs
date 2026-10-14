@@ -498,3 +498,6 @@ mod confirmed_reconfigure;
 
 #[path = "delegated_confirmed_remove_tests.rs"]
 mod confirmed_remove;
+
+#[path = "delegated_confirmed_kick_tests.rs"]
+mod confirmed_kick;

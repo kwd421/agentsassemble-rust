@@ -17,6 +17,7 @@ pub enum ConfirmedRoomAction {
     CreateAgent(ConfirmedAgentCreate),
     ReconfigureAgent(ConfirmedAgentReconfigure),
     RemoveAgent(ConfirmedAgentRemove),
+    KickParticipant(ConfirmedParticipantKick),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -147,6 +148,18 @@ pub struct ConfirmedAgentRemove {
     pub params: crate::RequestRemoveAgent,
     pub expected_created_at: DateTime<Utc>,
 }
+/// Owner-confirmed human participant kick. `params` are the AI-supplied request
+/// identity and target id as received; `expected_created_at` seals the target
+/// person's admission identity, so a missing, replaced, re-admitted or
+/// already-removed person refuses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmedParticipantKick {
+    pub request_id: String,
+    pub participant_id: String,
+    pub params: crate::RequestKickParticipant,
+    pub expected_created_at: DateTime<Utc>,
+}
 impl ConfirmedRoomAction {
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -156,6 +169,7 @@ impl ConfirmedRoomAction {
             Self::CreateAgent(r) => &r.request_id,
             Self::ReconfigureAgent(r) => &r.request_id,
             Self::RemoveAgent(r) => &r.request_id,
+            Self::KickParticipant(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -166,6 +180,7 @@ impl ConfirmedRoomAction {
             Self::CreateAgent(_) => "request_create_agent",
             Self::ReconfigureAgent(_) => "request_reconfigure_agent",
             Self::RemoveAgent(_) => "request_remove_agent",
+            Self::KickParticipant(_) => "request_kick_participant",
         }
     }
 }

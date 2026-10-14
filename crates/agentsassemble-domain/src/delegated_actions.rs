@@ -120,6 +120,26 @@ pub struct RequestRemoveAgent {
     pub agent_id: String,
 }
 
+// Director-requested human participant kick. The schema carries only the request
+// identity and the target participant id: the target's current identity is bound on
+// the server, and a missing, replaced, re-admitted or already-removed person refuses
+// `target_changed`.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+    ts_rs::TS,
+)]
+#[serde(deny_unknown_fields)]
+pub struct RequestKickParticipant {
+    pub request_id: String,
+    pub participant_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectRoomAction {
@@ -132,6 +152,7 @@ pub enum DirectRoomAction {
     RequestCreateAgent(RequestCreateAgent),
     RequestReconfigureAgent(RequestReconfigureAgent),
     RequestRemoveAgent(RequestRemoveAgent),
+    RequestKickParticipant(RequestKickParticipant),
 }
 impl DirectRoomAction {
     pub const NAMES: &[&str] = &[
@@ -144,6 +165,7 @@ impl DirectRoomAction {
         "request_create_agent",
         "request_reconfigure_agent",
         "request_remove_agent",
+        "request_kick_participant",
     ];
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -157,6 +179,7 @@ impl DirectRoomAction {
             Self::RequestCreateAgent(r) => &r.request_id,
             Self::RequestReconfigureAgent(r) => &r.request_id,
             Self::RequestRemoveAgent(r) => &r.request_id,
+            Self::RequestKickParticipant(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -171,6 +194,7 @@ impl DirectRoomAction {
             Self::RequestCreateAgent(_) => "request_create_agent",
             Self::RequestReconfigureAgent(_) => "request_reconfigure_agent",
             Self::RequestRemoveAgent(_) => "request_remove_agent",
+            Self::RequestKickParticipant(_) => "request_kick_participant",
         }
     }
 }

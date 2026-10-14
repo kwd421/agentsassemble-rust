@@ -19,8 +19,14 @@ that agent's creation identity, and executes the same participant-removal core a
 owner's own kick of an agent (its `room.manage` gate, canonical-owner protection and
 existing runtime cleanup) after approval; a missing, replaced or already-removed
 target refuses with `target_changed`. Nothing is mutated or reserved before
-approval. Role assignment, provider approvals and the remaining slice-4 actions
-(kick, invite) stay unreachable.
+approval. `request_kick_participant(request_id, participant_id)` carries only the
+target participant id, binds the human target's current identity, and executes the
+same participant-removal core and the same live-session revocation follow-up as the
+owner's own kick of a human (its `room.manage` gate, canonical-owner protection and
+host/operator protection) after approval; a missing, replaced, re-admitted or
+already-removed target refuses with `target_changed`, and an AI target, the owner,
+the host and anyone the owner could not remove are refused at request time. Role
+assignment, provider approvals and invite creation stay unreachable.
 
 The host persists a typed immutable request with normalised parameters and resolved
 defaults, room incarnation, exact owner provenance, delegate/session/execution binding,
