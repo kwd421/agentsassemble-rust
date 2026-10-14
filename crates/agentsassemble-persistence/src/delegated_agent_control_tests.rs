@@ -501,3 +501,6 @@ mod confirmed_remove;
 
 #[path = "delegated_confirmed_kick_tests.rs"]
 mod confirmed_kick;
+
+#[path = "delegated_confirmed_invite_tests.rs"]
+mod confirmed_invite;

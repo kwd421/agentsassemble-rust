@@ -37,6 +37,8 @@ impl DelegatedRoomActionAuthority {
             "request_remove_agent" | "request_kick_participant" => {
                 self.owner.capabilities.room_manage
             }
+            // Falls back to the owner's own room-manager authority for invite creation.
+            "request_create_invite" => self.owner.capabilities.room_manage,
             _ => false,
         }
     }
@@ -140,6 +142,7 @@ impl SqliteStore {
             | DirectRoomAction::RequestReconfigureAgent(_)
             | DirectRoomAction::RequestRemoveAgent(_)
             | DirectRoomAction::RequestKickParticipant(_)
+            | DirectRoomAction::RequestCreateInvite(_)
             | DirectRoomAction::StopAgent(_) => {
                 return Err(rejected("bad_request", "Use the lifecycle mutation owner."));
             }

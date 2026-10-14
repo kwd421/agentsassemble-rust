@@ -140,6 +140,31 @@ pub struct RequestKickParticipant {
     pub participant_id: String,
 }
 
+// Director-requested HUMAN room invite. The schema carries only the invite fields the
+// owner's own human-invite creation accepts from a person: an optional label, the
+// invite scope, a positive lifetime and a use limit. Companion, attendee and connector
+// invites have no variant here, so they are structurally unreachable through delegation.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+    ts_rs::TS,
+)]
+#[serde(deny_unknown_fields)]
+pub struct RequestCreateInvite {
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub display_name: Option<String>,
+    pub invite_scope: String,
+    pub ttl_seconds: i64,
+    pub max_uses: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DirectRoomAction {
@@ -153,6 +178,7 @@ pub enum DirectRoomAction {
     RequestReconfigureAgent(RequestReconfigureAgent),
     RequestRemoveAgent(RequestRemoveAgent),
     RequestKickParticipant(RequestKickParticipant),
+    RequestCreateInvite(RequestCreateInvite),
 }
 impl DirectRoomAction {
     pub const NAMES: &[&str] = &[
@@ -166,6 +192,7 @@ impl DirectRoomAction {
         "request_reconfigure_agent",
         "request_remove_agent",
         "request_kick_participant",
+        "request_create_invite",
     ];
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -180,6 +207,7 @@ impl DirectRoomAction {
             Self::RequestReconfigureAgent(r) => &r.request_id,
             Self::RequestRemoveAgent(r) => &r.request_id,
             Self::RequestKickParticipant(r) => &r.request_id,
+            Self::RequestCreateInvite(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -195,6 +223,7 @@ impl DirectRoomAction {
             Self::RequestReconfigureAgent(_) => "request_reconfigure_agent",
             Self::RequestRemoveAgent(_) => "request_remove_agent",
             Self::RequestKickParticipant(_) => "request_kick_participant",
+            Self::RequestCreateInvite(_) => "request_create_invite",
         }
     }
 }

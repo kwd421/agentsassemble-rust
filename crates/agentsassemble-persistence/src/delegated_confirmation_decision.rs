@@ -189,6 +189,22 @@ impl SqliteStore {
                                 revoked = fingerprints;
                                 Ok(result)
                             }
+                            ConfirmedRoomAction::CreateHumanInvite(invite) => {
+                                // Both authorities are revalidated now and the owner's
+                                // provenance must resolve to the owner's own room-manager
+                                // authority; the server actor mints the credential after
+                                // commit and returns the link only in this acknowledgement.
+                                let proof = validate_in(&mut tx, &principal.room_id, &row).await?;
+                                crate::delegation_owner::manager_authority_for_delegate(
+                                    &mut tx,
+                                    &principal.room_id,
+                                    &proof.delegate.participant_id,
+                                )
+                                .await?;
+                                let mut executing = request.clone(); executing.state = ConfirmationState::Executing;
+                                sqlx::query("UPDATE delegated_action_requests SET state='executing',request_json=? WHERE room_id=? AND confirmation_id=?").bind(serde_json::to_string(&executing)?).bind(&principal.room_id).bind(&request.confirmation_id).execute(&mut *tx).await?;
+                                Ok(json!({"status":"in_progress","request_id":invite.request_id,"action":"create_human_invite","confirmation_id":request.confirmation_id}))
+                            }
                         }
                     }.await;
                     match execution {
@@ -251,6 +267,7 @@ impl SqliteStore {
             confirmation_id: decision.confirmation_id.clone(),
             state: item(&current)?.state,
             receipt: receipt(&current)?,
+            invite: None,
         })?;
         let events: Vec<String> = sqlx::query_scalar(
             "SELECT event_json FROM room_events WHERE room_id=? AND seq>=? ORDER BY seq",
@@ -300,6 +317,7 @@ fn requires_full_access_acknowledgement(action: &ConfirmedRoomAction) -> bool {
         }
         ConfirmedRoomAction::RemoveAgent(_)
         | ConfirmedRoomAction::DeleteTextChannel(_)
-        | ConfirmedRoomAction::KickParticipant(_) => false,
+        | ConfirmedRoomAction::KickParticipant(_)
+        | ConfirmedRoomAction::CreateHumanInvite(_) => false,
     }
 }

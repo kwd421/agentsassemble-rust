@@ -211,6 +211,98 @@ impl OwnerBinding {
         }
         Ok(principal)
     }
+
+    /// Maps the proven owner reference to the owner's own room-manager authority: the
+    /// exact authority the owner's own HTTP invite path builds from its one-use local
+    /// control ticket or central-owner session. Only local-bootstrap lineage or a live
+    /// operator session can produce it; a human guest/member or a server-owner
+    /// provenance refuses `owner_authority_unavailable` rather than inventing authority.
+    /// # Errors
+    /// Rejects a changed room incarnation, unprovable provenance and storage failures.
+    pub(crate) async fn manager_authority(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        room_id: &str,
+    ) -> Result<RoomManagerAuthority, PersistenceError> {
+        let room = crate::authority::load_active_room(tx, room_id).await?;
+        if room.room_uid != self.room_uid {
+            return Err(unavailable());
+        }
+        match &self.reference {
+            OwnerReference::Local {
+                server_id,
+                authority_lineage_id,
+            } => {
+                let manager = crate::LocalRoomManagerAuthority {
+                    server_id: server_id.clone(),
+                    authority_lineage_id: authority_lineage_id.clone(),
+                    room_uid: self.room_uid,
+                    manager: crate::RoomUserIdentity {
+                        room_id: room_id.to_owned(),
+                        user_id: self.user_id.clone(),
+                        participant_id: self.participant_id.clone(),
+                    },
+                };
+                let principal = manager.resolve(tx).await?;
+                if principal.room_id != room_id
+                    || principal.principal_id != self.user_id
+                    || principal.participant_id != self.participant_id
+                {
+                    return Err(unavailable());
+                }
+                Ok(RoomManagerAuthority::Local(manager))
+            }
+            OwnerReference::Operator {
+                fingerprint,
+                device,
+                origin,
+            } => {
+                let session = crate::operator_pairing::resolve_operator_session(
+                    tx,
+                    fingerprint,
+                    device,
+                    origin,
+                    chrono::Utc::now(),
+                )
+                .await?;
+                if session.principal().room_id != room_id
+                    || session.principal().principal_id != self.user_id
+                    || session.principal().participant_id != self.participant_id
+                {
+                    return Err(unavailable());
+                }
+                Ok(RoomManagerAuthority::Operator(Box::new(session)))
+            }
+            OwnerReference::Human { .. } | OwnerReference::ServerOwner { .. } => Err(unavailable()),
+        }
+    }
+}
+
+/// Resolves the exact room-manager authority owned by the bound owner of one delegate,
+/// or refuses. A companion delegate's provenance lives on its invitation and is never a
+/// manager authority, so it refuses here.
+/// # Errors
+/// Refuses `owner_authority_unavailable` for unprovable or ineligible provenance.
+pub(crate) async fn manager_authority_for_delegate(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    delegate_id: &str,
+) -> Result<RoomManagerAuthority, PersistenceError> {
+    let companion: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM room_attendee_invites WHERE room_id=? AND participant_id=? AND parent_fingerprint IS NOT NULL)")
+        .bind(room_id)
+        .bind(delegate_id)
+        .fetch_one(&mut **tx)
+        .await?;
+    if companion != 0 {
+        return Err(unavailable());
+    }
+    let encoded: Option<String> = sqlx::query_scalar("SELECT binding_json FROM ai_owner_bindings WHERE room_id=? AND subject_kind='participant' AND subject_id=?")
+        .bind(room_id)
+        .bind(delegate_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+    let binding: OwnerBinding = serde_json::from_str(&encoded.ok_or_else(unavailable)?)?;
+    binding.manager_authority(tx, room_id).await
 }
 
 // Immutable non-bearer owner reference and its current authority deadline.

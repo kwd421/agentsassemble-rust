@@ -18,6 +18,7 @@ pub enum ConfirmedRoomAction {
     ReconfigureAgent(ConfirmedAgentReconfigure),
     RemoveAgent(ConfirmedAgentRemove),
     KickParticipant(ConfirmedParticipantKick),
+    CreateHumanInvite(ConfirmedHumanInvite),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -66,6 +67,26 @@ pub struct DelegatedActionDecisionAck {
     pub confirmation_id: String,
     pub state: ConfirmationState,
     pub receipt: serde_json::Value,
+    /// Present only in the live acknowledgement of an approved HUMAN room-invite
+    /// decision, exactly once. Never stored, replayed or delivered to the AI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub invite: Option<DelegatedInviteAck>,
+}
+
+/// The one-time human room-invite credential delivered only to the bound owner in the
+/// live acknowledgement of the owner's own decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DelegatedInviteAck {
+    pub invite_id: String,
+    pub invite_token: String,
+    pub join_code: String,
+    pub join_url: String,
+    pub display_name: String,
+    pub invite_scope: String,
+    pub max_uses: i64,
+    pub expires_at: String,
 }
 
 /// Owner-private fields of requested/updated room event envelopes.
@@ -160,6 +181,16 @@ pub struct ConfirmedParticipantKick {
     pub params: crate::RequestKickParticipant,
     pub expected_created_at: DateTime<Utc>,
 }
+/// Owner-confirmed HUMAN room invite. `params` are the AI-supplied invite fields as
+/// received; request time and approval both run the owner's own invite-policy
+/// validation, so approval cannot mint a different scope, use limit or expiry. No
+/// credential is bound here, and the minted link is never stored in this request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmedHumanInvite {
+    pub request_id: String,
+    pub params: crate::RequestCreateInvite,
+}
 impl ConfirmedRoomAction {
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -170,6 +201,7 @@ impl ConfirmedRoomAction {
             Self::ReconfigureAgent(r) => &r.request_id,
             Self::RemoveAgent(r) => &r.request_id,
             Self::KickParticipant(r) => &r.request_id,
+            Self::CreateHumanInvite(r) => &r.request_id,
         }
     }
     #[must_use]
@@ -181,6 +213,7 @@ impl ConfirmedRoomAction {
             Self::ReconfigureAgent(_) => "request_reconfigure_agent",
             Self::RemoveAgent(_) => "request_remove_agent",
             Self::KickParticipant(_) => "request_kick_participant",
+            Self::CreateHumanInvite(_) => "request_create_invite",
         }
     }
 }

@@ -48,6 +48,7 @@ pub(crate) async fn validate_in(
         ConfirmedRoomAction::ReconfigureAgent(_) => "request_reconfigure_agent",
         ConfirmedRoomAction::RemoveAgent(_) => "request_remove_agent",
         ConfirmedRoomAction::KickParticipant(_) => "request_kick_participant",
+        ConfirmedRoomAction::CreateHumanInvite(_) => "request_create_invite",
     };
     let proof = DelegatedRoomActionAuthority::direct(tx, &binding.authority, name).await?;
     let (reference, _) = crate::delegation_owner::confirmation_provenance(

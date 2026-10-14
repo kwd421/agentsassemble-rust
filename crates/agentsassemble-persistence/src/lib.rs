@@ -346,5 +346,9 @@ mod delegated_confirmed_reconfigure;
 pub use delegated_confirmed_reconfigure::{
     ApprovedReconfigureDrive, reconfigure_execution_payload, reconfigure_selection_payload,
 };
+mod delegated_confirmed_invite;
 mod delegated_confirmed_kick;
+pub use delegated_confirmed_invite::{
+    ApprovedInviteDrive, DelegatedInvitePolicy, MintedHumanInvite, delegated_invite_policy,
+};
 mod delegated_confirmed_remove;
