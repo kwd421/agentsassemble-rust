@@ -52,10 +52,11 @@ describe("guest room projection", () => {
     },
   };
 
-  it("retains central member presentation across reload without granting operator authority", () => {
+  it("keeps central member sessions memory-only so restart re-admits from the anchor", () => {
     const session = { ...roomGuestSessionFromJoinPayload("", joinResponse), centralMember: true };
     persistRoomGuestSession(session);
-    expect(loadRoomGuestSession()).toMatchObject({ centralMember: true, operator: false });
+    expect(loadRoomGuestSession()).toBeNull();
+    expect(window.localStorage.getItem("agentsassemble.roomGuestSession.v1")).toBeNull();
     persistRoomGuestSession(null);
   });
 

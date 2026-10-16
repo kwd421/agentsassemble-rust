@@ -231,10 +231,12 @@ export function loadRoomGuestSession(): RoomGuestSession | null {
   // session is shadowed only by its own host going live, never by an unrelated
   // host. A legacy guest room for host X stays visible while only host Y is
   // live; it stops applying once X itself is live.
+  // Central member sessions are never restored from storage: re-entry runs a
+  // fresh grant through the per-host anchor, and bearers stay memory-only.
   try {
     const raw = window.localStorage.getItem(ROOM_GUEST_SESSION_STORAGE_KEY);
     const session = normalizeRoomGuestSession(raw ? JSON.parse(raw) : null);
-    if (session?.centralOwner) {
+    if (session?.centralOwner || session?.centralMember || session?.nativeMember) {
       window.localStorage.removeItem(ROOM_GUEST_SESSION_STORAGE_KEY);
       return null;
     }
@@ -247,6 +249,12 @@ export function loadRoomGuestSession(): RoomGuestSession | null {
 
 export function persistRoomGuestSession(session: RoomGuestSession | null) {
   if (session?.centralOwner) return;
+  // Member sessions are memory-only: persisting their bearer would keep a
+  // credential outside the trusted session. Restart re-admits from the anchor.
+  if (session?.centralMember || session?.nativeMember) {
+    try { window.localStorage.removeItem(ROOM_GUEST_SESSION_STORAGE_KEY); } catch { /* best-effort */ }
+    return;
+  }
   // Clearing stored state always proceeds, so expiry/revocation cleanup for
   // one host is never blocked by another host staying live. Storing is
   // skipped only for the live host itself, which owns its session in memory.

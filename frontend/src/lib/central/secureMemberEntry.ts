@@ -3,7 +3,7 @@ import { decodeCanonicalBase64Url } from "../base64Url";
 import { getOrCreateBrowserCredential, getOrCreateClientId } from "../deviceIdentity";
 import { createSecureRequestId } from "../secureRequestId";
 import { strictRecord, assertExactKeys } from "../strictJsonContract";
-import { parseRoomInviteAdmissionResponse, parseRoomInviteJoinResponse } from "../roomAdmissionContract";
+import { parseRoomInviteAdmissionResponse, parseRoomInviteJoinResponse, type RoomInviteJoinResponse } from "../roomAdmissionContract";
 import { roomGuestSessionFromJoinPayload } from "../roomGuestSession";
 import { RemoteTransport } from "../remote/remoteTransport";
 import { installRemoteWorkspace, bindRemoteSession } from "../remote/remoteWorkspace";
@@ -86,16 +86,17 @@ export class SecureMemberAdmission {
     if (!Array.isArray(value.rooms) || !value.rooms.length || value.rooms.length > 50 || !value.rooms.every(r => r && typeof r.room_id === "string" && r.room_id && typeof r.name === "string")) throw new Error("참가 중인 방을 확인하지 못했어요.");
     return value.rooms;
   }
-  async select(roomId: string) {
+  async select(roomId: string): Promise<RoomInviteJoinResponse> {
     const payload = await this.post("/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId });
-    this.install(payload, payload.request_id, roomId);
+    return this.install(payload, payload.request_id, roomId);
   }
-  private install(raw: unknown, requestId: string, roomId: string) {
+  private install(raw: unknown, requestId: string, roomId: string): RoomInviteJoinResponse {
     const payload = parseRoomInviteJoinResponse(raw, requestId, roomId, this.clientId);
     if (payload.server_id !== this.entry.server_id || loadCentralSession()?.token !== this.session.token || !this.transport.active) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
     const member = { ...roomGuestSessionFromJoinPayload("", payload), centralMember: true };
     bindRemoteSession(member.sessionToken, this.transport, member.serverSurface.server_id);
     this.adopted = true;
     installRemoteWorkspace({ transport: this.transport, owner: null, member, deviceToken: this.deviceToken, clientId: this.clientId });
+    return payload;
   }
 }

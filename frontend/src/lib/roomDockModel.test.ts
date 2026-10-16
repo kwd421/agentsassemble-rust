@@ -133,6 +133,25 @@ describe("durable room identity", () => {
     expect(reconciled.meetingId).toBe(exactRoomId);
   });
 
+  it("scopes member directory rooms without room_uid by host", () => {
+    const first = mergeServerRoomsIntoDock(
+      [],
+      [{ room_id: "general", label: "First" }],
+      "https://first.example",
+      "server-a"
+    );
+    const second = mergeServerRoomsIntoDock(
+      first,
+      [{ room_id: "general", label: "Second" }],
+      "https://second.example",
+      "server-b"
+    );
+    expect(second).toHaveLength(2);
+    expect(new Set(second.map((room) => room.id))).toEqual(
+      new Set(["server-server-a-general", "server-server-b-general"])
+    );
+  });
+
   it("does not collapse equal room aliases owned by different servers", () => {
     const first = mergeServerRoomsIntoDock(
       [],
@@ -192,6 +211,20 @@ describe("multihost merge", () => {
       [{ serverId: "server-a", serverOrigin: "https://server-a.test", rooms: [directoryRoom("general")], state: "connected" }]
     );
     expect(merged.map((room) => room.meetingId)).toEqual(["general"]);
+  });
+
+  it("adds a known offline host's cached rooms as disconnected without inventing rooms", () => {
+    const merged = mergeHostRoomsIntoDock(
+      [hostRoom("server-b", "general", "connected")],
+      [
+        { serverId: "local", serverOrigin: window.location.origin, rooms: [], state: "connected", local: true },
+        { serverId: "server-a", serverOrigin: "https://server-a.test", rooms: [{ room_id: "general", label: "First" }], state: "disconnected" },
+        { serverId: "server-b", serverOrigin: "https://server-b.test", rooms: [{ room_id: "gone", label: "Gone" }], state: "disconnected" },
+      ]
+    );
+    const byMeeting = Object.fromEntries(merged.map((room) => [room.meetingId, room]));
+    expect(byMeeting["general"]).toMatchObject({ serverId: "server-a", connectionState: "disconnected" });
+    expect(byMeeting["gone"]).toMatchObject({ serverId: "server-b", connectionState: "disconnected" });
   });
 
   it("preserves a live peer's rooms through a single-host merge while unknown hosts go disconnected", () => {

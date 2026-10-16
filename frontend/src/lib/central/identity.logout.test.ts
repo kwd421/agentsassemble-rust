@@ -1,6 +1,36 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); localStorage.clear(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); localStorage.clear(); sessionStorage.clear(); });
+
+const anchorFor = (server_id: string) => ({
+  server_id, registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+  endpoint_origin: "https://host.test", endpoint_generation: 3,
+  rooms: [{ room_id: "general", name: "일반" }], hidden: false, updated_at: 1,
+});
+
+it("clears only the signed-out account's member anchors", async () => {
+  vi.resetModules();
+  const { clearCentralSession, saveSession } = await import("./identity");
+  const { saveMemberAnchor, loadMemberAnchors } = await import("./memberAnchors");
+  saveMemberAnchor("person-a", anchorFor("server-a"));
+  saveMemberAnchor("person-b", anchorFor("server-b"));
+  localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({
+    token: "fixture-session", expires_at: 9_999_999_999, device_id: "device",
+    person: { person_id: "person-a", identity_kind: "google", display_name: "A" },
+  }));
+  clearCentralSession();
+  expect(loadMemberAnchors("person-a")).toEqual([]);
+  expect(loadMemberAnchors("person-b")).toHaveLength(1);
+  localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({
+    token: "other-session", expires_at: 9_999_999_999, device_id: "device",
+    person: { person_id: "person-b", identity_kind: "google", display_name: "B" },
+  }));
+  saveSession({
+    session: { token: "new-session", expires_at: 9_999_999_999, device_id: "device" },
+    person: { person_id: "person-c", identity_kind: "google", display_name: "C" },
+  });
+  expect(loadMemberAnchors("person-b")).toEqual([]);
+});
 
 it("keeps a failed logout retryable and persists logout only after a signed revocation", async () => {
   vi.resetModules();

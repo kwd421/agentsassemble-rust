@@ -47,8 +47,9 @@ vi.mock("../lib/roomDirectoryContract", async () => ({
 vi.mock("../lib/roomGuestSession", async () => ({
   ...(await vi.importActual<typeof import("../lib/roomGuestSession")>("../lib/roomGuestSession")),
   loadRoomGuestSession: () => guestSessionStore.current,
+  // Mirrors the real boundary: member sessions stay memory-only.
   persistRoomGuestSession: (session: RoomGuestSession | null) => {
-    guestSessionStore.current = session;
+    guestSessionStore.current = session?.centralMember || session?.nativeMember ? null : session;
   },
 }));
 
@@ -125,7 +126,8 @@ describe("useRoomAdmission", () => {
       });
     });
     expect(result.current.admissionState.kind).toBe("joined");
-    expect(loadRoomGuestSession()).toMatchObject({ sessionToken: "member-session", centralMember: true });
+    expect(result.current.guestSession).toMatchObject({ sessionToken: "member-session", centralMember: true });
+    expect(loadRoomGuestSession()).toBeNull();
     expect(onRoomJoined).toHaveBeenCalledOnce();
     expect(result.current.admittedSessionToken).toBe("member-session");
     expect(window.location.search).toBe("");

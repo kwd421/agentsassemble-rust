@@ -10,6 +10,8 @@ import {
   centralAccountEntryUrl, issueCentralMemberGrant, loadCentralSession, loadPendingCentralRecoveryCode,
   loginCentralGoogle, previewCentralMember, setCentralMemberHidden,
 } from "../../lib/central/identity";
+import { loadMemberAnchor, saveMemberAnchor } from "../../lib/central/memberAnchors";
+import type { SecureTarget } from "../../lib/remote/secureCrypto";
 import { completeCentralWebGoogleReturn, startCentralWebGoogle } from "../../lib/central/webGoogle";
 import {
   centralMemberEntryUrl, clearCentralMemberRequest, createMemberHandoff, memberCallbackUrl,
@@ -72,6 +74,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
   const [status, setStatus] = useState("참가를 준비하고 있어요");
   const [error, setError] = useState(entryError ? failureMessage(new Error(entryError)) : "");
   const secureAdmission = useRef<SecureMemberAdmission | null>(null);
+  const secureAnchor = useRef<{ target: SecureTarget; rooms: { room_id: string; name: string }[] } | null>(null);
   const record = useRef<MemberHandoff | undefined>(host?.callback?.record);
   const active = useRef(true);
   const flight = useRef(false);
@@ -105,8 +108,29 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
     if (!(await host.onComplete(payload))) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
   }
 
+  function saveSecureAnchor() {
+    // Best-effort display cache: the live session owns the join result, the
+    // anchor only lets other startups re-enter silently from membership.
+    const saved = secureAnchor.current;
+    const session = loadCentralSession();
+    if (!saved || !session) return;
+    try {
+      const previous = loadMemberAnchor(session.person.person_id, saved.target.server_id);
+      saveMemberAnchor(session.person.person_id, {
+        server_id: saved.target.server_id,
+        registration_epoch: saved.target.registration_epoch,
+        host_key_fingerprint: saved.target.host_key_fingerprint,
+        endpoint_origin: saved.target.origin,
+        endpoint_generation: saved.target.generation,
+        rooms: saved.rooms.map((room) => ({ room_id: room.room_id, name: room.name })),
+        hidden: previous?.hidden ?? false,
+        updated_at: Date.now(),
+      });
+    } catch { /* anchor write stays best-effort */ }
+  }
+
   async function selectRoom(roomId: string, pending = record.current) {
-    if (secureAdmission.current) { await secureAdmission.current.select(roomId); return; }
+    if (secureAdmission.current) { await secureAdmission.current.select(roomId); saveSecureAnchor(); return; }
     if (!host || !pending) return;
     const payload = await selectMemberConnect(pending, roomId, host.clientId, host.deviceToken);
     if (!active.current) return;
@@ -115,7 +139,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
 
   async function prepare(recoveryAcknowledged = false) {
     setConsent(null); setRooms([]);
-    secureAdmission.current?.close(); secureAdmission.current = null;
+    secureAdmission.current?.close(); secureAdmission.current = null; secureAnchor.current = null;
     if (secureEntry) {
       const session = loadCentralSession();
       if (!session || (!host && !recoveryAcknowledged && loadPendingCentralRecoveryCode())) { setGuestActive(true); setStatus("로그인하면 참가를 이어갈 수 있어요."); return; }
@@ -187,7 +211,16 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
       setStatus("참가를 준비하고 있어요");
       if (loadCentralSession()?.token !== consent.sessionToken) throw new Error("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
       if (record.current && record.current.expires_at <= Date.now() / 1000) throw new Error("참가 요청이 만료됐어요. 다시 시도해 주세요.");
-      if (restoreHidden) await setCentralMemberHidden(consent.request, false);
+      if (restoreHidden) {
+        await setCentralMemberHidden(consent.request, false);
+        const session = loadCentralSession();
+        const previous = session ? loadMemberAnchor(session.person.person_id, consent.request.server_id) : null;
+        if (session && previous?.hidden) {
+          try {
+            saveMemberAnchor(session.person.person_id, { ...previous, hidden: false, updated_at: Date.now() });
+          } catch { /* anchor write stays best-effort */ }
+        }
+      }
       if (secureEntry && consent.target.target) {
         loginAbort.current = new AbortController();
         secureAdmission.current?.close();
@@ -196,9 +229,13 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
         try {
           const available = await admission.admit();
           if (!active.current) { admission.close(); return; }
-          if (available?.length === 1) await admission.select(available[0].room_id);
-          else if (available) { setConsent(null); setRooms(available); setStatus(""); }
-        } catch (error) { admission.close(); throw error; }
+          if (available?.length === 1) {
+            secureAnchor.current = { target: consent.target.target, rooms: available };
+            await admission.select(available[0].room_id);
+            saveSecureAnchor();
+          }
+          else if (available) { secureAnchor.current = { target: consent.target.target, rooms: available }; setConsent(null); setRooms(available); setStatus(""); }
+        } catch (error) { secureAnchor.current = null; admission.close(); throw error; }
         return;
       }
       const grant = await issueCentralMemberGrant(consent.request);

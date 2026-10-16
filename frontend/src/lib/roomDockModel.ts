@@ -186,9 +186,13 @@ export function roomFromServerRoom(
   const remote =
     existing?.roomOrigin === "remote_server" || currentServerOrigin !== window.location.origin;
   return {
+    // Member directory rooms carry no room_uid; scope their dock id by host
+    // so two hosts with the same room_id never share one rail entry.
     id: roomUid && currentServerId
       ? `server-${currentServerId}-${roomUid}`
-      : `server-${meetingId}`,
+      : remote && currentServerId
+        ? `server-${currentServerId}-${meetingId}`
+        : `server-${meetingId}`,
     label,
     meetingId,
     roomUid: roomUid || undefined,
@@ -360,7 +364,7 @@ export function mergeHostRoomsIntoDock(
 
   const seenRoomIdentities = new Set(next.map(roomDockIdentity));
   for (const { host } of indexed) {
-    if (!host.rooms || host.state !== "connected") continue;
+    if (!host.rooms) continue;
     for (const serverRoom of host.rooms) {
       const dockRoom = roomFromServerRoom(
         serverRoom,
@@ -369,7 +373,9 @@ export function mergeHostRoomsIntoDock(
         host.serverId
       );
       if (!dockRoom || seenRoomIdentities.has(roomDockIdentity(dockRoom))) continue;
-      next.push(dockRoom);
+      // A known host that is down still contributes its last known rooms,
+      // shown disconnected; unknown/new rooms are never invented.
+      next.push(host.state === "connected" ? dockRoom : { ...dockRoom, connectionState: host.state });
       seenRoomIdentities.add(roomDockIdentity(dockRoom));
       changed = true;
     }

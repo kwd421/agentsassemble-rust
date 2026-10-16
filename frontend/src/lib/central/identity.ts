@@ -1,6 +1,7 @@
 import { nativeGoogleAuthorization } from "./nativeGoogleAuthorization";
 import { finishGoogleVerification } from "./googleRegistration";
 import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
+import { clearMemberAnchors } from "./memberAnchors";
 import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
@@ -246,7 +247,10 @@ export function saveSession(
     ...(centralSessionLoggedOut() || (previous?.person.person_id === result.person.person_id && previous.pending_account_switch)
       ? { pending_account_switch: true } : {}),
   };
-  if (previous?.person.person_id !== result.person.person_id) clearCentralDirectoryCache();
+  if (previous?.person.person_id !== result.person.person_id) {
+    if (previous?.person.person_id) clearMemberAnchors(previous.person.person_id);
+    clearCentralDirectoryCache();
+  }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   window.dispatchEvent(new Event(CENTRAL_SESSION_CHANGED_EVENT));
   return session;
@@ -303,6 +307,14 @@ export function loadCentralSession(): CentralSession | null {
 }
 
 export function clearCentralSession(): void {
+  // Read the raw record: loadCentralSession clears expired sessions, which
+  // would recurse back here.
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SESSION_KEY) || "null") as { person?: { person_id?: unknown } } | null;
+    if (typeof parsed?.person?.person_id === "string" && parsed.person.person_id) {
+      clearMemberAnchors(parsed.person.person_id);
+    }
+  } catch { /* anchor clearing stays best-effort */ }
   if (!centralSessionLoggedOut()) {
     localStorage.setItem(SESSION_KEY, "logged-out");
     devicePromise = undefined;
