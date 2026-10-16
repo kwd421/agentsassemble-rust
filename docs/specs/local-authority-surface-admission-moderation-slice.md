@@ -130,8 +130,14 @@ including private cancellation, pending/error events and restart recovery. Prese
 target participant/session fields and recipient visibility. Direct human events
 keep their existing actor. The event producer owns attribution; projection,
 archive allowlists/provenance and generated frontend event contracts must preserve
-these existing fields without inventing a human executor. Verify live transport
-receipts/publication and recovered durable events, including failed recovery.
+these existing fields without inventing a human executor. The wire `RoomEvent`
+flattens `extra` (server `#[serde(flatten)]`), so the timeline projection reads the
+flat attribution keys (`action`, `actor_participant_id`,
+`on_behalf_of_participant_id`, `target_id`, plus `request_id`/`confirmation_id`/
+`pinned`/`target_channel_id` when present) from the same event object the
+snapshot/history load and live socket frames deliver; the server `content` stays
+English. Verify live transport receipts/publication and recovered durable events,
+including failed recovery.
 Frontend views remain unchanged; report any changed displayed strings.
 
 ## Delegated direct runtime, module responsibilities (2026-10-16)

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mergeLobbyEvents, type RoomEvent } from "../api";
+import { formatDelegatedActionText } from "./delegatedActionText";
 import { projectRoomEventProgress, projectRoomEventsToTimeline } from "./roomEventProjection";
 
 function event(overrides: Partial<RoomEvent>): RoomEvent {
@@ -622,10 +623,8 @@ it("carries a delegation attribution on its system line for the Korean renderer"
       display_name: "claude-haiku-5-5",
       content: "claude-haiku-5-5 updated a text channel on behalf of owner.",
       message_kind: "system",
-      extra: {
-        actor_participant_id: "agent-1", on_behalf_of_participant_id: "owner-1",
-        action: "create_text_channel", target_id: "ch-1", request_id: "req-1",
-      },
+      actor_participant_id: "agent-1", on_behalf_of_participant_id: "owner-1",
+      action: "create_text_channel", target_id: "ch-1", request_id: "req-1",
     }),
   ]);
   expect(rows).toHaveLength(1);
@@ -636,4 +635,37 @@ it("carries a delegation attribution on its system line for the Korean renderer"
     onBehalfOfParticipantId: "owner-1", actorParticipantId: "agent-1",
     confirmationId: undefined, pinned: undefined, targetChannelId: undefined,
   });
+});
+
+it("keeps the structured attribution of a real stored wire event for the Korean renderer", () => {
+  // Verbatim shape of a stored room event: `extra` is flattened on the wire,
+  // so the attribution keys sit beside `type`, never under a nested `extra`.
+  const stored = {
+    v: 1, id: "90e1c9dc-3075-44ee-9328-7e1640adc4b6", seq: 49,
+    created_at: "2026-10-16T13:19:10.376255Z", room_id: "room-x", type: "message_final",
+    actor: { participant_id: "opencode-87a106c9-d81c-56e4-9086-f0e58494098e", participant_type: "agent" },
+    participant_id: "opencode-87a106c9-d81c-56e4-9086-f0e58494098e", participant_type: "agent",
+    actor_id: "opencode-87a106c9-d81c-56e4-9086-f0e58494098e", actor_type: "agent",
+    display_name: "claude-haiku-5-5",
+    content: "claude-haiku-5-5 updated a text channel on behalf of ᅡᄂ나나.",
+    message_kind: "system", action: "create_text_channel",
+    actor_participant_id: "opencode-87a106c9-d81c-56e4-9086-f0e58494098e",
+    on_behalf_of_participant_id: "operator-local",
+    request_id: "9b4e7d20-1c3a-4f6e-a5b8-7d2e0c9f1a5a", target_id: "c53f207c12256",
+  } as unknown as RoomEvent;
+  const rows = projectRoomEventsToTimeline([stored]);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].delegation).toEqual({
+    action: "create_text_channel", targetId: "c53f207c12256",
+    onBehalfOfParticipantId: "operator-local",
+    actorParticipantId: "opencode-87a106c9-d81c-56e4-9086-f0e58494098e",
+    confirmationId: undefined, pinned: undefined, targetChannelId: undefined,
+  });
+  expect(formatDelegatedActionText(rows[0], {
+    participantProfiles: {
+      "opencode-87a106c9-d81c-56e4-9086-f0e58494098e": { displayName: "claude-haiku-5-5" },
+      "operator-local": { displayName: "ᅡᄂ나나" },
+    },
+    channelLabels: { c53f207c12256: "기획" },
+  })).toBe("claude-haiku-5-5가 ᅡᄂ나나 대신 #기획 채널을 만들었어요.");
 });

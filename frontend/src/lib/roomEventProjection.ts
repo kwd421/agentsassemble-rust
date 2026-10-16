@@ -68,16 +68,16 @@ type TimelineRoomEvent = Pick<
   vote_id?: string;
   vote_options?: string[];
   vote_question?: string;
-  // Delegation attribution carried on room-visible system messages.
-  extra?: {
-    action?: unknown;
-    target_id?: unknown;
-    on_behalf_of_participant_id?: unknown;
-    actor_participant_id?: unknown;
-    confirmation_id?: unknown;
-    pinned?: unknown;
-    target_channel_id?: unknown;
-  } | null;
+  // Delegation attribution arrives flattened on the wire: the server stores it in
+  // `extra`, which serde flattens into the event object, so there is no nested
+  // `extra` in what snapshot/history loads and live socket frames deliver.
+  action?: unknown;
+  target_id?: unknown;
+  on_behalf_of_participant_id?: unknown;
+  actor_participant_id?: unknown;
+  confirmation_id?: unknown;
+  pinned?: unknown;
+  target_channel_id?: unknown;
 };
 
 function actor(event: TimelineRoomEvent) {
@@ -137,19 +137,17 @@ function skipSummary(skips: readonly { name: string; reason: string }[]): string
 /// A delegation attribution stays with its system line; the server content remains
 /// the machine-readable English while the UI renders Korean from these fields.
 function delegationOf(event: TimelineRoomEvent): LobbyEvent["delegation"] {
-  const extra = event.extra;
-  if (!extra || typeof extra !== "object") return undefined;
-  const action = String(extra.action || "");
+  const action = String(event.action || "");
   if (!action) return undefined;
-  const confirmationId = extra.confirmation_id;
-  const targetChannelId = extra.target_channel_id;
+  const confirmationId = event.confirmation_id;
+  const targetChannelId = event.target_channel_id;
   return {
     action,
-    targetId: String(extra.target_id || ""),
-    onBehalfOfParticipantId: String(extra.on_behalf_of_participant_id || ""),
-    actorParticipantId: String(extra.actor_participant_id || ""),
+    targetId: String(event.target_id || ""),
+    onBehalfOfParticipantId: String(event.on_behalf_of_participant_id || ""),
+    actorParticipantId: String(event.actor_participant_id || ""),
     confirmationId: typeof confirmationId === "string" && confirmationId ? confirmationId : undefined,
-    pinned: typeof extra.pinned === "boolean" ? extra.pinned : undefined,
+    pinned: typeof event.pinned === "boolean" ? event.pinned : undefined,
     targetChannelId: typeof targetChannelId === "string" && targetChannelId ? targetChannelId : undefined,
   };
 }
