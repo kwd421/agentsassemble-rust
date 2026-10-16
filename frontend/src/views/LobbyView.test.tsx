@@ -864,7 +864,7 @@ it("renders an evicted pending request inside the requesting agent message witho
   const message = input.closest("[data-room-event-id]");
   expect(message?.textContent).toContain("Requesting Agent");
   // The card headline is Korean; the provider's English title never renders.
-  expect(message?.textContent).toContain("Codex가 답변을 기다려요");
+  expect(message?.textContent).toContain("Codex 질문");
   expect(message?.textContent).not.toContain(pendingRequest.request.title);
   expect(screen.queryByRole("button", { name: /에이전트 요청/ })).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();

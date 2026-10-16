@@ -62,7 +62,7 @@ it("hides pre-upgrade OpenCode remembered grants and submits only a one-time cho
   expect(screen.getByLabelText(/한 번만 허용/)).toBeTruthy();
   expect(screen.queryByLabelText(/Allow once/)).toBeNull();
   expect(screen.queryByText(/OpenCode requests bash/)).toBeNull();
-  expect(screen.getByText(/OpenCode가 실행 권한을 허락해 달라고 해요/)).toBeTruthy();
+  expect(screen.getByText(/OpenCode 실행 권한 요청/)).toBeTruthy();
   expect(screen.queryByLabelText(/Always allow/)).toBeNull();
   fireEvent.click(screen.getByLabelText(/한 번만 허용/));
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "응답 보내기" })); });

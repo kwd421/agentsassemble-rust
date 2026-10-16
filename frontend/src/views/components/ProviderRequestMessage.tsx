@@ -26,9 +26,9 @@ function providerNameOf(providerKind?: string): string {
 }
 
 function requestHeadline(kind: ProviderRequestKind, providerName: string): string {
-  if (kind === "permission") return `${providerName}가 실행 권한을 허락해 달라고 해요`;
-  if (kind === "user_input") return `${providerName}가 답변을 기다려요`;
-  if (kind === "external_action") return `${providerName}가 확인을 기다려요`;
+  if (kind === "permission") return `${providerName} 실행 권한 요청`;
+  if (kind === "user_input") return `${providerName} 질문`;
+  if (kind === "external_action") return `${providerName} 확인 요청`;
   return `${providerName} 요청`;
 }
 

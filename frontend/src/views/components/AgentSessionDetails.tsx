@@ -73,6 +73,57 @@ function sessionErrorInfo(session: RoomAgentSession): { summary: string; detail:
   if (session.last_error_code === "provider_rate_limited") {
     return { summary: "AI 서비스에 요청이 너무 많아요. 잠시 후 다시 시도해 주세요.", detail: "" };
   }
+  if (session.last_error_code === "provider_turn_timeout") {
+    return { summary: "AI 응답 시간이 초과됐어요. 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_turn_cancelled") {
+    return { summary: "AI 응답이 취소됐어요. 필요하면 다시 요청해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_model_mismatch") {
+    return { summary: "선택한 모델 정보를 확인하지 못했어요. 실행 설정에서 모델을 다시 선택해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_runtime_exited") {
+    return { summary: "에이전트 실행이 예기치 않게 끝났어요. 중지한 뒤 재개해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_runtime_restart_required") {
+    return { summary: "에이전트를 다시 시작해야 해요. 중지한 뒤 재개해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "room_observation_unconfirmed") {
+    return { summary: "대화 내용을 전달했는지 확인하지 못했어요. 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "room_portal_publication_missing") {
+    return { summary: "AI가 방에 남길 답을 만들지 못했어요. 다시 요청해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_protocol_invalid") {
+    return { summary: "AI 응답 형식을 이해하지 못했어요. 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_turn_task_failed") {
+    return { summary: "AI 실행이 끝나기 전에 연결이 끊겼어요. 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "interrupted") {
+    return { summary: "운영자가 AI 응답을 중단했어요. 필요하면 다시 요청해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "bridge_disconnected") {
+    return { summary: "외부 연결이 끊겼어요. 연결한 앱에서 다시 연결해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "server_restored") {
+    return { summary: "서버가 복구돼 세션을 다시 확인해야 해요. 중지한 뒤 재개해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "runtime_start_failed") {
+    return { summary: "에이전트를 시작하지 못했어요. 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "runtime_stop_unconfirmed") {
+    return { summary: "에이전트가 정말 끝났는지 확인하지 못했어요. 복구를 눌러 확인해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "runtime_start_recovered_gone") {
+    return { summary: "시작 요청이 서버 복구 전에 끝났어요. 다시 시작해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "runtime_start_abandoned_before_effect") {
+    return { summary: "시작 요청이 승인 전에 취소됐어요. 다시 시작해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "runtime_stop_abandoned_before_effect") {
+    return { summary: "중지 요청이 승인 전에 취소됐어요. 다시 중지해 주세요.", detail: "" };
+  }
   if (session.last_error_code === "runtime_profile_unsupported") {
     return { summary: "저장된 실행 설정을 지금은 사용할 수 없어요. 실행 설정에서 다시 선택해 주세요.", detail: "" };
   }

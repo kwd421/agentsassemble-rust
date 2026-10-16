@@ -137,6 +137,21 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(screen.getByText("provider unavailable").closest("details")).toBeTruthy();
   });
 
+  it("renders a timeout code as one Korean line without English", () => {
+    const session: RoomAgentSession = agentSessionFixture({
+      provider_kind: "opencode_server",
+      runtime_status: "error",
+      last_error_code: "provider_turn_timeout",
+      last_error: "The OpenCode turn timed out.",
+      recovery_required: true,
+    });
+
+    const { container } = render(<AgentSessionDetails session={session} />);
+    expect(screen.getByText("오류 원인 · AI 응답 시간이 초과됐어요. 다시 시도해 주세요.")).toBeTruthy();
+    expect(screen.queryByText(/timed out/)).toBeNull();
+    expect(container.textContent).not.toContain("The OpenCode turn timed out.");
+  });
+
   it.each([undefined, false, true])("requires advertised interrupt support (%s)", async (support) => {
     const onControl = vi.fn().mockResolvedValue(undefined);
     const session = agentSessionFixture({ runtime_status: "busy", enabled: true });
