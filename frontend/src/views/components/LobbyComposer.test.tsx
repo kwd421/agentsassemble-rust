@@ -422,4 +422,25 @@ describe("LobbyComposer", () => {
     expect(say).not.toHaveBeenCalled();
     expect(screen.queryByText("map.png")).toBeNull();
   });
+
+  it("shows a picked mention by its readable name but sends the wire markup", async () => {
+    const say = vi.fn().mockResolvedValue({ events: [] });
+    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
+    render(
+      <RoomSocketProvider socket={socket}>
+        <LobbyComposer meetingId="room-a" onPosted={vi.fn()}
+          mentionables={[{ token: "opencode-87a106c9-test", label: "claude-haiku-5-5", participantKind: "agent" }]} />
+      </RoomSocketProvider>
+    );
+    const input = screen.getByLabelText("채팅 입력") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "@cl" } });
+    input.selectionStart = input.value.length;
+    fireEvent.keyUp(input);
+    fireEvent.click(await screen.findByRole("option", { name: "claude-haiku-5-5" }));
+    expect(input.value).toBe("@claude-haiku-5-5 ");
+    expect(input.value).not.toContain("opencode-87a106c9-test");
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+    await waitFor(() => expect(say).toHaveBeenCalledTimes(1));
+    expect(say).toHaveBeenCalledWith(expect.objectContaining({ message: "<@opencode-87a106c9-test>" }));
+  });
 });

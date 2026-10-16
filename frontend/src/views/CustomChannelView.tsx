@@ -6,6 +6,7 @@ import type { MessagePinsAuthority, RoomChannel, RoomSearchResult } from "../api
 import type { useChannelTranscript } from "../app/useChannelTranscript";
 import type { CanonicalParticipantProfile } from "../lib/canonicalRoomProjection";
 import type { Mentionable } from "../lib/mentionComposerModel";
+import { resolveMentionMarkup } from "../lib/mentionComposerModel";
 import { MAX_TEXT_CHAT_CHARACTERS } from "../types/generated/TEXT_CHAT_WIRE";
 import ChannelHeader, { type ChannelHeaderActions, type ChannelSearchScope } from "./components/ChannelHeader";
 import ChannelMessageRows from "./components/ChannelMessageRows";
@@ -117,9 +118,9 @@ export default function CustomChannelView({
     if (disabled || !value.trim() || tooLong) return;
     setSendError({ identity, message: "" });
     try {
-      if (replyTo) await transcript.send(value, draft.retry, replyTo);
-      else if (draft.retry) await transcript.send(value, draft.retry);
-      else await transcript.send(value);
+      if (replyTo) await transcript.send(resolveMentionMarkup(value, mentionables), draft.retry, replyTo);
+      else if (draft.retry) await transcript.send(resolveMentionMarkup(value, mentionables), draft.retry);
+      else await transcript.send(resolveMentionMarkup(value, mentionables));
       if (!mounted.current || selectionRef.current !== selection) return;
       setDraft({ identity, value: "" }); focusAfterSend.current = true;
     } catch (cause) {

@@ -3,6 +3,7 @@ import { AtSign, MessageSquare, Send, Smile, X } from "lucide-react";
 import type { useRoomSideChat } from "../../app/useRoomSideChat";
 import type { RoomSocketHandle } from "../../roomSocketTypes";
 import type { Mentionable } from "../../lib/mentionComposerModel";
+import { resolveMentionMarkup } from "../../lib/mentionComposerModel";
 import { MAX_TEXT_CHAT_CHARACTERS } from "../../types/generated/TEXT_CHAT_WIRE";
 import DiscordText from "./DiscordText";
 import MentionInput from "./MentionInput";
@@ -68,7 +69,7 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
     const scope = chat.scope;
     setSendError({ scope, message: "" });
     try {
-      await chat.send(value, socket);
+      await chat.send(resolveMentionMarkup(value, mentionables), socket);
       if (currentScope.current !== scope) return;
       chat.updateDraft("");
       focusAfterSend.current = true;

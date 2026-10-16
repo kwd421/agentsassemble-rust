@@ -3,6 +3,7 @@ import {
   insertMentionText,
   mentionOptions,
   mentionQueryAtCursor,
+  resolveMentionMarkup,
 } from "./mentionComposerModel";
 import { roomMentionables } from "./roomMentionables";
 import { agentSessionFixture } from "../test/agentSession";
@@ -92,8 +93,8 @@ describe("roomMentionables", () => {
     ]);
   });
 
-  it("inserts a participant id while preserving a spaced display label", () => {
-    const expectedMention = "<@sol-dm> ";
+  it("inserts the readable display label while the wire markup resolves at send time", () => {
+    const expectedMention = "@Sol — 던전 마스터 ";
     const mentionable = roomMentionables({
       displayResourceBase: "http://127.0.0.1:43123",
       viewerParticipantId: "host",
@@ -123,6 +124,7 @@ describe("roomMentionables", () => {
       message: expectedMention,
       cursor: expectedMention.length,
     });
+    expect(resolveMentionMarkup(expectedMention, [mentionable])).toBe("<@sol-dm> ");
   });
 
   it("takes agent presentation while keeping ownership room-owned", () => {

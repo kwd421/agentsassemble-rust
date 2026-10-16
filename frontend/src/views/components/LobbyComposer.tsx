@@ -25,6 +25,7 @@ import { isUnauthorizedApiError } from "../../lib/apiErrors";
 import type { RoomPostingMode } from "../../lib/roomGuestPosting";
 import type { OutgoingDraft } from "../../lib/outgoingMessages";
 import type { Mentionable } from "../../lib/mentionComposerModel";
+import { resolveMentionMarkup } from "../../lib/mentionComposerModel";
 import { parseVoteCommand } from "../../lib/votePoll";
 import MentionInput from "./MentionInput";
 import { ReplyDraft, type ReplySource } from "./MessageReply";
@@ -354,7 +355,7 @@ export default function LobbyComposer({
     if (disabled || busy) return;
     const draftMessage = message;
     const draftAttachments = pendingAttachments;
-    const trimmed = draftMessage.trim();
+    const trimmed = resolveMentionMarkup(draftMessage, mentionables).trim();
     let replyToEventId = replyTo?.eventId;
     if (!trimmed && draftAttachments.length === 0) return;
     if (trimmed.toLocaleLowerCase() === "/vote") {

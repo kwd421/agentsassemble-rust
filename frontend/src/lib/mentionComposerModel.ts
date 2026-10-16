@@ -74,6 +74,35 @@ export function formatMentionToken(value: MentionableInput): string {
   return `@${mentionable.token}`;
 }
 
+const MENTION_MARKUP_SPAN_PATTERN = /(<@[^>\r\n]{1,80}>)/g;
+
+function escapeMentionPattern(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// The composer shows the readable name; the wire markup is resolved at send time
+// so the visible draft never carries the raw token.
+export function resolveMentionMarkup(message: string, mentionables: MentionableInput[]): string {
+  const tokensByLabel = new Map<string, string>();
+  for (const raw of mentionables) {
+    const mentionable = normalizedMentionable(raw);
+    if (!mentionable || mentionable.label === mentionable.token) continue;
+    if (!tokensByLabel.has(mentionable.label)) tokensByLabel.set(mentionable.label, mentionable.token);
+  }
+  if (tokensByLabel.size === 0) return message;
+  const labels = [...tokensByLabel.keys()]
+    .sort((left, right) => right.length - left.length)
+    .map(escapeMentionPattern);
+  const pattern = new RegExp(`(^|\\s)@(${labels.join("|")})(?=$|[\\s.,!?;:)\\]}>*~\`#])`, "gu");
+  return message
+    .split(MENTION_MARKUP_SPAN_PATTERN)
+    .map((part, index) => {
+      if (index % 2 === 1) return part;
+      return part.replace(pattern, (_match, prefix, label) => `${prefix}<@${tokensByLabel.get(label)}>`);
+    })
+    .join("");
+}
+
 export function insertMentionText(
   message: string,
   cursor: number,
@@ -81,13 +110,15 @@ export function insertMentionText(
   mentionable: MentionableInput
 ): { message: string; cursor: number } {
   const safeCursor = Math.max(0, Math.min(cursor, message.length));
-  if (!query) {
+  const display = normalizedMentionable(mentionable);
+  if (!query || !display) {
     return {
       message,
       cursor: safeCursor,
     };
   }
-  const token = `${formatMentionToken(mentionable)} `;
+  // The composer shows the readable name; the wire markup is resolved at send time.
+  const token = `@${display.label} `;
   const start = Math.max(0, Math.min(query.start, safeCursor));
   const nextMessage = `${message.slice(0, start)}${token}${message.slice(safeCursor)}`;
   return {
