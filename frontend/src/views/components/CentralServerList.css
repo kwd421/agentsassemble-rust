@@ -1,4 +1,4 @@
-/* Server chooser rows follow Discord's list: icon, name and status on one line. */
+/* Server list rows follow Discord's list: icon, name and status on one line. */
 .dc-server-list {
   display: grid;
   gap: 2px;

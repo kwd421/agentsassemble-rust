@@ -123,7 +123,7 @@ it("keeps this-device closed while the central answer is still checking", () => 
   expect(screen.getByRole("button", { name: "이 기기 서버 열기" })).toHaveProperty("disabled", false);
 });
 
-it("does not expose full or shortened server IDs in the saved chooser", () => {
+it("does not expose full or shortened server IDs in the saved server list", () => {
   const server = { ...host, server_id: "12345678-1234-4234-8234-123456789abc", alias: "" };
   render(<CentralServerList servers={[server]} liveServers={[]} busy={false} onOpen={async () => {}} onRefresh={async () => {}} />);
   expect(screen.getByText("이름 없는 서버")).toBeTruthy();

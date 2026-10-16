@@ -238,7 +238,7 @@ describe("StartupIdentityGate", () => {
     expect(centralMocks.register).not.toHaveBeenCalled();
   });
 
-  it.each(["google", "guest", "recover", "pending"])("%s entry reaches the chooser without a room runtime", async (entry) => {
+  it.each(["google", "guest", "recover", "pending"])("%s entry reaches the server setup notice without a room runtime", async (entry) => {
     centralMocks.configured = true;
     const person = { display_name: "Account" };
     centralMocks.bootstrap.mockResolvedValue({ person, servers: [], server_time: 1 });
@@ -446,7 +446,7 @@ it("requires login after authentication rejection even with an existing local ho
   expect(onComplete).not.toHaveBeenCalled();
 });
 
-it("keeps the saved-server chooser after the first request times out", async () => {
+it("keeps the saved server visible after the first request times out", async () => {
   centralMocks.configured = true;
   centralMocks.session = { person: { person_id: "cached", display_name: "Cached name" } };
   saveCentralDirectoryCache("cached", [{ server_id: "saved", alias: "Saved Mac", icon: "", host_os: "macos", relation: "owner" }]);

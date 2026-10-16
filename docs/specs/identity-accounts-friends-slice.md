@@ -3056,10 +3056,16 @@ Joining a friend's room puts that room into the left server rail and keeps it
 LIVE together with the user's own rooms, Discord-style: the client is
 connected to every host it belongs to at the same time. No reconnect-on-select,
 no navigating the whole window to the friend's origin, and after an app restart
-all joined hosts reconnect automatically. The startup server list exists only
-for when the user owns several server computers (or nothing can be opened).
-With one own server the app goes straight in. App (desktop) and web share
-product UI and semantics; only transport/capabilities differ per platform.
+all joined hosts reconnect automatically. An account's server runs on exactly
+one computer at a time (moving it to another computer is a server move, not
+a second server); this rule is only about the user's OWN server and never
+about joined friends' hosts, of which any number stay live together.
+Startup always goes straight in to the account's one server: this computer
+opens the local host, another device connects to it. A server list or
+notice appears only when nothing can be opened (the server computer is
+offline, a duplicate-host conflict, or the server is retired). App
+(desktop) and web share product UI and semantics; only
+transport/capabilities differ per platform.
 
 This supersedes the single-authority passages below; everything else they say
 about authentication, admission custody, expiry/revocation and failure
@@ -3069,8 +3075,8 @@ credentials/private keys persisted outside trusted owner" (now refined by the
 bearer/device-credential split below); the rail step-1 disconnected-room
 model; the tab-scoped `sessionStorage` member handoff; the desktop
 `open_central_owned_server` window navigation for members; and the
-always-chooser startup (now: chooser only for several own servers or nothing
-openable).
+always-chooser startup (now: startup goes straight in to the account's one
+server, and a list or notice appears only when nothing can be opened).
 
 ### Required behavior
 
@@ -3081,8 +3087,8 @@ openable).
   directory stream per host. A session bearer or child ticket from host A is
   never sent to host B; cross-host use fails closed with an explicit error.
 - Per-host and per-room connection state. There are no server/computer icons
-  in the rail (`ServerRailEntries.tsx` removed; the startup chooser for
-  several own servers stays outside the rail). The computer is an attribute
+in the rail (`ServerRailEntries.tsx` removed; the startup notice for the
+nothing-openable cases stays outside the rail). The computer is an attribute
   of a room, not a rail item. Each room shows local, connected, connecting,
   or disconnected with a specific reason (unreachable, authentication
   rejected, revoked or removed, retired server, unsupported host version,
@@ -3183,14 +3189,19 @@ until a slice becomes active work.
   unchanged. Acceptance: in the packaged app, opening a friend's room keeps
   the window where it is with both hosts live.
 - M4 — startup goes straight in. Files: `StartupIdentityGate.tsx`,
-  `CentralServerList.tsx`. State transition: always-chooser becomes exactly
-  one openable own server opens immediately (local server on this device,
-  account server from another device), zero openable shows setup/empty, two
-  or more own servers show the chooser; joined member hosts reconnect in the
-  background in all cases. Tests: chooser matrix (1/0/N own servers),
+  `CentralServerList.tsx`. State transition: always-chooser becomes the
+  account's one server opens immediately (local server on this device,
+  account server from another device; changing which computer runs the
+  server is a server move, never a second own server), and a list or
+  notice appears only when nothing can be opened (server computer
+  offline, duplicate-host conflict, retired); joined member hosts
+  reconnect in the background in all cases. Tests: startup matrix (one
+  own server opens immediately with no chooser; nothing openable shows
+  setup/notice; duplicate-host conflict shows the keep-choice screen),
   central-outage continuity preserved (open local server from display
-  cache). Acceptance: single-server desktop and web enter directly with no
-  chooser; multi-server still offers the list.
+  cache). Acceptance: desktop and web enter directly with no chooser;
+  a list appears only for the nothing-openable cases, never for
+  several own servers.
 - M5 — per-host version skew and authority hardening. Files: admission
   surface check per host, owner/member role binding per host, unsupported /
   revoked presentation. State transition: assumed-compatible hosts become
@@ -3207,7 +3218,7 @@ Discord-style. The separate server/computer icons are removed from the rail
 `RoomRail`/`AppView`); a room's connection state (connected / connecting /
 disconnected + reason) is shown on that room's icon and in the room's
 disconnected view. The computer is an attribute of a room, not a rail item.
-The startup chooser for several own servers stays outside the rail.
+The startup notice for the nothing-openable cases stays outside the rail.
 B. No cap on the number of joined hosts.
 C. A long-offline friend host: its rooms simply stay disconnected (reason +
 retry); no automatic cleanup prompt; the user removes them with the existing
@@ -3224,5 +3235,8 @@ failure semantics stays.
 Decided without asking (stated for correction): offline hosts show no unread
 counts rather than stale ones; session bearers are never persisted, only the
 device credential plus membership anchor; central gains no polling,
-heartbeats or presence; several own servers always show the chooser (no
-default-pick); first join always keeps explicit consent on both platforms.
+heartbeats or presence; an account's server runs on exactly one computer
+at a time (changing it is a server move), so startup always goes straight
+in to that one server and a list or notice appears only when nothing can
+be opened — this never meant several own servers showing a chooser;
+first join always keeps explicit consent on both platforms.
