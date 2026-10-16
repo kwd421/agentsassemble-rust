@@ -29,6 +29,7 @@ async fn confirmation_is_immutable_owner_private_and_executes_once() -> TestResu
             .as_str()
             .ok_or("channel")?
             .into(),
+        expected_settings_revision: None,
     };
     let message = store
         .execute_channel_message(
@@ -238,6 +239,7 @@ async fn approved_delete_of_a_non_last_channel_keeps_dense_positions() -> TestRe
     let request = DeleteTextChannel {
         request_id: Uuid::new_v4().to_string(),
         channel_id: created_ids[0].clone(),
+        expected_settings_revision: None,
     };
     let pending = store
         .request_delegated_channel_delete::<()>(&authority, &request, |_, _, _| Ok(()))
@@ -257,11 +259,7 @@ async fn approved_delete_of_a_non_last_channel_keeps_dense_positions() -> TestRe
         )
         .await?;
     assert_eq!(outcome.result["state"], "succeeded");
-    let channels = store
-        .snapshot("general", 0, 100)
-        .await?
-        .settings
-        .channels;
+    let channels = store.snapshot("general", 0, 100).await?.settings.channels;
     assert_eq!(channels.len(), 1);
     assert_eq!(channels[0].id, created_ids[1]);
     assert_eq!(channels[0].position, 0);
@@ -291,6 +289,7 @@ async fn declines_expiry_changed_target_and_revoked_authority_are_terminal() -> 
         let request = DeleteTextChannel {
             request_id: Uuid::new_v4().to_string(),
             channel_id: created.outcome.result["target_id"].as_str().unwrap().into(),
+            expected_settings_revision: None,
         };
         let pending = store
             .request_delegated_channel_delete(&authority, &request, |_, _, _| Ok(()))
@@ -427,6 +426,7 @@ async fn request_delete(
             &DeleteTextChannel {
                 request_id: Uuid::new_v4().to_string(),
                 channel_id: channel_id.into(),
+                expected_settings_revision: None,
             },
             |_, _, _| Ok(()),
         )
@@ -552,6 +552,48 @@ async fn unrelated_channel_change_does_not_block_delete_approval() -> TestResult
     assert_eq!(channels[0].id, other);
     assert_eq!(channels[0].name, "Renamed");
     assert_eq!(channels[0].position, 0);
+    Ok(())
+}
+
+// The host emits the request-time settings revision on the wire for old web
+// clients. It is informational only: approval binds the target, and rows
+// stored without it (revision-less host) still parse and approve.
+#[tokio::test]
+async fn outgoing_delete_action_carries_settings_revision() -> TestResult {
+    let (store, authority, _, _dir) = fixture().await?;
+    let target = create_channel(&store, &authority, "Target").await?;
+    let confirmation = request_delete(&store, &authority, &target).await?;
+    let encoded: String = sqlx::query_scalar(
+        "SELECT request_json FROM delegated_action_requests WHERE room_id='general' AND confirmation_id=?",
+    )
+    .bind(&confirmation)
+    .fetch_one(&store.pool)
+    .await?;
+    let request: serde_json::Value = serde_json::from_str(&encoded)?;
+    let revision = request["action"]["expected_settings_revision"]
+        .as_str()
+        .ok_or("expected_settings_revision missing")?;
+    assert!(!revision.is_empty());
+    // Both wire shapes parse: with the revision (old and new hosts) and
+    // without it (the revision-less host).
+    let agentsassemble_domain::ConfirmedRoomAction::DeleteTextChannel(with) =
+        serde_json::from_value(request["action"].clone())?
+    else {
+        return Err("action".into());
+    };
+    assert_eq!(with.expected_settings_revision.as_deref(), Some(revision));
+    let mut bare = request["action"].clone();
+    bare.as_object_mut()
+        .ok_or("action")?
+        .remove("expected_settings_revision");
+    let agentsassemble_domain::ConfirmedRoomAction::DeleteTextChannel(without): agentsassemble_domain::ConfirmedRoomAction =
+        serde_json::from_value(bare)?
+    else {
+        return Err("action".into());
+    };
+    assert_eq!(without.expected_settings_revision, None);
+    assert_eq!(without.request_id, with.request_id);
+    assert_eq!(without.channel_id, with.channel_id);
     Ok(())
 }
 

@@ -2,35 +2,19 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
 pub struct DeleteTextChannel {
     pub request_id: String,
     pub channel_id: String,
-}
-
-impl<'de> Deserialize<'de> for DeleteTextChannel {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct StoredDeleteTextChannel {
-            request_id: String,
-            channel_id: String,
-            // Rows stored before per-target binding carry the whole-room
-            // revision. It is accepted so those rows keep parsing, and ignored:
-            // the stored card name binds the target instead.
-            #[serde(default)]
-            expected_settings_revision: Option<String>,
-        }
-        let stored = StoredDeleteTextChannel::deserialize(deserializer)?;
-        let _ = stored.expected_settings_revision;
-        Ok(DeleteTextChannel {
-            request_id: stored.request_id,
-            channel_id: stored.channel_id,
-        })
-    }
+    /// Settings revision at request time. Informational only: approval binds
+    /// the target (channel id plus card name), never this revision. Kept on
+    /// the wire so old web clients keep validating; new clients accept the
+    /// action with or without it (non-empty when present). Stored rows from
+    /// the revision-less host parse as `None` and are honored the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub expected_settings_revision: Option<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]

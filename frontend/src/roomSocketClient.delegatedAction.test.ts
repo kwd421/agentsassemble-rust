@@ -28,6 +28,18 @@ describe("owner confirmation socket projection", () => {
     expect(readDelegatedActionRequests(handle)).toEqual([]);
     handle.close();
   });
+  it("accepts the channel delete with or without the informational revision but rejects unknown keys", () => {
+    const withRevision = structuredClone(request);
+    if (withRevision.action.action === "delete_text_channel") withRevision.action.expected_settings_revision = "rev-1";
+    expect(parseDelegatedActionRequest(structuredClone(withRevision))).toEqual(withRevision);
+    expect(parseDelegatedActionRequest(structuredClone(request))).toEqual(request);
+    const emptyRevision = structuredClone(request);
+    if (emptyRevision.action.action === "delete_text_channel") (emptyRevision.action as Record<string, unknown>).expected_settings_revision = "";
+    expect(() => parseDelegatedActionRequest(emptyRevision)).toThrow();
+    const extra = structuredClone(request);
+    if (extra.action.action === "delete_text_channel") (extra.action as Record<string, unknown>).unexpected = "x";
+    expect(() => parseDelegatedActionRequest(extra)).toThrow();
+  });
   it("parses a bound agent-creation request so the owner card can render it", () => {
     const created: DelegatedActionRequest = {
       ...request,

@@ -209,6 +209,7 @@ async fn pending_channel_delete(
             .as_str()
             .ok_or("channel")?
             .into(),
+        expected_settings_revision: None,
     };
     let pending = store
         .request_delegated_channel_delete::<()>(authority, &request, |_, _, _| Ok(()))

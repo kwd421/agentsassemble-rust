@@ -111,6 +111,19 @@ fn cancelled_receipt(error: &PersistenceError) -> Value {
     json!({"status":"rejected","code":"confirmation_cancelled","retryable":false,"cause":{"code":code,"message":message}})
 }
 
+pub(crate) fn same_confirmed_action(
+    stored: &ConfirmedRoomAction,
+    incoming: &ConfirmedRoomAction,
+) -> bool {
+    match (stored, incoming) {
+        (ConfirmedRoomAction::DeleteTextChannel(a), ConfirmedRoomAction::DeleteTextChannel(b)) => {
+            // The settings revision is informational only (kept for old web
+            // clients); exact retries compare the bound target.
+            a.request_id == b.request_id && a.channel_id == b.channel_id
+        }
+        _ => stored == incoming,
+    }
+}
 pub(crate) async fn retry_in(
     tx: &mut Transaction<'_, Sqlite>,
     authority: &DelegateRoomAuthority,
@@ -120,7 +133,9 @@ pub(crate) async fn retry_in(
     let Some(row) = sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND request_id=?")
         .bind(authority.room_id()).bind(authority.delegate_id()).bind(request_id).fetch_optional(&mut **tx).await? else { return Ok(None); };
     let binding: Binding = serde_json::from_str(row.get("binding_json"))?;
-    if item(&row)?.action != *action || !binding.authority.same_delegate(authority) {
+    if !same_confirmed_action(&item(&row)?.action, action)
+        || !binding.authority.same_delegate(authority)
+    {
         return Err(rejected(
             "request_conflict",
             "Request identity is bound to a different action or execution.",

@@ -82,6 +82,15 @@ honored under the same per-target check against their stored card name, because
 the per-target check is strictly narrower and never approves a different target
 than the card showed. The direct (non-confirmed) `rename_text_channel` keeps
 its AI-supplied `expected_settings_revision` on purpose and is unchanged.
+Version skew for the confirmed delete action: the web client (served from
+central) and each host run independently, so all four combinations must keep
+the owner card. The host always emits `expected_settings_revision` (the
+settings revision at request time, informational only; approval never
+compares it) so old web clients keep passing their exact-key check. The new
+web client accepts the delete action with or without
+`expected_settings_revision` (non-empty when present) and still rejects any
+other unknown key; rows stored without the field parse as absent and approve
+under the same per-target check.
 Only that human may approve/decline; another operator, guest or AI cannot substitute.
 Approving a full-access agent start requires that human's explicit full-access
 acknowledgement inside the approval; without it approval is refused and the request

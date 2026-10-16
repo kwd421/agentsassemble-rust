@@ -90,7 +90,9 @@ impl SqliteStore {
         let current = settings_in(&mut tx, authority.room_id()).await?;
         // The request binds its own target only: the channel must exist now and
         // its card name is stored as the target name. Unrelated room changes
-        // never block this request or its later approval.
+        // never block this request or its later approval. The settings
+        // revision at request time is still emitted on the wire (informational
+        // only, for old web clients); approval never compares it.
         crate::room_channels::require_text_channel(
             &mut tx,
             authority.room_id(),
@@ -102,6 +104,14 @@ impl SqliteStore {
             .iter()
             .find(|c| c.id == request.channel_id)
             .ok_or_else(|| rejected("channel_not_found", "Text channel is unavailable."))?;
+        let bound = DeleteTextChannel {
+            request_id: request.request_id.clone(),
+            channel_id: request.channel_id.clone(),
+            expected_settings_revision: Some(
+                agentsassemble_domain::public_settings(&current)?.settings_revision,
+            ),
+        };
+        let action = ConfirmedRoomAction::DeleteTextChannel(bound);
         let result = create_in(&mut tx, authority, &proof, action, target.name.clone(), "Deletes the channel and its message text, pins and search records. Event sequence and actor records are retained.", admit).await?;
         tx.commit().await?;
         Ok(result)
