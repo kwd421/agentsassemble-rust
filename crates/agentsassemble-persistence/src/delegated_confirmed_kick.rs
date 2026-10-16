@@ -79,7 +79,9 @@ pub(crate) async fn kick_participant_in(
         &json!({"participant_id": kick.participant_id}),
     )?;
     let current = load_kick_target(tx, &proof.owner.room_id, &kick.participant_id).await?;
-    if current.created_at != kick.expected_created_at {
+    if current.created_at != kick.expected_created_at
+        || current.updated_at != kick.expected_updated_at
+    {
         return Err(rejected(
             "target_changed",
             "The target participant changed before approval.",
@@ -218,6 +220,7 @@ impl SqliteStore {
             participant_id: params.participant_id.clone(),
             params: params.clone(),
             expected_created_at: target.created_at,
+            expected_updated_at: target.updated_at,
         });
         let result = create_in(
             &mut tx,

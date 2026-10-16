@@ -91,6 +91,7 @@ describe("owner confirmation socket projection", () => {
         action: "kick_participant", request_id: request.confirmation_id, participant_id: "guest-1",
         params: { request_id: request.confirmation_id, participant_id: "guest-1" },
         expected_created_at: "2026-10-13T00:00:00Z",
+        expected_updated_at: "2026-10-13T00:00:00Z",
       },
       target_name: "Guest", consequences: "Removes the person Guest from the room",
     };

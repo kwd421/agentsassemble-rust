@@ -57,8 +57,8 @@ export function parseDelegatedActionRequest(value: unknown): DelegatedActionRequ
     assertExactKeys(params, ["request_id", "agent_id"], "confirmed removal params");
     if (params.request_id !== action.request_id || params.agent_id !== action.agent_id) throw new Error("Invalid confirmed removal params");
   } else if (action.action === "kick_participant") {
-    assertExactKeys(action, ["action", "request_id", "participant_id", "params", "expected_created_at"], "confirmed participant kick");
-    if (["request_id", "participant_id"].some((k) => typeof action[k] !== "string" || !action[k]) || typeof action.expected_created_at !== "string" || !Number.isFinite(Date.parse(action.expected_created_at))) throw new Error("Invalid confirmed kick identity");
+    assertExactKeys(action, ["action", "request_id", "participant_id", "params", "expected_created_at", "expected_updated_at"], "confirmed participant kick");
+    if (["request_id", "participant_id"].some((k) => typeof action[k] !== "string" || !action[k]) || typeof action.expected_created_at !== "string" || !Number.isFinite(Date.parse(action.expected_created_at)) || typeof action.expected_updated_at !== "string" || !Number.isFinite(Date.parse(action.expected_updated_at))) throw new Error("Invalid confirmed kick identity");
     const params = strictRecord(action.params, "confirmed kick params");
     assertExactKeys(params, ["request_id", "participant_id"], "confirmed kick params");
     if (params.request_id !== action.request_id || params.participant_id !== action.participant_id) throw new Error("Invalid confirmed kick params");

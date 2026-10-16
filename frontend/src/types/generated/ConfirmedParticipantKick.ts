@@ -4,7 +4,10 @@ import type { RequestKickParticipant } from "./RequestKickParticipant.js";
 /**
  * Owner-confirmed human participant kick. `params` are the AI-supplied request
  * identity and target id as received; `expected_created_at` seals the target
- * person's admission identity, so a missing, replaced, re-admitted or
- * already-removed person refuses.
+ * person's admission identity and `expected_updated_at` seals its latest state, so
+ * a missing, replaced, re-admitted or already-removed person refuses. The admission
+ * core moves `updated_at` on every return to `Joined` while leave keeps
+ * `created_at`, so a leave-and-rejoin inside the confirmation window refuses even
+ * though the creation identity is unchanged.
  */
-export type ConfirmedParticipantKick = { request_id: string, participant_id: string, params: RequestKickParticipant, expected_created_at: string, };
+export type ConfirmedParticipantKick = { request_id: string, participant_id: string, params: RequestKickParticipant, expected_created_at: string, expected_updated_at: string, };

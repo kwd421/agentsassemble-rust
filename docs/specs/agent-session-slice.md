@@ -74,7 +74,8 @@ the owner card carries the target name and states that consequence. Confirmed hu
 kicks (`request_kick_participant(request_id, participant_id)`) go through the same
 participant-removal gate as the owner's own kick, never the owner themself, the host,
 an AI, or anyone the owner could not remove, and bind the target's current identity
-so a missing, replaced, re-admitted or already-removed person refuses with
+(`created_at` and `updated_at`, where the admission core moves `updated_at` on every
+return to `Joined` while leave keeps `created_at`) so a missing, replaced, re-admitted or already-removed person refuses with
 `target_changed`. Removal ends the target's room sessions — their live browser
 session is closed by the same revocation broadcast the owner's own kick sends — and
 revokes their access exactly as today; the agents and companions they own are not

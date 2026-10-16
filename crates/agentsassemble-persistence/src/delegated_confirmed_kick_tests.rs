@@ -1,4 +1,8 @@
 use super::*;
+use crate::{
+    HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence,
+    HumanSessionAuthorization, PreparedHumanAdmission,
+};
 use agentsassemble_domain::{
     AuthenticatedPrincipal, ConfirmationDecision, ConfirmedRoomAction, DecideDelegatedAction,
     InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, ParticipantStatus, RequestKickParticipant,
@@ -251,6 +255,161 @@ async fn kick_refuses_a_target_re_admitted_before_approval() -> TestResult {
     assert_eq!(live_session_state(&store, GUEST_ID).await?, "active");
     Ok(())
 }
+
+#[tokio::test]
+async fn kick_refuses_a_target_who_left_and_rejoined_before_approval() -> TestResult {
+    let (store, owner, delegate, guest) = rejoinable_fixture().await?;
+    let target = guest.principal().participant_id.clone();
+    let id = bound_kick(&store, &delegate, &target).await?;
+    // The guest leaves: membership ends but the creation identity is kept.
+    store
+        .execute_room_session_participant_leave(
+            &crate::RoomSessionAuthorization::Human(guest),
+            &Uuid::new_v4().to_string(),
+            &json!({}),
+        )
+        .await?;
+    assert_eq!(
+        store.participant("general", &target).await?.status,
+        ParticipantStatus::Left
+    );
+    // The same browser rejoins through a second reusable invite: the participant row
+    // returns to Joined with its creation identity unchanged.
+    rejoin(&store).await?;
+    assert_eq!(
+        store.participant("general", &target).await?.status,
+        ParticipantStatus::Joined
+    );
+    let ack = store
+        .decide_delegated_action(
+            RoomMutationAuthority::TrustedPrincipal(&owner),
+            &DecideDelegatedAction {
+                confirmation_id: id,
+                decision: ConfirmationDecision::Approve,
+                full_access_acknowledged: None,
+            },
+        )
+        .await?;
+    assert_eq!(ack.result["state"], "failed");
+    assert_eq!(ack.result["receipt"]["code"], "target_changed");
+    assert_eq!(
+        store.participant("general", &target).await?.status,
+        ParticipantStatus::Joined
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM human_room_sessions WHERE room_id='general' AND participant_id=? AND state='active'"
+        )
+        .bind(&target)
+        .fetch_one(&store.pool)
+        .await?,
+        1
+    );
+    Ok(())
+}
+
+/// A guest admitted through a reusable invite, with the live session kept for leave.
+async fn rejoinable_fixture() -> Result<
+    (
+        SqliteStore,
+        AuthenticatedPrincipal,
+        DelegateRoomAuthority,
+        HumanSessionAuthorization,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    store
+        .bootstrap_local_authority(&Uuid::new_v4().to_string(), "Host")
+        .await?;
+    store
+        .create_room_for_local_operator(&Uuid::new_v4().to_string(), "general", "General")
+        .await?;
+    insert_reusable_invite(&store, REJOIN_SIGNED, REJOIN_JOIN, "rejoin-guest").await?;
+    let now = chrono::Utc::now();
+    let request = PreparedHumanAdmission::prepare(
+        HumanInviteCredentialEvidence::JoinCode {
+            fingerprint: REJOIN_JOIN,
+        },
+        REJOIN_BROWSER,
+        &HumanAdmissionInput {
+            request_id: Uuid::new_v4().to_string(),
+            meeting_id_assertion: "general".to_owned(),
+            display_name: "Rejoin Guest".to_owned(),
+            participant_type: "human".to_owned(),
+            owner_display_name: "Host".to_owned(),
+            client_id: "rejoin-browser".to_owned(),
+            avatar_image_url: String::new(),
+        },
+    )?;
+    assert!(matches!(
+        store.admit_human(&request, now).await?,
+        HumanAdmissionDecision::Admitted(_)
+    ));
+    let fingerprint: [u8; 32] = sqlx::query_scalar::<_, Vec<u8>>(
+        "SELECT session_fingerprint FROM human_room_sessions WHERE state = 'active'",
+    )
+    .fetch_one(&store.pool)
+    .await?
+    .try_into()
+    .map_err(|value: Vec<u8>| format!("invalid fingerprint length: {}", value.len()))?;
+    let guest = store.authorize_human_session(&fingerprint).await?;
+    let owner = crate::human_session_authority_tests::local_operator_principal();
+    let delegate = director(&store).await?;
+    Ok((store, owner, delegate, guest))
+}
+
+async fn rejoin(store: &SqliteStore) -> Result<(), Box<dyn std::error::Error>> {
+    insert_reusable_invite(&store, REJOIN_SIGNED_TWO, REJOIN_JOIN_TWO, "unused").await?;
+    let request = PreparedHumanAdmission::prepare(
+        HumanInviteCredentialEvidence::JoinCode {
+            fingerprint: REJOIN_JOIN_TWO,
+        },
+        REJOIN_BROWSER,
+        &HumanAdmissionInput {
+            request_id: Uuid::new_v4().to_string(),
+            meeting_id_assertion: "general".to_owned(),
+            display_name: "Rejoin Guest".to_owned(),
+            participant_type: "human".to_owned(),
+            owner_display_name: "Host".to_owned(),
+            client_id: "rejoin-browser".to_owned(),
+            avatar_image_url: String::new(),
+        },
+    )?;
+    assert!(matches!(
+        store.admit_human(&request, chrono::Utc::now()).await?,
+        HumanAdmissionDecision::Admitted(_)
+    ));
+    Ok(())
+}
+
+async fn insert_reusable_invite(
+    store: &SqliteStore,
+    signed: [u8; 32],
+    join: [u8; 32],
+    base_participant_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'general', ?, 'Rejoin Guest', 'read_write', 0, 0, ?, 0, ?, ?)",
+    )
+    .bind(hex::encode(&signed[..8]))
+    .bind(signed.as_slice())
+    .bind(join.as_slice())
+    .bind(base_participant_id)
+    .bind((now + chrono::Duration::hours(1)).timestamp_micros())
+    .bind(agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
+    .bind((now - chrono::Duration::minutes(1)).timestamp_micros())
+    .execute(&store.pool)
+    .await?;
+    Ok(())
+}
+
+const REJOIN_SIGNED: [u8; 32] = [0x71; 32];
+const REJOIN_JOIN: [u8; 32] = [0x72; 32];
+const REJOIN_BROWSER: [u8; 32] = [0x73; 32];
+const REJOIN_SIGNED_TWO: [u8; 32] = [0x74; 32];
+const REJOIN_JOIN_TWO: [u8; 32] = [0x75; 32];
 
 #[tokio::test]
 async fn a_guest_ai_cannot_kick_anyone() -> TestResult {

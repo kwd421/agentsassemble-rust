@@ -171,8 +171,11 @@ pub struct ConfirmedAgentRemove {
 }
 /// Owner-confirmed human participant kick. `params` are the AI-supplied request
 /// identity and target id as received; `expected_created_at` seals the target
-/// person's admission identity, so a missing, replaced, re-admitted or
-/// already-removed person refuses.
+/// person's admission identity and `expected_updated_at` seals its latest state, so
+/// a missing, replaced, re-admitted or already-removed person refuses. The admission
+/// core moves `updated_at` on every return to `Joined` while leave keeps
+/// `created_at`, so a leave-and-rejoin inside the confirmation window refuses even
+/// though the creation identity is unchanged.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ConfirmedParticipantKick {
@@ -180,6 +183,8 @@ pub struct ConfirmedParticipantKick {
     pub participant_id: String,
     pub params: crate::RequestKickParticipant,
     pub expected_created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub expected_updated_at: DateTime<Utc>,
 }
 /// Owner-confirmed HUMAN room invite. `params` are the AI-supplied invite fields as
 /// received; request time and approval both run the owner's own invite-policy
