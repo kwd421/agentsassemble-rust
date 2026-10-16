@@ -56,7 +56,7 @@ describe("messageAttachmentDownload", () => {
       close: () => { transport.active = false; for (const callback of callbacks) callback(); }
     };
     installRemoteWorkspace({ transport: transport as unknown as RemoteTransport,
-      owner: { sessionToken: "download-owner" } as never, deviceToken: "device", clientId: "client" });
+      owner: { sessionToken: "download-owner", serverId: "download" } as never, deviceToken: "device", clientId: "client" });
     desktopMock.isDesktop.mockReturnValue(false);
     createObjectURL.mockReturnValue("blob:displayed-original");
     try {

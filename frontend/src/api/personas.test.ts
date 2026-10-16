@@ -109,8 +109,8 @@ function remoteLibrary(owner = true) {
     onClose: (fn: () => void) => { callbacks.add(fn); return () => callbacks.delete(fn); },
     close: () => { remote.active = false; for (const fn of callbacks) fn(); } };
   installRemoteWorkspace({ transport: remote as unknown as RemoteTransport,
-    owner: owner ? { sessionToken: "root-persona", generation: 17 } as never : null,
-    member: owner ? undefined : { sessionToken: "member-persona" } as never,
+    owner: owner ? { sessionToken: "root-persona", generation: 17, serverId: "persona-host" } as never : null,
+    member: owner ? undefined : { sessionToken: "member-persona", serverSurface: { server_id: "persona-host" } } as never,
     deviceToken: "remote-device", clientId: "remote-client" });
   return remote;
 }

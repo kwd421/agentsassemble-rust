@@ -3080,12 +3080,15 @@ openable).
   keyed by `server_id`: one transport, one owner/member session and one
   directory stream per host. A session bearer or child ticket from host A is
   never sent to host B; cross-host use fails closed with an explicit error.
-- Per-server and per-room connection state. Each rail server shows connected,
-  connecting, or disconnected with a specific reason (unreachable,
-  authentication rejected, revoked or removed, retired server, unsupported host
-  version, central-unconfirmed). Each room shows local, connected, or
-  disconnected with the same reason. Reasons use plain Korean 해요체; protocol
-  and key jargon stays off screen.
+- Per-host and per-room connection state. There are no server/computer icons
+  in the rail (`ServerRailEntries.tsx` removed; the startup chooser for
+  several own servers stays outside the rail). The computer is an attribute
+  of a room, not a rail item. Each room shows local, connected, connecting,
+  or disconnected with a specific reason (unreachable, authentication
+  rejected, revoked or removed, retired server, unsupported host version,
+  central-unconfirmed) on that room's icon and in the room's disconnected
+  view. Reasons use plain Korean 해요체; protocol and key jargon stays off
+  screen.
 - One host offline never affects the others. Its rooms show the disconnected
   view with the reason and a per-host retry action; every other host keeps
   working, including sending and receiving. Retry is per host with the
@@ -3093,10 +3096,10 @@ openable).
   polling/heartbeats are added. Host liveness is learned only from that
   host's own directory stream and sockets.
 - Unread and mentions per host. Per-room unread keeps its existing owner
-  (`LobbyView` events versus read cursor); the rail aggregates per host from
-  those per-room states: a count badge plus a mention marker when any room on
-  that host mentions the user. Counts are derived, never authoritative. An
-  offline host shows no counts (unknown is shown as unknown, never
+  (`LobbyView` events versus read cursor) and the rooms-only rail shows that
+  per-room state unchanged. Per-host aggregates stay derived from per-room
+  state, never authoritative, and the rooms-only rail carries no per-host
+  badge. An offline host shows no counts (unknown is shown as unknown, never
   fabricated); on reconnect the host's live state recomputes them.
 - Owner vs member authority per host. Each host independently owns exactly one
   role for this client: owner (local bootstrap/operator session or a
@@ -3154,12 +3157,13 @@ until a slice becomes active work.
   `frontend/src/lib/remote/remoteWorkspace.ts` (registry keyed by
   `server_id`), `useRoomDirectory.ts`, `useAppController.tsx`,
   `useCentralOwnerWorkspace.ts`, `roomDockModel.ts` (merge rooms from every
-  connected host; only a host's own rooms go disconnected when it drops),
-  rail/badge/disconnected-view presentation. State transition: single live
-  workspace with placeholders becomes N live host sessions with per-server
-  and per-room connection state. Tests: per-host install/close isolation,
+  live host; only a host's own rooms go disconnected when it drops),
+  rooms-only rail (`ServerRailEntries.tsx` removed, `RoomRail.tsx`,
+  `AppView.tsx`) plus badge/disconnected-view presentation. State transition: single live
+  workspace with placeholders becomes N live host sessions with per-room
+  connection state from each room's own host session. Tests: per-host install/close isolation,
   cross-host bearer refusal, merge keeps host B live while host A drops,
-  per-host unread/mention aggregation from per-room state. Acceptance: own
+  rail renders no server icons and shows per-room state. Acceptance: own
   server plus one joined host live together; stopping the joined host leaves
   own rooms fully usable with the joined rooms showing reason plus retry.
 - M2 — durable member anchor and restart reconnect. Files:
@@ -3195,14 +3199,27 @@ until a slice becomes active work.
   cannot be revived by replay. Acceptance: mixed-version hosts in the real
   app show the new host as unsupported while old hosts keep working.
 
-### Open product questions for the owner
+### Owner answers (2026-10-17)
 
-1. How many joined hosts may one user keep live at once (resource and rail
-   UX cap)?
-2. A friend's host offline for a long time: after how long do we prompt
-   cleanup of its rooms and anchor instead of showing disconnected forever?
-3. When a friend removes the user: keep a revoked tombstone row with a
-   re-request path, or drop the server from the rail?
+A. The left rail shows ROOMS only (own rooms and every joined room),
+Discord-style. The separate server/computer icons are removed from the rail
+(`frontend/src/views/components/ServerRailEntries.tsx` and its use in
+`RoomRail`/`AppView`); a room's connection state (connected / connecting /
+disconnected + reason) is shown on that room's icon and in the room's
+disconnected view. The computer is an attribute of a room, not a rail item.
+The startup chooser for several own servers stays outside the rail.
+B. No cap on the number of joined hosts.
+C. A long-offline friend host: its rooms simply stay disconnected (reason +
+retry); no automatic cleanup prompt; the user removes them with the existing
+leave action.
+D. Removed/kicked/revoked by the friend: the room disappears from the rail
+(no tombstone).
+
+Provenance note: the owner never decided the single-authority model; it
+came from implementation commits 0866b39c/eb9b500f (2026-10-05). The
+single-authority passages below are superseded as stated above; everything
+else they say about authentication, admission custody, expiry/revocation and
+failure semantics stays.
 
 Decided without asking (stated for correction): offline hosts show no unread
 counts rather than stale ones; session bearers are never persisted, only the

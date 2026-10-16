@@ -25,7 +25,7 @@ function workspace() {
       : new Response(JSON.stringify(path === "/api/attachments" ? { attachment: { url: profile.avatar_image_url } } : { profile }))),
     onClose: (fn: () => void) => { callbacks.add(fn); return () => callbacks.delete(fn); },
     close: () => { transport.active = false; for (const fn of callbacks) fn(); } };
-  installRemoteWorkspace({ transport: transport as unknown as RemoteTransport, owner: { sessionToken: token } as never,
+  installRemoteWorkspace({ transport: transport as unknown as RemoteTransport, owner: { sessionToken: token, serverId: "host" } as never,
     deviceToken: "device", clientId: "client" });
   const invoke = vi.fn(); Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
   const plain = vi.fn(); vi.stubGlobal("fetch", plain);

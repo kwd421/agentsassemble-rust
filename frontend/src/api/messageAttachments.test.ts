@@ -99,7 +99,7 @@ describe("lobby message-attachment HTTP authority", () => {
     const fetch = vi.fn().mockResolvedValue(attachmentResponse(bytes));
     const transport = { hello: { origin: "https://host.test" }, active: true, onClose: () => () => {}, close() {}, fetch };
     installRemoteWorkspace({ transport: transport as unknown as RemoteTransport,
-      owner: { sessionToken: "resource-owner" } as never, deviceToken: "device", clientId: "client" });
+      owner: { sessionToken: "resource-owner", serverId: "host" } as never, deviceToken: "device", clientId: "client" });
     const blob = await fetchMessageAttachmentBlob({ ...attachment, size: bytes.length }, "general",
       { kind: "remote", sessionToken: "resource-owner" }, "download");
     expect(blob.size).toBe(bytes.length);
@@ -430,7 +430,7 @@ it.each([false, true])("uses preview only on an advertised encrypted channel (%s
   const transport = { hello: { origin: "https://preview.test" }, active: true,
     supportsImagePreview: () => supported, onClose: () => () => {}, close() {}, fetch };
   installRemoteWorkspace({ transport: transport as unknown as RemoteTransport,
-    owner: { sessionToken: "preview-owner" } as never, deviceToken: "device", clientId: "client" });
+    owner: { sessionToken: "preview-owner", serverId: "preview" } as never, deviceToken: "device", clientId: "client" });
   try {
     const blob = await fetchMessageAttachmentBlob(image, "general", { kind: "remote", sessionToken: "preview-owner" }, "preview");
     expect(fetch).toHaveBeenCalledOnce();

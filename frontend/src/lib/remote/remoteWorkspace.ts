@@ -4,8 +4,12 @@ export type SecureMemberEntry = { server_id: string; registration_epoch: string;
 import type { CentralOwnerWorkspace } from "../central/ownerWorkspace";
 import { RemoteTransport, connectionEnded } from "./remoteTransport";
 
-type Workspace = { transport: RemoteTransport; owner: CentralOwnerWorkspace | null; member?: RoomGuestSession; deviceToken: string; clientId: string };
-let workspace: Workspace | null = null;
+type WorkspaceInstall = { transport: RemoteTransport; owner: CentralOwnerWorkspace | null; member?: RoomGuestSession; deviceToken: string; clientId: string };
+type Workspace = WorkspaceInstall & { serverId: string };
+// One live entry per host, keyed by server_id in install order. Installing
+// host B never closes host A: each entry owns its transport and session,
+// and routing below always resolves the bearer to its own transport.
+const workspaces = new Map<string, Workspace>();
 let pendingMember: SecureMemberEntry | null = null;
 export const pendingMemberSnapshot = () => pendingMember;
 export function selectRemoteMember(entry: SecureMemberEntry | null) { pendingMember = entry; for (const listener of listeners) listener(); }
@@ -13,7 +17,17 @@ const listeners = new Set<() => void>();
 // Entries remain until page disposal, including after a channel ends: an old
 // bearer must never fall through to a plaintext request.
 const sessions = new Map<string, { transport: RemoteTransport | null; origin: string }>();
-export const remoteWorkspaceSnapshot = () => workspace;
+function lastWorkspace(): Workspace | null {
+  let current: Workspace | null = null;
+  for (const entry of workspaces.values()) current = entry;
+  return current;
+}
+// Transitional single-context selector: the most recently installed live
+// entry. Per-host consumers resolve through remoteWorkspaceFor or the bearer
+// binding instead.
+export const remoteWorkspaceSnapshot = () => lastWorkspace();
+export const remoteWorkspacesSnapshot = (): Workspace[] => [...workspaces.values()];
+export const remoteWorkspaceFor = (serverId: string): Workspace | null => workspaces.get(serverId) ?? null;
 export function subscribeRemoteWorkspace(listener: () => void) {
   listeners.add(listener); return () => { listeners.delete(listener); };
 }
@@ -23,23 +37,36 @@ export function bindRemoteSession(token: string, transport: RemoteTransport) {
   transport.onClose(() => { if (sessions.get(token) === binding) binding.transport = null; });
 }
 export function remoteSessionTransport(token?: string) { return token ? sessions.get(token)?.transport ?? undefined : undefined; }
-export function productWorkspaceOrigin() { return workspace?.transport.hello.origin ?? (typeof window !== "undefined" ? window.location.origin : ""); }
+export function productWorkspaceOrigin() { return lastWorkspace()?.transport.hello.origin ?? (typeof window !== "undefined" ? window.location.origin : ""); }
 export function sessionHostOrigin(token: string) { return sessions.get(token)?.origin ?? (typeof window !== "undefined" ? window.location.origin : ""); }
-export function installRemoteWorkspace(next: Workspace) {
-  workspace?.transport.close();
-  workspace = next; pendingMember = null;
+export function installRemoteWorkspace(next: WorkspaceInstall) {
+  const serverId = next.owner?.serverId || next.member?.serverSurface.server_id || "";
+  if (!serverId) throw new Error("서버를 확인하지 못했어요. 서버 목록에서 다시 연결해 주세요.");
+  const advertised = next.transport.hello.server_id;
+  if (advertised && advertised !== serverId) throw new Error("선택한 서버와 연결이 일치하지 않습니다.");
+  // Replacing one host closes only that host's previous transport.
+  workspaces.get(serverId)?.transport.close();
+  workspaces.delete(serverId);
+  workspaces.set(serverId, { ...next, serverId });
+  pendingMember = null;
   bindRemoteSession(next.owner?.sessionToken || next.member!.sessionToken, next.transport);
   for (const listener of listeners) listener();
 }
-export function closeRemoteWorkspace() {
-  workspace?.transport.close(); workspace = null;
+export function closeRemoteWorkspace(serverId?: string) {
+  if (serverId === undefined) {
+    for (const entry of workspaces.values()) entry.transport.close();
+    workspaces.clear();
+  } else {
+    workspaces.get(serverId)?.transport.close();
+    workspaces.delete(serverId);
+  }
   for (const listener of listeners) listener();
 }
 const plainUploads = new Map<string, { transfer: boolean; limit: number }>();
 export function messageAttachmentCapabilities(token: string, path: string) {
   const transport = remoteSessionTransport(token);
   if (transport) return transport.messageAttachmentCapabilities();
-  if (workspace || sessions.has(token)) throw connectionEnded();
+  if (workspaces.size > 0 || sessions.has(token)) throw connectionEnded();
   return plainUploads.get(requestOrigin(path)) ?? { transfer: false, limit: LEGACY_MESSAGE_ATTACHMENT_LIMIT };
 }
 const plainImagePreviews = new Map<string, boolean>();
@@ -47,7 +74,7 @@ function requestOrigin(path: string) { return new URL(path, window.location.href
 export function supportsMessageAttachmentPreview(token: string, path: string): boolean {
   const transport = remoteSessionTransport(token);
   if (transport) return transport.supportsImagePreview();
-  if (workspace || sessions.has(token)) return false;
+  if (workspaces.size > 0 || sessions.has(token)) return false;
   return plainImagePreviews.get(requestOrigin(path)) === true;
 }
 
@@ -71,7 +98,7 @@ export function fetchPlainProductTransport(path: string, init: RequestInit = {})
 export function fetchSessionTransport(token: string | undefined, path: string, init: RequestInit = {}): Promise<Response> {
   const transport = remoteSessionTransport(token);
   if (transport) return transport.fetch(path, init);
-  if (workspace || token && sessions.has(token)) return Promise.reject(connectionEnded());
+  if (workspaces.size > 0 || token && sessions.has(token)) return Promise.reject(connectionEnded());
   return fetchPlainProductTransport(path, init);
 }
 

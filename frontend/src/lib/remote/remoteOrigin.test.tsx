@@ -21,7 +21,7 @@ function workspace(server: string) {
   const remote = { hello: { origin }, active: true, fetch: vi.fn(), onClose: (fn: () => void) => { callbacks.add(fn); return () => callbacks.delete(fn); }, close: () => { remote.active = false; for (const fn of callbacks) fn(); } };
   const session = { sessionToken: `token-${server}`, meetingId: "general", roomUid: "room-uid", displayName: "Owner", expiresAt: "2099-01-01T00:00:00Z",
     serverSurface: { server_id: server, authority_lineage_id: `lineage-${server}`, server_product_surface: TEST_SERVER_PRODUCT_SURFACE } } as RoomGuestSession;
-  installRemoteWorkspace({ transport: remote as unknown as RemoteTransport, owner: { sessionToken: session.sessionToken } as never, deviceToken: "device", clientId: "client" });
+  installRemoteWorkspace({ transport: remote as unknown as RemoteTransport, owner: { sessionToken: session.sessionToken, serverId: server } as never, deviceToken: "device", clientId: "client" });
   return { remote, session, origin };
 }
 it("binds directories and dock entries to host origins across A to B in one trusted shell", async () => {

@@ -7,7 +7,7 @@ it("bounds live resources across reads, retains in-use URLs and revokes them on 
   const callbacks = new Set<() => void>();
   const remote = { hello: { origin: "https://host.test" }, active: true, onClose: (fn: () => void) => { callbacks.add(fn); return () => callbacks.delete(fn); },
     close: () => { remote.active = false; for (const fn of callbacks) fn(); } };
-  installRemoteWorkspace({ transport: remote as unknown as RemoteTransport, owner: { sessionToken: "resource-owner" } as never, deviceToken: "device", clientId: "client" });
+  installRemoteWorkspace({ transport: remote as unknown as RemoteTransport, owner: { sessionToken: "resource-owner", serverId: "host" } as never, deviceToken: "device", clientId: "client" });
   vi.spyOn(URL, "createObjectURL").mockReturnValueOnce("blob:large").mockReturnValueOnce("blob:small");
   const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   const large = createResourceUrl({ size: 64 * 1024 * 1024 } as Blob);
