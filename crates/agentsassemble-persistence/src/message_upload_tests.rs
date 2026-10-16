@@ -494,15 +494,16 @@ async fn staged_upload_survives_idle_ping_cancellation() -> TestResult {
     store
         .append_message_upload(&auth, &begun.handle, 0, &[7; 512])
         .await?;
-    // Holding the only connection makes the next status future suspend inside pool
-    // acquisition; dropping it there is what a client disconnect or select! cancellation
-    // does. Dropping it must not close the connection that owns the TEMP staging.
-    let held = store.pool.acquire().await?;
+    // Let the append's connection return to the pool so the single connection is idle; the
+    // next acquire then runs the idle ping. Dropping a store read suspended there is a client
+    // disconnect or select! cancellation, and must not close the connection holding TEMP staging.
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    assert_eq!(store.pool.num_idle(), 1);
     let mut context = std::task::Context::from_waker(std::task::Waker::noop());
     let mut probe = Box::pin(store.message_upload_status(&auth, &begun.handle));
     assert!(std::future::Future::poll(probe.as_mut(), &mut context).is_pending());
     drop(probe);
-    drop(held);
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     assert_eq!(store.pool.size(), 1);
     let status = store.message_upload_status(&auth, &begun.handle).await?;
     assert_eq!(status.accepted_offset, 512);
