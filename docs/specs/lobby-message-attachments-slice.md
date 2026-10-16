@@ -222,6 +222,11 @@ main-schema archive catalog or VACUUM export, and cannot be supplied by restore.
 There is no durable schema change. Piece transactions release the writer before
 network awaits; partial final pieces retain the exact accepted byte offset.
 All ordinary attachment insertion quota checks include live reservations.
+In-progress transfers must survive the cancellation of any unrelated request: a cancelled
+pool acquire must not replace the single pooled connection (the pool performs no
+per-acquire liveness ping). If that connection is replaced for another reason, a genuinely
+broken connection, in-progress transfers fail cleanly as `upload_missing` and release their
+quota reservation.
 
 Admission allows three active transfers per human, 64 per host: one MiB fixed
 application/HTTP buffer allowance each, including bounded driver copies and HTTP

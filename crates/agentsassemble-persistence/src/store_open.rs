@@ -74,6 +74,8 @@ impl SqliteStore {
     async fn open_prepared(prepared: PreparedDatabase) -> Result<Self, PersistenceError> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
+            // TEMP upload staging lives on this single connection; a cancelled liveness ping would replace it.
+            .test_before_acquire(false)
             .after_connect(|connection, _| {
                 Box::pin(crate::message_upload::initialize_connection(connection))
             })
