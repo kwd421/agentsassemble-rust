@@ -1,7 +1,7 @@
 //! The action-bound proof stays private; no operator principal reaches an AI.
 use agentsassemble_domain::{
-    Actor, AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    Participant, ParticipantStatus, RoomEvent, SetMessagePin, canonical_payload_hash,
+    Actor, AuthenticatedPrincipal, InviteScope, ParticipantStatus, RoomEvent, SetMessagePin,
+    canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -101,7 +101,10 @@ impl DelegateRoomAuthority {
                     crate::delegation_owner::load_delegate_member(tx, room_id, session_id, true)
                         .await?;
                 if participant.status == ParticipantStatus::Detached {
-                    return confirmation_principal(&session, &participant);
+                    return crate::room_turns::support::detached_provider_principal(
+                        &session,
+                        &participant,
+                    );
                 }
                 crate::room_turns::support::provider_room_principal(
                     &session,
@@ -189,40 +192,6 @@ impl DelegateRoomAuthority {
             }
         }
     }
-}
-
-/// The delegate principal for approval, drives and reconciliation when the runtime
-/// detached the participant but the membership is intact. It enforces the same
-/// delegate gates as the live principal except live attachment; mute, role, type
-/// and identity mismatches refuse exactly as they do there.
-fn confirmation_principal(
-    session: &DurableAgentSession,
-    participant: &Participant,
-) -> Result<AuthenticatedPrincipal, PersistenceError> {
-    if participant.muted
-        || participant.participant_type != "agent"
-        || participant.room_id != session.public.room_id
-        || participant.participant_id != session.public.participant_id
-    {
-        return Err(rejected(
-            "stale_provider_turn",
-            "Room tool authority no longer matches an active Agent Session participant.",
-        ));
-    }
-    Ok(AuthenticatedPrincipal {
-        principal_id: session.public.session_id.clone(),
-        participant_id: participant.participant_id.clone(),
-        display_name: participant.display_name.clone(),
-        room_id: session.public.room_id.clone(),
-        client_kind: ClientKind::AgentBridge,
-        invite_scope: InviteScope::ReadWrite,
-        is_operator: false,
-        capabilities: CapabilitySet::for_principal(
-            ClientKind::AgentBridge,
-            InviteScope::ReadWrite,
-            false,
-        ),
-    })
 }
 
 pub(crate) struct DelegatedRoomActionAuthority {

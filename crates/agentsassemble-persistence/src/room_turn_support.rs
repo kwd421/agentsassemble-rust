@@ -19,7 +19,27 @@ pub(crate) fn provider_room_principal(
     participant: &Participant,
     scope: InviteScope,
 ) -> Result<AuthenticatedPrincipal, PersistenceError> {
-    if participant.status != ParticipantStatus::Joined
+    provider_principal(session, participant, scope, true)
+}
+
+/// The delegate principal for approval, drives and reconciliation when the runtime
+/// detached the participant but the membership is intact. It enforces the same
+/// delegate gates as the live principal except live attachment; mute, role, type
+/// and identity mismatches refuse exactly as they do there.
+pub(crate) fn detached_provider_principal(
+    session: &DurableAgentSession,
+    participant: &Participant,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    provider_principal(session, participant, InviteScope::ReadWrite, false)
+}
+
+fn provider_principal(
+    session: &DurableAgentSession,
+    participant: &Participant,
+    scope: InviteScope,
+    require_joined: bool,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    if (require_joined && participant.status != ParticipantStatus::Joined)
         || participant.muted
         || participant.participant_type != "agent"
         || participant.room_id != session.public.room_id
