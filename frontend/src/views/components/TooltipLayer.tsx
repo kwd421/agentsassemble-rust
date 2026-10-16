@@ -16,11 +16,13 @@ export default function TooltipLayer() {
   useEffect(() => {
     let current: HTMLElement | null = null;
     let parked: string | null = null;
+    let borrowedTip = false;
     let shown = "";
     let orphaned = 0;
     const restore = () => {
       if (current && parked !== null && !current.hasAttribute("title")) current.setAttribute("title", parked);
-      current = null; parked = null;
+      if (current && borrowedTip) delete current.dataset.tip;
+      current = null; parked = null; borrowedTip = false;
     };
     const release = () => {
       window.clearTimeout(orphaned);
@@ -36,8 +38,14 @@ export default function TooltipLayer() {
       window.clearTimeout(orphaned);
       restore();
       current = element;
+      // The native title stays parked as data-tip too, so the parked trigger is still
+      // found by the selector on inner pointer moves instead of releasing the hint.
       parked = element.getAttribute("title");
-      element.removeAttribute("title");
+      if (parked !== null) {
+        borrowedTip = !element.dataset.tip;
+        element.removeAttribute("title");
+        if (borrowedTip) element.dataset.tip = parked;
+      }
       // A control that already shows this text in full needs no hint.
       const wanted = !(element.textContent || "").includes(text) || clipped(element);
       // A re-rendered control with the same hint keeps the one already on screen.

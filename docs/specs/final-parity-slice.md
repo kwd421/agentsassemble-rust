@@ -739,3 +739,14 @@ constant-pinning tests. User explicitly prohibits Computer Use for this bundle, 
 post-change pixel/packaged interaction evidence remains unverified. Commit/push and
 central assets-only deployment plus /, /v1/bootstrap, /member-join smoke are authorized.
 This bundle does not close the broader Phase 9 review/real-client acceptance.
+
+## Steady hover hints (2026-10-17)
+
+The user still sees tooltip flicker after `9cb7cdfb`: hints blink on and off
+whenever the pointer moves inside the hovered control. The shared hint owner
+(parks native `title` text while a hint is up) must keep one hint node mounted
+for as long as the pointer stays inside its trigger, whatever that trigger is —
+`data-tip`, a parked `title`, or a control that re-renders while hovered. The
+hint leaves only when the pointer leaves the trigger (or a new trigger takes
+over). Acceptance: repeated pointer moves inside the trigger keep the same hint
+node mounted and never toggle it hidden; leaving the trigger releases it.

@@ -47,3 +47,20 @@ it("keeps the hint up when the hovered control is swapped for an identical one",
   fireEvent.pointerOver(screen.getByRole("button"));
   expect(screen.getByRole("tooltip")).toBe(hint);
 });
+
+it("keeps the same hint node while the pointer moves inside the trigger", () => {
+  render(<><TooltipLayer /><button title="답장"><span>A</span><span>B</span></button></>);
+  const button = screen.getByRole("button");
+  const [first, second] = button.querySelectorAll("span");
+  fireEvent.pointerOver(button);
+  const hint = screen.getByRole("tooltip");
+  for (const node of [first, second, button, first, second]) {
+    fireEvent.pointerOver(node);
+    fireEvent.pointerMove(node);
+    expect(screen.getByRole("tooltip")).toBe(hint);
+  }
+  expect(button.hasAttribute("title")).toBe(false);
+  fireEvent.pointerOver(document.body);
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  expect(button.getAttribute("title")).toBe("답장");
+});
