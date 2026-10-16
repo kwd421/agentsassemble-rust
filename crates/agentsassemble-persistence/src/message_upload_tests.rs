@@ -476,3 +476,51 @@ async fn raster_preview_matches_legacy_and_invalid_raster_never_commits() -> Tes
     );
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "reproduces: cancelling a pool acquire during its idle ping closes the only connection and loses TEMP upload staging"]
+async fn staged_upload_survives_idle_ping_cancellation() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let (store, auth) = fixture(Some(&directory.path().join("runtime.sqlite"))).await?;
+    policy(&store, 50 * 1024 * 1024, 500 * 1024 * 1024).await?;
+    let begun = store
+        .begin_message_upload(
+            &auth,
+            "interrupted",
+            "file.bin",
+            "application/octet-stream",
+            1024,
+        )
+        .await?;
+    store
+        .append_message_upload(&auth, &begun.handle, 0, &[7; 512])
+        .await?;
+    // A request future dropped while suspended in the pool's idle ping is what a client
+    // disconnect or select! cancellation does. Status is read-only, so a probe that
+    // completes without suspending is simply retried.
+    let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+    let mut closed = false;
+    for _ in 0..1_000 {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while store.pool.num_idle() == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        let mut probe = Box::pin(store.message_upload_status(&auth, &begun.handle));
+        if std::future::Future::poll(probe.as_mut(), &mut context).is_pending() {
+            drop(probe);
+            if store.pool.size() == 0 {
+                closed = true;
+                break;
+            }
+        }
+    }
+    assert!(closed, "no status probe was cancelled during the idle ping");
+    let status = store.message_upload_status(&auth, &begun.handle).await?;
+    assert_eq!(status.accepted_offset, 512);
+    store
+        .append_message_upload(&auth, &begun.handle, 512, &[7; 512])
+        .await?;
+    Ok(())
+}
