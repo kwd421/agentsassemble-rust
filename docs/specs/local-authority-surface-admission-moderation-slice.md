@@ -31,7 +31,11 @@ max_uses)` carries only the owner's own human-invite fields, runs the owner's ow
 invite-policy validation at request time and again at approval, binds the normalised
 policy, and mints after approval through the same `create_human_invite_for_manager`
 core under the owner's own `RoomManagerAuthority` (local-bootstrap lineage or the
-exact operator session re-resolved from the stored owner binding); a human
+exact operator session re-resolved from the stored owner binding); the lifetime keeps
+the owner route's exact bounds (positive and representable as a checked duration, the
+same `bad_request` refusal for an over-limit value) and the use limit keeps its exact
+bounds (non-negative), and the mint converts the lifetime with the same checked
+conversion rather than a panicking one; a human
 guest/member owner, a companion delegate or any owner whose provenance cannot be
 re-resolved as that authority is refused with `owner_authority_unavailable` at
 request time and never queued. The link, token and join code reach only the bound

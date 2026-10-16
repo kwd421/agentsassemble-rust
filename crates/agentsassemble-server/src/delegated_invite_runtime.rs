@@ -155,9 +155,19 @@ async fn mint_and_drive(
             "The invite window is invalid.",
         ));
     };
-    let Some(expires_at) =
-        created_at.checked_add_signed(chrono::Duration::seconds(policy.ttl_seconds))
-    else {
+    let Some(ttl) = chrono::TimeDelta::try_seconds(policy.ttl_seconds) else {
+        state
+            .store
+            .fail_approved_human_invite(
+                room_id,
+                confirmation_id,
+                "invite_window_invalid",
+                "The invite expiry is out of range.",
+            )
+            .await?;
+        return Ok(None);
+    };
+    let Some(expires_at) = created_at.checked_add_signed(ttl) else {
         state
             .store
             .fail_approved_human_invite(

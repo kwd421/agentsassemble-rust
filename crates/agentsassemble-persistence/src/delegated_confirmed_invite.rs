@@ -9,7 +9,7 @@
 //! minted token, join code and link are never stored here: the server crate mints them
 //! and returns them only in the owner's live acknowledgement, so the stored request,
 //! receipt and events stay secret-free.
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -59,9 +59,11 @@ pub struct ApprovedInviteDrive {
 /// Validates and normalises the AI-supplied invite fields as the owner's own human
 /// invite creation does: an empty label becomes `Guest`, the label is one single-line
 /// value within its limit, the scope is an exact supported value, the lifetime is
-/// positive and the use limit is non-negative.
+/// positive and representable as a checked duration exactly as the owner route
+/// requires, and the use limit is non-negative.
 /// # Errors
-/// Rejects `invalid_human_invite` for any out-of-policy field.
+/// Rejects `invalid_human_invite` for any out-of-policy field, and `bad_request` for
+/// a lifetime the owner route itself refuses as over-limit.
 pub fn delegated_invite_policy(
     params: &RequestCreateInvite,
 ) -> Result<DelegatedInvitePolicy, PersistenceError> {
@@ -89,6 +91,9 @@ pub fn delegated_invite_policy(
             "invalid_human_invite",
             "Human invite policy is invalid.",
         ));
+    }
+    if TimeDelta::try_seconds(params.ttl_seconds).is_none() {
+        return Err(rejected("bad_request", "ttl_seconds must be positive."));
     }
     Ok(DelegatedInvitePolicy {
         display_name: display_name.to_owned(),

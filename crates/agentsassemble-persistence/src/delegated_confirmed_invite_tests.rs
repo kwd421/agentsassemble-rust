@@ -200,6 +200,24 @@ async fn invite_refuses_invalid_policy_and_an_unsupported_owner_provenance() -> 
     }
     assert_eq!(invite_rows(&store).await?, baseline);
     assert_eq!(request_rows(&store).await?, 0);
+    // A lifetime the owner's own route cannot represent as a checked duration is
+    // refused with the owner route's error before anything is queued.
+    for over_limit in [i64::MAX, 9_223_372_036_854_776] {
+        assert!(
+            matches!(store.request_delegated_human_invite::<()>(&delegate, &params_with(|p| p.ttl_seconds = over_limit), |_, _, _| Ok(())).await, Err(PersistenceError::CommandRejected { code, .. }) if code == "bad_request")
+        );
+    }
+    assert_eq!(invite_rows(&store).await?, baseline);
+    assert_eq!(request_rows(&store).await?, 0);
+    // A large but representable lifetime still queues.
+    let (queued, _) = store
+        .request_delegated_human_invite::<()>(
+            &delegate,
+            &params_with(|p| p.ttl_seconds = 86_400 * 30),
+            |_, _, _| Ok(()),
+        )
+        .await?;
+    assert_eq!(queued["status"], "pending_confirmation");
     // Companion, attendee and connector invites have no schema: unknown fields are refused.
     let unknown = json!({
         "request_id": Uuid::new_v4().to_string(),
