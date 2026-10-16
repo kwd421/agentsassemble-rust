@@ -133,7 +133,11 @@ describe("StartupIdentityGate", () => {
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
     const onComplete = vi.fn();
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-    await userEvent.click(await screen.findByRole("button", { name: /이 기기 서버 열기/ }));
+    // Until the central retry confirms the outage, this device stays checking and closed.
+    const checking = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
+    expect(checking).toHaveProperty("disabled", true);
+    await vi.waitFor(() => expect(checking).toHaveProperty("disabled", false), { timeout: 8000 });
+    await userEvent.click(checking);
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
     expect(centralMocks.register).not.toHaveBeenCalled();
     expect(desktopMocks.initializeBootstrap).not.toHaveBeenCalled();
@@ -592,13 +596,15 @@ it("offers default keep and explicit local data choice after account-deleted hos
   expect(centralMocks.register).not.toHaveBeenCalled(); expect(centralMocks.openServer).not.toHaveBeenCalled();
 });
 
-it("exposes the same account settings from signed-out native startup without registering", async () => {
+it("exposes account deletion from signed-out native startup without a profile chip", async () => {
   centralMocks.configured = true;
   desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
   desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
   const onComplete = vi.fn();
   render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-  await userEvent.click(await screen.findByRole("button", { name: "계정 설정" }));
+  await screen.findByRole("button", { name: "Google로 계속" });
+  expect(screen.queryByRole("button", { name: "계정 설정" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "계정 탈퇴" }));
   expect(screen.getByRole("button", { name: "계정 탈퇴" })).toBeTruthy();
   expect(centralMocks.bootstrap).not.toHaveBeenCalled();
   expect(centralMocks.register).not.toHaveBeenCalled();

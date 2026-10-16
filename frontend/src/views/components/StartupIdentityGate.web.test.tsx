@@ -94,7 +94,7 @@ it("reaches a retained receipt from ordinary signed-out startup without login or
   mocks.receipt.mockResolvedValue({ status: "account_deleted" });
   vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(function(this: HTMLDialogElement) { this.open = true; });
   render(<AccountDeletionSurface><StartupIdentityGate deviceToken="" onComplete={completeStartup} /></AccountDeletionSurface>);
-  fireEvent.click(await screen.findByRole("button", { name: "계정 설정" }));
+  fireEvent.click(await screen.findByRole("button", { name: "계정 탈퇴" }));
   fireEvent.click(screen.getByRole("button", { name: "계정 탈퇴" }));
   expect(mocks.receipt).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));

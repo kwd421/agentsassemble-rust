@@ -111,6 +111,18 @@ it("dims central-dependent cached servers while keeping this-device open availab
   expect(screen.getByText(/연결 끊김 · 로그인 서버 확인 불가/).closest(".dc-server-row")?.getAttribute("data-state")).toBe("central-unconfirmed");
 });
 
+it("keeps this-device closed while the central answer is still checking", () => {
+  const local = { server_id: "local-only", host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner" } as const;
+  const { rerender } = render(<CentralServerList servers={[]} liveServers={[]} centralUnavailable busy={false} localChecking
+    localHost={local} onOpenLocal={async () => {}} onOpen={async () => {}} onRefresh={async () => {}} />);
+  const checking = screen.getByRole("button", { name: "이 기기 서버 열기" });
+  expect(checking).toHaveProperty("disabled", true);
+  expect(checking.closest(".dc-server-row")?.getAttribute("data-state")).toBe("checking");
+  rerender(<CentralServerList servers={[]} liveServers={[]} centralUnavailable busy={false}
+    localHost={local} onOpenLocal={async () => {}} onOpen={async () => {}} onRefresh={async () => {}} />);
+  expect(screen.getByRole("button", { name: "이 기기 서버 열기" })).toHaveProperty("disabled", false);
+});
+
 it("does not expose full or shortened server IDs in the saved chooser", () => {
   const server = { ...host, server_id: "12345678-1234-4234-8234-123456789abc", alias: "" };
   render(<CentralServerList servers={[server]} liveServers={[]} busy={false} onOpen={async () => {}} onRefresh={async () => {}} />);

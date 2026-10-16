@@ -58,6 +58,9 @@ import { saveLocalProfile } from "../../lib/localProfile";
 
 type Screen = CentralGuestScreen | "servers";
 
+// One retry of an unconfirmed central answer before this computer's row stops checking.
+const CENTRAL_RETRY_DELAY_MS = 3000;
+
 // Keep native strings and browser errors available without exposing them by default.
 function failureMessage(reason: unknown, message: string): ReactNode {
   const detail = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
@@ -90,6 +93,20 @@ export default function StartupIdentityGate({
   const { directory, refresh: refreshCentral } = useCentralDirectory();
   const [connectingServerId, setConnectingServerId] = useState("");
   const centralUnavailable = directory?.status === "central-unconfirmed" || directory?.status === "error";
+  // An unconfirmed central answer is not yet an offline verdict: retry once, then trust the result.
+  const [centralUnreachable, setCentralUnreachable] = useState(false);
+  useEffect(() => {
+    setCentralUnreachable(false);
+    if (directory?.status !== "central-unconfirmed") return;
+    const timer = window.setTimeout(() => {
+      refreshCentral().then(
+        (next) => setCentralUnreachable(next.status === "central-unconfirmed"),
+        (reason: unknown) => { if ((reason as { name?: unknown } | null)?.name !== "AbortError") setCentralUnreachable(true); },
+      );
+    }, CENTRAL_RETRY_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [directory?.status, refreshCentral]);
+  const localChecking = directory?.status === "central-unconfirmed" && !centralUnreachable;
   const centralPerson = directory?.person;
   const accountDeviceOnly = Boolean(centralPerson && deviceAccount === centralPerson.person_id);
   const centralServers = directory?.servers || [];
@@ -480,9 +497,9 @@ export default function StartupIdentityGate({
       >
         <div className="flex items-center justify-end gap-2 empty:hidden">
         <AppUpdateIndicator />
-        {(screen === "servers" || screen === "choice") && !accountSettingsOpen && <button type="button" className="ops-button flex min-h-11 max-w-full items-center gap-2 justify-self-end" aria-label="계정 설정" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>
-          <span className="dc-member-avatar" style={{ width: 28, height: 28 }} aria-hidden="true">{centralPerson?.avatar_url ? <img src={centralPerson?.avatar_url} alt="" referrerPolicy="no-referrer" /> : centralPerson?.display_name.slice(0, 1) || "•"}</span>
-          <span className="truncate">{centralPerson?.display_name || "계정"}</span>
+        {centralPerson && (screen === "servers" || screen === "choice") && !accountSettingsOpen && <button type="button" className="ops-button flex min-h-11 max-w-full items-center gap-2 justify-self-end" aria-label="계정 설정" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>
+          <span className="dc-member-avatar" style={{ width: 28, height: 28 }} aria-hidden="true">{centralPerson.avatar_url ? <img src={centralPerson.avatar_url} alt="" referrerPolicy="no-referrer" /> : centralPerson.display_name.slice(0, 1) || "•"}</span>
+          <span className="truncate">{centralPerson.display_name}</span>
         </button>}
         </div>
         {accountSettingsOpen ? <>
@@ -550,7 +567,7 @@ export default function StartupIdentityGate({
               <p className="text-[12px] text-text-muted">{ownedRemoteReason}</p>
               <details><summary className="text-[12px] text-text-muted">자세히</summary><p className="break-all whitespace-pre-wrap text-[12px] text-text-muted">{ownedRemoteDetail}</p></details>
             </div>}
-            <CentralServerList deviceToken={deviceToken} deviceConnect={Boolean(ownedServer)} conflict={ownerConflict} key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={!webEntry && !hostingState && !accountDeviceOnly ? localHost : null} onOpenLocal={!webEntry && !ownerConflict && (ownedServers.length === 0 || ownedServer?.server_id === localHost?.server_id) && !hostingState && !accountDeviceOnly ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
+            <CentralServerList deviceToken={deviceToken} deviceConnect={Boolean(ownedServer)} conflict={ownerConflict} key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} localChecking={localChecking} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={!webEntry && !hostingState && !accountDeviceOnly ? localHost : null} onOpenLocal={!webEntry && !ownerConflict && (ownedServers.length === 0 || ownedServer?.server_id === localHost?.server_id) && !hostingState && !accountDeviceOnly ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}
@@ -574,6 +591,7 @@ export default function StartupIdentityGate({
             {screen === "choice" && loadCentralSession() && <button type="button" className="ops-button mt-2 block" disabled={busy} onClick={() => void refreshServers()}>다시 확인</button>}
           </div>
         )}
+        {!centralPerson && screen === "choice" && !accountSettingsOpen && <button type="button" className="mx-auto min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>계정 탈퇴</button>}
       </main>
     </div>
   );

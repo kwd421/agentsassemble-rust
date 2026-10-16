@@ -23,6 +23,8 @@ type Props = {
   servers: CentralServerDisplay[];
   liveServers: CentralServer[];
   centralUnavailable?: boolean;
+  // Until the central directory answers, this computer's row is only checking, not openable.
+  localChecking?: boolean;
   connectingServerId?: string;
   busy: boolean;
   localHost?: HostDeviceInfo | null;
@@ -60,7 +62,7 @@ export function ServerIcon({ reference, name }: { reference?: string; name: stri
     : <span title={failed ? "아이콘을 불러오지 못했어요" : undefined}>{roomInitials(name)}</span>;
 }
 
-export default function CentralServerList({ deviceConnect = false, deviceToken = "", conflict, servers, busy, localHost, profileName, onOpenLocal, onOpen, onRefresh, liveServers, centralUnavailable = false, connectingServerId }: Props) {
+export default function CentralServerList({ deviceConnect = false, deviceToken = "", conflict, servers, busy, localHost, profileName, onOpenLocal, onOpen, onRefresh, liveServers, centralUnavailable = false, localChecking = false, connectingServerId }: Props) {
   const [keeperId, setKeeperId] = useState("");
   const [confirmKeeper, setConfirmKeeper] = useState("");
   const [localName, setLocalName] = useState<string | undefined>();
@@ -194,7 +196,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
 
   return <div className="dc-server-list" aria-busy={saving}>
     {localHost && onOpenLocal && !servers.some((server) => server.server_id === localHost.server_id) &&
-      <div className="dc-server-row" data-state="local">
+      <div className="dc-server-row" data-state={localChecking ? "checking" : "local"}>
         <span className="dc-server-row-icon" aria-hidden>{roomInitials(localName || localDefaultName)}</span>
         <div className="dc-server-row-copy">
           <strong className="break-all">{localName || localDefaultName || "프로필 이름 확인 중"}</strong>
@@ -206,7 +208,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         {editingId !== "local" && <div className="dc-server-row-actions">
           <button type="button" className="dc-server-row-icon-button" aria-label={`${localName || localDefaultName} 이름 변경`} title="이름 변경" disabled={busy || saving || !localDefaultName}
             onClick={() => { setEditingId("local"); setName(localName || localDefaultName); setError(""); }}><Pencil size={16} /></button>
-          <button type="button" className="ops-cta dc-server-row-open" aria-label="이 기기 서버 열기" disabled={busy || saving || !localDefaultName} onClick={() => void onOpenLocal(localName)}>열기</button>
+          <button type="button" className={localChecking ? "ops-button dc-server-row-open" : "ops-cta dc-server-row-open"} aria-label="이 기기 서버 열기" disabled={busy || saving || localChecking || !localDefaultName} onClick={() => void onOpenLocal(localName)}>{localChecking ? "확인 중" : "열기"}</button>
         </div>}
       </div>}
     {servers.map((server) => {
@@ -214,8 +216,9 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
       const live = liveServers.find(item => item.server_id === server.server_id);
       const online = !centralUnavailable && ["owner", "member"].includes(server.relation) && live?.endpoint?.status === "published" && live.endpoint.mode === "event_secure_v1";
       const name = server.alias || "이름 없는 서버";
-      const openable = isLocal || online;
-      const state = connectingServerId === server.server_id ? "connecting" : isLocal ? "local" : centralUnavailable ? "central-unconfirmed" : server.relation === "bookmark" ? "invited" : online ? "online" : "offline";
+      const checking = isLocal && localChecking;
+      const openable = !checking && (isLocal || online);
+      const state = connectingServerId === server.server_id ? "connecting" : checking ? "checking" : isLocal ? "local" : centralUnavailable ? "central-unconfirmed" : server.relation === "bookmark" ? "invited" : online ? "online" : "offline";
       return <div key={server.server_id} className="dc-server-row" data-state={state}>
         {server.relation === "owner"
           ? <button type="button" className="dc-server-row-icon dc-server-row-icon-edit" aria-label={`${name} 아이콘 변경`} title="아이콘 변경"
@@ -228,14 +231,14 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
           <strong className="break-all">{name}</strong>
           <span className="dc-server-row-meta">
             <span className="dc-server-row-dot" aria-hidden />
-            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기" : state === "online" ? "연결 가능" : "연결 끊김"}
+            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : (state === "local" || state === "checking") ? "이 기기" : state === "online" ? "연결 가능" : "연결 끊김"}
             {server.relation !== "member" && <> · <span aria-label="서버 컴퓨터 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span></>}
           </span>
           {editingId === server.server_id && nameEditor(server.default_name, server)}
         </div>
         {editingId !== server.server_id && <div className="dc-server-row-actions">
           {server.relation === "owner" && <button type="button" className="dc-server-row-icon-button" aria-label={`${name} 이름 변경`} title="이름 변경" disabled={busy || saving || centralUnavailable} onClick={() => { setEditingId(server.server_id); setName(server.alias); setError(""); }}><Pencil size={16} /></button>}
-          <button type="button" className={openable ? "ops-cta dc-server-row-open" : "ops-button dc-server-row-open"} aria-label={!isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : `${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>{!isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : "열기"}</button>
+          <button type="button" className={openable ? "ops-cta dc-server-row-open" : "ops-button dc-server-row-open"} aria-label={!isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : `${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>{checking ? "확인 중" : !isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : "열기"}</button>
         </div>}
       </div>;
     })}
