@@ -3049,3 +3049,163 @@ chunk/queue limits, streaming cancellation, empty requests and GET/HEAD body ref
 no body buffering, plaintext transport, compatibility fallback or custody change.
 Verify public RemoteTransport.fetch through its wire/HTTP outcome with absent
 Request.body, then direct packaged/web Google join/message/deletion acceptance.
+
+## Multihost live rail — owner decision (2026-10-17)
+
+Joining a friend's room puts that room into the left server rail and keeps it
+LIVE together with the user's own rooms, Discord-style: the client is
+connected to every host it belongs to at the same time. No reconnect-on-select,
+no navigating the whole window to the friend's origin, and after an app restart
+all joined hosts reconnect automatically. The startup server list exists only
+for when the user owns several server computers (or nothing can be opened).
+With one own server the app goes straight in. App (desktop) and web share
+product UI and semantics; only transport/capabilities differ per platform.
+
+This supersedes the single-authority passages below; everything else they say
+about authentication, admission custody, expiry/revocation and failure
+semantics stays: "Exactly one outer channel owns committed custody" (now: one
+outer channel per host); "Reload requires fresh admission; no
+credentials/private keys persisted outside trusted owner" (now refined by the
+bearer/device-credential split below); the rail step-1 disconnected-room
+model; the tab-scoped `sessionStorage` member handoff; the desktop
+`open_central_owned_server` window navigation for members; and the
+always-chooser startup (now: chooser only for several own servers or nothing
+openable).
+
+### Required behavior
+
+- One live session per host. The single `workspace` in
+  `frontend/src/lib/remote/remoteWorkspace.ts` (whose
+  `installRemoteWorkspace` closes the previous transport) becomes a registry
+  keyed by `server_id`: one transport, one owner/member session and one
+  directory stream per host. A session bearer or child ticket from host A is
+  never sent to host B; cross-host use fails closed with an explicit error.
+- Per-server and per-room connection state. Each rail server shows connected,
+  connecting, or disconnected with a specific reason (unreachable,
+  authentication rejected, revoked or removed, retired server, unsupported host
+  version, central-unconfirmed). Each room shows local, connected, or
+  disconnected with the same reason. Reasons use plain Korean 해요체; protocol
+  and key jargon stays off screen.
+- One host offline never affects the others. Its rooms show the disconnected
+  view with the reason and a per-host retry action; every other host keeps
+  working, including sending and receiving. Retry is per host with the
+  existing capped backoff; no global reconnect loop and no central
+  polling/heartbeats are added. Host liveness is learned only from that
+  host's own directory stream and sockets.
+- Unread and mentions per host. Per-room unread keeps its existing owner
+  (`LobbyView` events versus read cursor); the rail aggregates per host from
+  those per-room states: a count badge plus a mention marker when any room on
+  that host mentions the user. Counts are derived, never authoritative. An
+  offline host shows no counts (unknown is shown as unknown, never
+  fabricated); on reconnect the host's live state recomputes them.
+- Owner vs member authority per host. Each host independently owns exactly one
+  role for this client: owner (local bootstrap/operator session or a
+  central-owner-derived pairing) or member (central-bound member admission).
+  That host's existing room/admission owners stay authoritative for that
+  host's rooms; authority is never merged across hosts. A revoked or Left /
+  Kicked membership ends only that host's sessions and marks its rooms
+  revoked with an explicit re-join path.
+- Credential storage and restart reconnect. Session bearers and private ECDH
+  keys stay memory-only and are never persisted. What may persist, owned by
+  the trusted central ASSETS UI exactly like other private credentials, is
+  the per-host re-entry anchor: `server_id`, `registration_epoch`, host key
+  fingerprint, endpoint origin/generation, the browser/device credential, and
+  hide state. Display-only cache rules are unchanged: no endpoint bearer,
+  grant, recovery code or host proof in the display cache. On restart the
+  client revalidates the central session, takes a fresh central directory,
+  and re-admits to each joined host with a fresh grant through the existing
+  member-connect challenge/redeem/select path; the one-time invite handoff
+  stays tab-scoped and take-and-delete. A persisted anchor whose epoch, key
+  fingerprint or origin no longer matches is refused without retry.
+  Revocation (host leave/kick/revocation, central hide, logout,
+  account switch or deletion) clears the persisted anchor for that
+  host/membership. First join keeps explicit consent; silent re-entry is
+  allowed only when the live preview (`server_id`, label, endpoint
+  origin/generation) matches the stored anchor, otherwise full consent again.
+- Central stays minimal. Central provides the event-driven directory
+  bootstrap (existing focus/visible throttled, online/explicit immediate
+  checks only), grant issue/redeem on demand, hide/unhide, and member-sync
+  outbox acknowledgements. No presence, health polling, heartbeats, or
+  per-host status tracking is added; everything observable stays on the
+  host's own connection.
+- Version skew. Admission validates each host's advertised protocol/product
+  surface before use. A host newer than the client shows per-host
+  unsupported (fail closed, other hosts unaffected); the client never sends a
+  route the host did not advertise. Central D1 changes keep the Rule 10
+  expand-first order while pre-release; local SQLite upgrade semantics are
+  unchanged.
+- Desktop vs web transport. Both keep one secure outer channel per host and
+  share rail, room and consent UI. Desktop (Tauri) connects directly: the own
+  server over the existing local path and member hosts over direct encrypted
+  channels with no window navigation to the friend's origin;
+  `open_central_owned_server` navigation remains only for opening an owned
+  server. Web performs first join through trusted central `/member-join`
+  with explicit consent and re-enters via anchor plus fresh grant as above.
+  Host-origin JavaScript still never receives grants, browser credentials,
+  bearers, private keys or child tickets.
+
+### Implementation plan (per-slice execution gate record)
+
+Each slice is one independently buildable, verifiable, rollbackable commit
+under 1,000 changed lines, in dependency order. No WORKBOARD entry is added
+until a slice becomes active work.
+
+- M1 — per-host session registry and live rail merge. Files:
+  `frontend/src/lib/remote/remoteWorkspace.ts` (registry keyed by
+  `server_id`), `useRoomDirectory.ts`, `useAppController.tsx`,
+  `useCentralOwnerWorkspace.ts`, `roomDockModel.ts` (merge rooms from every
+  connected host; only a host's own rooms go disconnected when it drops),
+  rail/badge/disconnected-view presentation. State transition: single live
+  workspace with placeholders becomes N live host sessions with per-server
+  and per-room connection state. Tests: per-host install/close isolation,
+  cross-host bearer refusal, merge keeps host B live while host A drops,
+  per-host unread/mention aggregation from per-room state. Acceptance: own
+  server plus one joined host live together; stopping the joined host leaves
+  own rooms fully usable with the joined rooms showing reason plus retry.
+- M2 — durable member anchor and restart reconnect. Files:
+  `frontend/src/lib/central/memberConnect.ts` and the trusted owner store,
+  startup re-admission path. State transition: tab-scoped handoff becomes a
+  persisted per-host re-entry anchor with fresh-grant re-admission; bearers
+  stay memory-only. Tests: restart re-admits without a new invite, epoch/key/
+  origin mismatch refuses, revocation fails closed, logout and account switch
+  clear anchors. Acceptance: real app restart reconnects all joined hosts
+  automatically; a revoked membership shows revoked with a re-join path.
+- M3 — in-place host sessions, no window navigation. Files:
+  `desktop/src-tauri/src/lib.rs` (`open_central_owned_server` scoped to
+  owned-server open), member fragment handling attaches the session in
+  place, web keeps `/member-join` for first-join consent only. State
+  transition: member select-navigates becomes member select-attaches. Tests:
+  selecting a joined host never changes the window origin; owner open path
+  unchanged. Acceptance: in the packaged app, opening a friend's room keeps
+  the window where it is with both hosts live.
+- M4 — startup goes straight in. Files: `StartupIdentityGate.tsx`,
+  `CentralServerList.tsx`. State transition: always-chooser becomes exactly
+  one openable own server opens immediately (local server on this device,
+  account server from another device), zero openable shows setup/empty, two
+  or more own servers show the chooser; joined member hosts reconnect in the
+  background in all cases. Tests: chooser matrix (1/0/N own servers),
+  central-outage continuity preserved (open local server from display
+  cache). Acceptance: single-server desktop and web enter directly with no
+  chooser; multi-server still offers the list.
+- M5 — per-host version skew and authority hardening. Files: admission
+  surface check per host, owner/member role binding per host, unsupported /
+  revoked presentation. State transition: assumed-compatible hosts become
+  per-host negotiated-or-denied. Tests: newer-than-client host denied
+  without touching other hosts, unknown route never sent, kicked membership
+  cannot be revived by replay. Acceptance: mixed-version hosts in the real
+  app show the new host as unsupported while old hosts keep working.
+
+### Open product questions for the owner
+
+1. How many joined hosts may one user keep live at once (resource and rail
+   UX cap)?
+2. A friend's host offline for a long time: after how long do we prompt
+   cleanup of its rooms and anchor instead of showing disconnected forever?
+3. When a friend removes the user: keep a revoked tombstone row with a
+   re-request path, or drop the server from the rail?
+
+Decided without asking (stated for correction): offline hosts show no unread
+counts rather than stale ones; session bearers are never persisted, only the
+device credential plus membership anchor; central gains no polling,
+heartbeats or presence; several own servers always show the chooser (no
+default-pick); first join always keeps explicit consent on both platforms.
