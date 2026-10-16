@@ -71,6 +71,7 @@ import {
   type RoomPreferenceAuthority,
 } from "./useRoomSettingsController";
 import { useSidebarResize } from "./useSidebarResize";
+import { projectChannelUnread } from "../lib/channelUnread";
 
 export function useAppController(deviceToken: string, clientId: string, memberReturn?: import("../lib/central/memberConnect").MemberReturn) {
   const ownerWorkspace = useCentralOwnerWorkspace(deviceToken);
@@ -469,6 +470,12 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     localAvailable: !guestLocked && isDesktopWebview(),
   });
   const visibleChannels = [...CHANNELS.map(item => item.id === "lobby" && canonicalRoom.roomSettings?.roomId === activeRoom.meetingId && canonicalRoom.roomSettings.lobbyName ? { ...item, label: canonicalRoom.roomSettings.lobbyName } : item), ...roomChannels.activeChannels.filter((item) => item.type === "text").map((item) => ({ id: item.id, label: item.name, icon: Hash }))];
+  const channelUnread = useMemo(() => projectChannelUnread({
+    channelIds: visibleChannels.map((item) => item.id),
+    cursors: canonicalRoom.channelMessageCursors,
+    eventLists: [canonicalRoom.events, channelTranscript.events],
+    settings: activeChannelSettings,
+  }), [visibleChannels, canonicalRoom.channelMessageCursors, canonicalRoom.events, channelTranscript.events, activeChannelSettings]);
   const messageSearchChannelLabels = Object.fromEntries(visibleChannels.map((item) => [item.id, item.label]));
   useEffect(() => {
     setMessageSearchScope("all");
@@ -728,7 +735,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,
     cancelMobileShellPointer, canonicalRoom, sideChat,
     changeAgentActivityVisibility, channel, channelHeaderActions,
-    channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
+    channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth, channelUnread,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     deviceToken, clientId, exitGuestSurface, expireGuestSession,
     generateInviteLink,

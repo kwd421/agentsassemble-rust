@@ -45,6 +45,7 @@ import {
 import type { RoomStream } from "./types/generated/RoomStream";
 import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
 import { useAcceptedRoomProjection } from "./lib/useAcceptedRoomProjection";
+import { parseChannelMessageCursors } from "./lib/channelUnread";
 import { scrubHistoricalAuthors, useAnonymousAuthors } from "./lib/participantAnonymization";
 
 export type { CanonicalRoomHistoryState } from "./lib/canonicalRoomProjection";
@@ -114,6 +115,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   const roomSettingsSeqRef = useRef<Record<string, number>>({});
   const roomSettingsRef = useRef<Record<string, RoomGlobalSettings>>({});
   const [eventsByRoom, setEventsByRoom] = useState<Record<string, RoomEvent[]>>({});
+  const [channelCursorsByRoom, setChannelCursorsByRoom] = useState<Record<string, Record<string, number>>>({});
   const [roomSettingsByRoom, setRoomSettingsByRoom] = useState<
     Record<string, RoomGlobalSettings>
   >({});
@@ -323,6 +325,10 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         setParticipantsByRoom((previous) => ({
           ...previous,
           [roomId]: snapshotParticipants,
+        }));
+        setChannelCursorsByRoom((previous) => ({
+          ...previous,
+          [roomId]: parseChannelMessageCursors(snapshot.channel_message_cursors),
         }));
         setSessionsByRoom((previous) => ({
           ...previous,
@@ -756,6 +762,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           }
         : null,
     events,
+    channelMessageCursors: projectionIsCurrent ? channelCursorsByRoom[roomId] || {} : {},
     timelineEvents,
     displayResourceBase:
       projectionIsCurrent ? acceptedProjection.displayResourceBase : "",

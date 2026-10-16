@@ -33,6 +33,7 @@ import UserPanel from "../views/components/UserPanel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel";
 import { RIGHT_PANEL_WIDTH_MAX, RIGHT_PANEL_WIDTH_MIN, useRightPanelResize } from "./useRightPanelResize";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
+import { filterCollapsedChannels } from "../lib/channelUnread";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
 const FriendsView = lazy(() => import("../views/FriendsView"));
@@ -56,7 +57,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     admittedSessionToken, agentActivityVisibility, cancelMobileShellPointer,
     canonicalRoom, canManageActiveRoom, changeAgentActivityVisibility, channel,
     channelHeaderActions, channelMenu, channelSearchNeedle, channelSearchQuery,
-    channelSidebarWidth, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
+    channelSidebarWidth, channelUnread, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     deviceToken, exitGuestSurface,
     expireGuestSession, goToChannel,
     guestExpired, guestLocked, canCreateRoom, canInviteRooms, profileAuthorityReady, ownerProfileSession, ownerProfileRevision,
@@ -283,13 +284,9 @@ export default function AppView({ controller }: { controller: AppController }) {
             const channels = visibleChannels.filter((item) => !channelSearchNeedle || item.label.toLowerCase().includes(channelSearchNeedle));
             if (!channels.length) return null;
             const sectionCollapsed = Boolean(collapsedChannelSections[section.id]);
-            const activeSectionChannel = channels.find((item) => item.id === channel);
-            const visibleSectionChannels =
-              sectionCollapsed && activeSectionChannel
-                ? [activeSectionChannel]
-                : sectionCollapsed
-                  ? []
-                  : channels;
+            const visibleSectionChannels = sectionCollapsed
+              ? filterCollapsedChannels(channels, channel, channelUnread)
+              : channels;
             return (
               <section key={section.id} className="dc-channel-section">
                 <div className="flex items-center justify-between">
@@ -316,6 +313,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                         type="button"
                         data-active={!adminOpen && channel === id}
                         data-muted={activeChannelSettings[id]?.notifications === "mute"}
+                        data-unread={channelUnread[id] === true}
                         data-read-at={activeChannelSettings[id]?.lastReadAt || undefined}
                         onClick={() => { setFriendsOpen(false); goToChannel(id); }}
                         onContextMenu={(event) => openChannelMenu(event, id)}

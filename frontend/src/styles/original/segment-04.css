@@ -275,6 +275,24 @@ body[data-sidebar-resizing="true"] {
   opacity: 0.68;
 }
 
+.dc-channel[data-unread="true"] {
+  position: relative;
+  color: var(--color-sidebar-text-active);
+  font-weight: 700;
+}
+
+.dc-channel[data-unread="true"]:not([data-active="true"])::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  width: 4px;
+  height: 16px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: var(--color-text-primary);
+}
+
 .dc-channel-live-dot {
   width: 7px;
   height: 7px;
