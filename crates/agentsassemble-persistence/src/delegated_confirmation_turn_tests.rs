@@ -28,6 +28,7 @@ async fn provider_store() -> Result<
         DelegateRoomAuthority,
         u64,
         String,
+        crate::ProviderTurnStartAuthority,
         tempfile::TempDir,
     ),
     Box<dyn std::error::Error>,
@@ -182,6 +183,7 @@ async fn provider_store() -> Result<
         authority,
         assignment.turn_generation,
         assignment.execution_id,
+        start,
         directory,
     ))
 }
@@ -235,7 +237,7 @@ fn approve(confirmation_id: &str) -> DecideDelegatedAction {
 
 #[tokio::test]
 async fn provider_pending_survives_turn_end_and_owner_approval_executes() -> TestResult {
-    let (store, authority, generation, execution_id, _directory) = provider_store().await?;
+    let (store, authority, generation, execution_id, _start, _directory) = provider_store().await?;
     let local = local_owner();
     let (confirmation_id, _) = pending_channel_delete(&store, &authority).await?;
     // The exact turn-end call from the report: it ends provider approval requests
@@ -284,7 +286,7 @@ async fn provider_pending_survives_turn_end_and_owner_approval_executes() -> Tes
 
 #[tokio::test]
 async fn provider_director_loss_before_approval_cancels_without_effects() -> TestResult {
-    let (store, authority, _, _, _directory) = provider_store().await?;
+    let (store, authority, _, _, _start, _directory) = provider_store().await?;
     let local = local_owner();
     let (confirmation_id, _) = pending_channel_delete(&store, &authority).await?;
     store
@@ -487,5 +489,170 @@ async fn attendee_director_loss_before_approval_cancels_without_effects() -> Tes
         )
         .await?;
     assert_eq!(view.settings.channels.len(), 1);
+    Ok(())
+}
+
+// A pending owner confirmation belongs to the owner's decision, not to the
+// delegate's runtime: the bridge exiting after the requesting turn detaches the
+// participant (membership intact), and that churn must not cancel the request.
+#[tokio::test]
+async fn provider_pending_survives_runtime_detach_and_owner_approval_executes() -> TestResult {
+    let (store, authority, _generation, _execution_id, start, _directory) =
+        provider_store().await?;
+    // Workspace-write session like the report; the request itself goes through
+    // the real turn authority.
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = json_set(session_json, '$.permission_mode', 'workspace-write') WHERE room_id='general' AND session_id=?",
+    )
+    .bind(PROVIDER_DELEGATE)
+    .execute(&store.pool)
+    .await?;
+    let (confirmation_id, _) = pending_channel_delete(&store, &authority).await?;
+    // The real turn-completion transition the runtime performs.
+    let completion_authority = crate::ProviderTurnAuthority {
+        room_id: &start.room_id,
+        session_id: &start.session_id,
+        turn_id: &start.turn_id,
+        turn_generation: start.turn_generation,
+        execution_id: &start.execution_id,
+        start_dispatch_nonce: &start.start_dispatch_nonce,
+        runtime_handle_id: &start.runtime_handle_id,
+        runtime_owner_id: &start.runtime_owner_id,
+        runtime_lease_token: &start.runtime_lease_token,
+        provider_turn_id: "provider-turn-test-1",
+        provider_session_id: Some("provider-thread-1"),
+    };
+    store
+        .complete_agent_turn(
+            "general",
+            PROVIDER_DELEGATE,
+            completion_authority,
+            "Finished the requested work.",
+            "",
+            None,
+            &[],
+        )
+        .await?;
+    // The managed bridge ending while idle detaches the participant through the
+    // real runtime-failure path; the delegate keeps role, mute state and owner.
+    let candidate = store
+        .load_runtime_reconciliation_candidate("general", PROVIDER_DELEGATE)
+        .await?
+        .ok_or("no reconciliation candidate for the idle session")?;
+    store.record_idle_runtime_failure(&candidate).await?;
+    let participant: Participant = serde_json::from_str(
+        &sqlx::query_scalar::<_, String>(
+            "SELECT participant_json FROM participants WHERE room_id='general' AND participant_id=?",
+        )
+        .bind(PROVIDER_DELEGATE)
+        .fetch_one(&store.pool)
+        .await?,
+    )?;
+    assert_eq!(participant.status, ParticipantStatus::Detached);
+    assert_eq!(participant.role, ParticipantRole::Director);
+    assert!(!participant.muted);
+    // Room-input reconciliation must keep the confirmation pending.
+    store.reconcile_delegated_confirmations("general").await?;
+    let local = local_owner();
+    let view = store
+        .snapshot_for(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            0,
+            100,
+        )
+        .await?;
+    assert_eq!(view.delegated_action_requests.len(), 1);
+    assert!(matches!(
+        view.delegated_action_requests[0].state,
+        ConfirmationState::Pending
+    ));
+    // The owner can still approve while the delegate is detached: approval runs
+    // under the owner's own authority, not the delegate's runtime.
+    let ack = store
+        .decide_delegated_action(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            &approve(&confirmation_id),
+        )
+        .await?;
+    assert_eq!(ack.result["state"], "succeeded");
+    let view = store
+        .snapshot_for(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            0,
+            100,
+        )
+        .await?;
+    assert!(view.settings.channels.is_empty());
+    Ok(())
+}
+
+// Real authority loss still cancels in reconciliation, and the stored receipt
+// keeps the underlying cause next to `confirmation_cancelled`.
+#[tokio::test]
+async fn detached_reconciliation_still_cancels_real_authority_loss_with_cause() -> TestResult {
+    let (store, authority, _generation, _execution_id, start, _directory) =
+        provider_store().await?;
+    let (confirmation_id, _) = pending_channel_delete(&store, &authority).await?;
+    let completion_authority = crate::ProviderTurnAuthority {
+        room_id: &start.room_id,
+        session_id: &start.session_id,
+        turn_id: &start.turn_id,
+        turn_generation: start.turn_generation,
+        execution_id: &start.execution_id,
+        start_dispatch_nonce: &start.start_dispatch_nonce,
+        runtime_handle_id: &start.runtime_handle_id,
+        runtime_owner_id: &start.runtime_owner_id,
+        runtime_lease_token: &start.runtime_lease_token,
+        provider_turn_id: "provider-turn-test-1",
+        provider_session_id: Some("provider-thread-1"),
+    };
+    store
+        .complete_agent_turn(
+            "general",
+            PROVIDER_DELEGATE,
+            completion_authority,
+            "Finished the requested work.",
+            "",
+            None,
+            &[],
+        )
+        .await?;
+    let candidate = store
+        .load_runtime_reconciliation_candidate("general", PROVIDER_DELEGATE)
+        .await?
+        .ok_or("no reconciliation candidate for the idle session")?;
+    store.record_idle_runtime_failure(&candidate).await?;
+    store.reconcile_delegated_confirmations("general").await?;
+    let local = local_owner();
+    let view = store
+        .snapshot_for(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            0,
+            100,
+        )
+        .await?;
+    assert_eq!(view.delegated_action_requests.len(), 1);
+    assert!(matches!(
+        view.delegated_action_requests[0].state,
+        ConfirmationState::Pending
+    ));
+    // Losing the director role is real authority loss: the next
+    // reconciliation cancels, and the receipt explains itself.
+    store
+        .execute_participant_role_update(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            &Uuid::new_v4().to_string(),
+            &json!({"participant_id": PROVIDER_DELEGATE, "role": "agent"}),
+        )
+        .await?;
+    store.reconcile_delegated_confirmations("general").await?;
+    let mut tx = store.pool.begin().await?;
+    let row =
+        crate::delegated_confirmation_lifecycle::load_in(&mut tx, "general", &confirmation_id)
+            .await?;
+    let receipt = crate::delegated_confirmation_lifecycle::receipt(&row)?;
+    assert_eq!(receipt["code"], "confirmation_cancelled");
+    assert_eq!(receipt["cause"]["code"], "role_required");
+    tx.rollback().await?;
     Ok(())
 }

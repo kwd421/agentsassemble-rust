@@ -89,10 +89,16 @@ its expiry, or loss of current authority. Current authority is re-proved at appr
 an AI retry, and in every room-input reconciliation: the delegate participant is still
 joined, unmuted, an AI, holds `director` and is bound to the same owner; the owner's bound
 authority still resolves; and the delegate's session custody is live (provider session
-server-owned, attendee session unrevoked, connector session live). Turn generation,
+server-owned, attendee session unrevoked, connector session live). A provider delegate
+whose runtime ended (participant `detached`, membership intact, still director/unmuted/bound)
+keeps its pending requests across that churn — detach is runtime absence, not removal —
+until a later live turn, restart or re-add re-attaches it; live tool calls still require
+the joined participant with exact turn authority. Turn generation,
 execution, input cursor, runtime lease and connection are not required at that point.
 Removal, kick, leave, mute or role change of the delegate, or loss of the owner, ends the
-request as `cancelled` with `confirmation_cancelled`; nothing executes. An AI retry of the
+request as `cancelled` with `confirmation_cancelled`; nothing executes. A cancellation
+receipt keeps `code: "confirmation_cancelled"` and records the underlying rejection as
+`cause: {"code", "message"}` so a later cancellation explains itself. An AI retry of the
 same request ID from a later turn or connection of the same delegate identity returns the
 stored state or receipt; a different action or payload conflicts. Connector requests keep
 these rules unchanged. Do not invent a connector execution protocol. Persist non-bearer

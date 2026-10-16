@@ -49,7 +49,7 @@ async fn bound_guest_never_borrows_operator_authority_and_live_changes_revoke() 
     bind_delegate(&store, RoomMutationAuthority::HumanSession(&human)).await?;
     assert!(store.director_owner_can_pin("general", "delegate").await?);
     let mut tx = store.pool.begin().await?;
-    let owner = resolve_pin_owner(&mut tx, "general", "delegate").await?;
+    let owner = resolve_pin_owner(&mut tx, "general", "delegate", false).await?;
     assert!(!owner.is_operator);
     assert!(!owner.capabilities.room_manage);
     tx.commit().await?;
@@ -93,7 +93,7 @@ async fn bound_guest_never_borrows_operator_authority_and_live_changes_revoke() 
         .execute(&mut *tx)
         .await?;
     assert!(
-        matches!(resolve_pin_owner(&mut tx, "general", "delegate").await,
+        matches!(resolve_pin_owner(&mut tx, "general", "delegate", false).await,
         Err(PersistenceError::CommandRejected { code, .. }) if code == "owner_authority_unavailable")
     );
     tx.commit().await?;
@@ -122,7 +122,7 @@ async fn local_binding_needs_no_socket_but_role_kind_and_historical_binding_stay
         .await?;
     let mut tx = store.pool.begin().await?;
     assert!(
-        matches!(resolve_pin_owner(&mut tx, "general", "delegate").await,
+        matches!(resolve_pin_owner(&mut tx, "general", "delegate", false).await,
         Err(PersistenceError::CommandRejected { code, .. }) if code == "owner_authority_unavailable")
     );
     Ok(())

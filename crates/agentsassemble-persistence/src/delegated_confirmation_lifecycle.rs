@@ -78,27 +78,37 @@ pub(crate) async fn refresh_in(
     if row.get::<&str, _>("state") != "pending" {
         return Ok(());
     }
-    let (state, code) = if row.get::<i64, _>("expires_at") <= Utc::now().timestamp_millis() {
-        (ConfirmationState::Expired, "confirmation_expired")
+    let (state, receipt) = if row.get::<i64, _>("expires_at") <= Utc::now().timestamp_millis() {
+        (
+            ConfirmationState::Expired,
+            json!({"status":"rejected","code":"confirmation_expired","retryable":false}),
+        )
     } else {
         match validate_in(tx, room_id, row).await {
             Ok(_) => return Ok(()),
             Err(
-                PersistenceError::CommandRejected { .. }
+                error @ (PersistenceError::CommandRejected { .. }
                 | PersistenceError::ParticipantMissing
-                | PersistenceError::RoomMissing,
-            ) => (ConfirmationState::Cancelled, "confirmation_cancelled"),
+                | PersistenceError::RoomMissing),
+            ) => (ConfirmationState::Cancelled, cancelled_receipt(&error)),
             Err(error) => return Err(error),
         }
     };
-    finish_in(
-        tx,
-        room_id,
-        row,
-        state,
-        &json!({"status":"rejected","code":code,"retryable":false}),
-    )
-    .await
+    finish_in(tx, room_id, row, state, &receipt).await
+}
+
+/// A cancellation keeps `confirmation_cancelled` as its code and records the
+/// underlying rejection as its cause, so a later cancellation explains itself.
+fn cancelled_receipt(error: &PersistenceError) -> Value {
+    let (code, message) = match error {
+        PersistenceError::CommandRejected { code, message } => (code.to_string(), message.clone()),
+        PersistenceError::ParticipantMissing => {
+            ("participant_missing".to_owned(), error.to_string())
+        }
+        PersistenceError::RoomMissing => ("room_missing".to_owned(), error.to_string()),
+        _ => ("unknown".to_owned(), error.to_string()),
+    };
+    json!({"status":"rejected","code":"confirmation_cancelled","retryable":false,"cause":{"code":code,"message":message}})
 }
 
 pub(crate) async fn retry_in(

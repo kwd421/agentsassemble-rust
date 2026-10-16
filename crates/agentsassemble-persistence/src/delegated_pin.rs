@@ -1,6 +1,7 @@
 //! The action-bound proof stays private; no operator principal reaches an AI.
 use agentsassemble_domain::{
-    Actor, AuthenticatedPrincipal, InviteScope, RoomEvent, SetMessagePin, canonical_payload_hash,
+    Actor, AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
+    Participant, ParticipantStatus, RoomEvent, SetMessagePin, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -76,7 +77,9 @@ impl DelegateRoomAuthority {
 
     /// Current custody of the delegate's session without the request turn or connection:
     /// the provider session must still be server-owned, the attendee session unrevoked
-    /// and the connector session live. Live tool calls keep using `resolve`.
+    /// and the connector session live. A runtime-detached provider delegate (membership
+    /// intact, bridge gone) keeps its confirmation authority here. Live tool calls keep
+    /// using `resolve`.
     pub(crate) async fn resolve_session(
         &self,
         tx: &mut Transaction<'_, Sqlite>,
@@ -95,7 +98,11 @@ impl DelegateRoomAuthority {
                     ));
                 }
                 let participant =
-                    crate::authority::load_active_participant(tx, room_id, session_id).await?;
+                    crate::delegation_owner::load_delegate_member(tx, room_id, session_id, true)
+                        .await?;
+                if participant.status == ParticipantStatus::Detached {
+                    return confirmation_principal(&session, &participant);
+                }
                 crate::room_turns::support::provider_room_principal(
                     &session,
                     &participant,
@@ -184,6 +191,40 @@ impl DelegateRoomAuthority {
     }
 }
 
+/// The delegate principal for approval, drives and reconciliation when the runtime
+/// detached the participant but the membership is intact. It enforces the same
+/// delegate gates as the live principal except live attachment; mute, role, type
+/// and identity mismatches refuse exactly as they do there.
+fn confirmation_principal(
+    session: &DurableAgentSession,
+    participant: &Participant,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    if participant.muted
+        || participant.participant_type != "agent"
+        || participant.room_id != session.public.room_id
+        || participant.participant_id != session.public.participant_id
+    {
+        return Err(rejected(
+            "stale_provider_turn",
+            "Room tool authority no longer matches an active Agent Session participant.",
+        ));
+    }
+    Ok(AuthenticatedPrincipal {
+        principal_id: session.public.session_id.clone(),
+        participant_id: participant.participant_id.clone(),
+        display_name: participant.display_name.clone(),
+        room_id: session.public.room_id.clone(),
+        client_kind: ClientKind::AgentBridge,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: false,
+        capabilities: CapabilitySet::for_principal(
+            ClientKind::AgentBridge,
+            InviteScope::ReadWrite,
+            false,
+        ),
+    })
+}
+
 pub(crate) struct DelegatedRoomActionAuthority {
     pub(crate) owner: AuthenticatedPrincipal,
     pub(crate) delegate: AuthenticatedPrincipal,
@@ -198,6 +239,7 @@ impl DelegatedRoomActionAuthority {
             tx,
             authority.room_id(),
             authority.delegate_id(),
+            false,
         )
         .await?;
         let delegate = authority.resolve(tx).await?;
@@ -205,7 +247,8 @@ impl DelegatedRoomActionAuthority {
     }
 
     /// Proves current owner and delegate authority for approval, drives and reconciliation.
-    /// It never requires the requesting turn or connection.
+    /// It never requires the requesting turn or connection. A runtime-detached delegate
+    /// (membership intact, bridge gone) keeps its authority here; live calls do not.
     pub(crate) async fn pin_current(
         tx: &mut Transaction<'_, Sqlite>,
         authority: &DelegateRoomAuthority,
@@ -214,6 +257,7 @@ impl DelegatedRoomActionAuthority {
             tx,
             authority.room_id(),
             authority.delegate_id(),
+            true,
         )
         .await?;
         let delegate = authority.resolve_session(tx).await?;

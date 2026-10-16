@@ -382,8 +382,9 @@ pub(crate) async fn resolve_pin_owner(
     tx: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     delegate_id: &str,
+    allow_detached: bool,
 ) -> Result<AuthenticatedPrincipal, PersistenceError> {
-    let delegate = crate::authority::load_active_participant(tx, room_id, delegate_id).await?;
+    let delegate = load_delegate_member(tx, room_id, delegate_id, allow_detached).await?;
     if delegate.participant_type != "agent" || delegate.role != ParticipantRole::Director {
         return Err(rejected("role_required", "A director AI is required."));
     }
@@ -418,6 +419,32 @@ pub(crate) async fn resolve_pin_owner(
     Ok(owner)
 }
 
+/// Loads a delegate participant for delegation authority. Membership intact
+/// (`joined`, or `detached` when the caller tolerates runtime absence) proves the
+/// delegate; removal, disconnect of the membership itself and revoked actors refuse
+/// exactly as the shared active-membership gate refuses them.
+pub(crate) async fn load_delegate_member(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    delegate_id: &str,
+    allow_detached: bool,
+) -> Result<agentsassemble_domain::Participant, PersistenceError> {
+    crate::authority::load_active_room(tx, room_id).await?;
+    let participant = crate::participant_rows::load_participant_by_key(tx, room_id, delegate_id)
+        .await?
+        .ok_or(PersistenceError::ParticipantMissing)?;
+    let attached = participant.room_id == room_id
+        && participant.participant_id == delegate_id
+        && (participant.status == agentsassemble_domain::ParticipantStatus::Joined
+            || (allow_detached
+                && participant.status == agentsassemble_domain::ParticipantStatus::Detached));
+    if !attached {
+        return Err(crate::authority::session_revoked());
+    }
+    crate::central_member_removal::require_live_actor(tx, delegate_id).await?;
+    Ok(participant)
+}
+
 async fn resolve_bound_owner(
     tx: &mut Transaction<'_, Sqlite>,
     room_id: &str,
@@ -448,7 +475,7 @@ impl SqliteStore {
         delegate_id: &str,
     ) -> Result<bool, PersistenceError> {
         let mut tx = self.pool.begin().await?;
-        let result = resolve_pin_owner(&mut tx, room_id, delegate_id).await;
+        let result = resolve_pin_owner(&mut tx, room_id, delegate_id, false).await;
         tx.commit().await?;
         match result {
             Ok(_) => Ok(true),
