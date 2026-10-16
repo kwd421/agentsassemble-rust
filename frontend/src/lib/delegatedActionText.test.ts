@@ -100,6 +100,47 @@ describe("formatDelegatedActionText", () => {
     expect(text).toContain("채널");
   });
 
+  it("does not double the noun when the channel name is unknown", () => {
+    for (const [action, verb] of [
+      ["create_text_channel", "만들었어요"],
+      ["rename_text_channel", "이름을 바꿨어요"],
+      ["delete_text_channel", "삭제했어요"],
+    ] as const) {
+      const text = line(action, `x ${action} on behalf of y.`, { targetId: "missing-channel" });
+      expect(text).toContain("채널");
+      expect(text).toContain(verb);
+      expect(text).not.toContain("채널 채널");
+    }
+    const known = line("delete_text_channel", "x deleted a text channel on behalf of y.");
+    expect(known).toContain("#기획 채널을");
+    const deletedUnknown = line("delete_text_channel", "x deleted a text channel on behalf of y.",
+      { targetId: "missing-channel" });
+    expect(deletedUnknown).toContain("채널을 삭제했어요");
+  });
+
+  it("does not double the noun when the agent or participant name is unknown", () => {
+    for (const action of ["start_agent", "stop_agent", "create_agent", "remove_agent"]) {
+      const text = line(action, `x ${action} on behalf of y.`, { targetId: "missing-agent" });
+      expect(text).toContain("에이전트를");
+      expect(text).not.toContain("에이전트 에이전트");
+    }
+    const reconfigured = line("reconfigure_agent", "x reconfigure on behalf of y.", { targetId: "missing-agent" });
+    expect(reconfigured).toContain("에이전트 설정을 바꿨어요");
+    expect(reconfigured).not.toContain("에이전트 에이전트");
+    const knownAgent = line("start_agent", "x start on behalf of y.", { targetId: "target-1" });
+    expect(knownAgent).toContain("새내기 에이전트를");
+    const muted = line("set_participant_mute", "x muted a participant on behalf of y.", { targetId: "missing-agent" });
+    expect(muted).toContain("참가자를 음소거했어요");
+    expect(muted).not.toContain("참가자 참가자");
+    const kicked = line("kick_participant", "x kicked someone on behalf of y.", { targetId: "missing-agent" });
+    expect(kicked).toContain("참가자를 내보냈어요");
+    expect(kicked).not.toContain("참가자 참가자");
+    const pinned = line("set_message_pin", "x pinned a message on behalf of y.",
+      { targetId: "msg-1", pinned: true, targetChannelId: "missing-channel" });
+    expect(pinned).toContain("메시지를 고정했어요");
+    expect(pinned).not.toContain("채널 채널");
+  });
+
   it("falls back to a neutral phrase for an unknown action", () => {
     const text = line("future_action", "x did something on behalf of y.");
     expect(text).toContain("claude-haiku-5-5");

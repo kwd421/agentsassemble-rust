@@ -46,16 +46,16 @@ export function formatDelegatedActionText(
   const owner = participantName(profiles, delegation.onBehalfOfParticipantId);
   const head = owner ? `${actor}${subjectParticle(actor)} ${owner} 대신 ` : `${actor}${subjectParticle(actor)} `;
   const channel = channelName(channels, delegation.targetId);
-  const channelNoun = channel ? `#${channel}` : "채널";
+  const channelDisplay = channel ? `#${channel} 채널` : "채널";
   const targetParticipant = participantName(profiles, delegation.targetId);
-  const agent = targetParticipant || "에이전트";
+  const agentDisplay = targetParticipant ? `${targetParticipant} 에이전트` : "에이전트";
   switch (delegation.action) {
     case "create_text_channel":
-      return `${head}${channelNoun} 채널을 만들었어요.`;
+      return `${head}${channelDisplay}을 만들었어요.`;
     case "rename_text_channel":
-      return `${head}${channelNoun} 채널 이름을 바꿨어요.`;
+      return `${head}${channelDisplay} 이름을 바꿨어요.`;
     case "delete_text_channel":
-      return `${head}${channelNoun} 채널을 삭제했어요.`;
+      return `${head}${channelDisplay}을 삭제했어요.`;
     case "set_message_pin": {
       const pinned = delegation.pinned ?? !/unpinned/i.test(event.message);
       const scope = delegation.targetChannelId && channelName(channels, delegation.targetChannelId)
@@ -70,15 +70,15 @@ export function formatDelegatedActionText(
         : `${head}${target}${objectParticle(target)} 음소거했어요.`;
     }
     case "start_agent":
-      return `${head}${agent} 에이전트를 시작했어요.`;
+      return `${head}${agentDisplay}를 시작했어요.`;
     case "stop_agent":
-      return `${head}${agent} 에이전트를 중지했어요.`;
+      return `${head}${agentDisplay}를 중지했어요.`;
     case "create_agent":
-      return `${head}${agent} 에이전트를 만들었어요.`;
+      return `${head}${agentDisplay}를 만들었어요.`;
     case "reconfigure_agent":
-      return `${head}${agent} 에이전트 설정을 바꿨어요.`;
+      return `${head}${agentDisplay} 설정을 바꿨어요.`;
     case "remove_agent":
-      return `${head}${agent} 에이전트를 삭제했어요.`;
+      return `${head}${agentDisplay}를 삭제했어요.`;
     case "kick_participant": {
       const target = targetParticipant || "참가자";
       return `${head}${target}${objectParticle(target)} 내보냈어요.`;
