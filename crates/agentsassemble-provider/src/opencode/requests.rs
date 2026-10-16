@@ -70,7 +70,15 @@ impl NativeRequest {
                     (
                         ProviderRequestKind::Permission,
                         format!("OpenCode requests {permission}"),
-                        display(&patterns.join(", ")),
+                        // The subject (permission name) belongs in the detail field so the
+                        // owner-facing card can present it beside the localized title.
+                        display(
+                            &[permission.to_owned(), patterns.join(", ")]
+                                .into_iter()
+                                .filter(|part| !part.is_empty())
+                                .collect::<Vec<_>>()
+                                .join(" · "),
+                        ),
                         ProviderRequestPrompt::Option { options },
                         "permission",
                     )

@@ -1,28 +1,55 @@
 import { useRef, useState } from "react";
 import type { PendingProviderRequest } from "../../types/generated/PendingProviderRequest";
+import type { ProviderRequestKind } from "../../types/generated/ProviderRequestKind";
+import type { ProviderRequestOption } from "../../types/generated/ProviderRequestOption";
 import type { ProviderRequestQuestion } from "../../types/generated/ProviderRequestQuestion";
 import type { ProviderRequestResolution } from "../../types/generated/ProviderRequestResolution";
 import { RoomSocketSayError, type RoomSocketHandle } from "../../roomSocketTypes";
+import { resolveProviderPresentation } from "./providerBranding";
 
 const controlStyle = { minHeight: 44, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-panel-separator)", background: "var(--color-panel)", color: "var(--color-text-primary)" } as const;
 const terminalLabels: Record<string, string> = {
   resolved: "응답을 전달했어요.", failed: "응답을 전달하지 못했어요. 에이전트에서 새 요청이 필요해요.",
   cancelled: "요청이 취소됐어요.", expired: "응답 시간이 만료됐어요.",
 };
+// Option labels come from the structured option kind, never the provider's English label.
+// An unknown kind (a newer host may add one) still renders a neutral Korean label.
+const optionKindLabels: Record<string, string> = {
+  allow_once: "한 번만 허용", allow_always: "항상 허용", allow_session: "이번 세션 동안 허용",
+  reject_once: "한 번만 거부", reject_always: "항상 거부",
+  deny: "거부", decline: "거부하고 계속", cancel: "거부하고 중단", allow_policy: "규칙을 추가하고 허용",
+};
+const neutralOptionLabel = "선택";
 
-export default function ProviderRequestMessage({ entry, title, state, socket, connected, canPost, providerKind }: {
+function providerNameOf(providerKind?: string): string {
+  return resolveProviderPresentation({ providerKind }).providerName || "에이전트";
+}
+
+function requestHeadline(kind: ProviderRequestKind, providerName: string): string {
+  if (kind === "permission") return `${providerName}가 실행 권한을 허락해 달라고 해요`;
+  if (kind === "user_input") return `${providerName}가 답변을 기다려요`;
+  if (kind === "external_action") return `${providerName}가 확인을 기다려요`;
+  return `${providerName} 요청`;
+}
+
+export function providerRequestOptionLabel(option: ProviderRequestOption): string {
+  return optionKindLabels[option.kind] || neutralOptionLabel;
+}
+
+export default function ProviderRequestMessage({ entry, state, socket, connected, canPost, providerKind }: {
   entry?: PendingProviderRequest; title?: string; state?: string; providerKind?: string;
   socket: RoomSocketHandle | null; connected: boolean; canPost: boolean;
 }) {
+  const providerName = providerNameOf(providerKind);
   return <section aria-label="에이전트 요청" style={{ marginTop: 8, maxWidth: 560, borderLeft: "2px solid var(--color-panel-separator)", padding: "4px 0 4px 12px", fontSize: 14, overflowWrap: "anywhere" }}>
     {entry ? <>
       {!connected && <p role="status">연결을 복구하고 있어요. 연결되면 응답할 수 있어요.</p>}
-      <RequestForm key={entry.request.provider_request_id} entry={entry} socket={socket} enabled={connected && canPost} providerKind={providerKind} />
-    </> : <><p className="font-semibold">{title || "요청"}</p><p role="status">{terminalLabels[state || ""] || "현재 응답할 수 없는 요청이에요."}</p></>}
+      <RequestForm key={entry.request.provider_request_id} entry={entry} socket={socket} enabled={connected && canPost} providerName={providerName} providerKind={providerKind} />
+    </> : <><p className="font-semibold">{`${providerName} 요청`}</p><p role="status">{terminalLabels[state || ""] || "현재 응답할 수 없는 요청이에요."}</p></>}
   </section>;
 }
 
-function RequestForm({ entry, socket, enabled, providerKind }: { entry: PendingProviderRequest; socket: RoomSocketHandle | null; enabled: boolean; providerKind?: string }) {
+function RequestForm({ entry, socket, enabled, providerName, providerKind }: { entry: PendingProviderRequest; socket: RoomSocketHandle | null; enabled: boolean; providerName: string; providerKind?: string }) {
   const { request, state } = entry;
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [optionId, setOptionId] = useState("");
@@ -53,12 +80,13 @@ function RequestForm({ entry, socket, enabled, providerKind }: { entry: PendingP
     } finally { inFlight.current = false; setBusy(false); }
   }
   return <form onSubmit={(event) => { event.preventDefault(); void submit(); }} style={{ display: "grid", gap: 16 }}>
-    <div><h3 style={{ fontWeight: 700 }}>{request.title}</h3><p style={{ whiteSpace: "pre-wrap" }}>{request.description}</p></div>
+    <div><h3 style={{ fontWeight: 700 }}>{requestHeadline(request.request_kind, providerName)}</h3>
+      {request.description && <p style={{ whiteSpace: "pre-wrap" }}>{request.description}</p>}</div>
     <p>응답 기한: <time dateTime={entry.expires_at}>{new Date(entry.expires_at).toLocaleString("ko-KR")}</time></p>
     <fieldset disabled={locked} style={{ display: "grid", gap: 12, minWidth: 0 }}>
       {request.prompt.response_kind === "option" && request.prompt.options.filter((option) => !(providerKind === "opencode_server" && request.request_kind === "permission" && (option.id === "always" || option.kind === "allow_always"))).map((option) => <label key={option.id} style={{ ...controlStyle, display: "flex", alignItems: "center", gap: 12 }}>
         <input type="radio" name={request.provider_request_id} required checked={optionId === option.id} onChange={() => setOptionId(option.id)} />
-        <span>{option.label}{option.description && <small style={{ display: "block" }}>{option.description}</small>}</span>
+        <span>{providerRequestOptionLabel(option)}{option.description && <small style={{ display: "block" }}>{option.description}</small>}</span>
       </label>)}
       {request.prompt.response_kind === "answers" && request.prompt.questions.map((question) => <QuestionInput key={question.id}
         question={question} values={answers[question.id] ?? []} group={`${request.provider_request_id}-${question.id}`}

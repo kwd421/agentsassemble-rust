@@ -50,7 +50,7 @@ describe("provider request controls", () => {
 it("hides pre-upgrade OpenCode remembered grants and submits only a one-time choice", async () => {
   const resolve = vi.fn().mockResolvedValue(ack);
   const entry = { ...pendingRequest, request: { ...pendingRequest.request,
-    request_kind: "permission" as const,
+    request_kind: "permission" as const, title: "OpenCode requests bash",
     prompt: { response_kind: "option" as const, options: [
       { id: "once", kind: "allow_once", label: "Allow once", description: "" },
       { id: "always", kind: "allow_always", label: "Always allow", description: "" },
@@ -58,8 +58,25 @@ it("hides pre-upgrade OpenCode remembered grants and submits only a one-time cho
     ] },
   } };
   render(<ProviderRequestMessage entry={entry} providerKind="opencode_server" socket={socket(resolve)} connected canPost />);
-  expect(screen.queryByLabelText("Always allow")).toBeNull();
-  fireEvent.click(screen.getByLabelText("Allow once"));
+  // Labels come from the structured kind; the provider's English label and title never render.
+  expect(screen.getByLabelText(/한 번만 허용/)).toBeTruthy();
+  expect(screen.queryByLabelText(/Allow once/)).toBeNull();
+  expect(screen.queryByText(/OpenCode requests bash/)).toBeNull();
+  expect(screen.getByText(/OpenCode가 실행 권한을 허락해 달라고 해요/)).toBeTruthy();
+  expect(screen.queryByLabelText(/Always allow/)).toBeNull();
+  fireEvent.click(screen.getByLabelText(/한 번만 허용/));
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "응답 보내기" })); });
   expect(resolve).toHaveBeenCalledWith(entry.request.provider_request_id, { response_kind: "option", option_id: "once" });
+});
+
+it("renders a neutral Korean label for an option kind it does not know", () => {
+  const entry = { ...pendingRequest, request: { ...pendingRequest.request,
+    request_kind: "permission" as const,
+    prompt: { response_kind: "option" as const, options: [
+      { id: "future", kind: "allow_from_orbit", label: "Allow from orbit", description: "" },
+    ] },
+  } };
+  render(<ProviderRequestMessage entry={entry} providerKind="codex_live_session" socket={socket(vi.fn())} connected canPost />);
+  expect(screen.queryByLabelText(/Allow from orbit/)).toBeNull();
+  expect(screen.getByLabelText(/선택/)).toBeTruthy();
 });
