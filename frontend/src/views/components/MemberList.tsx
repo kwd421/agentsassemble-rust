@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Check, Search, Volume2, VolumeX } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Search, Volume2, VolumeX } from "lucide-react";
 import type {
   LiveAgent,
   RoomAgentSession,
@@ -205,6 +205,8 @@ export default function MemberList({
         )}
         {ownerGroups.map((group) => {
           const collapseId = `owner:${group.id}`;
+          const collapsed = Boolean(collapsedGroups[collapseId]);
+          const ToggleIcon = collapsed ? ChevronRight : ChevronDown;
           return (
             <section key={group.id} className="dc-person-member-group">
               {group.person ? (
@@ -219,29 +221,29 @@ export default function MemberList({
                 <p className="dc-person-owner-label preserve-words">{group.label}</p>
               )}
               {group.agents.length > 0 && (
-                <div className="dc-owner-agent-group">
-                  <button type="button" className="dc-owner-agent-spine" aria-expanded={!collapsedGroups[collapseId]}
-                    aria-label={`에이전트 ${group.agents.length}명 ${collapsedGroups[collapseId] ? "펼치기" : "접기"}`}
-                    data-tip={collapsedGroups[collapseId] ? "펼치기" : "접기"} onClick={() => toggleGroup(collapseId)} />
-                  {collapsedGroups[collapseId] ? (
-                    <div className="dc-owner-agent-item">
-                      <button type="button" className="dc-owner-agent-more" onClick={() => toggleGroup(collapseId)}>
-                        에이전트 {group.agents.length}명
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="dc-owner-agent-list">
-                      {group.agents.map((entry) => (
-                        <div key={entry.id} className="dc-owner-agent-item">
-                          <MemberRow
-                            entry={entry}
-                            onOpenDetails={openMemberDetails}
-                            onContextMenu={handleMemberContextMenu}
-                            canManageParticipant={roleMenuAvailable || Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
-                            canEditRoles={canEditRoles}
-                          />
-                        </div>
-                      ))}
+                <div className="dc-owner-agent-group" data-collapsed={collapsed}>
+                  <button type="button" className="dc-owner-agent-toggle" aria-expanded={!collapsed}
+                    aria-label={`에이전트 ${group.agents.length}명 ${collapsed ? "펼치기" : "접기"}`}
+                    onClick={() => toggleGroup(collapseId)}>
+                    <ToggleIcon size={12} aria-hidden />
+                    <span>에이전트 {group.agents.length}명</span>
+                  </button>
+                  {!collapsed && (
+                    <div className="dc-owner-agent-list-wrap">
+                      <span className="dc-owner-agent-spine" aria-hidden="true" />
+                      <div className="dc-owner-agent-list">
+                        {group.agents.map((entry) => (
+                          <div key={entry.id} className="dc-owner-agent-item">
+                            <MemberRow
+                              entry={entry}
+                              onOpenDetails={openMemberDetails}
+                              onContextMenu={handleMemberContextMenu}
+                              canManageParticipant={roleMenuAvailable || Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
+                              canEditRoles={canEditRoles}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

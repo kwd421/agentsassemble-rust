@@ -42,45 +42,47 @@
   content: "";
 }
 
-/* The connector line doubles as the fold control. */
-.dc-owner-agent-spine {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  bottom: 21px;
-  left: -5px;
-  width: 12px;
-  cursor: pointer;
-}
-
-.dc-owner-agent-group:has(.dc-owner-agent-spine:hover) .dc-owner-agent-item::before,
-.dc-owner-agent-group:has(.dc-owner-agent-spine:hover) .dc-owner-agent-item::after,
-.dc-owner-agent-group:has(.dc-owner-agent-spine:focus-visible) .dc-owner-agent-item::before,
-.dc-owner-agent-group:has(.dc-owner-agent-spine:focus-visible) .dc-owner-agent-item::after {
-  border-color: var(--color-text-muted);
-}
-
-.dc-owner-agent-spine:focus-visible {
-  outline: none;
-}
-
-.dc-owner-agent-more {
+/* The single fold control: a Discord channel-category style header row. */
+.dc-owner-agent-toggle {
   display: flex;
   min-height: 32px;
   width: 100%;
   align-items: center;
-  border-radius: 8px;
+  gap: 4px;
+  border-radius: 4px;
   padding: 0 8px;
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 700;
   text-align: left;
 }
 
-.dc-owner-agent-more:hover,
-.dc-owner-agent-more:focus-visible {
+.dc-owner-agent-toggle:hover,
+.dc-owner-agent-toggle:focus-visible {
   background: var(--color-sidebar-hover);
   color: var(--color-text-secondary);
   outline: none;
+}
+
+.dc-owner-agent-toggle svg {
+  flex-shrink: 0;
+}
+
+.dc-owner-agent-list-wrap {
+  position: relative;
+}
+
+/* The connector spine is decoration only: it joins the header row to the
+   agent rows and is never interactive. */
+.dc-owner-agent-spine {
+  position: absolute;
+  top: -2px;
+  bottom: 21px;
+  left: -12px;
+  width: 2px;
+  border-radius: 2px;
+  background: #474851;
+  pointer-events: none;
 }
 
 .dc-owner-agent-list .dc-member {

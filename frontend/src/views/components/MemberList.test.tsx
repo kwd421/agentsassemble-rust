@@ -275,6 +275,41 @@ describe("MemberList component wiring", () => {
     expect(within(group as HTMLElement).getByText("Agent One")).toBeTruthy();
   });
 
+  it("toggles an owner's agent group with one header control and a decorative spine", () => {
+    const secondAgent: LiveAgent = { ...AGENT, agent_id: "agent-2", display_name: "Agent Two" };
+    render(
+      <MemberList
+        agents={[AGENT, secondAgent]}
+        members={[participantFixture()]}
+        viewerParticipantId="operator-local"
+        roomId="room-1"
+        roomName="Room One"
+      />
+    );
+
+    const group = screen.getByText("Operator").closest(".dc-person-member-group") as HTMLElement;
+    const toggles = within(group).getAllByRole("button", { name: /에이전트 2명/ });
+    expect(toggles).toHaveLength(1);
+    const toggle = toggles[0];
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(within(group).getByText("Agent Two")).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(within(group).queryByText("Agent One")).toBeNull();
+    expect(within(group).getAllByRole("button", { name: /에이전트 2명/ })).toHaveLength(1);
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(within(group).getByText("Agent Two")).toBeTruthy();
+
+    const spine = group.querySelector(".dc-owner-agent-spine") as HTMLElement | null;
+    expect(spine).not.toBeNull();
+    expect(spine?.tagName).not.toBe("BUTTON");
+    expect(spine?.getAttribute("aria-hidden")).toBe("true");
+    expect(spine?.getAttribute("tabindex")).toBeNull();
+  });
+
   it("does not infer participant ownership from local runtime custody", () => {
     const members: RoomMember[] = [
       participantFixture({
