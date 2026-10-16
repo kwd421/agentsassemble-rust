@@ -11,7 +11,7 @@ function request(owner: string, id: string): DelegatedActionRequest {
   return {
     confirmation_id: id, owner_participant_id: owner, owner_display_name: "Owner",
     delegate_participant_id: "agent-1", delegate_display_name: "코덱스",
-    action: { action: "delete_text_channel", request_id: "r", channel_id: "c", expected_settings_revision: "s" },
+    action: { action: "delete_text_channel", request_id: "r", channel_id: "c" },
     target_name: "기획", consequences: "host text", created_at: new Date().toISOString(),
     expires_at: new Date(Date.now() + 300_000).toISOString(), state: "pending",
   } as DelegatedActionRequest;

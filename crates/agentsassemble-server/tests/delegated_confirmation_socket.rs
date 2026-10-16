@@ -18,7 +18,7 @@ pub(super) async fn verify(
         .snapshot("general", 0, 200)
         .await?
         .settings;
-    let request = json!({"connection_id":connection,"channel_id":create["target_id"],"expected_settings_revision":agentsassemble_domain::public_settings(&settings)?.settings_revision,"request_id":Uuid::new_v4()});
+    let request = json!({"connection_id":connection,"channel_id":create["target_id"],"request_id":Uuid::new_v4()});
     let mut owner = local_socket::connect(&server.base_url, server.state(), "general").await;
     assert_eq!(owner.subscribe(0).await["op"], "subscribed");
     assert_eq!(owner.receive_json().await["op"], "snapshot");

@@ -5,7 +5,7 @@ import type { DelegatedActionRequest } from "./types/generated/DelegatedActionRe
 
 const request: DelegatedActionRequest = {
   confirmation_id: "8b6be8f4-7315-4b6c-b4b6-ff12f57e69b4", owner_participant_id: "operator-local", owner_display_name: "Owner",
-  delegate_participant_id: "ai", delegate_display_name: "Director", action: { action: "delete_text_channel", request_id: "8b6be8f4-7315-4b6c-b4b6-ff12f57e69b5", channel_id: "ctarget", expected_settings_revision: "rev" },
+  delegate_participant_id: "ai", delegate_display_name: "Director", action: { action: "delete_text_channel", request_id: "8b6be8f4-7315-4b6c-b4b6-ff12f57e69b5", channel_id: "ctarget" },
   target_name: "Planning", consequences: "Deletes messages", created_at: "2026-10-13T00:00:00Z", expires_at: "2026-10-13T00:05:00Z", state: "pending",
 };
 describe("owner confirmation socket projection", () => {

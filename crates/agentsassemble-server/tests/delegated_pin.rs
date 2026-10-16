@@ -534,9 +534,7 @@ async fn verify_direct(
         );
     }
     let settings = store.snapshot("general", 0, 200).await?.settings;
-    let delete = args(
-        json!({"channel_id":settings.channels[0].id,"expected_settings_revision":agentsassemble_domain::public_settings(&settings)?.settings_revision}),
-    );
+    let delete = args(json!({"channel_id":settings.channels[0].id}));
     let pending = call(client, "request_delete_text_channel", delete.clone()).await;
     assert_eq!(pending["status"], "pending_confirmation");
     assert_eq!(settings, store.snapshot("general", 0, 200).await?.settings);

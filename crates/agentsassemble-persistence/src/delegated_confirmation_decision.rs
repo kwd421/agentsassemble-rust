@@ -137,15 +137,26 @@ impl SqliteStore {
                             ConfirmedRoomAction::DeleteTextChannel(action) => {
                         let proof = validate_in(&mut tx, &principal.room_id, &row).await?;
                         let mut settings = settings_in(&mut tx, &principal.room_id).await?;
-                        if agentsassemble_domain::public_settings(&settings)?.settings_revision != action.expected_settings_revision {
-                            return Err(rejected("target_changed", "The target settings changed before approval."));
+                        let current_revision = agentsassemble_domain::public_settings(&settings)?.settings_revision;
+                        // Only this channel may refuse approval: a deleted
+                        // target is a changed target, and a renamed one no
+                        // longer matches the card the owner reviewed. Any other
+                        // room change leaves this approval alone.
+                        if let Err(error) = crate::room_channels::require_text_channel(&mut tx, &principal.room_id, &action.channel_id).await {
+                            if matches!(&error, PersistenceError::CommandRejected { code, .. } if code == "channel_not_found") {
+                                return Err(rejected("target_changed", "The text channel no longer exists."));
+                            }
+                            return Err(error);
                         }
-                        crate::room_channels::require_text_channel(&mut tx, &principal.room_id, &action.channel_id).await?;
+                        let target = settings.channels.iter().find(|channel| channel.id == action.channel_id).ok_or_else(|| rejected("target_changed", "The text channel no longer exists."))?;
+                        if target.name != request.target_name {
+                            return Err(rejected("target_changed", "The text channel changed before approval."));
+                        }
                         settings.channels.retain(|c| c.id != action.channel_id);
                         for (position, channel) in settings.channels.iter_mut().enumerate() {
                             channel.position = position as u32;
                         }
-                        let delta = json!({"expected_revision":action.expected_settings_revision,"channels":settings.channels});
+                        let delta = json!({"expected_revision":current_revision,"channels":settings.channels});
                         let mut outcome = crate::room_settings::update_settings_in(&mut tx, &proof.owner, &delta).await?;
                         let mut event = crate::delegated_pin::attributed_action_event(&mut tx, proof.attribution(), &action.request_id, "delete_text_channel", &action.channel_id, "deleted a text channel and its messages").await?;
                         event.extra.insert("confirmation_id".into(), json!(request.confirmation_id));

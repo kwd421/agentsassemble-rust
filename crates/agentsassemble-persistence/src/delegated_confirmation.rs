@@ -4,8 +4,7 @@ use crate::{
     delegated_pin::DelegatedRoomActionAuthority,
 };
 use agentsassemble_domain::{
-    ConfirmationState, ConfirmedRoomAction, DelegatedActionRequest, DeleteTextChannel,
-    RoomSettings, public_settings,
+    ConfirmationState, ConfirmedRoomAction, DelegatedActionRequest, DeleteTextChannel, RoomSettings,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -89,9 +88,9 @@ impl SqliteStore {
             other => other,
         })?;
         let current = settings_in(&mut tx, authority.room_id()).await?;
-        if public_settings(&current)?.settings_revision != request.expected_settings_revision {
-            return Err(rejected("target_changed", "Room settings have changed."));
-        }
+        // The request binds its own target only: the channel must exist now and
+        // its card name is stored as the target name. Unrelated room changes
+        // never block this request or its later approval.
         crate::room_channels::require_text_channel(
             &mut tx,
             authority.room_id(),

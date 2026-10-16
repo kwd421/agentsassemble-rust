@@ -3,7 +3,7 @@
 ## Director delegation: owner confirmation (slice 3, required behaviour)
 
 RoomPortal managed/API and attendee/companion calls and connector MCP calls support
-`request_delete_text_channel(channel_id, expected_settings_revision, request_id)`;
+`request_delete_text_channel(channel_id, request_id)`;
 `start_agent(agent_id, request_id)` remains direct for `meeting_read_only` and requests
 confirmation for workspace-write/full-access. `request_create_agent` carries the
 owner's own `agent.create` fields except acknowledgement, start intent and session
@@ -69,6 +69,19 @@ ID retired; event sequence/actor records are retained. Do not promise physical e
 The approval rebuilds the channel list exactly as the owner's own settings update
 does: the removed entry is dropped and the survivors keep list order with dense
 positions, so deleting a channel that is not last still validates.
+A pending channel deletion is bound to its own target only: the channel id plus
+the channel name shown on the owner card (the stored target name). Approval
+refuses with `target_changed` only when that channel itself changed — it is
+gone, renamed, or otherwise not the channel the card showed. Any other room
+change (another channel created, renamed or deleted, any non-channel setting)
+never blocks approval, so several deletions requested in one turn are
+approved one after another, each applied to the then-current settings through
+the settings owner. Rows stored before this rule carry
+`expected_settings_revision`; the revision is ignored and those rows are
+honored under the same per-target check against their stored card name, because
+the per-target check is strictly narrower and never approves a different target
+than the card showed. The direct (non-confirmed) `rename_text_channel` keeps
+its AI-supplied `expected_settings_revision` on purpose and is unchanged.
 Only that human may approve/decline; another operator, guest or AI cannot substitute.
 Approving a full-access agent start requires that human's explicit full-access
 acknowledgement inside the approval; without it approval is refused and the request

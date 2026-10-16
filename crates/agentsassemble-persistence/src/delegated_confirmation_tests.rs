@@ -19,17 +19,16 @@ async fn confirmation_is_immutable_owner_private_and_executes_once() -> TestResu
         )
         .await?
         .0;
+    let revision = created.outcome.events[0].extra["room_settings"]["settings_revision"]
+        .as_str()
+        .ok_or("revision")?
+        .to_owned();
     let request = DeleteTextChannel {
         request_id: Uuid::new_v4().to_string(),
         channel_id: created.outcome.result["target_id"]
             .as_str()
             .ok_or("channel")?
             .into(),
-        expected_settings_revision:
-            created.outcome.events[0].extra["room_settings"]["settings_revision"]
-                .as_str()
-                .ok_or("revision")?
-                .into(),
     };
     let message = store
         .execute_channel_message(
@@ -53,7 +52,7 @@ async fn confirmation_is_immutable_owner_private_and_executes_once() -> TestResu
         pending
     );
     assert!(
-        matches!(store.execute_delegated_atomic(&authority,&DirectRoomAction::RenameTextChannel(agentsassemble_domain::RenameTextChannel {request_id:request.request_id.clone(),channel_id:request.channel_id.clone(),name:"Smuggled".into(),expected_settings_revision:request.expected_settings_revision.clone()}),|_,_,_|Ok(())).await,Err(PersistenceError::CommandRejected{code,..}) if code=="request_conflict")
+        matches!(store.execute_delegated_atomic(&authority,&DirectRoomAction::RenameTextChannel(agentsassemble_domain::RenameTextChannel {request_id:request.request_id.clone(),channel_id:request.channel_id.clone(),name:"Smuggled".into(),expected_settings_revision:revision}),|_,_,_|Ok(())).await,Err(PersistenceError::CommandRejected{code,..}) if code=="request_conflict")
     );
     let mut changed = request.clone();
     changed.channel_id = "different".into();
@@ -217,7 +216,6 @@ async fn approved_delete_of_a_non_last_channel_keeps_dense_positions() -> TestRe
     let (store, authority, _, _dir) = fixture().await?;
     let local = crate::human_session_authority_tests::local_operator_principal();
     let mut created_ids = Vec::new();
-    let mut revision = String::new();
     for name in ["First", "Second"] {
         let created = store
             .execute_delegated_atomic(
@@ -236,15 +234,10 @@ async fn approved_delete_of_a_non_last_channel_keeps_dense_positions() -> TestRe
                 .ok_or("channel")?
                 .to_owned(),
         );
-        revision = created.outcome.events[0].extra["room_settings"]["settings_revision"]
-            .as_str()
-            .ok_or("revision")?
-            .to_owned();
     }
     let request = DeleteTextChannel {
         request_id: Uuid::new_v4().to_string(),
         channel_id: created_ids[0].clone(),
-        expected_settings_revision: revision,
     };
     let pending = store
         .request_delegated_channel_delete::<()>(&authority, &request, |_, _, _| Ok(()))
@@ -291,14 +284,13 @@ async fn declines_expiry_changed_target_and_revoked_authority_are_terminal() -> 
             )
             .await?
             .0;
+        let revision = created.outcome.events[0].extra["room_settings"]["settings_revision"]
+            .as_str()
+            .unwrap()
+            .to_owned();
         let request = DeleteTextChannel {
             request_id: Uuid::new_v4().to_string(),
             channel_id: created.outcome.result["target_id"].as_str().unwrap().into(),
-            expected_settings_revision:
-                created.outcome.events[0].extra["room_settings"]["settings_revision"]
-                    .as_str()
-                    .unwrap()
-                    .into(),
         };
         let pending = store
             .request_delegated_channel_delete(&authority, &request, |_, _, _| Ok(()))
@@ -323,9 +315,7 @@ async fn declines_expiry_changed_target_and_revoked_authority_are_terminal() -> 
                                 request_id: Uuid::new_v4().to_string(),
                                 channel_id: request.channel_id.clone(),
                                 name: "Changed".into(),
-                                expected_settings_revision: request
-                                    .expected_settings_revision
-                                    .clone(),
+                                expected_settings_revision: revision.clone(),
                             },
                         ),
                         |_, _, _| Ok(()),
@@ -401,5 +391,200 @@ async fn declines_expiry_changed_target_and_revoked_authority_are_terminal() -> 
         assert_eq!(outcomes[0].receipt["code"], expected);
         assert_eq!(outcomes[0].request_id, request.request_id);
     }
+    Ok(())
+}
+
+async fn create_channel(
+    store: &SqliteStore,
+    authority: &DelegateRoomAuthority,
+    name: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let created = store
+        .execute_delegated_atomic(
+            authority,
+            &DirectRoomAction::CreateTextChannel(CreateTextChannel {
+                request_id: Uuid::new_v4().to_string(),
+                name: name.into(),
+            }),
+            |_, _, _| Ok(()),
+        )
+        .await?
+        .0;
+    Ok(created.outcome.result["target_id"]
+        .as_str()
+        .ok_or("channel")?
+        .to_owned())
+}
+
+async fn request_delete(
+    store: &SqliteStore,
+    authority: &DelegateRoomAuthority,
+    channel_id: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let pending = store
+        .request_delegated_channel_delete::<()>(
+            authority,
+            &DeleteTextChannel {
+                request_id: Uuid::new_v4().to_string(),
+                channel_id: channel_id.into(),
+            },
+            |_, _, _| Ok(()),
+        )
+        .await?
+        .0;
+    assert_eq!(pending["status"], "pending_confirmation");
+    Ok(pending["confirmation_id"]
+        .as_str()
+        .ok_or("confirmation")?
+        .to_owned())
+}
+
+async fn approve(
+    store: &SqliteStore,
+    confirmation_id: &str,
+) -> Result<crate::CommandOutcome, Box<dyn std::error::Error>> {
+    let local = crate::human_session_authority_tests::local_operator_principal();
+    Ok(store
+        .decide_delegated_action(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            &DecideDelegatedAction {
+                confirmation_id: confirmation_id.into(),
+                decision: ConfirmationDecision::Approve,
+                full_access_acknowledged: None,
+            },
+        )
+        .await?)
+}
+
+async fn rename_channel(
+    store: &SqliteStore,
+    authority: &DelegateRoomAuthority,
+    channel_id: &str,
+    name: &str,
+) -> TestResult {
+    let revision =
+        agentsassemble_domain::public_settings(&store.snapshot("general", 0, 100).await?.settings)?
+            .settings_revision;
+    store
+        .execute_delegated_atomic(
+            authority,
+            &DirectRoomAction::RenameTextChannel(agentsassemble_domain::RenameTextChannel {
+                request_id: Uuid::new_v4().to_string(),
+                channel_id: channel_id.into(),
+                name: name.into(),
+                expected_settings_revision: revision,
+            }),
+            |_, _, _| Ok(()),
+        )
+        .await?;
+    Ok(())
+}
+
+// Two deletions requested in one turn share nothing but the room: approving
+// the first must not invalidate the second.
+#[tokio::test]
+async fn two_pending_deletes_from_one_turn_approve_in_sequence() -> TestResult {
+    let (store, authority, _, _dir) = fixture().await?;
+    let first = create_channel(&store, &authority, "First").await?;
+    let second = create_channel(&store, &authority, "Second").await?;
+    let first_confirmation = request_delete(&store, &authority, &first).await?;
+    let second_confirmation = request_delete(&store, &authority, &second).await?;
+    assert_eq!(
+        approve(&store, &first_confirmation).await?.result["state"],
+        "succeeded"
+    );
+    assert_eq!(
+        store
+            .snapshot("general", 0, 100)
+            .await?
+            .settings
+            .channels
+            .iter()
+            .map(|channel| channel.id.clone())
+            .collect::<Vec<_>>(),
+        [second.clone()]
+    );
+    assert_eq!(
+        approve(&store, &second_confirmation).await?.result["state"],
+        "succeeded"
+    );
+    assert!(
+        store
+            .snapshot("general", 0, 100)
+            .await?
+            .settings
+            .channels
+            .is_empty()
+    );
+    Ok(())
+}
+
+// The owner must never approve a different target than the card showed.
+#[tokio::test]
+async fn renamed_delete_target_refuses_target_changed() -> TestResult {
+    let (store, authority, _, _dir) = fixture().await?;
+    let target = create_channel(&store, &authority, "Target").await?;
+    let confirmation = request_delete(&store, &authority, &target).await?;
+    rename_channel(&store, &authority, &target, "Changed").await?;
+    let outcome = approve(&store, &confirmation).await?;
+    assert_eq!(outcome.result["state"], "failed");
+    assert_eq!(outcome.result["receipt"]["code"], "target_changed");
+    let channels = store.snapshot("general", 0, 100).await?.settings.channels;
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].name, "Changed");
+    Ok(())
+}
+
+// An unrelated channel change before approval leaves this target alone.
+#[tokio::test]
+async fn unrelated_channel_change_does_not_block_delete_approval() -> TestResult {
+    let (store, authority, _, _dir) = fixture().await?;
+    let target = create_channel(&store, &authority, "Target").await?;
+    let other = create_channel(&store, &authority, "Other").await?;
+    let confirmation = request_delete(&store, &authority, &target).await?;
+    rename_channel(&store, &authority, &other, "Renamed").await?;
+    assert_eq!(
+        approve(&store, &confirmation).await?.result["state"],
+        "succeeded"
+    );
+    let channels = store.snapshot("general", 0, 100).await?.settings.channels;
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].id, other);
+    assert_eq!(channels[0].name, "Renamed");
+    assert_eq!(channels[0].position, 0);
+    Ok(())
+}
+
+// Rows stored before per-target binding carry the whole-room revision. It is
+// ignored: the stored card name binds the target, so those rows stay
+// approvable instead of failing on unrelated room changes.
+#[tokio::test]
+async fn legacy_row_with_settings_revision_is_honored_per_target() -> TestResult {
+    let (store, authority, _, _dir) = fixture().await?;
+    let target = create_channel(&store, &authority, "Target").await?;
+    let other = create_channel(&store, &authority, "Other").await?;
+    let confirmation = request_delete(&store, &authority, &target).await?;
+    let encoded: String = sqlx::query_scalar(
+        "SELECT request_json FROM delegated_action_requests WHERE room_id='general' AND confirmation_id=?",
+    )
+    .bind(&confirmation)
+    .fetch_one(&store.pool)
+    .await?;
+    let mut request: serde_json::Value = serde_json::from_str(&encoded)?;
+    request["action"]["expected_settings_revision"] =
+        serde_json::json!("stale-whole-room-revision");
+    sqlx::query("UPDATE delegated_action_requests SET request_json=? WHERE room_id='general' AND confirmation_id=?")
+        .bind(serde_json::to_string(&request)?)
+        .bind(&confirmation)
+        .execute(&store.pool)
+        .await?;
+    rename_channel(&store, &authority, &other, "Renamed").await?;
+    assert_eq!(
+        approve(&store, &confirmation).await?.result["state"],
+        "succeeded"
+    );
+    let channels = store.snapshot("general", 0, 100).await?.settings.channels;
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].id, other);
     Ok(())
 }
