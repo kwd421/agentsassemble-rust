@@ -36,6 +36,32 @@ export function agentSessionIsPresent(status?: string) {
   return ["starting", "idle", "busy", "paused", "stopping"].includes(status || "");
 }
 
+/** Whether the viewer may pause this session right now (owner of the detail-panel pause gate). */
+export function agentSessionCanPause(session: RoomAgentSession) {
+  return (
+    !session.external_owned &&
+    session.process_ownership === "server" &&
+    session.runtime_status === "idle" &&
+    !session.recovery_required
+  );
+}
+
+/** Whether the viewer may resume this session right now (owner of the detail-panel resume gate). */
+export function agentSessionCanResume(session: RoomAgentSession) {
+  if (
+    session.external_owned ||
+    session.process_ownership !== "server" ||
+    session.recovery_required
+  ) {
+    return false;
+  }
+  if (session.runtime_status === "paused") return true;
+  return (
+    Boolean(session.turn_count || session.last_seen_event_id) &&
+    ["stopped", "error", "disconnected", "available"].includes(session.runtime_status || "")
+  );
+}
+
 export function agentSessionPresenceStatus(status?: string, recoveryRequired = false) {
   if (recoveryRequired) return "error";
   if (status === "busy" || status === "starting" || status === "stopping") return "working";
@@ -172,15 +198,13 @@ export default function AgentSessionDetails({
   const canStart =
     serverOwned && !session.recovery_required && !hasRunBefore &&
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
-  const canPause = serverOwned && status === "idle" && !session.recovery_required;
+  const canPause = agentSessionCanPause(session);
   const canStop = agentSessionIsPresent(status) || status === "error" || session.recovery_required;
   // A server killed without a clean shutdown leaves this: stop is the owner request that lets
   // the runtime prove the previous owner is gone, so it is offered as recovery.
   const strandedRuntime =
     session.recovery_required && session.last_error_code === "runtime_authority_uncertain";
-  const canResume =
-    serverOwned && !session.recovery_required && (status === "paused" ||
-    (hasRunBefore && ["stopped", "error", "disconnected", "available"].includes(status || "")));
+  const canResume = agentSessionCanResume(session);
   const canInterrupt =
     (serverOwned ? provider?.turn_interrupt === "retained_runtime"
       : session.external_owned && session.process_ownership === "external" && session.external_retained_interrupt === true)

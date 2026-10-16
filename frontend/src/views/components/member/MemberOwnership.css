@@ -24,11 +24,11 @@
 .dc-owner-agent-item::before {
   position: absolute;
   top: 0;
-  left: -12px;
+  left: 13px;
   width: 10px;
   height: 50%;
-  border-bottom: 2px solid #474851;
-  border-left: 2px solid #474851;
+  border-bottom: 2px solid var(--color-member-spine);
+  border-left: 2px solid var(--color-member-spine);
   border-bottom-left-radius: 6px;
   content: "";
 }
@@ -37,16 +37,24 @@
   position: absolute;
   top: 50%;
   bottom: 0;
-  left: -12px;
-  border-left: 2px solid #474851;
+  left: 13px;
+  border-left: 2px solid var(--color-member-spine);
   content: "";
 }
 
-/* The single fold control: a Discord channel-category style header row. */
+/* The single fold control: a Discord channel-category style header row. The bulk
+   pause/resume buttons share this row at the right and never collapse it. */
+.dc-owner-agent-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .dc-owner-agent-toggle {
   display: flex;
   min-height: 32px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 4px;
   border-radius: 4px;
@@ -68,21 +76,51 @@
   flex-shrink: 0;
 }
 
+.dc-owner-agent-bulk-action {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+}
+
+.dc-owner-agent-bulk-action:hover,
+.dc-owner-agent-bulk-action:focus-visible {
+  background: var(--color-sidebar-hover);
+  color: var(--color-text-secondary);
+  outline: none;
+}
+
+.dc-owner-agent-bulk-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.dc-owner-agent-bulk-action svg {
+  flex-shrink: 0;
+}
+
 .dc-owner-agent-list-wrap {
   position: relative;
 }
 
-/* The connector spine is decoration only: it joins the header row to the
-   agent rows and is never interactive. */
+/* The connector spine is decoration only: it runs under the header chevron,
+   joins it to the agent rows, and is never interactive. */
 .dc-owner-agent-spine {
   position: absolute;
   top: -2px;
   bottom: 21px;
-  left: -12px;
+  left: 13px;
   width: 2px;
   border-radius: 2px;
-  background: #474851;
+  background: var(--color-member-spine);
   pointer-events: none;
+}
+
+.dc-owner-agent-list {
+  padding-left: 24px;
 }
 
 .dc-owner-agent-list .dc-member {

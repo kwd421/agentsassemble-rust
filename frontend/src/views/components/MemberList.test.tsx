@@ -152,6 +152,81 @@ describe("MemberList component wiring", () => {
     expect(screen.queryByRole("menuitem", { name: "내보내기" })).toBeNull();
   });
 
+  it("pauses and resumes every eligible agent of an owner from the group header", async () => {
+    const second = { ...AGENT, agent_id: "agent-2", display_name: "Agent Two" };
+    const idle = agentSessionFixture({
+      session_id: "session-1", participant_id: "agent-1", display_name: "Agent One",
+      runtime_status: "idle",
+    });
+    const paused = agentSessionFixture({
+      session_id: "session-2", participant_id: "agent-2", display_name: "Agent Two",
+      runtime_status: "paused",
+    });
+    const onAgentControl = vi.fn(async () => {});
+    render(
+      <MemberList
+        agents={[AGENT, second]}
+        agentSessions={[idle, paused]}
+        roomId="room-1"
+        roomName="Room One"
+        onAgentControl={onAgentControl}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "전체 일시정지" }));
+    await waitFor(() => expect(onAgentControl).toHaveBeenCalledTimes(1));
+    expect(onAgentControl).toHaveBeenCalledWith(idle, "pause");
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "전체 재개" }));
+    await waitFor(() => expect(onAgentControl).toHaveBeenCalledTimes(2));
+    expect(onAgentControl).toHaveBeenCalledWith(paused, "resume");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("reports only bulk control failures under the group header", async () => {
+    const idle = agentSessionFixture({ session_id: "session-1", participant_id: "agent-1", runtime_status: "idle" });
+    const onAgentControl = vi.fn(async () => { throw new Error("제어 실패"); });
+    render(
+      <MemberList
+        agents={[AGENT]}
+        agentSessions={[idle]}
+        roomId="room-1"
+        roomName="Room One"
+        onAgentControl={onAgentControl}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "전체 일시정지" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("일시정지하지 못했어요.");
+    expect(onAgentControl).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides bulk controls the viewer may not use", () => {
+    const external = agentSessionFixture({
+      session_id: "session-1", participant_id: "agent-1",
+      external_owned: true, process_ownership: "external", runtime_status: "idle",
+    });
+    const view = render(
+      <MemberList
+        agents={[AGENT]}
+        agentSessions={[external]}
+        roomId="room-1"
+        roomName="Room One"
+        onAgentControl={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "전체 일시정지" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "전체 재개" })).toBeNull();
+    view.rerender(
+      <MemberList
+        agents={[AGENT]}
+        agentSessions={[external]}
+        roomId="room-1"
+        roomName="Room One"
+      />
+    );
+    expect(screen.queryByRole("button", { name: "전체 일시정지" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "전체 재개" })).toBeNull();
+  });
+
   it("shows the active model controls in the member row", () => {
     render(
       <MemberList

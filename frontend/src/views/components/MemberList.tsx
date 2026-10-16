@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Check, ChevronDown, ChevronRight, Search, Volume2, VolumeX } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pause, Play, Search, Volume2, VolumeX } from "lucide-react";
 import type {
   LiveAgent,
   RoomAgentSession,
@@ -11,6 +11,7 @@ import ProviderTruthChips from "./ProviderTruthChips";
 import type {
   AgentSessionControlAction,
 } from "./AgentSessionDetails";
+import { agentSessionCanPause, agentSessionCanResume } from "./AgentSessionDetails";
 import MemberDetailModal from "./member/MemberDetailModal";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import MemberRow from "./member/MemberRow";
@@ -84,6 +85,8 @@ export default function MemberList({
   const [memberMenu, setMemberMenu] = useState<{ x: number; y: number; entry: MemberEntry } | null>(null);
   const [muteBusy, setMuteBusy] = useState(false);
   const [roleChangeError, setRoleChangeError] = useState("");
+  const [groupControlBusy, setGroupControlBusy] = useState<Record<string, boolean>>({});
+  const [groupControlError, setGroupControlError] = useState<Record<string, string>>({});
   const query = searchQuery ?? localQuery;
   const memberMenuOpen = memberMenu !== null;
   // A right-click leaves focus on the row, so Escape is handled at the window like other popouts.
@@ -165,6 +168,30 @@ export default function MemberList({
     setCollapsedGroups((previous) => ({ ...previous, [groupId]: !previous[groupId] }));
   }
 
+  async function runGroupControl(groupId: string, sessions: RoomAgentSession[], action: "pause" | "resume") {
+    if (!onAgentControl || groupControlBusy[groupId] || sessions.length === 0) return;
+    setGroupControlBusy((previous) => ({ ...previous, [groupId]: true }));
+    setGroupControlError((previous) => ({ ...previous, [groupId]: "" }));
+    try {
+      const outcomes = await Promise.allSettled(
+        sessions.map((session) => onAgentControl(session, action))
+      );
+      const failed = outcomes.filter((outcome) => outcome.status === "rejected").length;
+      if (failed > 0) {
+        setGroupControlError((previous) => ({
+          ...previous,
+          [groupId]: action === "pause"
+            ? `${failed}개의 에이전트를 일시정지하지 못했어요.`
+            : `${failed}개의 에이전트를 재개하지 못했어요.`,
+        }));
+      } else {
+        onSessionActionComplete?.();
+      }
+    } finally {
+      setGroupControlBusy((previous) => ({ ...previous, [groupId]: false }));
+    }
+  }
+
   function openMemberDetails(entry: MemberEntry) {
     setDetailEntryId(entry.id);
   }
@@ -207,6 +234,12 @@ export default function MemberList({
           const collapseId = `owner:${group.id}`;
           const collapsed = Boolean(collapsedGroups[collapseId]);
           const ToggleIcon = collapsed ? ChevronRight : ChevronDown;
+          const pausable = onAgentControl
+            ? group.agents.filter((entry) => entry.agentSession && agentSessionCanPause(entry.agentSession))
+            : [];
+          const resumable = onAgentControl
+            ? group.agents.filter((entry) => entry.agentSession && agentSessionCanResume(entry.agentSession))
+            : [];
           return (
             <section key={group.id} className="dc-person-member-group">
               {group.person ? (
@@ -222,12 +255,33 @@ export default function MemberList({
               )}
               {group.agents.length > 0 && (
                 <div className="dc-owner-agent-group" data-collapsed={collapsed}>
-                  <button type="button" className="dc-owner-agent-toggle" aria-expanded={!collapsed}
-                    aria-label={`에이전트 ${group.agents.length}명 ${collapsed ? "펼치기" : "접기"}`}
-                    onClick={() => toggleGroup(collapseId)}>
-                    <ToggleIcon size={12} aria-hidden />
-                    <span>에이전트 {group.agents.length}명</span>
-                  </button>
+                  <div className="dc-owner-agent-head">
+                    <button type="button" className="dc-owner-agent-toggle" aria-expanded={!collapsed}
+                      aria-label={`에이전트 ${group.agents.length}명 ${collapsed ? "펼치기" : "접기"}`}
+                      onClick={() => toggleGroup(collapseId)}>
+                      <ToggleIcon size={12} aria-hidden />
+                      <span>에이전트 {group.agents.length}명</span>
+                    </button>
+                    {pausable.length > 0 && (
+                      <button type="button" className="dc-owner-agent-bulk-action"
+                        aria-label="전체 일시정지" title="전체 일시정지"
+                        disabled={groupControlBusy[group.id]}
+                        onClick={() => void runGroupControl(group.id, pausable.map((entry) => entry.agentSession!), "pause")}>
+                        <Pause size={13} aria-hidden />
+                      </button>
+                    )}
+                    {resumable.length > 0 && (
+                      <button type="button" className="dc-owner-agent-bulk-action"
+                        aria-label="전체 재개" title="전체 재개"
+                        disabled={groupControlBusy[group.id]}
+                        onClick={() => void runGroupControl(group.id, resumable.map((entry) => entry.agentSession!), "resume")}>
+                        <Play size={13} aria-hidden />
+                      </button>
+                    )}
+                  </div>
+                  {groupControlError[group.id] && (
+                    <p className="dc-room-play-error preserve-words" role="alert">{groupControlError[group.id]}</p>
+                  )}
                   {!collapsed && (
                     <div className="dc-owner-agent-list-wrap">
                       <span className="dc-owner-agent-spine" aria-hidden="true" />

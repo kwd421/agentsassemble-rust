@@ -387,6 +387,16 @@ cleanup with no recovery state. Exact packaged evidence and cleanup are recorded
 `docs/VERIFICATION.md`. Critical-web and Daybreaker manual review approved pushed HEAD `0821b0a`
 and cumulative `a340a31..0821b0a` at C0/H0/M0/L0; no automated scan was run.
 
+Owner-group bulk pause/resume (2026-10-17): the member list's "에이전트 N명"
+header carries always-visible 전체 일시정지/전체 재개 icon buttons at its right.
+Each button shows only while at least one agent of that owner passes the existing
+per-agent `agentSessionCanPause`/`agentSessionCanResume` gate owned by
+`AgentSessionDetails`, and sends that action through the existing per-session
+`onAgentControl` path for each eligible session. Success stays silent; any
+rejection surfaces one short Korean line under that header. The decorative spine
+stays a pure connector: vertically under the header chevron, coloured by the
+`--color-member-spine` token instead of a hard-coded value.
+
 ## Active busy-turn interrupt extension
 
 The copied client exposes `agent.interrupt` only while an Agent Session is `busy`. The original
