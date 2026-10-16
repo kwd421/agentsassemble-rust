@@ -30,12 +30,21 @@ the host and anyone the owner could not remove are refused at request time.
 max_uses)` carries only the owner's own human-invite fields, runs the owner's own
 invite-policy validation at request time and again at approval, binds the normalised
 policy, and mints after approval through the same `create_human_invite_for_manager`
-core under the owner's own `RoomManagerAuthority` (local-bootstrap lineage or the
-exact operator session re-resolved from the stored owner binding); the lifetime keeps
-the owner route's exact bounds (positive and representable as a checked duration, the
-same `bad_request` refusal for an over-limit value) and the use limit keeps its exact
-bounds (non-negative), and the mint converts the lifetime with the same checked
-conversion rather than a panicking one; a human
+core under the owner's own `RoomManagerAuthority` taken from the recorded approving
+session and re-resolved inside the mint transaction — the desktop's own local
+session (local-bootstrap lineage, recognised by its local socket provenance, never
+by participant id alone) or the exact central-owner operator session — never from
+delegate or owner provenance alone; an `Operator` owner reference that is not
+central-owner cannot become that authority, and a recorded approver whose session no
+longer re-resolves mints nothing. Approving an invite additionally requires the
+deciding session itself to hold that authority right now: any other deciding session
+(including an ordinary paired operator browser resolving to the same local-operator
+participant) gets `permission_denied` for approval while decline stays allowed, and
+nothing is minted. The decision transaction pins the exact approving session
+(fingerprint/device/origin), its liveness, central-owner provenance and current
+manager binding; current-origin equality, secure-channel presentation and
+owner-lease liveness remain enforced where that state lives (socket ticket exchange
+and per-command session revalidation, as for every other room command); a human
 guest/member owner, a companion delegate or any owner whose provenance cannot be
 re-resolved as that authority is refused with `owner_authority_unavailable` at
 request time and never queued. The link, token and join code reach only the bound

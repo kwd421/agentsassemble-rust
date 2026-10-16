@@ -10,6 +10,7 @@
 //! and returns them only in the owner's live acknowledgement, so the stored request,
 //! receipt and events stay secret-free.
 use chrono::{DateTime, TimeDelta, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -17,13 +18,16 @@ use crate::delegated_confirmation::{Binding, create_in, rejected};
 use crate::delegated_confirmation_lifecycle::{
     finish_in, item, load_in, receipt, retry_in, validate_in,
 };
-use crate::{DelegateRoomAuthority, HumanInvite, NewHumanInvite, PersistenceError, SqliteStore};
+use crate::{
+    DelegateRoomAuthority, HumanInvite, LocalRoomManagerAuthority, NewHumanInvite,
+    PersistenceError, RoomManagerAuthority, RoomUserIdentity, SqliteStore,
+};
 use agentsassemble_domain::{
     ConfirmationDecision, ConfirmationState, ConfirmedHumanInvite, ConfirmedRoomAction,
     DecideDelegatedAction, DelegatedActionRequest, InviteScope, RequestCreateInvite, RoomEvent,
     canonical_payload_hash,
 };
-use sqlx::Row;
+use sqlx::{Row, Sqlite, Transaction};
 
 const MAX_INVITE_LABEL_CHARS: usize = 128;
 
@@ -110,6 +114,128 @@ fn consequences(policy: &DelegatedInvitePolicy) -> String {
     };
     format!(
         "Creates a room invitation that lets whoever holds the link or join code {scope} this room. You see the link once in this acknowledgement; it is never posted to the room and cannot be retrieved later."
+    )
+}
+
+/// The deciding session recorded with one approved HUMAN invite. Only a session
+/// that could create a human invite through the owner's own route right now may
+/// approve: the desktop's own local session, or an exact central-owner operator
+/// session. An ordinary paired operator browser is never recorded here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum InviteApprover {
+    /// The desktop's own local session, pinned to the current local-bootstrap
+    /// lineage. Recorded from local socket provenance, never from a participant id.
+    Local {
+        server_id: String,
+        authority_lineage_id: String,
+        room_uid: Uuid,
+        user_id: String,
+        participant_id: String,
+    },
+    /// An exact central-owner operator session, pinned by session, device, origin
+    /// and the manager identity it resolved to.
+    Operator {
+        fingerprint: [u8; 32],
+        device: [u8; 32],
+        origin: String,
+        user_id: String,
+        participant_id: String,
+    },
+}
+
+/// One invite approval decision with the session that made it. The mint
+/// transaction re-resolves exactly this session and mints under its authority, so
+/// the link can only be minted for, and delivered to, the session that approved.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct RecordedInviteDecision {
+    pub(crate) decision: DecideDelegatedAction,
+    pub(crate) approver: InviteApprover,
+}
+
+/// Whether a stored invite decision encodes the same owner decision. Recorded
+/// approvals compare their decision and ignore the bound approver, so an exact
+/// decision replays its receipt; anything else conflicts.
+pub(crate) fn recorded_invite_decision_matches(
+    previous: &str,
+    decision: &DecideDelegatedAction,
+) -> bool {
+    if let Ok(recorded) = serde_json::from_str::<RecordedInviteDecision>(previous) {
+        return recorded.decision == *decision;
+    }
+    serde_json::from_str::<DecideDelegatedAction>(previous).is_ok_and(|stored| stored == *decision)
+}
+
+/// Re-resolves the recorded approver into the owner's own room-manager authority
+/// inside the mint transaction: current local-bootstrap lineage for the desktop's
+/// own local session, or the exact live central-owner operator session. Anything
+/// else refuses, so the mint can only run under the session that approved.
+/// # Errors
+/// Refuses `owner_authority_unavailable` for an unresolvable or ineligible
+/// approver; propagates storage failures.
+pub(crate) async fn approver_manager_authority(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    approver: &InviteApprover,
+) -> Result<RoomManagerAuthority, PersistenceError> {
+    match approver {
+        InviteApprover::Local {
+            server_id,
+            authority_lineage_id,
+            room_uid,
+            user_id,
+            participant_id,
+        } => {
+            let expected = LocalRoomManagerAuthority {
+                server_id: server_id.clone(),
+                authority_lineage_id: authority_lineage_id.clone(),
+                room_uid: *room_uid,
+                manager: RoomUserIdentity {
+                    room_id: room_id.to_owned(),
+                    user_id: user_id.clone(),
+                    participant_id: participant_id.clone(),
+                },
+            };
+            expected.resolve(tx).await.map_err(|error| match error {
+                PersistenceError::CommandRejected { .. } => unavailable(),
+                other => other,
+            })?;
+            Ok(RoomManagerAuthority::Local(expected))
+        }
+        InviteApprover::Operator {
+            fingerprint,
+            device,
+            origin,
+            user_id,
+            participant_id,
+        } => {
+            let session = crate::operator_pairing::resolve_operator_session(
+                tx,
+                fingerprint,
+                device,
+                origin,
+                Utc::now(),
+            )
+            .await
+            .map_err(|error| match error {
+                PersistenceError::CommandRejected { .. } => unavailable(),
+                other => other,
+            })?;
+            if !session.is_central_owner()
+                || session.principal().room_id != room_id
+                || session.principal().principal_id != *user_id
+                || session.principal().participant_id != *participant_id
+            {
+                return Err(unavailable());
+            }
+            Ok(RoomManagerAuthority::Operator(Box::new(session)))
+        }
+    }
+}
+
+fn unavailable() -> PersistenceError {
+    rejected(
+        "owner_authority_unavailable",
+        "The bound owner's authority is unavailable.",
     )
 }
 
@@ -247,6 +373,48 @@ impl SqliteStore {
         })
     }
 
+    /// Records an approval whose bound session ended before the mint as cancelled:
+    /// the approving authority is gone, so nothing may mint and the owner starts
+    /// over with a fresh request.
+    /// # Errors
+    /// Propagates storage failures; a non-executing request returns its receipt.
+    pub async fn cancel_approved_human_invite(
+        &self,
+        room_id: &str,
+        confirmation_id: &str,
+    ) -> Result<ApprovedInviteDrive, PersistenceError> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let row = load_in(&mut tx, room_id, confirmation_id).await?;
+        let request = item(&row)?;
+        if request.state != ConfirmationState::Executing {
+            let receipt = receipt(&row)?;
+            tx.commit().await?;
+            return Ok(ApprovedInviteDrive {
+                receipt,
+                state: request.state,
+                new_events: Vec::new(),
+                invite: None,
+            });
+        }
+        let receipt = json!({"status":"rejected","code":"confirmation_cancelled","message":"The owner or delegate authority ended before execution.","retryable":false});
+        finish_in(
+            &mut tx,
+            room_id,
+            &row,
+            ConfirmationState::Cancelled,
+            &receipt,
+        )
+        .await?;
+        tx.commit().await?;
+        self.notify_room_directory_changed();
+        Ok(ApprovedInviteDrive {
+            receipt,
+            state: ConfirmationState::Cancelled,
+            new_events: Vec::new(),
+            invite: None,
+        })
+    }
+
     /// Executes one approved HUMAN invite creation through the owner's own invite core.
     /// Idempotent: a request that already left `executing` returns its receipt without
     /// minting or storing a credential. The credential identity is supplied by the
@@ -288,11 +456,22 @@ impl SqliteStore {
                 invite: None,
             });
         }
-        let decision: DecideDelegatedAction = serde_json::from_str(
-            row.get::<Option<&str>, _>("decision_json")
-                .ok_or_else(|| rejected("permission_denied", "The owner has not approved."))?,
-        )?;
-        if decision.decision != ConfirmationDecision::Approve {
+        let recorded = match row.get::<Option<&str>, _>("decision_json") {
+            Some(encoded) => match serde_json::from_str::<RecordedInviteDecision>(encoded) {
+                Ok(recorded) => recorded,
+                Err(_) => {
+                    // No bound approver (a corrupt or pre-binding row): fail closed.
+                    tx.commit().await?;
+                    return self
+                        .cancel_approved_human_invite(room_id, confirmation_id)
+                        .await;
+                }
+            },
+            None => {
+                return Err(rejected("permission_denied", "The owner has not approved."));
+            }
+        };
+        if recorded.decision.decision != ConfirmationDecision::Approve {
             return Err(rejected(
                 "permission_denied",
                 "The owner has not approved this execution.",
@@ -343,26 +522,15 @@ impl SqliteStore {
             }
             Err(error) => return Err(error),
         };
-        let manager = match crate::delegation_owner::manager_authority_for_delegate(
-            &mut tx,
-            room_id,
-            &proof.delegate.participant_id,
-        )
-        .await
-        {
+        // The mint runs under the recorded approving session's own authority,
+        // re-resolved here: a session revoked after approval mints nothing.
+        let manager = match approver_manager_authority(&mut tx, room_id, &recorded.approver).await {
             Ok(manager) => manager,
-            Err(PersistenceError::CommandRejected { code, message }) => {
-                let receipt =
-                    json!({"status":"rejected","code":code,"message":message,"retryable":false});
-                finish_in(&mut tx, room_id, &row, ConfirmationState::Failed, &receipt).await?;
+            Err(PersistenceError::CommandRejected { .. }) => {
                 tx.commit().await?;
-                self.notify_room_directory_changed();
-                return Ok(ApprovedInviteDrive {
-                    receipt,
-                    state: ConfirmationState::Failed,
-                    new_events: Vec::new(),
-                    invite: None,
-                });
+                return self
+                    .cancel_approved_human_invite(room_id, confirmation_id)
+                    .await;
             }
             Err(error) => return Err(error),
         };

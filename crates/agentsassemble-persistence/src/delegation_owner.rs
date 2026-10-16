@@ -215,7 +215,8 @@ impl OwnerBinding {
     /// Maps the proven owner reference to the owner's own room-manager authority: the
     /// exact authority the owner's own HTTP invite path builds from its one-use local
     /// control ticket or central-owner session. Only local-bootstrap lineage or a live
-    /// operator session can produce it; a human guest/member or a server-owner
+    /// central-owner operator session can produce it; a human guest/member, an ordinary
+    /// paired operator browser or a server-owner
     /// provenance refuses `owner_authority_unavailable` rather than inventing authority.
     /// # Errors
     /// Rejects a changed room incarnation, unprovable provenance and storage failures.
@@ -265,6 +266,13 @@ impl OwnerBinding {
                     chrono::Utc::now(),
                 )
                 .await?;
+                // An ordinary paired operator browser resolves to the same
+                // local-operator participant but holds no invite-management
+                // authority; only central-owner provenance maps to the owner's
+                // own room-manager authority.
+                if !session.is_central_owner() {
+                    return Err(unavailable());
+                }
                 if session.principal().room_id != room_id
                     || session.principal().principal_id != self.user_id
                     || session.principal().participant_id != self.participant_id

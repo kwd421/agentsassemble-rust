@@ -1,12 +1,16 @@
 //! The exact human decides; the transaction claims and executes the stored channel delta.
 use crate::delegated_confirmation::{rejected, settings_in};
 use crate::delegated_confirmation_lifecycle::{finish_in, item, load_in, receipt, validate_in};
-use crate::{CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore};
+use crate::{
+    CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore,
+    delegated_confirmed_invite::InviteApprover,
+};
 use agentsassemble_domain::{
     ClientKind, ConfirmationDecision, ConfirmationState, ConfirmedRoomAction, DecideDelegatedAction,
 };
+use chrono::Utc;
 use serde_json::{Value, json};
-use sqlx::Row;
+use sqlx::{Row, Sqlite, Transaction};
 
 impl SqliteStore {
     /// Claims one immutable request and executes through the human settings gate.
@@ -69,12 +73,36 @@ impl SqliteStore {
                 "Approving this full-access agent requires the owner's explicit acknowledgement.",
             ));
         }
-        let encoded = serde_json::to_string(decision)?;
+        // An invite approval additionally requires the deciding session itself to
+        // hold owner-route invite authority right now; the recorded session is the
+        // only authority the later mint may use.
+        let invite_approver = if decision.decision == ConfirmationDecision::Approve
+            && matches!(request.action, ConfirmedRoomAction::CreateHumanInvite(_))
+        {
+            Some(require_invite_approval_authority(&mut tx, authority).await?)
+        } else {
+            None
+        };
+        let encoded = match &invite_approver {
+            Some(approver) => {
+                serde_json::to_string(&crate::delegated_confirmed_invite::RecordedInviteDecision {
+                    decision: decision.clone(),
+                    approver: approver.clone(),
+                })?
+            }
+            None => serde_json::to_string(decision)?,
+        };
         let first_seq =
             crate::room_event_sequence::next_sequence(&mut tx, &principal.room_id).await?;
         let mut revoked: Vec<[u8; 32]> = Vec::new();
         let deduplicated = if let Some(previous) = row.get::<Option<String>, _>("decision_json") {
-            if previous != encoded {
+            let same = match &invite_approver {
+                Some(_) => crate::delegated_confirmed_invite::recorded_invite_decision_matches(
+                    &previous, decision,
+                ),
+                None => previous == encoded,
+            };
+            if !same {
                 return Err(rejected(
                     "request_conflict",
                     "This confirmation already has another decision.",
@@ -319,5 +347,85 @@ fn requires_full_access_acknowledgement(action: &ConfirmedRoomAction) -> bool {
         | ConfirmedRoomAction::DeleteTextChannel(_)
         | ConfirmedRoomAction::KickParticipant(_)
         | ConfirmedRoomAction::CreateHumanInvite(_) => false,
+    }
+}
+
+/// Proves the deciding session could create a human invite through the owner's own
+/// route right now, and records how the mint must re-resolve it. The desktop's own
+/// local session (local socket provenance, never a participant id) proves current
+/// local-bootstrap lineage; a paired operator browser proves a live central-owner
+/// session with current manager binding. Any other deciding session cannot approve
+/// an invite, while decline stays allowed for every session.
+/// # Errors
+/// Refuses `permission_denied` for any session without current owner-route invite
+/// authority; storage failures propagate.
+async fn require_invite_approval_authority(
+    tx: &mut Transaction<'_, Sqlite>,
+    authority: RoomMutationAuthority<'_>,
+) -> Result<InviteApprover, PersistenceError> {
+    let denied = || {
+        rejected(
+            "permission_denied",
+            "Only a session that could create a human invite itself may approve one.",
+        )
+    };
+    match authority {
+        RoomMutationAuthority::TrustedPrincipal(principal) => {
+            let (binding, _) = crate::room_user_identity::resolve_local_room_manager(
+                tx,
+                &principal.room_id,
+                &principal.principal_id,
+                &principal.participant_id,
+            )
+            .await
+            .map_err(|error| match error {
+                PersistenceError::CommandRejected { .. } => denied(),
+                other => other,
+            })?;
+            Ok(InviteApprover::Local {
+                server_id: binding.server_id.clone(),
+                authority_lineage_id: binding.authority_lineage_id.clone(),
+                room_uid: binding.room_uid,
+                user_id: binding.manager.user_id.clone(),
+                participant_id: binding.manager.participant_id.clone(),
+            })
+        }
+        RoomMutationAuthority::OperatorSession(session) => {
+            if !session.is_central_owner() {
+                return Err(denied());
+            }
+            let current = crate::operator_pairing::resolve_operator_session(
+                tx,
+                session.session_fingerprint(),
+                session.delegation_device(),
+                session.delegation_origin(),
+                Utc::now(),
+            )
+            .await
+            .map_err(|error| match error {
+                PersistenceError::CommandRejected { .. } => denied(),
+                other => other,
+            })?;
+            if !current.is_central_owner() {
+                return Err(denied());
+            }
+            crate::RoomManagerAuthority::Operator(Box::new(current.clone()))
+                .exact_binding(tx)
+                .await
+                .map_err(|error| match error {
+                    PersistenceError::CommandRejected { .. } => denied(),
+                    other => other,
+                })?;
+            Ok(InviteApprover::Operator {
+                fingerprint: *session.session_fingerprint(),
+                device: *session.delegation_device(),
+                origin: session.delegation_origin().to_owned(),
+                user_id: current.principal().principal_id.clone(),
+                participant_id: current.principal().participant_id.clone(),
+            })
+        }
+        RoomMutationAuthority::HumanSession(_)
+        | RoomMutationAuthority::ConnectorSession(_)
+        | RoomMutationAuthority::ServerOwnerLifecycle(_) => Err(denied()),
     }
 }

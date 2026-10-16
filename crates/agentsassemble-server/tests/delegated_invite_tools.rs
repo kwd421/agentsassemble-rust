@@ -27,16 +27,12 @@ async fn connector_create_human_invite_uses_a_fresh_owner_budget() -> TestResult
             )
             .await?,
     );
-    let now = chrono::Utc::now();
-    let _pairing = store
-        .create_operator_pairing(&manager, &[61; 32], "https://invite.example.test", now)
-        .await?;
-    let paired = store
-        .redeem_operator_pairing(&[61; 32], &[62; 32], "https://invite.example.test", now)
-        .await?;
+    // The delegate must be owned by invite-capable provenance: an ordinary paired
+    // operator browser cannot queue a human invite (pinned in persistence tests), so
+    // the connector invite is issued under the local manager.
     let invite = store
         .create_connector_invite(
-            &RoomManagerAuthority::Operator(Box::new(paired.authorization)),
+            &manager,
             Uuid::new_v4(),
             InviteScope::ReadWrite,
             chrono::Utc::now(),

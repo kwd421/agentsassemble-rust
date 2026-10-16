@@ -1,9 +1,84 @@
 use super::*;
 use crate::MintedHumanInvite;
+use crate::{
+    CentralOwnerSessionRequest, OperatorSessionAuthorization, RoomManagerAuthority,
+    ServerOwnerAuthority,
+};
 use agentsassemble_domain::{
     AuthenticatedPrincipal, ConfirmationDecision, ConfirmationState, ConfirmedRoomAction,
-    DecideDelegatedAction, ParticipantRole, RequestCreateInvite,
+    DecideDelegatedAction, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, ParticipantRole,
+    RequestCreateInvite,
 };
+
+const ORIGIN: &str = "https://room.example.test";
+
+/// An ordinary paired operator browser: same local-operator participant, but no
+/// central-owner provenance.
+async fn ordinary_operator(
+    store: &SqliteStore,
+) -> Result<OperatorSessionAuthorization, Box<dyn std::error::Error>> {
+    let manager = store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await?;
+    let now = chrono::Utc::now();
+    store
+        .create_operator_pairing(
+            &RoomManagerAuthority::Local(manager),
+            &[0x41; 32],
+            ORIGIN,
+            now,
+        )
+        .await?;
+    Ok(store
+        .redeem_operator_pairing(&[0x41; 32], &[0x42; 32], ORIGIN, now)
+        .await?
+        .authorization)
+}
+
+async fn central_owner_operator(
+    store: &SqliteStore,
+) -> Result<OperatorSessionAuthorization, Box<dyn std::error::Error>> {
+    let manager = store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await?;
+    let now = chrono::Utc::now();
+    let request = CentralOwnerSessionRequest::new(
+        "general",
+        manager.room_uid,
+        &[0x43; 32],
+        &[0x44; 32],
+        ORIGIN,
+        now + chrono::Duration::minutes(4),
+        now,
+    );
+    Ok(store
+        .create_central_owner_session(&ServerOwnerAuthority::LocalOperator, &request)
+        .await?
+        .authorization)
+}
+
+async fn pending_invite(
+    store: &SqliteStore,
+    delegate: &DelegateRoomAuthority,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let pending = store
+        .request_delegated_human_invite(delegate, &params(), |_, _, _| Ok(()))
+        .await?
+        .0;
+    assert_eq!(pending["status"], "pending_confirmation", "{pending}");
+    Ok(pending["confirmation_id"]
+        .as_str()
+        .ok_or("confirmation")?
+        .to_owned())
+}
 
 fn params() -> RequestCreateInvite {
     RequestCreateInvite {
@@ -312,5 +387,126 @@ async fn a_guest_ai_cannot_request_a_human_invite() -> TestResult {
     );
     assert_eq!(request_rows(&store).await?, 0);
     assert_eq!(invite_rows(&store).await?, baseline);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_ordinary_paired_operator_cannot_approve_a_human_invite() -> TestResult {
+    let (store, _owner, delegate) = invite_fixture().await?;
+    let baseline = invite_rows(&store).await?;
+    let id = pending_invite(&store, &delegate).await?;
+    let ordinary = ordinary_operator(&store).await?;
+    assert!(!ordinary.is_central_owner());
+    // The same local-operator participant, but an ordinary paired browser: approval
+    // is refused and nothing is minted or stored.
+    let approve = DecideDelegatedAction {
+        confirmation_id: id.clone(),
+        decision: ConfirmationDecision::Approve,
+        full_access_acknowledged: None,
+    };
+    assert!(
+        matches!(store.decide_delegated_action(RoomMutationAuthority::OperatorSession(&ordinary), &approve).await, Err(PersistenceError::CommandRejected { code, .. }) if code == "permission_denied")
+    );
+    assert_eq!(invite_rows(&store).await?, baseline);
+    let (request, _, receipt) = store.approved_invite_snapshot("general", &id).await?;
+    assert!(matches!(request.state, ConfirmationState::Pending));
+    assert_eq!(receipt["status"], "pending_confirmation");
+    // Decline stays allowed for the same session.
+    let ack = store
+        .decide_delegated_action(
+            RoomMutationAuthority::OperatorSession(&ordinary),
+            &DecideDelegatedAction {
+                confirmation_id: id,
+                decision: ConfirmationDecision::Decline,
+                full_access_acknowledged: None,
+            },
+        )
+        .await?;
+    assert_eq!(ack.result["state"], "declined");
+    assert!(ack.result.get("invite").is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_central_owner_session_approves_and_the_mint_binds_that_session() -> TestResult {
+    let (store, _owner, delegate) = invite_fixture().await?;
+    let baseline = invite_rows(&store).await?;
+    let id = pending_invite(&store, &delegate).await?;
+    let central = central_owner_operator(&store).await?;
+    assert!(central.is_central_owner());
+    let ack = store
+        .decide_delegated_action(
+            RoomMutationAuthority::OperatorSession(&central),
+            &DecideDelegatedAction {
+                confirmation_id: id.clone(),
+                decision: ConfirmationDecision::Approve,
+                full_access_acknowledged: None,
+            },
+        )
+        .await?;
+    assert_eq!(ack.result["state"], "executing", "{:?}", ack.result);
+    assert!(ack.result.get("invite").is_none());
+    assert_eq!(invite_rows(&store).await?, baseline);
+    let drive = store
+        .drive_approved_human_invite("general", &id, &minted().await?)
+        .await?;
+    assert!(drive.invite.is_some());
+    assert_eq!(drive.state, ConfirmationState::Succeeded);
+    assert_eq!(invite_rows(&store).await?, baseline + 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_session_revoked_after_approval_mints_no_invite() -> TestResult {
+    let (store, _owner, delegate) = invite_fixture().await?;
+    let baseline = invite_rows(&store).await?;
+    let id = pending_invite(&store, &delegate).await?;
+    let central = central_owner_operator(&store).await?;
+    let ack = store
+        .decide_delegated_action(
+            RoomMutationAuthority::OperatorSession(&central),
+            &DecideDelegatedAction {
+                confirmation_id: id.clone(),
+                decision: ConfirmationDecision::Approve,
+                full_access_acknowledged: None,
+            },
+        )
+        .await?;
+    assert_eq!(ack.result["state"], "executing", "{:?}", ack.result);
+    sqlx::query("UPDATE operator_pairings SET revoked = 1")
+        .execute(&store.pool)
+        .await?;
+    let drive = store
+        .drive_approved_human_invite("general", &id, &minted().await?)
+        .await?;
+    assert!(drive.invite.is_none());
+    assert_eq!(drive.state, ConfirmationState::Cancelled);
+    assert_eq!(drive.receipt["code"], "confirmation_cancelled");
+    assert_eq!(invite_rows(&store).await?, baseline);
+    Ok(())
+}
+
+#[tokio::test]
+async fn manager_authority_refuses_an_ordinary_operator_provenance() -> TestResult {
+    let (store, _owner, _delegate) = invite_fixture().await?;
+    let ordinary = ordinary_operator(&store).await?;
+    let mut tx = store.pool.begin().await?;
+    crate::delegation_owner::OwnerBinding::from_mutation(
+        &mut tx,
+        RoomMutationAuthority::OperatorSession(&ordinary),
+    )
+    .await?
+    .save(&mut tx, "general", "participant", "operator-delegate")
+    .await?;
+    assert!(matches!(
+        crate::delegation_owner::manager_authority_for_delegate(
+            &mut tx,
+            "general",
+            "operator-delegate"
+        )
+        .await,
+        Err(PersistenceError::CommandRejected { code, .. }) if code == "owner_authority_unavailable"
+    ));
+    tx.rollback().await?;
     Ok(())
 }
