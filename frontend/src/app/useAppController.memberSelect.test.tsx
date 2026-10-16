@@ -5,7 +5,7 @@ import { useAppController } from "./useAppController";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { bindRemoteSession } from "../lib/remote/remoteWorkspace";
 import type { RemoteTransport } from "../lib/remote/remoteTransport";
-import { roomDockIdentity, type RoomDockItem } from "../lib/roomDockModel";
+import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomDirectoryContinuity } from "./useRoomDirectory";
 import type { RoomInviteJoinResponse } from "../lib/roomAdmissionContract";
 import type { MemberHostAnchor } from "../lib/central/memberAnchors";
