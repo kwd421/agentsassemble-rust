@@ -35,7 +35,7 @@ use crate::{
 
 use crate::room_command_execution::CommandExecution;
 
-#[path = "delegated_direct_runtime.rs"]
+#[path = "delegated_direct_runtime/mod.rs"]
 pub(crate) mod delegated_direct;
 
 #[path = "delegated_pin_runtime.rs"]

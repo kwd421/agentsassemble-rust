@@ -110,6 +110,28 @@ these existing fields without inventing a human executor. Verify live transport
 receipts/publication and recovered durable events, including failed recovery.
 Frontend views remain unchanged; report any changed displayed strings.
 
+## Delegated direct runtime, module responsibilities (2026-10-16)
+
+Behaviour contract (unchanged by the size refactor): every delegated direct
+action, on portal/attendee calls, connector MCP calls and the room-actor
+mutation queue, goes through `room_runtime::delegated_direct`
+(`crates/agentsassemble-server/src/delegated_direct_runtime/`). The request
+branches (`request/`) run one owner-confirmed request per branch: current
+in-flight admission, a store call charged with the shared owner+delegate
+delegated-charge identity, debit resolution, durable publication only on
+success and the exact same reply. The create/reconfigure branches additionally
+complete an approved-but-undriven confirmation idempotently and return the
+recorded receipt. `apply.rs` owns the non-confirmed direct execution path
+(lifecycle start/stop and atomic mutations) and its publication.
+`drive.rs` owns approved execution drives: catalog re-validation with
+`target_changed` refusal drives (create/reconfigure) and the post-decision
+confirmed drives (create/reconfigure/start) with their unchanged guard,
+committed-event extension and uncertain-effect warning logs. Results, error
+codes, receipts, events, publication order, budget charging and logging stay
+exactly as recorded above for every entry point: `execute_delegated_direct`,
+`provider_room_tool_runtime::handle_provider_room_tool`, the room mutation
+queue, and the post-decision drives called from the room command handler.
+
 ## Round-4 delegated mute correction (2026-10-12)
 
 Provider, attendee and connector director calls must refuse `muted=true` when
