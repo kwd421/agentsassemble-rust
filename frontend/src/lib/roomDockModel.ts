@@ -1,4 +1,4 @@
-import { sessionHostOrigin } from "./remote/remoteWorkspace";
+import { sessionHostDisplayOrigin } from "./remote/remoteWorkspace";
 import type { ServerConnectionState } from "./serverConnectionState";
 import type { LucideIcon } from "lucide-react";
 import { Bot, Gamepad2, LayoutDashboard, Radio, Sparkles, Users } from "lucide-react";
@@ -394,7 +394,9 @@ export function roomFromGuestSession(session: RoomGuestSession): RoomDockItem {
     roomUid: session.roomUid,
     serverId: session.serverSurface.server_id,
     roomOrigin: "remote_server",
-    serverOrigin: sessionHostOrigin(session.sessionToken),
+    // Display only; routing always uses serverId/bearer. Unknown until the
+    // host's session is bound, and never another host's origin.
+    serverOrigin: sessionHostDisplayOrigin(session.sessionToken) ?? undefined,
     connectionState: "connected",
     topic: session.roomTopic || `${session.displayName || session.agentId}로 입장한 방`,
     shortLabel: label.slice(0, 1).toUpperCase() || "G",

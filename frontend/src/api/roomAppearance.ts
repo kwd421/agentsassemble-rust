@@ -1,4 +1,4 @@
-import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
+import { fetchProductTransport, hasRemoteWorkspace, remoteSessionTransport } from "../lib/remote/remoteWorkspace";
 import {
   fileToBase64,
   isPrivateNoStoreResponse,
@@ -44,8 +44,13 @@ function requireResponseMetadata(response: Response, contentType: string) {
   if (!isPrivateNoStoreResponse(response, contentType)) invalidResponse();
 }
 
-async function strictPngBlob(response: Response): Promise<Blob> {
-  return strictPrivatePngBlob(response, "방 외형 자산 응답 계약이 올바르지 않습니다.");
+async function strictPngBlob(response: Response, authority: RoomAppearanceReadAuthority): Promise<Blob> {
+  // Bind the blob budget to this room's own host; a local room reads plainly.
+  const transport = authority.kind === "remote" ? remoteSessionTransport(authority.sessionToken) ?? null : null;
+  if (authority.kind === "remote" && !transport && hasRemoteWorkspace()) {
+    throw new Error("서버 연결이 끝났어요. 서버 목록에서 다시 연결해 주세요.");
+  }
+  return strictPrivatePngBlob(response, "방 외형 자산 응답 계약이 올바르지 않습니다.", transport);
 }
 
 function exactObject(
@@ -183,5 +188,5 @@ export async function fetchRoomAppearanceBlob(
       ? await fetchLocalAppearance(reference, authority, mode, signal)
       : await fetchRemoteAppearance(reference, authority, signal);
   if (!response.ok) throw await responseError(response);
-  return strictPngBlob(response);
+  return strictPngBlob(response, authority);
 }

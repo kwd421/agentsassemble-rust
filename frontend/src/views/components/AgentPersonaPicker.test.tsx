@@ -85,7 +85,8 @@ describe("AgentPersonaPicker", () => {
     await waitFor(() =>
       expect(personaApi.fetchPersonaThumbnail).toHaveBeenCalledWith(
         "guide",
-        expect.any(AbortSignal)
+        expect.any(AbortSignal),
+        undefined
       )
     );
     await waitFor(() =>

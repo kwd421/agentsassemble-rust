@@ -12,33 +12,83 @@ type Workspace = WorkspaceInstall & { serverId: string };
 const workspaces = new Map<string, Workspace>();
 let pendingMember: SecureMemberEntry | null = null;
 export const pendingMemberSnapshot = () => pendingMember;
-export function selectRemoteMember(entry: SecureMemberEntry | null) { pendingMember = entry; for (const listener of listeners) listener(); }
+export function selectRemoteMember(entry: SecureMemberEntry | null) { pendingMember = entry; notifyWorkspaceListeners(); }
 const listeners = new Set<() => void>();
+let workspaceVersion = 0;
+function notifyWorkspaceListeners() {
+  workspaceVersion += 1;
+  for (const listener of listeners) listener();
+}
+export const remoteWorkspaceVersion = () => workspaceVersion;
 // Entries remain until page disposal, including after a channel ends: an old
 // bearer must never fall through to a plaintext request.
-const sessions = new Map<string, { transport: RemoteTransport | null; origin: string }>();
-function lastWorkspace(): Workspace | null {
-  let current: Workspace | null = null;
-  for (const entry of workspaces.values()) current = entry;
-  return current;
-}
-// Transitional single-context selector: the most recently installed live
-// entry. Per-host consumers resolve through remoteWorkspaceFor or the bearer
-// binding instead.
-export const remoteWorkspaceSnapshot = () => lastWorkspace();
+const sessions = new Map<string, { transport: RemoteTransport | null; origin: string; serverId: string }>();
+// No "most recent workspace" selector exists on purpose: with several hosts
+// live at once, picking one implicitly would send one host's bearer, upload or
+// read to another host. Every per-host call resolves its workspace explicitly
+// from the room's own server_id/origin (remoteWorkspaceFor) or from its own
+// bearer (remoteSessionTransport); App-wide UI uses hasRemoteWorkspace().
 export const remoteWorkspacesSnapshot = (): Workspace[] => [...workspaces.values()];
 export const remoteWorkspaceFor = (serverId: string): Workspace | null => workspaces.get(serverId) ?? null;
+export function remoteTransportForOrigin(origin: string): RemoteTransport | null {
+  for (const entry of workspaces.values()) {
+    if (entry.transport.hello.origin === origin && entry.transport.active) return entry.transport;
+  }
+  return null;
+}
+export const hasRemoteWorkspace = (): boolean => workspaces.size > 0;
+/**
+ * Default origin for host-agnostic reads. With exactly one host live it is
+ * that host (the old single-host behavior, with nothing to leak to); with
+ * zero or several live it is the local origin, so per-host lookups bound to
+ * a real host origin simply miss instead of hitting another host.
+ */
+export function defaultWorkspaceOrigin(): string {
+  const live = [...workspaces.values()];
+  if (live.length === 1) return live[0].transport.hello.origin;
+  return typeof window !== "undefined" ? window.location.origin : "";
+}
+/**
+ * Fail-closed host origin for a bearer. A session bound to its own host
+ * resolves there; an unknown session fails closed while any host is live.
+ * With no host live there is no other host to leak to, so the legacy local
+ * origin applies (single-host startup/admission paths).
+ */
+/**
+ * Display-only host origin for a bearer: the bound host, else the legacy
+ * local origin when no host is live, else null (never another host). Unlike
+ * requireSessionHostOrigin it never throws, so render paths stay total.
+ */
+export function sessionHostDisplayOrigin(token: string): string | null {
+  return sessionHostOrigin(token) ?? (hasRemoteWorkspace() ? null : typeof window !== "undefined" ? window.location.origin : null);
+}
+export function requireSessionHostOrigin(token: string): string {
+  const origin = sessionHostOrigin(token);
+  if (origin) return origin;
+  if (!hasRemoteWorkspace()) return typeof window !== "undefined" ? window.location.origin : "";
+  throw new Error("서버 연결이 끝났어요. 서버 목록에서 다시 연결해 주세요.");
+}
+export function requireRemoteWorkspaceFor(serverId: string): Workspace {
+  const workspace = serverId ? workspaces.get(serverId) ?? null : null;
+  if (!workspace || !workspace.transport.active) throw new Error("서버 연결이 끝났어요. 서버 목록에서 다시 연결해 주세요.");
+  return workspace;
+}
 export function subscribeRemoteWorkspace(listener: () => void) {
   listeners.add(listener); return () => { listeners.delete(listener); };
 }
-export function bindRemoteSession(token: string, transport: RemoteTransport) {
-  const binding = { transport: transport as RemoteTransport | null, origin: transport.hello.origin };
+export function bindRemoteSession(token: string, transport: RemoteTransport, serverId?: string) {
+  const binding = { transport: transport as RemoteTransport | null, origin: transport.hello.origin, serverId: serverId ?? "" };
   sessions.set(token, binding);
   transport.onClose(() => { if (sessions.get(token) === binding) binding.transport = null; });
 }
 export function remoteSessionTransport(token?: string) { return token ? sessions.get(token)?.transport ?? undefined : undefined; }
-export function productWorkspaceOrigin() { return lastWorkspace()?.transport.hello.origin ?? (typeof window !== "undefined" ? window.location.origin : ""); }
-export function sessionHostOrigin(token: string) { return sessions.get(token)?.origin ?? (typeof window !== "undefined" ? window.location.origin : ""); }
+/** Fail-closed host origin for a bearer: null when the session is unknown or closed. */
+export function sessionHostOrigin(token: string): string | null { return sessions.get(token)?.origin ?? null; }
+/** Fail-closed server id for a bearer: null when the session is unknown. */
+export function sessionHostServerId(token: string): string | null {
+  const serverId = sessions.get(token)?.serverId ?? "";
+  return serverId ? serverId : null;
+}
 export function installRemoteWorkspace(next: WorkspaceInstall) {
   const serverId = next.owner?.serverId || next.member?.serverSurface.server_id || "";
   if (!serverId) throw new Error("서버를 확인하지 못했어요. 서버 목록에서 다시 연결해 주세요.");
@@ -49,8 +99,8 @@ export function installRemoteWorkspace(next: WorkspaceInstall) {
   workspaces.delete(serverId);
   workspaces.set(serverId, { ...next, serverId });
   pendingMember = null;
-  bindRemoteSession(next.owner?.sessionToken || next.member!.sessionToken, next.transport);
-  for (const listener of listeners) listener();
+  bindRemoteSession(next.owner?.sessionToken || next.member!.sessionToken, next.transport, serverId);
+  notifyWorkspaceListeners();
 }
 export function closeRemoteWorkspace(serverId?: string) {
   if (serverId === undefined) {
@@ -60,21 +110,24 @@ export function closeRemoteWorkspace(serverId?: string) {
     workspaces.get(serverId)?.transport.close();
     workspaces.delete(serverId);
   }
-  for (const listener of listeners) listener();
+  notifyWorkspaceListeners();
 }
 const plainUploads = new Map<string, { transfer: boolean; limit: number }>();
-export function messageAttachmentCapabilities(token: string, path: string) {
+export function messageAttachmentCapabilities(token: string, path: string, local = false) {
   const transport = remoteSessionTransport(token);
   if (transport) return transport.messageAttachmentCapabilities();
-  if (workspaces.size > 0 || sessions.has(token)) throw connectionEnded();
+  // A local (desktop-ticket) authority never resolves to a remote transport;
+  // it reads the plain probe cache even while remote hosts are live. A remote
+  // bearer with no live transport fails closed instead of downgrading.
+  if (!local && (workspaces.size > 0 || sessions.has(token))) throw connectionEnded();
   return plainUploads.get(requestOrigin(path)) ?? { transfer: false, limit: LEGACY_MESSAGE_ATTACHMENT_LIMIT };
 }
 const plainImagePreviews = new Map<string, boolean>();
 function requestOrigin(path: string) { return new URL(path, window.location.href).origin; }
-export function supportsMessageAttachmentPreview(token: string, path: string): boolean {
+export function supportsMessageAttachmentPreview(token: string, path: string, local = false): boolean {
   const transport = remoteSessionTransport(token);
   if (transport) return transport.supportsImagePreview();
-  if (workspaces.size > 0 || sessions.has(token)) return false;
+  if (!local && (workspaces.size > 0 || sessions.has(token))) return false;
   return plainImagePreviews.get(requestOrigin(path)) === true;
 }
 

@@ -9,12 +9,15 @@ export default function AgentSessionPersonaSettings({
   session,
   provider,
   canConfigure,
+  serverId,
   onConfigure,
   onStatus,
 }: {
   session: RoomAgentSession;
   provider: NativeCliProviderAvailability;
   canConfigure: boolean;
+  /** The room's own host: persona library reads stay on that host. */
+  serverId?: string;
   onConfigure: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onStatus: (status: string) => void;
 }) {
@@ -49,6 +52,7 @@ export default function AgentSessionPersonaSettings({
         value={personaCardId}
         applied={session.persona_card || undefined}
         disabled={busy || !canConfigure}
+        serverId={serverId}
         onChange={setPersonaCardId}
       />
       <div className="dc-agent-persona-actions">

@@ -1,6 +1,6 @@
 import MemberJoinPanel from "./MemberJoinPanel";
 import RemoteMemberWorkspaceBoundary from "./RemoteMemberWorkspaceBoundary";
-import { remoteWorkspaceSnapshot, subscribeRemoteWorkspace, pendingMemberSnapshot, selectRemoteMember } from "../../lib/remote/remoteWorkspace";
+import { remoteWorkspaceVersion, remoteWorkspacesSnapshot, subscribeRemoteWorkspace, pendingMemberSnapshot, selectRemoteMember } from "../../lib/remote/remoteWorkspace";
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import {
@@ -42,7 +42,14 @@ export default function StartupIdentityBoundary({
   children: (identity: { deviceToken: string; clientId: string }) => ReactNode;
   memberReturn?: MemberReturn;
 }) {
-  const remote = useSyncExternalStore(subscribeRemoteWorkspace, remoteWorkspaceSnapshot);
+  // The version counter is the subscription snapshot (stable); the list is
+  // read during render so no new array identity triggers a resubscribe loop.
+  useSyncExternalStore(subscribeRemoteWorkspace, remoteWorkspaceVersion);
+  const remotes = remoteWorkspacesSnapshot();
+  // App-shell identity is explicit, never "most recent": the account's own
+  // server owns the shell; otherwise the single live host does. Every live
+  // host still wraps the content so its own end-state shows per host.
+  const remote = remotes.find((entry) => entry.owner) ?? remotes[0] ?? null;
   const pendingMember = useSyncExternalStore(subscribeRemoteWorkspace, pendingMemberSnapshot);
   const [centralOwnerConnect] = useState(() => { clearStoredCentralOwnerWorkspace(); return consumeCentralOwnerConnectFromUrl(); });
   const [ownerWorkspace, setOwnerWorkspace] = useState<CentralOwnerWorkspace | null>(null);
@@ -83,8 +90,9 @@ export default function StartupIdentityBoundary({
   if (pendingMember) return <MemberJoinPanel secureEntry={pendingMember} onCancel={() => selectRemoteMember(null)} />;
   if (remote) {
     const content = children({ deviceToken: remote.deviceToken, clientId: remote.clientId });
-    return remote.owner ? <CentralOwnerWorkspaceBoundary key={remote.owner.sessionId} session={remote.owner}>{content}</CentralOwnerWorkspaceBoundary>
-      : <RemoteMemberWorkspaceBoundary key={remote.transport.hello.channel_id} transport={remote.transport}>{content}</RemoteMemberWorkspaceBoundary>;
+    return remotes.reduceRight<ReactNode>((wrapped, entry) => entry.owner
+      ? <CentralOwnerWorkspaceBoundary key={entry.owner.sessionId} session={entry.owner}>{wrapped}</CentralOwnerWorkspaceBoundary>
+      : <RemoteMemberWorkspaceBoundary key={entry.transport.hello.channel_id} transport={entry.transport} serverId={entry.serverId}>{wrapped}</RemoteMemberWorkspaceBoundary>, content);
   }
 
   if (memberReturn && !memberReturn.record && !memberReturn.connect) return <GuestJoinProfilePanel displayName=""

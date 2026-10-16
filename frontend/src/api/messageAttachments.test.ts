@@ -107,6 +107,32 @@ describe("lobby message-attachment HTTP authority", () => {
     expect(bridge.settings).not.toHaveBeenCalled();
   });
 
+  it("routes a room's attachment read to its own host and fails closed when that host is gone", async () => {
+    function liveHost(serverId: string, token: string, fetch: ReturnType<typeof vi.fn>) {
+      const callbacks = new Set<() => void>();
+      const transport = { hello: { origin: `https://${serverId}.test` }, active: true,
+        onClose: (fn: () => void) => { callbacks.add(fn); return () => callbacks.delete(fn); },
+        close() { transport.active = false; for (const fn of callbacks) fn(); }, fetch };
+      installRemoteWorkspace({ transport: transport as unknown as RemoteTransport,
+        owner: { sessionToken: token, serverId } as never, deviceToken: "device", clientId: "client" });
+      return transport;
+    }
+    const fetchA = vi.fn().mockResolvedValue(attachmentResponse("notes"));
+    const fetchB = vi.fn().mockResolvedValue(attachmentResponse("notes"));
+    liveHost("server-a", "token-a", fetchA);
+    liveHost("server-b", "token-b", fetchB);
+    const blob = await fetchMessageAttachmentBlob(attachment, "general",
+      { kind: "remote", sessionToken: "token-a" }, "download");
+    expect(blob.size).toBe(attachment.size);
+    releaseResourceBlob(blob);
+    expect(fetchA).toHaveBeenCalledOnce();
+    expect(fetchB).not.toHaveBeenCalled();
+    closeRemoteWorkspace("server-b");
+    await expect(fetchMessageAttachmentBlob(attachment, "general",
+      { kind: "remote", sessionToken: "token-b" }, "download")).rejects.toThrow("연결이 끝났어요");
+    expect(fetchB).not.toHaveBeenCalled();
+  });
+
   it("uploads through one fresh local grant with only the canonical message payload", async () => {
     bridge.upload.mockResolvedValue(grant("a".repeat(64)));
     const fetchMock = vi.fn().mockResolvedValue(

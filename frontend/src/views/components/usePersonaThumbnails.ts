@@ -8,7 +8,8 @@ type ThumbnailRequest = {
 
 export function usePersonaThumbnails(
   personaIds: readonly string[],
-  importGeneration: number
+  importGeneration: number,
+  serverId?: string
 ) {
   const desiredKey = [...new Set(personaIds)].sort().join("\0");
   const activeRef = useRef(true);
@@ -45,7 +46,7 @@ export function usePersonaThumbnails(
       if (requestsRef.current.has(personaId)) continue;
       const request: ThumbnailRequest = { controller: new AbortController() };
       requestsRef.current.set(personaId, request);
-      void fetchPersonaThumbnail(personaId, request.controller.signal)
+      void fetchPersonaThumbnail(personaId, request.controller.signal, serverId)
         .then((blob) => {
           if (
             !activeRef.current ||

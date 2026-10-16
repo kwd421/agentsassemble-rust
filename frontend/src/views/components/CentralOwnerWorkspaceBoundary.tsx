@@ -1,4 +1,4 @@
-import { closeRemoteWorkspace, remoteSessionTransport, remoteWorkspaceSnapshot } from "../../lib/remote/remoteWorkspace";
+import { closeRemoteWorkspace, hasRemoteWorkspace, remoteSessionTransport } from "../../lib/remote/remoteWorkspace";
 import { observeOwnerSessionRejection } from "../../lib/ownerSessionTransport";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AccountDeletionActiveContext } from "./AccountDeletionContext";
@@ -22,11 +22,11 @@ export default function CentralOwnerWorkspaceBoundary({ session, children }: { s
   const ended = status?.state === "ended";
   return <CentralOwnerWorkspaceContext.Provider value={context}>
     <div inert={ended || undefined} aria-hidden={ended || undefined} className="contents">{children}</div>
-    {ended && <EndedWorkspace reason={status.reason} />}
+    {ended && <EndedWorkspace reason={status.reason} serverId={session.serverId} />}
   </CentralOwnerWorkspaceContext.Provider>;
 }
 
-export function EndedWorkspace({ reason }: { reason: "revoked" | "disconnected" | "unavailable" }) {
+export function EndedWorkspace({ reason, serverId }: { reason: "revoked" | "disconnected" | "unavailable"; serverId?: string }) {
   const accountOperation = useContext(AccountDeletionActiveContext);
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -45,7 +45,7 @@ export function EndedWorkspace({ reason }: { reason: "revoked" | "disconnected" 
           ? "호스트에서 이 기기의 연결을 해제했어요."
           : reason === "disconnected" ? "호스트와의 연결이 끊겼어요."
           : "서버 접속 권한을 확인하지 못했어요."} 내 서버 목록에서 다시 연결해 주세요.</p>
-        {centralAccountEntryUrl() && <a className="ops-button" href={centralAccountEntryUrl()} onClick={event => { if (remoteWorkspaceSnapshot()) { event.preventDefault(); closeRemoteWorkspace(); } }}>내 서버 목록으로</a>}
+        {centralAccountEntryUrl() && <a className="ops-button" href={centralAccountEntryUrl()} onClick={event => { if (serverId && hasRemoteWorkspace()) { event.preventDefault(); closeRemoteWorkspace(serverId); } }}>내 서버 목록으로</a>}
       </main>
     </dialog>;
 }

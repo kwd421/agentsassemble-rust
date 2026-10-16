@@ -94,7 +94,7 @@ export class SecureMemberAdmission {
     const payload = parseRoomInviteJoinResponse(raw, requestId, roomId, this.clientId);
     if (payload.server_id !== this.entry.server_id || loadCentralSession()?.token !== this.session.token || !this.transport.active) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
     const member = { ...roomGuestSessionFromJoinPayload("", payload), centralMember: true };
-    bindRemoteSession(member.sessionToken, this.transport);
+    bindRemoteSession(member.sessionToken, this.transport, member.serverSurface.server_id);
     this.adopted = true;
     installRemoteWorkspace({ transport: this.transport, owner: null, member, deviceToken: this.deviceToken, clientId: this.clientId });
   }

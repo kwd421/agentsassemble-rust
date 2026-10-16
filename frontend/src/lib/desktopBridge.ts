@@ -1,4 +1,4 @@
-import { remoteWorkspaceSnapshot, fetchPlainProductTransport } from "./remote/remoteWorkspace";
+import { hasRemoteWorkspace, fetchPlainProductTransport } from "./remote/remoteWorkspace";
 import type { HostDeviceInfo } from "../types/generated/HostDeviceInfo";
 import type { HostInstallationInfo } from "../types/generated/HostInstallationInfo";
 import type { HostProductSurface } from "../types/generated/HostProductSurface";
@@ -130,7 +130,10 @@ export interface DesktopWorkspaceSelection {
 let desktopHostSurface: HostProductSurface | null = null;
 
 function requireDesktopHostCommand(command: string) {
-  if (remoteWorkspaceSnapshot() && !["save_message_attachment", "runtime_central_login", "open_central_google_login", "runtime_account_deletion_ticket", "runtime_account_data_wipe"].includes(command)) throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
+  // This computer's host authority is unusable while visiting any remote
+  // server; the rule is per-command and host-independent, so any live remote
+  // workspace (never one picked host) blocks it.
+  if (hasRemoteWorkspace() && !["save_message_attachment", "runtime_central_login", "open_central_google_login", "runtime_account_deletion_ticket", "runtime_account_data_wipe"].includes(command)) throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
   if (!desktopHostSurface) {
     throw new Error("데스크톱 호스트 제품 표면이 아직 고정되지 않았습니다.");
   }

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { saveSession } from "./identity";
 import { openCentralOwnedServer } from "./secureOwnerEntry";
 import { RemoteTransport } from "../remote/remoteTransport";
-import { closeRemoteWorkspace, remoteWorkspaceSnapshot } from "../remote/remoteWorkspace";
+import { closeRemoteWorkspace, remoteWorkspaceFor } from "../remote/remoteWorkspace";
 
 const server = { server_id: "server", registration_epoch: "epoch", relation: "owner" as const, alias: "컴퓨터", host_public_key_jwk: { kty: "OKP", crv: "Ed25519", x: "public-key" }, host_key_fingerprint: "fingerprint",
   endpoint: { origin: "https://host.test", generation: 7, mode: "event_secure_v1", protocol: "secure_admission_v1", status: "published" as const } };
@@ -37,7 +37,7 @@ it("pins the central grant to the verified channel and installs the shared works
   expect(JSON.parse(init.body)).toEqual(hello);
   expect(transport.fetch.mock.calls[0][0]).toBe("/api/central-owner/session");
   expect(JSON.stringify(transport.fetch.mock.calls)).not.toContain("central-only");
-  expect(remoteWorkspaceSnapshot()?.owner?.serverId).toBe("server");
+  expect(remoteWorkspaceFor("server")?.owner?.serverId).toBe("server");
   expect(window.location.href).toBe("https://central.test/");
 });
 it("rejects a mismatched channel echo before sending the grant to the host", async () => {

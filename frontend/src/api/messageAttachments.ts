@@ -1,6 +1,6 @@
 import { fetchRoomSettings } from "./room";
 import { readResourceBlob, releaseResourceBlob } from "../lib/remote/remoteResources";
-import { fetchProductTransport, supportsMessageAttachmentPreview } from "../lib/remote/remoteWorkspace";
+import { fetchProductTransport, hasRemoteWorkspace, remoteSessionTransport, supportsMessageAttachmentPreview } from "../lib/remote/remoteWorkspace";
 import {
   requestDesktopMessageAttachmentReadTicket,
   requestDesktopMessageAttachmentUploadTicket,
@@ -233,11 +233,22 @@ export async function fetchMessageAttachmentBlob(
     signal
   );
   const preview = mode === "preview" && attachment.is_image && supportsMessageAttachmentPreview(
-    resolvedAuthority.credential, `${resolvedAuthority.baseUrl}${attachment.url}`
+    resolvedAuthority.credential, `${resolvedAuthority.baseUrl}${attachment.url}`, authority.kind === "local"
   );
   const reference = preview
     ? attachment.url.replace(MESSAGE_ATTACHMENT_VIEW_SUFFIX, MESSAGE_ATTACHMENT_PREVIEW_SUFFIX)
     : mode === "download" ? attachment.download_url : attachment.url;
+  // The blob budget is bound to this room's own host: a remote room resolves
+  // its live session transport (fail closed when its host is not live) and a
+  // local room reads plainly, never charging another host's budget.
+  const resourceTransport = authority.kind === "remote"
+    ? remoteSessionTransport(resolvedAuthority.credential) ?? null
+    : null;
+  // With hosts live the room's own transport must be present; with none
+  // live there is no other host to leak to, so the legacy plain read applies.
+  if (authority.kind === "remote" && !resourceTransport && hasRemoteWorkspace()) {
+    throw new Error("서버 연결이 끝났어요. 서버 목록에서 다시 연결해 주세요.");
+  }
   beforeDispatch?.();
   const response = await fetchProductTransport(`${resolvedAuthority.baseUrl}${reference}`, {
     cache: "no-store",
@@ -248,7 +259,7 @@ export async function fetchMessageAttachmentBlob(
   const contentType = response.headers.get("Content-Type");
   const derivedType = preview && contentType !== null && ["image/jpeg", "image/webp"].includes(contentType);
   if (!isPrivateNoStoreResponse(response, derivedType ? contentType : attachment.content_type)) invalidResponse();
-  const blob = await readResourceBlob(response, attachment.size);
+  const blob = await readResourceBlob(response, attachment.size, resourceTransport);
   const original = blob.size === attachment.size && blob.type === attachment.content_type;
   const derived = derivedType && blob.size <= MAX_MESSAGE_ATTACHMENT_PREVIEW_BYTES;
   if (blob.size < 1 || blob.type !== contentType || !(original || derived)) {

@@ -12,7 +12,7 @@ import {
   type OutgoingDraft,
   type OutgoingMessage,
 } from "../../lib/outgoingMessages";
-import { remoteWorkspaceSnapshot, sessionHostOrigin, subscribeRemoteWorkspace } from "../../lib/remote/remoteWorkspace";
+import { hasRemoteWorkspace, remoteSessionTransport, sessionHostServerId, subscribeRemoteWorkspace } from "../../lib/remote/remoteWorkspace";
 import { roomMessagePayload } from "../../lib/roomMessagePayload";
 import { RoomSocketSayError, type RoomSocketHandle } from "../../roomSocketTypes";
 import type { RoomEvent } from "../../types/generated/RoomEvent";
@@ -38,6 +38,8 @@ type Owner = {
   rooms: Map<string, RoomEntry>;
   generations: number;
   snapshot: readonly OutgoingMessage[];
+  /** The remote bearer this owner publishes through; absent for the local host. */
+  serverToken?: string;
 };
 const owners = new Map<string, Owner>();
 const NONE: readonly OutgoingMessage[] = Object.freeze([]);
@@ -50,11 +52,11 @@ function socketId(socket: RoomSocketHandle | null): number {
   return id;
 }
 
-function ownerFor(key: string, hostId: string, personId: string): Owner {
+function ownerFor(key: string, hostId: string, personId: string, serverToken?: string): Owner {
   const existing = owners.get(key);
   if (existing) return existing;
   const owner: Owner = {
-    rooms: new Map(), generations: 0, snapshot: NONE,
+    rooms: new Map(), generations: 0, snapshot: NONE, serverToken,
     model: new OutgoingMessages({
       hostId, personId,
       publish: (authority, request) => {
@@ -103,14 +105,17 @@ function leave(key: string, roomId: string) {
   owner.model.leaveRoom(roomId); owner.rooms.delete(roomId);
   if (owner.rooms.size === 0) { owner.model.close(); owners.delete(key); }
 }
-// Ending the remote workspace (sign-out, another account or server) ends everything queued under it.
-let seenWorkspace = remoteWorkspaceSnapshot();
+// Ending a host's channel (sign-out, another account or server) ends only the
+// queues owned by that host. Each owner is keyed by its host (local or the
+// session's server_id), so installing or closing host B never touches host A.
 subscribeRemoteWorkspace(() => {
-  const current = remoteWorkspaceSnapshot();
-  if (current === seenWorkspace) return;
-  seenWorkspace = current;
-  for (const owner of owners.values()) owner.model.close();
-  owners.clear();
+  for (const [key, owner] of [...owners.entries()]) {
+    // Local owners have no bearer and never close on remote changes; every
+    // remote owner is bound to its own bearer, so only that host's close
+    // ends its queues.
+    if (!owner.serverToken) continue;
+    if (!remoteSessionTransport(owner.serverToken)) { owner.model.close(); owners.delete(key); }
+  }
 });
 
 export function uploadFailureMessage(error: unknown, fileLimit?: number): string {
@@ -146,9 +151,18 @@ export function useOutgoingMessages({ roomUid, roomId, participantId, authority,
   socket: RoomSocketHandle | null;
   events: readonly LobbyEvent[];
 }): OutgoingController {
+  // The owner is resolved from this room's own authority only: a remote room
+  // uses its session's live server, never whichever host was installed last.
+  // An unknown or closed session fails closed (no key, nothing sends).
   const hostId = !authority || !participantId ? ""
-    : authority.kind === "remote" ? sessionHostOrigin(authority.sessionToken) : "local";
-  const key = hostId ? `${hostId}\n${participantId}` : "";
+    : authority.kind === "remote"
+      ? (sessionHostServerId(authority.sessionToken) ?? (hasRemoteWorkspace() ? "" : window.location.origin))
+      : "local";
+  const serverToken = authority?.kind === "remote" ? authority.sessionToken : undefined;
+  if (serverToken && !remoteSessionTransport(serverToken)) {
+    // Fail closed below via the empty key; the effect leaves any previous owner.
+  }
+  const key = hostId && (!serverToken || remoteSessionTransport(serverToken)) ? `${hostId}\n${participantId}` : "";
   const principal = hostId && authority ? JSON.stringify([roomUid, participantId, authority]) : "";
   const identity = principal ? `${principal}#${socketId(socket)}` : "";
   const [admitted, setAdmitted] = useState(0);
@@ -160,7 +174,7 @@ export function useOutgoingMessages({ roomUid, roomId, participantId, authority,
     if (lastKey.current && lastKey.current !== key) leave(lastKey.current, roomId);
     lastKey.current = key;
     if (!key || !identity || !authority) return undefined;
-    const owner = ownerFor(key, hostId, participantId);
+    const owner = ownerFor(key, hostId, participantId, serverToken);
     let room = owner.rooms.get(roomId);
     if (!room) { room = { principal, identity: "", generation: 0, socket: null }; owner.rooms.set(roomId, room); }
     const entry = room;

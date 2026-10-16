@@ -79,7 +79,9 @@ export async function createMessageAttachmentUploadClient(
     return { base: "", token: authority.sessionToken, device: authority.deviceToken };
   }
   const discovery = await grant();
-  const capabilities = messageAttachmentCapabilities(discovery.token, `${discovery.base}/api/message-attachments`);
+  // Local desktop grants read the plain probe cache even while remote hosts
+  // are live; remote bearers resolve to their own host's transport.
+  const capabilities = messageAttachmentCapabilities(discovery.token, `${discovery.base}/api/message-attachments`, authority.kind === "local");
   let fileLimit = settings.attachmentFileLimitBytes ?? MAX_ATTACHMENT_BYTES;
   function preflight(file: File) {
     if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > fileLimit) throw new UploadFailure("file_size_limit", false);

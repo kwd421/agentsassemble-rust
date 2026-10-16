@@ -14,11 +14,14 @@ export default function AgentPersonaPicker({
   value,
   applied,
   disabled = false,
+  serverId,
   onChange,
 }: {
   value: string;
   applied?: PersonaAssetSummary;
   disabled?: boolean;
+  /** The room's own host: the persona library is read from that host only. */
+  serverId?: string;
   onChange: (personaId: string) => void;
 }) {
   const [items, setItems] = useState<PersonaAssetSummary[]>([]);
@@ -33,7 +36,7 @@ export default function AgentPersonaPicker({
     if (!libraryOpen || loaded) return;
     let active = true;
     setStatus("불러오는 중...");
-    fetchPersonaAssets()
+    fetchPersonaAssets(serverId)
       .then((nextItems) => {
         if (!active) return;
         setItems(nextItems);
@@ -49,7 +52,7 @@ export default function AgentPersonaPicker({
     return () => {
       active = false;
     };
-  }, [libraryOpen, loaded]);
+  }, [libraryOpen, loaded, serverId]);
 
   const libraryItems = useMemo(() => {
     if (!applied || items.some((item) => item.id === applied.id)) return items;
@@ -77,7 +80,7 @@ export default function AgentPersonaPicker({
       : []),
   ];
   const { urls: thumbnailUrls, failedIds: failedThumbnailIds } =
-    usePersonaThumbnails(thumbnailIds, importGeneration);
+    usePersonaThumbnails(thumbnailIds, importGeneration, serverId);
   const searching = Boolean(query.trim());
   // With nothing imported there is only one thing to choose, and it is already
   // named on the trigger. Showing a search field, a repeat of that one row and
@@ -88,7 +91,7 @@ export default function AgentPersonaPicker({
     setImporting(true);
     setStatus("가져오는 중...");
     try {
-      const imported = await importPersonaAsset(file);
+      const imported = await importPersonaAsset(file, serverId);
       setItems((current) => [imported, ...current.filter((item) => item.id !== imported.id)]);
       setLoaded(true);
       setImportGeneration((current) => current + 1);

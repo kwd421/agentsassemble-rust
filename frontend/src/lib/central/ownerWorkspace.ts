@@ -35,7 +35,7 @@ export async function exchangeCentralOwnerSession(connect: CentralOwnerConnect, 
       session.serverId !== connect.serverId || session.generation !== connect.generation) {
     throw new Error("선택한 서버와 발급된 세션이 일치하지 않습니다.");
   }
-  if (transport) bindRemoteSession(session.sessionToken, transport);
+  if (transport) bindRemoteSession(session.sessionToken, transport, session.serverId);
   return session;
 }
 
@@ -82,6 +82,6 @@ export async function enterCentralOwnerRoom(session: CentralOwnerWorkspace, devi
     throw new Error("선택한 서버·방과 발급된 접속권이 일치하지 않습니다.");
   }
   const transport = remoteSessionTransport(session.sessionToken);
-  if (transport) bindRemoteSession(payload.session_token, transport);
+  if (transport) bindRemoteSession(payload.session_token, transport, payload.server_id);
   return payload;
 }

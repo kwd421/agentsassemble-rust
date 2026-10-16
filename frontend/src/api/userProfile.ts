@@ -3,7 +3,7 @@ import {
   isDesktopWebview,
 } from "../lib/desktopBridge";
 import { profileAvatarReference } from "../lib/attachmentReference";
-import { sessionHostOrigin } from "../lib/remote/remoteWorkspace";
+import { sessionHostDisplayOrigin } from "../lib/remote/remoteWorkspace";
 import {
   fetchJsonWithIdentity,
   fileToBase64,
@@ -117,7 +117,10 @@ function userProfileToApi(profile: UserProfile): ApiUserProfile {
 function browserDisplayResourceBase(identity: UserProfileIdentity): string {
   const token = identity.centralSession?.sessionToken || identity.sessionToken;
   try {
-    const endpoint = new URL("/api/user-profile", token ? sessionHostOrigin(token) : window.location.href);
+    // No host live means no other host to leak to: keep the legacy local base.
+    const origin = token ? sessionHostDisplayOrigin(token) : window.location.href;
+    if (!origin) throw new Error("host-closed");
+    const endpoint = new URL("/api/user-profile", origin);
     if (["http:", "https:"].includes(endpoint.protocol)) return endpoint.origin;
   } catch {
     // An opaque desktop document cannot stand in for missing host custody.

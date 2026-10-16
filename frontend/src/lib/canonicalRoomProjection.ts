@@ -1,4 +1,4 @@
-import { productWorkspaceOrigin } from "./remote/remoteWorkspace";
+import { defaultWorkspaceOrigin } from "./remote/remoteWorkspace";
 import type { LobbyEvent, RoomAgentSession, RoomEvent, RoomMember } from "../api";
 import type {
   ProviderCatalogSnapshot,
@@ -261,7 +261,7 @@ export function canonicalRoomProjectionScopeKey(
   roomId: string,
   auth: RoomSocketAuth | undefined,
   viewerParticipantId: string,
-  origin = productWorkspaceOrigin(),
+  origin: string = defaultWorkspaceOrigin(),
 ): string {
   const authKey = canonicalRoomAuthKey(auth);
   return roomId && authKey

@@ -53,6 +53,8 @@ type AgentCreateModalProps = {
   catalogRevision?: string;
   localProviderActions?: boolean;
   openCodeFreePermissionHint?: string;
+  /** The room's own host: persona library reads stay on that host. */
+  serverId?: string;
   initialSelection?: { providerId: string; displayName: string };
   onCatalogChange?: (catalog: ProviderCatalog) => void;
   onClose: () => void;
@@ -72,6 +74,7 @@ export default function AgentCreateModal({
   catalogRevision = "",
   localProviderActions = true,
   openCodeFreePermissionHint = OPENCODE_FREE_PERMISSION_HINT,
+  serverId,
   initialSelection,
   onCatalogChange,
   onClose,
@@ -564,7 +567,7 @@ export default function AgentCreateModal({
           {selectedProvider && !existingSessionId &&
             ["api", "local"].includes(providerGroup) && (
               <section className="dc-agent-section">
-                <AgentPersonaPicker value={personaCardId} onChange={setPersonaCardId} />
+                <AgentPersonaPicker value={personaCardId} serverId={serverId} onChange={setPersonaCardId} />
               </section>
             )}
 

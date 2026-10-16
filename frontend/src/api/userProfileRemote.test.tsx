@@ -66,8 +66,9 @@ it("loads profile, card and edit-preview avatars as encrypted Blob URLs and revo
 
 it("routes only matching host attachment/avatar resources into the channel", () => {
   workspace();
-  expect(remoteResourcePath(profile.avatar_image_url)).toBe(profile.avatar_image_url);
-  expect(remoteResourcePath(`https://host.test${profile.avatar_image_url}`)).toBe(profile.avatar_image_url);
-  expect(remoteResourcePath(`https://foreign.test${profile.avatar_image_url}`)).toBeNull();
-  expect(() => remoteResourcePath("https://host.test/api/user-profile")).toThrow("사진 주소");
+  expect(remoteResourcePath(profile.avatar_image_url, "https://host.test")).toBe(profile.avatar_image_url);
+  expect(remoteResourcePath(`https://host.test${profile.avatar_image_url}`, "https://host.test")).toBe(profile.avatar_image_url);
+  expect(remoteResourcePath(`https://foreign.test${profile.avatar_image_url}`, "https://host.test")).toBeNull();
+  expect(() => remoteResourcePath("https://host.test/api/user-profile", "https://host.test")).toThrow("사진 주소");
+  expect(() => remoteResourcePath(profile.avatar_image_url)).toThrow("서버를 확인하지 못했어요");
 });

@@ -134,6 +134,35 @@ it("uses admitted remote owner custody for list, import and thumbnails in a desk
   }
   expect(bridge.fetchOperator).not.toHaveBeenCalled();
 });
+it("routes each room's persona call to its own host and fails closed without it", async () => {
+  bridge.fetchOperator.mockReset();
+  function ownerHost(serverId: string, token: string) {
+    const callbacks = new Set<() => void>();
+    const remote = { hello: { origin: `https://${serverId}.test` }, active: true, fetch: vi.fn(),
+      onClose: (fn: () => void) => { callbacks.add(fn); return () => callbacks.delete(fn); },
+      close: () => { remote.active = false; for (const fn of callbacks) fn(); } };
+    installRemoteWorkspace({ transport: remote as unknown as RemoteTransport,
+      owner: { sessionToken: token, generation: 17, serverId } as never,
+      deviceToken: "remote-device", clientId: "remote-client" });
+    return remote;
+  }
+  const hostA = ownerHost("server-a", "root-a");
+  const hostB = ownerHost("server-b", "root-b");
+  hostA.fetch.mockResolvedValue(jsonResponse({ items: [summary] }));
+  hostB.fetch.mockResolvedValue(jsonResponse({ items: [summary] }));
+  expect(await fetchPersonaAssets("server-a")).toEqual([summary]);
+  expect(hostA.fetch).toHaveBeenCalledOnce();
+  expect(hostB.fetch).not.toHaveBeenCalled();
+  expect(new Headers(hostA.fetch.mock.calls[0][1].headers).get("authorization")).toBe("Bearer root-a");
+  await expect(fetchPersonaAssets("server-missing")).rejects.toThrow("소유자");
+  // Two live owners with no room named: nothing may silently pick one host.
+  await expect(fetchPersonaAssets()).rejects.toThrow("서버를 확인하지 못했어요");
+  expect(bridge.fetchOperator).not.toHaveBeenCalled();
+  closeRemoteWorkspace("server-b");
+  hostB.fetch.mockClear();
+  await expect(fetchPersonaAssets("server-b")).rejects.toThrow("소유자");
+  expect(hostB.fetch).not.toHaveBeenCalled();
+});
 it("never inherits local authority for a member, closed channel or switched upload", async () => {
   bridge.fetchOperator.mockReset();
   const member = remoteLibrary(false);
