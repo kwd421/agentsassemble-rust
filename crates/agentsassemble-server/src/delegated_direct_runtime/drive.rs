@@ -14,6 +14,48 @@ use crate::room_agent_lifecycle_runtime::{LifecycleCommand, execute_agent_start}
 use crate::room_command_execution::CommandExecution;
 use crate::room_runtime::RoomCommand;
 
+/// Returns the driveable confirmation of one fresh approved room-command
+/// decision: its reply must still carry the `executing` state for this
+/// receipt action together with its confirmation ID.
+fn approved_decision(
+    command: &RoomCommand,
+    execution: &CommandExecution,
+    receipt_action: &str,
+) -> Option<String> {
+    if command.action != agentsassemble_protocol::RoomAction::DelegatedActionDecide {
+        return None;
+    }
+    let Ok(outcome) = &execution.reply else {
+        return None;
+    };
+    if outcome.deduplicated
+        || outcome.result.get("state").and_then(Value::as_str) != Some("executing")
+        || outcome
+            .result
+            .get("receipt")
+            .and_then(|receipt| receipt.get("action"))
+            .and_then(Value::as_str)
+            != Some(receipt_action)
+    {
+        return None;
+    }
+    outcome
+        .result
+        .get("confirmation_id")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
+fn owner_principal(owner_reference: &Value) -> Result<&str, PersistenceError> {
+    owner_reference
+        .get("user_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| PersistenceError::CommandRejected {
+            code: "owner_authority_unavailable".into(),
+            message: "The bound owner's authority is unavailable.".into(),
+        })
+}
+
 /// Re-runs the owner's catalog selection for a bound create request and drives
 /// its approved execution. Selection drift refuses with `target_changed`;
 /// execution itself is idempotent, so lost drives safely retry the same receipt.
@@ -43,12 +85,7 @@ pub(crate) async fn drive_approved_create(
             message: "An agent creation is required.".into(),
         });
     };
-    let Some(owner_principal_id) = owner_reference.get("user_id").and_then(Value::as_str) else {
-        return Err(PersistenceError::CommandRejected {
-            code: "owner_authority_unavailable".into(),
-            message: "The bound owner's authority is unavailable.".into(),
-        });
-    };
+    let owner_principal_id = owner_principal(&owner_reference)?;
     let selection = match provider_catalog
         .validate_creation(
             room_id,
@@ -123,12 +160,7 @@ pub(crate) async fn drive_approved_reconfigure(
             message: "An agent reconfiguration is required.".into(),
         });
     };
-    let Some(owner_principal_id) = owner_reference.get("user_id").and_then(Value::as_str) else {
-        return Err(PersistenceError::CommandRejected {
-            code: "owner_authority_unavailable".into(),
-            message: "The bound owner's authority is unavailable.".into(),
-        });
-    };
+    let owner_principal_id = owner_principal(&owner_reference)?;
     let current = match store
         .delegated_reconfigure_session(room_id, &reconfigure.agent_id)
         .await
@@ -208,31 +240,9 @@ pub(crate) async fn drive_approved_confirmed_reconfigure(
     command: &RoomCommand,
     execution: &mut CommandExecution,
 ) {
-    if command.action != agentsassemble_protocol::RoomAction::DelegatedActionDecide {
-        return;
-    }
-    let Ok(outcome) = &execution.reply else {
+    let Some(confirmation_id) = approved_decision(command, execution, "reconfigure_agent") else {
         return;
     };
-    if outcome.deduplicated
-        || outcome.result.get("state").and_then(Value::as_str) != Some("executing")
-        || outcome
-            .result
-            .get("receipt")
-            .and_then(|receipt| receipt.get("action"))
-            .and_then(Value::as_str)
-            != Some("reconfigure_agent")
-    {
-        return;
-    }
-    let Some(confirmation_id) = outcome
-        .result
-        .get("confirmation_id")
-        .and_then(Value::as_str)
-    else {
-        return;
-    };
-    let confirmation_id = confirmation_id.to_owned();
     let drive = drive_approved_reconfigure(
         store,
         provider_catalog,
@@ -260,31 +270,9 @@ pub(crate) async fn drive_approved_confirmed_create(
     command: &RoomCommand,
     execution: &mut CommandExecution,
 ) {
-    if command.action != agentsassemble_protocol::RoomAction::DelegatedActionDecide {
-        return;
-    }
-    let Ok(outcome) = &execution.reply else {
+    let Some(confirmation_id) = approved_decision(command, execution, "create_agent") else {
         return;
     };
-    if outcome.deduplicated
-        || outcome.result.get("state").and_then(Value::as_str) != Some("executing")
-        || outcome
-            .result
-            .get("receipt")
-            .and_then(|receipt| receipt.get("action"))
-            .and_then(Value::as_str)
-            != Some("create_agent")
-    {
-        return;
-    }
-    let Some(confirmation_id) = outcome
-        .result
-        .get("confirmation_id")
-        .and_then(Value::as_str)
-    else {
-        return;
-    };
-    let confirmation_id = confirmation_id.to_owned();
     let drive = drive_approved_create(
         store,
         provider_catalog,
@@ -313,35 +301,9 @@ pub(crate) async fn drive_approved_confirmed_start(
     command: &RoomCommand,
     execution: &mut CommandExecution,
 ) {
-    if command.action != agentsassemble_protocol::RoomAction::DelegatedActionDecide {
-        return;
-    }
-    let Ok(outcome) = &execution.reply else {
+    let Some(confirmation_id) = approved_decision(command, execution, "start_agent") else {
         return;
     };
-    if outcome.deduplicated
-        || outcome
-            .result
-            .get("state")
-            .and_then(serde_json::Value::as_str)
-            != Some("executing")
-        || outcome
-            .result
-            .get("receipt")
-            .and_then(|receipt| receipt.get("action"))
-            .and_then(serde_json::Value::as_str)
-            != Some("start_agent")
-    {
-        return;
-    }
-    let Some(confirmation_id) = outcome
-        .result
-        .get("confirmation_id")
-        .and_then(serde_json::Value::as_str)
-    else {
-        return;
-    };
-    let confirmation_id = confirmation_id.to_owned();
     let control = match store
         .confirmed_agent_start(&command.principal.room_id, &confirmation_id)
         .await
