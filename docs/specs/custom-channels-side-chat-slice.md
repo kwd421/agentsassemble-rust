@@ -519,3 +519,22 @@ The existing single-use and purpose checks remain authoritative. No client fence
 new credential mechanism, timer or compatibility path substitutes for this check.
 Acceptance verifies real HTTP stale-ticket cases after same-ID room recreation for
 side chat, search/context and pin read/write, including fresh-ticket success.
+
+## Per-channel sidebar unread
+
+The left sidebar shows Discord-style per-channel unread state under the chat
+channel category. A channel is unread when its latest real message sequence is
+greater than its own `lastReadAt` (`seq:N` in channel settings, owned by the
+preferences slice); comparing against the room-wide latest sequence is rejected
+because one message anywhere would mark every channel unread. Only real messages
+count: lobby `message_kind=system` lines never raise unread, matching the lobby
+unread divider. Muted channels never show unread. A collapsed category keeps the
+open channel and unread non-muted channels visible and hides the rest.
+
+Entry points: the room snapshot carries each channel's latest real message
+sequence (`channel_message_cursors`, snapshot/channel projection owner, lobby
+under `lobby` plus current text channels), the client merges per-channel history
+pages and live `message_final`/`channel_message_final` events above that floor,
+and read markers come from channel settings. The cursor field is optional on the
+wire: older hosts omit it and newer clients accept snapshots with or without it,
+treating channels without a known sequence as read, never all unread.
