@@ -3340,3 +3340,51 @@ selection performs no central refresh. Entry points:
 `frontend/src/app/useAppController.tsx` (`selectRoom`, `onGuestRoomJoined`,
 `leaveRoom`), `frontend/src/app/useMemberHosts.ts` (`selectRoom`),
 `frontend/src/app/useRailRooms.ts`, `frontend/src/app/AppView.tsx` banner.
+
+### M4 member-select stays bounded and keeps each room on its own surface (2026-10-17)
+
+Real-app failure after the M4 scoping fix: its jsdom test passes, but the
+desktop app still strands the selection on the own room (rail highlight and
+header stay on the own room, `초대받은 방 / 불러오는 중…`, empty member
+panel) with neither the own nor the member room socket opening after the
+grant. The jsdom path resolves its admission instantly and never installs the
+member workspace, so it never exercises the real path: both member
+secure-channels died around the selection, the first `select` threw, the
+retry re-attached, and the second `select` hung forever on the dead transport
+— `SecureMemberAdmission.select`/`admit` and the `useMemberHosts.selectRoom`
+retry have no timeout, so the rail click awaits forever with no error and the
+selection never moves. Separately, the canonical room surface is global
+(`guestSession` surface wins for every room), so once any member session
+exists the own room's socket validates against the foreign surface and its
+streams; any build skew throws in a silent reconnect loop with no ticket and
+no socket, and the own room never recovers even when selected back.
+Required: member select is bounded (one select times out instead of hanging
+forever; a timed-out or dead transport is dropped and surfaced, never
+retried silently in a loop); only a stale-challenge 401 re-attaches and
+retries once, other select errors surface immediately without destroying the
+live admission/snapshot; the canonical socket, streams and viewer always
+follow the active room's own owner (own rooms use this computer's bound
+surface looked up under its own origin, member rooms use their own room
+session's surface) so a foreign surface can never validate or drive the own
+room's socket; each member-select step emits development-only diagnostics
+(rail click id, resolved room + host, session chosen, socket open/close per
+room and auth kind; never tokens or tickets). Entry points:
+`frontend/src/app/useAppController.tsx` (`selectRoom`, surface derivation),
+`frontend/src/app/useMemberHosts.ts` (`selectRoom`), 
+`frontend/src/lib/central/secureMemberEntry.ts` (`SecureMemberAdmission`
+`select`/`admit`/`post` abort signal), `frontend/src/roomSocketClient.ts`
+(authority validation), `frontend/src/useCanonicalRoom.ts` (socket lifecycle).
+
+### Desktop avatar CSP — Google account photos (2026-10-17)
+
+Real-app failure: the desktop `img-src` blocked central Google account
+photos (`https://lh3.googleusercontent.com/...`, "Refused to load …
+img-src"), so profile pictures never render in the packaged app while the
+web build shows them. Required: the desktop CSP `img-src` allows exactly
+that Google avatar CDN host; images only, no script/style change.
+Owner: desktop packaging (`desktop/src-tauri/tauri.conf.json`), not the
+host — proxying/caching identity photos through the host would add a fetch
+endpoint, cache/invalidation, server-side URL allowlisting and web/desktop
+parity work for images that are already public capability-addressed URLs,
+while `connect-src` already permits `https:` fetches broadly, so the
+exact-host image allowlist grants no new capability.

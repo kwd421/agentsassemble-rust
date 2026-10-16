@@ -3,9 +3,31 @@ import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
 import { remoteWorkspaceFor } from "../lib/remote/remoteWorkspace";
+import { ApiError } from "../lib/apiErrors";
 import type { SecureMemberAdmission } from "../lib/central/secureMemberEntry";
 import type { HostRoomDirectory, ServerRoomDockSource } from "../lib/roomDockModel";
 import type { RemoteHostConnection } from "../lib/serverConnectionState";
+
+// One member-room select (including a single silent re-attach) never
+// outlives this bound. A dead admission transport's multiplexed fetch has
+// no timeout of its own, so without this a rail click would await forever
+// with no error and the selection would never move.
+const MEMBER_SELECT_TIMEOUT_MS = 30_000;
+
+function memberSelectErrorNeedsFreshChallenge(error: unknown): boolean {
+  // Only a stale challenge (401) or a dead transport (no HTTP answer at
+  // all) recovers with a fresh challenge/grant. Terminal answers from the
+  // host (removed/kicked/revoked room, bad request) surface immediately
+  // instead of destroying the live admission and spending another grant.
+  if (error instanceof ApiError) {
+    return error.status === 401 || error.status === 408 || error.status === 429 || error.status >= 500;
+  }
+  return true;
+}
+
+function memberSelectTimeout(): Error {
+  return new Error("참가 서버의 응답이 없어요. 다시 시도해 주세요.");
+}
 
 export type MemberHostSnapshot = {
   serverId: string;
@@ -89,10 +111,12 @@ export function useMemberHosts({
     setSnapshots((current) => current.filter((entry) => entry.serverId !== serverId));
   }, []);
 
-  const attach = useCallback(async (serverId: string, epoch: string, origin: string) => {
+  const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal) => {
     const { personId: activePerson, sessionToken: activeToken } = identityRef.current;
-    if (!activePerson || !activeToken || flights.current.has(serverId)) return;
+    if (!activePerson || !activeToken || flights.current.has(serverId) || signal?.aborted) return;
     const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
     flights.current.set(serverId, controller);
     const previousAnchor = loadMemberAnchor(activePerson, serverId);
     setPhase(serverId, "connecting", previousAnchor?.rooms ?? null, origin, null);
@@ -260,33 +284,107 @@ export function useMemberHosts({
   }, [dropHost, reconcile]);
 
   const selectRoom = useCallback(async (serverId: string, roomId: string) => {
-    let admission = admissions.current.get(serverId);
-    if (!admission) {
-      const live = directoryRef.current?.status === "connected" ? directoryRef.current.live?.servers ?? null : null;
-      const epoch = live?.find((entry) => entry.server_id === serverId)?.registration_epoch;
+    if (import.meta.env.DEV) console.debug("[member-select] select start", { serverId, roomId });
+    const timeout = new AbortController();
+    const timer = window.setTimeout(() => timeout.abort(memberSelectTimeout()), MEMBER_SELECT_TIMEOUT_MS);
+    const timedOut = () => {
+      if (!timeout.signal.aborted) return null;
+      const reason = timeout.signal.reason;
+      return reason instanceof Error ? reason : memberSelectTimeout();
+    };
+    const liveServer = () => directoryRef.current?.status === "connected"
+      ? directoryRef.current.live?.servers.find((entry) => entry.server_id === serverId) ?? null
+      : null;
+    // A manual attach replaces the reconcile bookkeeping for the directory's
+    // current tuple; otherwise the anchor save at the end of the attach
+    // triggers reconcile into an immediate duplicate attach.
+    const markAttempted = () => {
+      const entry = liveServer();
+      const epoch = entry?.registration_epoch || "";
+      if (!epoch) return;
+      attempted.current.set(serverId, tupleKey({
+        epoch,
+        fingerprint: entry?.host_key_fingerprint || "",
+        origin: entry?.endpoint?.origin || "",
+        mode: entry?.endpoint?.mode || "",
+        status: entry?.endpoint?.status || "",
+      }));
+    };
+    const attachFresh = async () => {
+      const entry = liveServer();
+      const epoch = entry?.registration_epoch || "";
       if (!epoch) throw new Error("서버에 연결 중이에요. 연결이 끝나면 다시 시도해 주세요.");
       attempted.current.delete(serverId);
       dropHost(serverId);
-      await attach(serverId, epoch, loadMemberAnchor(identityRef.current.personId, serverId)?.endpoint_origin || "");
-      admission = admissions.current.get(serverId);
-      if (!admission) throw new Error("서버에 연결 중이에요. 연결이 끝나면 다시 시도해 주세요.");
-    }
+      await attach(serverId, epoch, loadMemberAnchor(identityRef.current.personId, serverId)?.endpoint_origin || "", timeout.signal);
+      markAttempted();
+      return admissions.current.get(serverId);
+    };
     try {
-      return await admission.select(roomId);
+      let admission = admissions.current.get(serverId);
+      if (!admission) {
+        admission = await attachFresh();
+        if (!admission) throw timedOut() ?? new Error("서버에 연결 중이에요. 연결이 끝나면 다시 시도해 주세요.");
+      }
+      if (import.meta.env.DEV) console.debug("[member-select] admission ready, selecting room", { serverId, roomId });
+      try {
+        const selected = await admission.select(roomId, timeout.signal);
+        if (import.meta.env.DEV) console.debug("[member-select] room admitted", { serverId, roomId, meetingId: selected.meeting_id });
+        return selected;
+      } catch (error) {
+        const expiredInner = timedOut();
+        if (expiredInner) throw expiredInner;
+        if (!memberSelectErrorNeedsFreshChallenge(error)) {
+          // Terminal host answer (removed/kicked/revoked room): refresh the
+          // host's room list so the dead room leaves the rail, then surface
+          // the original error. No select retry: it would fail the same way.
+          if (import.meta.env.DEV) console.debug("[member-select] select refused, refreshing host rooms", {
+            serverId, roomId,
+            status: error instanceof ApiError ? error.status : undefined,
+            code: error instanceof ApiError ? error.code || undefined : undefined,
+          });
+          if (identityRef.current.personId && liveServer()?.registration_epoch) {
+            try {
+              attempted.current.delete(serverId);
+              await attach(serverId, liveServer()?.registration_epoch || "",
+                loadMemberAnchor(identityRef.current.personId, serverId)?.endpoint_origin || "", timeout.signal);
+              markAttempted();
+            } catch {
+              // The refresh is best-effort; the original refusal below is
+              // what the user must act on. The snapshot already reflects
+              // the failed attach (disconnected + retry).
+            }
+          }
+          throw error;
+        }
+        if (import.meta.env.DEV) console.debug("[member-select] select failed, re-attaching with a fresh challenge", {
+          serverId, roomId,
+          status: error instanceof ApiError ? error.status : undefined,
+          code: error instanceof ApiError ? error.code || undefined : undefined,
+        });
+        if (!identityRef.current.personId) throw error;
+        const retry = await attachFresh();
+        if (!retry) throw timedOut() ?? error;
+        const selected = await retry.select(roomId, timeout.signal);
+        if (import.meta.env.DEV) console.debug("[member-select] room admitted after re-attach", { serverId, roomId, meetingId: selected.meeting_id });
+        return selected;
+      }
     } catch (error) {
-      const { personId: activePerson } = identityRef.current;
-      if (!activePerson) throw error;
-      const live = directoryRef.current?.status === "connected" ? directoryRef.current.live?.servers ?? null : null;
-      const epoch = live?.find((entry) => entry.server_id === serverId)?.registration_epoch;
-      if (!epoch) throw error;
-      attempted.current.delete(serverId);
-      dropHost(serverId);
-      await attach(serverId, epoch, loadMemberAnchor(activePerson, serverId)?.endpoint_origin || "");
-      const retry = admissions.current.get(serverId);
-      if (!retry) throw error;
-      return await retry.select(roomId);
+      const expired = timedOut();
+      if (expired) {
+        // The transport is suspect (hung or dead): drop it and let a fresh
+        // background attach restore the rooms as disconnected (anchor rooms
+        // stay visible with retry) instead of stranding a hung select.
+        dropHost(serverId);
+        attempted.current.delete(serverId);
+        reconcile();
+        throw expired;
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
     }
-  }, [attach, dropHost]);
+  }, [attach, dropHost, reconcile]);
 
   const removeRoom = useCallback((serverId: string, roomId: string) => {
     const { personId: activePerson } = identityRef.current;

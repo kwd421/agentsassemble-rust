@@ -267,6 +267,9 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   useEffect(() => {
     setProviderRequests([]);
     if (!roomId || !auth || !serverSurface) {
+      if (import.meta.env.DEV) console.debug("[room-socket] no socket", {
+        roomId: roomId || null, hasAuth: Boolean(auth), hasSurface: Boolean(serverSurface),
+      });
       connectionGenerationRef.current += 1;
       clearAcceptedProjection();
       setSocket(null);
@@ -277,6 +280,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     const connectionGeneration = connectionGenerationRef.current + 1;
     connectionGenerationRef.current = connectionGeneration;
     const connectionIsCurrent = () => connectionGenerationRef.current === connectionGeneration;
+    if (import.meta.env.DEV) console.debug("[room-socket] open", { roomId, auth: auth.kind });
     setLastError(null);
     setConnectionState("connecting");
     let acceptedRoomUid: unknown;
@@ -470,6 +474,9 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     });
     setSocket(currentSocket);
     return () => {
+      if (import.meta.env.DEV) console.debug("[room-socket] close", {
+        roomId, auth: auth.kind, superseded: !connectionIsCurrent(),
+      });
       if (connectionIsCurrent()) {
         connectionGenerationRef.current += 1;
         clearAcceptedProjection();

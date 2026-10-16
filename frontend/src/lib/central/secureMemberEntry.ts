@@ -55,14 +55,14 @@ export class SecureMemberAdmission {
     return new SecureMemberAdmission(await RemoteTransport.connect(target, entry.inviteToken ? "member_admission" : "member_connect", signal), session, {...entry,registration_epoch:target.registration_epoch});
   }
   close() { if (!this.adopted) this.transport.close(); }
-  private async post(path: string, body: object) {
-    const response = await this.transport.fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Device-Token": this.deviceToken }, body: JSON.stringify(body) });
+  private async post(path: string, body: object, signal?: AbortSignal) {
+    const response = await this.transport.fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Device-Token": this.deviceToken }, body: JSON.stringify(body), ...(signal ? { signal } : {}) });
     if (!response.ok) throw await responseError(response);
     return response.json();
   }
-  async admit(): Promise<{ room_id: string; name: string }[] | null> {
+  async admit(signal?: AbortSignal): Promise<{ room_id: string; name: string }[] | null> {
     const invite = this.entry.inviteToken;
-    const challenge = parseMemberChallenge(await this.post(invite ? "/api/room-invite/member-challenge" : "/api/member-connect/challenge", invite ? { invite_token: invite } : {}));
+    const challenge = parseMemberChallenge(await this.post(invite ? "/api/room-invite/member-challenge" : "/api/member-connect/challenge", invite ? { invite_token: invite } : {}, signal));
     if (challenge.server_id !== this.entry.server_id || challenge.registration_epoch !== this.entry.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 연결해 주세요.");
     this.challengeId = challenge.challenge_id;
     const { protocol, client_public_key, channel_id, origin, generation } = this.transport.hello;
@@ -81,13 +81,13 @@ export class SecureMemberAdmission {
       const payload = await this.post("/api/room-invite/member-join", { invite_token: invite, challenge_id: this.challengeId, grant_token: grant.grant_token, request_id: requestId, client_id: this.clientId });
       this.install(payload, requestId, preflight.room_id); return null;
     }
-    const value = strictRecord(await this.post("/api/member-connect/rooms", { challenge_id: this.challengeId, grant_token: grant.grant_token }), "참가 중인 방");
+    const value = strictRecord(await this.post("/api/member-connect/rooms", { challenge_id: this.challengeId, grant_token: grant.grant_token }, signal), "참가 중인 방");
     assertExactKeys(value, ["rooms"], "참가 중인 방");
     if (!Array.isArray(value.rooms) || !value.rooms.length || value.rooms.length > 50 || !value.rooms.every(r => r && typeof r.room_id === "string" && r.room_id && typeof r.name === "string")) throw new Error("참가 중인 방을 확인하지 못했어요.");
     return value.rooms;
   }
-  async select(roomId: string): Promise<RoomInviteJoinResponse> {
-    const payload = await this.post("/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId });
+  async select(roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
+    const payload = await this.post("/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId }, signal);
     return this.install(payload, payload.request_id, roomId);
   }
   private install(raw: unknown, requestId: string, roomId: string): RoomInviteJoinResponse {

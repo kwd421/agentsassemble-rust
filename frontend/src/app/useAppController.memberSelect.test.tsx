@@ -3,12 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hash } from "lucide-react";
 import { useAppController } from "./useAppController";
 import type { CentralDirectoryState } from "./useCentralDirectory";
-import { bindRemoteSession } from "../lib/remote/remoteWorkspace";
+import { bindRemoteSession, installRemoteWorkspace } from "../lib/remote/remoteWorkspace";
 import type { RemoteTransport } from "../lib/remote/remoteTransport";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomDirectoryContinuity } from "./useRoomDirectory";
 import type { RoomInviteJoinResponse } from "../lib/roomAdmissionContract";
 import type { MemberHostAnchor } from "../lib/central/memberAnchors";
+import { roomGuestSessionFromJoinPayload } from "../lib/roomGuestSession";
 import type { RoomAgentSession, RoomMember } from "../api";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 
@@ -242,8 +243,15 @@ describe("member room selection on an owner local host", () => {
     }));
     const transport = { hello: { origin: "https://hihi.test" }, active: true, onClose: () => undefined };
     hooks.select.mockImplementation(async () => {
-      bindRemoteSession(MEMBER_TOKEN, transport as unknown as RemoteTransport, MEMBER_SERVER);
-      return memberJoinPayload();
+      // Production SecureMemberAdmission.install binds the session AND
+      // installs the member workspace on the same transport. The install
+      // changes default-origin routing and the session display origin, so
+      // the test must do it too instead of binding the session alone.
+      const payload = memberJoinPayload();
+      const member = { ...roomGuestSessionFromJoinPayload("", payload), centralMember: true as const };
+      bindRemoteSession(member.sessionToken, transport as unknown as RemoteTransport, member.serverSurface.server_id);
+      installRemoteWorkspace({ transport: transport as unknown as RemoteTransport, owner: null, member, deviceToken: "device-test", clientId: "client-test" });
+      return payload;
     });
     hooks.attach.mockImplementation(async () => {
       const anchor: MemberHostAnchor = {

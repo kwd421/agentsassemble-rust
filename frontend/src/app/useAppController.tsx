@@ -253,6 +253,17 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     : admittedSessionToken;
   const activeGuestSession = scopeSessionToActiveRoom ? activeRoomSession : guestSession;
   const activeGuestLocked = scopeSessionToActiveRoom ? Boolean(activeRoomSession) : guestLocked;
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.debug("[member-select] active room resolved", {
+      activeRoomId, resolvedId: activeRoom.id, meetingId: activeRoom.meetingId,
+      serverId: activeRoom.serverId ?? null,
+      session: activeRoomSession
+        ? { serverId: activeRoomSession.serverSurface.server_id, meetingId: activeRoomSession.meetingId }
+        : null,
+      authority: activeGuestLocked ? "session" : "host",
+    });
+  }, [activeRoomId, activeRoom.id, activeRoom.meetingId, activeRoom.serverId, activeRoomSession, activeGuestLocked]);
   const canCreateRoom = startupHostEnabled || Boolean(ownerWorkspace.connect);
   const canInviteRooms = startupHostEnabled || Boolean(ownerWorkspace.connect);
   const startupIdentityResolved =
@@ -265,12 +276,27 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
         operatorPairingToken ||
         guestRecoveryRequest
     );
-  const hostServerProductSurface = useMemo(
-    () => currentServerProductSurface(),
-    [roomDirectorySyncIssue, startupIdentityResolved]
+  const hostServerProductSurface = useMemo(() => {
+    // The own host's surface is bound under this computer's origin. The
+    // default origin follows the single live remote workspace once a member
+    // host is installed, so it must not be used for the own host here: after
+    // any member admission the lookup would return the member's surface.
+    if (startupHostEnabled) return currentServerProductSurface(window.location.origin);
+    return currentServerProductSurface();
+  },
+    [roomDirectorySyncIssue, startupIdentityResolved, startupHostEnabled]
   );
-  const serverProductSurface =
-    guestSession?.serverSurface.server_product_surface || hostServerProductSurface;
+  // One room's session never validates or drives another host's room: the
+  // active room opens with its own owner's surface (this computer's for own
+  // rooms, the matching member session's for its room). A foreign surface
+  // used to win globally here, so once any member session existed the own
+  // room's socket validated the local streams against the foreign surface
+  // and never recovered.
+  const serverProductSurface = activeRoomSession
+    ? activeRoomSession.serverSurface.server_product_surface
+    : guestSession && !scopeSessionToActiveRoom
+      ? guestSession.serverSurface.server_product_surface
+      : hostServerProductSurface;
   const onRoomCreated = useCallback(
     async (room: RoomDockItem) => {
       if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
@@ -510,11 +536,18 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       const memberServerId = room.roomOrigin === "remote_server" && room.serverId &&
         room.serverId !== ownerWorkspace.connect?.serverId && memberHosts.hasAnchor(room.serverId)
         ? room.serverId : null;
+      if (import.meta.env.DEV) console.debug("[member-select] rail select", {
+        roomId, meetingId: room.meetingId, serverId: room.serverId ?? null,
+        roomOrigin: room.roomOrigin ?? null, memberServerId,
+      });
       if (memberServerId &&
           !(admittedSessionToken && guestSession && !guestExpired &&
             guestSession.meetingId === room.meetingId &&
             guestSession.serverSurface.server_id === room.serverId)) {
         const payload = await memberHosts.selectRoom(memberServerId, room.meetingId);
+        if (import.meta.env.DEV) console.debug("[member-select] admission complete", {
+          roomId, meetingId: payload.meeting_id, serverId: payload.server_id,
+        });
         if (!await acceptMemberRoomSession(payload)) return;
       } else if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
     } catch (error) {

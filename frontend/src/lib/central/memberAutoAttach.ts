@@ -52,7 +52,7 @@ export async function attachMemberHost(
   }
   const admission = await deps.open(entry, target, sessionToken, signal);
   try {
-    const rooms = await admission.admit();
+    const rooms = await admission.admit(signal);
     if (!rooms) throw new Error("참가 중인 방을 확인하지 못했어요.");
     const anchor: MemberHostAnchor = {
       server_id: target.server_id,
