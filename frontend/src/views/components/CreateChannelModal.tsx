@@ -33,14 +33,21 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
     };
   }, [opener]);
   async function submit() {
-    if (!validName || submitting.current) return;
+    if (submitting.current) return;
+    if (!validName) {
+      setError(room ? "방 이름을 입력해 주세요." : "채널 이름을 입력해 주세요.");
+      return;
+    }
     submitting.current = true;
     setBusy(true); setError("");
     try {
       const created = await onCreate({ name: name.trim(), type: "text" });
       if (active.current) {
         if (created !== false) onClose();
-        else setBusy(false);
+        else {
+          setError(room ? "방을 만들지 못했어요." : "채널을 만들지 못했어요.");
+          setBusy(false);
+        }
       }
     } catch (err) {
       if (active.current) {
@@ -78,7 +85,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
       {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
       <div className="dc-create-channel-actions">
         <button type="button" className="ops-button" disabled={busy} onClick={onClose} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>취소</button>
-        <button type="button" className="ops-cta" disabled={busy || !validName} onClick={() => void submit()} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>
+        <button type="button" className="ops-cta" disabled={busy} aria-disabled={!validName || undefined} onClick={() => void submit()} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>
           {busy ? "만드는 중..." : "만들기"}
         </button>
       </div>

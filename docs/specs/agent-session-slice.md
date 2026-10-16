@@ -145,7 +145,10 @@ or a raw provider/model-id. Never generate a raw provider/model-id name. Preserv
 user-entered names through model/provider selection and catalog refresh; preserve
 explicit handoff names (the local setup packet requires a nonempty name).
 Disabled permission options reuse existing disabled styling and cannot be selected.
-No runtime, permission authority, persistence, retry or provider execution changes.
+A dropdown whose options have not arrived yet stays activatable and explains that
+its list is loading (`ProviderControlSelect` toggle) instead of silently ignoring
+the click; the menu stays closed until options exist. No runtime, permission
+authority, persistence, retry or provider execution changes.
 Acceptance: frontend regression tests/build and mandatory gates; central assets-only
 deployment and HTTP smoke. No Computer Use; visual acceptance remains unverified.
 

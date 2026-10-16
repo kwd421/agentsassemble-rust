@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -6,7 +6,23 @@ import ProviderControlSelect from "./ProviderControlSelect";
 
 afterEach(cleanup);
 
+function fastClick(element: HTMLElement) {
+  fireEvent.pointerDown(element);
+  fireEvent.pointerUp(element);
+  fireEvent.click(element);
+}
+
 describe("ProviderControlSelect", () => {
+  it("answers a fast click while options are still loading instead of ignoring it", () => {
+    const onChange = vi.fn();
+    render(
+      <ProviderControlSelect label="모델" options={[]} value="" onChange={onChange} />
+    );
+    fastClick(screen.getByRole("combobox", { name: "모델" }));
+    expect(screen.getByRole("status").textContent).toContain("모델 목록을 불러오는 중이에요.");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
   it("drills into model families inside the same bounded menu", async () => {
     render(
       <ProviderControlSelect

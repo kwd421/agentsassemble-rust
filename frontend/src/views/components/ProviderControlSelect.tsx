@@ -48,7 +48,9 @@ export default function ProviderControlSelect({
   const menuRef = useRef<HTMLDivElement>(null);
   const selectedOption = options.find((option) => option.value === value);
   const hasOnlyResolvedOption = options.length === 1 && Boolean(selectedOption);
-  const controlDisabled = disabled || options.length === 0 || hasOnlyResolvedOption;
+  const loadingOptions = !disabled && !hasOnlyResolvedOption && options.length === 0;
+  const controlDisabled = disabled || hasOnlyResolvedOption;
+  const [notice, setNotice] = useState("");
   const isModelControl = label === "모델";
   const modelDetails = useProviderModelDetails(isModelControl && open);
   const showModelTools = isModelControl && options.length > 1;
@@ -116,6 +118,10 @@ export default function ProviderControlSelect({
   }, [activeGroup, open]);
 
   useEffect(() => {
+    if (!loadingOptions) setNotice("");
+  }, [loadingOptions]);
+
+  useEffect(() => {
     if (controlDisabled) {
       setOpen(false);
       setActiveGroup("");
@@ -155,6 +161,10 @@ export default function ProviderControlSelect({
 
   function toggleMenu() {
     if (controlDisabled || !buttonRef.current) return;
+    if (loadingOptions) {
+      setNotice(`${label} 목록을 불러오는 중이에요.`);
+      return;
+    }
     if (open) {
       setOpen(false);
       setActiveGroup("");
@@ -201,6 +211,7 @@ export default function ProviderControlSelect({
         aria-controls={listboxId}
         aria-expanded={open}
         aria-haspopup={showGroupLabels ? "menu" : "listbox"}
+        aria-disabled={loadingOptions || undefined}
         data-effect={providerControlOptionEffect(selectedOption)}
         disabled={controlDisabled}
         onClick={toggleMenu}
@@ -215,6 +226,7 @@ export default function ProviderControlSelect({
         )}
         <ChevronDown size={15} aria-hidden="true" />
       </button>
+      {notice && !open && <p className="dc-agent-select-note" role="status">{notice}</p>}
       {label === "권한" && value === "full_access" && (
         <p className="text-xs text-amber-600 preserve-words">방에 있는 누구의 말이든 이 컴퓨터에서 승인 없이 명령으로 실행될 수 있어요.</p>
       )}

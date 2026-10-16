@@ -122,3 +122,9 @@ The optional persisted/public `lobby_name` is set by the Rust settings owner for
 new rooms. Absence keeps the existing built-in label and is omitted on reserialization
 to preserve old rooms' revision hashes. Global settings edits retain this metadata;
 no client rename, new channel ID, data rewrite or database migration is involved.
+
+A normal click on 만들기 always answers: an empty name explains that a name is
+required (`CreateChannelModal` submit/`validName`) instead of silently ignoring
+the click, and an unconfirmed creation (`created === false`) surfaces the existing
+failure text instead of resetting to idle. In-flight submission stays hard
+disabled; only the silent drops change.

@@ -657,6 +657,12 @@
   transition: background-color 140ms ease;
 }
 
+.ops-cta:disabled,
+.ops-cta[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .ops-cta:hover:not(:disabled) {
   background: var(--color-accent-hover);
 }
