@@ -84,7 +84,8 @@ body[data-sidebar-resizing="true"] {
 .dc-server-header-button {
   display: flex;
   width: calc(100% + 20px);
-  height: 48px;
+  /* 47px row plus the header's 1px border matches the 48px channel header. */
+  height: 47px;
   margin: 0 -10px;
   align-items: center;
   justify-content: flex-start;
