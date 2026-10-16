@@ -157,14 +157,17 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   } = useSidebarResize();
   const latestRooms = useRef<RoomDockItem[]>([]);
   const onGuestRoomJoined = useCallback((room: RoomDockItem) => {
-    // A member room selected from the rail updates its rail entry instead of
-    // replacing the rail; a lone guest invite still replaces its placeholder.
-    const joinsRail = latestRooms.current.some((existing) => existing.id === room.id ||
+    // A member room selected from the rail keeps its existing rail entry:
+    // the anchor list carries no room_uid, so the session-derived id would
+    // otherwise replace the rail id and strand the selection on a stale id.
+    // A lone guest invite still replaces its placeholder.
+    const existingRailId = latestRooms.current.find((existing) => existing.id === room.id ||
       (existing.roomOrigin === "remote_server" && room.roomOrigin === "remote_server" &&
-        existing.serverId && existing.serverId === room.serverId && existing.meetingId === room.meetingId));
-    if (ownerWorkspace.connect || joinsRail) mergeFlowRoom(room);
-    else replaceRooms([room]);
-    setActiveRoomId(room.id);
+        existing.serverId && existing.serverId === room.serverId && existing.meetingId === room.meetingId))?.id;
+    if (ownerWorkspace.connect || existingRailId) {
+      mergeFlowRoom(existingRailId && existingRailId !== room.id ? { ...room, id: existingRailId } : room);
+    } else replaceRooms([room]);
+    setActiveRoomId(existingRailId ?? room.id);
     setChannel("lobby");
   }, [replaceRooms, mergeFlowRoom, ownerWorkspace.connect]);
   const onGuestAdmissionReset = useCallback(() => {
@@ -229,6 +232,23 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   latestRooms.current = rooms;
   if (guestSession?.centralOwner && guestSession.roomUid) lastOwnerRoomUid.current = guestSession.roomUid;
   const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
+  const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? EMPTY_ROOM;
+  const activeRoomDisconnected = roomIsDisconnected(activeRoom);
+  // A member room session belongs to exactly one host room. While the local
+  // host owns the surface, that session authorizes only its own room: the
+  // own rooms keep host authority (and the local operator viewer) instead of
+  // inheriting another host's bearer. Single-surface guest and central-owner
+  // flows keep the legacy global lock untouched.
+  const scopeSessionToActiveRoom = startupHostEnabled && !ownerWorkspace.connect;
+  const activeRoomSession = guestSession && !guestExpired &&
+    guestSession.serverSurface.server_id === activeRoom.serverId &&
+    guestSession.meetingId === activeRoom.meetingId
+    ? guestSession : null;
+  const activeSessionToken = scopeSessionToActiveRoom
+    ? (activeRoomSession ? admittedSessionToken : "")
+    : admittedSessionToken;
+  const activeGuestSession = scopeSessionToActiveRoom ? activeRoomSession : guestSession;
+  const activeGuestLocked = scopeSessionToActiveRoom ? Boolean(activeRoomSession) : guestLocked;
   const canCreateRoom = startupHostEnabled || Boolean(ownerWorkspace.connect);
   const canInviteRooms = startupHostEnabled || Boolean(ownerWorkspace.connect);
   const startupIdentityResolved =
@@ -273,7 +293,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     credential: { sessionToken: ownerWorkspace.connect.sessionToken, generation: ownerWorkspace.connect.generation }, deviceToken,
   } : undefined, [ownerWorkspace.connect, deviceToken]);
   const roomLifecycle = useRoomLifecycle({
-    enabled: Boolean(ownerLifecycleTransport || !guestLocked) && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === (ownerLifecycleTransport ? "/api/room-session/lifecycle" : "/api/rooms/lifecycle"))),
+    enabled: Boolean(ownerLifecycleTransport || !activeGuestLocked) && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === (ownerLifecycleTransport ? "/api/room-session/lifecycle" : "/api/rooms/lifecycle"))),
     transport: ownerLifecycleTransport,
     authorityReady: !roomDirectorySyncIssue,
     managementRooms, captureRoomDirectoryContinuity, validateRoomDirectoryContinuity, refreshRoomDirectory,
@@ -281,23 +301,21 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const lobbyPostingState = useMemo(
     () =>
       roomPostingState({
-        guestLocked,
+        guestLocked: activeGuestLocked,
         guestReadOnly,
-        sessionToken: admittedSessionToken,
+        sessionToken: activeSessionToken,
       }),
-    [admittedSessionToken, guestLocked, guestReadOnly]
+    [activeSessionToken, activeGuestLocked, guestReadOnly]
   );
-  const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? EMPTY_ROOM;
-  const activeRoomDisconnected = roomIsDisconnected(activeRoom);
   const activeOperationalMeetingId = activeRoomDisconnected ? "" : activeRoom.meetingId;
   // Rooms-as-server-objects: when a room becomes active, promote it to a
   // server-backed meeting (idempotent) so adding agents / roster / lobby always
   // have a real meeting to bind to instead of failing with "Meeting not found".
   const canonicalRoomAuth = activeRoomDisconnected
     ? undefined
-    : guestLocked
-    ? admittedSessionToken
-      ? ({ kind: "session" as const, sessionToken: admittedSessionToken, deviceToken })
+    : activeGuestLocked
+    ? activeSessionToken
+      ? ({ kind: "session" as const, sessionToken: activeSessionToken, deviceToken })
       : undefined
     : activeRoom.meetingId
       ? ({ kind: "host" as const, meetingId: activeRoom.meetingId })
@@ -307,7 +325,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   );
   const sideChat = useRoomSideChat(
     startupIdentityResolved && roomSurfaceReady ? activeOperationalMeetingId : "",
-    resolveRoomHttpAuthority(admittedSessionToken, !guestLocked && isDesktopWebview(), deviceToken),
+    resolveRoomHttpAuthority(activeSessionToken, !activeGuestLocked && isDesktopWebview(), deviceToken),
   );
   const channelReceiver = useRef<((events: RoomEvent[]) => void) | null>(null);
   const canonicalRoom = useCanonicalRoom({
@@ -315,7 +333,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     auth: roomSurfaceReady ? canonicalRoomAuth : undefined,
     streams: serverProductSurface?.websocket_streams || [],
     serverSurface: serverProductSurface,
-    viewerParticipantId: guestSession?.agentId || "operator-local",
+    viewerParticipantId: activeGuestSession?.agentId || "operator-local",
     onRoomEvents: (events) => channelReceiver.current?.(events),
     onSideChat: sideChat.receive,
     onSideChatReady: sideChat.connect,
@@ -345,9 +363,9 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     canonicalParticipants: canonicalRoom.participants,
     enabled: startupIdentityResolved && !activeRoomDisconnected,
   });
-  const roomPreferenceAuthority: RoomPreferenceAuthority = guestLocked
-    ? admittedSessionToken
-      ? { kind: "remote", sessionToken: admittedSessionToken, deviceToken }
+  const roomPreferenceAuthority: RoomPreferenceAuthority = activeGuestLocked
+    ? activeSessionToken
+      ? { kind: "remote", sessionToken: activeSessionToken, deviceToken }
       : { kind: "remote-unavailable" }
     : { kind: "local", deviceToken };
   const activeRoomMembers = roomMembers.activeMembers;
@@ -361,7 +379,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   });
   const roomAppearanceAssets = useRoomAppearanceAssets({
     rooms, activeRoomId: activeRoom.id,
-    activeRemoteRoomId: guestLocked ? activeRoom.id : "", remoteSessionToken: admittedSessionToken, remoteDeviceToken: deviceToken,
+    activeRemoteRoomId: activeGuestLocked ? activeRoom.id : "", remoteSessionToken: activeSessionToken, remoteDeviceToken: deviceToken,
     canonicalAppearanceFor: roomSettings.appearanceFor,
     settingsStateFor: roomSettings.settingsStateFor,
     localAuthorityCurrent: managerAuthorityCurrent,
@@ -412,40 +430,40 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     canonicalRoom,
     activeRoom,
     activeRoomMembers,
-    guestSession,
+    guestSession: activeGuestSession,
     agentActivityVisibility,
     setAgentActivityVisibility,
   });
   const canManageActiveRoom = !activeRoomDisconnected && Boolean(activeRoomCapabilities["room.manage"]);
   const canControlActiveAgents = !activeRoomDisconnected && Boolean(activeRoomCapabilities["agent.control"]);
-  const canAddCompanion = !activeRoomDisconnected && !guestExpired && Boolean(guestSession) &&
-    guestSession?.meetingId === activeRoom.meetingId && canonicalRoom.connectionState === "connected" &&
+  const canAddCompanion = !activeRoomDisconnected && !guestExpired && Boolean(activeGuestSession) &&
+    activeGuestSession?.meetingId === activeRoom.meetingId && canonicalRoom.connectionState === "connected" &&
     lobbyPostingState.canPost && Boolean(activeRoomCapabilities["message.send"]) &&
-    canonicalRoom.participants.some((participant) => participant.participant_id === guestSession?.agentId &&
+    canonicalRoom.participants.some((participant) => participant.participant_id === activeGuestSession?.agentId &&
       participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
   const canAddActiveAI = canControlActiveAgents || canAddCompanion;
   const pairedRoomLifecycle = usePairedRoomLifecycle({
-    enabled: !ownerLifecycleTransport && guestLocked && canManageActiveRoom && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === "/api/room-session/lifecycle")),
-    session: guestSession, deviceToken, expired: guestExpired,
+    enabled: !ownerLifecycleTransport && activeGuestLocked && canManageActiveRoom && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === "/api/room-session/lifecycle")),
+    session: activeGuestSession, deviceToken, expired: guestExpired,
     room: canonicalRoom.room ? { ...canonicalRoom.room, label: canonicalRoom.roomSettings?.label ?? canonicalRoom.room.label } : null,
     refreshProjection: () => canonicalRoom.socket?.resync?.(),
   });
   useEffect(() => {
     if (!canAddActiveAI) setAgentCreateOpen(false);
-    if (guestLocked && !canManageActiveRoom) setSettingsModal(null);
-  }, [canAddActiveAI, canManageActiveRoom, guestLocked]);
+    if (activeGuestLocked && !canManageActiveRoom) setSettingsModal(null);
+  }, [canAddActiveAI, canManageActiveRoom, activeGuestLocked]);
   const saveAgentAvatar = useCallback(async (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => {
-    if ((!managerAuthorityCurrent && !(guestLocked && canControlActiveAgents)) || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
+    if ((!managerAuthorityCurrent && !(activeGuestLocked && canControlActiveAgents)) || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
       throw new Error("현재 방의 에이전트 프로필 업로드 권위를 사용할 수 없습니다.");
     }
-    const authority = guestLocked
-      ? { kind: "remote" as const, sessionToken: admittedSessionToken, deviceToken }
+    const authority = activeGuestLocked
+      ? { kind: "remote" as const, sessionToken: activeSessionToken, deviceToken }
       : { kind: "local" as const, manager: resolveManagerRoomAuthority(activeRoom.id) };
     const avatarUrl = await uploadAgentAvatar(file, authority, session.session_id, signal);
     signal.throwIfAborted();
     await sendAgentProfileUpdate(session, { display_name: displayName, avatar_image_url: avatarUrl });
   }, [managerAuthorityCurrent, activeOperationalMeetingId, roomSocket, resolveManagerRoomAuthority,
-    activeRoom.id, sendAgentProfileUpdate, guestLocked, canControlActiveAgents, admittedSessionToken, deviceToken]);
+    activeRoom.id, sendAgentProfileUpdate, activeGuestLocked, canControlActiveAgents, activeSessionToken, deviceToken]);
   useDismissMenus(roomMenu, channelMenu, setRoomMenu, setChannelMenu);
   const activeChannelSettings = roomSettings.channelSettingsFor(activeRoom);
   const { roomHttpAuthority, roomMessageSearch } = useAppMessageSearch({
@@ -454,8 +472,8 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     selectedChannelId: channel,
     scope: messageSearchScope,
     deviceToken,
-    sessionToken: admittedSessionToken,
-    localAvailable: !guestLocked && isDesktopWebview(),
+    sessionToken: activeSessionToken,
+    localAvailable: !activeGuestLocked && isDesktopWebview(),
   });
   const visibleChannels = [...CHANNELS.map(item => item.id === "lobby" && canonicalRoom.roomSettings?.roomId === activeRoom.meetingId && canonicalRoom.roomSettings.lobbyName ? { ...item, label: canonicalRoom.roomSettings.lobbyName } : item), ...roomChannels.activeChannels.filter((item) => item.type === "text").map((item) => ({ id: item.id, label: item.name, icon: Hash }))];
   const channelUnread = useMemo(() => projectChannelUnread({
@@ -594,7 +612,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   }
 
   function openRoomSettings(roomId: string, initialSectionId: RoomSettingsSectionId = "settings-overview") {
-    if (guestLocked && (roomId !== activeRoom.id || !canManageActiveRoom)) return;
+    if (activeGuestLocked && (roomId !== activeRoom.id || !canManageActiveRoom)) return;
     setActiveRoomId(roomId);
     setAdminOpen(false);
     setSettingsModal({ roomId, initialSectionId });
@@ -624,12 +642,19 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   }
 
   async function leaveRoom(roomId: string) {
+    const leaving = rooms.find((room) => room.id === roomId);
     if (guestLocked && guestExpired && roomId === activeRoom.id) {
+      if (scopeSessionToActiveRoom && leaving?.roomOrigin === "remote_server" && leaving.serverId) {
+        // A dead member session drops only its own room; the own server stays.
+        memberHosts.removeRoom(leaving.serverId, leaving.meetingId);
+        removeAcknowledgedRoom(roomId);
+        clearGuestSession();
+        return;
+      }
       removeAcknowledgedRoom(roomId);
       exitGuestSurface();
       return;
     }
-    const leaving = rooms.find((room) => room.id === roomId);
     if (leaving?.roomOrigin === "remote_server" && leaving.serverId &&
         (roomIsDisconnected(leaving) || roomId !== activeRoom.id || !roomSocket?.ready())) {
       // A disconnected member room cannot reach its host: drop it from the
@@ -647,6 +672,16 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       memberHosts.removeRoom(activeRoom.serverId, activeRoom.meetingId);
     }
     removeAcknowledgedRoom(roomId);
+    if (scopeSessionToActiveRoom) {
+      // Leaving one room never abandons the own server surface for another
+      // host's session; drop the dead member session only when it was that room's.
+      if (leaving?.roomOrigin === "remote_server" && leaving.serverId &&
+          guestSession?.serverSurface.server_id === leaving.serverId &&
+          guestSession?.meetingId === leaving.meetingId) {
+        clearGuestSession();
+      }
+      return;
+    }
     if (guestLocked) {
       exitGuestSurface();
     }
@@ -675,7 +710,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const toggleMembers = useCallback(() => setMembersOpen((value) => !value), []);
   const showMembers = !adminOpen;
   const inviteModalRoom = inviteModal ? rooms.find((room) => room.id === inviteModal.roomId) : undefined;
-  const settingsModalRoom = settingsModal && (!guestLocked || canManageActiveRoom)
+  const settingsModalRoom = settingsModal && (!activeGuestLocked || canManageActiveRoom)
     ? rooms.find((room) => room.id === settingsModal.roomId)
     : undefined;
   const leaveRoomTarget = rooms.find((room) => room.id === leaveRoomTargetId);
@@ -723,7 +758,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       lastReadSummary: channelLastReadSummary(setting),
       lastReadCursor: setting?.lastReadAt || "",
       onMarkRead: channelReadReady ? (cursor) => markChannelRead(channelId, cursor) : undefined,
-      onOpenSettings: !guestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined,
+      onOpenSettings: !activeGuestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined,
     };
   }
 
@@ -757,7 +792,8 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     profileAuthorityReady: startupHostEnabled || Boolean(ownerWorkspace.connect) || Boolean(admittedSessionToken),
     ownerProfileRevision, hostingRestriction,
     ownerProfileSession: ownerWorkspace.connect ? { sessionToken: ownerWorkspace.connect.sessionToken, generation: ownerWorkspace.connect.generation } : undefined,
-    guestLocked, canCreateRoom, canInviteRooms, guestPanelProfile, guestRecoveryRequest, guestSession,
+    guestLocked: activeGuestLocked, canCreateRoom, canInviteRooms, guestPanelProfile, guestRecoveryRequest, guestSession,
+    activeRoomSession,
     handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteCopyStatus, inviteModalAppearance,
     inviteModalRoom, invitePublicUrl, inviteRoom,
@@ -774,7 +810,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
-    saveAgentAvatar: canControlActiveAgents && (managerAuthorityCurrent || guestLocked) ? saveAgentAvatar : undefined,
+    saveAgentAvatar: canControlActiveAgents && (managerAuthorityCurrent || activeGuestLocked) ? saveAgentAvatar : undefined,
     scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate,
     sendAgentControl, sendParticipantMute, sendParticipantRemove, setAdminOpen,
     setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery,

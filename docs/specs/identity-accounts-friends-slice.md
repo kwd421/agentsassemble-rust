@@ -3304,3 +3304,26 @@ fingerprint or origin mismatch refuses without retry. Revocation (host
 leave/kick/revocation, central hide, logout, account switch or deletion)
 clears the anchor for that host/membership, and revoked rooms leave the
 rail with no tombstone (owner decision D).
+
+### M4 member-room selection keeps every host's session on its own room (2026-10-17)
+
+Real-app failure of M3/M2: with the own server open and an attached member
+host in the rail, selecting the member room never loaded it, and afterwards
+the own room no longer opened either (header kept the own label, a single
+`general` channel, `초대받은 방 / 불러오는 중…`, empty member panel).
+Required: selecting a rail member room opens that host's room in place with
+that host's own room session (channels, messages, agents from its host);
+selecting back the own room restores host authority (own channels and
+agents); selecting the member room again is still live without re-admission.
+One member/guest session must never authorize another host's room: while the
+local host owns the surface, room transport, posting, preference, appearance
+and viewer authority follow the session only when its server and meeting
+match the active room, and the joined room keeps its existing rail id instead
+of the session-derived id. Leaving/expiry of a member room drops that room
+(and its dead session) and stays on the own server; it never navigates to
+`/join`. The `로그인 서버에 연결하지 못했어요…` banner is central bootstrap
+state (`useCentralDirectory` retained cache), independent of member attach;
+selection performs no central refresh. Entry points:
+`frontend/src/app/useAppController.tsx` (`selectRoom`, `onGuestRoomJoined`,
+`leaveRoom`), `frontend/src/app/useMemberHosts.ts` (`selectRoom`),
+`frontend/src/app/useRailRooms.ts`, `frontend/src/app/AppView.tsx` banner.

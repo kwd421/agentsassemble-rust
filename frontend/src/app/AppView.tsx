@@ -51,7 +51,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     activeAppearance, activeChannelDisplay,
     activeChannelSettings,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities, activeRoomDisconnected,
-    activeRoomHistory, activeRoomMembers, addFreshRoom,
+    activeRoomHistory, activeRoomMembers, activeRoomSession, addFreshRoom,
     adjustSidebarWidthWithKeyboard, adminOpen,
     admittedSessionToken, agentActivityVisibility, cancelMobileShellPointer,
     canonicalRoom, canManageActiveRoom, changeAgentActivityVisibility, channel,
@@ -89,10 +89,10 @@ export default function AppView({ controller }: { controller: AppController }) {
   const friendAuthority = ownerProfileSession ? { kind: "server_owner" as const, credential: ownerProfileSession, deviceToken } : roomHttpAuthority;
   const canCreateChannel = canManageActiveRoom && canonicalRoom.connectionState === "connected";
   const canPostHumanMessage = lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) &&
-    canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
+    canonicalRoom.participants.some((participant) => participant.participant_id === (activeRoomSession?.agentId || "operator-local") &&
       participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
-  const companionInvites = useCompanionInvites(controller.canAddCompanion && guestSession && canonicalRoom.room
-    ? { ...guestSession, roomUid: canonicalRoom.room.room_uid } : null, canonicalRoom.events, deviceToken);
+  const companionInvites = useCompanionInvites(controller.canAddCompanion && activeRoomSession && canonicalRoom.room
+    ? { ...activeRoomSession, roomUid: canonicalRoom.room.room_uid } : null, canonicalRoom.events, deviceToken);
   useLayoutEffect(() => { setCreateChannelScope(""); setSideChatScope(""); }, [channelScope]);
   // Recovery owns the entrance until its current session surface is accepted.
   // Do not mount native directory/profile controls beneath that entrance.
@@ -134,7 +134,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
         publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
           const value = event.profile_revision;
-          return event.type === "participant_updated" && event.participant_id === (guestSession?.agentId || "operator-local") && typeof value === "number" && Number.isSafeInteger(value)
+          return event.type === "participant_updated" && event.participant_id === (activeRoomSession?.agentId || "operator-local") && typeof value === "number" && Number.isSafeInteger(value)
             ? Math.max(revision, value) : revision;
         }, ownerProfileRevision)}
         profileIdentity={{
@@ -407,7 +407,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               roomSessionToken={lobbyPostingState.sessionToken}
               roomDeviceToken={deviceToken}
               messagePinsAuthority={roomHttpAuthority}
-              viewerParticipantId={guestSession?.agentId || "operator-local"}
+              viewerParticipantId={activeRoomSession?.agentId || "operator-local"}
               canManageRoom={canManageActiveRoom}
               canPostMessages={lobbyPostingState.canPost}
               canModifyMessages={
@@ -539,7 +539,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               room={activeRoom}
               agents={scopedAgents}
               members={activeRoomMembers}
-              viewerParticipantId={guestSession?.agentId || "operator-local"}
+              viewerParticipantId={activeRoomSession?.agentId || "operator-local"}
               displayResourceBase={canonicalRoom.displayResourceBase}
               onRoleChange={updateMemberRole}
               channelNotifications={activeChannelSettings}
