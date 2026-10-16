@@ -1,4 +1,5 @@
 import MemberJoinPanel from "./MemberJoinPanel";
+import GoogleGLogo from "./GoogleGLogo";
 import RemoteMemberWorkspaceBoundary from "./RemoteMemberWorkspaceBoundary";
 import { remoteWorkspaceVersion, remoteWorkspacesSnapshot, subscribeRemoteWorkspace, pendingMemberSnapshot, selectRemoteMember } from "../../lib/remote/remoteWorkspace";
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -114,7 +115,7 @@ export default function StartupIdentityBoundary({
           <p className="text-[14px] leading-6 text-text-muted">
             내 서버는 Google 계정으로 로그인해서 열어요.
           </p>
-          {centralAccountEntryUrl() && <a href={centralAccountEntryUrl()} className="ops-cta mt-2 inline-flex min-h-11 items-center justify-center px-4 text-[15px]">Google로 로그인</a>}
+          {centralAccountEntryUrl() && <a href={centralAccountEntryUrl()} className="dc-google-signin mt-2 min-h-11 text-[15px]"><GoogleGLogo />Google로 로그인</a>}
           <p className="mt-1 text-[13px] leading-5 text-text-muted">
             초대받은 방은 호스트가 보낸 초대·기기 연결·복구 링크로 바로 들어갈 수 있어요.
           </p>

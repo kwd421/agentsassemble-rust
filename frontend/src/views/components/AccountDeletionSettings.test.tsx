@@ -14,6 +14,12 @@ vi.mock("../../lib/central/identity", () => ({ CENTRAL_SESSION_CHANGED_EVENT: "c
 vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: () => false, wipeDesktopAccountData: vi.fn() }));
 const session = { token: "fixture-session", device_id: "device", expires_at: 2 ** 31, person: { person_id: "person", display_name: "Disposable fixture", identity_kind: "guest" as const } };
 beforeEach(() => { cleanup(); vi.clearAllMocks(); sessionStorage.clear(); vi.mocked(loadCentralSession).mockReturnValue(session); });
+it("brands the Google step-up button with the official G logo", async () => {
+  vi.mocked(loadCentralSession).mockReturnValue({ token: "fixture-session", device_id: "device", expires_at: 2 ** 31, person: { person_id: "person", display_name: "Google fixture", identity_kind: "google" } });
+  render(<AccountDeletionFlow disabled={false} />);
+  const button = await screen.findByRole("button", { name: "Google로 확인하고 탈퇴" });
+  expect(button.querySelector('img[src*="data:image/svg+xml"]')).not.toBeNull();
+});
 it("shows hidden/skipped servers and requires explicit receipt lookup after a lost final response", async () => {
   const user = userEvent.setup();
   let disableCalls = 0;

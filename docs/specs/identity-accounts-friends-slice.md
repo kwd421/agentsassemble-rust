@@ -48,6 +48,18 @@ only, with deployment left to the manager. Regression tests assert workflow/auth
 invariants, not constant values. Record reproduction, fixes and remaining unknowns in
 `docs/VERIFICATION.md`.
 
+## Google sign-in button branding (2026-10-17)
+
+Every Google sign-in button (StartupIdentityGate choice, member join panel,
+central account entry link, account-deletion Google step-up, registration
+"다른 계정으로 로그인") shows the official colour Google "G" from the local
+`frontend/src/assets/google-g.svg` asset next to its existing Korean action text
+("Google로 계속" and per-surface equivalents). Dark app surfaces use Google's
+dark variant (fill `#131314`, 1px inside stroke `#8E918F`, text `#E3E3E3`,
+12px left padding, 10px gap, 12px right padding, 18px unstretched logo) via the
+shared `GoogleGLogo`/`.dc-google-signin` owner; no remote fetch, no monochrome
+or recoloured G, and no G without its button boundary and action text.
+
 ## Restored host metadata and retired backup UI correction (2026-10-11)
 
 On every host start, the existing signed default-name publisher must publish this

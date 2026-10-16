@@ -16,9 +16,9 @@ import { startCentralWebGoogle, completeCentralWebGoogleReturn } from "../../lib
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   LoaderCircle,
-  LogIn,
   RefreshCw,
 } from "lucide-react";
+import GoogleGLogo from "./GoogleGLogo";
 
 import {
   centralIdentityConfigured,
@@ -529,14 +529,14 @@ export default function StartupIdentityGate({
           <div className="grid gap-3">
             <button
               type="button"
-              className="flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#5865f2] px-4 text-[14px] font-black text-white disabled:opacity-60"
+              className="dc-google-signin min-h-12 w-full"
               disabled={busy}
               onClick={() => void googleLogin()}
             >
               {busy ? (
                 <LoaderCircle size={17} className="animate-spin" />
               ) : (
-                <LogIn size={17} />
+                <GoogleGLogo />
               )}{" "}
               Google로 계속
             </button>

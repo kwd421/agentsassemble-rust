@@ -6,6 +6,7 @@ import { confirmDeletionGoogle } from "../../lib/central/accountDeletionGoogle";
 import { CENTRAL_SESSION_CLEARED_EVENT, CENTRAL_SESSION_CHANGED_EVENT, loadCentralSession } from "../../lib/central/identity";
 import ParticipantAvatarContent from "./ParticipantAvatarContent";
 import LocalAccountDataChoice from "./LocalAccountDataChoice";
+import GoogleGLogo from "./GoogleGLogo";
 
 export default function AccountDeletionSettings({ disabled }: { disabled: boolean }) {
   const open = useContext(AccountDeletionContext);
@@ -122,8 +123,8 @@ export function AccountDeletionFlow({ disabled, onClose, onDeleted }: { disabled
       </li>)}</ul>}
       {session?.person.identity_kind === "guest" && <label className="dc-account-deletion-code">복구 코드<input className="ops-input" type="password" autoComplete="off" value={code} onChange={e => setCode(e.currentTarget.value)} disabled={busy} /></label>}
       <footer><button type="button" className="dc-join-cancel" onClick={close}>취소</button>
-        <button type="button" className="dc-member-session-button" data-variant="danger" disabled={disabled || busy || (!session && !receiptOnly) || (!receiptOnly && session?.person.identity_kind === "guest" && !code.trim())} onClick={() => void start()}>
-          {busy ? checking ? "확인하는 중…" : "탈퇴하는 중…" : error ? "다시 시도" : session?.person.identity_kind === "guest" ? "복구 코드로 확인하고 탈퇴" : "Google로 확인하고 탈퇴"}
+        <button type="button" className="dc-google-signin" disabled={disabled || busy || (!session && !receiptOnly) || (!receiptOnly && session?.person.identity_kind === "guest" && !code.trim())} onClick={() => void start()}>
+          <GoogleGLogo />{busy ? checking ? "확인하는 중…" : "탈퇴하는 중…" : error ? "다시 시도" : session?.person.identity_kind === "guest" ? "복구 코드로 확인하고 탈퇴" : "Google로 확인하고 탈퇴"}
         </button>
       </footer>
     </>}

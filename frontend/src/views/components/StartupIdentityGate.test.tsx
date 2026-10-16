@@ -121,7 +121,8 @@ describe("StartupIdentityGate", () => {
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
     const onComplete = vi.fn();
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-    await screen.findByRole("button", { name: "Google로 계속" });
+    const googleButton = await screen.findByRole("button", { name: "Google로 계속" });
+    expect(googleButton.querySelector('img[src*="data:image/svg+xml"]')).not.toBeNull();
     expect(onComplete).not.toHaveBeenCalled();
   });
 

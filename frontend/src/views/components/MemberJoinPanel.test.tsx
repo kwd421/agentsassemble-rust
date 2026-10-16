@@ -152,7 +152,9 @@ describe("member invite screen", () => {
     expect(Object.keys(request).sort()).toEqual(["challenge_hash", "handoff_state", "registration_epoch", "room_name", "server_id"]);
     mocks.session.mockReturnValue(null);
     const central = render(<MemberJoinPanel request={request} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Google로 계속" }));
+    const googleButton = await screen.findByRole("button", { name: "Google로 계속" });
+    expect(googleButton.querySelector('img[src*="data:image/svg+xml"]')).not.toBeNull();
+    fireEvent.click(googleButton);
     await waitFor(() => expect(mocks.webLogin).toHaveBeenCalledOnce());
     expect(mocks.issue).not.toHaveBeenCalled(); central.unmount();
     realWindow.history.replaceState({}, "", "/?code=test-code&state=test-state");

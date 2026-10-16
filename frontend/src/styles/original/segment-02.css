@@ -73,6 +73,33 @@
   opacity: 0.55;
 }
 
+.dc-google-signin {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #8e918f;
+  border-radius: 8px;
+  background: #131314;
+  padding: 8px 12px;
+  color: #e3e3e3;
+  font-family: "Google Sans", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.dc-google-signin:hover:not(:disabled) {
+  background: #1e1e1f;
+}
+
+.dc-google-signin:disabled,
+.dc-google-signin[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .dc-agent-select-trigger[data-effect="ultra"] {
   position: relative;
   overflow: hidden;

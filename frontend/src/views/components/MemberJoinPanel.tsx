@@ -17,6 +17,7 @@ import {
   type MemberGrant, type MemberHandoff, type MemberReturn, type MemberTargetRequest,
 } from "../../lib/central/memberConnect";
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
+import GoogleGLogo from "./GoogleGLogo";
 
 export type MemberJoinHost = {
   purpose?: "connect";
@@ -240,7 +241,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
         <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>{reconnect ? "다시 연결" : "참가하기"}</button>
       </>}
       {consent && <button type="button" className="dc-join-cancel" disabled={busy} onClick={() => void confirm(true)}>목록에 다시 표시하고 참가</button>}
-      {!host && !busy && (!error || (secureEntry && !loadCentralSession())) && !consent && rooms.length === 0 && guestScreen === "choice" && <button type="button" className="dc-guest-join-button"
+      {!host && !busy && (!error || (secureEntry && !loadCentralSession())) && !consent && rooms.length === 0 && guestScreen === "choice" && <button type="button" className="dc-google-signin w-full"
         onClick={() => void run(async () => {
           loginAbort.current = new AbortController();
           if (secureEntry) {
@@ -248,7 +249,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
             else await loginMemberPopup(loginAbort.current.signal);
             await prepare();
           } else await startCentralWebGoogle(loginAbort.current.signal);
-        })}>{error ? "Google로 다시 시도" : "Google로 계속"}</button>}
+        })}><GoogleGLogo />{error ? "Google로 다시 시도" : "Google로 계속"}</button>}
       {!host && !entryError && guestActive && !consent && rooms.length === 0 && <CentralGuestEntry
         screen={guestScreen} setScreen={setGuestScreen} disabled={busy} onBusyChange={setBusy}
         onComplete={async () => { await run(() => prepare(true)); }} />}

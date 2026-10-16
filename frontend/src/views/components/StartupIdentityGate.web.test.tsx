@@ -118,7 +118,9 @@ it.each(["return", "login"])("shows a dedicated deleted-account card from Google
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByText("앱을 시작하지 못했어요.")).toBeNull();
   expect(register).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "다른 계정으로 로그인" }));
+  const relogin = screen.getByRole("button", { name: "다른 계정으로 로그인" });
+  expect(relogin.querySelector('img[src*="data:image/svg+xml"]')).not.toBeNull();
+  fireEvent.click(relogin);
   expect(await screen.findByRole("button", { name: "Google로 계속" })).toBeTruthy();
   expect(screen.queryByRole("heading", { name: "탈퇴한 계정이에요" })).toBeNull();
   expect(register).not.toHaveBeenCalled();

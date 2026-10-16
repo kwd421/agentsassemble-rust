@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { GoogleRegistrationRequired } from "../../lib/central/googleRegistration";
+import GoogleGLogo from "./GoogleGLogo";
 
 export default function GoogleRegistrationChoice({ request, onComplete, onCancel }: { request: GoogleRegistrationRequired; onComplete: () => Promise<void>; onCancel: () => void }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -15,7 +16,7 @@ export default function GoogleRegistrationChoice({ request, onComplete, onCancel
     <h1 className="text-2xl font-black text-text-primary">{request.identityStatus === "deleted" ? "탈퇴한 계정이에요" : "새 계정을 만들어 주세요"}</h1>
     <p className="text-[13px] font-semibold leading-5 text-text-muted">{request.message}</p>
     <button type="button" className="ops-cta min-h-12 px-4" disabled={busy} onClick={() => void register()}>새 계정 만들기</button>
-    <button type="button" className="ops-button min-h-12 px-4" disabled={busy} onClick={onCancel}>다른 계정으로 로그인</button>
+    <button type="button" className="dc-google-signin min-h-12 px-4" disabled={busy} onClick={onCancel}><GoogleGLogo />다른 계정으로 로그인</button>
     {error && <p role="alert">{error}</p>}
   </section>;
 }
