@@ -104,13 +104,13 @@ export default function StartupIdentityGate({
   const ownedRemoteReason = !webEntry && ownedServer && !ownerConflict && !ownedIsLocal && !localHostError
     && hostingState !== "retired" && hostingState !== "account_deleted"
     ? (!localHost?.server_id
-      ? "이 기기에는 아직 서버가 없어요."
+      ? "이 컴퓨터에서 서버 데이터를 찾지 못했어요."
       : localHost.server_id !== ownedServer.server_id
-        ? "이 기기의 서버가 계정의 서버와 달라요."
-        : "이 기기에서는 기기로만 연결할 수 있어요.")
+        ? "이 컴퓨터의 서버가 계정에 등록된 서버와 달라요."
+        : "이 컴퓨터가 다른 기기로 등록돼 있어요.")
     : "";
   const ownedRemoteDetail = ownedRemoteReason
-    ? `이 기기 서버 ID: ${localHost?.server_id ? `${localHost.server_id.slice(0, 8)}…` : "없음"}\n호스팅 제한: ${hostingState === "device" ? "기기 연결 전용" : "없음"}${accountDeviceOnly ? "\n등록 상태: 기기 연결로 안내 중" : ""}`
+    ? `이 컴퓨터 서버 ID: ${localHost?.server_id ? `${localHost.server_id.slice(0, 8)}…` : "없음"}\n계정 서버 ID: ${ownedServer?.server_id.slice(0, 8)}…${hostingState === "device" || accountDeviceOnly ? "\n기기로 등록됨" : ""}`
     : "";
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);

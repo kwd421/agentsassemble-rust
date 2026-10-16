@@ -529,8 +529,8 @@ it("states the local cause when the owned server is shown as a remote device", a
   render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
   const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
   expect((remote as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByText("이 기기에는 아직 서버가 없어요.")).toBeTruthy();
-  expect(screen.getByText(/이 기기 서버 ID: 없음/)).toBeTruthy();
+  expect(screen.getByText("이 컴퓨터에서 서버 데이터를 찾지 못했어요.")).toBeTruthy();
+  expect(screen.getByText(/이 컴퓨터 서버 ID: 없음/)).toBeTruthy();
   expect(centralMocks.register).not.toHaveBeenCalled();
   expect(complete).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).toBeNull();
@@ -544,8 +544,8 @@ it("states the mismatch when the local server differs from the account server", 
   render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
   const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
   expect((remote as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByText("이 기기의 서버가 계정의 서버와 달라요.")).toBeTruthy();
-  expect(screen.getByText(/이 기기 서버 ID: 40000000/)).toBeTruthy();
+  expect(screen.getByText("이 컴퓨터의 서버가 계정에 등록된 서버와 달라요.")).toBeTruthy();
+  expect(screen.getByText(/이 컴퓨터 서버 ID: 40000000/)).toBeTruthy();
   expect(centralMocks.register).not.toHaveBeenCalled();
   expect(complete).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).toBeNull();
@@ -563,8 +563,8 @@ it("states device-only guidance after the owned registration is refused", async 
   await userEvent.click(open);
   const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
   expect((remote as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByText("이 기기에서는 기기로만 연결할 수 있어요.")).toBeTruthy();
-  expect(screen.getByText(/등록 상태: 기기 연결로 안내 중/)).toBeTruthy();
+  expect(screen.getByText("이 컴퓨터가 다른 기기로 등록돼 있어요.")).toBeTruthy();
+  expect(screen.getByText(/기기로 등록됨/)).toBeTruthy();
   expect(complete).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).toBeNull();
 });
