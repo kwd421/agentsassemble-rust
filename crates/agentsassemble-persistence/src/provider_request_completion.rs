@@ -117,16 +117,6 @@ impl SqliteStore {
         for row in rows {
             events.push(close_in(&mut tx, &row, "cancelled").await?);
         }
-        events.extend(
-            crate::delegated_confirmation_lifecycle::cancel_execution_in(
-                &mut tx,
-                room_id,
-                session_id,
-                turn_generation,
-                execution_id,
-            )
-            .await?,
-        );
         tx.commit().await?;
         Ok(events)
     }

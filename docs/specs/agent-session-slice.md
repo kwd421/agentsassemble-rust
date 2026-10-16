@@ -13,8 +13,10 @@ Confirmed existing-agent starts bind all stored launch controls and the resolved
 creation identity, target name and the existing sealed runtime profile key. The code
 has no separate configuration revision: use that existing identity plus the typed
 snapshot, without adding a new hash. Approval reserves the normal lifecycle command
-in the decision transaction; its owner rechecks original owner/delegate authority and
-configuration before effects. Once accepted, expiry applies to pending decisions;
+in the decision transaction; its owner rechecks current owner/delegate authority (not the
+requesting turn; see the request lifetime rule in
+local-authority-surface-admission-moderation-slice.md) and configuration before effects.
+Once accepted, expiry applies to pending decisions;
 uncertain effects stay executing under existing reconciliation. Approving a
 full-access target additionally requires the exact human owner's explicit
 `full_access_acknowledged: true` inside the approval decision; without it approval is

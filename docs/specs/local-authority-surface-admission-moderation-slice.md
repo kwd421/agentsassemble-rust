@@ -81,10 +81,22 @@ status/receipt, without private owner request data or secrets. The existing
 `read_room_status`/`room_status` observation includes up to 16 correlated outcomes
 for that AI alone; ordinary room context does not render arbitrary event payloads.
 
-Portal/attendee requests end with their exact turn/connection. Connector requests have
-no execution lifetime: they bind only to their session/participant and terminate on
-owner decision, expiry or loss of session authority/role/membership. Do not invent a
-connector execution protocol. Persist non-bearer references only; no session swapping.
+Pending requests from every surface (managed Portal, attendee, connector) are not tied
+to the AI's turn or connection: the AI ending its turn, an attendee connection closing or
+a connector reconnecting never cancels them. A request is created by the delegate's live
+call and then belongs to the owner's decision. It ends only by the exact owner's decision,
+its expiry, or loss of current authority. Current authority is re-proved at approval, at
+an AI retry, and in every room-input reconciliation: the delegate participant is still
+joined, unmuted, an AI, holds `director` and is bound to the same owner; the owner's bound
+authority still resolves; and the delegate's session custody is live (provider session
+server-owned, attendee session unrevoked, connector session live). Turn generation,
+execution, input cursor, runtime lease and connection are not required at that point.
+Removal, kick, leave, mute or role change of the delegate, or loss of the owner, ends the
+request as `cancelled` with `confirmation_cancelled`; nothing executes. An AI retry of the
+same request ID from a later turn or connection of the same delegate identity returns the
+stored state or receipt; a different action or payload conflicts. Connector requests keep
+these rules unchanged. Do not invent a connector execution protocol. Persist non-bearer
+references only; no session swapping.
 New schema/table follows the normal version migration and archive catalog. Requests
 and their private events are ephemeral and excluded from backups/server moves.
 
@@ -92,7 +104,7 @@ Frontend work is restricted to generated wire types, socket validation and proje
 views/styles/app are owned elsewhere. Expose pending owner requests, typed decision
 and ACK. Acceptance: non-mutation, exact owner-only approval/delivery/reconnect,
 payload/target binding, concurrent exactly-once, authority revocation, explicit decline/
-expiry/turn cancellation, archive exclusion and both actions across all three surfaces.
+expiry/authority-loss cancellation (not turn end), archive exclusion and both actions across all three surfaces.
 Run affected crate tests, fmt, architecture-check, generated TS checks and affected
 Vitest; server integration uses `--test-threads=2`. This is acceptance, not completion.
 

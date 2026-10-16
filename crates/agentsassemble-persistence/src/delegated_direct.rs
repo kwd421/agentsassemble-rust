@@ -14,7 +14,19 @@ impl DelegatedRoomActionAuthority {
         authority: &DelegateRoomAuthority,
         action: &str,
     ) -> Result<Self, PersistenceError> {
-        let proof = Self::pin(tx, authority).await?;
+        Self::permitted(Self::pin(tx, authority).await?, action)
+    }
+
+    /// Approval-time form of `direct`: the same owner capability gate over current authority.
+    pub(crate) async fn current(
+        tx: &mut Transaction<'_, Sqlite>,
+        authority: &DelegateRoomAuthority,
+        action: &str,
+    ) -> Result<Self, PersistenceError> {
+        Self::permitted(Self::pin_current(tx, authority).await?, action)
+    }
+
+    fn permitted(proof: Self, action: &str) -> Result<Self, PersistenceError> {
         if !proof.allows(action) {
             return Err(rejected(
                 "owner_not_permitted",

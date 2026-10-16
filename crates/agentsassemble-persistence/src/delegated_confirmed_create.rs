@@ -111,7 +111,8 @@ impl SqliteStore {
         authority: &DelegateRoomAuthority,
     ) -> Result<AuthenticatedPrincipal, PersistenceError> {
         let mut tx = self.pool.begin().await?;
-        let proof = crate::delegated_pin::DelegatedRoomActionAuthority::direct(
+        // Current authority, so a retry from a later turn can still read its stored receipt.
+        let proof = crate::delegated_pin::DelegatedRoomActionAuthority::current(
             &mut tx,
             authority,
             "request_create_agent",

@@ -50,7 +50,8 @@ pub(crate) async fn validate_in(
         ConfirmedRoomAction::KickParticipant(_) => "request_kick_participant",
         ConfirmedRoomAction::CreateHumanInvite(_) => "request_create_invite",
     };
-    let proof = DelegatedRoomActionAuthority::direct(tx, &binding.authority, name).await?;
+    // Approval, drives and reconciliation prove current authority, not the requesting turn.
+    let proof = DelegatedRoomActionAuthority::current(tx, &binding.authority, name).await?;
     let (reference, _) = crate::delegation_owner::confirmation_provenance(
         tx,
         room_id,
@@ -109,7 +110,7 @@ pub(crate) async fn retry_in(
     let Some(row) = sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND request_id=?")
         .bind(authority.room_id()).bind(authority.delegate_id()).bind(request_id).fetch_optional(&mut **tx).await? else { return Ok(None); };
     let binding: Binding = serde_json::from_str(row.get("binding_json"))?;
-    if item(&row)?.action != *action || !binding.authority.same_binding(authority) {
+    if item(&row)?.action != *action || !binding.authority.same_delegate(authority) {
         return Err(rejected(
             "request_conflict",
             "Request identity is bound to a different action or execution.",
@@ -280,54 +281,6 @@ pub(crate) async fn outcomes_in(
             })
         })
         .collect()
-}
-
-pub(crate) async fn cancel_execution_in(
-    tx: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    delegate_id: &str,
-    generation: u64,
-    execution_id: &str,
-) -> Result<Vec<RoomEvent>, PersistenceError> {
-    let first = crate::room_event_sequence::next_sequence(tx, room_id).await?;
-    let rows = sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND state='pending'").bind(room_id).bind(delegate_id).fetch_all(&mut **tx).await?;
-    for row in rows {
-        let binding: Binding = serde_json::from_str(row.get("binding_json"))?;
-        let matches = match binding.authority {
-            DelegateRoomAuthority::Provider {
-                turn_generation,
-                execution_id: bound,
-                ..
-            }
-            | DelegateRoomAuthority::Attendee {
-                turn_generation,
-                execution_id: bound,
-                ..
-            } => turn_generation == generation && bound == execution_id,
-            DelegateRoomAuthority::Connector(_) => false,
-        };
-        if matches {
-            finish_in(
-                tx,
-                room_id,
-                &row,
-                ConfirmationState::Cancelled,
-                &json!({"status":"rejected","code":"confirmation_cancelled","retryable":false}),
-            )
-            .await?;
-        }
-    }
-    let events: Vec<String> = sqlx::query_scalar(
-        "SELECT event_json FROM room_events WHERE room_id=? AND seq>=? ORDER BY seq",
-    )
-    .bind(room_id)
-    .bind(first)
-    .fetch_all(&mut **tx)
-    .await?;
-    Ok(events
-        .iter()
-        .map(|event| serde_json::from_str(event))
-        .collect::<Result<_, _>>()?)
 }
 
 pub(crate) async fn reject_confirmation_identity(

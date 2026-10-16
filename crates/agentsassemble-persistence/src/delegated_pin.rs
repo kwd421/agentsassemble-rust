@@ -47,48 +47,77 @@ impl DelegateRoomAuthority {
         }
     }
 
-    pub(crate) fn same_binding(&self, other: &Self) -> bool {
+    /// The same AI delegate identity through the same custody kind. Turn, execution,
+    /// input cursor, runtime lease and connection describe one request-time call, so a
+    /// later turn or connection of the same delegate may retry and read the stored result.
+    pub(crate) fn same_delegate(&self, other: &Self) -> bool {
         match (self, other) {
             (
                 Self::Provider {
                     room_id: a,
                     session_id: b,
-                    turn_id: c,
-                    input_up_to_seq: d,
-                    turn_generation: e,
-                    execution_id: f,
+                    ..
                 },
                 Self::Provider {
-                    room_id: g,
-                    session_id: h,
-                    turn_id: i,
-                    input_up_to_seq: j,
-                    turn_generation: k,
-                    execution_id: l,
+                    room_id: c,
+                    session_id: d,
+                    ..
                 },
-            ) => (a, b, c, d, e, f) == (g, h, i, j, k, l),
-            (
-                Self::Attendee {
-                    session: a,
-                    connection_id: b,
-                    turn_generation: c,
-                    execution_id: d,
-                },
-                Self::Attendee {
-                    session: e,
-                    connection_id: f,
-                    turn_generation: g,
-                    execution_id: h,
-                },
-            ) => {
-                a.session_fingerprint() == e.session_fingerprint()
-                    && a.room_uid() == e.room_uid()
-                    && (b, c, d) == (f, g, h)
+            ) => (a, b) == (c, d),
+            (Self::Attendee { session: a, .. }, Self::Attendee { session: e, .. }) => {
+                a.session_fingerprint() == e.session_fingerprint() && a.room_uid() == e.room_uid()
             }
             (Self::Connector(a), Self::Connector(b)) => {
                 a.session_fingerprint() == b.session_fingerprint() && a.room_uid() == b.room_uid()
             }
             _ => false,
+        }
+    }
+
+    /// Current custody of the delegate's session without the request turn or connection:
+    /// the provider session must still be server-owned, the attendee session unrevoked
+    /// and the connector session live. Live tool calls keep using `resolve`.
+    pub(crate) async fn resolve_session(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+    ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+        match self {
+            Self::Provider {
+                room_id,
+                session_id,
+                ..
+            } => {
+                let session = crate::agent_lifecycle::load_session(tx, room_id, session_id).await?;
+                if session.public.external_owned || session.public.process_ownership != "server" {
+                    return Err(rejected(
+                        "stale_provider_turn",
+                        "Room tool authority no longer matches an active Agent Session participant.",
+                    ));
+                }
+                let participant =
+                    crate::authority::load_active_participant(tx, room_id, session_id).await?;
+                crate::room_turns::support::provider_room_principal(
+                    &session,
+                    &participant,
+                    InviteScope::ReadWrite,
+                )
+            }
+            Self::Attendee { session, .. } => {
+                Ok(
+                    crate::attendee::session::revalidate_in(tx, session, Utc::now())
+                        .await?
+                        .principal()
+                        .clone(),
+                )
+            }
+            Self::Connector(session) => {
+                Ok(
+                    crate::connector_session::revalidate_in(tx, session, Utc::now())
+                        .await?
+                        .principal()
+                        .clone(),
+                )
+            }
         }
     }
 
@@ -160,6 +189,7 @@ pub(crate) struct DelegatedRoomActionAuthority {
     pub(crate) delegate: AuthenticatedPrincipal,
 }
 impl DelegatedRoomActionAuthority {
+    /// Proves the live call of an AI inside its own turn or connection.
     pub(crate) async fn pin(
         tx: &mut Transaction<'_, Sqlite>,
         authority: &DelegateRoomAuthority,
@@ -171,6 +201,29 @@ impl DelegatedRoomActionAuthority {
         )
         .await?;
         let delegate = authority.resolve(tx).await?;
+        Self::from_parts(owner, delegate)
+    }
+
+    /// Proves current owner and delegate authority for approval, drives and reconciliation.
+    /// It never requires the requesting turn or connection.
+    pub(crate) async fn pin_current(
+        tx: &mut Transaction<'_, Sqlite>,
+        authority: &DelegateRoomAuthority,
+    ) -> Result<Self, PersistenceError> {
+        let owner = crate::delegation_owner::resolve_pin_owner(
+            tx,
+            authority.room_id(),
+            authority.delegate_id(),
+        )
+        .await?;
+        let delegate = authority.resolve_session(tx).await?;
+        Self::from_parts(owner, delegate)
+    }
+
+    fn from_parts(
+        owner: AuthenticatedPrincipal,
+        delegate: AuthenticatedPrincipal,
+    ) -> Result<Self, PersistenceError> {
         if delegate.invite_scope != InviteScope::ReadWrite {
             return Err(rejected(
                 "delegate_authority_expired",

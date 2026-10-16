@@ -102,7 +102,8 @@ impl SqliteStore {
         agent_id: &str,
     ) -> Result<(AuthenticatedPrincipal, DurableAgentSession), PersistenceError> {
         let mut tx = self.pool.begin().await?;
-        let proof = crate::delegated_pin::DelegatedRoomActionAuthority::direct(
+        // Current authority, so a retry from a later turn can still read its stored receipt.
+        let proof = crate::delegated_pin::DelegatedRoomActionAuthority::current(
             &mut tx,
             authority,
             "request_reconfigure_agent",
@@ -173,7 +174,7 @@ impl SqliteStore {
                     ));
                 }
             };
-            if !binding.authority.same_binding(authority) || bound.params != *params {
+            if !binding.authority.same_delegate(authority) || bound.params != *params {
                 return Err(rejected(
                     "request_conflict",
                     "This request ID identifies another action or execution.",

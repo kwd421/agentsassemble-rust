@@ -176,7 +176,7 @@ impl SqliteStore {
                     ));
                 }
             };
-            if !binding.authority.same_binding(authority) || bound.params != *params {
+            if !binding.authority.same_delegate(authority) || bound.params != *params {
                 return Err(rejected(
                     "request_conflict",
                     "This request ID identifies another action or execution.",

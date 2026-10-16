@@ -89,7 +89,7 @@ impl SqliteStore {
         if let Some(row)=sqlx::query("SELECT * FROM delegated_action_requests WHERE room_id=? AND delegate_id=? AND request_id=?").bind(authority.room_id()).bind(authority.delegate_id()).bind(&request.request_id).fetch_optional(&mut *tx).await? {
             let binding:Binding=serde_json::from_str(row.get("binding_json"))?;
             let stored=item(&row)?;
-            if !binding.authority.same_binding(authority) || !matches!(&stored.action,ConfirmedRoomAction::StartAgent(s) if s.request_id==request.request_id && s.agent_id==request.agent_id) { return Err(rejected("request_conflict","This request ID identifies another action or execution.")); }
+            if !binding.authority.same_delegate(authority) || !matches!(&stored.action,ConfirmedRoomAction::StartAgent(s) if s.request_id==request.request_id && s.agent_id==request.agent_id) { return Err(rejected("request_conflict","This request ID identifies another action or execution.")); }
             refresh_in(&mut tx,authority.room_id(),&row).await?;
             let row=load_in(&mut tx,authority.room_id(),&stored.confirmation_id).await?;
             let result=receipt(&row)?;
