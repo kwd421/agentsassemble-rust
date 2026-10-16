@@ -98,6 +98,9 @@ export interface RoomSocketSnapshot {
   snapshot_mode: "initial" | "resume" | "gap";
   provider_catalog: ProviderCatalogSnapshot;
   capabilities: Record<string, boolean>;
+  // Latest real message sequence per channel. Older hosts omit it; channels
+  // without a known sequence read as read, never all unread.
+  channel_message_cursors?: import("./types/generated/ChannelMessageCursor").ChannelMessageCursor[];
 }
 
 export type RoomCommandAck = Pick<

@@ -1,8 +1,8 @@
 use std::{fs::File, io, path::PathBuf, sync::Arc};
 
 use agentsassemble_domain::{
-    AgentSession, AuthenticatedPrincipal, CapabilitySet, DurableAgentSession, Participant, Room,
-    RoomEvent, RoomSettings, SnapshotMode,
+    AgentSession, AuthenticatedPrincipal, CapabilitySet, ChannelMessageCursor, DurableAgentSession,
+    Participant, Room, RoomEvent, RoomSettings, SnapshotMode,
 };
 use serde_json::Value;
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
@@ -99,6 +99,7 @@ pub struct RoomSnapshotData {
     pub has_more_before: bool,
     pub resume_gap: bool,
     pub snapshot_mode: SnapshotMode,
+    pub channel_message_cursors: Vec<ChannelMessageCursor>,
 }
 
 #[derive(Debug, Clone)]
@@ -357,6 +358,8 @@ impl SqliteStore {
             .last()
             .map_or(resume_from_seq, |event: &RoomEvent| event.seq);
         let has_more_before = oldest_seq > 1;
+        let channel_message_cursors =
+            latest_channel_message_cursors(&mut transaction, room_id).await?;
         transaction.commit().await?;
         Ok(RoomSnapshotData {
             room,
@@ -371,8 +374,47 @@ impl SqliteStore {
             has_more_before,
             resume_gap,
             snapshot_mode,
+            channel_message_cursors,
         })
     }
+}
+
+/// Reports each channel's latest real message sequence for sidebar unread state.
+/// The lobby reports under `lobby`; custom text channels under their id. Only
+/// real messages count, so lobby `system` lines never advance a cursor. This
+/// covers messages outside the bounded snapshot tail, which the client cannot
+/// observe without loading every channel's history.
+async fn latest_channel_message_cursors(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+) -> Result<Vec<ChannelMessageCursor>, PersistenceError> {
+    let rows = sqlx::query(
+        "SELECT CASE WHEN json_extract(event_json, '$.type') = 'channel_message_final' \
+          THEN json_extract(event_json, '$.channel_id') ELSE 'lobby' END AS channel_id, \
+          MAX(seq) AS last_seq FROM room_events WHERE room_id = ? \
+          AND (json_extract(event_json, '$.type') = 'channel_message_final' \
+          OR (json_extract(event_json, '$.type') = 'message_final' \
+          AND COALESCE(json_extract(event_json, '$.message_kind'), 'message') != 'system')) \
+          GROUP BY channel_id",
+    )
+    .bind(room_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    let mut cursors = Vec::with_capacity(rows.len());
+    for row in rows {
+        let channel_id: Option<String> = row.try_get("channel_id")?;
+        let last_seq: i64 = row.try_get("last_seq")?;
+        if let Some(channel_id) = channel_id {
+            if !channel_id.is_empty() && last_seq > 0 {
+                cursors.push(ChannelMessageCursor {
+                    channel_id,
+                    last_seq,
+                });
+            }
+        }
+    }
+    cursors.sort_by(|left, right| left.channel_id.cmp(&right.channel_id));
+    Ok(cursors)
 }
 
 async fn load_snapshot_participants(

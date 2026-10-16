@@ -97,6 +97,7 @@ const GENERATED_SNAPSHOT_KEYS = [
   "resume_gap",
   "snapshot_mode",
   "capabilities",
+  "channel_message_cursors",
 ] as const;
 const SNAPSHOT_KEYS: ExactGeneratedKeys<RoomSnapshot, typeof GENERATED_SNAPSHOT_KEYS> =
   GENERATED_SNAPSHOT_KEYS;
@@ -536,11 +537,36 @@ export function commandAckResultIsValid(
   return true;
 }
 
+// Latest real message sequences per channel. Older hosts omit the field;
+// newer clients accept snapshots with or without it.
+export function channelMessageCursorsAreValid(value: unknown): value is import("../types/generated/ChannelMessageCursor").ChannelMessageCursor[] {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set<string>();
+  return value.every((entry) => {
+    try {
+      const record = strictRecord(entry, "channel message cursor");
+      assertExactKeys(record, ["channel_id", "last_seq"], "channel message cursor");
+      const channelId = record.channel_id;
+      if (
+        (channelId !== "lobby" && !isCustomChannelId(channelId)) ||
+        seen.has(channelId as string) ||
+        !isSequence(record.last_seq)
+      ) {
+        return false;
+      }
+      seen.add(channelId as string);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
 // The wire snapshot and its separately validated catalog are one admitted view.
 export function snapshotWithCatalog(value: unknown, catalog: import("../types/generated/ProviderCatalog").ProviderCatalog, requests: import("../types/generated/PendingProviderRequest").PendingProviderRequest[]): Record<string, unknown> {
   try {
     const snapshot = strictRecord(value, "room snapshot");
-    assertExactKeys(snapshot, ["op", ...SNAPSHOT_KEYS], "room snapshot");
+    assertExactKeys(snapshot, ["op", ...SNAPSHOT_KEYS.filter((key) => key !== "channel_message_cursors")], "room snapshot", ["channel_message_cursors"]);
     return { ...snapshot, provider_catalog: catalog, provider_requests: requests };
   } catch {
     throw new RoomSocketSayError("Room snapshot did not match the canonical browser schema; reconnecting.", "snapshot_schema_invalid");
@@ -556,7 +582,7 @@ export function snapshotValidationError(
 ): RoomSocketSayError | null {
   if (isRecord(value)) {
     try {
-      assertExactKeys(value, ["op", ...SNAPSHOT_KEYS, "provider_catalog", "provider_requests"], "room snapshot");
+      assertExactKeys(value, ["op", ...SNAPSHOT_KEYS.filter((key) => key !== "channel_message_cursors"), "provider_catalog", "provider_requests"], "room snapshot", ["channel_message_cursors"]);
       parsePublicRoom(value.room, expectedRoomId);
     } catch {
       return new RoomSocketSayError(
@@ -583,6 +609,15 @@ export function snapshotValidationError(
   ) {
     return new RoomSocketSayError(
       "Room snapshot did not match the canonical browser schema; reconnecting.",
+      "snapshot_schema_invalid"
+    );
+  }
+  if (
+    value.channel_message_cursors !== undefined &&
+    !channelMessageCursorsAreValid(value.channel_message_cursors)
+  ) {
+    return new RoomSocketSayError(
+      "Room snapshot contained invalid channel message cursors; reconnecting.",
       "snapshot_schema_invalid"
     );
   }

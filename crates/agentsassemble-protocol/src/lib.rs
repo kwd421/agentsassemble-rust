@@ -1,8 +1,8 @@
 mod attendee_entry;
 mod central_owner;
 use agentsassemble_domain::{
-    AgentSession, CapabilitySet, Participant, ProviderCatalog, PublicRoomSettings, Room, RoomEvent,
-    SnapshotMode,
+    AgentSession, CapabilitySet, ChannelMessageCursor, Participant, ProviderCatalog,
+    PublicRoomSettings, Room, RoomEvent, SnapshotMode,
 };
 pub use agentsassemble_domain::{
     MAX_ATTACHMENT_BYTES, MAX_CHANNEL_MESSAGE_PINS, MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
@@ -428,6 +428,12 @@ pub struct RoomSnapshot {
     pub resume_gap: bool,
     pub snapshot_mode: SnapshotMode,
     pub capabilities: CapabilitySet,
+    /// Latest real message sequence per channel (`lobby` plus text channel ids).
+    /// Optional on the wire: older hosts omit it and newer clients treat
+    /// channels without a known sequence as read, never all unread.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub channel_message_cursors: Option<Vec<ChannelMessageCursor>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

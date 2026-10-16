@@ -449,6 +449,7 @@ where
         resume_gap: snapshot_data.resume_gap,
         snapshot_mode: snapshot_data.snapshot_mode,
         capabilities: principal.capabilities.clone(),
+        channel_message_cursors: Some(snapshot_data.channel_message_cursors),
     };
     let catalog_frame = ServerFrame::ProviderCatalogUpdated {
         catalog: provider_catalog,

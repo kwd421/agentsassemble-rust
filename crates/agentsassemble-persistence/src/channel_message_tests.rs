@@ -483,3 +483,106 @@ async fn the_same_channel_id_in_two_rooms_never_shares_a_stream() {
         assert_eq!(history.events[0].content.as_deref(), Some(text));
     }
 }
+
+#[tokio::test]
+async fn snapshot_cursors_track_each_channel_latest_and_skip_system_lines() {
+    let (store, principal, _directory) = fixture().await;
+    let lobby = checked(
+        store
+            .execute_message(
+                &principal,
+                "lobby-one",
+                "message.send",
+                &json!({"content":"lobby text"}),
+            )
+            .await,
+    )
+    .event
+    .seq;
+    let first_a = checked(
+        store
+            .execute_channel_message(
+                TrustedPrincipal(&principal),
+                "a-one",
+                &json!({"channel_id":"c0123456789ab", "content":"first"}),
+            )
+            .await,
+    )
+    .event
+    .seq;
+    let first_b = checked(
+        store
+            .execute_channel_message(
+                TrustedPrincipal(&principal),
+                "b-one",
+                &json!({"channel_id":"c0123456789ac", "content":"other"}),
+            )
+            .await,
+    )
+    .event
+    .seq;
+    let later_a = checked(
+        store
+            .execute_channel_message(
+                TrustedPrincipal(&principal),
+                "a-two",
+                &json!({"channel_id":"c0123456789ab", "content":"later"}),
+            )
+            .await,
+    )
+    .event
+    .seq;
+    // A room-visible system line (delegation/pin attribution shape) advances the
+    // room sequence but must not advance any channel cursor.
+    let system_seq = checked(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
+        )
+        .bind("general")
+        .fetch_one(&store.pool)
+        .await,
+    );
+    let template: String = checked(
+        sqlx::query_scalar("SELECT event_json FROM room_events WHERE room_id = ? AND seq = ?")
+            .bind("general")
+            .bind(lobby)
+            .fetch_one(&store.pool)
+            .await,
+    );
+    let mut system_event: Value = checked(serde_json::from_str(&template));
+    system_event["id"] = json!(uuid::Uuid::new_v4().to_string());
+    system_event["seq"] = json!(system_seq);
+    system_event["message_kind"] = json!("system");
+    system_event["content"] = json!("Host did something on behalf of Host");
+    checked(
+        sqlx::query("INSERT INTO room_events (room_id, seq, event_json) VALUES (?, ?, ?)")
+            .bind("general")
+            .bind(system_seq)
+            .bind(system_event.to_string())
+            .execute(&store.pool)
+            .await,
+    );
+    let snapshot = checked(store.snapshot("general", 0, 200).await);
+    assert_eq!(snapshot.last_seq, system_seq);
+    let cursors: Vec<(String, i64)> = snapshot
+        .channel_message_cursors
+        .iter()
+        .map(|cursor| (cursor.channel_id.clone(), cursor.last_seq))
+        .collect();
+    assert_eq!(
+        cursors,
+        vec![
+            ("c0123456789ab".to_owned(), later_a),
+            ("c0123456789ac".to_owned(), first_b),
+            ("lobby".to_owned(), lobby),
+        ]
+    );
+    assert!(first_a < later_a);
+}
+
+#[tokio::test]
+async fn snapshot_cursors_are_empty_without_real_messages() {
+    let (store, _principal, _directory) = fixture().await;
+    let snapshot = checked(store.snapshot("general", 0, 200).await);
+    assert!(snapshot.channel_message_cursors.is_empty());
+}

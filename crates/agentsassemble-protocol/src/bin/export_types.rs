@@ -189,6 +189,7 @@ fn export_chat_contracts(
         ),
     )?;
     agentsassemble_domain::ChannelHistoryPage::export_all(config)?;
+    agentsassemble_domain::ChannelMessageCursor::export_all(config)?;
     agentsassemble_domain::ChannelMessageSend::export_all(config)?;
     agentsassemble_domain::SideChatSnapshot::export_all(config)?;
     agentsassemble_domain::SideChatUpdate::export_all(config)?;

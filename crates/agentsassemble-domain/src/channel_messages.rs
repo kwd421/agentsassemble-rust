@@ -122,6 +122,18 @@ pub struct ChannelHistoryPage {
     pub has_more_before: bool,
 }
 
+/// Latest real message sequence of one channel for sidebar unread state.
+/// The lobby reports under `lobby`; custom text channels under their id.
+/// Only real messages count: lobby `system` lines never advance a cursor.
+/// Absent entries (and snapshots without cursors) mean no known message and
+/// read as read, never as unread.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ChannelMessageCursor {
+    pub channel_id: String,
+    pub last_seq: i64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
