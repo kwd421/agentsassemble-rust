@@ -375,3 +375,6 @@ async fn assert_direct_rejections(
 
 #[path = "delegated_confirmation_tests.rs"]
 mod confirmations;
+
+#[path = "delegated_confirmation_turn_tests.rs"]
+mod turn_survival;
