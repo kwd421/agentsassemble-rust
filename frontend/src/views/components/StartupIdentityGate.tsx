@@ -96,6 +96,22 @@ export default function StartupIdentityGate({
   const ownerConflict = directory?.live?.owner_server_conflict;
   const ownedServers = centralServers.filter(server => server.relation === "owner");
   const ownedServer = ownedServers.length === 1 ? ownedServers[0] : undefined;
+  // The owned row renders as this computer only when every local-open guard agrees.
+  const ownedIsLocal = !webEntry && !ownerConflict && !hostingState && !accountDeviceOnly
+    && Boolean(localHost?.server_id) && ownedServer?.server_id === localHost?.server_id;
+  // When the account's owned server is shown as a remote device instead, keep every
+  // guard and button as they are and state the local cause in one plain line.
+  const ownedRemoteReason = !webEntry && ownedServer && !ownerConflict && !ownedIsLocal && !localHostError
+    && hostingState !== "retired" && hostingState !== "account_deleted"
+    ? (!localHost?.server_id
+      ? "이 기기에는 아직 서버가 없어요."
+      : localHost.server_id !== ownedServer.server_id
+        ? "이 기기의 서버가 계정의 서버와 달라요."
+        : "이 기기에서는 기기로만 연결할 수 있어요.")
+    : "";
+  const ownedRemoteDetail = ownedRemoteReason
+    ? `이 기기 서버 ID: ${localHost?.server_id ? `${localHost.server_id.slice(0, 8)}…` : "없음"}\n호스팅 제한: ${hostingState === "device" ? "기기 연결 전용" : "없음"}${accountDeviceOnly ? "\n등록 상태: 기기 연결로 안내 중" : ""}`
+    : "";
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("저장된 사용자 확인 중");
@@ -530,6 +546,10 @@ export default function StartupIdentityGate({
             {localHostError && <div role="alert" className="text-sm text-red-300">{localHostError}<p>서버 목록 새로고침으로 다시 확인해 주세요.</p></div>}
             {!webEntry && hostingState === "account_deleted" && localHost?.server_id && <FreshHostRegistrationButton serverId={localHost.server_id} deviceToken={deviceToken} disabled={busy} onRegistered={refreshServers} />}
             <ServerRestoreCard onOpen={() => enterApplication()} liveHost={Boolean(localHost?.server_id) && !hostingState} />
+            {ownedRemoteReason && <div className="grid gap-1">
+              <p className="text-[12px] text-text-muted">{ownedRemoteReason}</p>
+              <details><summary className="text-[12px] text-text-muted">자세히</summary><p className="break-all whitespace-pre-wrap text-[12px] text-text-muted">{ownedRemoteDetail}</p></details>
+            </div>}
             <CentralServerList deviceToken={deviceToken} deviceConnect={Boolean(ownedServer)} conflict={ownerConflict} key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={!webEntry && !hostingState && !accountDeviceOnly ? localHost : null} onOpenLocal={!webEntry && !ownerConflict && (ownedServers.length === 0 || ownedServer?.server_id === localHost?.server_id) && !hostingState && !accountDeviceOnly ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>

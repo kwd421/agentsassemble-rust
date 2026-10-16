@@ -521,6 +521,54 @@ it("changes a registration race's server_exists into device connection", async (
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
+it("states the local cause when the owned server is shown as a remote device", async () => {
+  setupOneServer();
+  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: null, host_name: "PC", host_os: "windows", device_kind: "컴퓨터", profile_name: null, hosting_state: null });
+  centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [{ ...oneServer, endpoint: null }], server_time: 1 });
+  const complete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
+  const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
+  expect((remote as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText("이 기기에는 아직 서버가 없어요.")).toBeTruthy();
+  expect(screen.getByText(/이 기기 서버 ID: 없음/)).toBeTruthy();
+  expect(centralMocks.register).not.toHaveBeenCalled();
+  expect(complete).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("states the mismatch when the local server differs from the account server", async () => {
+  setupOneServer();
+  desktopMocks.requestHostDeviceInfo.mockResolvedValue({ server_id: "40000000-0000-4000-8000-000000000001", host_name: "PC", host_os: "windows", device_kind: "컴퓨터", profile_name: "Owner", hosting_state: null });
+  centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [{ ...oneServer, endpoint: null }], server_time: 1 });
+  const complete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
+  const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
+  expect((remote as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText("이 기기의 서버가 계정의 서버와 달라요.")).toBeTruthy();
+  expect(screen.getByText(/이 기기 서버 ID: 40000000/)).toBeTruthy();
+  expect(centralMocks.register).not.toHaveBeenCalled();
+  expect(complete).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("states device-only guidance after the owned registration is refused", async () => {
+  setupOneServer();
+  centralMocks.register.mockRejectedValueOnce(Object.assign(new Error("exists"), { status: 409, code: "server_exists" }));
+  centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [], server_time: 1 });
+  const complete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
+  const open = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
+  centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [{ ...oneServer, endpoint: null }], server_time: 1 });
+  centralMocks.hostingState.mockResolvedValue(null);
+  await userEvent.click(open);
+  const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
+  expect((remote as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText("이 기기에서는 기기로만 연결할 수 있어요.")).toBeTruthy();
+  expect(screen.getByText(/등록 상태: 기기 연결로 안내 중/)).toBeTruthy();
+  expect(complete).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
 it("shows the duplicate screen when bootstrap removes owner entries from the rail", async () => {
   setupOneServer();
   centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [], server_time: 1,
