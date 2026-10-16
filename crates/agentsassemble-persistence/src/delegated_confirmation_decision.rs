@@ -142,6 +142,9 @@ impl SqliteStore {
                         }
                         crate::room_channels::require_text_channel(&mut tx, &principal.room_id, &action.channel_id).await?;
                         settings.channels.retain(|c| c.id != action.channel_id);
+                        for (position, channel) in settings.channels.iter_mut().enumerate() {
+                            channel.position = position as u32;
+                        }
                         let delta = json!({"expected_revision":action.expected_settings_revision,"channels":settings.channels});
                         let mut outcome = crate::room_settings::update_settings_in(&mut tx, &proof.owner, &delta).await?;
                         let mut event = crate::delegated_pin::attributed_action_event(&mut tx, proof.attribution(), &action.request_id, "delete_text_channel", &action.channel_id, "deleted a text channel and its messages").await?;

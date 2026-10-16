@@ -213,6 +213,69 @@ async fn confirmation_is_immutable_owner_private_and_executes_once() -> TestResu
 }
 
 #[tokio::test]
+async fn approved_delete_of_a_non_last_channel_keeps_dense_positions() -> TestResult {
+    let (store, authority, _, _dir) = fixture().await?;
+    let local = crate::human_session_authority_tests::local_operator_principal();
+    let mut created_ids = Vec::new();
+    let mut revision = String::new();
+    for name in ["First", "Second"] {
+        let created = store
+            .execute_delegated_atomic(
+                &authority,
+                &DirectRoomAction::CreateTextChannel(CreateTextChannel {
+                    request_id: Uuid::new_v4().to_string(),
+                    name: name.into(),
+                }),
+                |_, _, _| Ok(()),
+            )
+            .await?
+            .0;
+        created_ids.push(
+            created.outcome.result["target_id"]
+                .as_str()
+                .ok_or("channel")?
+                .to_owned(),
+        );
+        revision = created.outcome.events[0].extra["room_settings"]["settings_revision"]
+            .as_str()
+            .ok_or("revision")?
+            .to_owned();
+    }
+    let request = DeleteTextChannel {
+        request_id: Uuid::new_v4().to_string(),
+        channel_id: created_ids[0].clone(),
+        expected_settings_revision: revision,
+    };
+    let pending = store
+        .request_delegated_channel_delete::<()>(&authority, &request, |_, _, _| Ok(()))
+        .await?
+        .0;
+    let outcome = store
+        .decide_delegated_action(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            &DecideDelegatedAction {
+                confirmation_id: pending["confirmation_id"]
+                    .as_str()
+                    .ok_or("confirmation")?
+                    .into(),
+                decision: ConfirmationDecision::Approve,
+                full_access_acknowledged: None,
+            },
+        )
+        .await?;
+    assert_eq!(outcome.result["state"], "succeeded");
+    let channels = store
+        .snapshot("general", 0, 100)
+        .await?
+        .settings
+        .channels;
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].id, created_ids[1]);
+    assert_eq!(channels[0].position, 0);
+    Ok(())
+}
+
+#[tokio::test]
 async fn declines_expiry_changed_target_and_revoked_authority_are_terminal() -> TestResult {
     for case in ["decline", "expiry", "target", "owner", "delegate"] {
         let (store, authority, _, _dir) = fixture().await?;

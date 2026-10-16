@@ -66,6 +66,9 @@ snapshot entries. The stored action, current target name, AI and owner identitie
 consequences and expiry are the decision surface. Channel deletion uses the settings
 owner: its message text is blanked/deleted, pins and search records removed and channel
 ID retired; event sequence/actor records are retained. Do not promise physical erasure.
+The approval rebuilds the channel list exactly as the owner's own settings update
+does: the removed entry is dropped and the survivors keep list order with dense
+positions, so deleting a channel that is not last still validates.
 Only that human may approve/decline; another operator, guest or AI cannot substitute.
 Approving a full-access agent start requires that human's explicit full-access
 acknowledgement inside the approval; without it approval is refused and the request
