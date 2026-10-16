@@ -236,6 +236,7 @@ struct Fixture {
     host_task: JoinHandle<()>,
     connections: tokio_util::task::TaskTracker,
     tickets: TicketStore,
+    _database: tempfile::TempDir,
 }
 
 async fn start_fixture() -> Fixture {
@@ -273,9 +274,15 @@ async fn start_fixture() -> Fixture {
     let address = listener
         .local_addr()
         .unwrap_or_else(|error| panic!("host address: {error:?}"));
-    let store = SqliteStore::open("sqlite::memory:")
-        .await
-        .unwrap_or_else(|error| panic!("host store: {error:?}"));
+    // File-backed: sqlx may replace the single pooled connection after a cancelled
+    // acquire, and a fresh connection to sqlite::memory: would be an empty database.
+    let database = tempfile::tempdir().unwrap_or_else(|error| panic!("host database: {error}"));
+    let store = SqliteStore::open(&format!(
+        "sqlite://{}",
+        database.path().join("runtime.sqlite3").display()
+    ))
+    .await
+    .unwrap_or_else(|error| panic!("host store: {error:?}"));
     store
         .bootstrap_local_authority("518f301c-e3bf-4b1c-82dd-5853bacb837f", "Host")
         .await
@@ -323,6 +330,7 @@ async fn start_fixture() -> Fixture {
         host_task,
         connections,
         tickets,
+        _database: database,
     }
 }
 

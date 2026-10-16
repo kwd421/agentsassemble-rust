@@ -86,6 +86,7 @@ async function verifyRoomFilePolicy({member, memberHeaders, memberSocket, member
   await tiny.body.cancel(); // Router task can finish before this cancellation.
   const abort = new AbortController();
   const cancelled = await member.fetch(large.attachment.download_url, {headers:memberHeaders, signal:abort.signal});
+  assert.equal(cancelled.status,200);
   const reader = cancelled.body.getReader();
   assert.equal((await reader.read()).done, false);
   abort.abort();

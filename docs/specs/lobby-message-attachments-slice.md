@@ -382,7 +382,9 @@ WAN/peak-RSS measurement, provider run or external re-review is claimed.
 Measured with `AA_TRANSPORT_BENCHMARK=1 cargo test -p agentsassemble-server --test
 integration central_owner_boundary::secure::trusted_webcrypto_owner_uses_encrypted_http_sse_and_room_socket
 -- --nocapture`: loopback TCP proxy, production Node WebCrypto/RemoteTransport,
-real router/upload owner and in-memory SQLite fixture. Upload timing includes
+real router/upload owner and a file-backed SQLite fixture in a temporary directory
+(an in-memory database is emptied if sqlx replaces its single pooled connection, so
+the fixture must not use `sqlite::memory:`). Upload timing includes
 begin/data/finish, with up to three concurrent admissions; publication and
 byte-exact readback run afterwards. Downloads consume and compare every piece.
 Legacy replay freezes both wire shapes and the channel-wide consumed chain.
