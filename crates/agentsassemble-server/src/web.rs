@@ -4,7 +4,7 @@ use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES;
 use axum::{
     Extension, Json, Router,
-    extract::{Query, Request, State, WebSocketUpgrade},
+    extract::{Query, RawQuery, Request, State, WebSocketUpgrade},
     http::{HeaderValue, StatusCode, header},
     middleware,
     response::{Html, IntoResponse, Redirect, Response},
@@ -606,6 +606,7 @@ async fn health() -> Json<Value> {
 async fn upgrade_socket(
     State(state): State<AppState>,
     Query(query): Query<TicketQuery>,
+    RawQuery(raw_query): RawQuery,
     upgrade: WebSocketUpgrade,
     origin: Option<Extension<crate::ingress_trust::TrustedIngressOrigin>>,
 ) -> Result<Response, ApiError> {
@@ -643,6 +644,10 @@ async fn upgrade_socket(
         .acquire(grant.principal())
         .map_err(|error| ApiError::unavailable(error.to_string()))?;
     let connections = state.connections.clone();
+    // The cursor advertisement rides the URL query so old hosts (whose
+    // `TicketQuery` ignores unknown pairs) accept the upgrade untouched.
+    let channel_message_cursors =
+        crate::room_socket::client_advertises_channel_message_cursors(raw_query.as_deref());
     Ok(upgrade
         .max_message_size(MAX_ROOM_SOCKET_MESSAGE_BYTES)
         .max_frame_size(MAX_ROOM_SOCKET_MESSAGE_BYTES)
@@ -655,6 +660,7 @@ async fn upgrade_socket(
                 grant,
                 revocations,
                 lease,
+                channel_message_cursors,
             ))
         })
         .into_response())
@@ -804,6 +810,22 @@ mod tests {
     use crate::room_socket::persistence_error;
 
     use super::{drain_reconciliation_owner_after, drain_reconciliation_then};
+
+    #[test]
+    fn legacy_socket_query_ignores_cursor_advertisement() {
+        // Mirrors the pre-gating `TicketQuery` shape (only `ticket`, no
+        // `deny_unknown_fields`): an old host extracts the ticket through the
+        // same axum `Query` path and ignores the new client's advertisement
+        // instead of rejecting the upgrade.
+        #[derive(serde::Deserialize)]
+        struct LegacyTicketQuery {
+            ticket: String,
+        }
+        let query: LegacyTicketQuery =
+            serde_urlencoded::from_str("ticket=fixture&channel_message_cursors=1")
+                .unwrap_or_else(|error| panic!("legacy ticket query: {error}"));
+        assert_eq!(query.ticket, "fixture");
+    }
 
     #[test]
     fn internal_persistence_errors_have_a_stable_wire_message() {

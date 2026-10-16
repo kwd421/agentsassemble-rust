@@ -538,3 +538,14 @@ pages and live `message_final`/`channel_message_final` events above that floor,
 and read markers come from channel settings. The cursor field is optional on the
 wire: older hosts omit it and newer clients accept snapshots with or without it,
 treating channels without a known sequence as read, never all unread.
+
+Version skew: web clients are served from central and can be older than a host,
+and those old clients validate the snapshot with exact keys, so the host emits
+`channel_message_cursors` only for a client that advertised it understands it;
+any other client gets exactly the old snapshot shape. The advertisement is the
+`channel_message_cursors=1` pair on the WebSocket URL query (direct `/ws` and
+the outer `/api/secure-channel` URL): old hosts already ignore it there (their
+ticket query parser accepts unknown pairs and the secure-channel upgrade parses
+no query), while the subscribe frame cannot carry it (old hosts NACK unknown
+subscribe fields). The new client always advertises and keeps tolerating the
+field's absence. Never send the field to a peer that did not advertise it.

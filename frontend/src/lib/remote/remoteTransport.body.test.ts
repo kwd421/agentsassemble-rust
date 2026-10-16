@@ -34,7 +34,8 @@ class Peer {
   onopen?: () => void; onmessage?: (event: { data: string | ArrayBuffer }) => void;
   onerror?: () => void; onclose?: () => void;
   requests = new Map<number, { headers: [string, string][]; uploadCredit: boolean; window: boolean; offeredWindow: boolean; binary: boolean; offered: boolean; offset: number; chunks: Uint8Array[] }>();
-  constructor() { Peer.latest = this; queueMicrotask(() => this.onopen?.()); }
+  url: string;
+  constructor(url: string) { this.url = url; Peer.latest = this; queueMicrotask(() => this.onopen?.()); }
   consume() { const credit = this.pendingWindowCredits.shift(); if (credit) { this.emit({ op: "credit", ...credit }); return; } const id = this.pendingCredits.shift(); if (id !== undefined) this.emit({ op: "consumed", id }); }
   emit(frame: object) { queueMicrotask(() => this.onmessage?.({ data: encoder.encode(JSON.stringify(frame)).buffer })); }
   send(record: string | ArrayBuffer) {
@@ -108,6 +109,12 @@ async function connectWithoutRequestBody() {
   const transport = await RemoteTransport.connect({ origin: "https://host.test" } as never, "member_admission");
   transports.push(transport); return transport;
 }
+// Old secure-channel hosts never parsed the upgrade query, so advertising
+// snapshot cursor support there keeps them serving the old snapshot shape.
+test("secure channel advertises snapshot cursor support old hosts ignore", async () => {
+  await connectWithoutRequestBody();
+  expect(new URL(Peer.latest.url).searchParams.get("channel_message_cursors")).toBe("1");
+});
 // Old optional Request.body reader sends an empty body: JSON parsing, multipart
 // decoding and the stream byte oracle fail at the returned HTTP boundary.
 test("browser without Request.body sends member JSON over the encrypted HTTP protocol", async () => {

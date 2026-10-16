@@ -14,7 +14,8 @@ use axum::extract::ws::Message;
 use futures_util::{Sink, stream};
 
 use crate::{
-    AppState, TicketStore, owner_session_lifetime::OwnerSessionLease, ticket::ConsumedSocketTicket,
+    AppState, TicketStore, owner_session_lifetime::OwnerSessionLease,
+    room_socket::client_advertises_channel_message_cursors, ticket::ConsumedSocketTicket,
 };
 
 const ORIGIN: &str = "https://owner.example.test";
@@ -124,7 +125,7 @@ async fn socket_retains_owner_before_first_frame_until_subscription_drop()
         r#"{"op":"subscribe","streams":["room_events"],"resume_from_seq":0}"#.into(),
     ))]);
     let subscription =
-        crate::room_socket::establish(&mut sender, &mut receiver, &state, grant).await;
+        crate::room_socket::establish(&mut sender, &mut receiver, &state, grant, false).await;
     assert!(subscription.is_some());
     assert!(
         sender.frames.iter().any(
@@ -157,7 +158,7 @@ async fn cancelled_owner_ticket_sends_no_subscription_frames()
         r#"{"op":"subscribe","streams":["room_events"],"resume_from_seq":0}"#.into(),
     ))]);
     assert!(
-        crate::room_socket::establish(&mut sender, &mut receiver, &state, grant)
+        crate::room_socket::establish(&mut sender, &mut receiver, &state, grant, false)
             .await
             .is_none()
     );
@@ -181,7 +182,7 @@ async fn abandoned_subscription_releases_retained_owner() -> Result<(), Box<dyn 
     };
     let mut receiver = stream::empty();
     assert!(
-        crate::room_socket::establish(&mut sender, &mut receiver, &state, grant)
+        crate::room_socket::establish(&mut sender, &mut receiver, &state, grant, false)
             .await
             .is_none()
     );
@@ -192,4 +193,128 @@ async fn abandoned_subscription_releases_retained_owner() -> Result<(), Box<dyn 
     state.connections.wait().await;
     state.rooms.shutdown().await?;
     Ok(())
+}
+
+fn snapshot_frame(frames: &[Message]) -> serde_json::Value {
+    frames
+        .iter()
+        .find_map(|frame| match frame {
+            Message::Text(text) => {
+                let value: serde_json::Value = serde_json::from_str(text.as_str()).ok()?;
+                (value.get("op")?.as_str() == Some("snapshot")).then_some(value)
+            }
+            _ => None,
+        })
+        .expect("snapshot frame")
+}
+
+async fn established_snapshot(
+    channel_message_cursors: bool,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let (state, owner, grant) = fixture().await?;
+    let mut sender = FirstFrameSink {
+        directory: None,
+        state: state.clone(),
+        owner,
+        frames: Vec::new(),
+    };
+    let mut receiver = stream::iter([Ok(Message::Text(
+        r#"{"op":"subscribe","streams":["room_events"],"resume_from_seq":0}"#.into(),
+    ))]);
+    let subscription = crate::room_socket::establish(
+        &mut sender,
+        &mut receiver,
+        &state,
+        grant,
+        channel_message_cursors,
+    )
+    .await;
+    assert!(subscription.is_some());
+    let snapshot = snapshot_frame(&sender.frames);
+    drop(subscription);
+    state.shutdown.cancel();
+    state.connections.close();
+    state.connections.wait().await;
+    state.rooms.shutdown().await?;
+    Ok(snapshot)
+}
+
+// Old web clients validate the snapshot with exact keys, so a peer that did
+// not advertise cursor support must receive exactly the old snapshot shape.
+#[tokio::test]
+async fn snapshot_without_capability_keeps_exact_old_key_set()
+-> Result<(), Box<dyn std::error::Error>> {
+    let snapshot = established_snapshot(false).await?;
+    assert!(
+        snapshot.get("channel_message_cursors").is_none(),
+        "unadvertised peer must not receive the skew-breaking field"
+    );
+    let mut keys: Vec<&str> = snapshot
+        .as_object()
+        .expect("snapshot object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        [
+            "active_turns",
+            "agent_sessions",
+            "capabilities",
+            "delegated_action_requests",
+            "events",
+            "has_more_before",
+            "last_seq",
+            "oldest_seq",
+            "op",
+            "participants",
+            "resume_gap",
+            "room",
+            "room_settings",
+            "snapshot_mode",
+            "stream",
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn snapshot_with_capability_carries_cursors() -> Result<(), Box<dyn std::error::Error>> {
+    let snapshot = established_snapshot(true).await?;
+    assert!(
+        snapshot
+            .get("channel_message_cursors")
+            .is_some_and(|cursors| cursors.is_array()),
+        "advertised peer must receive the cursor field"
+    );
+    Ok(())
+}
+
+#[test]
+fn cursor_advertisement_requires_the_exact_query_pair() {
+    assert!(!client_advertises_channel_message_cursors(None));
+    assert!(!client_advertises_channel_message_cursors(Some(
+        "ticket=fixture"
+    )));
+    assert!(client_advertises_channel_message_cursors(Some(
+        "ticket=fixture&channel_message_cursors=1"
+    )));
+    assert!(client_advertises_channel_message_cursors(Some(
+        "channel_message_cursors=1"
+    )));
+    for query in [
+        "channel_message_cursors=0",
+        "channel_message_cursors=",
+        "channel_message_cursors=10",
+        "channel_message_cursors=true",
+        "xchannel_message_cursors=1",
+        "channel_message_cursors=1 ",
+        "ticket=channel_message_cursors%3D1",
+    ] {
+        assert!(
+            !client_advertises_channel_message_cursors(Some(query)),
+            "must not advertise on {query:?}"
+        );
+    }
 }

@@ -34,10 +34,17 @@ struct Custody {
     owner: Mutex<Option<OwnerSessionLease>>,
     closed: CancellationToken,
     adopted: tokio::sync::Notify,
+    // Client-build capability from the outer WebSocket URL query: the peer
+    // understands the optional `channel_message_cursors` snapshot field.
+    channel_message_cursors: bool,
 }
 
 impl SecureClient {
-    pub(crate) fn new(hello: SecureClientHello, channel_id: String) -> Result<Self, ()> {
+    pub(crate) fn new(
+        hello: SecureClientHello,
+        channel_id: String,
+        channel_message_cursors: bool,
+    ) -> Result<Self, ()> {
         let key = URL_SAFE_NO_PAD
             .decode(&hello.client_public_key)
             .map_err(|_| ())?;
@@ -51,6 +58,7 @@ impl SecureClient {
             owner: Mutex::new(None),
             closed: CancellationToken::new(),
             adopted: tokio::sync::Notify::new(),
+            channel_message_cursors,
         })))
     }
 
@@ -65,6 +73,9 @@ impl SecureClient {
     }
     pub(crate) fn admitted(&self) -> bool {
         self.0.admitted.load(Ordering::Acquire)
+    }
+    pub(crate) fn channel_message_cursors(&self) -> bool {
+        self.0.channel_message_cursors
     }
 
     pub(crate) fn close(&self) {

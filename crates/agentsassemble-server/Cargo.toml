@@ -68,6 +68,7 @@ command-fds.workspace = true
 listenfd = "1.0.2"
 
 [dev-dependencies]
+serde_urlencoded = "0.7"
 aws-lc-rs = { version = "1.18.0", features = ["ring-io"] }
 png.workspace = true
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }

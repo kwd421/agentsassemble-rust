@@ -23,6 +23,26 @@ use crate::{
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_SUBSCRIPTION_CATCH_UP_EVENTS: i64 = 256;
 
+/// WebSocket URL query pair through which a client build advertises that it
+/// understands the optional `channel_message_cursors` snapshot field. Old
+/// hosts never read the query beyond `ticket` (`TicketQuery` has no
+/// `deny_unknown_fields`, and the secure-channel upgrade parses no query at
+/// all), so the advertisement is ignored there and those hosts keep serving
+/// the exact old snapshot shape. The subscribe frame cannot carry it:
+/// `ClientFrame` rejects unknown fields, so an old host would NACK the
+/// subscription. Never send the field to a peer that did not advertise it.
+pub(crate) const CHANNEL_MESSAGE_CURSORS_QUERY: &str = "channel_message_cursors";
+const CHANNEL_MESSAGE_CURSORS_VALUE: &str = "1";
+
+pub(crate) fn client_advertises_channel_message_cursors(query: Option<&str>) -> bool {
+    query.is_some_and(|query| {
+        query.split('&').any(|pair| {
+            pair.split_once('=')
+                == Some((CHANNEL_MESSAGE_CURSORS_QUERY, CHANNEL_MESSAGE_CURSORS_VALUE))
+        })
+    })
+}
+
 pub(crate) struct EstablishedSubscription {
     pub owner_lease: Option<crate::owner_session_lifetime::OwnerSessionLease>,
     pub room_uid: uuid::Uuid,
@@ -54,6 +74,7 @@ pub(crate) async fn establish<S, R>(
     receiver: &mut R,
     state: &AppState,
     grant: ConsumedSocketTicket,
+    channel_message_cursors: bool,
 ) -> Option<EstablishedSubscription>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
@@ -64,7 +85,14 @@ where
         result = tokio::time::timeout(
             HANDSHAKE_TIMEOUT,
             async {
-                let subscription = establish_before_deadline(sender, receiver, state, grant).await?;
+                let subscription = establish_before_deadline(
+                    sender,
+                    receiver,
+                    state,
+                    grant,
+                    channel_message_cursors,
+                )
+                .await?;
                 record_session_traffic(state, subscription.room_session.as_ref()).await?;
                 Some(subscription)
             },
@@ -77,6 +105,7 @@ async fn establish_before_deadline<S, R>(
     receiver: &mut R,
     state: &AppState,
     grant: ConsumedSocketTicket,
+    channel_message_cursors: bool,
 ) -> Option<EstablishedSubscription>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
@@ -105,6 +134,7 @@ where
         &mut principal,
         &mut room_session,
         request.resume_from_seq,
+        channel_message_cursors,
     )
     .await?;
     let catch_up = load_catch_up(
@@ -402,6 +432,7 @@ async fn prepare_snapshot<S>(
     principal: &mut AuthenticatedPrincipal,
     room_session: &mut Option<RoomSessionAuthorization>,
     resume_from_seq: i64,
+    channel_message_cursors: bool,
 ) -> Option<PreparedSnapshot>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
@@ -449,7 +480,14 @@ where
         resume_gap: snapshot_data.resume_gap,
         snapshot_mode: snapshot_data.snapshot_mode,
         capabilities: principal.capabilities.clone(),
-        channel_message_cursors: Some(snapshot_data.channel_message_cursors),
+        // Gate the skew-breaking field on the client's URL advertisement: old
+        // web clients validate the snapshot with exact keys, so an unadvertised
+        // peer gets exactly the old shape (`None` omits the key on the wire).
+        channel_message_cursors: if channel_message_cursors {
+            Some(snapshot_data.channel_message_cursors)
+        } else {
+            None
+        },
     };
     let catalog_frame = ServerFrame::ProviderCatalogUpdated {
         catalog: provider_catalog,

@@ -101,6 +101,12 @@ function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
   const base = new URL(websocketBaseUrl);
   const url = new URL("/ws", base);
   url.searchParams.set("ticket", ticket);
+  // Capability advertisement an old host already ignores: its ticket query
+  // parser accepts unknown pairs, so the upgrade succeeds and it keeps
+  // serving the exact old snapshot shape. A new host gates the optional
+  // channel_message_cursors field on this pair; absence is tolerated either
+  // way, so this never breaks a version-skewed peer.
+  url.searchParams.set("channel_message_cursors", "1");
   return url.toString();
 }
 

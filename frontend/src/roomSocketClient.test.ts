@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RoomSocketSayError } from "./roomSocketClient";
+import { RoomSocketSayError, openRoomSocket } from "./roomSocketClient";
 import {
+  FakeWebSocket,
   encodedServerFrame,
   event,
   flushPromises,
@@ -12,6 +13,7 @@ import {
   sentClientFrame,
 } from "./test/roomSocketHarness";
 import { agentSessionFixture } from "./test/agentSession";
+import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 
 function leaveAck(
   requestId: unknown,
@@ -84,6 +86,36 @@ afterEach(() => {
 });
 
 describe("bounded canonical room socket", () => {
+  it("advertises snapshot cursor support on the socket URL old hosts ignore", async () => {
+    const urls: string[] = [];
+    const handle = openRoomSocket(
+      { kind: "host", meetingId: "general" },
+      ["room_events"],
+      {},
+      {
+        getTicket: async () => ({
+          ticket: "a".repeat(64), ttl_seconds: 30,
+          websocket_base_url: "ws://127.0.0.1:43123",
+          displayResourceBase: "http://127.0.0.1:43123",
+        }),
+        createSocket: (url: string) => {
+          urls.push(url);
+          return new FakeWebSocket() as unknown as WebSocket;
+        },
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
+        expectedRoomId: "general",
+        expectedParticipantId: "operator-local",
+      }
+    );
+    await flushPromises();
+    expect(urls).toHaveLength(1);
+    const url = new URL(urls[0]);
+    expect(url.pathname).toBe("/ws");
+    expect(url.searchParams.get("ticket")).toBe("a".repeat(64));
+    expect(url.searchParams.get("channel_message_cursors")).toBe("1");
+    handle.close();
+  });
+
   it("rejects a command before admission when secure request identity is unavailable", async () => {
     const { handle, sockets } = openHarness();
     await flushPromises();

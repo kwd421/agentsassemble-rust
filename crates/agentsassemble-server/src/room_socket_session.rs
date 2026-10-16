@@ -29,6 +29,7 @@ pub(crate) async fn run<S>(
     grant: ConsumedSocketTicket,
     mut revocations: Option<broadcast::Receiver<crate::SessionRevocation>>,
     _lease: ConnectionLease,
+    channel_message_cursors: bool,
 ) where
     S: futures_util::Sink<Message, Error = axum::Error>
         + futures_util::Stream<Item = Result<Message, axum::Error>>
@@ -44,7 +45,14 @@ pub(crate) async fn run<S>(
         mut catalog_updates,
         mut delivered_seq,
         mut side_chat,
-    }) = establish(&mut sender, &mut receiver, &state, grant).await
+    }) = establish(
+        &mut sender,
+        &mut receiver,
+        &state,
+        grant,
+        channel_message_cursors,
+    )
+    .await
     else {
         return;
     };

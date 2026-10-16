@@ -628,6 +628,20 @@ mod tests {
     }
 
     #[test]
+    fn subscribe_rejects_unknown_capability_fields() {
+        // Old hosts NACK any subscribe frame carrying unknown fields, so a
+        // client capability must travel outside the subscribe envelope (the
+        // WebSocket URL query old hosts already ignore).
+        let frame: Result<ClientFrame, _> = serde_json::from_value(json!({
+            "op": "subscribe",
+            "streams": ["room_events"],
+            "resume_from_seq": 0,
+            "channel_message_cursors": true,
+        }));
+        assert!(frame.is_err());
+    }
+
+    #[test]
     fn ack_keeps_existing_outer_shape() {
         let frame = ServerFrame::Ack(CommandAck {
             request_id: "web-1".to_owned(),

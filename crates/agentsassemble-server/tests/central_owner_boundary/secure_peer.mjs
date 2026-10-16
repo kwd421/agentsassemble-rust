@@ -8,7 +8,7 @@ const NativeWebSocket = globalThis.WebSocket;
 let linkRtt = 0;
 // Test-only physical tunnel adapter; production crypto, multiplexing and HTTP are unchanged.
 globalThis.WebSocket = class extends NativeWebSocket {
-  constructor(url) { assert.equal(String(url), `${config.target.origin.replace('https:', 'wss:')}/api/secure-channel`); super(`ws://${config.proxy}/api/secure-channel`); }
+  constructor(url) { const requested = new URL(String(url)); assert.equal(requested.origin + requested.pathname, `${config.target.origin.replace('https:', 'wss:')}/api/secure-channel`); assert.equal(requested.searchParams.get('channel_message_cursors'), '1'); super(`ws://${config.proxy}/api/secure-channel`); }
   set onmessage(handler) { super.onmessage = handler ? event => { if(linkRtt) setTimeout(()=>handler(event),linkRtt/2); else handler(event); } : null; }
   get onmessage() { return super.onmessage; }
   send(bytes) { if(linkRtt) setTimeout(()=>super.send(bytes),linkRtt/2); else super.send(bytes); }
