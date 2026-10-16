@@ -1,6 +1,7 @@
 import { useCentralDirectory } from "./useCentralDirectory";
 import { projectRoomConnections } from "../lib/serverConnectionState";
-import { openCentralOwnedServer, openCentralMemberServer, setCentralMemberHidden } from "../lib/central/identity";
+import { remoteSessionTransport } from "../lib/remote/remoteWorkspace";
+import { openCentralOwnedServer, openCentralMemberServer } from "../lib/central/identity";
 import type { CentralServerDisplay } from "../lib/central/directoryCache";
 import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
 import { Hash } from "lucide-react";
@@ -42,7 +43,7 @@ import {
 } from "../lib/roomDockModel";
 import { consumeOperatorPairingTokenFromUrl } from "../lib/roomGuestSession";
 import { roomPostingState } from "../lib/roomGuestPosting";
-import { currentRoomDirectoryAuthority, currentServerProductSurface } from "../lib/roomDirectoryContract";
+import { currentServerProductSurface } from "../lib/roomDirectoryContract";
 import { roomRailMenuPosition } from "../lib/roomRailMenuPosition";
 import {
   CHANNELS,
@@ -119,13 +120,6 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     hostEnabled: startupHostEnabled,
     remoteOwner: ownerWorkspace.remoteDirectory,
   });
-  const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
-  const rooms = useMemo(() => projectRoomConnections(directoryRooms, startupHostEnabled
-    ? roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected"
-    : null, centralDirectory?.status === "central-unconfirmed", ownerWorkspace.connect ? {
-      serverId: ownerWorkspace.connect.serverId,
-      state: roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected",
-    } : undefined), [directoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory, ownerWorkspace.connect]);
   const [connectingServerId, setConnectingServerId] = useState("");
   const [serverConnectionError, setServerConnectionError] = useState("");
   const serverOpening = useRef(false);
@@ -140,13 +134,6 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       else await openCentralOwnedServer(live);
     } catch (error) { setServerConnectionError(error instanceof Error ? error.message : "서버 연결이 끊겼어요."); }
     finally { serverOpening.current = false; setConnectingServerId(""); }
-  }
-  async function hideRailServer(server: CentralServerDisplay) {
-    if (serverOpening.current) return;
-    serverOpening.current=true; setServerConnectionError("");
-    try { await setCentralMemberHidden(server,true); await refreshCentralDirectory(); }
-    catch { setServerConnectionError("목록에서 숨기지 못했어요. 잠시 뒤 다시 시도해 주세요."); }
-    finally { serverOpening.current=false; }
   }
   async function retryRoomConnection(room: RoomDockItem) {
     if (room.roomOrigin === "remote_server") {
@@ -239,6 +226,31 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     onRoomJoined: onGuestRoomJoined,
     onResetToLobby: onGuestAdmissionReset,
   });
+  // Every live host besides the directory owner below: their rooms are
+  // preserved by the merge while their own session projects their state.
+  const remoteHostStates = useMemo(() => {
+    const states: Array<{ serverId: string; state: "connected" | "connecting" | "disconnected" | "central-unconfirmed" }> = [];
+    const seen = new Set<string>();
+    if (ownerWorkspace.connect) {
+      seen.add(ownerWorkspace.connect.serverId);
+      states.push({
+        serverId: ownerWorkspace.connect.serverId,
+        state: roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected",
+      });
+    }
+    if (admittedSessionToken && guestSession && !guestExpired && !seen.has(guestSession.serverSurface.server_id)) {
+      states.push({
+        serverId: guestSession.serverSurface.server_id,
+        state: remoteSessionTransport(admittedSessionToken) ? "connected" : "disconnected",
+      });
+    }
+    return states;
+  }, [ownerWorkspace.connect, admittedSessionToken, guestSession, guestExpired, roomDirectorySyncIssue]);
+  const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
+  const rooms = useMemo(() => projectRoomConnections(directoryRooms, startupHostEnabled
+    ? roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected"
+    : null, centralDirectory?.status === "central-unconfirmed", remoteHostStates),
+    [directoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory, remoteHostStates]);
   if (guestSession?.centralOwner && guestSession.roomUid) lastOwnerRoomUid.current = guestSession.roomUid;
   const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
   const canCreateRoom = startupHostEnabled || Boolean(ownerWorkspace.connect);
@@ -722,9 +734,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   }
 
   return {
-    localServerId: startupHostEnabled ? currentRoomDirectoryAuthority()?.server_id : undefined,
-    connectedServerId: ownerWorkspace.connect?.serverId || (admittedSessionToken && guestSession && !guestExpired ? guestSession.serverSurface.server_id : undefined),
-    centralDirectory, refreshCentralDirectory, openRailServer, hideRailServer, connectingServerId, serverConnectionError, retryRoomConnection,
+    centralDirectory, refreshCentralDirectory, openRailServer, connectingServerId, serverConnectionError, retryRoomConnection,
     roomLifecycle, pairedRoomLifecycle, roomChannels, activeCustomChannel, channelTranscript,
     acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings,

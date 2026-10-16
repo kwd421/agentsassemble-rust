@@ -1,11 +1,10 @@
-import { productWorkspaceOrigin } from "../lib/remote/remoteWorkspace";
+import { productWorkspaceOrigin, remoteWorkspacesSnapshot } from "../lib/remote/remoteWorkspace";
 import type { CentralOwnerSessionStatus } from "../types/generated/CentralOwnerSessionStatus";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fetchRooms } from "../api";
 import { openNativeDirectoryStream, subscribeRoomDirectory, type OpenDirectoryStream } from "../lib/roomDirectorySubscription";
 import {
   mergeServerRoomsIntoDock,
-  roomFromServerRoom,
   persistableRoom,
   roomDockIdentity,
   type RoomDockItem,
@@ -407,13 +406,26 @@ export function useRoomDirectory({
 
   const publishDirectory = useCallback(
     (payload: StrictRoomDirectory, epoch: number) => {
+      // Every other live host from the session registry: this directory
+      // never owns their rooms, so the merge preserves them as-is while
+      // their own session projects their connection state.
+      const peers = remoteWorkspacesSnapshot()
+        .filter((entry) => entry.serverId !== payload.server_id)
+        .map((entry) => ({ serverId: entry.serverId }));
       const synchronized = remoteOwner
-        ? payload.rooms.map(room => roomFromServerRoom(room, { roomOrigin: "remote_server", serverOrigin: directoryOrigin }, directoryOrigin, payload.server_id)).filter((room): room is RoomDockItem => room !== null)
+        ? mergeServerRoomsIntoDock(
+        roomsRef.current,
+        payload.rooms,
+        directoryOrigin,
+        payload.server_id,
+        { local: false, peers: hostEnabled ? [{ local: true }, ...peers] : peers }
+      )
         : mergeServerRoomsIntoDock(
         roomsRef.current,
         payload.rooms,
         directoryOrigin,
-        payload.server_id
+        payload.server_id,
+        { local: true, peers }
       );
       const snapshot = hostEnabled ? managerAuthoritySnapshot(synchronized, payload, epoch) : null;
       assertCurrentEpoch(epoch);

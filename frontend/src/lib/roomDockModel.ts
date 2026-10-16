@@ -210,93 +210,169 @@ export function mergeServerRoomsIntoDock(
   currentRooms: RoomDockItem[],
   serverRooms: ServerRoomDockSource[],
   currentServerOrigin = window.location.origin,
-  currentServerId = ""
+  currentServerId = "",
+  options: { local?: boolean; peers?: RoomHostPeer[] } = {}
 ): RoomDockItem[] {
-  const serverRoomsByIdentity = new Map<string, ServerRoomDockSource>();
-  const serverRoomsByMeetingId = new Map<string, ServerRoomDockSource>();
-  for (const room of serverRooms) {
+  const { local = true, peers = [] } = options;
+  return mergeHostRoomsIntoDock(currentRooms, [
+    { serverId: currentServerId, serverOrigin: currentServerOrigin, rooms: serverRooms, state: "connected", local },
+    ...peers.map((peer) => ({
+      serverId: peer.serverId ?? "",
+      serverOrigin: peer.serverOrigin ?? "",
+      rooms: null,
+      state: "connected" as ServerConnectionState,
+      local: peer.local,
+    })),
+  ]);
+}
+
+export type RoomHostPeer = {
+  serverId?: string;
+  serverOrigin?: string;
+  local?: boolean;
+};
+
+export type HostRoomDirectory = {
+  serverId: string;
+  serverOrigin: string;
+  rooms: ServerRoomDockSource[] | null;
+  state: ServerConnectionState;
+  local?: boolean;
+};
+
+function hostForRoom(room: RoomDockItem, hosts: HostRoomDirectory[]): HostRoomDirectory | null {
+  if (room.roomOrigin !== "remote_server") {
+    return hosts.find((host) => host.local && (!room.serverId || !host.serverId || room.serverId === host.serverId)) ?? null;
+  }
+  return hosts.find((host) => host.serverId !== "" && room.serverId !== undefined && host.serverId === room.serverId)
+    ?? hosts.find((host) => host.serverOrigin !== "" && room.serverOrigin !== undefined && host.serverOrigin === room.serverOrigin)
+    ?? null;
+}
+
+function indexHostRooms(host: HostRoomDirectory) {
+  const byIdentity = new Map<string, ServerRoomDockSource>();
+  const byMeetingId = new Map<string, ServerRoomDockSource>();
+  for (const room of host.rooms ?? []) {
     const meetingId = String(room.room_id || "");
     const roomUid = String(room.room_uid || "");
     if (!meetingId) continue;
-    serverRoomsByMeetingId.set(meetingId, room);
-    if (currentServerId && roomUid) {
-      serverRoomsByIdentity.set(`${currentServerId}:${roomUid}`, room);
+    byMeetingId.set(meetingId, room);
+    if (host.serverId && roomUid) {
+      byIdentity.set(`${host.serverId}:${roomUid}`, room);
     }
   }
+  return { host, byIdentity, byMeetingId };
+}
+
+function reconcileRoom(
+  room: RoomDockItem,
+  serverRoom: ServerRoomDockSource,
+  host: HostRoomDirectory
+): { room: RoomDockItem; changed: boolean } | null {
+  // Rooms owned by a remote host stay remote even when that host shares the
+  // shell origin; only the local host's own rooms compare against it.
+  const existing = host.local
+    ? room
+    : { ...room, roomOrigin: "remote_server" as const, serverOrigin: room.serverOrigin ?? host.serverOrigin };
+  const canonicalRoom = roomFromServerRoom(serverRoom, existing, host.serverOrigin, host.serverId);
+  if (!canonicalRoom) return null;
+  const reconciledRoom = {
+    ...room,
+    label: canonicalRoom.label,
+    meetingId: canonicalRoom.meetingId,
+    topic: canonicalRoom.topic,
+    shortLabel: canonicalRoom.shortLabel,
+    appearance: canonicalRoom.appearance,
+    inviteScope: canonicalRoom.inviteScope,
+    icon: canonicalRoom.icon,
+    createdAt: canonicalRoom.createdAt,
+    tone: canonicalRoom.tone,
+    roomOrigin: canonicalRoom.roomOrigin,
+    roomUid: canonicalRoom.roomUid,
+    serverId: canonicalRoom.serverId,
+    serverOrigin: canonicalRoom.serverOrigin,
+    connectionState: canonicalRoom.connectionState,
+  };
+  const changed =
+    room.label !== reconciledRoom.label ||
+    room.meetingId !== reconciledRoom.meetingId ||
+    room.topic !== reconciledRoom.topic ||
+    room.shortLabel !== reconciledRoom.shortLabel ||
+    !sameRoomAppearance(room.appearance, reconciledRoom.appearance) ||
+    room.inviteScope !== reconciledRoom.inviteScope ||
+    room.icon !== reconciledRoom.icon ||
+    room.createdAt !== reconciledRoom.createdAt ||
+    room.tone !== reconciledRoom.tone ||
+    room.roomOrigin !== reconciledRoom.roomOrigin ||
+    room.roomUid !== reconciledRoom.roomUid ||
+    room.serverId !== reconciledRoom.serverId ||
+    room.serverOrigin !== reconciledRoom.serverOrigin ||
+    room.connectionState !== reconciledRoom.connectionState;
+  return { room: changed ? reconciledRoom : room, changed };
+}
+
+function disconnectRoom(room: RoomDockItem, state: ServerConnectionState): { room: RoomDockItem; changed: boolean } {
+  if (room.connectionState === state) return { room, changed: false };
+  return { room: { ...room, connectionState: state }, changed: true };
+}
+
+export function mergeHostRoomsIntoDock(
+  currentRooms: RoomDockItem[],
+  hosts: HostRoomDirectory[]
+): RoomDockItem[] {
+  const indexed = hosts.map(indexHostRooms);
   const next: RoomDockItem[] = [];
   let changed = false;
 
   for (const room of currentRooms) {
-    if (
-      room.roomOrigin === "remote_server" &&
-      room.serverOrigin !== currentServerOrigin
-    ) {
-      const disconnectedRoom = room.connectionState === "disconnected"
-        ? room
-        : { ...room, connectionState: "disconnected" as const };
-      if (disconnectedRoom !== room) changed = true;
-      next.push(disconnectedRoom);
+    const owner = hostForRoom(room, hosts);
+    const index = owner ? indexed[hosts.indexOf(owner)] : null;
+    if (!owner || !index) {
+      // No live host owns this room: it stays visible but disconnected, and
+      // is never silently dropped or revived by another host's directory.
+      const resolved = disconnectRoom(room, "disconnected");
+      if (resolved.changed) changed = true;
+      next.push(resolved.room);
       continue;
     }
-    const serverRoom = serverRoomsByIdentity.get(roomDockIdentity(room))
-      || serverRoomsByMeetingId.get(room.meetingId);
-    const canonicalRoom = serverRoom
-      ? roomFromServerRoom(serverRoom, room, currentServerOrigin, currentServerId)
-      : null;
-    if (!canonicalRoom) {
+    if (!owner.rooms || owner.state !== "connected") {
+      if (!owner.rooms && owner.state === "connected") {
+        next.push(room);
+        continue;
+      }
+      const resolved = disconnectRoom(room, owner.state);
+      if (resolved.changed) changed = true;
+      next.push(resolved.room);
+      continue;
+    }
+    const serverRoom = index.byIdentity.get(roomDockIdentity(room))
+      || index.byMeetingId.get(room.meetingId);
+    const resolved = serverRoom ? reconcileRoom(room, serverRoom, owner) : null;
+    if (!resolved) {
+      // The owning host is live but no longer lists this room: the friend
+      // removed, kicked or revoked it, so it disappears without a tombstone.
       changed = true;
       continue;
     }
-    const reconciledRoom = {
-      ...room,
-      label: canonicalRoom.label,
-      meetingId: canonicalRoom.meetingId,
-      topic: canonicalRoom.topic,
-      shortLabel: canonicalRoom.shortLabel,
-      appearance: canonicalRoom.appearance,
-      inviteScope: canonicalRoom.inviteScope,
-      icon: canonicalRoom.icon,
-      createdAt: canonicalRoom.createdAt,
-      tone: canonicalRoom.tone,
-      roomOrigin: canonicalRoom.roomOrigin,
-      roomUid: canonicalRoom.roomUid,
-      serverId: canonicalRoom.serverId,
-      serverOrigin: canonicalRoom.serverOrigin,
-      connectionState: canonicalRoom.connectionState,
-    };
-    if (
-      room.label !== reconciledRoom.label ||
-      room.meetingId !== reconciledRoom.meetingId ||
-      room.topic !== reconciledRoom.topic ||
-      room.shortLabel !== reconciledRoom.shortLabel ||
-      !sameRoomAppearance(room.appearance, reconciledRoom.appearance) ||
-      room.inviteScope !== reconciledRoom.inviteScope ||
-      room.icon !== reconciledRoom.icon ||
-      room.createdAt !== reconciledRoom.createdAt ||
-      room.tone !== reconciledRoom.tone ||
-      room.roomOrigin !== reconciledRoom.roomOrigin ||
-      room.roomUid !== reconciledRoom.roomUid ||
-      room.serverId !== reconciledRoom.serverId ||
-      room.serverOrigin !== reconciledRoom.serverOrigin ||
-      room.connectionState !== reconciledRoom.connectionState
-    ) {
-      changed = true;
-    }
-    next.push(reconciledRoom);
+    if (resolved.changed) changed = true;
+    next.push(resolved.room);
   }
 
   const seenRoomIdentities = new Set(next.map(roomDockIdentity));
-  for (const serverRoom of serverRooms) {
-    const dockRoom = roomFromServerRoom(
-      serverRoom,
-      undefined,
-      currentServerOrigin,
-      currentServerId
-    );
-    if (!dockRoom || seenRoomIdentities.has(roomDockIdentity(dockRoom))) continue;
-    next.push(dockRoom);
-    seenRoomIdentities.add(roomDockIdentity(dockRoom));
-    changed = true;
+  for (const { host } of indexed) {
+    if (!host.rooms || host.state !== "connected") continue;
+    for (const serverRoom of host.rooms) {
+      const dockRoom = roomFromServerRoom(
+        serverRoom,
+        host.local ? undefined : { roomOrigin: "remote_server", serverOrigin: host.serverOrigin },
+        host.serverOrigin,
+        host.serverId
+      );
+      if (!dockRoom || seenRoomIdentities.has(roomDockIdentity(dockRoom))) continue;
+      next.push(dockRoom);
+      seenRoomIdentities.add(roomDockIdentity(dockRoom));
+      changed = true;
+    }
   }
   return changed ? next : currentRooms;
 }

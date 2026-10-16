@@ -1,7 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { Sparkles } from "lucide-react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomDockItem } from "../lib/roomDockModel";
+import { closeRemoteWorkspace, installRemoteWorkspace } from "../lib/remote/remoteWorkspace";
+import type { RemoteTransport } from "../lib/remote/remoteTransport";
 import { useRoomDirectory } from "./useRoomDirectory";
 
 const desktopMocks = vi.hoisted(() => ({ isDesktop: vi.fn(() => false), bootstrap: vi.fn() }));
@@ -639,6 +641,41 @@ describe("useRoomDirectory", () => {
 
     expect(result.current.rooms).toEqual([initialRoom]);
     expect(apiMocks.fetchRooms).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves a live registry peer's rooms through local publish instead of disconnecting them", async () => {
+    afterEach(() => closeRemoteWorkspace());
+    const localRoom = makeRoom("local", { meetingId: "local-meeting" });
+    const peerRoom = makeRoom("peer", {
+      meetingId: "peer-meeting",
+      roomOrigin: "remote_server",
+      serverId: "peer-host",
+      serverOrigin: "https://peer.test",
+      connectionState: "connected",
+    });
+    const inFlight = deferred<{ rooms: ReturnType<typeof serverRoom>[] }>();
+    apiMocks.fetchRooms.mockReturnValueOnce(inFlight.promise);
+    const hook = renderHook(() =>
+      useRoomDirectory({ initialRooms: [localRoom, peerRoom], hostEnabled: true })
+    );
+    await waitFor(() => expect(apiMocks.fetchRooms).toHaveBeenCalledOnce());
+    const callbacks = new Set<() => void>();
+    const transport = { hello: { origin: "https://peer.test", server_id: "peer-host" }, active: true,
+      fetch: vi.fn(), onClose: (fn: () => void) => { callbacks.add(fn); return () => callbacks.delete(fn); },
+      close: () => { for (const fn of callbacks) fn(); } };
+    installRemoteWorkspace({ transport: transport as unknown as RemoteTransport,
+      owner: { sessionToken: "peer-owner", serverId: "peer-host" } as never, deviceToken: "device", clientId: "client" });
+    await act(async () => {
+      inFlight.resolve({ rooms: [serverRoom(localRoom.meetingId, "Local")] });
+      await inFlight.promise;
+    });
+    await waitFor(() => expect(hook.result.current.syncIssue).toBeNull());
+    expect(hook.result.current.rooms.find((room) => room.id === "peer")).toMatchObject({
+      roomOrigin: "remote_server",
+      serverId: "peer-host",
+      connectionState: "connected",
+    });
+    hook.unmount();
   });
 
   it("reconciles existing flow rooms and inserts new flow rooms after the first room", () => {

@@ -1,4 +1,3 @@
-import ServerRailEntries from "../views/components/ServerRailEntries";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
@@ -171,10 +170,6 @@ export default function AppView({ controller }: { controller: AppController }) {
       onPointerCancel={cancelMobileShellPointer}
     >
       <RoomRail
-        serverEntries={<ServerRailEntries directory={controller.centralDirectory}
-          localServerIds={[controller.localServerId || ""]}
-          connectedServerId={controller.connectedServerId}
-          connectingId={controller.connectingServerId} onOpen={controller.openRailServer} onHide={controller.hideRailServer} />}
         rooms={rooms}
         activeRoom={activeRoom}
         roomAppearances={roomAppearances}

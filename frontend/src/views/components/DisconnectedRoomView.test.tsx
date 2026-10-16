@@ -24,8 +24,18 @@ it("explains central-unconfirmed remote rooms without hiding saved room identity
 it("projects only the admitted server's pending or verified directory and preserves other servers", () => {
   const saved = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const };
   const other = { ...saved, serverId: "other" };
-  const pending = projectRoomConnections([saved, other], null, true, { serverId: "host", state: "connecting" });
+  const pending = projectRoomConnections([saved, other], null, true, [{ serverId: "host", state: "connecting" }]);
   expect(pending.map(room => room.connectionState)).toEqual(["connecting", "central-unconfirmed"]);
-  expect(projectRoomConnections([saved], null, true, { serverId: "host", state: "connected" })[0].connectionState).toBe("connected");
-  expect(projectRoomConnections([saved], null, true, { serverId: "host", state: "disconnected" })[0].connectionState).toBe("disconnected");
+  expect(projectRoomConnections([saved], null, true, [{ serverId: "host", state: "connected" }])[0].connectionState).toBe("connected");
+  expect(projectRoomConnections([saved], null, true, [{ serverId: "host", state: "disconnected" }])[0].connectionState).toBe("disconnected");
+});
+
+it("keeps a second live host connected while the first host drops", () => {
+  const first = { ...createFreshRoom(), serverId: "first", roomOrigin: "remote_server" as const, connectionState: "connected" as const };
+  const second = { ...first, serverId: "second" };
+  const merged = projectRoomConnections([first, second], "connected", false, [
+    { serverId: "first", state: "disconnected" },
+    { serverId: "second", state: "connected" },
+  ]);
+  expect(merged.map(room => room.connectionState)).toEqual(["disconnected", "connected"]);
 });
