@@ -30,38 +30,24 @@ pub(crate) async fn request(
     params: &RequestCreateInvite,
     reply: impl FnOnce(Result<Value, PersistenceError>),
 ) -> Option<crate::event_publication::PublicationAttempt> {
-    let result = async {
-        let _inflight = admission.acquire_inflight()?;
-        let (result, debits) = owners
-            .store
-            .request_delegated_human_invite(authority, params, |owner, delegate, bytes| {
-                crate::room_runtime::delegated_direct::charge_request(
-                    admission, authority, request, owner, delegate, bytes,
-                )
-            })
-            .await?;
-        if let Some(debits) = debits {
-            for debit in debits {
-                debit.resolve();
-            }
-        }
-        Ok(result)
-    }
-    .await;
-    let publication = if result.is_ok() {
-        Some(
-            crate::event_publication::publish_durable_room_events(
-                owners.store,
-                owners.event_tx,
-                authority.room_id(),
-            )
-            .await,
-        )
-    } else {
-        None
-    };
-    reply(result);
-    publication
+    let store = owners.store;
+    crate::room_runtime::delegated_direct::confirmed_request(
+        store,
+        owners.event_tx,
+        authority.room_id(),
+        admission,
+        reply,
+        async {
+            store
+                .request_delegated_human_invite(authority, params, |owner, delegate, bytes| {
+                    crate::room_runtime::delegated_direct::charge_request(
+                        admission, authority, request, owner, delegate, bytes,
+                    )
+                })
+                .await
+        },
+    )
+    .await
 }
 
 /// Mints and stores an approved human invite after the decision committed, adding the
