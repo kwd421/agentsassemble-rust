@@ -83,13 +83,14 @@ async fn open_central_owned_server(window: WebviewWindow, url: String) -> Result
 fn central_owned_server_url(url: &str) -> Result<url::Url, String> {
     let parsed = url::Url::parse(url).map_err(|_| "central server URL is invalid".to_owned())?;
     let fragment = parsed.fragment().unwrap_or_default();
+    // Owned-server open only: member hosts attach in place as another live
+    // session and never navigate this window to a friend's origin.
     if parsed.scheme() != "https"
         || parsed.host_str().is_none()
         || !parsed.username().is_empty()
         || parsed.password().is_some()
         || parsed.query().is_some()
-        || !((parsed.path() == "/pair" && fragment.starts_with("central-owner="))
-            || (parsed.path() == "/join" && fragment.starts_with("native-member=")))
+        || !(parsed.path() == "/pair" && fragment.starts_with("central-owner="))
         || fragment.len() > 16_384
     {
         return Err("central server URL is outside the owned-server boundary".to_owned());
@@ -681,17 +682,21 @@ mod tests {
     }
 
     #[test]
-    fn member_navigation_uses_only_its_public_join_shell() {
-        assert!(
-            central_owned_server_url("https://host.example/join#native-member=fixture").is_ok()
-        );
-        assert!(
-            central_owned_server_url("https://host.example/pair#native-member=fixture").is_err()
-        );
-        assert!(
-            central_owned_server_url("https://host.example/join?leak=1#native-member=fixture")
-                .is_err()
-        );
+    fn member_navigation_never_moves_the_window() {
+        // Member hosts attach in place; even the public join shell is
+        // outside the owned-server open boundary.
+        for url in [
+            "https://host.example/join#native-member=fixture",
+            "https://host.example/pair#native-member=fixture",
+            "https://host.example/join?leak=1#native-member=fixture",
+            "https://host.example/join#member-connect=fixture",
+        ] {
+            assert_eq!(
+                central_owned_server_url(url).err().as_deref(),
+                Some("central server URL is outside the owned-server boundary"),
+                "unexpected acceptance: {url}"
+            );
+        }
     }
 
     #[test]

@@ -23,11 +23,14 @@ beforeEach(async()=>{
 });
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();localStorage.clear();sessionStorage.clear();});
 it("native reconnect retains a trusted entry until consent without host navigation or credentials", async () => {
+  const href = window.location.href;
   await openCentralMemberServer(server);
   expect(pendingMemberSnapshot()).toEqual({ server_id: "host", registration_epoch: "epoch" });
   expect(fetcher).not.toHaveBeenCalled();
   expect(native.open).not.toHaveBeenCalled();
+  expect(window.location.href).toBe(href);
   selectRemoteMember(null);
+  expect(window.location.href).toBe(href);
 });
 it("member bootstrap exposes only the approved member fields",async()=>{
   fetcher.mockResolvedValue(new Response(JSON.stringify({person,server_time:1,servers:[{...server,host_os:"macos",default_name:"private",member_count:9,room_list:["private"],host_public_key_jwk:{x:"private"},endpoint:{...server.endpoint,lease_expires_at:999}}]})));

@@ -22,7 +22,7 @@ import {
 import { centralAccountEntryUrl, isCentralWebEntry } from "../../lib/central/identity";
 import StartupIdentityGate from "./StartupIdentityGate";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
-import { retainedNativeMemberCredential, type MemberReturn } from "../../lib/central/memberConnect";
+import { type MemberReturn } from "../../lib/central/memberConnect";
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
 
 function browserEntranceHasAuthority(): boolean {
@@ -67,7 +67,7 @@ export default function StartupIdentityBoundary({
     }
     try {
       return {
-        deviceToken: memberReturn?.browserCredential || (loadRoomGuestSession()?.nativeMember ? retainedNativeMemberCredential() : getOrCreateBrowserCredential()),
+        deviceToken: getOrCreateBrowserCredential(),
         clientId: getOrCreateClientId(),
         error: "",
       };

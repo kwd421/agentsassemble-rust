@@ -4,7 +4,7 @@ import { encodeBase64Url } from "../base64Url";
 import {
   centralMemberEntryUrl, consumeCentralMemberRequest, consumeMemberReturn,
   createMemberHandoff, exactMemberOrigin, memberCallbackUrl, memberTargetRequest,
-  parseMemberGrant, purgeMemberHandoffs, storeMemberHandoff, nativeMemberCallbackUrl, retainedNativeMemberCredential,
+  parseMemberGrant, purgeMemberHandoffs, storeMemberHandoff,
 } from "./memberConnect";
 
 const challenge = { server_id: "server", registration_epoch: "epoch", challenge_hash: "a".repeat(43),
@@ -113,21 +113,15 @@ it("keeps connect purpose across a credential-free handoff and rejects admission
   expect(consumeMemberReturn()?.record?.purpose).toBe("connect");
 });
 
-it("validates native connect origin and retains only its scoped browser credential after removing the fragment",()=>{
+it("clears a leftover navigated-window member fragment without attaching a session",()=>{
   const pending={...createMemberHandoff(challenge,"",""),purpose:"connect" as const};
   const issued={...grant,grant_token:`aamc1.${"c".repeat(43)}`};
   const credential=`aad1_${"A".repeat(43)}`;
-  const url=nativeMemberCallbackUrl(pending,issued,credential);
-  localStorage.setItem("agentsassemble.browserCredential.v1","existing-browser");
-  window.history.replaceState({},"",new URL(url).pathname+new URL(url).hash);
-  const result=consumeMemberReturn();
-  expect(result?.record?.purpose).toBe("connect");
-  expect(result?.browserCredential).toBe(credential);
+  const stale=`#native-member=${encodeBase64Url(new TextEncoder().encode(JSON.stringify({record:pending,grant:issued,browser_credential:credential})))}`;
+  const href=window.location.href;
+  window.history.replaceState({},"",`/join${stale}`);
+  expect(consumeMemberReturn()).toBeUndefined();
   expect(window.location.hash).toBe("");
-  expect(retainedNativeMemberCredential()).toBe(credential);
-  expect(localStorage.getItem("agentsassemble.browserCredential.v1")).toBe("existing-browser");
-  const wrong=nativeMemberCallbackUrl(pending,{...issued,endpoint_origin:"https://other.test"},credential);
-  window.history.replaceState({},"","/join"+new URL(wrong).hash);
-  expect(consumeMemberReturn()?.error).toBeTruthy();
-  expect(window.location.hash).toBe("");
+  expect(window.location.href).toBe(href.replace(/#.*$/,""));
+  expect(sessionStorage.getItem("agentsassemble.nativeMemberBrowser.v1")).toBeNull();
 });

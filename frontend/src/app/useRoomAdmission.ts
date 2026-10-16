@@ -367,7 +367,7 @@ export function useRoomAdmission({
 
   const acceptMemberSession = useCallback(async (payload: RoomInviteJoinResponse) => {
     const attempt = beginAdmissionAttempt();
-    return applyJoinedSession({...roomGuestSessionFromJoinPayload(guestJoinToken, payload), centralMember:true, nativeMember:Boolean(memberReturn?.browserCredential)}, "invite", attempt.isCurrent);
+    return applyJoinedSession({...roomGuestSessionFromJoinPayload(guestJoinToken, payload), centralMember:true}, "invite", attempt.isCurrent);
   }, [applyJoinedSession, beginAdmissionAttempt, guestJoinToken, memberReturn]);
 
   const acceptRecoveredSession = useCallback(

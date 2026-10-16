@@ -1,4 +1,3 @@
-import { isCanonicalBrowserCredential } from "../deviceIdentity";
 import { decodeCanonicalBase64Url, encodeBase64Url } from "../base64Url";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
@@ -23,7 +22,7 @@ export type MemberGrant = {
   grant_token: string; server_id: string; registration_epoch: string; expires_at: number;
   endpoint_origin: string; endpoint_generation: number;
 };
-export type MemberReturn = { browserCredential?: string; connect?: { server_id: string; registration_epoch: string }; record?: MemberHandoff; grant?: MemberGrant; error?: string; retry?: boolean };
+export type MemberReturn = { connect?: { server_id: string; registration_epoch: string }; record?: MemberHandoff; grant?: MemberGrant; error?: string; retry?: boolean };
 
 export function memberRoomName(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -122,24 +121,12 @@ export function memberRetryUrl(origin: string, request: MemberTargetRequest): st
 
 /** Called by main before React startup; even malformed grants leave browser history first. */
 export function consumeMemberReturn(): MemberReturn | undefined {
+  // Member hosts attach in place as another live session: a window navigated
+  // to a friend's origin never becomes an entry point. A leftover
+  // navigated-window fragment is cleared without extracting any session.
   if (window.location.hash.startsWith("#native-member=")) {
-    const fragment=window.location.hash;
-    window.history.replaceState({},"",window.location.pathname+window.location.search);
-    try {
-      const value=strictRecord(decode(fragment.slice("#native-member=".length)),"연결 응답");
-      assertExactKeys(value,["record","grant","browser_credential"],"연결 응답");
-      if (typeof value.browser_credential !== "string" || !isCanonicalBrowserCredential(value.browser_credential)) throw new Error("연결 요청을 확인하지 못했어요.");
-      const saved=strictRecord(value.record,"연결 기록");
-      assertExactKeys(saved,["challenge_id","challenge_hash","server_id","registration_epoch","expires_at","handoff_state","purpose","invite_token","meeting_id"],"연결 기록");
-      if (saved.purpose !== "connect" || saved.invite_token !== "" || saved.meeting_id !== "") throw new Error("연결 요청을 확인하지 못했어요.");
-      const {challenge_id,expires_at,invite_token,meeting_id,...tuple}=saved;
-      const request=parseMemberTargetRequest(tuple);
-      requiredString(saved,"challenge_id","연결 기록"); liveExpiry(expires_at);
-      const grant=parseMemberGrant(value.grant,request);
-      if (grant.endpoint_origin !== window.location.origin) throw new Error("서버 주소가 변경됐어요. 다시 시도해 주세요.");
-      sessionStorage.setItem("agentsassemble.nativeMemberBrowser.v1",value.browser_credential);
-      return {record:saved as MemberHandoff,grant,browserCredential:value.browser_credential};
-    } catch { return {error:"연결 요청을 확인하지 못했어요."}; }
+    window.history.replaceState({}, "", window.location.pathname + window.location.search);
+    return undefined;
   }
   if (window.location.hash.startsWith("#member-connect=")) {
     const fragment = window.location.hash;
@@ -207,13 +194,4 @@ export function clearCentralMemberRequest(): void { sessionStorage.removeItem(CE
 export function memberServerEntryUrl(origin: string, server: { server_id: string; registration_epoch?: string }): string {
   if (!server.registration_epoch) throw new Error("서버 등록 정보를 확인하지 못했어요.");
   return `${exactCentralServerOrigin(origin)}/join#member-connect=${encode({server_id:server.server_id,registration_epoch:server.registration_epoch})}`;
-}
-
-export function nativeMemberCallbackUrl(record: MemberHandoff, grant: MemberGrant, browserCredential: string): string {
-  return `${exactCentralServerOrigin(grant.endpoint_origin)}/join#native-member=${encode({record,grant,browser_credential:browserCredential})}`;
-}
-export function retainedNativeMemberCredential(): string {
-  const credential=sessionStorage.getItem("agentsassemble.nativeMemberBrowser.v1");
-  if (credential === null || !isCanonicalBrowserCredential(credential)) throw new Error("저장된 연결 정보를 확인하지 못했어요.");
-  return credential;
 }

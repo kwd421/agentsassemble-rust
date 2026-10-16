@@ -3264,3 +3264,43 @@ at a time (changing it is a server move), so startup always goes straight
 in to that one server and a list or notice appears only when nothing can
 be opened — this never meant several own servers showing a chooser;
 first join always keeps explicit consent on both platforms.
+
+### M3 in-place attach entry points (2026-10-17)
+
+Selecting a joined friend host never changes the window origin on either
+platform. Desktop `open_central_owned_server`
+(`desktop/src-tauri/src/lib.rs`) keeps only the owned-server open path
+(`/pair#central-owner=`); a member URL is refused there. Member attach runs
+through the per-host registry in
+`frontend/src/lib/remote/remoteWorkspace.ts` via the existing member-connect
+challenge/redeem/select path (`SecureMemberAdmission` in
+`frontend/src/lib/central/secureMemberEntry.ts`); the `/join#native-member=`
+return handling in `frontend/src/lib/central/memberConnect.ts` installs the
+session in place instead of navigating the window to the friend's origin.
+Web keeps `/member-join` only for first-join consent and attaches in place
+afterwards. The Rust `caller_is_bundled_ui` origin guard stays unchanged.
+
+### M2 durable anchor and automatic reconnect (2026-10-17)
+
+Finding from the real app: the test account joined a friend's room on web
+(Firefox); the desktop app of the same account lists the friend's server in
+the central server list (relation `member`) but shows none of its rooms in
+the rail, because nothing connects to it. Required: on startup and whenever
+the central directory lists a `member` server for the logged-in account, the
+client automatically attaches to that host with a fresh grant through the
+existing member-connect challenge/redeem/select path (bearers memory-only)
+and merges its rooms into the rail. When the host is offline its rooms show
+disconnected, using the last known room list from the per-host anchor/cache
+if any; with no known rooms yet, that host contributes no rooms rather than
+invented ones. Explicit consent happens once at first join for the ACCOUNT
+(on whatever device); other devices of the same logged-in account reconnect
+without asking again — proposed by Claude 2026-10-17, awaiting owner
+confirmation. Entry points: central directory bootstrap/refresh, the trusted
+owner store holding the per-host anchor, and the startup re-admission path.
+Persist only the per-host anchor (`server_id`, `registration_epoch`, host
+key fingerprint, endpoint origin/generation, display-only room list, hide
+state); never persist bearers, grants or private keys. Anchor epoch, key
+fingerprint or origin mismatch refuses without retry. Revocation (host
+leave/kick/revocation, central hide, logout, account switch or deletion)
+clears the anchor for that host/membership, and revoked rooms leave the
+rail with no tombstone (owner decision D).
