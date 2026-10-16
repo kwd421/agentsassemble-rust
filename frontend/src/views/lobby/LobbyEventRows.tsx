@@ -21,6 +21,7 @@ import type { MessageAttachmentReadScheduler } from "../../lib/messageAttachment
 import type { RoomTypingIndicator } from "../../lib/roomTypingIndicators";
 import { isVoteTransitionKind } from "../../lib/voteEventKind";
 import DiscordText, { type MentionLabels } from "../components/DiscordText";
+import { formatDelegatedActionText, type DelegationNameSources } from "../../lib/delegatedActionText";
 import LobbyAttachments from "../components/LobbyAttachments";
 import ProviderLogo from "../components/ProviderLogo";
 import MessageMutationControls from "./MessageMutationControls";
@@ -345,10 +346,15 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
 export function LobbySystemRow({
   event,
   mentionLabels,
+  nameSources,
 }: {
   event: LobbyEvent;
   mentionLabels: MentionLabels;
+  nameSources?: DelegationNameSources;
 }) {
+  // Delegation attributions render in Korean from the structured fields;
+  // other system lines keep their stored text.
+  const text = formatDelegatedActionText(event, nameSources) || event.message || "";
   return (
     <div
       className="dc-system-divider px-4"
@@ -356,7 +362,7 @@ export function LobbySystemRow({
       role="status"
     >
       <span>
-        <DiscordText text={event.message || ""} mentionLabels={mentionLabels} />
+        <DiscordText text={text} mentionLabels={mentionLabels} />
       </span>
     </div>
   );

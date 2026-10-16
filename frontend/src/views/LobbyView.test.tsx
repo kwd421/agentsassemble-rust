@@ -333,6 +333,53 @@ describe("LobbyView active provider turn", () => {
     expect(screen.queryByRole("region", { name: "안 읽은 메시지" })).toBeNull();
   });
 
+  it("does not count a room system attribution as unread while it stays in history", () => {
+    render(
+      <LobbyView
+        activeRoom={room}
+        agents={[]}
+        canonicalEvents={[
+          {
+            id: "read-message",
+            seq: 10,
+            kind: "message",
+            name: "Agent A",
+            message: "이미 읽은 메시지",
+            side: "other",
+            created_at: "2026-07-26T01:00:00Z",
+          },
+          {
+            id: "system-attribution",
+            seq: 11,
+            kind: "system",
+            name: "claude-haiku-5-5",
+            message: "claude-haiku-5-5 updated a text channel on behalf of owner.",
+            side: "other",
+            created_at: "2026-07-26T01:01:00Z",
+            delegation: {
+              action: "create_text_channel",
+              targetId: "ch-1",
+              onBehalfOfParticipantId: "owner-1",
+              actorParticipantId: "agent-1",
+            },
+          },
+        ]}
+        canonicalHasMoreHistory={false}
+        headerActions={{ lastReadCursor: "seq:10", onMarkRead: vi.fn() }}
+        participantProfiles={{
+          "agent-1": { displayName: "claude-haiku-5-5" },
+          "owner-1": { displayName: "owner" },
+        }}
+        messageSearchChannelLabels={{ "ch-1": "general" }}
+      />
+    );
+
+    expect(screen.queryByRole("region", { name: "안 읽은 메시지" })).toBeNull();
+    const row = document.querySelector('[data-room-event-id="system-attribution"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent).not.toContain("on behalf of");
+  });
+
   it("announces who is writing above the composer and keeps live thought activity collapsed in the feed", async () => {
     renderLobby([thought("Bash로 테스트를 실행 중")], [indicator]);
 

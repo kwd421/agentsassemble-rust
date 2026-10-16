@@ -68,6 +68,16 @@ type TimelineRoomEvent = Pick<
   vote_id?: string;
   vote_options?: string[];
   vote_question?: string;
+  // Delegation attribution carried on room-visible system messages.
+  extra?: {
+    action?: unknown;
+    target_id?: unknown;
+    on_behalf_of_participant_id?: unknown;
+    actor_participant_id?: unknown;
+    confirmation_id?: unknown;
+    pinned?: unknown;
+    target_channel_id?: unknown;
+  } | null;
 };
 
 function actor(event: TimelineRoomEvent) {
@@ -122,6 +132,26 @@ function declineReason(code?: string): string {
 /// Read by search and screen readers, so the row still says who skipped without hovering.
 function skipSummary(skips: readonly { name: string; reason: string }[]): string {
   return `차례 넘김 — ${skips.map((skip) => `${skip.name}(${skip.reason})`).join(", ")}`;
+}
+
+/// A delegation attribution stays with its system line; the server content remains
+/// the machine-readable English while the UI renders Korean from these fields.
+function delegationOf(event: TimelineRoomEvent): LobbyEvent["delegation"] {
+  const extra = event.extra;
+  if (!extra || typeof extra !== "object") return undefined;
+  const action = String(extra.action || "");
+  if (!action) return undefined;
+  const confirmationId = extra.confirmation_id;
+  const targetChannelId = extra.target_channel_id;
+  return {
+    action,
+    targetId: String(extra.target_id || ""),
+    onBehalfOfParticipantId: String(extra.on_behalf_of_participant_id || ""),
+    actorParticipantId: String(extra.actor_participant_id || ""),
+    confirmationId: typeof confirmationId === "string" && confirmationId ? confirmationId : undefined,
+    pinned: typeof extra.pinned === "boolean" ? extra.pinned : undefined,
+    targetChannelId: typeof targetChannelId === "string" && targetChannelId ? targetChannelId : undefined,
+  };
 }
 
 export function projectRoomEventsToTimeline(
@@ -255,6 +285,7 @@ export function projectRoomEventsToTimeline(
       const message = event.type === "message_final"
         ? String(event.content || "")
         : `${existing?.message || ""}${event.content || ""}`;
+      const delegation = delegationOf(event) || existing?.delegation;
       const projected: LobbyEvent = {
         id: key,
         record_id: event.type === "message_final" ? event.id : existing?.record_id,
@@ -300,6 +331,7 @@ export function projectRoomEventsToTimeline(
         edited_at: String(event.edited_at || existing?.edited_at || "") || undefined,
         message_deleted: event.message_deleted === true,
         reply_to_event_id: event.reply_to_event_id,
+        delegation,
       };
       if (projected.message_deleted) {
         projected.reply_to_event_id = undefined;

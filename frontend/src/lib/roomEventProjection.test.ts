@@ -612,3 +612,28 @@ it("keeps each agent request and its terminal result in the same attributed mess
   expect(rows[0]).toMatchObject({ id: "provider-request:a", actor_id: "agent-a", provider_request_title: "Question a", provider_request_state: "resolved" });
   expect(rows[1]).toMatchObject({ id: "provider-request:b", actor_id: "agent-b", provider_request_state: "open" });
 });
+
+it("carries a delegation attribution on its system line for the Korean renderer", () => {
+  const rows = projectRoomEventsToTimeline([
+    event({
+      id: "attribution-1", seq: 9, type: "message_final",
+      actor: { participant_id: "agent-1", participant_type: "agent" },
+      participant_id: "agent-1", participant_type: "agent",
+      display_name: "claude-haiku-5-5",
+      content: "claude-haiku-5-5 updated a text channel on behalf of owner.",
+      message_kind: "system",
+      extra: {
+        actor_participant_id: "agent-1", on_behalf_of_participant_id: "owner-1",
+        action: "create_text_channel", target_id: "ch-1", request_id: "req-1",
+      },
+    }),
+  ]);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].kind).toBe("system");
+  expect(rows[0].message).toBe("claude-haiku-5-5 updated a text channel on behalf of owner.");
+  expect(rows[0].delegation).toEqual({
+    action: "create_text_channel", targetId: "ch-1",
+    onBehalfOfParticipantId: "owner-1", actorParticipantId: "agent-1",
+    confirmationId: undefined, pinned: undefined, targetChannelId: undefined,
+  });
+});

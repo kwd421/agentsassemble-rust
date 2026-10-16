@@ -337,6 +337,7 @@ export default function LobbyView({
     onMarkRead: headerActions?.onMarkRead,
   });
   // Like Discord, the viewer's own messages (from any device) are never unread.
+  // Room system lines (delegation attributions, skips) are history, not unread.
   const unreadEvents = useMemo(
     () =>
       headerActions?.onMarkRead
@@ -344,6 +345,7 @@ export default function LobbyView({
             (event) =>
               Number(event.seq) > lastReadSequence &&
               event.kind !== "thinking" &&
+              event.kind !== "system" &&
               event.side !== "mine"
           )
         : [],
@@ -604,7 +606,8 @@ export default function LobbyView({
               event.kind === "system" ||
               event.kind === "flow_event"
             ) {
-              return <LobbySystemRow key={row.key} event={event} mentionLabels={mentionLabels} />;
+              return <LobbySystemRow key={row.key} event={event} mentionLabels={mentionLabels}
+                nameSources={{ participantProfiles, channelLabels: messageSearchChannelLabels }} />;
             }
             return (
               <LobbyMessageRow

@@ -79,6 +79,16 @@ export interface LobbyEvent {
   vote_choice?: string;
   attachments?: LobbyAttachmentRef[];
   skips?: LobbySkip[];
+  /** A room-visible delegation attribution carried on a system message. */
+  delegation?: {
+    action: string;
+    targetId: string;
+    onBehalfOfParticipantId: string;
+    actorParticipantId: string;
+    confirmationId?: string;
+    pinned?: boolean;
+    targetChannelId?: string;
+  };
 }
 
 export interface LobbyPostResponse {
