@@ -16,6 +16,7 @@ import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import type { OperatorPairingPresentation } from "../../app/useManagedOperatorPairings";
 import type { RoomAppearance } from "../../lib/roomAppearance";
 import SavedFriendInvitePicker from "./SavedFriendInvitePicker";
+import { humanInviteSummary } from "../../lib/humanInviteSummary";
 
 type PendingPublicAction = { kind: "human"; options: HumanInviteOptions };
 
@@ -47,12 +48,6 @@ function inviteExpiryLabel(value: string) {
   return `${day} ${expiry.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true })} 만료`;
 }
 
-const HUMAN_INVITE_TTL_LABELS: Record<number, string> = { 3600: "1시간", 86400: "24시간", 604800: "7일" };
-
-function humanInviteSummary(maxUses: number, ttlSeconds: number) {
-  const uses = maxUses === 0 ? "인원 제한 없이" : maxUses === 1 ? "1명만" : `${maxUses}명까지`;
-  return `${uses} 쓸 수 있고 ${HUMAN_INVITE_TTL_LABELS[ttlSeconds] || `${ttlSeconds}초`} 후 만료돼요.`;
-}
 
 export default function RoomInviteModal({
   roomLabel,

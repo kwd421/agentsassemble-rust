@@ -45,3 +45,25 @@ it("keeps the request and says why when the decision is refused", async () => {
   expect(await screen.findByText("그 사이 내용이 바뀌어서 실행하지 않았어요.")).toBeTruthy();
   expect(command).toHaveBeenCalledWith("delegated_action.decide", { confirmation_id: "mine", decision: "decline" });
 });
+
+it("shows a minted invite link only from the approval acknowledgement, until closed", async () => {
+  const invite = {
+    invite_id: "inv", invite_token: "token", join_code: "code", join_url: "https://example.test/join?token=code",
+    display_name: "Guest", invite_scope: "read_write", max_uses: 1, expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+  };
+  const command = vi.fn().mockResolvedValue({ result: { confirmation_id: "mine", state: "succeeded", receipt: {}, invite } });
+  const socket = { command } as unknown as RoomSocketHandle;
+  const store = createDelegatedActionProjection();
+  registerDelegatedActionProjection(socket, store);
+  store.replace([{
+    ...request("me", "mine"),
+    action: { action: "create_human_invite", request_id: "r", params: { request_id: "r", invite_scope: "read_write", ttl_seconds: 86_400, max_uses: 1 } },
+  } as DelegatedActionRequest]);
+  render(<PendingDelegatedActions socket={socket} viewerParticipantId="me" />);
+
+  expect(screen.queryByDisplayValue(invite.join_url)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "허용" }));
+  expect(await screen.findByDisplayValue(invite.join_url)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  expect(screen.queryByDisplayValue(invite.join_url)).toBeNull();
+});

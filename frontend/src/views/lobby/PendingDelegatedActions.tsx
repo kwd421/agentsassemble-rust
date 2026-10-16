@@ -2,7 +2,10 @@ import { useState } from "react";
 import { decideDelegatedAction, useDelegatedActionRequests } from "../../lib/delegatedActionProjection";
 import { RoomSocketSayError, type RoomSocketHandle } from "../../roomSocketTypes";
 import type { DelegatedActionRequest } from "../../types/generated/DelegatedActionRequest";
+import type { DelegatedInviteAck } from "../../types/generated/DelegatedInviteAck";
+import { humanInviteSummary } from "../../lib/humanInviteSummary";
 import DelegatedActionCard from "../components/DelegatedActionCard";
+import DelegatedInviteLink from "../components/DelegatedInviteLink";
 
 // What the owner reads is written here, from the typed action: the host's own
 // consequence text is for records, not for the screen.
@@ -48,6 +51,13 @@ function describe(request: DelegatedActionRequest): { summary: string; consequen
   if (action.action === "kick_participant") {
     return { summary: `${request.target_name} 님을 방에서 내보내려고 해요`, consequence: "접속이 바로 끊기고, 되돌릴 수 없어요.", destructive: true };
   }
+  if (action.action === "create_human_invite") {
+    const { display_name, invite_scope, max_uses, ttl_seconds } = action.params;
+    return {
+      summary: display_name ? `‘${display_name}’ 초대 링크를 만들려고 해요` : "사람 초대 링크를 만들려고 해요",
+      consequence: humanInviteSummary(max_uses, ttl_seconds) + (invite_scope === "read_only" ? " 읽기 전용으로 참가해요." : ""),
+    };
+  }
   return { summary: `${request.target_name}에 대한 작업을 하려고 해요` };
 }
 
@@ -75,17 +85,21 @@ export default function PendingDelegatedActions({ socket, viewerParticipantId }:
     .filter((request) => request.state === "pending" && request.owner_participant_id === viewerParticipantId);
   const [busy, setBusy] = useState<Record<string, "allow" | "decline">>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  if (!socket || requests.length === 0) return null;
+  // A minted invite link exists only in this acknowledgement; keep it in memory until closed.
+  const [minted, setMinted] = useState<{ id: string; invite: DelegatedInviteAck }[]>([]);
+  if (!socket || (requests.length === 0 && minted.length === 0)) return null;
 
   async function decide(id: string, decision: "approve" | "decline", acknowledgedFullAccess = false) {
     if (!socket || busy[id]) return;
     setBusy((current) => ({ ...current, [id]: decision === "approve" ? "allow" : "decline" }));
     setErrors((current) => ({ ...current, [id]: "" }));
     try {
-      await decideDelegatedAction(socket, {
+      const ack = await decideDelegatedAction(socket, {
         confirmation_id: id, decision,
         ...(decision === "approve" && acknowledgedFullAccess ? { full_access_acknowledged: true } : {}),
       });
+      const invite = ack.invite;
+      if (invite) setMinted((current) => [...current.filter((item) => item.id !== id), { id, invite }]);
     } catch (error) {
       setErrors((current) => ({ ...current, [id]: failure(error) }));
     } finally {
@@ -95,6 +109,9 @@ export default function PendingDelegatedActions({ socket, viewerParticipantId }:
 
   return (
     <>
+      {minted.map(({ id, invite }) => (
+        <DelegatedInviteLink key={id} invite={invite} onClose={() => setMinted((current) => current.filter((item) => item.id !== id))} />
+      ))}
       {requests.map((request) => (
         <DelegatedActionCard key={request.confirmation_id}
           delegateName={request.delegate_display_name} {...describe(request)}
