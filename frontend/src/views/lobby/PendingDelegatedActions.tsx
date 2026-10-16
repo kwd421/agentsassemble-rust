@@ -76,6 +76,41 @@ function failure(error: unknown): string {
   return "처리하지 못했어요. 다시 눌러 주세요.";
 }
 
+// What the owner reads where the card was after an approved action ends failed:
+// one line naming the action, with the reason only when the receipt code is known.
+function describeOutcome(request: DelegatedActionRequest, code: string): string {
+  const action = request.action;
+  let base: string;
+  if (action.action === "delete_text_channel") {
+    base = `#${request.target_name} 채널을 지우지 못했어요.`;
+  } else if (action.action === "start_agent") {
+    base = `${request.target_name} 에이전트를 시작하지 못했어요.`;
+  } else if (action.action === "create_agent") {
+    base = `${request.target_name} 에이전트를 만들지 못했어요.`;
+  } else if (action.action === "reconfigure_agent") {
+    base = `${request.target_name} 에이전트 설정을 바꾸지 못했어요.`;
+  } else if (action.action === "remove_agent") {
+    base = `${request.target_name} 에이전트를 내보내지 못했어요.`;
+  } else if (action.action === "kick_participant") {
+    base = `${request.target_name} 님을 내보내지 못했어요.`;
+  } else if (action.action === "create_human_invite") {
+    base = "초대 링크를 만들지 못했어요.";
+  } else {
+    base = `${request.target_name}에 대한 작업을 하지 못했어요.`;
+  }
+  if (code === "target_changed") return `${base} 그 사이 내용이 바뀌었어요.`;
+  if (code === "confirmation_expired") return `${base} 시간이 지났어요.`;
+  return base;
+}
+
+function receiptCode(receipt: unknown): string {
+  if (typeof receipt === "object" && receipt !== null && "code" in receipt) {
+    const code = (receipt as Record<string, unknown>).code;
+    if (typeof code === "string") return code;
+  }
+  return "";
+}
+
 /** The viewer's own pending confirmations; nobody else ever receives them. */
 export default function PendingDelegatedActions({ socket, viewerParticipantId }: {
   socket: RoomSocketHandle | null;
@@ -85,21 +120,29 @@ export default function PendingDelegatedActions({ socket, viewerParticipantId }:
     .filter((request) => request.state === "pending" && request.owner_participant_id === viewerParticipantId);
   const [busy, setBusy] = useState<Record<string, "allow" | "decline">>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // An approved action that ends failed leaves one dismissible result line where
+  // its card was. Declined, expired and cancelled stay quiet.
+  const [outcomes, setOutcomes] = useState<{ id: string; text: string }[]>([]);
   // A minted invite link exists only in this acknowledgement; keep it in memory until closed.
   const [minted, setMinted] = useState<{ id: string; invite: DelegatedInviteAck }[]>([]);
-  if (!socket || (requests.length === 0 && minted.length === 0)) return null;
+  if (!socket || (requests.length === 0 && minted.length === 0 && outcomes.length === 0)) return null;
 
   async function decide(id: string, decision: "approve" | "decline", acknowledgedFullAccess = false) {
     if (!socket || busy[id]) return;
     setBusy((current) => ({ ...current, [id]: decision === "approve" ? "allow" : "decline" }));
     setErrors((current) => ({ ...current, [id]: "" }));
     try {
+      const decided = requests.find((request) => request.confirmation_id === id);
       const ack = await decideDelegatedAction(socket, {
         confirmation_id: id, decision,
         ...(decision === "approve" && acknowledgedFullAccess ? { full_access_acknowledged: true } : {}),
       });
       const invite = ack.invite;
       if (invite) setMinted((current) => [...current.filter((item) => item.id !== id), { id, invite }]);
+      if (ack.state === "failed" && decided) {
+        const text = describeOutcome(decided, receiptCode(ack.receipt));
+        setOutcomes((current) => [...current.filter((item) => item.id !== id), { id, text }]);
+      }
     } catch (error) {
       setErrors((current) => ({ ...current, [id]: failure(error) }));
     } finally {
@@ -111,6 +154,16 @@ export default function PendingDelegatedActions({ socket, viewerParticipantId }:
     <>
       {minted.map(({ id, invite }) => (
         <DelegatedInviteLink key={id} invite={invite} onClose={() => setMinted((current) => current.filter((item) => item.id !== id))} />
+      ))}
+      {outcomes.map(({ id, text }) => (
+        <section key={id} className="dc-delegated-action" aria-label="확인 요청 결과">
+          <div className="dc-delegated-action-main">
+            <p className="dc-delegated-action-summary preserve-words" role="alert">{text}</p>
+          </div>
+          <div className="dc-delegated-action-buttons">
+            <button type="button" className="dc-quiet-button" onClick={() => setOutcomes((current) => current.filter((item) => item.id !== id))}>닫기</button>
+          </div>
+        </section>
       ))}
       {requests.map((request) => (
         <DelegatedActionCard key={request.confirmation_id}

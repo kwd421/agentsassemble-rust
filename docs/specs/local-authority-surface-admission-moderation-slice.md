@@ -111,7 +111,10 @@ and their private events are ephemeral and excluded from backups/server moves.
 
 Frontend work is restricted to generated wire types, socket validation and projection;
 views/styles/app are owned elsewhere. Expose pending owner requests, typed decision
-and ACK. Acceptance: non-mutation, exact owner-only approval/delivery/reconnect,
+and ACK. An approved action that ends `failed` leaves a dismissible one-line Korean
+result where the card was (the action-specific failure line plus the mapped reason
+when the receipt code is known, else the neutral line); declined, expired and
+cancelled stay quiet. Acceptance: non-mutation, exact owner-only approval/delivery/reconnect,
 payload/target binding, concurrent exactly-once, authority revocation, explicit decline/
 expiry/authority-loss cancellation (not turn end), archive exclusion and both actions across all three surfaces.
 Run affected crate tests, fmt, architecture-check, generated TS checks and affected
