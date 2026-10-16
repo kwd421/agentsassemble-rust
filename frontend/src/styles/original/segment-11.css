@@ -381,6 +381,11 @@
   font-weight: 800;
 }
 
+/* Dialog text fields keep the 12px inner inset used by the settings inputs. */
+.dc-create-channel-name .ops-input {
+  padding: 0 12px;
+}
+
 .dc-create-channel-actions {
   display: flex;
   justify-content: flex-end;
