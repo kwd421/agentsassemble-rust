@@ -114,7 +114,7 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(screen.getByRole("button", { name: turnCount ? "재개" : "시작" })).toBeTruthy();
   });
 
-  it("shows why an agent session failed", () => {
+  it("shows one Korean reason and keeps raw provider text behind the disclosure", () => {
     const session: RoomAgentSession = agentSessionFixture({
       room_id: "room-1",
       session_id: "session-1",
@@ -132,13 +132,9 @@ describe("AgentSessionDetails diagnostics", () => {
     });
 
     render(<AgentSessionDetails session={session} />);
-    expect(
-      screen.getByText(
-        (_, element) =>
-          element?.tagName === "P" &&
-          element.textContent === "오류 원인 · provider unavailable"
-      )
-    ).toBeTruthy();
+    expect(screen.getByText("오류 원인 · 에이전트 요청을 처리하지 못했어요.")).toBeTruthy();
+    // The raw provider string stays available, but only inside the disclosure.
+    expect(screen.getByText("provider unavailable").closest("details")).toBeTruthy();
   });
 
   it.each([undefined, false, true])("requires advertised interrupt support (%s)", async (support) => {

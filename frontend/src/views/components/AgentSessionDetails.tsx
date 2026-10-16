@@ -13,6 +13,7 @@ import {
 import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
 import AgentActivitySettings from "./AgentActivitySettings";
 import ProviderModelRefresh from "./ProviderModelRefresh";
+import { resolveProviderPresentation } from "./providerBranding";
 import ProviderRuntimeSettingField from "./ProviderRuntimeSettingField";
 
 export type AgentSessionControlAction = "start" | "pause" | "stop" | "resume" | "interrupt";
@@ -52,32 +53,34 @@ function actionCompletedLabel(action: AgentSessionControlAction) {
   return "현재 응답 중단 요청 완료";
 }
 
-function sessionErrorMessage(session: RoomAgentSession) {
+/** One Korean line for the session, with raw provider text kept behind the disclosure. */
+function sessionErrorInfo(session: RoomAgentSession): { summary: string; detail: string } {
   if (session.last_error_code === "managed_bridge_exited") {
-    return "에이전트 연결이 끊겼어요. 중지한 뒤 재개해 주세요.";
+    return { summary: "에이전트 연결이 끊겼어요. 중지한 뒤 재개해 주세요.", detail: "" };
   }
   if (session.last_error_code === "provider_output_truncated") {
-    return "응답이 최대 응답 길이에서 잘렸어요. 실행 설정에서 최대 응답 길이를 늘리거나 더 짧게 요청해 주세요.";
+    return { summary: "응답이 최대 응답 길이에서 잘렸어요. 실행 설정에서 최대 응답 길이를 늘리거나 더 짧게 요청해 주세요.", detail: "" };
   }
   if (session.last_error_code === "runtime_authority_uncertain") {
-    return "앱이 갑자기 종료돼 이 세션이 실제로 끝났는지 확인하지 못했어요. 복구를 누르면 확인 후 정리해요.";
+    return { summary: "앱이 갑자기 종료돼 이 세션이 실제로 끝났는지 확인하지 못했어요. 복구를 누르면 확인 후 정리해요.", detail: "" };
   }
   if (session.last_error_code === "provider_turn_recovery_required") {
-    return "AI 응답이 완료됐는지 확인하지 못했어요. 복구를 눌러 실행 상태를 확인해 주세요.";
+    return { summary: "AI 응답이 완료됐는지 확인하지 못했어요. 복구를 눌러 실행 상태를 확인해 주세요.", detail: "" };
   }
   if (session.last_error_code === "quota_exhausted") {
-    return "AI 서비스의 사용 한도나 잔액을 모두 썼어요.";
+    return { summary: "AI 서비스의 사용 한도나 잔액을 모두 썼어요.", detail: "" };
   }
   if (session.last_error_code === "provider_rate_limited") {
-    return "AI 서비스에 요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
+    return { summary: "AI 서비스에 요청이 너무 많아요. 잠시 후 다시 시도해 주세요.", detail: "" };
   }
   if (session.last_error_code === "runtime_profile_unsupported") {
-    return "저장된 실행 설정을 지금은 사용할 수 없어요. 실행 설정에서 다시 선택해 주세요.";
+    return { summary: "저장된 실행 설정을 지금은 사용할 수 없어요. 실행 설정에서 다시 선택해 주세요.", detail: "" };
   }
-  if (session.provider_kind === "opencode_server" && session.last_error && !/[가-힣]/.test(session.last_error)) {
-    return `OpenCode 요청을 처리하지 못했어요. · ${session.last_error}`;
-  }
-  return session.last_error || "";
+  const raw = session.last_error || "";
+  if (!raw) return { summary: "", detail: "" };
+  if (/[가-힣]/.test(raw)) return { summary: raw, detail: "" };
+  const providerName = resolveProviderPresentation({ providerKind: session.provider_kind }).providerName || "에이전트";
+  return { summary: `${providerName} 요청을 처리하지 못했어요.`, detail: raw };
 }
 
 export default function AgentSessionDetails({
@@ -144,7 +147,7 @@ export default function AgentSessionDetails({
   const invalidRuntimeValue = invalidRuntimeControl
     ? settings[invalidRuntimeControl.key] || ""
     : "";
-  const visibleSessionError = sessionErrorMessage(session);
+  const sessionError = sessionErrorInfo(session);
   const storedSettings = useMemo(() => {
     const storedModel = session.model || controlDefault(provider, "model");
     return {
@@ -239,10 +242,11 @@ export default function AgentSessionDetails({
           {agentSessionStatusLabel(status, session.recovery_required)}
         </span>
       </div>
-      {(status === "error" || session.recovery_required) && visibleSessionError && (
-        <p className="dc-room-play-error preserve-words">
-          오류 원인 · {visibleSessionError}
-        </p>
+      {(status === "error" || session.recovery_required) && sessionError.summary && (
+        <div className="dc-room-play-error preserve-words">
+          <p>오류 원인 · {sessionError.summary}</p>
+          {sessionError.detail && <details><summary>자세히</summary><p className="break-all whitespace-pre-wrap">{sessionError.detail}</p></details>}
+        </div>
       )}
       {onControl && (
         <div className="dc-member-session-actions" aria-label={`${session.display_name} 세션 제어`}>
