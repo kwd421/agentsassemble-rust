@@ -572,13 +572,16 @@ fn opencode_models(output: &str) -> Result<Vec<ProviderControlOption>, ProbeFail
             .and_then(Value::as_f64)
             .ok_or(ProbeFailure::Malformed)?;
         let mut entry = option(model, model);
+        // The Go namespace is a paid subscription; its native catalog reports zero
+        // cost, so only the free `opencode` namespace may be priced as free.
+        let free = model
+            .split_once('/')
+            .is_some_and(|(namespace, _)| namespace == "opencode")
+            && input == 0.0
+            && output == 0.0;
         entry.metadata.insert(
             "pricing".to_owned(),
-            json!(if input == 0.0 && output == 0.0 {
-                "free"
-            } else {
-                "paid"
-            }),
+            json!(if free { "free" } else { "paid" }),
         );
         models.insert(model.to_owned(), entry);
     }

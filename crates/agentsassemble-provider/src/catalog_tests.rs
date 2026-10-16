@@ -327,11 +327,25 @@ fn fixture_provider() -> ProviderAvailability {
 fn opencode_free_pricing_uses_native_costs_not_a_model_list() {
     let models = opencode_models(concat!(
         "opencode/big-pickle\n{\"cost\":{\"input\":0,\"output\":0}}\n",
-        "opencode/paid\n{\"cost\":{\"input\":1,\"output\":0}}\n"
+        "opencode/paid\n{\"cost\":{\"input\":1,\"output\":0}}\n",
+        "opencode-go/subscription\n{\"cost\":{\"input\":0,\"output\":0}}\n"
     ))
     .unwrap_or_else(|error| panic!("native costs: {error:?}"));
-    assert_eq!(models[0].metadata["pricing"], "free");
-    assert_eq!(models[1].metadata["pricing"], "paid");
+    let pricing = |value: &str| {
+        models
+            .iter()
+            .find(|model| model.value == value)
+            .unwrap_or_else(|| panic!("missing model {value}"))
+            .metadata["pricing"]
+            .clone()
+    };
+    assert_eq!(pricing("opencode/big-pickle"), serde_json::json!("free"));
+    assert_eq!(pricing("opencode/paid"), serde_json::json!("paid"));
+    // The Go subscription reports zero cost but is not a free model.
+    assert_eq!(
+        pricing("opencode-go/subscription"),
+        serde_json::json!("paid")
+    );
     assert!(opencode_models("opencode/unknown\n{}").is_err());
     assert!(opencode_models("opencode/unknown\n{broken").is_err());
 }
