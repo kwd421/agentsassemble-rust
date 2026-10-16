@@ -773,6 +773,7 @@ export function useRoomAdmission({
     retryOperatorPairing,
     acceptRecoveredSession,
     acceptOwnerSession,
+    acceptMemberRoomSession: acceptMemberSession,
     expireGuestSession,
     clearGuestSession,
   };

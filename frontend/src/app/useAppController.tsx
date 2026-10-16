@@ -1,8 +1,5 @@
 import { useCentralDirectory } from "./useCentralDirectory";
-import { projectRoomConnections } from "../lib/serverConnectionState";
-import { remoteSessionTransport } from "../lib/remote/remoteWorkspace";
-import { openCentralOwnedServer, openCentralMemberServer } from "../lib/central/identity";
-import type { CentralServerDisplay } from "../lib/central/directoryCache";
+import { useServerOpening } from "./useServerOpening";
 import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
 import { Hash } from "lucide-react";
 import { isCustomChannelId } from "../lib/customChannelId";
@@ -41,6 +38,7 @@ import {
   roomIsDisconnected,
   type RoomDockItem,
 } from "../lib/roomDockModel";
+import { useRailRooms } from "./useRailRooms";
 import { consumeOperatorPairingTokenFromUrl } from "../lib/roomGuestSession";
 import { roomPostingState } from "../lib/roomGuestPosting";
 import { currentServerProductSurface } from "../lib/roomDirectoryContract";
@@ -120,28 +118,6 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     hostEnabled: startupHostEnabled,
     remoteOwner: ownerWorkspace.remoteDirectory,
   });
-  const [connectingServerId, setConnectingServerId] = useState("");
-  const [serverConnectionError, setServerConnectionError] = useState("");
-  const serverOpening = useRef(false);
-  async function openRailServer(server: CentralServerDisplay) {
-    if (serverOpening.current) return;
-    serverOpening.current = true; setConnectingServerId(server.server_id); setServerConnectionError("");
-    try {
-      const current = await refreshCentralDirectory();
-      const live = current.live?.servers.find(item => item.server_id === server.server_id);
-      if (!live) throw new Error("서버 연결이 끊겼어요. 로그인 서버 연결을 다시 확인하고 있어요.");
-      if (live.relation === "member") await openCentralMemberServer(live);
-      else await openCentralOwnedServer(live);
-    } catch (error) { setServerConnectionError(error instanceof Error ? error.message : "서버 연결이 끊겼어요."); }
-    finally { serverOpening.current = false; setConnectingServerId(""); }
-  }
-  async function retryRoomConnection(room: RoomDockItem) {
-    if (room.roomOrigin === "remote_server") {
-      await openRailServer({ server_id: room.serverId || "", alias: room.label, relation: "owner", host_os: null });
-    } else {
-      await refreshRoomDirectory(captureRoomDirectoryContinuity());
-    }
-  }
   const [activeRoomId, setActiveRoomId] = useState(() => startupRoute.activeRoomId);
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);
   const [channelMenu, setChannelMenu] = useState<ChannelMenuState>(null);
@@ -179,8 +155,14 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     startSidebarResize,
     adjustSidebarWidthWithKeyboard,
   } = useSidebarResize();
+  const latestRooms = useRef<RoomDockItem[]>([]);
   const onGuestRoomJoined = useCallback((room: RoomDockItem) => {
-    if (ownerWorkspace.connect) mergeFlowRoom(room);
+    // A member room selected from the rail updates its rail entry instead of
+    // replacing the rail; a lone guest invite still replaces its placeholder.
+    const joinsRail = latestRooms.current.some((existing) => existing.id === room.id ||
+      (existing.roomOrigin === "remote_server" && room.roomOrigin === "remote_server" &&
+        existing.serverId && existing.serverId === room.serverId && existing.meetingId === room.meetingId));
+    if (ownerWorkspace.connect || joinsRail) mergeFlowRoom(room);
     else replaceRooms([room]);
     setActiveRoomId(room.id);
     setChannel("lobby");
@@ -211,7 +193,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     setPendingGuestAvatarImage,
     requestGuestJoin,
     retryOperatorPairing,
-    acceptRecoveredSession, acceptOwnerSession, memberJoin,
+    acceptRecoveredSession, acceptOwnerSession, memberJoin, acceptMemberRoomSession,
     expireGuestSession,
     clearGuestSession,
   } = useRoomAdmission({
@@ -226,31 +208,25 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     onRoomJoined: onGuestRoomJoined,
     onResetToLobby: onGuestAdmissionReset,
   });
-  // Every live host besides the directory owner below: their rooms are
-  // preserved by the merge while their own session projects their state.
-  const remoteHostStates = useMemo(() => {
-    const states: Array<{ serverId: string; state: "connected" | "connecting" | "disconnected" | "central-unconfirmed" }> = [];
-    const seen = new Set<string>();
-    if (ownerWorkspace.connect) {
-      seen.add(ownerWorkspace.connect.serverId);
-      states.push({
-        serverId: ownerWorkspace.connect.serverId,
-        state: roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected",
-      });
-    }
-    if (admittedSessionToken && guestSession && !guestExpired && !seen.has(guestSession.serverSurface.server_id)) {
-      states.push({
-        serverId: guestSession.serverSurface.server_id,
-        state: remoteSessionTransport(admittedSessionToken) ? "connected" : "disconnected",
-      });
-    }
-    return states;
-  }, [ownerWorkspace.connect, admittedSessionToken, guestSession, guestExpired, roomDirectorySyncIssue]);
   const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
-  const rooms = useMemo(() => projectRoomConnections(directoryRooms, startupHostEnabled
-    ? roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected"
-    : null, centralDirectory?.status === "central-unconfirmed", remoteHostStates),
-    [directoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory, remoteHostStates]);
+  const { rooms, memberHosts } = useRailRooms({
+    directoryRooms,
+    startupHostEnabled,
+    roomDirectorySyncIssue,
+    centralDirectory,
+    ownerConnect: ownerWorkspace.connect,
+    admittedSessionToken,
+    guestSession,
+    guestExpired,
+  });
+  const { openRailServer, retryRoomConnection, connectingServerId, serverConnectionError } = useServerOpening({
+    refreshCentralDirectory,
+    refreshRoomDirectory,
+    captureRoomDirectoryContinuity,
+    hasMemberAnchor: memberHosts.hasAnchor,
+    retryMemberHost: memberHosts.retryHost,
+  });
+  latestRooms.current = rooms;
   if (guestSession?.centralOwner && guestSession.roomUid) lastOwnerRoomUid.current = guestSession.roomUid;
   const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
   const canCreateRoom = startupHostEnabled || Boolean(ownerWorkspace.connect);
@@ -506,7 +482,19 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     const room = rooms.find(item => item.id === roomId);
     if (!room) return;
     try {
-      if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
+      // An anchored member room needs its own room session before it can
+      // open: select it on demand through the live host admission. Rooms
+      // without an anchor keep the legacy guest/owner path untouched.
+      const memberServerId = room.roomOrigin === "remote_server" && room.serverId &&
+        room.serverId !== ownerWorkspace.connect?.serverId && memberHosts.hasAnchor(room.serverId)
+        ? room.serverId : null;
+      if (memberServerId &&
+          !(admittedSessionToken && guestSession && !guestExpired &&
+            guestSession.meetingId === room.meetingId &&
+            guestSession.serverSurface.server_id === room.serverId)) {
+        const payload = await memberHosts.selectRoom(memberServerId, room.meetingId);
+        if (!await acceptMemberRoomSession(payload)) return;
+      } else if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "방을 열지 못했어요.");
       return;
@@ -641,10 +629,23 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       exitGuestSurface();
       return;
     }
+    const leaving = rooms.find((room) => room.id === roomId);
+    if (leaving?.roomOrigin === "remote_server" && leaving.serverId &&
+        (roomIsDisconnected(leaving) || roomId !== activeRoom.id || !roomSocket?.ready())) {
+      // A disconnected member room cannot reach its host: drop it from the
+      // rail and the anchor cache. A live host re-lists rooms it still
+      // shares on the next admission.
+      memberHosts.removeRoom(leaving.serverId, leaving.meetingId);
+      removeAcknowledgedRoom(roomId);
+      return;
+    }
     if (roomId !== activeRoom.id || !roomSocket?.ready()) {
       throw new Error("나갈 서버를 먼저 열고 연결이 완료될 때까지 기다려 주세요.");
     }
     await roomSocket.command("participant.leave", {});
+    if (activeRoom.roomOrigin === "remote_server" && activeRoom.serverId) {
+      memberHosts.removeRoom(activeRoom.serverId, activeRoom.meetingId);
+    }
     removeAcknowledgedRoom(roomId);
     if (guestLocked) {
       exitGuestSurface();

@@ -34,7 +34,7 @@ type UseRoomDirectoryOptions = {
   remoteOwner?: { serverId: string; fetchRooms: (beforeDispatch: () => void, signal?: AbortSignal) => Promise<StrictRoomDirectory>; openStream: OpenDirectoryStream; onStatus: (status: CentralOwnerSessionStatus) => void };
 };
 
-type RoomDirectorySyncIssue = {
+export type RoomDirectorySyncIssue = {
   category: "room_directory_unconfirmed" | "room_directory_unavailable";
   message: string;
 };
@@ -275,8 +275,15 @@ export function useRoomDirectory({
     (roomOrNull: RoomDockItem | null) => {
       if (!roomOrNull) return;
       commit((current) => {
+        // A member room listed from the anchor and the same room joined
+        // with a live session share server and meeting but not the dock
+        // identity (the anchor list carries no room_uid): match them so the
+        // session updates the rail entry instead of duplicating it.
         const existingIndex = current.findIndex(
-          (room) => roomDockIdentity(room) === roomDockIdentity(roomOrNull)
+          (room) => roomDockIdentity(room) === roomDockIdentity(roomOrNull) ||
+            (room.roomOrigin === "remote_server" && roomOrNull.roomOrigin === "remote_server" &&
+              Boolean(room.serverId) && room.serverId === roomOrNull.serverId &&
+              room.meetingId === roomOrNull.meetingId)
         );
         if (existingIndex >= 0) {
           const next = [...current];
