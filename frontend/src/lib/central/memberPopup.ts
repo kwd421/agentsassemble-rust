@@ -29,7 +29,7 @@ export function loginMemberPopup(signal: AbortSignal): Promise<void> {
     let state = "", returned = false, finished = false;
     let timer = setTimeout(() => finish(failure()), 300_000);
     const finish = (error?: Error) => {
-      if (finished) return; finished = true; clearTimeout(timer);
+      if (finished) return; finished = true; clearTimeout(timer); clearInterval(closedPoll);
       channel.postMessage({ type: "member-login-ended", nonce, state }); channel.close();
       window.removeEventListener("message", message); window.removeEventListener("focus", focus);
       signal.removeEventListener("abort", abort);
@@ -47,6 +47,13 @@ export function loginMemberPopup(signal: AbortSignal): Promise<void> {
     };
     channel.onmessage = event => {
       const data = event.data;
+      if (data?.type === "member-login-started" && !state && data.nonce === nonce &&
+        /^[A-Za-z0-9_-]{43}$/.test(data.state) && Number.isSafeInteger(data.expiresAt) && data.expiresAt > Date.now() / 1000) {
+        state = data.state; clearTimeout(timer);
+        timer = setTimeout(() => finish(failure()), Math.min(300_000, data.expiresAt * 1000 - Date.now()));
+        channel.postMessage({ type: "member-login-ready", nonce, state });
+        return;
+      }
       if (!state || data?.nonce !== nonce || data.state !== state) return;
       if (data.type === "member-login-returned") { returned = true; channel.postMessage({ type: "member-login-ready", nonce, state }); }
       else if (data.type === "member-login-complete" && returned && loadCentralSession()) finish();
@@ -55,6 +62,12 @@ export function loginMemberPopup(signal: AbortSignal): Promise<void> {
     const abort = () => { finish(failure()); popup.close(); };
     // COOP can report closed=true after navigation although the OAuth window lives.
     const focus = () => { if (!state && popup.closed) finish(failure()); };
+    // A completed popup can miss member-login-complete on a partitioned channel and
+    // stays open for a manual return; if the user closes it after the return was
+    // seen and the session is visible, that is the same proof. Never fail early.
+    const closedPoll = window.setInterval(() => {
+      if (returned && popup.closed && loadCentralSession()) finish();
+    }, 1000);
     window.addEventListener("message", message); window.addEventListener("focus", focus);
     signal.addEventListener("abort", abort, { once: true });
   });
@@ -114,7 +127,12 @@ export async function runMemberLoginPopup(signal: AbortSignal): Promise<void> {
       await startCentralWebGoogle(signal, async handoff => {
         const pending = { nonce, state: handoff.state, expiresAt: Math.min(handoff.expires_at, Math.floor(Date.now() / 1000) + 300) };
         sessionStorage.setItem(KEY, JSON.stringify(pending));
-        await acknowledge(pending, () => window.opener.postMessage({ type: "member-login-started", ...pending }, window.location.origin), signal);
+        await acknowledge(pending, channel => {
+          channel.postMessage({ type: "member-login-started", ...pending });
+          // window.opener may be severed while the nonce channel still connects;
+          // the opener accepts the same validated record from either path.
+          try { window.opener?.postMessage({ type: "member-login-started", ...pending }, window.location.origin); } catch { /* channel carries it */ }
+        }, signal);
       });
       return;
     }

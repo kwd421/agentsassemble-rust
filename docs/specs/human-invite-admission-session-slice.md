@@ -26,6 +26,19 @@ issue/redeem. Virtual streams/socket reconnect inside a live outer channel remai
 local. Exact retry cannot revive ended/revoked custody. Full security/lifecycle and
 verification contract: identity-accounts-friends-slice.md secure admission section.
 
+Member-login popup Safari completion (2026-10-17): the member-join Google popup
+must complete in Safari as in Firefox. The opener (`loginMemberPopup`) and popup
+(`runMemberLoginPopup`) in `frontend/src/lib/central/memberPopup.ts` keep every
+nonce/state/origin check: the nonce names the BroadcastChannel, `state` still
+binds the server Google handoff with the 43-char format and expiry, and the popup
+`message` path still requires exact origin and the owned popup source. What changes
+is transport redundancy, not trust: `member-login-started` also travels the
+already-open nonce channel (accepted with the same validation as the window path),
+so a severed `window.opener` link cannot stall the handshake; and the opener polls
+a closed popup only to succeed early when `member-login-returned` was already seen
+and a central session is visible, never to fail early (timer/abort still own
+failure). No credential, verifier, or session material moves over the new path.
+
 
 Status: admission implementation retained; Phase 5 removes D-07 unconsumed signed
 claim self-description. The D-02 frame correction and D-03 direct remote HTTP target

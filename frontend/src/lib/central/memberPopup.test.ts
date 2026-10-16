@@ -54,6 +54,29 @@ it("correlates the exact popup first; nonce channel return survives a COOP-sever
   expect(Channel.channels[0].closed).toBe(true);
   expect(String(b.open.mock.calls[0][0])).not.toContain("invite");
 });
+it("accepts the popup start over the nonce channel when the opener link is severed", async () => {
+  const b = begin(), finished = vi.fn(); void b.result.then(finished);
+  const seen: unknown[] = [];
+  b.channel.onmessage = event => { seen.push(event.data); };
+  vi.stubGlobal("opener", null);
+  b.channel.postMessage({ type: "member-login-started", nonce: b.nonce, state: b.state, expiresAt: b.expiresAt });
+  for (let flush = 0; flush < 5; flush++) await Promise.resolve();
+  expect(seen).toContainEqual({ type: "member-login-ready", nonce: b.nonce, state: b.state });
+  b.channel.postMessage({ type: "member-login-returned", nonce: b.nonce, state: b.state });
+  b.channel.postMessage({ type: "member-login-complete", nonce: b.nonce, state: b.state });
+  await b.result; expect(finished).toHaveBeenCalledOnce();
+  expect(b.popup.close).toHaveBeenCalledOnce();
+});
+it("completes when a returned popup is closed with the session visible, without the final message", async () => {
+  const b = begin(), finished = vi.fn(); void b.result.then(finished);
+  b.send();
+  b.channel.postMessage({ type: "member-login-returned", nonce: b.nonce, state: b.state });
+  for (let flush = 0; flush < 5; flush++) await Promise.resolve();
+  Object.defineProperty(b.popup, "closed", { value: true });
+  await vi.advanceTimersByTimeAsync(1000);
+  await b.result; expect(finished).toHaveBeenCalledOnce();
+  expect(b.popup.close).toHaveBeenCalledOnce();
+});
 it("shows an actionable blocked error, bounds expiry and disposes cancellation without polling", async () => {
   vi.spyOn(window, "open").mockReturnValue(null);
   await expect(loginMemberPopup(new AbortController().signal)).rejects.toThrow("팝업을 허용한 뒤 Google로 다시 시도");
