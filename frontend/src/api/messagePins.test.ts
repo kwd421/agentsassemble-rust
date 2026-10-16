@@ -96,8 +96,8 @@ describe("lobby message-pin HTTP authority", () => {
 
     expect(listed).toEqual([pin()]);
     expect(changed).toEqual([]);
-    expect(bridge.read).toHaveBeenCalledWith("general");
-    expect(bridge.write).toHaveBeenCalledWith("general");
+    expect(bridge.read).toHaveBeenCalledWith("general", { kind: "local" });
+    expect(bridge.write).toHaveBeenCalledWith("general", { kind: "local" });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "http://127.0.0.1:49154/api/room-pins?room_id=general&channel_id=lobby",

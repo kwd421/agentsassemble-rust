@@ -475,7 +475,7 @@ export function fetchRoomSettings(
           { signal }
         )
       : isDesktopWebview()
-      ? fetchDesktopRoomPreferences(roomId, { signal }).then(async (response) => {
+      ? fetchDesktopRoomPreferences(roomId, { signal }, { kind: "local" }).then(async (response) => {
           if (!response.ok) throw await responseError(response);
           return response.json() as Promise<unknown>;
         })
@@ -521,7 +521,7 @@ export function saveRoomSettings({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-        }).then(async (response) => {
+        }, { kind: "local" }).then(async (response) => {
           if (!response.ok) throw await responseError(response);
           return response.json() as Promise<unknown>;
         })
@@ -585,7 +585,7 @@ export type RoomSocketTicket = DesktopRuntimeTicket;
 
 export async function getWsTicket(auth: RoomSocketAuth): Promise<RoomSocketTicket> {
   if (auth.kind === "host" && isDesktopWebview()) {
-    return requestDesktopRuntimeTicket(auth.meetingId);
+    return requestDesktopRuntimeTicket(auth.meetingId, { kind: "local" });
   }
   if (auth.kind === "session") {
     const payload = await exchangeSessionSocketTicket(auth.sessionToken, auth.deviceToken);

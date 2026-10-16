@@ -150,7 +150,7 @@ describe("lobby message-attachment HTTP authority", () => {
       )
     ).resolves.toEqual(attachment);
 
-    expect(bridge.upload).toHaveBeenCalledWith("general");
+    expect(bridge.upload).toHaveBeenCalledWith("general", { kind: "local" });
     expect(beforeDispatch).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://127.0.0.1:49154/api/message-attachments");
@@ -394,7 +394,7 @@ describe("lobby message-attachment HTTP authority", () => {
       "view"
     );
 
-    expect(bridge.read).toHaveBeenCalledWith("general", attachmentId);
+    expect(bridge.read).toHaveBeenCalledWith("general", attachmentId, { kind: "local" });
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       `http://127.0.0.1:49154${attachment.download_url}`
     );

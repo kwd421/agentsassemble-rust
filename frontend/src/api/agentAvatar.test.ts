@@ -26,7 +26,7 @@ it("uploads through the exact Agent ticket and keeps human reference parsing dis
   vi.stubGlobal("fetch", fetchMock);
   const controller = new AbortController();
   await expect(uploadAgentAvatar(file(), { kind: "local", manager }, "agent-one", controller.signal)).resolves.toBe(url);
-  expect(bridge.upload).toHaveBeenCalledWith(manager, "agent-one");
+  expect(bridge.upload).toHaveBeenCalledWith(manager, "agent-one", { kind: "local", manager });
   expect(fetchMock).toHaveBeenCalledWith(`${origin}/api/agent-avatars/upload/agent-one`, expect.objectContaining({
     redirect: "error", signal: controller.signal, method: "POST", cache: "no-store",
     headers: { Authorization: `Bearer ${"b".repeat(64)}`, "Content-Type": "application/json" },

@@ -3152,6 +3152,18 @@ nothing-openable cases stays outside the rail). The computer is an attribute
   with explicit consent and re-enters via anchor plus fresh grant as above.
   Host-origin JavaScript still never receives grants, browser credentials,
   bearers, private keys or child tickets.
+- Desktop host commands are per-action, never per-window. With own rooms and
+  joined friend rooms live together, this computer's host commands
+  (workspace folder pick, provider setup, agent runtime controls, server
+  move/backup, bootstrap/operator tickets) stay usable for actions on this
+  computer's own host and local rooms; only an action that targets a remote
+  room is refused in the frontend (the call site passes that target
+  explicitly). The real origin guard stays Rust-side: `caller_is_bundled_ui`
+  (`desktop/src-tauri/src/lib.rs`) allows host commands only from the
+  bundled UI origin, so a page served from a friend's origin can never call
+  them — both while window navigation still exists (the navigated window's
+  URL fails the check) and after it is gone (remote content arrives over the
+  encrypted channel, never as a navigated page).
 
 ### Implementation plan (per-slice execution gate record)
 

@@ -208,8 +208,8 @@ describe("lobby message-search HTTP authority", () => {
       "event-agent",
       "event-tool",
     ]);
-    expect(bridge.read).toHaveBeenNthCalledWith(1, "general");
-    expect(bridge.read).toHaveBeenNthCalledWith(2, "general");
+    expect(bridge.read).toHaveBeenNthCalledWith(1, "general", { kind: "local" });
+    expect(bridge.read).toHaveBeenNthCalledWith(2, "general", { kind: "local" });
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "http://127.0.0.1:49154/api/room-search?room_id=general&channel_id=all&q=canonical"
     );

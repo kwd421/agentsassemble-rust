@@ -13,7 +13,7 @@ export async function fetchSideChatSnapshot(
 ) {
   const room = canonicalRoomId(roomId);
   const grant = authority.kind === "local"
-    ? await requestDesktopSideChatReadTicket(room)
+    ? await requestDesktopSideChatReadTicket(room, authority)
     : { http_base_url: "", ticket: authority.sessionToken };
   signal.throwIfAborted();
   if (!grant.ticket) throw new Error("사이드챗 읽기 권한을 사용할 수 없어요.");

@@ -470,7 +470,7 @@ async function searchAuthority(
   authority: MessageSearchAuthority
 ): Promise<SearchAuthority> {
   if (authority.kind === "local") {
-    const grant = await requestDesktopMessageSearchReadTicket(roomId);
+    const grant = await requestDesktopMessageSearchReadTicket(roomId, authority);
     return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
   if (!authority.sessionToken) throw new Error("방 세션 권위를 사용할 수 없습니다.");

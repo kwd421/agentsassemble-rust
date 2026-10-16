@@ -13,7 +13,7 @@ export async function uploadAgentAvatar(file: File, authority: RoomAssetUploadAu
   if (authority.kind === "remote" && (!authority.sessionToken || !authority.deviceToken)) {
     throw new Error("현재 기기의 방 세션 권위를 사용할 수 없습니다.");
   }
-  const grant = authority.kind === "local" ? await requestDesktopAgentAvatarUploadTicket(authority.manager, sessionId) : null;
+  const grant = authority.kind === "local" ? await requestDesktopAgentAvatarUploadTicket(authority.manager, sessionId, authority) : null;
   signal.throwIfAborted();
   const response = await fetchProductTransport(`${authority.kind === "local" ? grant!.http_base_url : ""}/api/agent-avatars/upload/${encodeURIComponent(sessionId)}`, {
     method: "POST", cache: "no-store", redirect: "error", signal,

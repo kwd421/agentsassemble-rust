@@ -1,4 +1,4 @@
-import { hasRemoteWorkspace, remoteSessionTransport } from "./remote/remoteWorkspace";
+import { remoteSessionTransport, remoteWorkspaceFor } from "./remote/remoteWorkspace";
 import type { RoomAppearance } from "./roomAppearance";
 import {
   parseRoomSessionSurface,
@@ -220,11 +220,17 @@ export function roomGuestSessionExpired(
   return expiresAt <= now;
 }
 
+/** True while the session's own host is live (its bearer or server has a live workspace). */
+function isLiveHostSession(session: RoomGuestSession): boolean {
+  if (remoteSessionTransport(session.sessionToken)) return true;
+  return remoteWorkspaceFor(session.serverSurface.server_id) !== null;
+}
+
 export function loadRoomGuestSession(): RoomGuestSession | null {
   // Live workspaces own their member sessions in memory per host; the stored
-  // session is never authoritative for any of them, so it must not shadow
-  // one host's member as another host's. It only applies with no host live.
-  if (hasRemoteWorkspace()) return null;
+  // session is shadowed only by its own host going live, never by an unrelated
+  // host. A legacy guest room for host X stays visible while only host Y is
+  // live; it stops applying once X itself is live.
   try {
     const raw = window.localStorage.getItem(ROOM_GUEST_SESSION_STORAGE_KEY);
     const session = normalizeRoomGuestSession(raw ? JSON.parse(raw) : null);
@@ -232,6 +238,7 @@ export function loadRoomGuestSession(): RoomGuestSession | null {
       window.localStorage.removeItem(ROOM_GUEST_SESSION_STORAGE_KEY);
       return null;
     }
+    if (session && isLiveHostSession(session)) return null;
     return session;
   } catch {
     return null;
@@ -239,8 +246,11 @@ export function loadRoomGuestSession(): RoomGuestSession | null {
 }
 
 export function persistRoomGuestSession(session: RoomGuestSession | null) {
-  if (hasRemoteWorkspace() || remoteSessionTransport(session?.sessionToken)) return;
   if (session?.centralOwner) return;
+  // Clearing stored state always proceeds, so expiry/revocation cleanup for
+  // one host is never blocked by another host staying live. Storing is
+  // skipped only for the live host itself, which owns its session in memory.
+  if (session && isLiveHostSession(session)) return;
   if (session) {
     try {
       const serialized = JSON.stringify(session);

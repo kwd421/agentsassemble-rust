@@ -153,8 +153,8 @@ async function operationAuthority(
   if (authority.kind === "local") {
     const grant =
       operation === "read"
-        ? await requestDesktopMessagePinsReadTicket(roomId)
-        : await requestDesktopMessagePinsWriteTicket(roomId);
+        ? await requestDesktopMessagePinsReadTicket(roomId, authority)
+        : await requestDesktopMessagePinsWriteTicket(roomId, authority);
     return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
   if (!authority.sessionToken) {

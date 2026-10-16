@@ -91,7 +91,7 @@ describe("room appearance HTTP contract", () => {
     );
 
     expect(uploaded.reference).toEqual({ assetId, url: reference });
-    expect(bridge.upload).toHaveBeenCalledWith(manager);
+    expect(bridge.upload).toHaveBeenCalledWith(manager, { kind: "local", manager });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://127.0.0.1:49154/api/attachments");
     expect(init.method).toBe("POST");
@@ -179,8 +179,8 @@ describe("room appearance HTTP contract", () => {
     await fetchRoomAppearanceBlob(reference, { kind: "local", manager }, "pending");
     await fetchRoomAppearanceBlob(reference, { kind: "local", manager }, "bound");
 
-    expect(bridge.pending).toHaveBeenCalledWith(manager, assetId);
-    expect(bridge.bound).toHaveBeenCalledWith(manager, assetId);
+    expect(bridge.pending).toHaveBeenCalledWith(manager, assetId, { kind: "local", manager });
+    expect(bridge.bound).toHaveBeenCalledWith(manager, assetId, { kind: "local", manager });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       `http://127.0.0.1:49154${reference}`,

@@ -116,11 +116,13 @@ async function fetchLocalAppearance(
     mode === "pending"
       ? await requestDesktopAppearancePendingReadTicket(
           authority.manager,
-          reference.assetId
+          reference.assetId,
+          authority
         )
       : await requestDesktopAppearanceBoundReadTicket(
           authority.manager,
-          reference.assetId
+          reference.assetId,
+          authority
         );
   return fetchProductTransport(`${grant.http_base_url}${reference.url}`, {
     cache: "no-store",
@@ -152,7 +154,7 @@ export async function uploadRoomAppearance(
   if (authority.kind === "remote" && (!authority.sessionToken || !authority.deviceToken)) {
     throw new Error("현재 기기의 방 세션 권위를 사용할 수 없습니다.");
   }
-  const grant = authority.kind === "local" ? await requestDesktopAppearanceUploadTicket(authority.manager) : null;
+  const grant = authority.kind === "local" ? await requestDesktopAppearanceUploadTicket(authority.manager, authority) : null;
   const response = await fetchProductTransport(`${authority.kind === "local" ? grant!.http_base_url : ""}/api/attachments`, {
     cache: "no-store", redirect: "error",
     method: "POST",

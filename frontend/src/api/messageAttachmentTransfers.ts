@@ -73,7 +73,7 @@ export async function createMessageAttachmentUploadClient(
   signal?.throwIfAborted();
   async function grant() {
     if (authority.kind === "local") {
-      const ticket = await requestDesktopMessageAttachmentUploadTicket(room);
+      const ticket = await requestDesktopMessageAttachmentUploadTicket(room, authority);
       return { base: ticket.http_base_url, token: ticket.ticket, device: undefined };
     }
     return { base: "", token: authority.sessionToken, device: authority.deviceToken };

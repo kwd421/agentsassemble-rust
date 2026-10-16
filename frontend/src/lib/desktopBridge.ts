@@ -1,4 +1,4 @@
-import { hasRemoteWorkspace, fetchPlainProductTransport } from "./remote/remoteWorkspace";
+import { fetchPlainProductTransport } from "./remote/remoteWorkspace";
 import type { HostDeviceInfo } from "../types/generated/HostDeviceInfo";
 import type { HostInstallationInfo } from "../types/generated/HostInstallationInfo";
 import type { HostProductSurface } from "../types/generated/HostProductSurface";
@@ -129,11 +129,22 @@ export interface DesktopWorkspaceSelection {
 
 let desktopHostSurface: HostProductSurface | null = null;
 
-function requireDesktopHostCommand(command: string) {
-  // This computer's host authority is unusable while visiting any remote
-  // server; the rule is per-command and host-independent, so any live remote
-  // workspace (never one picked host) blocks it.
-  if (hasRemoteWorkspace() && !["save_message_attachment", "runtime_central_login", "open_central_google_login", "runtime_account_deletion_ticket", "runtime_account_data_wipe"].includes(command)) throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
+/**
+ * Which host an action targets. This computer's host commands stay usable for
+ * its own rooms while friend hosts are live; only an action that targets a
+ * remote room is refused here. Callers pass the authority they already
+ * branched on (`{ kind: "local" }` / `{ kind: "remote" }`); global own-host
+ * commands (bootstrap, provider setup, server move, ...) carry no target and
+ * are always allowed through to the Rust side.
+ */
+export type DesktopHostCommandTarget = { kind: "local" | "remote" };
+
+function requireDesktopHostCommand(command: string, target?: DesktopHostCommandTarget) {
+  // Per-action, never per-window: the real origin guard is Rust-side
+  // `caller_is_bundled_ui` (desktop/src-tauri/src/lib.rs), which only the
+  // bundled UI origin passes, so a friend-origin page can never reach a host
+  // command even though this check lets own-host work continue.
+  if (target?.kind === "remote") throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
   if (!desktopHostSurface) {
     throw new Error("데스크톱 호스트 제품 표면이 아직 고정되지 않았습니다.");
   }
@@ -376,13 +387,14 @@ function validateDesktopHttpTicket(
 async function requestDesktopHttpTicket(
   command: DesktopHttpTicketCommand,
   args: Record<string, unknown> | undefined,
-  label: string
+  label: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const tauri = tauriInternals();
   if (!tauri) {
     throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
   }
-  requireDesktopHostCommand(command);
+  requireDesktopHostCommand(command, target);
   return validateDesktopHttpTicket(
     await tauri.invoke<unknown>(command, args),
     label
@@ -430,13 +442,14 @@ function validateDesktopCentralRegistrationTicket(
 }
 
 export async function requestDesktopRuntimeTicket(
-  roomId: string
+  roomId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopRuntimeTicket> {
   const tauri = tauriInternals();
   if (!tauri) {
     throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
   }
-  requireDesktopHostCommand("runtime_ticket");
+  requireDesktopHostCommand("runtime_ticket", target);
   return tauri
     .invoke<unknown>("runtime_ticket", { roomId })
     .then(parseNativeRoomRuntimeTicket);
@@ -482,77 +495,91 @@ export async function requestDesktopOperatorTicket(): Promise<DesktopOperatorHtt
 }
 
 export function requestDesktopPreferencesReadTicket(
-  roomId: string
+  roomId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   return requestDesktopHttpTicket(
     "runtime_preferences_read_ticket",
     { roomId },
-    "방 preference read 티켓"
+    "방 preference read 티켓",
+    target
   );
 }
 
 export function requestDesktopPreferencesWriteTicket(
-  roomId: string
+  roomId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   return requestDesktopHttpTicket(
     "runtime_preferences_write_ticket",
     { roomId },
-    "방 preference write 티켓"
+    "방 preference write 티켓",
+    target
   );
 }
 
 export function requestDesktopMessagePinsReadTicket(
-  roomId: string
+  roomId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   return requestDesktopHttpTicket(
     "runtime_message_pins_read_ticket",
     { roomId },
-    "로비 메시지 핀 read 티켓"
+    "로비 메시지 핀 read 티켓",
+    target
   );
 }
 
 export function requestDesktopMessagePinsWriteTicket(
-  roomId: string
+  roomId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   return requestDesktopHttpTicket(
     "runtime_message_pins_write_ticket",
     { roomId },
-    "로비 메시지 핀 write 티켓"
+    "로비 메시지 핀 write 티켓",
+    target
   );
 }
 
 export function requestDesktopMessageSearchReadTicket(
-  roomId: string
+  roomId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   return requestDesktopHttpTicket(
     "runtime_message_search_read_ticket",
     { roomId },
-    "로비 메시지 검색 read 티켓"
+    "로비 메시지 검색 read 티켓",
+    target
   );
 }
 
-export function requestDesktopSideChatReadTicket(roomId: string): Promise<DesktopOperatorHttpTicket> {
-  return requestDesktopHttpTicket("runtime_side_chat_read_ticket", { roomId }, "사이드챗 읽기 권한");
+export function requestDesktopSideChatReadTicket(roomId: string, target?: DesktopHostCommandTarget): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket("runtime_side_chat_read_ticket", { roomId }, "사이드챗 읽기 권한", target);
 }
 
 export function requestDesktopMessageAttachmentUploadTicket(
-  roomId: string
+  roomId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   return requestDesktopHttpTicket(
     "runtime_message_attachment_upload_ticket",
     { roomId },
-    "로비 메시지 첨부 upload 티켓"
+    "로비 메시지 첨부 upload 티켓",
+    target
   );
 }
 
 export function requestDesktopMessageAttachmentReadTicket(
   roomId: string,
-  attachmentId: string
+  attachmentId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   return requestDesktopHttpTicket(
     "runtime_message_attachment_read_ticket",
     { roomId, attachmentId: messageAttachmentId(attachmentId) },
-    "로비 메시지 첨부 read 티켓"
+    "로비 메시지 첨부 read 티켓",
+    target
   );
 }
 
@@ -577,89 +604,104 @@ export async function saveDesktopMessageAttachment(
 }
 
 export function requestDesktopAttendeeInviteCreateTicket(
-  authority: DesktopManagerRoomAuthority
+  authority: DesktopManagerRoomAuthority,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_attendee_invite_create_ticket",
     { authority: verified },
-    "AI 참가자 초대 생성 티켓"
+    "AI 참가자 초대 생성 티켓",
+    target
   );
 }
 
 export function requestDesktopConnectorInviteCreateTicket(
-  authority: DesktopManagerRoomAuthority
+  authority: DesktopManagerRoomAuthority,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_connector_invite_create_ticket",
     { authority: verified },
-    "외부 AI 초대 생성 티켓"
+    "외부 AI 초대 생성 티켓",
+    target
   );
 }
 
 export function requestDesktopHumanInviteCreateTicket(
-  authority: DesktopManagerRoomAuthority
+  authority: DesktopManagerRoomAuthority,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_human_invite_create_ticket",
     { authority: verified },
-    "사람 초대 생성 티켓"
+    "사람 초대 생성 티켓",
+    target
   );
 }
 
 export function requestDesktopHumanInviteRevokeTicket(
-  authority: DesktopManagerRoomAuthority
+  authority: DesktopManagerRoomAuthority,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_human_invite_revoke_ticket",
     { authority: verified },
-    "사람 초대 취소 티켓"
+    "사람 초대 취소 티켓",
+    target
   );
 }
 
 export function requestDesktopAgentAvatarUploadTicket(
-  authority: DesktopManagerRoomAuthority, sessionId: string
+  authority: DesktopManagerRoomAuthority, sessionId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket("runtime_agent_avatar_upload_ticket",
-    { authority: verified, sessionId }, "에이전트 프로필 사진 업로드 티켓");
+    { authority: verified, sessionId }, "에이전트 프로필 사진 업로드 티켓", target);
 }
 
 export function requestDesktopAppearanceUploadTicket(
-  authority: DesktopManagerRoomAuthority
+  authority: DesktopManagerRoomAuthority,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_appearance_upload_ticket",
     { authority: verified },
-    "방 외형 업로드 티켓"
+    "방 외형 업로드 티켓",
+    target
   );
 }
 
 export function requestDesktopAppearancePendingReadTicket(
   authority: DesktopManagerRoomAuthority,
-  assetId: string
+  assetId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_appearance_pending_read_ticket",
     { authority: verified, assetId: roomAppearanceAssetId(assetId) },
-    "방 외형 pending read 티켓"
+    "방 외형 pending read 티켓",
+    target
   );
 }
 
 export function requestDesktopAppearanceBoundReadTicket(
   authority: DesktopManagerRoomAuthority,
-  assetId: string
+  assetId: string,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpTicket> {
   const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_appearance_bound_read_ticket",
     { authority: verified, assetId: roomAppearanceAssetId(assetId) },
-    "방 외형 bound read 티켓"
+    "방 외형 bound read 티켓",
+    target
   );
 }
 
@@ -708,7 +750,8 @@ export function requestDesktopSettingsDirectoryReadTicket(): Promise<DesktopOper
 
 export async function fetchDesktopRoomPreferences(
   roomId: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  target?: DesktopHostCommandTarget
 ): Promise<Response> {
   const method = String(init.method || "GET").toUpperCase();
   if (method !== "GET" && method !== "POST") {
@@ -719,8 +762,8 @@ export async function fetchDesktopRoomPreferences(
   }
   const issued =
     method === "GET"
-      ? await requestDesktopPreferencesReadTicket(roomId)
-      : await requestDesktopPreferencesWriteTicket(roomId);
+      ? await requestDesktopPreferencesReadTicket(roomId, target)
+      : await requestDesktopPreferencesWriteTicket(roomId, target);
   const query = method === "GET" ? `?room_id=${encodeURIComponent(roomId)}` : "";
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
@@ -736,7 +779,8 @@ async function fetchDesktopHumanInvite(
   authority: DesktopManagerRoomAuthority,
   operation: "create" | "revoke",
   init: RequestInit,
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  target?: DesktopHostCommandTarget
 ): Promise<Response> {
   const method = init.method === undefined ? "POST" : String(init.method).toUpperCase();
   if (method !== "POST") {
@@ -744,8 +788,8 @@ async function fetchDesktopHumanInvite(
   }
   const issued =
     operation === "create"
-      ? await requestDesktopHumanInviteCreateTicket(authority)
-      : await requestDesktopHumanInviteRevokeTicket(authority);
+      ? await requestDesktopHumanInviteCreateTicket(authority, target)
+      : await requestDesktopHumanInviteRevokeTicket(authority, target);
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   beforeDispatch?.();
@@ -760,17 +804,19 @@ async function fetchDesktopHumanInvite(
 export function fetchDesktopHumanInviteCreate(
   authority: DesktopManagerRoomAuthority,
   init: RequestInit,
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  target?: DesktopHostCommandTarget
 ): Promise<Response> {
-  return fetchDesktopHumanInvite(authority, "create", init, beforeDispatch);
+  return fetchDesktopHumanInvite(authority, "create", init, beforeDispatch, target);
 }
 
 export function fetchDesktopHumanInviteRevoke(
   authority: DesktopManagerRoomAuthority,
   init: RequestInit,
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  target?: DesktopHostCommandTarget
 ): Promise<Response> {
-  return fetchDesktopHumanInvite(authority, "revoke", init, beforeDispatch);
+  return fetchDesktopHumanInvite(authority, "revoke", init, beforeDispatch, target);
 }
 
 export async function requestDesktopCentralRegistrationTicket(): Promise<DesktopCentralRegistrationTicket> {
@@ -787,12 +833,13 @@ export async function requestDesktopCentralRegistrationTicket(): Promise<Desktop
 export async function fetchDesktopRuntime(
   roomId: string,
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  target?: DesktopHostCommandTarget
 ): Promise<Response> {
   if (!path.startsWith("/") || path.startsWith("//")) {
     throw new Error("데스크톱 Rust 런타임 경로가 잘못되었습니다.");
   }
-  const issued = await requestDesktopRuntimeTicket(roomId);
+  const issued = await requestDesktopRuntimeTicket(roomId, target);
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   return fetchPlainProductTransport(`${issued.displayResourceBase}${path}`, { ...init, headers });
@@ -801,11 +848,13 @@ export async function fetchDesktopRuntime(
 export async function fetchDesktopOperatorRuntimeWithBase(
   path: string,
   init: RequestInit = {},
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  target?: DesktopHostCommandTarget
 ): Promise<DesktopOperatorHttpResponse> {
   if (!path.startsWith("/") || path.startsWith("//")) {
     throw new Error("데스크톱 Rust 런타임 경로가 잘못되었습니다.");
   }
+  if (target?.kind === "remote") throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
   const issued = await requestDesktopOperatorTicket();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
@@ -819,9 +868,10 @@ export async function fetchDesktopOperatorRuntimeWithBase(
 export async function fetchDesktopOperatorRuntime(
   path: string,
   init: RequestInit = {},
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  target?: DesktopHostCommandTarget
 ): Promise<Response> {
-  return (await fetchDesktopOperatorRuntimeWithBase(path, init, beforeDispatch)).response;
+  return (await fetchDesktopOperatorRuntimeWithBase(path, init, beforeDispatch, target)).response;
 }
 
 export async function fetchDesktopCentralRegistration(

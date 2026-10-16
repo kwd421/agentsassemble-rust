@@ -150,7 +150,7 @@ async function uploadAuthority(
 ): Promise<TransferAuthority> {
   signal?.throwIfAborted();
   if (authority.kind === "local") {
-    const grant = await requestDesktopMessageAttachmentUploadTicket(roomId);
+    const grant = await requestDesktopMessageAttachmentUploadTicket(roomId, authority);
     signal?.throwIfAborted();
     return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
@@ -168,7 +168,8 @@ async function readAuthority(
   if (authority.kind === "local") {
     const grant = await requestDesktopMessageAttachmentReadTicket(
       roomId,
-      attachmentId
+      attachmentId,
+      authority
     );
     signal?.throwIfAborted();
     return { baseUrl: grant.http_base_url, credential: grant.ticket };

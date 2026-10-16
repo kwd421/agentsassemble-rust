@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 import { roomDockIdentity, roomFromGuestSession } from "./roomDockModel";
 import {
@@ -8,6 +8,11 @@ import {
   roomGuestSessionFromJoinPayload,
   roomGuestSessionFromPairingPayload,
 } from "./roomGuestSession";
+import {
+  closeRemoteWorkspace,
+  installRemoteWorkspace,
+} from "./remote/remoteWorkspace";
+import type { RemoteTransport } from "./remote/remoteTransport";
 
 import { parseOperatorPairingRedeemResponse } from "./roomAdmissionContract";
 
@@ -148,5 +153,101 @@ describe("guest room projection", () => {
         Object.defineProperty(window, "localStorage", originalStorage);
       }
     }
+  });
+});
+
+describe("guest room storage with several hosts live", () => {
+  const HOST_X = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const HOST_Y = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const sessionForHostX = () =>
+    roomGuestSessionFromJoinPayload("aaj1_host_x", {
+      status: "admitted",
+      request_id: "123e4567-e89b-42d3-a456-426614174000",
+      session_token: "session-x",
+      meeting_id: "room-x",
+      agent_id: "guest-x",
+      display_name: "Guest X",
+      invite_scope: "room",
+      participant_type: "human",
+      client_type: "browser",
+      provider_kind: "manual",
+      owner_display_name: "",
+      owner_id: "owner-x",
+      stable_identity: false,
+      operator: false,
+      connection_kind: "native_remote_room_client",
+      client_id: "client-x",
+      expires_at: "2026-07-12T00:00:00Z",
+      room_label: "Host X Room",
+      room_topic: "",
+      room_created_at: "2026-07-10T00:00:00Z",
+      server_id: HOST_X,
+      authority_lineage_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      server_product_surface: TEST_SERVER_PRODUCT_SURFACE,
+      guide: {
+        welcome: "Welcome",
+        how_to: ["Read and send messages."],
+        etiquette: [],
+        session: { expires_in_seconds: 3600, rejoin: "Request another invite." },
+      },
+    });
+
+  function installMemberHost(serverId: string, sessionToken: string) {
+    const callbacks = new Set<() => void>();
+    const transport = {
+      hello: { origin: `https://${serverId}.test` },
+      active: true,
+      fetch: vi.fn(),
+      onClose: (fn: () => void) => {
+        callbacks.add(fn);
+        return () => {
+          callbacks.delete(fn);
+        };
+      },
+      close: () => {
+        transport.active = false;
+        for (const fn of callbacks) fn();
+      },
+    };
+    installRemoteWorkspace({
+      transport: transport as unknown as RemoteTransport,
+      owner: null,
+      member: {
+        sessionToken,
+        serverSurface: { server_id: serverId },
+      } as never,
+      deviceToken: "device",
+      clientId: "client",
+    });
+  }
+
+  afterEach(() => {
+    closeRemoteWorkspace();
+    persistRoomGuestSession(null);
+  });
+
+  it("keeps a legacy guest room for host X visible while an unrelated host Y is live", () => {
+    persistRoomGuestSession(sessionForHostX());
+    installMemberHost(HOST_Y, "live-y-token");
+    expect(loadRoomGuestSession()?.sessionToken).toBe("session-x");
+    // Storing for X is not blocked by Y staying live either.
+    persistRoomGuestSession(sessionForHostX());
+    expect(loadRoomGuestSession()?.meetingId).toBe("room-x");
+  });
+
+  it("shadows the stored session only while its own host is live", () => {
+    persistRoomGuestSession(sessionForHostX());
+    installMemberHost(HOST_Y, "live-y-token");
+    installMemberHost(HOST_X, "live-x-token");
+    expect(loadRoomGuestSession()).toBeNull();
+    closeRemoteWorkspace(HOST_X);
+    expect(loadRoomGuestSession()?.sessionToken).toBe("session-x");
+  });
+
+  it("never blocks clearing stored state because another host stays live", () => {
+    persistRoomGuestSession(sessionForHostX());
+    installMemberHost(HOST_Y, "live-y-token");
+    persistRoomGuestSession(null);
+    expect(loadRoomGuestSession()).toBeNull();
   });
 });
