@@ -16,12 +16,14 @@ export function useServerOpening({
   refreshRoomDirectory,
   captureRoomDirectoryContinuity,
   hasMemberAnchor,
+  isMemberRefused,
   retryMemberHost,
 }: {
   refreshCentralDirectory: () => Promise<CentralDirectoryState>;
   refreshRoomDirectory: (predecessor: RoomDirectoryContinuity) => Promise<{ ok: boolean }>;
   captureRoomDirectoryContinuity: () => RoomDirectoryContinuity;
   hasMemberAnchor: (serverId: string) => boolean;
+  isMemberRefused: (serverId: string) => boolean;
   retryMemberHost: (serverId: string) => void;
 }) {
   const [connectingServerId, setConnectingServerId] = useState("");
@@ -41,7 +43,9 @@ export function useServerOpening({
   }
   async function retryRoomConnection(room: RoomDockItem) {
     if (room.roomOrigin === "remote_server") {
-      if (room.serverId && hasMemberAnchor(room.serverId)) {
+      // An identity-refused host (epoch/key changed) needs fresh consent,
+      // not a silent retry: route it through the member consent path.
+      if (room.serverId && hasMemberAnchor(room.serverId) && !isMemberRefused(room.serverId)) {
         retryMemberHost(room.serverId);
         return;
       }

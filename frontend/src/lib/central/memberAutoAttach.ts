@@ -1,5 +1,5 @@
 import { previewSecureMember, SecureMemberAdmission, type SecureMemberEntry } from "./secureMemberEntry";
-import { loadMemberAnchor, removeMemberAnchor, saveMemberAnchor, type MemberHostAnchor } from "./memberAnchors";
+import { loadMemberAnchor, saveMemberAnchor, type MemberHostAnchor } from "./memberAnchors";
 import type { CentralServer } from "./identity";
 
 export type MemberAttachDeps = {
@@ -23,9 +23,14 @@ export class MemberAnchorMismatchError extends Error {
  * Silent re-entry to one joined member host: central preview pins the live
  * incarnation, then a fresh member-connect grant admits through the existing
  * challenge/redeem/select path. Bearers stay memory-only; only the display
- * anchor persists. Throws MemberAnchorMismatchError when the stored anchor
- * no longer matches (the stale anchor is dropped), and the preview/host
- * error otherwise.
+ * anchor persists. The anchor pins host IDENTITY only (server_id,
+ * registration_epoch, host key fingerprint); the endpoint origin/generation
+ * is taken fresh from the central directory on every attach, so a friend's
+ * new random public origin re-attaches silently. Throws
+ * MemberAnchorMismatchError only on identity change (epoch or key
+ * fingerprint; the stored anchor is kept so the known rooms stay visible
+ * as disconnected with the re-join reason until fresh consent overwrites
+ * it), and the preview/host error otherwise.
  */
 export async function attachMemberHost(
   server: Pick<CentralServer, "server_id" | "registration_epoch">,
@@ -37,15 +42,12 @@ export async function attachMemberHost(
   if (!server.registration_epoch) throw new Error("서버 등록 정보를 확인하지 못했어요.");
   const stored = loadMemberAnchor(personId, server.server_id);
   if (stored && (stored.registration_epoch !== server.registration_epoch)) {
-    removeMemberAnchor(personId, server.server_id);
     throw new MemberAnchorMismatchError();
   }
   const entry: SecureMemberEntry = { server_id: server.server_id, registration_epoch: server.registration_epoch };
   const preview = await deps.preview(entry);
   const target = preview.target;
-  if (stored && (stored.host_key_fingerprint !== target.host_key_fingerprint ||
-      stored.endpoint_origin !== target.origin)) {
-    removeMemberAnchor(personId, server.server_id);
+  if (stored && stored.host_key_fingerprint !== target.host_key_fingerprint) {
     throw new MemberAnchorMismatchError();
   }
   const admission = await deps.open(entry, target, sessionToken, signal);

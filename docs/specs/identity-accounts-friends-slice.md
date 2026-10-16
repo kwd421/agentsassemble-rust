@@ -3135,14 +3135,22 @@ nothing-openable cases stays outside the rail). The computer is an attribute
   grant, recovery code or host proof in the display cache. On restart the
   client revalidates the central session, takes a fresh central directory,
   and re-admits to each joined host with a fresh grant through the existing
-  member-connect challenge/redeem/select path; the one-time invite handoff
-  stays tab-scoped and take-and-delete. A persisted anchor whose epoch, key
-  fingerprint or origin no longer matches is refused without retry.
+   member-connect challenge/redeem/select path; the one-time invite handoff
+  stays tab-scoped and take-and-delete. The anchor pins host IDENTITY only
+  (`server_id`, `registration_epoch`, host key fingerprint); the endpoint
+  origin/generation is taken fresh from the central directory on every
+  attach, so a friend's new random public origin (reopened external access
+  or restart) re-attaches silently. Only an identity change (epoch or key
+  fingerprint) refuses, and then the host stays visible with its known
+  rooms disconnected, the Korean re-join reason and a retry/re-join path —
+  never silently removed. A refused or failed host is never hidden and a
+  stale refusal never blocks a live membership without an anchor.
   Revocation (host leave/kick/revocation, central hide, logout,
   account switch or deletion) clears the persisted anchor for that
   host/membership. First join keeps explicit consent; silent re-entry is
-  allowed only when the live preview (`server_id`, label, endpoint
-  origin/generation) matches the stored anchor, otherwise full consent again.
+  allowed whenever the live preview matches the stored identity
+  (`server_id`, `registration_epoch`, host key fingerprint) regardless of
+  endpoint origin/generation, otherwise full consent again.
 - Central stays minimal. Central provides the event-driven directory
   bootstrap (existing focus/visible throttled, online/explicit immediate
   checks only), grant issue/redeem on demand, hide/unhide, and member-sync
@@ -3299,8 +3307,13 @@ confirmation. Entry points: central directory bootstrap/refresh, the trusted
 owner store holding the per-host anchor, and the startup re-admission path.
 Persist only the per-host anchor (`server_id`, `registration_epoch`, host
 key fingerprint, endpoint origin/generation, display-only room list, hide
-state); never persist bearers, grants or private keys. Anchor epoch, key
-fingerprint or origin mismatch refuses without retry. Revocation (host
+state); never persist bearers, grants or private keys. Only anchor epoch
+or key fingerprint mismatch refuses (the stale anchor is kept so the
+known rooms stay visible as disconnected with the Korean re-join reason
+until fresh consent overwrites it); an endpoint origin/generation change
+re-attaches silently. A refused or failed host stays visible
+(disconnected + reason + retry) and a stale refusal never blocks a live
+membership without an anchor. Revocation (host
 leave/kick/revocation, central hide, logout, account switch or deletion)
 clears the anchor for that host/membership, and revoked rooms leave the
 rail with no tombstone (owner decision D).

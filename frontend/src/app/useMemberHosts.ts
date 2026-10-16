@@ -12,6 +12,7 @@ export type MemberHostSnapshot = {
   phase: "connecting" | "connected" | "disconnected";
   origin: string;
   rooms: { room_id: string; name: string }[] | null;
+  detail: string | null;
 };
 
 type DirectoryTuple = {
@@ -62,7 +63,7 @@ export function useMemberHosts({
   identityRef.current = { personId, sessionToken };
 
   const setPhase = useCallback((serverId: string, phase: MemberHostSnapshot["phase"],
-      rooms?: { room_id: string; name: string }[] | null, origin?: string) => {
+      rooms?: { room_id: string; name: string }[] | null, origin?: string, detail?: string | null) => {
     setSnapshots((current) => {
       const existing = current.find((entry) => entry.serverId === serverId);
       const next: MemberHostSnapshot = {
@@ -70,8 +71,10 @@ export function useMemberHosts({
         phase,
         origin: origin ?? existing?.origin ?? "",
         rooms: rooms === undefined ? existing?.rooms ?? null : rooms,
+        detail: detail === undefined ? existing?.detail ?? null : detail,
       };
-      if (existing && existing.phase === next.phase && existing.rooms === next.rooms && existing.origin === next.origin) return current;
+      if (existing && existing.phase === next.phase && existing.rooms === next.rooms &&
+          existing.origin === next.origin && existing.detail === next.detail) return current;
       return [...current.filter((entry) => entry.serverId !== serverId), next];
     });
   }, []);
@@ -91,7 +94,8 @@ export function useMemberHosts({
     if (!activePerson || !activeToken || flights.current.has(serverId)) return;
     const controller = new AbortController();
     flights.current.set(serverId, controller);
-    setPhase(serverId, "connecting", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin);
+    const previousAnchor = loadMemberAnchor(activePerson, serverId);
+    setPhase(serverId, "connecting", previousAnchor?.rooms ?? null, origin, null);
     try {
       const attached = await attachMemberHost({ server_id: serverId, registration_epoch: epoch },
         activeToken, activePerson, controller.signal);
@@ -110,17 +114,22 @@ export function useMemberHosts({
         if (identityRef.current.sessionToken !== activeToken) return;
         setPhase(serverId, "disconnected");
       });
-      setPhase(serverId, "connected", attached.rooms, attached.anchor.endpoint_origin);
+      setPhase(serverId, "connected", attached.rooms, attached.anchor.endpoint_origin, null);
     } catch (error) {
       flights.current.delete(serverId);
       if (controller.signal.aborted) return;
       if (identityRef.current.personId !== activePerson || identityRef.current.sessionToken !== activeToken) return;
       if (error instanceof MemberAnchorMismatchError) {
+        // Identity changed (epoch or host key): keep the known rooms
+        // visible as disconnected with the Korean re-join reason. The
+        // stale anchor is kept as the refusal baseline, so neither
+        // auto-reconcile nor retry re-attaches silently; fresh consent
+        // overwrites it (re-join path).
         refused.current.add(serverId);
-        setSnapshots((current) => current.filter((entry) => entry.serverId !== serverId));
+        setPhase(serverId, "disconnected", previousAnchor?.rooms ?? null, origin, error.message);
         return;
       }
-      setPhase(serverId, "disconnected", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin);
+      setPhase(serverId, "disconnected", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin, null);
     }
   }, [setPhase, dropHost]);
 
@@ -180,23 +189,38 @@ export function useMemberHosts({
       const origin = tuple.origin || anchor?.endpoint_origin || "";
       if (tuple.mode && tuple.mode !== "event_secure_v1") {
         attempted.current.set(server.server_id, tupleKey(tuple));
-        setPhase(server.server_id, "disconnected", anchor?.rooms ?? null, origin);
+        setPhase(server.server_id, "disconnected", anchor?.rooms ?? null, origin, null);
+        continue;
+      }
+      // No anchor but a live membership on a never-refused host: a fresh
+      // device (first join happened elsewhere on the same account) attaches
+      // silently. A recorded identity refusal still blocks this path so an
+      // epoch/key change can never re-attach silently after the anchor is
+      // gone; only fresh consent overwrites the anchor and lifts it.
+      if (!anchor && refused.current.has(server.server_id)) {
+        const known = snapshotsRef.current.find((entry) => entry.serverId === server.server_id);
+        setPhase(server.server_id, "disconnected", known?.rooms ?? null, origin,
+          known?.detail ?? "참가 서버 정보가 바뀌었어요. 새 초대로 다시 참가해 주세요.");
         continue;
       }
       if (flights.current.has(server.server_id) || refused.current.has(server.server_id)) continue;
       if (attempted.current.get(server.server_id) === tupleKey(tuple)) continue;
+      // Identity-only pin: epoch or host key fingerprint mismatch refuses.
+      // Endpoint origin/generation comes fresh from the directory every
+      // time; a new random public origin re-attaches silently. The stale
+      // anchor is kept so the known rooms stay visible as disconnected
+      // with the re-join reason until fresh consent overwrites it.
       if (anchor && (anchor.registration_epoch !== epoch ||
-          (tuple.fingerprint !== "" && anchor.host_key_fingerprint !== tuple.fingerprint) ||
-          (origin !== "" && anchor.endpoint_origin !== origin))) {
-        removeMemberAnchor(activePerson, server.server_id);
+          (tuple.fingerprint !== "" && anchor.host_key_fingerprint !== tuple.fingerprint))) {
         refused.current.add(server.server_id);
-        if (snapshotsRef.current.some((entry) => entry.serverId === server.server_id)) dropHost(server.server_id);
+        attempted.current.set(server.server_id, tupleKey(tuple));
+        setPhase(server.server_id, "disconnected", anchor.rooms ?? null, origin,
+          "참가 서버 정보가 바뀌었어요. 새 초대로 다시 참가해 주세요.");
         continue;
       }
       // A fresh consent-written anchor lifts a previous refusal.
       if (anchor && anchor.registration_epoch === epoch &&
-          (tuple.fingerprint === "" || anchor.host_key_fingerprint === tuple.fingerprint) &&
-          (origin === "" || anchor.endpoint_origin === origin)) {
+          (tuple.fingerprint === "" || anchor.host_key_fingerprint === tuple.fingerprint)) {
         refused.current.delete(server.server_id);
       }
       attempted.current.set(server.server_id, tupleKey(tuple));
@@ -289,5 +313,7 @@ export function useMemberHosts({
     return Boolean(activePerson && loadMemberAnchor(activePerson, serverId));
   }, []);
 
-  return { snapshots, hostDirs, hostStates, hasAnchor, retryHost, selectRoom, removeRoom };
+  const isRefused = useCallback((serverId: string) => refused.current.has(serverId), []);
+
+  return { snapshots, hostDirs, hostStates, hasAnchor, isRefused, retryHost, selectRoom, removeRoom };
 }

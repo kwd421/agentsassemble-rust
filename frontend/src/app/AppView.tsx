@@ -388,7 +388,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} />
           ) : activeRoomDisconnected ? (
-            <DisconnectedRoomView key={activeRoom.id} room={activeRoom} onRetry={() => controller.retryRoomConnection(activeRoom)} />
+            <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={controller.activeMemberHostDetail} onRetry={() => controller.retryRoomConnection(activeRoom)} />
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
               <h1 id="empty-room-title">열려 있는 방이 없어요</h1>

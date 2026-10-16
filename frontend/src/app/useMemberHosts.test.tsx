@@ -85,20 +85,49 @@ describe("useMemberHosts", () => {
     expect(result.current.hostDirs[0]).toMatchObject({ serverId: "friend", rooms: null, state: "disconnected" });
   });
 
-  it("refuses an epoch mismatch without retry and drops the stale anchor", async () => {
+  it("keeps refused rooms visible as disconnected with a re-join reason and retains the anchor", async () => {
     saveMemberAnchor("person", {
       server_id: "friend", registration_epoch: "old", host_key_fingerprint: "fingerprint",
-      endpoint_origin: "https://friend.test", endpoint_generation: 2, rooms: [], hidden: false, updated_at: 1,
+      endpoint_origin: "https://friend.test", endpoint_generation: 2,
+      rooms: [{ room_id: "general", name: "일반" }], hidden: false, updated_at: 1,
     });
     const { result, rerender } = renderHook(({ directory }) => useMemberHosts({
       personId: "person", sessionToken: "token", directory,
     }), { initialProps: { directory: directoryFor([liveServer()]) } });
-    await waitFor(() => expect(window.localStorage.getItem("agentsassemble.memberAnchors.v1:person")).toBeNull(), { timeout: 5000 });
+    await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("disconnected"), { timeout: 5000 });
     expect(attach).not.toHaveBeenCalled();
-    expect(result.current.snapshots).toEqual([]);
+    expect(result.current.snapshots[0]).toMatchObject({ serverId: "friend", phase: "disconnected" });
+    expect(result.current.snapshots[0]?.detail).toMatch(/새 초대/);
+    expect(result.current.hostDirs[0]).toMatchObject({
+      serverId: "friend", rooms: [{ room_id: "general", label: "일반" }], state: "disconnected",
+    });
+    // The stale anchor is kept as the refusal baseline; a retry still
+    // refuses instead of silently adopting the new identity.
+    expect(window.localStorage.getItem("agentsassemble.memberAnchors.v1:person")).not.toBeNull();
     rerender({ directory: directoryFor([liveServer()]) });
     await act(async () => {});
     expect(attach).not.toHaveBeenCalled();
+    expect(result.current.snapshots[0]?.phase).toBe("disconnected");
+  });
+
+  it("re-attaches silently when only the endpoint origin changed", async () => {
+    saveMemberAnchor("person", {
+      server_id: "friend", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://old.test", endpoint_generation: 2,
+      rooms: [{ room_id: "general", name: "일반" }], hidden: false, updated_at: 1,
+    });
+    attach.mockImplementation(async () => ({
+      admission: admissionFor([{ room_id: "general", name: "일반" }]),
+      rooms: [{ room_id: "general", name: "일반" }],
+      anchor: { server_id: "friend", registration_epoch: "epoch" },
+    }));
+    const { result } = renderHook(() => useMemberHosts({
+      personId: "person", sessionToken: "token", directory: directoryFor([liveServer()]),
+    }));
+    await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("connected"), { timeout: 5000 });
+    expect(attach).toHaveBeenCalledOnce();
+    expect(result.current.hostDirs[0]).toMatchObject({ serverId: "friend", state: "connected" });
+    expect(result.current.snapshots[0]?.detail).toBeNull();
   });
 
   it("removes rooms and the anchor when a live directory drops the membership", async () => {

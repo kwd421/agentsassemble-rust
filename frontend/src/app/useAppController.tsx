@@ -227,6 +227,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     refreshRoomDirectory,
     captureRoomDirectoryContinuity,
     hasMemberAnchor: memberHosts.hasAnchor,
+    isMemberRefused: memberHosts.isRefused,
     retryMemberHost: memberHosts.retryHost,
   });
   latestRooms.current = rooms;
@@ -234,6 +235,9 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? EMPTY_ROOM;
   const activeRoomDisconnected = roomIsDisconnected(activeRoom);
+  const activeMemberHostDetail = activeRoom.roomOrigin === "remote_server" && activeRoom.serverId
+    ? memberHosts.snapshots.find((entry) => entry.serverId === activeRoom.serverId)?.detail ?? null
+    : null;
   // A member room session belongs to exactly one host room. While the local
   // host owns the surface, that session authorizes only its own room: the
   // own rooms keep host authority (and the local operator viewer) instead of
@@ -776,7 +780,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     activeChannelDisplay, activeChannelSettings,
     canManageActiveRoom, canControlActiveAgents, canAddCompanion, canAddActiveAI,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
-    activeRoomDisconnected, activeRoomHistory, activeRoomMembers,
+    activeRoomDisconnected, activeMemberHostDetail, activeRoomHistory, activeRoomMembers,
     addFreshRoom, adjustSidebarWidthWithKeyboard,
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,
     cancelMobileShellPointer, canonicalRoom, sideChat,

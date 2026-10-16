@@ -48,7 +48,23 @@ describe("member auto-attach", () => {
     detachMemberHost(attached.admission);
   });
 
-  it("refuses a key or origin mismatch and drops the stale anchor", async () => {
+  it("re-attaches silently when only the endpoint origin/generation changed", async () => {
+    saveMemberAnchor("person", {
+      server_id: "server", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://old.test", endpoint_generation: 2, rooms, hidden: false, updated_at: 1,
+    });
+    const { deps } = depsWith({});
+    const attached = await attachMemberHost(server, "central-token", "person", new AbortController().signal, deps as never);
+    expect(attached.rooms).toEqual(rooms);
+    // The anchor pins identity only; the fresh origin/generation is adopted.
+    expect(loadMemberAnchor("person", "server")).toMatchObject({
+      server_id: "server", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://host.test", endpoint_generation: 3,
+    });
+    detachMemberHost(attached.admission);
+  });
+
+  it("refuses a key mismatch and keeps the stale anchor for the disconnected view", async () => {
     saveMemberAnchor("person", {
       server_id: "server", registration_epoch: "epoch", host_key_fingerprint: "old-key",
       endpoint_origin: "https://host.test", endpoint_generation: 2, rooms, hidden: false, updated_at: 1,
@@ -56,10 +72,11 @@ describe("member auto-attach", () => {
     const { deps } = depsWith({});
     await expect(attachMemberHost(server, "central-token", "person", new AbortController().signal, deps as never))
       .rejects.toBeInstanceOf(MemberAnchorMismatchError);
-    expect(loadMemberAnchor("person", "server")).toBeNull();
+    expect(loadMemberAnchor("person", "server")).not.toBeNull();
+    expect(loadMemberAnchor("person", "server")?.rooms).toEqual(rooms);
   });
 
-  it("refuses an epoch mismatch before any preview and drops the stale anchor", async () => {
+  it("refuses an epoch mismatch before any preview and keeps the stale anchor", async () => {
     saveMemberAnchor("person", {
       server_id: "server", registration_epoch: "old", host_key_fingerprint: "fingerprint",
       endpoint_origin: "https://host.test", endpoint_generation: 2, rooms, hidden: false, updated_at: 1,
@@ -68,7 +85,8 @@ describe("member auto-attach", () => {
     await expect(attachMemberHost(server, "central-token", "person", new AbortController().signal, deps as never))
       .rejects.toBeInstanceOf(MemberAnchorMismatchError);
     expect(deps.preview).not.toHaveBeenCalled();
-    expect(loadMemberAnchor("person", "server")).toBeNull();
+    expect(loadMemberAnchor("person", "server")).not.toBeNull();
+    expect(loadMemberAnchor("person", "server")?.rooms).toEqual(rooms);
   });
 
   it("closes the transport when admission fails without persisting rooms", async () => {
