@@ -263,18 +263,14 @@ impl BoundSidecar {
     }
 
     fn bind_open_source(mut source: std::fs::File) -> io::Result<Self> {
-        use std::io::{Seek, Write};
-
-        use agentsassemble_domain::stable_content_identity;
-        use same_file::Handle;
+        use std::io::Write;
 
         let source_metadata = source.metadata()?;
         if !source_metadata.is_file() || source_metadata.permissions().mode() & 0o111 == 0 {
             return Err(io::Error::other("sidecar source is not executable"));
         }
-        let source_handle = Handle::from_file(source.try_clone()?)?;
-        let expected_identity = stable_content_identity(&source_handle, &mut source)?;
-        source.rewind()?;
+        // The open descriptor pins the source inode: a path replacement after this
+        // point changes neither the copied bytes nor the comparison below.
 
         let staging = RuntimeExecutableStaging::create()?;
         let staging_metadata = std::fs::symlink_metadata(staging.path())?;
@@ -293,8 +289,11 @@ impl BoundSidecar {
         io::copy(&mut source, &mut staged)?;
         staged.flush()?;
         staged.sync_all()?;
-        staged.rewind()?;
-        if stable_content_identity(&source_handle, &mut staged)? != expected_identity {
+        // Prove the private stage holds exactly the pinned source bytes before
+        // execution. A byte comparison through the same descriptors is exact and
+        // avoids hashing the executable twice: each SHA-256 pass costs seconds on
+        // a debug-sized server while the login/server UI shows nothing.
+        if !staged_copy_matches_source(&mut source, &mut staged)? {
             return Err(io::Error::other("sidecar staging identity changed"));
         }
         std::fs::set_permissions(&launch_path, std::fs::Permissions::from_mode(0o500))?;
@@ -306,6 +305,37 @@ impl BoundSidecar {
 
     fn launch_path(&self) -> &std::path::Path {
         &self.launch_path
+    }
+}
+
+/// Compares two streams byte for byte without hashing either side.
+///
+/// Short refills never imply end of stream, so only the overlapping prefix of
+/// each buffered refill is compared and both sides advance in lockstep. A
+/// length difference surfaces as a one-sided end of stream and fails closed.
+#[cfg(target_os = "macos")]
+fn staged_copy_matches_source(
+    source: &mut std::fs::File,
+    staged: &mut std::fs::File,
+) -> io::Result<bool> {
+    use std::io::Seek;
+
+    staged.rewind()?;
+    source.rewind()?;
+    let mut source = BufReader::with_capacity(64 * 1024, source);
+    let mut staged = BufReader::with_capacity(64 * 1024, staged);
+    loop {
+        let source_chunk = source.fill_buf()?;
+        let staged_chunk = staged.fill_buf()?;
+        let common = source_chunk.len().min(staged_chunk.len());
+        if source_chunk[..common] != staged_chunk[..common] {
+            return Ok(false);
+        }
+        if common == 0 {
+            return Ok(source_chunk.is_empty() && staged_chunk.is_empty());
+        }
+        source.consume(common);
+        staged.consume(common);
     }
 }
 
@@ -544,6 +574,45 @@ mod tests {
             super::reset_account_data(&script, &directory.path().join("runtime.sqlite3")).is_err()
         );
         Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn staged_verification_compares_exact_bytes() {
+        use std::io::{Seek, SeekFrom};
+
+        let directory = tempfile::tempdir()
+            .unwrap_or_else(|error| panic!("create staged comparison fixture: {error}"));
+        let source_path = directory.path().join("source");
+        let staged_path = directory.path().join("staged");
+        let bytes: Vec<u8> = (0..300_000_u32).map(|value| (value % 251) as u8).collect();
+        std::fs::write(&source_path, &bytes)
+            .unwrap_or_else(|error| panic!("write staged comparison source: {error}"));
+        let mut check = |staged_bytes: &[u8]| {
+            std::fs::write(&staged_path, staged_bytes)
+                .unwrap_or_else(|error| panic!("write staged comparison copy: {error}"));
+            let mut source = std::fs::File::open(&source_path)
+                .unwrap_or_else(|error| panic!("open staged comparison source: {error}"));
+            let mut staged = std::fs::File::open(&staged_path)
+                .unwrap_or_else(|error| panic!("open staged comparison copy: {error}"));
+            // Bind leaves both descriptors at the end; the helper must rewind.
+            source
+                .seek(SeekFrom::End(0))
+                .unwrap_or_else(|error| panic!("seek staged comparison source: {error}"));
+            staged
+                .seek(SeekFrom::End(0))
+                .unwrap_or_else(|error| panic!("seek staged comparison copy: {error}"));
+            super::staged_copy_matches_source(&mut source, &mut staged)
+                .unwrap_or_else(|error| panic!("compare staged copy: {error}"))
+        };
+        assert!(check(&bytes));
+        let mut flipped = bytes.clone();
+        flipped[150_000] ^= 0xFF;
+        assert!(!check(&flipped));
+        assert!(!check(&bytes[..bytes.len() - 1]));
+        let mut extended = bytes.clone();
+        extended.push(0xA5);
+        assert!(!check(&extended));
     }
 
     #[cfg(target_os = "macos")]

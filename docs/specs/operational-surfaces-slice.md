@@ -1208,6 +1208,21 @@ positive cleanup semantics. The app bundle executable is not a standalone helper
 No unsigned retry, mutable-source launch, signature removal, Keychain ACL widening,
 secret cache, or alternative credential source is permitted.
 
+Staging protects the launch, not the bytes' durability: it copies the opened
+helper/server file descriptor (which pins the source inode past any path
+replacement) into a private owned immutable stage (`0700` directory with an
+exclusive lease, `0500` staged file) so a path replacement between resolution
+and `exec` cannot substitute the running image.
+The staged copy must still be re-read and identity-compared before execution.
+Google login (`local_runtime::central_login::start_login_process`) and normal
+server startup (`local_runtime::start_runtime`) stage the server on every press
+through `runtime_supervisor::command`/`supervise` into
+`BoundSidecar::bind_open_source`; that path must prove the staged bytes equal
+the pinned source descriptor without hashing the executable at all (copy once
+from the open file, then byte-compare the staged re-read against the same
+descriptor before execution), because each full SHA-256 pass costs seconds on
+a 226 MB debug server while the login/server UI shows nothing.
+
 The macOS distribution entry `npm --prefix desktop run build:signed:macos` requires
 `APPLE_SIGNING_IDENTITY` set to the publisher's Developer ID. Tauri signs helper and
 server with their stable executable-name identifiers before signing the app. Keep
