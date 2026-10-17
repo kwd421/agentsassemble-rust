@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bindRemoteSession, closeRemoteWorkspace, fetchProductTransport, installRemoteWorkspace, remoteWorkspaceFor, remoteWorkspacesSnapshot } from "./remoteWorkspace";
+import { bindRemoteSession, closeRemoteWorkspace, fetchProductTransport, installRemoteWorkspace, remoteSessionTransport, remoteWorkspaceFor, remoteWorkspacesSnapshot, unbindRemoteSessionsForServer } from "./remoteWorkspace";
 import type { RemoteTransport } from "./remoteTransport";
 
 afterEach(() => { closeRemoteWorkspace(); vi.unstubAllGlobals(); });
@@ -85,5 +85,13 @@ describe("per-host session registry", () => {
     expect(() => installRemoteWorkspace({ transport: vague as unknown as RemoteTransport,
       owner: null, deviceToken: "device", clientId: "client" }))
       .toThrow("서버를 확인하지 못했어요");
+  });
+
+  it("unbinding one host drops only its bearers", () => {
+    installHost("server-a", "bearer-a");
+    installHost("server-b", "bearer-b");
+    unbindRemoteSessionsForServer("server-a");
+    expect(remoteSessionTransport("bearer-a")).toBeUndefined();
+    expect(remoteSessionTransport("bearer-b")).toBeTruthy();
   });
 });

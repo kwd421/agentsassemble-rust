@@ -4,7 +4,7 @@ import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from ".
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
 import { memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
-import { remoteWorkspaceFor } from "../lib/remote/remoteWorkspace";
+import { remoteWorkspaceFor, closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
 import { ApiError } from "../lib/apiErrors";
 import type { SecureMemberAdmission } from "../lib/central/secureMemberEntry";
 import type { HostRoomDirectory, ServerRoomDockSource } from "../lib/roomDockModel";
@@ -94,10 +94,12 @@ export function useMemberHosts({
   personId,
   sessionToken,
   directory,
+  onConfirmedMembershipLost,
 }: {
   personId: string;
   sessionToken: string;
   directory: CentralDirectoryState | null;
+  onConfirmedMembershipLost?: (serverId: string) => void;
 }) {
   const [snapshots, setSnapshots] = useState<MemberHostSnapshot[]>([]);
   const [anchorRevision, setAnchorRevision] = useState(0);
@@ -166,6 +168,25 @@ export function useMemberHosts({
   }, [clearReconnectTimer]);
 
   const reattachHostRef = useRef<(serverId: string) => void>(() => undefined);
+  const confirmedLossRef = useRef(onConfirmedMembershipLost);
+  confirmedLossRef.current = onConfirmedMembershipLost;
+
+  // Confirmed membership loss (kick/ban/revoke while central is connected):
+  // the adopted secure channel and every bound room bearer close here instead
+  // of staying open, and the caller drops the server's rooms from the rail.
+  // A temporary central outage never reaches this: without a connected
+  // directory listing, loss cannot be confirmed.
+  const cleanupConfirmedLoss = useCallback((serverId: string) => {
+    const admission = admissions.current.get(serverId);
+    dropHost(serverId);
+    // dropHost only closes an admit-only channel: an adopted room session
+    // keeps its transport open, so close it outright, then drop the workspace
+    // entry and every bearer bound to this host.
+    try { admission?.transport.close(); } catch { /* transport close is best-effort */ }
+    closeRemoteWorkspace(serverId);
+    unbindRemoteSessionsForServer(serverId);
+    confirmedLossRef.current?.(serverId);
+  }, [dropHost]);
 
   const scheduleReconnect = useCallback((serverId: string) => {
     // An identity refusal blocks silent re-entry (fresh consent overwrites
@@ -229,8 +250,12 @@ export function useMemberHosts({
       const directory = directoryRef.current;
       const live = directory?.status === "connected" ? directory.live?.servers ?? null : null;
       if (live && !live.some((server) => server.server_id === serverId && server.relation === "member")) {
+        // Confirmed loss mid-attach: the just-saved anchor goes too, or the
+        // next retry would re-attach from it as if nothing happened.
+        flights.current.delete(serverId);
         detachMemberHost(attached.admission);
-        dropHost(serverId);
+        if (activePerson) removeMemberAnchor(activePerson, serverId);
+        cleanupConfirmedLoss(serverId);
         return;
       }
       flights.current.delete(serverId);
@@ -284,7 +309,7 @@ export function useMemberHosts({
       reconnectRetryAfter.current.set(serverId, memberHostRetryAfterMs(error));
       scheduleReconnect(serverId);
     }
-  }, [setPhase, dropHost, scheduleReconnect, clearReconnectTimer]);
+  }, [setPhase, dropHost, scheduleReconnect, clearReconnectTimer, cleanupConfirmedLoss]);
 
   // Account switch or logout ends every member session; anchors are cleared
   // by the central identity owner, so re-login re-attaches from membership.
@@ -340,7 +365,11 @@ export function useMemberHosts({
     const seen = new Set(members.map((server) => server.server_id));
     for (const snapshot of snapshotsRef.current) {
       if (!seen.has(snapshot.serverId)) {
-        dropHost(snapshot.serverId);
+        // Central connectedly confirms the membership is gone (kick/ban/
+        // revoke): full loss cleanup, never a silent re-attach. A temporary
+        // central outage never reaches here (unconfirmed directories return
+        // above and keep every anchor).
+        cleanupConfirmedLoss(snapshot.serverId);
         reconnectAttempts.current.delete(snapshot.serverId);
         reconnectCauses.current.delete(snapshot.serverId);
         reconnectRetryAfter.current.delete(snapshot.serverId);
@@ -421,7 +450,7 @@ export function useMemberHosts({
       }
       void attach(server.server_id, epoch, origin);
     }
-  }, [attach, dropHost, scheduleReconnect, setPhase, clearReconnectTimer]);
+  }, [attach, dropHost, scheduleReconnect, setPhase, clearReconnectTimer, cleanupConfirmedLoss]);
 
   useEffect(() => {
     if (!personId || !sessionToken) {
@@ -453,8 +482,11 @@ export function useMemberHosts({
       reconcile();
       return;
     }
-    // Central is unconfirmed so reconcile cannot run: attach straight from
-    // the anchor instead of stranding the retry in silence.
+    // Central connectedly confirms no membership: this is loss, not outage.
+    // Reconcile owns the loss cleanup; a timer must never re-attach from the
+    // anchor as if nothing happened. Only an unconfirmed central may attach
+    // straight from the anchor instead of stranding the retry in silence.
+    if (live) return;
     void attach(serverId, epoch, anchor?.endpoint_origin || "");
   }, [attach, dropHost, reconcile, clearReconnectTimer]);
 

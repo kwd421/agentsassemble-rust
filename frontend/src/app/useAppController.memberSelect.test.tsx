@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hash } from "lucide-react";
 import { useAppController } from "./useAppController";
 import type { CentralDirectoryState } from "./useCentralDirectory";
-import { bindRemoteSession, installRemoteWorkspace } from "../lib/remote/remoteWorkspace";
+import { bindRemoteSession, installRemoteWorkspace, remoteSessionTransport, remoteWorkspaceFor } from "../lib/remote/remoteWorkspace";
 import type { RemoteTransport } from "../lib/remote/remoteTransport";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomDirectoryContinuity } from "./useRoomDirectory";
@@ -457,5 +457,84 @@ describe("member room selection on an owner local host", () => {
       const auth = call.auth as { kind?: string; meetingId?: string } | undefined;
       expect(auth?.kind === "host" && auth.meetingId === MEMBER_MEETING).toBe(false);
     }
+  });
+
+  it("closes the member transport, clears its session and drops its rooms when central confirms the membership is gone", async () => {
+    const attachTransportClose = vi.fn();
+    const workspaceTransportClose = vi.fn();
+    hooks.initialRooms = [
+      {
+        id: "own-room", label: "새 방", meetingId: OWN_MEETING, roomOrigin: "local",
+        connectionState: "local", topic: "own", shortLabel: "새", icon: Hash, createdAt: "", tone: "fresh",
+      },
+      {
+        id: "server-hihi-server-hihi-room", label: "Hihi room", meetingId: MEMBER_MEETING,
+        roomOrigin: "remote_server", serverId: MEMBER_SERVER, connectionState: "disconnected",
+        topic: "Hihi room", shortLabel: "H", icon: Hash, createdAt: "", tone: "resident",
+      },
+    ];
+    const workspaceTransport = { hello: { origin: "https://hihi.test" }, active: true, onClose: () => undefined, close: workspaceTransportClose };
+    hooks.select.mockImplementation(async () => {
+      const payload = memberJoinPayload();
+      const member = { ...roomGuestSessionFromJoinPayload("", payload), centralMember: true as const };
+      bindRemoteSession(member.sessionToken, workspaceTransport as unknown as RemoteTransport, member.serverSurface.server_id);
+      installRemoteWorkspace({ transport: workspaceTransport as unknown as RemoteTransport, owner: null, member, deviceToken: "device-test", clientId: "client-test" });
+      return payload;
+    });
+    hooks.attach.mockImplementation(async () => {
+      const anchor: MemberHostAnchor = {
+        server_id: MEMBER_SERVER, registration_epoch: "epoch-1", host_key_fingerprint: "fp",
+        endpoint_origin: "https://hihi.test", endpoint_generation: 3,
+        rooms: [{ room_id: MEMBER_MEETING, name: "Hihi room" }], hidden: false, updated_at: Date.now(),
+      };
+      const { saveMemberAnchor } = await import("../lib/central/memberAnchors");
+      saveMemberAnchor("person", anchor);
+      return {
+        admission: { transport: { onClose: () => undefined, close: attachTransportClose, active: true }, close: () => undefined, select: (...args: unknown[]) => hooks.select(...args) },
+        rooms: [{ room_id: MEMBER_MEETING, name: "Hihi room" }],
+        anchor,
+      };
+    });
+    const { result, rerender } = renderHook(() => useAppController("device-test", "client-test"));
+    await waitFor(() => {
+      if (result.current.rooms.length !== 2) throw new Error("rail not merged yet");
+    });
+    const memberId = result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!.id;
+    await act(async () => { await result.current.selectRoom(memberId); });
+    await waitFor(() => expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING));
+    await waitFor(() => expect(hooks.canonicalCalls.at(-1)).toMatchObject({
+      roomId: MEMBER_MEETING, auth: { kind: "session", sessionToken: MEMBER_TOKEN },
+    }));
+    expect(attachTransportClose).not.toHaveBeenCalled();
+    expect(workspaceTransportClose).not.toHaveBeenCalled();
+    expect(remoteWorkspaceFor(MEMBER_SERVER)).not.toBeNull();
+    expect(remoteSessionTransport(MEMBER_TOKEN)).toBeTruthy();
+    // The host kicks/bans the member (or central revokes it): while still
+    // connected, central no longer lists the membership. A temporary central
+    // outage keeps every anchor; only this connected confirmation is loss.
+    await act(async () => {
+      const live = hooks.directory?.live;
+      hooks.directory = {
+        status: "connected",
+        person: { person_id: "person", display_name: "나", identity_kind: "google" },
+        servers: [],
+        live: { person: live!.person, servers: [], server_time: 2 },
+      } as unknown as CentralDirectoryState;
+      rerender();
+    });
+    // The adopted channel and the room bearer close instead of staying open,
+    // the kicked rooms disappear from the rail (never linger disconnected),
+    // and the selection falls back to the own room.
+    await waitFor(() => expect(
+      result.current.rooms.some((room) => room.meetingId === MEMBER_MEETING)
+    ).toBe(false));
+    expect(attachTransportClose).toHaveBeenCalled();
+    expect(workspaceTransportClose).toHaveBeenCalled();
+    expect(remoteWorkspaceFor(MEMBER_SERVER)).toBeNull();
+    expect(remoteSessionTransport(MEMBER_TOKEN)).toBeUndefined();
+    expect(result.current.guestSession).toBeNull();
+    expect(result.current.admittedSessionToken).toBe("");
+    expect(result.current.activeRoom.meetingId).toBe(OWN_MEETING);
+    expect(hooks.attach).toHaveBeenCalledTimes(1);
   });
 });

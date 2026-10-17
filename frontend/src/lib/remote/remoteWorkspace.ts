@@ -101,6 +101,13 @@ export function bindRemoteSession(token: string, transport: RemoteTransport, ser
   transport.onClose(() => { if (sessions.get(token) === binding) binding.transport = null; });
 }
 export function remoteSessionTransport(token?: string) { return token ? sessions.get(token)?.transport ?? undefined : undefined; }
+/** Drops every bound bearer of one host after confirmed membership loss. */
+export function unbindRemoteSessionsForServer(serverId: string): void {
+  if (!serverId) return;
+  for (const [token, binding] of sessions) {
+    if (binding.serverId === serverId) sessions.delete(token);
+  }
+}
 /** Fail-closed host origin for a bearer: null when the session is unknown or closed. */
 export function sessionHostOrigin(token: string): string | null { return sessions.get(token)?.origin ?? null; }
 /** Fail-closed server id for a bearer: null when the session is unknown. */

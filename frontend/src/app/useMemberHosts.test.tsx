@@ -392,8 +392,37 @@ describe("useMemberHosts", () => {
     }
   });
 
-  it("confirms a member removal only from a live host that lists without the room", () => {
-    const room = { roomOrigin: "remote_server" as const, serverId: "friend", meetingId: "general" };
+  it("force-closes the adopted transport and reports confirmed loss instead of re-attaching", async () => {
+    const transportClose = vi.fn();
+    const admission = {
+      transport: { onClose: vi.fn(), close: transportClose, active: true },
+      close: vi.fn(),
+      select: vi.fn(),
+    };
+    attach.mockImplementation(async () => ({
+      admission,
+      rooms: [{ room_id: "general", name: "일반" }],
+      anchor: { server_id: "friend", registration_epoch: "epoch" },
+    }));
+    const onConfirmedMembershipLost = vi.fn();
+    const { result, rerender } = renderHook(({ directory }: { directory: CentralDirectoryState }) => useMemberHosts({
+      personId: "person", sessionToken: "token", directory, onConfirmedMembershipLost,
+    }), { initialProps: { directory: directoryFor([liveServer()]) as CentralDirectoryState } });
+    await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("connected"), { timeout: 5000 });
+    expect(attach).toHaveBeenCalledTimes(1);
+    // Central connectedly confirms the membership is gone (kick/ban/revoke):
+    // the adopted channel closes outright (a plain detach would leave it
+    // open), the loss is reported once, and no silent re-attach follows.
+    rerender({ directory: directoryFor([]) });
+    await waitFor(() => expect(result.current.snapshots).toEqual([]), { timeout: 5000 });
+    expect(transportClose).toHaveBeenCalled();
+    expect(onConfirmedMembershipLost).toHaveBeenCalledTimes(1);
+    expect(onConfirmedMembershipLost).toHaveBeenCalledWith("friend");
+    await act(async () => {});
+    expect(attach).toHaveBeenCalledTimes(1);
+  });
+
+  it("confirms a member removal only from a live host that lists without the room", () => {    const room = { roomOrigin: "remote_server" as const, serverId: "friend", meetingId: "general" };
     const snapshot = (phase: "connecting" | "connected" | "disconnected", rooms: { room_id: string; name: string }[] | null) =>
       ({ serverId: "friend", phase, origin: "https://friend.test", rooms, detail: null });
     // A live host that lists its rooms without this one removed it: fall back.

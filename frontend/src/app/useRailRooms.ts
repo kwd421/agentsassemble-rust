@@ -25,6 +25,7 @@ export function useRailRooms({
   admittedSessionToken,
   guestSession,
   guestExpired,
+  onConfirmedMembershipLost,
 }: {
   directoryRooms: RoomDockItem[];
   startupHostEnabled: boolean;
@@ -34,11 +35,13 @@ export function useRailRooms({
   admittedSessionToken: string;
   guestSession: RoomGuestSession | null;
   guestExpired: boolean;
+  onConfirmedMembershipLost?: (serverId: string) => void;
 }) {
   const memberHosts = useMemberHosts({
     personId: centralDirectory?.person?.person_id ?? "",
     sessionToken: loadCentralSession()?.token ?? "",
     directory: centralDirectory,
+    onConfirmedMembershipLost,
   });
   // Every live host besides the directory owner below: their rooms are
   // preserved by the merge while their own session projects their state.

@@ -75,6 +75,7 @@ import {
 } from "./useRoomSettingsController";
 import { useSidebarResize } from "./useSidebarResize";
 import { projectChannelUnread } from "../lib/channelUnread";
+import { closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
 import type { RoomStream } from "../types/generated/RoomStream";
 
 // Stable empty stream list for rooms without a server surface (a remote room
@@ -227,6 +228,30 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     onResetToLobby: onGuestAdmissionReset,
   });
   const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
+  // Confirmed membership loss (kick/ban/revoke while central is connected):
+  // the kicked rooms disappear from the rail (never linger disconnected),
+  // their bearer clears, and the selection falls back. A temporary central
+  // outage never reaches here.
+  const handleConfirmedMembershipLost = useCallback((serverId: string) => {
+    closeRemoteWorkspace(serverId);
+    unbindRemoteSessionsForServer(serverId);
+    if (guestSession && !guestExpired && guestSession.serverSurface.server_id === serverId) {
+      clearGuestSession();
+    }
+    const lostRoomIds = new Set(latestRooms.current
+      .filter((room) => room.roomOrigin === "remote_server" && room.serverId === serverId)
+      .map((room) => room.id));
+    if (lostRoomIds.size === 0) return;
+    for (const roomId of lostRoomIds) removeRoom(roomId);
+    if (memberSelectError && lostRoomIds.has(memberSelectError.roomId)) setMemberSelectError(null);
+    if (lostRoomIds.has(activeRoomId)) {
+      const fallback = latestRooms.current.find((room) => !lostRoomIds.has(room.id));
+      setActiveRoomId(fallback?.id || "");
+      setChannel("lobby");
+      setAdminOpen(false);
+      retainedActiveRoom.current = null;
+    }
+  }, [guestSession, guestExpired, clearGuestSession, removeRoom, memberSelectError, activeRoomId]);
   const { rooms: railRooms, memberHosts } = useRailRooms({
     directoryRooms,
     startupHostEnabled,
@@ -236,6 +261,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     admittedSessionToken,
     guestSession,
     guestExpired,
+    onConfirmedMembershipLost: handleConfirmedMembershipLost,
   });
   const { openRailServer, retryRoomConnection, connectingServerId, serverConnectionError } = useServerOpening({
     refreshCentralDirectory,
