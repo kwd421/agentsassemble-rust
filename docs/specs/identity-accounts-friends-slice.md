@@ -3853,4 +3853,19 @@ unchanged).
 
 ### A host's external access remembers its last open/closed choice (2026-10-17)
 
-Owner decision recorded with the implementation commit below.
+Owner decision (2026-10-17): a host's external access (public ingress,
+"외부 접속") remembers its last state. If it was open when the app
+quit, the desktop app reopens it automatically at the next start through
+the same owner path the "외부 접속 열기" button uses (local-operator
+`POST /api/public-invite/tunnel/start`, same server-side authority
+check, no new bypass), so joined friends reconnect without the owner
+pressing anything. If the owner closed it, it stays closed. Only the
+owner's last open/closed choice persists locally (bundled-UI storage,
+one boolean); never tokens, URLs, grants or keys. Web and other
+non-operator surfaces never auto-open. First start with no recorded
+choice stays closed, as today.
+
+Entry points: `frontend/src/app/useRoomInviteController.ts` (records the
+choice on successful start/stop, reopens once at startup when the
+remembered choice is open and the local operator path is eligible),
+`frontend/src/lib/publicIngressPreference.ts` (single boolean owner).

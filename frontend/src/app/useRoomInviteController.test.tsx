@@ -679,3 +679,69 @@ it("keeps failed remote authentication distinct from confirmed off and retries i
     await act(() => hook.result.current.startTunnel());
     expect(hook.result.current.copyStatus).toBe("외부 접속을 열지 못했어요. 잠시 후 다시 시도해 주세요.");
   });
+
+  describe("external-access memory (owner decision 2026-10-17)", () => {
+    const preferenceKey = "agentsassemble.publicIngress.open.v1";
+    beforeEach(() => {
+      window.localStorage.clear();
+      vi.resetAllMocks();
+      apiMocks.fetchPublicInviteStatus.mockResolvedValue(publicStatus);
+    });
+
+    it("records open on a successful start and closed on a successful stop", async () => {
+      apiMocks.startPublicInviteTunnel.mockResolvedValue(publicStatus);
+      const hook = renderInviteController();
+      await act(async () => {
+        await hook.result.current.startTunnel();
+      });
+      expect(window.localStorage.getItem(preferenceKey)).toBe("open");
+
+      apiMocks.stopPublicInviteTunnel.mockResolvedValue(stoppedStatus);
+      await act(async () => {
+        await hook.result.current.stopTunnel();
+      });
+      expect(window.localStorage.getItem(preferenceKey)).toBe("closed");
+      hook.unmount();
+    });
+
+    it("reopens once at startup when the remembered choice is open and the host is closed", async () => {
+      window.localStorage.setItem(preferenceKey, "open");
+      apiMocks.fetchPublicInviteStatus.mockResolvedValue(stoppedStatus);
+      apiMocks.startPublicInviteTunnel.mockResolvedValue(publicStatus);
+      const hook = renderInviteController();
+      await waitFor(() => expect(apiMocks.startPublicInviteTunnel).toHaveBeenCalledOnce());
+      expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalled();
+      // Same owner path as the button, exactly once per start.
+      expect(apiMocks.startPublicInviteTunnel).toHaveBeenCalledWith(expect.any(Function));
+      expect(window.localStorage.getItem(preferenceKey)).toBe("open");
+      hook.unmount();
+    });
+
+    it("starts nothing at startup when the remembered choice is closed", async () => {
+      window.localStorage.setItem(preferenceKey, "closed");
+      const hook = renderInviteController();
+      await act(async () => {});
+      expect(apiMocks.fetchPublicInviteStatus).not.toHaveBeenCalled();
+      expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+      hook.unmount();
+    });
+
+    it("starts nothing at startup when already open", async () => {
+      window.localStorage.setItem(preferenceKey, "open");
+      apiMocks.fetchPublicInviteStatus.mockResolvedValue(publicStatus);
+      const hook = renderInviteController();
+      await waitFor(() => expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalled());
+      await act(async () => {});
+      expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+      hook.unmount();
+    });
+
+    it("starts nothing at startup for a non-operator surface", async () => {
+      window.localStorage.setItem(preferenceKey, "open");
+      const hook = renderInviteController(false);
+      await act(async () => {});
+      expect(apiMocks.fetchPublicInviteStatus).not.toHaveBeenCalled();
+      expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+      hook.unmount();
+    });
+  });

@@ -1,4 +1,5 @@
 import { PUBLIC_INGRESS_START_ERROR } from "../lib/publicIngressStatus";
+import { loadPublicIngressPreference, savePublicIngressPreference } from "../lib/publicIngressPreference";
 import { fetchRemoteInviteOrigin, type RemoteInviteTransport } from "../api/roomInviteTransport";
 import { copyText } from "../lib/copyInviteText";
 import { useEffect, useRef, useState } from "react";
@@ -214,6 +215,27 @@ export function useRoomInviteController({
     };
   }, [localOperatorEligible, remote?.sessionToken, remote?.deviceToken, modal?.roomId]);
 
+  // Owner decision (2026-10-17): external access remembers its last state.
+  // If the owner left it open, reopen it once at startup through the same
+  // local-operator path the "외부 접속 열기" button uses (same server-side
+  // authority check, no bypass). Closed stays closed; remote and other
+  // non-operator surfaces never auto-open. A failed reopen stays quiet:
+  // the hosting footer already shows the closed state.
+  const autoReopenAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!localOperatorEligible || remote || autoReopenAttemptedRef.current) return;
+    if (!loadPublicIngressPreference()) return;
+    autoReopenAttemptedRef.current = true;
+    const generation = beginIngressOperation();
+    void (async () => {
+      try {
+        await preparePublicInvite(generation);
+      } catch {
+        // Quiet: a later start (next app start, or the button) retries.
+      }
+    })();
+  }, [localOperatorEligible, remote?.sessionToken, remote?.deviceToken]);
+
   async function refreshPublicInviteState(generation: number) {
     assertIngressOperation(generation);
     setPublicAccessQuery("checking");
@@ -269,15 +291,25 @@ export function useRoomInviteController({
   async function preparePublicInvite(generation: number) {
     try {
       let status = await refreshPublicInviteState(generation);
-      if (status.public_url) return status;
+      if (status.public_url) {
+        // Already open on this host: re-affirm the remembered choice.
+        if (!remote) savePublicIngressPreference(true);
+        return status;
+      }
       if (!("tunnel" in status) || !status.tunnel.available) throw new Error(PUBLIC_INGRESS_START_ERROR);
       assertIngressOperation(generation);
       status = await startPublicInviteTunnel(() => assertIngressOperation(generation));
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
-      if (status.public_url && "tunnel" in status && status.tunnel.phase === "running") return status;
+      if (status.public_url && "tunnel" in status && status.tunnel.phase === "running") {
+        if (!remote) savePublicIngressPreference(true);
+        return status;
+      }
       const readyStatus = await waitForTunnelReady(generation);
-      if (readyStatus.public_url && "tunnel" in readyStatus && readyStatus.tunnel.phase === "running") return readyStatus;
+      if (readyStatus.public_url && "tunnel" in readyStatus && readyStatus.tunnel.phase === "running") {
+        if (!remote) savePublicIngressPreference(true);
+        return readyStatus;
+      }
       throw new Error(PUBLIC_INGRESS_START_ERROR);
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) throw error;
@@ -373,6 +405,7 @@ export function useRoomInviteController({
       assertIngressOperation(generation);
       // The hosting footer already shows "외부 접속 열림"; no success box.
       if (!latest.public_url) setCopyStatus(PUBLIC_INGRESS_START_ERROR);
+      else if (!remote) savePublicIngressPreference(true);
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(PUBLIC_INGRESS_START_ERROR);
@@ -396,6 +429,7 @@ export function useRoomInviteController({
       );
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
+      if (!remote) savePublicIngressPreference(false);
       // The hosting footer already shows "외부 접속 꺼짐"; no success box.
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
