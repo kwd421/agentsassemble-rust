@@ -76,12 +76,15 @@ import {
 import { useSidebarResize } from "./useSidebarResize";
 import { projectChannelUnread } from "../lib/channelUnread";
 import { closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
-import type { RoomStream } from "../types/generated/RoomStream";
-
-// Stable empty stream list for rooms without a server surface (a remote room
-// without its member session). The socket effect depends on this identity, so
-// a fresh array per render would reopen it in a loop.
-const NO_SURFACE_STREAMS: RoomStream[] = [];
+import {
+  NO_SURFACE_STREAMS,
+  applyConfirmedMembershipLost,
+  canonicalRoomAuthFor,
+  memberAdmissionServerFor,
+  remoteRoomSessionReady,
+  roomPreferenceAuthorityFor,
+  serverProductSurfaceFor,
+} from "./remoteRoomAuthority";
 
 export function useAppController(deviceToken: string, clientId: string, memberReturn?: import("../lib/central/memberConnect").MemberReturn) {
   const ownerWorkspace = useCentralOwnerWorkspace(deviceToken);
@@ -228,29 +231,21 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     onResetToLobby: onGuestAdmissionReset,
   });
   const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
-  // Confirmed membership loss (kick/ban/revoke while central is connected):
-  // the kicked rooms disappear from the rail (never linger disconnected),
-  // their bearer clears, and the selection falls back. A temporary central
-  // outage never reaches here.
+  // Confirmed membership loss (kick/ban/revoke): rooms disappear from the
+  // rail, their bearer clears, and a stranded selection falls back.
   const handleConfirmedMembershipLost = useCallback((serverId: string) => {
-    closeRemoteWorkspace(serverId);
-    unbindRemoteSessionsForServer(serverId);
-    if (guestSession && !guestExpired && guestSession.serverSurface.server_id === serverId) {
-      clearGuestSession();
-    }
-    const lostRoomIds = new Set(latestRooms.current
-      .filter((room) => room.roomOrigin === "remote_server" && room.serverId === serverId)
-      .map((room) => room.id));
-    if (lostRoomIds.size === 0) return;
-    for (const roomId of lostRoomIds) removeRoom(roomId);
-    if (memberSelectError && lostRoomIds.has(memberSelectError.roomId)) setMemberSelectError(null);
-    if (lostRoomIds.has(activeRoomId)) {
-      const fallback = latestRooms.current.find((room) => !lostRoomIds.has(room.id));
-      setActiveRoomId(fallback?.id || "");
-      setChannel("lobby");
-      setAdminOpen(false);
-      retainedActiveRoom.current = null;
-    }
+    applyConfirmedMembershipLost(serverId,
+      {
+        guestSession, guestExpired, latestRooms: latestRooms.current,
+        activeRoomId, memberSelectError,
+      },
+      {
+        closeHost: closeRemoteWorkspace, unbindHostSessions: unbindRemoteSessionsForServer,
+        clearSession: clearGuestSession, removeRoom,
+        setSelectError: setMemberSelectError, activateRoom: setActiveRoomId,
+        resetChannel: () => setChannel("lobby"), closeAdmin: () => setAdminOpen(false),
+        clearRetainedRoom: () => { retainedActiveRoom.current = null; },
+      });
   }, [guestSession, guestExpired, clearGuestSession, removeRoom, memberSelectError, activeRoomId]);
   const { rooms: railRooms, memberHosts } = useRailRooms({
     directoryRooms,
@@ -329,13 +324,12 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     : admittedSessionToken;
   const activeGuestSession = scopeSessionToActiveRoom ? activeRoomSession : guestSession;
   const activeGuestLocked = scopeSessionToActiveRoom ? Boolean(activeRoomSession) : guestLocked;
-  // Host auth of this computer never drives a remote host's room: without
-  // that room's own member session the room stays disconnected (no socket, no
-  // host ticket), even while its host lists it as connected. Only the member
-  // select/admission path (`selectRoom` below) makes a remote room live;
-  // every other activation path leaves it disconnected. No second path.
-  const activeRoomSessionReady = activeRoom.roomOrigin !== "remote_server" ||
-    Boolean(activeGuestLocked && activeSessionToken && activeRoomSession && !guestExpired);
+  // Host auth never drives a remote host's room (see remoteRoomAuthority):
+  // without its own member session the room stays disconnected.
+  const activeRoomSessionReady = remoteRoomSessionReady(activeRoom, {
+    guestLocked: activeGuestLocked, sessionToken: activeSessionToken,
+    session: activeRoomSession, expired: guestExpired,
+  });
   const activeRoomOperationallyDisconnected = activeRoomDisconnected || !activeRoomSessionReady;
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -370,19 +364,9 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   },
     [roomDirectorySyncIssue, startupIdentityResolved, startupHostEnabled]
   );
-  // One room's session never validates or drives another host's room: the
-  // active room opens with its own owner's surface (this computer's for own
-  // rooms, the matching member session's for its room). A foreign surface
-  // used to win globally here, so once any member session existed the own
-  // room's socket validated the local streams against the foreign surface
-  // and never recovered.
-  const serverProductSurface = !activeRoomSessionReady
-    ? undefined
-    : activeRoomSession
-    ? activeRoomSession.serverSurface.server_product_surface
-    : guestSession && !scopeSessionToActiveRoom
-      ? guestSession.serverSurface.server_product_surface
-      : hostServerProductSurface;
+  const serverProductSurface = serverProductSurfaceFor(
+    activeRoomSessionReady, activeRoomSession, guestSession,
+    scopeSessionToActiveRoom, hostServerProductSurface);
   const onRoomCreated = useCallback(
     async (room: RoomDockItem) => {
       if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
@@ -427,15 +411,11 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   // Rooms-as-server-objects: when a room becomes active, promote it to a
   // server-backed meeting (idempotent) so adding agents / roster / lobby always
   // have a real meeting to bind to instead of failing with "Meeting not found".
-  const canonicalRoomAuth = activeRoomOperationallyDisconnected || activeRoomSelectError
-    ? undefined
-    : activeGuestLocked
-    ? activeSessionToken
-      ? ({ kind: "session" as const, sessionToken: activeSessionToken, deviceToken })
-      : undefined
-    : activeRoom.meetingId
-      ? ({ kind: "host" as const, meetingId: activeRoom.meetingId })
-      : undefined;
+  const canonicalRoomAuth = canonicalRoomAuthFor(
+    activeRoom, {
+      operational: activeRoomOperationallyDisconnected, selectError: Boolean(activeRoomSelectError),
+      guestLocked: activeGuestLocked,
+    }, activeSessionToken, deviceToken);
   const roomSurfaceReady = Boolean(
     serverProductSurface?.websocket_streams.includes("room_events")
   );
@@ -479,13 +459,8 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     canonicalParticipants: canonicalRoom.participants,
     enabled: startupIdentityResolved && !activeRoomOperationallyDisconnected,
   });
-  const roomPreferenceAuthority: RoomPreferenceAuthority = !activeRoomSessionReady
-    ? { kind: "remote-unavailable" }
-    : activeGuestLocked
-    ? activeSessionToken
-      ? { kind: "remote", sessionToken: activeSessionToken, deviceToken }
-      : { kind: "remote-unavailable" }
-    : { kind: "local", deviceToken };
+  const roomPreferenceAuthority: RoomPreferenceAuthority = roomPreferenceAuthorityFor(
+    activeRoomSessionReady, activeGuestLocked, activeSessionToken, deviceToken);
   const activeRoomMembers = roomMembers.activeMembers;
   const roomSettings = useRoomSettingsController({
     activeRoom,
@@ -617,15 +592,6 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     visibleChannels.find((item) => item.id === channel) ?? { id: channel, label: "채널 연결 중", icon: Hash };
   const channelSearchNeedle = channelSearchQuery.trim().toLowerCase();
 
-  // An anchored member room needs its own room session before it can open:
-  // only the select/admission path below may make it live. Every other
-  // activation path either routes through it or leaves the room disconnected.
-  function memberAdmissionServerFor(room: RoomDockItem): string | null {
-    return room.roomOrigin === "remote_server" && room.serverId &&
-      room.serverId !== ownerWorkspace.connect?.serverId && memberHosts.hasAnchor(room.serverId)
-      ? room.serverId : null;
-  }
-
   async function selectRoom(roomId: string) {
     const room = rooms.find(item => item.id === roomId);
     // A stale rail id is still a failed click: record the short Korean
@@ -638,7 +604,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       // An anchored member room needs its own room session before it can
       // open: select it on demand through the live host admission. Rooms
       // without an anchor keep the legacy guest/owner path untouched.
-      const memberServerId = memberAdmissionServerFor(room);
+      const memberServerId = memberAdmissionServerFor(room, ownerWorkspace.connect?.serverId, memberHosts.hasAnchor);
       if (import.meta.env.DEV) console.debug("[member-select] rail select", {
         roomId, meetingId: room.meetingId, serverId: room.serverId ?? null,
         roomOrigin: room.roomOrigin ?? null, memberServerId,
@@ -706,12 +672,9 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     event.preventDefault();
     event.stopPropagation();
     if (ownerWorkspace.connect && room.id !== activeRoomId) { void selectRoom(room.id); return; }
-    // A joined member room never becomes active from the rail menu alone:
-    // opening it needs its own room session, which the rail tap admits on
-    // demand through `selectRoom`. The menu still opens for background
-    // actions (unread badges, invite, settings, leave) without driving the
-    // room with this computer's host authority.
-    if (!memberAdmissionServerFor(room)) {
+    // A joined member room never becomes active from the rail menu alone
+    // (see remoteRoomAuthority): the menu still opens for background actions.
+    if (!memberAdmissionServerFor(room, ownerWorkspace.connect?.serverId, memberHosts.hasAnchor)) {
       setActiveRoomId(room.id);
     }
     setAdminOpen(false);
@@ -773,6 +736,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   async function inviteRoom(roomId: string) {
     const room = rooms.find((candidate) => candidate.id === roomId);
     if (!room || !canInviteRooms) return;
+    const ownerServerId = ownerWorkspace.connect?.serverId;
     if (ownerWorkspace.connect) {
       try {
         if (!await ownerWorkspace.enter(room, acceptOwnerSession)) return;
@@ -784,10 +748,8 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       setChannel("lobby");
       setAdminOpen(false);
       closeMobileOverlays();
-    } else if (memberAdmissionServerFor(room)) {
-      // A joined member room opens only through its own room session: admit
-      // first so the invite never drives another host's room with this
-      // computer's host authority.
+    } else if (memberAdmissionServerFor(room, ownerServerId, memberHosts.hasAnchor)) {
+      // A joined member room opens only through its own room session.
       await selectRoom(roomId);
     } else {
       setActiveRoomId(roomId);
@@ -811,10 +773,8 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   async function openRoomSettings(roomId: string, initialSectionId: RoomSettingsSectionId = "settings-overview") {
     if (activeGuestLocked && (roomId !== activeRoom.id || !canManageActiveRoom)) return;
     const room = rooms.find((candidate) => candidate.id === roomId);
-    if (room && memberAdmissionServerFor(room)) {
-      // A joined member room opens only through its own room session: admit
-      // first so settings never drive another host's room with this
-      // computer's host authority.
+    if (room && memberAdmissionServerFor(room, ownerWorkspace.connect?.serverId, memberHosts.hasAnchor)) {
+      // A joined member room opens only through its own room session.
       await selectRoom(roomId);
     } else {
       setActiveRoomId(roomId);
@@ -974,8 +934,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     }));
   }
 
-  // A remote room without its own member session needs admission, never a
-  // server reconnect: the disconnected view retries through `selectRoom`.
+  // A session-less remote room retries through admission, never reconnect.
   const activeRoomNeedsAdmission = activeRoom.roomOrigin === "remote_server" && !activeRoomSessionReady;
   return {
     centralDirectory, refreshCentralDirectory, openRailServer, connectingServerId, serverConnectionError, retryRoomConnection,
