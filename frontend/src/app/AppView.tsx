@@ -41,6 +41,15 @@ import { centralDailyQuotaNotice } from "../lib/central/centralRequestGovernor";
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
 const FriendsView = lazy(() => import("../views/FriendsView"));
 
+// Owner of the no-room shell copy: the text must match what this shell can
+// do. A shell that cannot create rooms (non-owner) never promises room
+// creation — it points at joining through an invite link instead.
+export function emptyRoomCopy(canCreateRoom: boolean): { title: string; description: string } {
+  return canCreateRoom
+    ? { title: "열려 있는 방이 없어요", description: "새 방을 만들어 대화를 시작할 수 있어요." }
+    : { title: "참가한 방이 없어요", description: "초대 링크로 참가할 수 있어요." };
+}
+
 export default function AppView({ controller }: { controller: AppController }) {
   const rightPanel = useRightPanelResize();
   const [createRoomOpen, setCreateRoomOpen] = useState(false);
@@ -108,6 +117,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       });
     }} />;
   const hasRoom = Boolean(activeRoom.meetingId);
+  const noRoomCopy = emptyRoomCopy(canCreateRoom);
   const canOpenSideChat = hasRoom && !guestExpired && !activeRoomDisconnected && !adminOpen && !friendsOpen;
   const sideChatOpen = canOpenSideChat && sideChatScope === channelScope;
   const roomInfoOpen = !mobileViewport && hasRoom && showMembers && membersOpen && !sideChatOpen;
@@ -451,8 +461,8 @@ export default function AppView({ controller }: { controller: AppController }) {
             <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={activeRoomSelectError ?? controller.activeMemberHostDetail} onRetry={activeRoomSelectError || activeRoomNeedsAdmission ? () => selectRoom(activeRoom.id) : () => controller.retryRoomConnection(activeRoom)} />
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
-              <h1 id="empty-room-title">열려 있는 방이 없어요</h1>
-              <p>새 방을 만들어 대화를 시작할 수 있어요.</p>
+              <h1 id="empty-room-title">{noRoomCopy.title}</h1>
+              <p>{noRoomCopy.description}</p>
               <div className="flex flex-wrap gap-3" style={{ justifyContent: "center", marginTop: 20 }}>
                 {canCreateRoom && <button type="button" className="dc-agent-create-primary" onClick={() => setCreateRoomOpen(true)}>새 방 만들기</button>}
               </div>
