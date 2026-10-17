@@ -225,7 +225,13 @@ export function useMemberHosts({
         setPhase(serverId, "disconnected", previousAnchor?.rooms ?? null, origin, error.message);
         return;
       }
-      setPhase(serverId, "disconnected", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin, null);
+      const throttled = (error as { throttled?: unknown } | null)?.throttled === true;
+      const rateLimited = throttled || (error as { status?: unknown } | null)?.status === 429;
+      // A governor-throttled or central-429 failure surfaces as the room's
+      // disconnected reason and retries only through the per-host backoff,
+      // never immediately.
+      setPhase(serverId, "disconnected", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin,
+        rateLimited && error instanceof Error ? error.message : null);
       // The failure kind picks the backoff: a revoked endpoint (409
       // incarnation_conflict) rests on a slow cadence, a 429 honors the
       // server's Retry-After. The counter keeps growing across these
@@ -533,22 +539,23 @@ export function useMemberHosts({
       if (expired) {
         // The transport is suspect (hung or dead): reset only the stale
         // flight/admission bookkeeping and mark the host disconnected with its
-        // last-known rooms, then let a fresh background attach restore it,
-        // instead of unlisting the rooms mid-select.
+        // last-known rooms, then park on the per-host backoff instead of
+        // reconciling immediately into another attach.
         flights.current.get(serverId)?.abort();
         flights.current.delete(serverId);
         admissions.current.get(serverId)?.close();
         admissions.current.delete(serverId);
-        attempted.current.delete(serverId);
         setPhase(serverId, "disconnected");
-        reconcile();
+        reconnectCauses.current.set(serverId, "transient");
+        reconnectRetryAfter.current.set(serverId, null);
+        scheduleReconnect(serverId);
         throw expired;
       }
       throw error;
     } finally {
       window.clearTimeout(timer);
     }
-  }, [attach, dropHost, reconcile]);
+  }, [attach, dropHost, reconcile, scheduleReconnect]);
 
   const removeRoom = useCallback((serverId: string, roomId: string) => {
     const { personId: activePerson } = identityRef.current;

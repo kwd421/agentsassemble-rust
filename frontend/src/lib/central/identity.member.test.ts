@@ -67,10 +67,14 @@ it("carries the server's Retry-After on a member-preview 429", async () => {
 });
 
 it("omits the wait on a 429 without a Retry-After header", async () => {
+  const { resetCentralRequestGovernorForTests } = await import("./centralRequestGovernor");
   fetcher.mockResolvedValue(Response.json({ error: { code: "rate_limited", message: "slow" } }, { status: 429 }));
   const target = { server_id: "host", registration_epoch: "epoch", challenge_hash: "x", handoff_state: "y" };
   await expect(previewCentralMember(target))
     .rejects.toMatchObject({ status: 429, code: "rate_limited" });
+  // The governor would otherwise throttle the immediate second attempt;
+  // reset it to assert the server payload shape in isolation.
+  resetCentralRequestGovernorForTests();
   try {
     await previewCentralMember(target);
     expect.unreachable();

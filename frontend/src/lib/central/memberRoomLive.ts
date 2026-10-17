@@ -39,8 +39,10 @@ export type MemberHostReconnectCause = "offline" | "rate_limited" | "transient";
 // 409 incarnation_conflict is the host being offline (central revoked its
 // endpoint row or the epoch moved on); 429 is central asking for quiet.
 // Both central (plain Error with status/code) and host (ApiError) failures
-// carry status/code, so both are classified here.
+// carry status/code, so both are classified here. The local governor's
+// throttled error never touches the network but backs off like a 429.
 export function memberHostReconnectCause(error: unknown): MemberHostReconnectCause {
+  if ((error as { throttled?: unknown } | null)?.throttled === true) return "rate_limited";
   const status = (error as { status?: unknown } | null)?.status;
   const code = (error as { code?: unknown } | null)?.code;
   if (status === 429) return "rate_limited";

@@ -1,4 +1,9 @@
-import { afterAll, beforeAll } from "vitest";
+import { afterAll, beforeAll, beforeEach } from "vitest";
+import { resetCentralRequestGovernorForTests } from "../lib/central/centralRequestGovernor";
+
+beforeEach(() => {
+  resetCentralRequestGovernorForTests();
+});
 
 // jsdom lacks modal top-layer APIs. Real focus/inert behavior is verified in the
 // packaged app; this shim only lets DOM contract tests mount native dialogs.

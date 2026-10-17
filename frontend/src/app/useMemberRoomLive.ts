@@ -24,6 +24,11 @@ type RoomRecord = {
   admission: SecureMemberAdmission;
   session: RoomInviteJoinResponse | null;
   socket: RoomSocketHandle | null;
+  // A background select already in flight for this room. Snapshot churn
+  // re-runs the effect while the first select still awaits its central
+  // grant, so without this a second select would spend a second grant for
+  // the same room and invalidate the first flow.
+  selecting: boolean;
   floor: number;
   floored: boolean;
   needsFreshFloor: boolean;
@@ -132,6 +137,7 @@ export function useMemberRoomLive({
           record.socket?.close();
           record.socket = null;
           record.flow += 1;
+          record.selecting = false;
           record.unread = false;
           record.mention = false;
           clearBadge(key);
@@ -162,6 +168,7 @@ export function useMemberRoomLive({
             record.socket?.close();
             record.socket = null;
             record.flow += 1;
+            record.selecting = false;
             record.floor = record.latest;
             record.unread = false;
             record.mention = false;
@@ -176,6 +183,7 @@ export function useMemberRoomLive({
             record.socket?.close();
             record.socket = null;
             record.flow += 1;
+            record.selecting = false;
             record.unread = false;
             record.mention = false;
           }
@@ -194,6 +202,7 @@ export function useMemberRoomLive({
             admission,
             session: null,
             socket: null,
+            selecting: false,
             floor: 0,
             floored: false,
             needsFreshFloor: false,
@@ -214,12 +223,14 @@ export function useMemberRoomLive({
           record.socket?.close();
           record.socket = null;
           record.flow += 1;
+          record.selecting = false;
           record.reauth = 0;
         }
         const liveAdmission = record.admission;
-        if (record.socket || !liveAdmission.transport.active) continue;
+        if (record.socket || record.selecting || !liveAdmission.transport.active) continue;
         const flow = record.flow + 1;
         record.flow = flow;
+        record.selecting = true;
         const current = record;
         void (async () => {
           try {
@@ -306,6 +317,10 @@ export function useMemberRoomLive({
             // or host change; selecting the room still works on demand.
             if (records.current.get(key) === current && current.flow === flow) {
               current.socket = null;
+            }
+          } finally {
+            if (records.current.get(key) === current && current.flow === flow) {
+              current.selecting = false;
             }
           }
         })();

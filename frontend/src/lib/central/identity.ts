@@ -6,6 +6,7 @@ import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
 import { CentralTemporaryError, fetchCentral } from "./connectionError";
+import { acquireCentralPermit, noteCentral429, noteCentralSuccess } from "./centralRequestGovernor";
 import {
   fetchDesktopCentralRegistration,
   fetchDesktopOperatorRuntime,
@@ -397,6 +398,7 @@ export async function unsignedPost<T>(
   signal?: AbortSignal
 ): Promise<T> {
   localStorage.removeItem(SERVERS_KEY);
+  acquireCentralPermit(path, "anonymous");
   const response = await fetch(`${configuredUrl()}${path}`, {
     method: "POST",
     mode: "cors",
@@ -408,6 +410,8 @@ export async function unsignedPost<T>(
     body: JSON.stringify(body),
     signal,
   });
+  if (response.status === 429) noteCentral429(path, "anonymous", parseRetryAfterMs(response.headers.get("Retry-After")));
+  else if (response.ok) noteCentralSuccess(path, "anonymous");
   return responsePayload<T>(response);
 }
 
@@ -519,6 +523,7 @@ async function signedFetch(
   bodyValue?: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<Response> {
+  acquireCentralPermit(path, session.person.person_id);
   const body = bodyValue ? JSON.stringify(bodyValue) : "";
   const headers = await signCentralNativeRequest(session,path,method,body);
   const response = await fetchCentral(`${configuredUrl()}${path}`, {
@@ -532,6 +537,11 @@ async function signedFetch(
     body: body || undefined,
     signal,
   });
+  if (response.status === 429) {
+    noteCentral429(path, session.person.person_id, parseRetryAfterMs(response.headers.get("Retry-After")));
+  } else if (response.ok) {
+    noteCentralSuccess(path, session.person.person_id);
+  }
   if (response.status === 401 && loadCentralSession()?.token === session.token) {
     const failure = await response.clone().json().catch(() => null);
     const stepUpFailure = (path === "/v1/account/deletion-proof" || path.endsWith("/restore-proof")) && [

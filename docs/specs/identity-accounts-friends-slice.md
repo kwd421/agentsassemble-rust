@@ -3589,6 +3589,49 @@ policy, cause classification), `frontend/src/lib/central/identity.ts`
 remoteWorkspace.ts` (host-origin transport lookup),
 `frontend/src/views/components/ResourceImage.tsx` (fail-closed render).
 
+### Central request governor and loop fixes (2026-10-17)
+
+Real-app failure (release build `c8879357`, 12:36→14:39): with the friend
+host endpoint unreachable/changed, the console filled with dozens of
+consecutive `POST /v1/servers/<id>/member-preview` → 429 lines (plus a
+`GET` bootstrap → 429 at startup). Central allows 60/min per actor and
+120/min per IP (`infra/identity-directory/wrangler.toml`), so a 429 two
+hours later means the app kept exceeding ~60/min for this account. The
+timer-only backoff test missed the other re-fire paths.
+
+Required:
+
+- One hard governor in the frontend central client, per account and per
+  endpoint path family, that no caller can bypass: at most 6
+  `member-preview` per host per 10 min and at most 20 central requests
+  per min total per account; it honors `Retry-After` and backs off
+  further on repeated 429, so even a future loop cannot exceed central
+  limits. Governed callers are `bootstrapCentral`, `previewSecureMember`
+  / `previewCentralMember`, `issueCentralMemberGrant` /
+  member-connect grants, and every other signed/unsigned central fetch
+  through the same `signedFetch` / `unsignedPost` owner. Local host
+  fetches are not governed.
+- A throttled call fails with the typed `CentralThrottledError`
+  (`throttled`, `retryAfterMs`) without touching the network. Member
+  attach surfaces it as the room's disconnected reason and retries only
+  through the existing per-host backoff (rate-limited cause), never
+  immediately.
+- Loop fixes at their owners: the startup `central-unconfirmed`
+  auto-retry runs once per unconfirmed episode and then waits for
+  focus/visible/online/explicit refresh; the member-select timeout parks
+  the host and schedules the per-host backoff instead of reconciling
+  immediately into another attach; background room selects never run two
+  concurrent selects for the same room on snapshot churn.
+
+Entry points: `frontend/src/lib/central/centralRequestGovernor.ts`
+(single owner), `frontend/src/lib/central/identity.ts` (`signedFetch`,
+`unsignedPost`), `frontend/src/app/useMemberHosts.ts` (throttled
+surface, timeout park), `frontend/src/app/useMemberRoomLive.ts`
+(single in-flight background select),
+`frontend/src/views/components/StartupIdentityGate.tsx` (one retry),
+`frontend/src/lib/central/secureMemberEntry.ts` and
+`frontend/src/lib/central/memberAutoAttach.ts` via the governor.
+
 ### Rail shows each joined room once (2026-10-17)
 
 Real-app failure (debug macOS build): after restart the rail showed the
