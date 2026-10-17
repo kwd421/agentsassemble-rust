@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
-import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
+import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
 import { memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { remoteWorkspaceFor } from "../lib/remote/remoteWorkspace";
 import { ApiError } from "../lib/apiErrors";
@@ -275,7 +275,21 @@ export function useMemberHosts({
     const { personId: activePerson } = identityRef.current;
     if (!activePerson) return;
     const live = directoryRef.current?.status === "connected" ? directoryRef.current.live?.servers ?? null : null;
-    if (!live) return;
+    if (!live) {
+      // Central is unconfirmed so its membership list cannot confirm or
+      // deny anything: every joined host with a stored anchor still gets an
+      // attach attempt scheduled through the existing anchor path in
+      // reattachHost. A startup 429 must never strand the rail in silence;
+      // a governor block inside the attempt ends in that host's scheduled
+      // retry, and an identity refusal keeps blocking silently-retrying.
+      for (const anchor of loadMemberAnchors(activePerson)) {
+        if (anchor.hidden || refused.current.has(anchor.server_id)) continue;
+        if (flights.current.has(anchor.server_id) || reconnectTimers.current.has(anchor.server_id)) continue;
+        if (admissions.current.has(anchor.server_id)) continue;
+        reattachHostRef.current(anchor.server_id);
+      }
+      return;
+    }
     const members = live.filter((server) =>
       server.relation === "member" && Boolean(server.registration_epoch));
     const seen = new Set(members.map((server) => server.server_id));

@@ -128,6 +128,19 @@ export function noteCentralSuccess(path: string, accountId: string): void {
   consecutive429ByKey.delete(familyKey(account, centralPathFamily(path)));
 }
 
+// Milliseconds until this path may be tried again under the governor:
+// the longest of the path-family block and the account global block, or
+// zero when no block is in force. Lets bounded retry schedules honor the
+// governor instead of firing into a local throttle (budgets unchanged).
+export function centralThrottledWaitMs(path: string, accountId: string): number {
+  const account = accountId || "anonymous";
+  const now = Date.now();
+  const parsed = centralPathFamily(path);
+  const familyBlocked = blockedUntilByKey.get(familyKey(account, parsed)) ?? 0;
+  const globalBlocked = blockedUntilByKey.get(`${account}\0global`) ?? 0;
+  return Math.max(0, familyBlocked - now, globalBlocked - now);
+}
+
 export function resetCentralRequestGovernorForTests(): void {
   requestTimesByAccount.clear();
   previewTimesByAccountHost.clear();

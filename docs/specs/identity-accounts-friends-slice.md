@@ -3632,6 +3632,46 @@ surface, timeout park), `frontend/src/app/useMemberRoomLive.ts`
 `frontend/src/lib/central/secureMemberEntry.ts` and
 `frontend/src/lib/central/memberAutoAttach.ts` via the governor.
 
+### Joined rooms reconnect after a startup central 429 (2026-10-17)
+
+Real-app failure (packaged desktop app, ~7 minutes observed): at startup
+exactly one central directory request failed with 429
+(`bootstrapCentral`, `GET /v1/bootstrap`; there is no `GET /v1/servers`
+directory loader in the frontend), and after that zero central requests
+and zero host attach attempts followed for 7+ minutes. The joined
+friend's host was up with external access on, but its room stayed in the
+rail with the grey disconnected dot forever; no retry fired without a
+user action. The governor commit fixed the reconnect storm but now
+over-blocks: nothing ever resumes.
+
+Required:
+
+- Rooms joined on other people's hosts stay in the rail and reconnect by
+  themselves, Discord-like, without the user clicking anything and
+  without central request storms. The governor in
+  `frontend/src/lib/central/centralRequestGovernor.ts` stays the single
+  hard owner of central budgets; its budgets are not loosened.
+- One bounded retry schedule for the directory load after temporary/429
+  failures: it honors the server `Retry-After` and the governor
+  `blockedUntil`, grows boundedly, and never tight-loops. A governor
+  block (`CentralThrottledError`, plus the global block in
+  `noteCentral429`) ends in a scheduled retry when the block lifts, not
+  in silence.
+- Joined hosts with a stored anchor get an attach attempt scheduled even
+  while the directory is unconfirmed, through the existing anchor path
+  in `reattachHost` — no second attach path is added.
+- When central answers 429, one development-only console line (no tokens
+  or ids beyond the path family) records the status, the `Retry-After`
+  header and the server's error `code` from the body, so the next real
+  run shows which limiter fired.
+
+Entry points: `frontend/src/app/useCentralDirectory.ts` (bounded
+directory retry), `frontend/src/app/useMemberHosts.ts` (`reconcile` /
+`reattachHost` anchor scheduling while unconfirmed),
+`frontend/src/lib/central/centralRequestGovernor.ts` (block-remaining
+accessor, unchanged budgets), `frontend/src/lib/central/identity.ts`
+(`signedFetch` / `unsignedPost` 429 diagnostics).
+
 ### Rail shows each joined room once (2026-10-17)
 
 Real-app failure (debug macOS build): after restart the rail showed the

@@ -6,7 +6,7 @@ import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
 import { CentralTemporaryError, fetchCentral } from "./connectionError";
-import { acquireCentralPermit, noteCentral429, noteCentralSuccess } from "./centralRequestGovernor";
+import { acquireCentralPermit, centralPathFamily, noteCentral429, noteCentralSuccess } from "./centralRequestGovernor";
 import {
   fetchDesktopCentralRegistration,
   fetchDesktopOperatorRuntime,
@@ -357,6 +357,30 @@ export function parseRetryAfterMs(value: string | null): number | null {
   return Number.isNaN(time) ? null : Math.max(0, time - Date.now());
 }
 
+// Development-only 429 diagnosis: one console line per throttled central
+// answer with the path family (never the host id), the HTTP status, the
+// raw Retry-After header and the server's error code from the body, so a
+// real run shows which limiter fired. Never tokens, accounts or bodies.
+function logCentralRateLimit(path: string, response: Response): void {
+  if (!import.meta.env.DEV) return;
+  try {
+    const family = centralPathFamily(path).family;
+    const retryAfter = response.headers.get("Retry-After");
+    void response.clone().json()
+      .then((payload: unknown) => (payload as { error?: { code?: unknown } } | null)?.error?.code)
+      .catch(() => undefined)
+      .then((code: unknown) => {
+        // eslint-disable-next-line no-console
+        console.warn("[central-429]", {
+          family,
+          status: response.status,
+          retryAfter,
+          code: typeof code === "string" ? code : undefined,
+        });
+      });
+  } catch { /* diagnostics never break the request path */ }
+}
+
 async function responsePayload<T>(response: Response, central = true, signal?: AbortSignal): Promise<T> {
   const payload = (await response.json().catch((error) => {
     if (response.ok) {
@@ -410,8 +434,10 @@ export async function unsignedPost<T>(
     body: JSON.stringify(body),
     signal,
   });
-  if (response.status === 429) noteCentral429(path, "anonymous", parseRetryAfterMs(response.headers.get("Retry-After")));
-  else if (response.ok) noteCentralSuccess(path, "anonymous");
+  if (response.status === 429) {
+    logCentralRateLimit(path, response);
+    noteCentral429(path, "anonymous", parseRetryAfterMs(response.headers.get("Retry-After")));
+  } else if (response.ok) noteCentralSuccess(path, "anonymous");
   return responsePayload<T>(response);
 }
 
@@ -538,6 +564,7 @@ async function signedFetch(
     signal,
   });
   if (response.status === 429) {
+    logCentralRateLimit(path, response);
     noteCentral429(path, session.person.person_id, parseRetryAfterMs(response.headers.get("Retry-After")));
   } else if (response.ok) {
     noteCentralSuccess(path, session.person.person_id);

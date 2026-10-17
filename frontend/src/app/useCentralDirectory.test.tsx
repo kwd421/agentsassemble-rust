@@ -18,7 +18,7 @@ function wake(trigger: string) {
     document.dispatchEvent(new Event("visibilitychange"));
   } else window.dispatchEvent(new Event(trigger));
 }
-it.each(["focus", "visible", "online", "explicit"])("retains outage display without scheduled retries and recovers on %s", async (trigger) => {
+it.each(["focus", "visible", "online", "explicit"])("retries an unconfirmed directory on a bounded backoff and recovers on %s", async (trigger) => {
   vi.useFakeTimers();
   mocks.session = { token: "session", person };
   saveCentralDirectoryCache(person.person_id, [server]);
@@ -26,8 +26,19 @@ it.each(["focus", "visible", "online", "explicit"])("retains outage display with
   const { result, unmount } = renderHook(() => useCentralDirectory());
   await act(async () => { await result.current.refresh(); });
   expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", servers: [server], live: null });
-  await act(async () => { await vi.advanceTimersByTimeAsync(24 * 60 * 60_000); });
+  // No user action: the first backoff step (30 s) retries on its own while
+  // the cached servers stay visible.
+  await act(async () => { await vi.advanceTimersByTimeAsync(29_000); });
   expect(mocks.bootstrap).toHaveBeenCalledOnce();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+  expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", servers: [server], live: null });
+  // The next step backs off to 60 s: bounded growth, never a tight loop.
+  await act(async () => { await vi.advanceTimersByTimeAsync(59_000); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(3);
+  expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", servers: [server], live: null });
   mocks.bootstrap.mockResolvedValue({ person, servers: [{ ...server, alias: "Recovered Mac" }], server_time: 1 });
   await act(async () => { if (trigger === "explicit") await result.current.refresh(); else wake(trigger); });
   expect(result.current.directory).toMatchObject({ status: "connected", servers: [{ alias: "Recovered Mac" }] });
@@ -105,7 +116,7 @@ it("rejects a successful flight when the session is cleared before publication",
   expect(result.current.directory).toBeNull();
 });
 
-it("retains saved servers on the first WebKit timeout until an online retry", async () => {
+it("retries a timed-out directory on a bounded backoff until an online recovery", async () => {
   vi.useFakeTimers();
   mocks.session = { token: "session", person };
   saveCentralDirectoryCache(person.person_id, [server]);
@@ -117,11 +128,18 @@ it("retains saved servers on the first WebKit timeout until an online retry", as
   await act(async () => {});
   expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", person, servers: [server], live: null });
   expect(result.current.directory?.error).toBeUndefined();
-  mocks.bootstrap.mockResolvedValue({ person, servers: [server], server_time: 1 });
-  await act(async () => { await vi.advanceTimersByTimeAsync(24 * 60 * 60_000); });
-  expect(mocks.bootstrap).toHaveBeenCalledOnce();
-  await act(async () => { wake("online"); });
+  // Bounded retries without user action: the 30 s step, then the 60 s
+  // step, each advancing the clock in small chunks so every retry settles.
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
   expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+  expect(result.current.directory?.status).toBe("central-unconfirmed");
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(3);
+  expect(result.current.directory?.status).toBe("central-unconfirmed");
+  mocks.bootstrap.mockResolvedValue({ person, servers: [server], server_time: 1 });
+  await act(async () => { wake("online"); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(4);
   expect(result.current.directory?.status).toBe("connected");
 });
 
