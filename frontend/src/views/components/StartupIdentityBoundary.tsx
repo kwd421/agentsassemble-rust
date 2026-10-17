@@ -1,6 +1,5 @@
 import MemberJoinPanel from "./MemberJoinPanel";
 import GoogleGLogo from "./GoogleGLogo";
-import RemoteMemberWorkspaceBoundary, { MemberEndedOverlay } from "./RemoteMemberWorkspaceBoundary";
 import { remoteWorkspaceVersion, remoteWorkspacesSnapshot, subscribeRemoteWorkspace, pendingMemberSnapshot, selectRemoteMember } from "../../lib/remote/remoteWorkspace";
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 
@@ -90,20 +89,23 @@ export default function StartupIdentityBoundary({
 
   if (pendingMember) return <MemberJoinPanel secureEntry={pendingMember} onCancel={() => selectRemoteMember(null)} />;
   if (remote && !remotes.some((entry) => entry.owner)) {
-    // Member-only hosts provide no workspace context (only an end-state
-    // overlay), so the app content stays at its stable tree position across
-    // member installs/ends. Wrapping it per transport remounts the whole app
-    // on every member select: the rail selection, admission and room sockets
+    // Member-only hosts provide no workspace context and never a blocking
+    // end-state: a dead member channel stays visible in place (rail grey
+    // dot + disconnected room notice from the member-host snapshots), so
+    // the app content stays at its stable tree position across member
+    // installs/ends. Wrapping it per transport remounts the whole app on
+    // every member select: the rail selection, admission and room sockets
     // are wiped and the view falls back to the own room.
-    const content = children({ deviceToken: remote.deviceToken, clientId: remote.clientId });
-    return <>{content}{remotes.map((entry) => <MemberEndedOverlay
-      key={entry.transport.hello.channel_id} transport={entry.transport} serverId={entry.serverId} />)}</>;
+    return children({ deviceToken: remote.deviceToken, clientId: remote.clientId });
   }
   if (remote) {
+    // Only this computer's own owner session may block the app with its
+    // end-state. Member transports never wrap the content: their rooms go
+    // disconnected in place with a per-host retry instead.
     const content = children({ deviceToken: remote.deviceToken, clientId: remote.clientId });
     return remotes.reduceRight<ReactNode>((wrapped, entry) => entry.owner
       ? <CentralOwnerWorkspaceBoundary key={entry.owner.sessionId} session={entry.owner}>{wrapped}</CentralOwnerWorkspaceBoundary>
-      : <RemoteMemberWorkspaceBoundary key={entry.transport.hello.channel_id} transport={entry.transport} serverId={entry.serverId}>{wrapped}</RemoteMemberWorkspaceBoundary>, content);
+      : wrapped, content);
   }
 
   if (memberReturn && !memberReturn.record && !memberReturn.connect) return <GuestJoinProfilePanel displayName=""

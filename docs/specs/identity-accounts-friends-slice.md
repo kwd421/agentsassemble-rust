@@ -3802,3 +3802,55 @@ identities from every source, and the rail key is that same identity.
 Entry points: `frontend/src/lib/roomDockModel.ts` (`roomDockIdentity`,
 `mergeHostRoomsIntoDock`), `frontend/src/views/components/RoomRail.tsx`
 (rail key).
+
+### Member host loss never blocks the app; 409 while down keeps a bounded slow retry (2026-10-17)
+
+Real-app failure (desktop debug build of `c6136ee3`, account Nel Le
+joined to Hihi's room on another host): when the friend's host app quit,
+the main app showed a full-screen blocking dialog ("서버 연결이
+종료됐어요 / 호스트와의 연결이 끊겼어요. 내 서버 목록에서 다시 연결해
+주세요. [내 서버 목록으로]") covering everything, including the user's
+own rooms. Console: the friend tunnel's secure channel failed, the member
+room socket closed, then `POST /v1/servers/<id>/member-preview` → 409
+`incarnation_conflict` four times in about a minute (endpoint revoked
+while the host is down). After the host restarted and republished its
+endpoint (new public origin), zero further attempts followed for 10+
+minutes: the dialog stayed up and the room never reconnected.
+
+Required:
+
+- A member (`remote_server`) host losing its transport never raises the
+  blocking "서버 연결이 종료됐어요" dialog. Its rooms stay in the rail
+  with the disconnected state in place (grey dot + the existing
+  disconnected room notice with per-host reason and retry); every other
+  host keeps working. The dialog stays exactly where it is still
+  correct: the own-host end-state (`CentralOwnerWorkspaceBoundary` for
+  this computer's owner session).
+- A 409 `incarnation_conflict` (endpoint revoked / host offline) while
+  the host is down is NOT terminal: the per-host reconnect keeps its
+  bounded slow cadence (60 s doubling to a 5 min cap, ±20% jitter, at
+  most 5 central previews per 10 minutes and at most 18 per host per
+  hour while revoked, no grant calls after a 409), waking early on real
+  signals (directory refresh with a fresh endpoint tuple, user retry),
+  so the next attempt after the host republishes reconnects without
+  user action. Identity refusal (registration epoch or host key
+  fingerprint change) stays terminal as today: disconnected with the
+  Korean re-join reason until fresh consent.
+- The timer-driven reattach never strands the host in silence: a
+  consumed slow timer that ends without an in-flight attempt parks the
+  host back on its backoff instead of dropping the retry.
+
+Entry points: `frontend/src/views/components/StartupIdentityBoundary.tsx`
+(member transports render no end-state dialog),
+`frontend/src/views/components/RemoteMemberWorkspaceBoundary.tsx`
+(removed: member-host end-state owner),
+`frontend/src/views/components/CentralOwnerWorkspaceBoundary.tsx`
+(unchanged own-host end-state), `frontend/src/app/useMemberHosts.ts`
+(timer-driven reattach park), `frontend/src/lib/central/memberRoomLive.ts`
+(offline cause + slow cadence, unchanged budgets),
+`frontend/src/lib/central/centralRequestGovernor.ts` (hard budgets,
+unchanged).
+
+### A host's external access remembers its last open/closed choice (2026-10-17)
+
+Owner decision recorded with the implementation commit below.
