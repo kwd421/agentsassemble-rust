@@ -2,6 +2,10 @@ import { useEffect, useRef } from "react";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomGuestSession } from "../lib/roomGuestSession";
 import { remoteSessionTransport, sessionHostOrigin } from "../lib/remote/remoteWorkspace";
+import {
+  MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE,
+  tryClaimMemberRoomAutoReselect,
+} from "../lib/central/memberRoomAutoReselectBudget";
 import { memberAdmissionServerFor } from "./remoteRoomAuthority";
 
 /**
@@ -21,6 +25,7 @@ import { memberAdmissionServerFor } from "./remoteRoomAuthority";
 export function useMemberRoomAutoReselect({
   activeRoom,
   ownerServerId,
+  accountId = "",
   hasAnchor,
   isRefused,
   snapshots,
@@ -35,6 +40,7 @@ export function useMemberRoomAutoReselect({
 }: {
   activeRoom: RoomDockItem;
   ownerServerId: string | undefined;
+  accountId?: string;
   hasAnchor: (serverId: string) => boolean;
   isRefused: (serverId: string) => boolean;
   snapshots: { serverId: string; phase: string; origin: string }[];
@@ -69,7 +75,6 @@ export function useMemberRoomAutoReselect({
     if (!admission) return;
     const activeKey = `${memberServerId}\0${activeRoom.meetingId}`;
     if (seen.current.get(activeKey) === admission) return;
-    seen.current.set(activeKey, admission);
     const sessionReadyForRoom = Boolean(
       guestSession && !guestExpired && admittedSessionToken &&
       guestSession.meetingId === activeRoom.meetingId &&
@@ -79,9 +84,25 @@ export function useMemberRoomAutoReselect({
     const staleSession = sessionReadyForRoom && (!boundTransport || !boundTransport.active ||
       (Boolean(boundOrigin) && Boolean(snapshot.origin) && boundOrigin !== snapshot.origin));
     if (sessionReadyForRoom && !staleSession) {
+      seen.current.set(activeKey, admission);
       return;
     }
     if (flight.current) return;
+    // Bounded automatic attempt: at most one per fresh EXTERNAL host
+    // re-attach (internal re-attaches inside selectRoom share the host
+    // generation and never release another claim) and at most a daily cap
+    // per host+room. The budget is module-level per account, so remounts
+    // never reset it and persistent 401/429/5xx parks instead of spinning
+    // central grants.
+    const claim = tryClaimMemberRoomAutoReselect(accountId, memberServerId, activeRoom.meetingId);
+    seen.current.set(activeKey, admission);
+    if (!claim.allowed) {
+      if (claim.reason === "exhausted") {
+        (setSelectError as (error: { roomId: string; message: string }) => void)(
+          { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+      }
+      return;
+    }
     if (import.meta.env.DEV) console.debug("[member-select] auto re-select open room on fresh admission", {
       roomId: activeRoom.id, meetingId: activeRoom.meetingId, serverId: memberServerId,
       sessionReady: sessionReadyForRoom, stale: staleSession,
@@ -105,18 +126,18 @@ export function useMemberRoomAutoReselect({
         }
         const payload = await selectRoom(memberServerId, activeRoom.meetingId);
         if (!await acceptSession(payload)) {
-          (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+          (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
         } else {
           (setSelectError as (update: (current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null) => void)(
             (current) => (current?.roomId === activeRoom.id ? null : current));
         }
       } catch {
-        (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+        (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
       } finally {
         flight.current = false;
       }
     })();
-  }, [activeRoom, ownerServerId, hasAnchor, isRefused, snapshots, admissionFor,
+  }, [activeRoom, ownerServerId, accountId, hasAnchor, isRefused, snapshots, admissionFor,
     guestSession, guestExpired, admittedSessionToken, liveSessionFor,
     selectRoom, acceptSession, setSelectError]);
 

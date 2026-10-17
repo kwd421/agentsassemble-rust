@@ -3,6 +3,7 @@ import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
 import { memberHostOfflineBudgetExhausted, memberHostOfflineParkMs, memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, noteMemberHostOfflinePreview, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
+import { noteMemberHostExternalReselectAttach } from "../lib/central/memberRoomAutoReselectBudget";
 import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
 import { remoteWorkspaceFor, closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
 import { ApiError, userFacingError } from "../lib/apiErrors";
@@ -244,7 +245,7 @@ export function useMemberHosts({
     reconnectTimers.current.set(serverId, window.setTimeout(fire, delay));
   }, [clearReconnectTimer]);
 
-  const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal) => {
+  const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal, options?: { internal?: boolean }) => {
     const { personId: activePerson, sessionToken: activeToken } = identityRef.current;
     if (!activePerson || !activeToken || flights.current.has(serverId) || signal?.aborted) return;
     const controller = new AbortController();
@@ -315,6 +316,14 @@ export function useMemberHosts({
       reconnectAttempts.current.delete(serverId);
       reconnectCauses.current.delete(serverId);
       reconnectRetryAfter.current.delete(serverId);
+      // Only an external re-attach (reconcile, timer-driven reattach,
+      // explicit retry) releases one automatic room re-select for this host.
+      // The failure path inside selectRoom re-attaches with internal: true
+      // and never bumps this generation, so its fresh admission cannot
+      // retrigger the automatic select into a grant-burning loop.
+      if (!options?.internal && activePerson) {
+        noteMemberHostExternalReselectAttach(activePerson, serverId);
+      }
       setPhase(serverId, "connected", attached.rooms, attached.anchor.endpoint_origin, null);
     } catch (error) {
       flights.current.delete(serverId);
@@ -639,7 +648,10 @@ export function useMemberHosts({
       flights.current.delete(serverId);
       admissions.current.get(serverId)?.close();
       admissions.current.delete(serverId);
-      await attach(serverId, tuple.epoch, anchorOrigin() || tuple.origin, timeout.signal);
+      // Internal re-attach for this tap only: it must not bump the external
+      // host generation, or the fresh admission would retrigger the automatic
+      // re-select into an unbounded grant-burning loop.
+      await attach(serverId, tuple.epoch, anchorOrigin() || tuple.origin, timeout.signal, { internal: true });
       markAttempted();
       return admissions.current.get(serverId);
     };
@@ -678,7 +690,7 @@ export function useMemberHosts({
             try {
               attempted.current.delete(serverId);
               await attach(serverId, refreshTuple.epoch,
-                anchorOrigin() || refreshTuple.origin, timeout.signal);
+                anchorOrigin() || refreshTuple.origin, timeout.signal, { internal: true });
               markAttempted();
             } catch {
               // The refresh is best-effort; the original refusal below is

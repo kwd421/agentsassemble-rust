@@ -306,6 +306,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     admissionFor: memberHosts.admissionFor,
     activeServerId: activeRoom.roomOrigin === "remote_server" ? activeRoom.serverId ?? "" : "",
     activeMeetingId: activeRoom.roomOrigin === "remote_server" ? activeRoom.meetingId : "",
+    accountId: centralDirectory?.person?.person_id ?? "",
   });
   const rooms = useMemo(
     () => applyMemberRoomLive(railRooms, memberRoomLive.badges),
@@ -601,6 +602,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const { markAdmissionSeen } = useMemberRoomAutoReselect({
     activeRoom,
     ownerServerId: ownerWorkspace.connect?.serverId,
+    accountId: centralDirectory?.person?.person_id ?? "",
     hasAnchor: memberHosts.hasAnchor,
     isRefused: memberHosts.isRefused,
     snapshots: memberHosts.snapshots,

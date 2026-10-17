@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomEvent } from "../api";
 import { memberRoomLiveKey, useMemberRoomLive } from "./useMemberRoomLive";
+import { resetMemberRoomAutoReselectBudgetForTests } from "../lib/central/memberRoomAutoReselectBudget";
 import type { MemberHostSnapshot } from "./useMemberHosts";
 import type { RoomSocketHandle, RoomSocketHandlers } from "../roomSocketTypes";
 
@@ -39,6 +40,9 @@ const snapshotFor = (serverId: string, rooms: string[], phase: MemberHostSnapsho
 describe("useMemberRoomLive", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Automatic selects share a module-level per-account daily budget; each
+    // unit test starts from a fresh budget so they stay independent.
+    resetMemberRoomAutoReselectBudgetForTests();
   });
 
   function setup() {
@@ -144,7 +148,12 @@ describe("useMemberRoomLive", () => {
 
     const selectCalls = selectBackgroundRoom.mock.calls.length;
     // A fresh host channel means a fresh admission: cached sessions were
-    // bound to the dead transport, so the hook re-selects on it.
+    // bound to the dead transport, so the hook re-selects on it. A genuine
+    // external re-attach bumps the host generation, which releases one more
+    // bounded automatic attempt.
+    const { noteMemberHostExternalReselectAttach } =
+      await import("../lib/central/memberRoomAutoReselectBudget");
+    noteMemberHostExternalReselectAttach("", "friend");
     const freshAdmission = {
       transport: { active: true },
       deviceToken: "device",

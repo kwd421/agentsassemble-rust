@@ -11,6 +11,7 @@ import {
   projectMemberRoomBadge,
   type MemberRoomLiveBadge,
 } from "../lib/central/memberRoomLive";
+import { tryClaimMemberRoomAutoReselect, tryClaimMemberRoomAutoReselectRetry } from "../lib/central/memberRoomAutoReselectBudget";
 import type { MemberHostSnapshot } from "./useMemberHosts";
 
 export type { MemberRoomLiveBadge };
@@ -56,12 +57,14 @@ export function useMemberRoomLive({
   admissionFor,
   activeServerId,
   activeMeetingId,
+  accountId = "",
   openSocket = openRoomSocket,
 }: {
   snapshots: MemberHostSnapshot[];
   admissionFor: (serverId: string) => SecureMemberAdmission | null | undefined;
   activeServerId: string;
   activeMeetingId: string;
+  accountId?: string;
   openSocket?: OpenSocket;
 }) {
   const [badges, setBadges] = useState<Record<string, MemberRoomLiveBadge>>({});
@@ -228,6 +231,16 @@ export function useMemberRoomLive({
         }
         const liveAdmission = record.admission;
         if (record.socket || record.selecting || !liveAdmission.transport.active) continue;
+        // Background re-selects share the automatic budget with the
+        // foreground re-select: at most one per fresh EXTERNAL host
+        // re-attach and a daily cap per host+room. Internal re-attaches
+        // (same host generation) and an exhausted budget park silently here
+        // — no grant is spent, and the rail keeps last-known state. A
+        // dead-session heal already spent its extra claim in onError, so it
+        // proceeds without a second generation claim.
+        if (!record.session && record.reauth === 0) {
+          if (!tryClaimMemberRoomAutoReselect(accountId, snapshot.serverId, room.room_id).allowed) continue;
+        }
         const flow = record.flow + 1;
         record.flow = flow;
         record.selecting = true;
@@ -296,7 +309,8 @@ export function useMemberRoomLive({
                 live.socket = null;
                 live.flow += 1;
                 if (live.reauth < 1 && admissionForRef.current(snapshot.serverId) === liveAdmission &&
-                    liveAdmission.transport.active) {
+                    liveAdmission.transport.active &&
+                    tryClaimMemberRoomAutoReselectRetry(accountId, snapshot.serverId, live.meetingId).allowed) {
                   live.reauth += 1;
                   setTick((value) => value + 1);
                 }
@@ -347,7 +361,7 @@ export function useMemberRoomLive({
       // Reconcile runs again on the next change; in-flight flows check the
       // per-room generation and land on nothing stale.
     };
-  }, [snapshots, activeServerId, activeMeetingId, tick, publishBadge, clearBadge]);
+  }, [snapshots, activeServerId, activeMeetingId, accountId, tick, publishBadge, clearBadge]);
 
   useEffect(() => () => {
     for (const record of records.current.values()) {
