@@ -1,4 +1,5 @@
 import { PUBLIC_INGRESS_START_ERROR } from "../../lib/publicIngressStatus";
+import { hostPublishQuotaNotice } from "../../lib/central/centralRequestGovernor";
 import { QRCodeSVG } from "qrcode.react";
 import type { SavedFriendsAuthority } from "../../api/friends";
 import { useFriendsDirectory } from "../../app/useFriendsDirectory";
@@ -66,6 +67,7 @@ export default function RoomInviteModal({
   publicAccessQuery,
   onRetryPublicAccess,
   tunnelStatus,
+  quotaParkedUntil,
   inviteScope = "room",
   copyStatus,
   onClose,
@@ -91,6 +93,7 @@ export default function RoomInviteModal({
   publicAccessQuery: PublicAccessQuery;
   onRetryPublicAccess?: () => void;
   tunnelStatus?: PublicInviteStatus["tunnel"];
+  quotaParkedUntil?: number | null;
   inviteScope?: RoomAppearance["inviteScope"];
   copyStatus?: string;
   onClose: () => void;
@@ -149,6 +152,7 @@ export default function RoomInviteModal({
   const publicTunnelActive = Boolean(tunnelStatus?.running);
   const publicAccessControllable = Boolean(tunnelStatus?.available);
   const publicAccessBusy = publicAccessStarting || publicAccessStopping || !publicAccessKnown;
+  const quotaParkedNotice = quotaParkedUntil ? hostPublishQuotaNotice(quotaParkedUntil) : null;
   // One hosting control at a time: an open or opening tunnel offers only Stop.
   const showStopTunnel =
     publicAccessStarting || publicAccessStopping || publicTunnelActive || publicAccessRunning;
@@ -443,7 +447,9 @@ export default function RoomInviteModal({
                     ? "외부 접속 확인 중"
                     : publicAccessQuery === "unavailable"
                       ? "외부 접속 상태 확인 필요"
-                      : publicAccessRunning
+                      : publicAccessRunning && quotaParkedNotice
+                    ? quotaParkedNotice
+                    : publicAccessRunning
                     ? "외부 접속 열림"
                     : "외부 접속 꺼짐"}
             </p>

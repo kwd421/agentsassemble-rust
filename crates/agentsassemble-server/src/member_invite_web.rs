@@ -343,6 +343,7 @@ fn redeem_error(error: &crate::central::directory::CentralDirectoryError) -> Hum
     if matches!(
         error,
         crate::central::directory::CentralDirectoryError::CapacityExhausted
+            | crate::central::directory::CentralDirectoryError::QuotaExhausted
     ) {
         HumanInviteHttpError::new(
             StatusCode::SERVICE_UNAVAILABLE,

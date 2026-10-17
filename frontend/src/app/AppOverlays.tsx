@@ -91,6 +91,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
             publicAccessQuery={roomInvite.publicAccessQuery}
             onRetryPublicAccess={roomInvite.retryPublicInviteState}
             tunnelStatus={publicInviteStatus?.tunnel}
+            quotaParkedUntil={roomInvite.centralQuotaParkedUntil}
             inviteScope={inviteModalAppearance?.inviteScope || inviteModalRoom.inviteScope || "room"}
             copyStatus={inviteCopyStatus}
             onClose={closeInviteModal}

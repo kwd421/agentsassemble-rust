@@ -114,6 +114,14 @@ export function centralDailyQuotaNotice(accountId: string, now = Date.now()): st
   return `오늘 연결 한도를 다 써서 친구 방은 ${formatCentralQuotaResetLocal(resetAt)} 이후에 다시 연결돼요.`;
 }
 
+// One Korean line for the host footer while the daily quota parks central
+// publish, or null when unparked. The park timestamp is unix seconds from the
+// host's `/api/server-info` projection; the reset renders in local time.
+export function hostPublishQuotaNotice(parkedUntilSecs: number, nowMs = Date.now()): string | null {
+  if (!Number.isSafeInteger(parkedUntilSecs) || parkedUntilSecs * 1000 <= nowMs) return null;
+  return `오늘 주소 등록 한도를 다 써서 친구들은 ${formatCentralQuotaResetLocal(parkedUntilSecs * 1000)} 이후에 들어올 수 있어요.`;
+}
+
 // One neutral Korean line for an explicit user action (rename, icon, …)
 // refused by the daily block, or null when unblocked. The friend-room
 // reconnect line stays on the reconnect/notice surfaces only; an explicit

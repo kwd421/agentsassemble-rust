@@ -687,19 +687,57 @@ export async function previewCentralMember(request: MemberTargetRequest, signal?
 
 export { openCentralOwnedServer } from "./secureOwnerEntry";
 
+export type LocalServerDirectoryStatus = {
+  enabled: boolean;
+  registered_origin: string;
+  last_success_at: number;
+  last_error: string;
+  name_sync_error: string;
+  /** Unix seconds of the next 00:00 UTC while daily quota parks publish; 0 when unparked. */
+  quota_parked_until: number;
+};
+
 export type LocalServerInfo = {
   server_id: string;
   host_public_key_jwk: JsonWebKey;
   host_key_fingerprint: string;
   protocol_version: number;
   status: string;
+  /** Absent on hosts before the quota-park field; never required. */
+  central_directory?: LocalServerDirectoryStatus;
 };
+
+// No exact-keys assertion on purpose: older hosts omit `central_directory`
+// and newer hosts may add keys, and both must still parse.
+function parseLocalServerDirectory(value: unknown): LocalServerDirectoryStatus | undefined {
+  if (value === undefined) return undefined;
+  const record = (value && typeof value === "object" && !Array.isArray(value) ? value : {}) as Record<string, unknown>;
+  const number = (key: string) =>
+    typeof record[key] === "number" && Number.isFinite(record[key]) ? (record[key] as number) : 0;
+  const text = (key: string) => (typeof record[key] === "string" ? (record[key] as string) : "");
+  return {
+    enabled: record.enabled === true,
+    registered_origin: text("registered_origin"),
+    last_success_at: number("last_success_at"),
+    last_error: text("last_error"),
+    name_sync_error: text("name_sync_error"),
+    quota_parked_until: number("quota_parked_until"),
+  };
+}
+
+export function parseLocalServerInfo(value: unknown): LocalServerInfo {
+  const payload = value as LocalServerInfo;
+  const directory = parseLocalServerDirectory(
+    (value as { central_directory?: unknown } | null)?.central_directory
+  );
+  return directory ? { ...payload, central_directory: directory } : payload;
+}
 
 export async function fetchLocalServerInfo(): Promise<LocalServerInfo> {
   const response = await fetchLocalRuntime("/api/server-info", {
     cache: "no-store",
   });
-  return responsePayload<LocalServerInfo>(response, false);
+  return parseLocalServerInfo(await responsePayload<LocalServerInfo>(response, false));
 }
 
 async function updateLocalRegistrationEpoch(serverId: string, epoch: string | null, deviceToken = ""): Promise<void> {

@@ -1922,6 +1922,24 @@ owned renewal task; failures remain visible and retry only while the runtime and
 same ingress generation remain active. No central session token is stored by the
 host. An unavailable or unpublished ingress leaves the server visible but unopened.
 
+Host daily-quota park (2026-10-17): central answers 429
+`{"error":{"code":"actor_quota_exhausted"}}` when the daily actor allowance
+(account/session/host) is spent until the next 00:00 UTC, never with Retry-After,
+and a rejected request spends no units. Required behavior: the single host->central
+owner (`central/directory.rs` `send_signed` and every caller: endpoint/name publish,
+member sync, admission redeem, owner/member login paths sharing it) reads the 429
+body code; `actor_quota_exhausted` parks ALL host->central delivery until the next
+00:00 UTC plus 0-60 s jitter with one bounded attempt afterwards and no 60 s
+polling, while other 429s honour Retry-After when present and otherwise keep the
+existing bounded backoff. The park is projected as `quota_parked_until` (unix
+seconds, 0 when unparked) in the existing `central_directory` status of
+`/api/server-info`; older hosts omit it and both sides still parse. While parked,
+the owner hosting footer shows one Korean line with the local reset time instead
+of claiming friends can connect. Affected entry points: `send_signed`,
+`event_publisher` delivery/due scheduling, `member_sync`, `admission_redeem`,
+`member_invite_web` redeem errors, `server-info` projection, the invite controller
+quota read, and the hosting footer.
+
 Grant redemption exposes a read-only room-directory projection and can mint one
 short operator session for an explicitly selected room. That session is bound to the
 requesting browser device, verified public origin and exact room incarnation, and

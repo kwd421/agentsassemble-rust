@@ -1,4 +1,5 @@
 import { PUBLIC_INGRESS_START_ERROR } from "../lib/publicIngressStatus";
+import { fetchLocalServerInfo } from "../lib/central/identity";
 import { loadPublicIngressPreference, savePublicIngressPreference } from "../lib/publicIngressPreference";
 import { fetchRemoteInviteOrigin, type RemoteInviteTransport } from "../api/roomInviteTransport";
 import { copyText } from "../lib/copyInviteText";
@@ -50,6 +51,7 @@ export function useRoomInviteController({
   const [copyStatus, setCopyStatus] = useState("");
   const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | { public_url: string; remote: true } | null>(null);
   const [publicAccessQuery, setPublicAccessQuery] = useState<PublicAccessQuery>("checking");
+  const [centralQuotaParkedUntil, setCentralQuotaParkedUntil] = useState<number | null>(null);
   const [publicAccessTransition, setPublicAccessTransition] =
     useState<PublicAccessTransition>("idle");
   const ingressGenerationRef = useRef(0);
@@ -180,6 +182,7 @@ export function useRoomInviteController({
     setModal({ roomId });
     setCopyStatus("");
     setPublicInviteStatus(null);
+    setCentralQuotaParkedUntil(null);
     setPublicAccessQuery("checking");
     setPublicAccessTransition("idle");
   }
@@ -243,10 +246,26 @@ export function useRoomInviteController({
       const status = await queryPublicInviteState(generation);
       assertIngressOperation(generation);
       setPublicAccessQuery("confirmed");
+      void refreshCentralQuotaState(generation);
       return status;
     } catch (error) {
       if (ingressOperationIsCurrent(generation)) setPublicAccessQuery("unavailable");
       throw error;
+    }
+  }
+
+  // Reads the host's central publish park (`quota_parked_until` in
+  // /api/server-info) so the footer stops claiming friends can connect while
+  // the daily allowance is spent. Quiet: a failed read keeps tunnel-only state.
+  async function refreshCentralQuotaState(generation: number) {
+    if (remote || !localOperatorEligible) return;
+    try {
+      const info = await fetchLocalServerInfo();
+      if (!ingressOperationIsCurrent(generation)) return;
+      const parked = info.central_directory?.quota_parked_until ?? 0;
+      setCentralQuotaParkedUntil(Number.isSafeInteger(parked) && parked > 0 ? parked : null);
+    } catch {
+      if (ingressOperationIsCurrent(generation)) setCentralQuotaParkedUntil(null);
     }
   }
 
@@ -495,6 +514,7 @@ export function useRoomInviteController({
     copyStatus,
     humanInvites: managedHumanInvites.humanInvites,
     publicInviteStatus: publicInviteStatus && "tunnel" in publicInviteStatus ? publicInviteStatus : null,
+    centralQuotaParkedUntil,
     publicAccessTransition,
     publicAccessQuery,
     retryPublicInviteState,

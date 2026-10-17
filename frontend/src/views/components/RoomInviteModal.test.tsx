@@ -33,6 +33,7 @@ function renderInviteModal({
   pairingAvailable = false,
   operatorPairings = [],
   copyStatus,
+  quotaParkedUntil = null,
 }: {
   lastError?: string;
   publicAccess?: boolean;
@@ -44,6 +45,7 @@ function renderInviteModal({
   pairingAvailable?: boolean;
   operatorPairings?: OperatorPairingPresentation[];
   copyStatus?: string;
+  quotaParkedUntil?: number | null;
 } = {}) {
   const retry = vi.fn();
   const onGenerateSecureInvite = vi.fn();
@@ -83,6 +85,7 @@ function renderInviteModal({
       onStartTunnel={vi.fn()}
       onStopTunnel={onStopTunnel}
       copyStatus={copyStatus}
+      quotaParkedUntil={quotaParkedUntil}
     />
   );
   return {
@@ -313,6 +316,18 @@ it("shows safe external-access failure copy", () => {
   renderInviteModal({ publicAccess: false, phase: "error", lastError: "cloudflared closed its output before exiting" });
   expect(screen.getByText("외부 접속을 열지 못했어요. 잠시 후 다시 시도해 주세요.")).toBeTruthy();
   expect(screen.queryByText(/cloudflared/)).toBeNull();
+});
+
+it("shows the daily quota line instead of an open claim while publish is parked", () => {
+  renderInviteModal({ quotaParkedUntil: Math.floor(Date.now() / 1000) + 3600 });
+  expect(screen.queryByText("외부 접속 열림")).toBeNull();
+  expect(screen.getByText(/오늘 주소 등록 한도를 다 써서 친구들은 .* 이후에 들어올 수 있어요\./)).toBeTruthy();
+});
+
+it("keeps the open claim once the quota park has expired", () => {
+  renderInviteModal({ quotaParkedUntil: Math.floor(Date.now() / 1000) - 10 });
+  expect(screen.getByText("외부 접속 열림")).toBeTruthy();
+  expect(screen.queryByText(/주소 등록 한도/)).toBeNull();
 });
 
 it.each([0, 1, 3, 370])("formats expiry %s local calendar days away without raw ISO", (days) => {

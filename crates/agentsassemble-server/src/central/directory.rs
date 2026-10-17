@@ -26,6 +26,10 @@ pub(crate) use admission_redeem::{MemberGrantPurpose, RedeemHost};
 #[path = "directory_terminal_tests.rs"]
 mod terminal_tests;
 
+#[cfg(test)]
+#[path = "directory_quota_tests.rs"]
+mod quota_tests;
+
 const RESPONSE_LIMIT: usize = 32 * 1024;
 
 #[derive(Clone)]
@@ -36,6 +40,10 @@ struct CentralDirectoryInner {
     client: Client,
     status: RwLock<CentralDirectoryStatus>,
     ingress: RwLock<PublicIngress>,
+    /// Transient per-minute rate-limit gate (wall ms) from the last 429
+    /// Retry-After. The daily quota park lives in `status.quota_parked_until`
+    /// so the owner UI can project it.
+    rate_limited_until_ms: RwLock<i64>,
     #[cfg(test)]
     publisher_probe: tokio::sync::watch::Sender<(u64, bool)>,
 }
@@ -47,6 +55,10 @@ pub(crate) struct CentralDirectoryStatus {
     pub(crate) last_success_at: i64,
     pub(crate) last_error: String,
     pub(crate) name_sync_error: String,
+    /// Unix seconds of the next 00:00 UTC (+0-60 s jitter) while a daily
+    /// `actor_quota_exhausted` refusal parks host->central delivery; 0 when
+    /// unparked. Older hosts omit it and newer clients must accept its absence.
+    pub(crate) quota_parked_until: i64,
 }
 
 impl CentralDirectoryStatus {
@@ -81,6 +93,8 @@ pub enum CentralDirectoryError {
     Unavailable,
     #[error("central directory request capacity is temporarily exhausted")]
     CapacityExhausted,
+    #[error("central directory daily request allowance is exhausted")]
+    QuotaExhausted,
     #[error("central directory response is invalid")]
     InvalidResponse,
     #[error("host request signing failed")]
@@ -174,12 +188,14 @@ impl CentralDirectory {
             base_url,
             client,
             ingress: RwLock::new(PublicIngress::disabled()),
+            rate_limited_until_ms: RwLock::new(0),
             status: RwLock::new(CentralDirectoryStatus {
                 enabled: true,
                 registered_origin: String::new(),
                 last_success_at: 0,
                 last_error: String::new(),
                 name_sync_error: String::new(),
+                quota_parked_until: 0,
             }),
         }))))
     }
@@ -198,6 +214,7 @@ impl CentralDirectory {
                 last_success_at: 0,
                 last_error: String::new(),
                 name_sync_error: String::new(),
+                quota_parked_until: 0,
             },
             |inner| inner.status.read().clone(),
         )
@@ -218,6 +235,51 @@ impl CentralDirectory {
 
 fn retry_delay(failure_count: u32) -> Duration {
     Duration::from_secs(2_u64.saturating_pow(failure_count.min(5)).min(60))
+}
+
+impl CentralDirectoryInner {
+    /// Wall-ms until host->central delivery may resume: the later of the daily
+    /// quota park and the transient Retry-After gate. An expired park clears to
+    /// 0 so the status projection stops advertising it without a new attempt.
+    fn delivery_gate_ms(&self, now_ms: i64) -> i64 {
+        let quota_ms = {
+            let mut status = self.status.write();
+            if status.quota_parked_until <= now_ms.div_euclid(1000) {
+                status.quota_parked_until = 0;
+                0
+            } else {
+                status.quota_parked_until.saturating_mul(1000)
+            }
+        };
+        quota_ms.max(*self.rate_limited_until_ms.read())
+    }
+}
+
+/// Next 00:00 UTC after `now_secs`, plus a bounded 0-60 s jitter so parked hosts
+/// do not retry in the same second. A rejected quota request spends no units,
+/// so the single attempt after the park either succeeds or re-parks.
+fn quota_park_until_secs(now_secs: i64, jitter_secs: i64) -> i64 {
+    let reset = (now_secs.div_euclid(86_400) + 1).saturating_mul(86_400);
+    reset.saturating_add(jitter_secs.clamp(0, 60))
+}
+
+fn quota_jitter_secs() -> i64 {
+    i64::try_from(rand::random::<u64>() % 61).unwrap_or(0)
+}
+
+/// Bounded Retry-After for per-minute 429s: plain delay seconds, else an HTTP
+/// date in the future. Anything else (including the quota refusal, which never
+/// carries Retry-After) falls back to the existing bounded backoff.
+fn parse_retry_after_ms(value: &str, now: chrono::DateTime<Utc>) -> Option<i64> {
+    let trimmed = value.trim();
+    if let Ok(secs) = trimmed.parse::<u64>() {
+        return Some(i64::try_from(secs.min(3_600)).unwrap_or(3_600).saturating_mul(1000));
+    }
+    let date = chrono::DateTime::parse_from_rfc2822(trimmed)
+        .ok()
+        .map(|date| date.with_timezone(&Utc))?;
+    let delta = date.signed_duration_since(now).num_milliseconds();
+    (delta > 0).then(|| delta.min(3_600_000))
 }
 
 // The existing directory task is the sole delivery owner. Profiles are durable;
@@ -274,6 +336,22 @@ async fn send_signed(
     if reconcile_demotion(store, &ingress).await? {
         return Err(CentralDirectoryError::ServerRetired);
     }
+    // The single host->central gate: while parked or rate-limited, fail without
+    // spending a request. An expired park clears here so exactly one bounded
+    // attempt goes out afterwards.
+    {
+        let now_secs = Utc::now().timestamp();
+        let mut status = inner.status.write();
+        if status.quota_parked_until > 0 {
+            if now_secs < status.quota_parked_until {
+                return Err(CentralDirectoryError::QuotaExhausted);
+            }
+            status.quota_parked_until = 0;
+        }
+    }
+    if *inner.rate_limited_until_ms.read() > Utc::now().timestamp_millis() {
+        return Err(CentralDirectoryError::CapacityExhausted);
+    }
     if body.get("registration_epoch").is_none()
         && let Some(epoch) = store.registration_epoch().await?
     {
@@ -299,11 +377,10 @@ async fn send_signed(
         .map_err(CentralDirectoryError::Request)?;
     let status = response.status();
     if status != StatusCode::OK && status != StatusCode::GONE {
-        return Err(if response.status() == StatusCode::TOO_MANY_REQUESTS {
-            CentralDirectoryError::CapacityExhausted
-        } else if response.status().is_server_error()
-            || response.status() == StatusCode::REQUEST_TIMEOUT
-        {
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            return Err(map_rate_limit(inner, response).await);
+        }
+        return Err(if status.is_server_error() || status == StatusCode::REQUEST_TIMEOUT {
             CentralDirectoryError::Unavailable
         } else {
             CentralDirectoryError::Rejected
@@ -328,6 +405,40 @@ async fn send_signed(
         return apply_terminal_response(inner, identity, store, &bytes).await;
     }
     Ok(bytes)
+}
+
+/// Maps a 429 to either the daily quota park or a transient capacity error. A
+/// `{"error":{"code":"actor_quota_exhausted"}}` body parks ALL host->central
+/// delivery until the next 00:00 UTC plus 0-60 s jitter; any other 429 honours
+/// Retry-After when present and otherwise keeps the existing bounded backoff.
+async fn map_rate_limit(
+    inner: &CentralDirectoryInner,
+    response: reqwest::Response,
+) -> CentralDirectoryError {
+    let retry_after_ms = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| parse_retry_after_ms(value, Utc::now()));
+    let body = response.bytes().await.unwrap_or_default();
+    let quota = !body.is_empty()
+        && body.len() <= RESPONSE_LIMIT
+        && serde_json::from_slice::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|value| value["error"]["code"].as_str().map(str::to_owned))
+            == Some("actor_quota_exhausted".to_owned());
+    if quota {
+        let parked_until = quota_park_until_secs(Utc::now().timestamp(), quota_jitter_secs());
+        inner.status.write().quota_parked_until = parked_until;
+        CentralDirectoryError::QuotaExhausted
+    } else {
+        if let Some(wait_ms) = retry_after_ms {
+            let gated_until = Utc::now().timestamp_millis().saturating_add(wait_ms);
+            let mut gate = inner.rate_limited_until_ms.write();
+            *gate = (*gate).max(gated_until);
+        }
+        CentralDirectoryError::CapacityExhausted
+    }
 }
 
 async fn apply_terminal_response(

@@ -97,6 +97,174 @@ async fn idle_directory_has_no_timer_wakes_and_failure_retries_keep_generation()
     Ok(())
 }
 
+#[tokio::test]
+async fn quota_refusal_parks_all_delivery_until_utc_midnight()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    store
+        .bootstrap_local_authority("2d697cab-366f-4b22-82d0-2c96b67bab42", "Owner")
+        .await?;
+    store.set_registration_epoch(Some("quota-epoch")).await?;
+    let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
+    let (tx, mut requests) = tokio::sync::mpsc::unbounded_channel();
+    let app = Router::new().route(
+        "/v1/servers/{id}/{operation}",
+        any(
+            move |Path((_, operation)): Path<(String, String)>,
+                  method: axum::http::Method,
+                  bytes: Bytes| {
+                let tx = tx.clone();
+                async move {
+                    let value: serde_json::Value =
+                        serde_json::from_slice(&bytes).unwrap_or_else(|_| panic!("JSON"));
+                    tx.send((operation, method, value))
+                        .unwrap_or_else(|_| panic!("capture"));
+                    (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        axum::Json(json!({"error": {"code": "actor_quota_exhausted"}})),
+                    )
+                }
+            },
+        ),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let directory = CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
+    let status_reader = directory.clone();
+    let inner = directory.0.as_ref().ok_or("directory")?.clone();
+    let mut probe = inner.publisher_probe.subscribe();
+    let http_cancel = CancellationToken::new();
+    let stop = http_cancel.clone();
+    let http = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(stop.cancelled_owned())
+            .await
+    });
+    let ingress = PublicIngress::configured_manual(
+        "127.0.0.1:41955".parse()?,
+        "https://quota.test",
+        &"s".repeat(32),
+    )?;
+    let cancel = CancellationToken::new();
+    let sender = tokio::spawn(directory.run(store.clone(), ingress, identity, cancel.clone()));
+    let first = requests.recv().await.ok_or("first endpoint")?;
+    assert_eq!(first.0, "endpoint");
+    probe.wait_for(|(_, waiting)| *waiting).await?;
+    let parked_until = status_reader.status().quota_parked_until;
+    let midnight = (Utc::now().timestamp().div_euclid(86_400) + 1) * 86_400;
+    assert!(
+        (midnight..=midnight + 60).contains(&parked_until),
+        "parked_until={parked_until} midnight={midnight}"
+    );
+    // No 60 s polling: an hour passes with no further request (the name
+    // publication never fires while parked).
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(3600)).await;
+    tokio::task::yield_now().await;
+    assert!(
+        requests.try_recv().is_err(),
+        "parked publisher must send nothing meanwhile"
+    );
+    tokio::time::resume();
+    cancel.cancel();
+    let result = sender.await?;
+    assert!(
+        matches!(result, Err(CentralDirectoryError::QuotaExhausted)),
+        "shutdown publish stays parked instead of polling"
+    );
+    assert!(requests.try_recv().is_err());
+    http_cancel.cancel();
+    http.await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn per_minute_rate_limit_honours_retry_after_without_quota_park()
+-> Result<(), Box<dyn std::error::Error>> {
+    use axum::http::header;
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    store
+        .bootstrap_local_authority("2d697cab-366f-4b22-82d0-2c96b67bab42", "Owner")
+        .await?;
+    store.set_registration_epoch(Some("rate-epoch")).await?;
+    let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
+    let (tx, mut requests) = tokio::sync::mpsc::unbounded_channel::<(String, serde_json::Value)>();
+    let name_tx = tx.clone();
+    let endpoint_tx = tx.clone();
+    let app = Router::new()
+        .route(
+            "/v1/servers/{id}/endpoint",
+            any(move || {
+                let endpoint_tx = endpoint_tx.clone();
+                async move {
+                    endpoint_tx
+                        .send(("endpoint".to_owned(), serde_json::json!({})))
+                        .ok();
+                    (StatusCode::OK, axum::Json(json!({"status": "ok"})))
+                }
+            }),
+        )
+        .route(
+            "/v1/servers/{id}/name",
+            axum::routing::put(move |body: Bytes| {
+                let name_tx = name_tx.clone();
+                async move {
+                    let value: serde_json::Value =
+                        serde_json::from_slice(&body).unwrap_or_else(|_| panic!("JSON"));
+                    name_tx.send(("name".to_owned(), value)).ok();
+                    (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        [(header::RETRY_AFTER, "120")],
+                        axum::Json(json!({"error": {"code": "per_minute_limited"}})),
+                    )
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let directory = CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
+    let status_reader = directory.clone();
+    let inner = directory.0.as_ref().ok_or("directory")?.clone();
+    let mut probe = inner.publisher_probe.subscribe();
+    let http_cancel = CancellationToken::new();
+    let stop = http_cancel.clone();
+    let http = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(stop.cancelled_owned())
+            .await
+    });
+    let cancel = CancellationToken::new();
+    let sender = tokio::spawn(directory.run(
+        store.clone(),
+        PublicIngress::disabled(),
+        identity,
+        cancel.clone(),
+    ));
+    assert_eq!(requests.recv().await.ok_or("endpoint")?.0, "endpoint");
+    assert_eq!(requests.recv().await.ok_or("name")?.0, "name");
+    probe.wait_for(|(_, waiting)| *waiting).await?;
+    assert_eq!(status_reader.status().quota_parked_until, 0);
+    // The short 2 s backoff would already have fired; Retry-After holds it.
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(60)).await;
+    tokio::task::yield_now().await;
+    assert!(
+        requests.try_recv().is_err(),
+        "Retry-After must delay the bounded retry"
+    );
+    tokio::time::resume();
+    cancel.cancel();
+    // Shutdown stays behind the same gate: no offline publish fires into the
+    // rate limit either.
+    let result = sender.await?;
+    assert!(
+        matches!(result, Err(CentralDirectoryError::CapacityExhausted)),
+        "shutdown publish honours Retry-After, got {result:?}"
+    );
+    assert!(requests.try_recv().is_err());
+    http_cancel.cancel();
+    http.await??;
+    Ok(())
+}
+
 fn capture_requests(
     tx: tokio::sync::mpsc::UnboundedSender<(String, Method, serde_json::Value)>,
     fail_online: bool,

@@ -88,9 +88,14 @@ async fn finish_delivery(
                 Err(error) => {
                     name.dirty |= !matches!(error, CentralDirectoryError::Rejected);
                     name.failures = name.failures.saturating_add(1);
-                    name.due = clock.now().saturating_add(
-                        i64::try_from(retry_delay(name.failures).as_millis()).unwrap_or(i64::MAX),
-                    );
+                    let backoff =
+                        i64::try_from(retry_delay(name.failures).as_millis()).unwrap_or(i64::MAX);
+                    // A quota park or Retry-After gate outlives the short backoff;
+                    // the delivery loop sends nothing until the gate lifts.
+                    name.due = clock
+                        .now()
+                        .saturating_add(backoff)
+                        .max(inner.delivery_gate_ms(clock.now()));
                     inner.status.write().name_sync_error = error.to_string();
                 }
             }
@@ -183,10 +188,23 @@ pub(super) async fn run(
             );
         }
         let due = if flight.is_none() {
-            [endpoint_due, name.dirty.then_some(name.due), member_due]
-                .into_iter()
-                .flatten()
-                .min()
+            // While a quota park or Retry-After gate holds, earlier dues wait
+            // for the gate instead of polling central; the gate itself wakes
+            // the loop once for the single bounded attempt afterwards.
+            let now = clock.now();
+            let gate = inner.delivery_gate_ms(now);
+            let mut candidates = Vec::new();
+            if gate > now {
+                candidates.push(gate);
+            }
+            for candidate in
+                [endpoint_due, name.dirty.then_some(name.due), member_due]
+                    .into_iter()
+                    .flatten()
+            {
+                candidates.push(candidate.max(gate));
+            }
+            candidates.into_iter().min()
         } else {
             None
         };
@@ -324,6 +342,9 @@ fn start_delivery(
     member_due: Option<i64>,
     now: i64,
 ) -> Option<AbortOnDropHandle<Delivered>> {
+    if now < inner.delivery_gate_ms(now) {
+        return None;
+    }
     let endpoint_due = pending
         .as_ref()
         .and_then(CentralEndpointEvent::next_attempt_at_ms);
