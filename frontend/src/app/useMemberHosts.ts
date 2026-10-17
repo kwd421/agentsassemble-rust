@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
+import { memberHostReconnectDelay } from "../lib/central/memberRoomLive";
 import { remoteWorkspaceFor } from "../lib/remote/remoteWorkspace";
 import { ApiError } from "../lib/apiErrors";
 import type { SecureMemberAdmission } from "../lib/central/secureMemberEntry";
@@ -93,6 +94,11 @@ export function useMemberHosts({
   const admissions = useRef(new Map<string, SecureMemberAdmission>());
   const attempted = useRef(new Map<string, string>());
   const refused = useRef(new Set<string>());
+  // Per-host automatic reconnect: bounded doubling backoff driven only by
+  // that host's own channel close or attach failure, plus explicit retry.
+  // No global loop, no central polling; each attempt re-admits on demand.
+  const reconnectTimers = useRef(new Map<string, number>());
+  const reconnectAttempts = useRef(new Map<string, number>());
   const snapshotsRef = useRef<MemberHostSnapshot[]>([]);
   snapshotsRef.current = snapshots;
   const directoryRef = useRef(directory);
@@ -118,6 +124,10 @@ export function useMemberHosts({
   }, []);
 
   const dropHost = useCallback((serverId: string) => {
+    const timer = reconnectTimers.current.get(serverId);
+    if (timer !== undefined) window.clearTimeout(timer);
+    reconnectTimers.current.delete(serverId);
+    reconnectAttempts.current.delete(serverId);
     flights.current.get(serverId)?.abort();
     flights.current.delete(serverId);
     const admission = admissions.current.get(serverId);
@@ -125,6 +135,20 @@ export function useMemberHosts({
     attempted.current.delete(serverId);
     detachMemberHost(admission);
     setSnapshots((current) => current.filter((entry) => entry.serverId !== serverId));
+  }, []);
+
+  const retryHostRef = useRef<(serverId: string) => void>(() => undefined);
+
+  const scheduleReconnect = useCallback((serverId: string) => {
+    // An identity refusal blocks silent re-entry (fresh consent overwrites
+    // the anchor); explicit retry past it stays manual.
+    if (reconnectTimers.current.has(serverId) || refused.current.has(serverId)) return;
+    const attempt = reconnectAttempts.current.get(serverId) ?? 0;
+    reconnectAttempts.current.set(serverId, attempt + 1);
+    reconnectTimers.current.set(serverId, window.setTimeout(() => {
+      reconnectTimers.current.delete(serverId);
+      retryHostRef.current(serverId);
+    }, memberHostReconnectDelay(attempt)));
   }, []);
 
   const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal) => {
@@ -159,8 +183,16 @@ export function useMemberHosts({
       admissions.current.set(serverId, attached.admission);
       attached.admission.transport.onClose(() => {
         if (identityRef.current.sessionToken !== activeToken) return;
+        // A deliberate drop already removed the admission, so its close
+        // never schedules a reconnect.
+        if (!admissions.current.has(serverId)) return;
         setPhase(serverId, "disconnected");
+        scheduleReconnect(serverId);
       });
+      const timer = reconnectTimers.current.get(serverId);
+      if (timer !== undefined) window.clearTimeout(timer);
+      reconnectTimers.current.delete(serverId);
+      reconnectAttempts.current.delete(serverId);
       setPhase(serverId, "connected", attached.rooms, attached.anchor.endpoint_origin, null);
     } catch (error) {
       flights.current.delete(serverId);
@@ -173,12 +205,16 @@ export function useMemberHosts({
         // auto-reconcile nor retry re-attaches silently; fresh consent
         // overwrites it (re-join path).
         refused.current.add(serverId);
+        const timer = reconnectTimers.current.get(serverId);
+        if (timer !== undefined) window.clearTimeout(timer);
+        reconnectTimers.current.delete(serverId);
         setPhase(serverId, "disconnected", previousAnchor?.rooms ?? null, origin, error.message);
         return;
       }
       setPhase(serverId, "disconnected", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin, null);
+      scheduleReconnect(serverId);
     }
-  }, [setPhase, dropHost]);
+  }, [setPhase, dropHost, scheduleReconnect]);
 
   // Account switch or logout ends every member session; anchors are cleared
   // by the central identity owner, so re-login re-attaches from membership.
@@ -187,6 +223,9 @@ export function useMemberHosts({
     refused.current.clear();
     attempted.current.clear();
     return () => {
+      for (const timer of reconnectTimers.current.values()) window.clearTimeout(timer);
+      reconnectTimers.current.clear();
+      reconnectAttempts.current.clear();
       for (const serverId of [...flights.current.keys()]) {
         flights.current.get(serverId)?.abort();
         flights.current.delete(serverId);
@@ -280,13 +319,14 @@ export function useMemberHosts({
         liveWorkspace.transport.onClose(() => {
           if (admissions.current.has(adoptedId)) return;
           setPhase(adoptedId, "disconnected");
+          scheduleReconnect(adoptedId);
         });
         setPhase(server.server_id, "connected", anchor.rooms, anchor.endpoint_origin);
         continue;
       }
       void attach(server.server_id, epoch, origin);
     }
-  }, [attach, dropHost, setPhase]);
+  }, [attach, dropHost, scheduleReconnect, setPhase]);
 
   useEffect(() => {
     if (!personId || !sessionToken) {
@@ -308,6 +348,10 @@ export function useMemberHosts({
     if (!epoch) return;
     refused.current.delete(serverId);
     attempted.current.delete(serverId);
+    const timer = reconnectTimers.current.get(serverId);
+    if (timer !== undefined) window.clearTimeout(timer);
+    reconnectTimers.current.delete(serverId);
+    reconnectAttempts.current.delete(serverId);
     dropHost(serverId);
     if (server) {
       reconcile();
@@ -317,6 +361,7 @@ export function useMemberHosts({
     // the anchor instead of stranding the explicit retry in silence.
     void attach(serverId, epoch, anchor?.endpoint_origin || "");
   }, [attach, dropHost, reconcile]);
+  retryHostRef.current = retryHost;
 
   const selectRoom = useCallback(async (serverId: string, roomId: string) => {
     if (import.meta.env.DEV) console.debug("[member-select] select start", { serverId, roomId });
@@ -484,5 +529,12 @@ export function useMemberHosts({
 
   const isRefused = useCallback((serverId: string) => refused.current.has(serverId), []);
 
-  return { snapshots, hostDirs, hostStates, hasAnchor, isRefused, retryHost, selectRoom, removeRoom };
+  // Live background subscriptions resolve the host admission behind this
+  // accessor; it never opens a second transport.
+  const admissionFor = useCallback(
+    (serverId: string) => admissions.current.get(serverId) ?? null,
+    []
+  );
+
+  return { snapshots, hostDirs, hostStates, hasAnchor, isRefused, retryHost, selectRoom, removeRoom, admissionFor };
 }

@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { memberRoomRemovedWhileLive, useMemberHosts } from "./useMemberHosts";
 import type { CentralDirectoryState } from "./useCentralDirectory";
@@ -43,6 +43,9 @@ const directoryFor = (servers: ReturnType<typeof liveServer>[]) => ({
 
 describe("useMemberHosts", () => {
   beforeEach(() => {
+    // Unmount the previous hook first: otherwise its per-host reconnect
+    // timer would fire into the next test's attach mock.
+    cleanup();
     window.localStorage.clear();
     window.sessionStorage.clear();
     vi.clearAllMocks();
@@ -226,6 +229,53 @@ describe("useMemberHosts", () => {
     act(() => { result.current.retryHost("friend"); });
     await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("connected"), { timeout: 5000 });
     expect(attach).toHaveBeenCalledTimes(2);
+  });
+
+  it("reconnects an offline host automatically with backoff", async () => {
+    vi.useFakeTimers();
+    try {
+      attach.mockRejectedValue(new Error("꺼져 있어요."));
+      const { result } = renderHook(() => useMemberHosts({
+        personId: "person", sessionToken: "token", directory: directoryFor([liveServer()]),
+      }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(result.current.snapshots[0]?.phase).toBe("disconnected");
+      const calls = attach.mock.calls.length;
+      // No central polling: the retry re-admits on the host's own backoff.
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(attach.mock.calls.length).toBeGreaterThan(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconnects after the host channel closes without a second transport", async () => {
+    vi.useFakeTimers();
+    try {
+      const onClose = vi.fn();
+      const admission = { ...admissionFor([{ room_id: "general", name: "일반" }]), transport: { onClose, active: true } };
+      attach.mockImplementation(async () => ({
+        admission,
+        rooms: [{ room_id: "general", name: "일반" }],
+        anchor: { server_id: "friend", registration_epoch: "epoch" },
+      }));
+      const { result } = renderHook(() => useMemberHosts({
+        personId: "person", sessionToken: "token", directory: directoryFor([liveServer()]),
+      }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(result.current.snapshots[0]?.phase).toBe("connected");
+      expect(onClose).toHaveBeenCalledOnce();
+      const closeHost = onClose.mock.calls[0][0] as () => void;
+      await act(async () => { closeHost(); });
+      expect(result.current.snapshots[0]?.phase).toBe("disconnected");
+      const calls = attach.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(attach.mock.calls.length).toBeGreaterThan(calls);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("confirms a member removal only from a live host that lists without the room", () => {

@@ -65,23 +65,23 @@ export class SecureMemberAdmission {
     const challenge = parseMemberChallenge(await this.post(invite ? "/api/room-invite/member-challenge" : "/api/member-connect/challenge", invite ? { invite_token: invite } : {}, signal));
     if (challenge.server_id !== this.entry.server_id || challenge.registration_epoch !== this.entry.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 연결해 주세요.");
     this.challengeId = challenge.challenge_id;
-    const { protocol, client_public_key, channel_id, origin, generation } = this.transport.hello;
-    const purpose = invite ? "admission" : "connect";
-    const binding = { protocol, client_public_key, channel_id, origin, generation, purpose, registration_epoch: this.entry.registration_epoch };
-    const grant = strictRecord(await signedRequest(this.session, `/v1/servers/${encodeURIComponent(this.entry.server_id)}/${invite ? "member-grants" : "member-connect-grants"}`, "POST", { ...binding, challenge_hash: challenge.challenge_hash }, signal), "서버 입장권");
-    assertExactKeys(grant, ["grant_token", "server_id", "registration_epoch", "expires_at", "endpoint_origin", "endpoint_generation", "protocol", "client_public_key", "channel_id", "purpose"], "서버 입장권");
-    if (["protocol", "client_public_key", "channel_id", "purpose", "registration_epoch"].some(key => grant[key] !== binding[key as keyof typeof binding]) ||
-        grant.server_id !== this.entry.server_id || grant.endpoint_origin !== origin || grant.endpoint_generation !== generation ||
-        typeof grant.grant_token !== "string" || !(invite ? /^aamg1\.[A-Za-z0-9_-]{43}$/ : /^aamc1\.[A-Za-z0-9_-]{43}$/).test(grant.grant_token) ||
-        !Number.isSafeInteger(grant.expires_at) || Number(grant.expires_at) <= Date.now() / 1000 || loadCentralSession()?.token !== this.session.token) throw new Error("입장권을 확인하지 못했어요. 다시 시도해 주세요.");
     if (invite) {
+      const { protocol, client_public_key, channel_id, origin, generation } = this.transport.hello;
+      const binding = { protocol, client_public_key, channel_id, origin, generation, purpose: "admission", registration_epoch: this.entry.registration_epoch };
+      const grant = strictRecord(await signedRequest(this.session, `/v1/servers/${encodeURIComponent(this.entry.server_id)}/member-grants`, "POST", { ...binding, challenge_hash: challenge.challenge_hash }, signal), "서버 입장권");
+      assertExactKeys(grant, ["grant_token", "server_id", "registration_epoch", "expires_at", "endpoint_origin", "endpoint_generation", "protocol", "client_public_key", "channel_id", "purpose"], "서버 입장권");
+      if (["protocol", "client_public_key", "channel_id", "purpose", "registration_epoch"].some(key => grant[key] !== binding[key as keyof typeof binding]) ||
+          grant.server_id !== this.entry.server_id || grant.endpoint_origin !== origin || grant.endpoint_generation !== generation ||
+          typeof grant.grant_token !== "string" || !/^aamg1\.[A-Za-z0-9_-]{43}$/.test(grant.grant_token) ||
+          !Number.isSafeInteger(grant.expires_at) || Number(grant.expires_at) <= Date.now() / 1000 || loadCentralSession()?.token !== this.session.token) throw new Error("입장권을 확인하지 못했어요. 다시 시도해 주세요.");
       const preflight = parseRoomInviteAdmissionResponse(await this.post("/api/room-invite/admission", { invite_token: invite }));
       if (!("room_id" in preflight)) throw new Error("초대를 사용할 수 없어요. 새 초대를 받아 주세요.");
       const requestId = createSecureRequestId();
       const payload = await this.post("/api/room-invite/member-join", { invite_token: invite, challenge_id: this.challengeId, grant_token: grant.grant_token, request_id: requestId, client_id: this.clientId });
       this.install(payload, requestId, preflight.room_id); return null;
     }
-    const value = strictRecord(await this.post("/api/member-connect/rooms", { challenge_id: this.challengeId, grant_token: grant.grant_token }, signal), "참가 중인 방");
+    const grantToken = await this.connectGrant(challenge, signal);
+    const value = strictRecord(await this.post("/api/member-connect/rooms", { challenge_id: this.challengeId, grant_token: grantToken }, signal), "참가 중인 방");
     assertExactKeys(value, ["rooms"], "참가 중인 방");
     if (!Array.isArray(value.rooms) || !value.rooms.length || value.rooms.length > 50 || !value.rooms.every(r => r && typeof r.room_id === "string" && r.room_id && typeof r.name === "string")) throw new Error("참가 중인 방을 확인하지 못했어요.");
     return value.rooms;
@@ -89,6 +89,39 @@ export class SecureMemberAdmission {
   async select(roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
     const payload = await this.post("/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId }, signal);
     return this.install(payload, payload.request_id, roomId);
+  }
+  private async connectGrant(challenge: { challenge_id: string; challenge_hash: string }, signal?: AbortSignal): Promise<string> {
+    const { protocol, client_public_key, channel_id, origin, generation } = this.transport.hello;
+    const binding = { protocol, client_public_key, channel_id, origin, generation, purpose: "connect", registration_epoch: this.entry.registration_epoch };
+    const grant = strictRecord(await signedRequest(this.session, `/v1/servers/${encodeURIComponent(this.entry.server_id)}/member-connect-grants`, "POST", { ...binding, challenge_hash: challenge.challenge_hash }, signal), "서버 입장권");
+    assertExactKeys(grant, ["grant_token", "server_id", "registration_epoch", "expires_at", "endpoint_origin", "endpoint_generation", "protocol", "client_public_key", "channel_id", "purpose"], "서버 입장권");
+    if (["protocol", "client_public_key", "channel_id", "purpose", "registration_epoch"].some(key => grant[key] !== binding[key as keyof typeof binding]) ||
+        grant.server_id !== this.entry.server_id || grant.endpoint_origin !== origin || grant.endpoint_generation !== generation ||
+        typeof grant.grant_token !== "string" || !/^aamc1\.[A-Za-z0-9_-]{43}$/.test(grant.grant_token) ||
+        !Number.isSafeInteger(grant.expires_at) || Number(grant.expires_at) <= Date.now() / 1000 || loadCentralSession()?.token !== this.session.token) throw new Error("입장권을 확인하지 못했어요. 다시 시도해 주세요.");
+    return grant.grant_token;
+  }
+  /**
+   * Background select of one more joined room over the SAME host channel.
+   * The host admits exactly one room per challenge, so each background room
+   * runs its own challenge/redeem/select cycle; the primary admission's
+   * challenge is untouched. The room session is bound for socket tickets
+   * without installing a workspace (the workspace keeps the foreground
+   * session only). Selecting also adopts the channel, so an attached host
+   * is never reaped as admit-only.
+   */
+  async selectBackgroundRoom(roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
+    const challenge = parseMemberChallenge(await this.post("/api/member-connect/challenge", {}, signal));
+    if (challenge.server_id !== this.entry.server_id || challenge.registration_epoch !== this.entry.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 연결해 주세요.");
+    const grantToken = await this.connectGrant(challenge, signal);
+    const value = strictRecord(await this.post("/api/member-connect/rooms", { challenge_id: challenge.challenge_id, grant_token: grantToken }, signal), "참가 중인 방");
+    assertExactKeys(value, ["rooms"], "참가 중인 방");
+    if (!Array.isArray(value.rooms) || !value.rooms.some((room) => room && typeof room.room_id === "string" && room.room_id === roomId)) throw new Error("참가 중인 방을 확인하지 못했어요.");
+    const payload = await this.post("/api/member-connect/select", { challenge_id: challenge.challenge_id, room_id: roomId, client_id: this.clientId }, signal);
+    const parsed = parseRoomInviteJoinResponse(payload, payload.request_id, roomId, this.clientId);
+    if (parsed.server_id !== this.entry.server_id || loadCentralSession()?.token !== this.session.token || !this.transport.active) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
+    bindRemoteSession(parsed.session_token, this.transport, parsed.server_id);
+    return parsed;
   }
   private install(raw: unknown, requestId: string, roomId: string): RoomInviteJoinResponse {
     const payload = parseRoomInviteJoinResponse(raw, requestId, roomId, this.clientId);
