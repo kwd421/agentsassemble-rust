@@ -3388,3 +3388,33 @@ endpoint, cache/invalidation, server-side URL allowlisting and web/desktop
 parity work for images that are already public capability-addressed URLs,
 while `connect-src` already permits `https:` fetches broadly, so the
 exact-host image allowlist grants no new capability.
+
+### M4 member-select deadline covers the central legs and failures stay visible (2026-10-17)
+
+Real-app failure after the bounded-select fix: the own room stays healthy,
+but the member room never opens — after 40 s the view still shows the own
+room, the rail selection never moves, and no error is shown to the user even
+though select is bounded at 30 s. Real-host reproduction (real host process,
+real `RemoteTransport`, desktop member-connect challenge → rooms → select,
+then the room socket over the same channel): the host is innocent — an
+admit-only channel is reaped exactly 30 s after open
+(`crates/agentsassemble-server/src/secure_channel.rs` first-admission rule),
+a select on the reaped channel fails fast, a fresh re-attach selects in
+~20 ms, and the desktop abort signal does propagate through a dead
+transport's fetch. The hang is in the retry's re-attach: central preview and
+central member-connect grants are awaited with no abort signal and no
+timeout, so once the 30 s timer has fired (or while it waits on central) the
+select promise never settles — no error, no selection move. A `window.alert`
+is not a visible failure on the member room either.
+Required: the whole member select — central preview, fresh-grant admit, host
+select, session accept — settles within the one select bound, because the
+deadline signal reaches the central preview/grants legs too; a failed select
+moves the rail selection to the clicked member room and shows a short Korean
+message on that room (never silence, never `window.alert`), with the existing
+per-host retry; the next tap re-selects through a fresh admission. No host
+change: its reap/fast-fail/retry semantics stay. Entry points:
+`frontend/src/lib/central/secureMemberEntry.ts` (preview/admit signal),
+`frontend/src/lib/central/memberAutoAttach.ts` (attach signal),
+`frontend/src/app/useMemberHosts.ts` (`selectRoom` bound),
+`frontend/src/app/useAppController.tsx` (`selectRoom` failure surface),
+`frontend/src/app/AppView.tsx` (disconnected view reason/retry).

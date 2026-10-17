@@ -3,7 +3,7 @@ import { loadMemberAnchor, saveMemberAnchor, type MemberHostAnchor } from "./mem
 import type { CentralServer } from "./identity";
 
 export type MemberAttachDeps = {
-  preview: typeof previewSecureMember;
+  preview: (entry: SecureMemberEntry, signal?: AbortSignal) => ReturnType<typeof previewSecureMember>;
   open: (entry: SecureMemberEntry, target: Parameters<typeof SecureMemberAdmission.open>[1], sessionToken: string, signal: AbortSignal) => Promise<SecureMemberAdmission>;
 };
 
@@ -45,7 +45,9 @@ export async function attachMemberHost(
     throw new MemberAnchorMismatchError();
   }
   const entry: SecureMemberEntry = { server_id: server.server_id, registration_epoch: server.registration_epoch };
-  const preview = await deps.preview(entry);
+  // The select deadline owns this signal: a hung central preview aborts with
+  // the select instead of stranding the rail selection forever.
+  const preview = await deps.preview(entry, signal);
   const target = preview.target;
   if (stored && stored.host_key_fingerprint !== target.host_key_fingerprint) {
     throw new MemberAnchorMismatchError();

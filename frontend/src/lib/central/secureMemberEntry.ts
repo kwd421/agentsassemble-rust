@@ -25,9 +25,9 @@ export function consumeSecureMemberEntry(): SecureMemberEntry | undefined {
   return { server_id, registration_epoch, inviteToken };
 }
 
-export async function previewSecureMember(entry: SecureMemberEntry) {
+export async function previewSecureMember(entry: SecureMemberEntry, signal?: AbortSignal) {
   const session = loadCentralSession(); if (!session) throw new Error("로그인이 필요해요.");
-  const value = strictRecord(await signedRequest(session, `/v1/servers/${encodeURIComponent(entry.server_id)}/member-preview`, "POST", { protocol: SECURE_PROTOCOL, registration_epoch: entry.registration_epoch, ...(entry.inviteToken ? {resolve_invite:true} : {}) }), "입장할 서버");
+  const value = strictRecord(await signedRequest(session, `/v1/servers/${encodeURIComponent(entry.server_id)}/member-preview`, "POST", { protocol: SECURE_PROTOCOL, registration_epoch: entry.registration_epoch, ...(entry.inviteToken ? {resolve_invite:true} : {}) }, signal), "입장할 서버");
   assertExactKeys(value, ["server_id", "label", "endpoint_origin", "endpoint_generation", "protocol", "mode", "registration_epoch", "host_key_fingerprint", "host_public_key_jwk"], "입장할 서버");
   if (value.server_id !== entry.server_id || (!entry.inviteToken && value.registration_epoch !== entry.registration_epoch) || typeof value.registration_epoch!=="string" || !/^[A-Za-z0-9._:-]{1,200}$/.test(value.registration_epoch) || value.protocol !== SECURE_PROTOCOL || value.mode !== "event_secure_v1" ||
       typeof value.label !== "string" || typeof value.endpoint_origin !== "string" || typeof value.host_key_fingerprint !== "string" || !Number.isSafeInteger(value.endpoint_generation) ||
@@ -68,7 +68,7 @@ export class SecureMemberAdmission {
     const { protocol, client_public_key, channel_id, origin, generation } = this.transport.hello;
     const purpose = invite ? "admission" : "connect";
     const binding = { protocol, client_public_key, channel_id, origin, generation, purpose, registration_epoch: this.entry.registration_epoch };
-    const grant = strictRecord(await signedRequest(this.session, `/v1/servers/${encodeURIComponent(this.entry.server_id)}/${invite ? "member-grants" : "member-connect-grants"}`, "POST", { ...binding, challenge_hash: challenge.challenge_hash }), "서버 입장권");
+    const grant = strictRecord(await signedRequest(this.session, `/v1/servers/${encodeURIComponent(this.entry.server_id)}/${invite ? "member-grants" : "member-connect-grants"}`, "POST", { ...binding, challenge_hash: challenge.challenge_hash }, signal), "서버 입장권");
     assertExactKeys(grant, ["grant_token", "server_id", "registration_epoch", "expires_at", "endpoint_origin", "endpoint_generation", "protocol", "client_public_key", "channel_id", "purpose"], "서버 입장권");
     if (["protocol", "client_public_key", "channel_id", "purpose", "registration_epoch"].some(key => grant[key] !== binding[key as keyof typeof binding]) ||
         grant.server_id !== this.entry.server_id || grant.endpoint_origin !== origin || grant.endpoint_generation !== generation ||

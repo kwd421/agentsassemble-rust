@@ -31,7 +31,8 @@ describe("member auto-attach", () => {
     const { deps } = depsWith({});
     const attached = await attachMemberHost(server, "central-token", "person", new AbortController().signal, deps as never);
     expect(attached.rooms).toEqual(rooms);
-    expect(deps.preview).toHaveBeenCalledWith(server);
+    // The select deadline owns the signal: it reaches the central preview.
+    expect(deps.preview).toHaveBeenCalledWith(server, expect.any(AbortSignal));
     const anchor = loadMemberAnchor("person", "server");
     expect(anchor).toMatchObject({
       server_id: "server", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
@@ -94,6 +95,20 @@ describe("member auto-attach", () => {
     await expect(attachMemberHost(server, "central-token", "person", new AbortController().signal, deps as never))
       .rejects.toThrow("꺼져 있어요.");
     expect(close).toHaveBeenCalledOnce();
+    expect(loadMemberAnchor("person", "server")).toBeNull();
+  });
+
+  it("aborts a hung central preview instead of stranding the attach", async () => {
+    const { deps } = depsWith({});
+    deps.preview.mockImplementation((_entry: unknown, signal?: AbortSignal) =>
+      new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      }));
+    const controller = new AbortController();
+    const pending = attachMemberHost(server, "central-token", "person", controller.signal, deps as never);
+    controller.abort(new Error("참가 서버의 응답이 없어요. 다시 시도해 주세요."));
+    await expect(pending).rejects.toThrow("참가 서버의 응답이 없어요. 다시 시도해 주세요.");
+    expect(deps.open).not.toHaveBeenCalled();
     expect(loadMemberAnchor("person", "server")).toBeNull();
   });
 

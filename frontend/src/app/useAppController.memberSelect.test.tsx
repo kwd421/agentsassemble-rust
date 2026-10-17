@@ -241,7 +241,7 @@ describe("member room selection on an owner local host", () => {
       appearance: { bannerPreset: "default", notifications: "default", inviteScope: "room" },
       channelSettings: {}, conversationMode: "ordered", toolMode: "chat", orderedExcludePreviousSpeaker: false,
     }));
-    const transport = { hello: { origin: "https://hihi.test" }, active: true, onClose: () => undefined };
+    const transport = { hello: { origin: "https://hihi.test" }, active: true, onClose: () => undefined, close: () => undefined };
     hooks.select.mockImplementation(async () => {
       // Production SecureMemberAdmission.install binds the session AND
       // installs the member workspace on the same transport. The install
@@ -331,5 +331,36 @@ describe("member room selection on an owner local host", () => {
       .toMatchObject({ connectionState: "connected" });
     expect(result.current.activeRoom).toMatchObject({ serverId: MEMBER_SERVER, meetingId: MEMBER_MEETING });
     expect(hooks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("moves the selection to the member room with an inline Korean message when select fails", async () => {
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    try {
+      const { result } = renderHook(() => useAppController("device-test", "client-test"));
+      await waitFor(() => {
+        if (result.current.rooms.length !== 2) throw new Error("rail not merged yet");
+      });
+      const memberId = result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!.id;
+      const successSelect = hooks.select.getMockImplementation();
+      if (!successSelect) throw new Error("member select mock missing");
+      // Both the first select and the single fresh-challenge retry fail.
+      hooks.select.mockRejectedValue(new Error("연결이 끝났어요."));
+      await act(async () => { await result.current.selectRoom(memberId); });
+      expect(hooks.select).toHaveBeenCalledTimes(2);
+      // Silence is the defect: the rail selection reflects the shown room and
+      // the room carries the short Korean message instead of an alert.
+      expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING);
+      expect(result.current.memberSelectError).toEqual({
+        roomId: memberId, message: "방을 열지 못했어요. 다시 시도해 주세요.",
+      });
+      expect(alert).not.toHaveBeenCalled();
+      // The next tap retries through a fresh admission and clears the message.
+      hooks.select.mockImplementation(successSelect);
+      await act(async () => { await result.current.selectRoom(memberId); });
+      await waitFor(() => expect(result.current.memberSelectError).toBeNull());
+      expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING);
+    } finally {
+      alert.mockRestore();
+    }
   });
 });

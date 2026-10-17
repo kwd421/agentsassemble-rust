@@ -119,6 +119,10 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     remoteOwner: ownerWorkspace.remoteDirectory,
   });
   const [activeRoomId, setActiveRoomId] = useState(() => startupRoute.activeRoomId);
+  // A failed member select stays visible: the rail selection still moves to
+  // the clicked room and the room shows this short Korean message (never an
+  // alert); the next tap retries through a fresh admission.
+  const [memberSelectError, setMemberSelectError] = useState<{ roomId: string; message: string } | null>(null);
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);
   const [channelMenu, setChannelMenu] = useState<ChannelMenuState>(null);
   const [settingsModal, setSettingsModal] = useState<RoomSettingsState>(null);
@@ -238,6 +242,11 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const activeMemberHostDetail = activeRoom.roomOrigin === "remote_server" && activeRoom.serverId
     ? memberHosts.snapshots.find((entry) => entry.serverId === activeRoom.serverId)?.detail ?? null
     : null;
+  // A room whose select just failed opens nothing until the next tap
+  // succeeds: without a session the host authority would be this computer's,
+  // which must never drive another host's room.
+  const activeRoomSelectError = memberSelectError && memberSelectError.roomId === activeRoom.id
+    ? memberSelectError.message : null;
   // A member room session belongs to exactly one host room. While the local
   // host owns the surface, that session authorizes only its own room: the
   // own rooms keep host authority (and the local operator viewer) instead of
@@ -337,11 +346,11 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       }),
     [activeSessionToken, activeGuestLocked, guestReadOnly]
   );
-  const activeOperationalMeetingId = activeRoomDisconnected ? "" : activeRoom.meetingId;
+  const activeOperationalMeetingId = activeRoomDisconnected || activeRoomSelectError ? "" : activeRoom.meetingId;
   // Rooms-as-server-objects: when a room becomes active, promote it to a
   // server-backed meeting (idempotent) so adding agents / roster / lobby always
   // have a real meeting to bind to instead of failing with "Meeting not found".
-  const canonicalRoomAuth = activeRoomDisconnected
+  const canonicalRoomAuth = activeRoomDisconnected || activeRoomSelectError
     ? undefined
     : activeGuestLocked
     ? activeSessionToken
@@ -544,11 +553,20 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
           !(admittedSessionToken && guestSession && !guestExpired &&
             guestSession.meetingId === room.meetingId &&
             guestSession.serverSurface.server_id === room.serverId)) {
-        const payload = await memberHosts.selectRoom(memberServerId, room.meetingId);
-        if (import.meta.env.DEV) console.debug("[member-select] admission complete", {
-          roomId, meetingId: payload.meeting_id, serverId: payload.server_id,
-        });
-        if (!await acceptMemberRoomSession(payload)) return;
+        try {
+          const payload = await memberHosts.selectRoom(memberServerId, room.meetingId);
+          if (import.meta.env.DEV) console.debug("[member-select] admission complete", {
+            roomId, meetingId: payload.meeting_id, serverId: payload.server_id,
+          });
+          if (!await acceptMemberRoomSession(payload)) return;
+          setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
+        } catch (error) {
+          if (import.meta.env.DEV) console.debug("[member-select] select failed", {
+            roomId, meetingId: room.meetingId, serverId: room.serverId ?? null,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          setMemberSelectError({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+        }
       } else if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "방을 열지 못했어요.");
@@ -813,7 +831,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     activeChannelDisplay, activeChannelSettings,
     canManageActiveRoom, canControlActiveAgents, canAddCompanion, canAddActiveAI,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
-    activeRoomDisconnected, activeMemberHostDetail, activeRoomHistory, activeRoomMembers,
+    activeRoomDisconnected, activeMemberHostDetail, activeRoomSelectError, activeRoomHistory, activeRoomMembers,
     addFreshRoom, adjustSidebarWidthWithKeyboard,
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,
     cancelMobileShellPointer, canonicalRoom, sideChat,
@@ -848,7 +866,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
     saveAgentAvatar: canControlActiveAgents && (managerAuthorityCurrent || activeGuestLocked) ? saveAgentAvatar : undefined,
-    scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate,
+    scopedOnlineCount, selectRoom, memberSelectError, sendAgentConfigure, sendAgentProfileUpdate,
     sendAgentControl, sendParticipantMute, sendParticipantRemove, setAdminOpen,
     setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery,
     setGuestRecoveryRequest, setLeaveRoomTargetId,

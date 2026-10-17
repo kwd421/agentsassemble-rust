@@ -276,24 +276,33 @@ describe("member room socket lifecycle on an owner local host", () => {
     expect(hooks.closes.filter((close) => close.roomId === MEMBER_MEETING)).toHaveLength(1);
   });
 
-  it("a refused select never touches the own room socket", async () => {
+  it("a refused select moves to the member room with the inline message and never touches the own room socket", async () => {
     const result = await renderWithMemberRail();
     await waitFor(() => expect(result.current.activeRoom.meetingId).toBe(OWN_MEETING));
     expect(hooks.opens).toHaveLength(1);
 
     // The friend removed the membership: the host answers 403. No silent
-    // re-attach and no second select may follow a terminal answer.
+    // re-attach and no second select may follow a terminal answer. The rail
+    // selection still moves to the clicked room with the short Korean
+    // message instead of an alert.
     hooks.select.mockRejectedValueOnce(new ApiError(403, "참가를 마치지 못했어요.", "member_membership_ended"));
-    await act(async () => { await result.current.selectRoom(result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!.id); });
-    expect(hooks.alert).toHaveBeenCalledTimes(1);
+    const memberId = result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!.id;
+    await act(async () => { await result.current.selectRoom(memberId); });
+    expect(hooks.alert).not.toHaveBeenCalled();
     expect(hooks.select).toHaveBeenCalledTimes(1);
-    // The selection stays on the own room and its socket is never closed.
-    expect(result.current.activeRoom.meetingId).toBe(OWN_MEETING);
+    expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING);
+    expect(result.current.memberSelectError).toEqual({
+      roomId: memberId, message: "방을 열지 못했어요. 다시 시도해 주세요.",
+    });
+    // Neither the own room socket nor a member socket opens for the failed room.
+    // Leaving the own room closes its handle (established switch teardown);
+    // no socket opens for the failed member room.
     expect(hooks.opens).toHaveLength(1);
-    expect(hooks.closes).toHaveLength(0);
+    expect(hooks.closes).toHaveLength(1);
+    expect(hooks.closes[0]).toMatchObject({ roomId: OWN_MEETING });
   });
 
-  it("a hung select times out instead of stranding the selection", async () => {
+  it("a hung select times out with the inline message instead of stranding the selection", async () => {
     const result = await renderWithMemberRail();
     await waitFor(() => expect(result.current.activeRoom.meetingId).toBe(OWN_MEETING));
     expect(hooks.opens).toHaveLength(1);
@@ -320,10 +329,15 @@ describe("member room socket lifecycle on an owner local host", () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(hooks.alert).toHaveBeenCalledTimes(1);
-    expect(String(hooks.alert.mock.calls[0][0])).toMatch(/응답이 없어요/);
-    expect(result.current.activeRoom.meetingId).toBe(OWN_MEETING);
+    expect(hooks.alert).not.toHaveBeenCalled();
+    expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING);
+    expect(result.current.memberSelectError).toEqual({
+      roomId: memberId, message: "방을 열지 못했어요. 다시 시도해 주세요.",
+    });
+    // The timed-out room opens no socket with the wrong authority while the
+    // own room socket stays untouched apart from the switch teardown.
     expect(hooks.opens).toHaveLength(1);
-    expect(hooks.closes).toHaveLength(0);
+    expect(hooks.closes).toHaveLength(1);
+    expect(hooks.closes[0]).toMatchObject({ roomId: OWN_MEETING });
   });
 });
