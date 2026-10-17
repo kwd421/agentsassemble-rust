@@ -1,3 +1,4 @@
+import { userFacingError } from "../lib/apiErrors";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import { centralAccountSelf, shouldShowOwnServerMismatch } from "../lib/central/localOwnership";
 import { openCentralOwnedServer } from "../lib/central/identity";
@@ -200,7 +201,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               setOwnServerError("");
               void openCentralOwnedServer(liveOwned)
                 .catch((reason: unknown) => {
-                  setOwnServerError(reason instanceof Error ? reason.message : "서버를 열지 못했어요.");
+                  setOwnServerError(userFacingError(reason, "서버를 열지 못했어요."));
                 })
                 .finally(() => setOwnServerBusy(false));
             }}
