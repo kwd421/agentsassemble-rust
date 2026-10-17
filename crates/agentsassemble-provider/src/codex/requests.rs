@@ -221,10 +221,13 @@ fn amendments(
                 .filter(|action| matches!(*action, "allow" | "deny"))
                 .ok_or_else(protocol_error)?;
             let id = format!("network-policy-{index}");
+            // The card labels the option from this structured kind, never the
+            // English text: a deny rule must not reuse the allow kind.
+            let kind = if action == "deny" { "deny_policy" } else { "allow_policy" };
             options.push(option(
                 &id,
                 &format!("Apply {action} network rule"),
-                "allow_policy",
+                kind,
                 &display(host),
             ));
             decisions.insert(id, json!({"decision": {"applyNetworkPolicyAmendment": {"network_policy_amendment": {"host": host, "action": action}}}}));
@@ -436,6 +439,38 @@ mod tests {
             );
         }
         assert!(MappedRequest::parse(&json!({"method": "item/tool/requestUserInput", "params": {"questions": [{"id":"q", "question":"Question", "isSecret":"false"}]}})).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn codex_network_deny_amendment_uses_deny_policy_kind() -> Result<(), DriverError> {
+        let mapped = MappedRequest::parse(
+            &json!({"method": "item/commandExecution/requestApproval", "params": {
+                "command": "curl example.test",
+                "proposedNetworkPolicyAmendments": [
+                    {"host": "example.test", "action": "allow"},
+                    {"host": "blocked.test", "action": "deny"},
+                ]
+            }}),
+        )?;
+        let kinds: std::collections::BTreeMap<&str, &str> = match &mapped.request.prompt {
+            ProviderRequestPrompt::Option { options } => options
+                .iter()
+                .filter(|option| option.id.starts_with("network-policy-"))
+                .map(|option| (option.id.as_str(), option.kind.as_str()))
+                .collect(),
+            _ => panic!("network amendments must map to option prompt"),
+        };
+        assert_eq!(kinds.get("network-policy-0"), Some(&"allow_policy"));
+        // A deny rule must never reuse the allow kind: the owner card labels
+        // the option from this structured kind.
+        assert_eq!(kinds.get("network-policy-1"), Some(&"deny_policy"));
+        assert_eq!(
+            mapped.response(&ProviderRequestResolution::Option {
+                option_id: "network-policy-1".to_owned()
+            })?,
+            json!({"decision": {"applyNetworkPolicyAmendment": {"network_policy_amendment": {"host": "blocked.test", "action": "deny"}}}})
+        );
         Ok(())
     }
 }

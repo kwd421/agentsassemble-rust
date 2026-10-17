@@ -18,6 +18,7 @@ const optionKindLabels: Record<string, string> = {
   allow_once: "한 번만 허용", allow_always: "항상 허용", allow_session: "이번 세션 동안 허용",
   reject_once: "한 번만 거부", reject_always: "항상 거부",
   deny: "거부", decline: "거부하고 계속", cancel: "거부하고 중단", allow_policy: "규칙을 추가하고 허용",
+  deny_policy: "규칙을 추가하고 거부",
 };
 const neutralOptionLabel = "선택";
 
