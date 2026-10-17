@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { Radio } from "lucide-react";
 import RoomRail from "./RoomRail";
@@ -52,4 +52,58 @@ it("keeps destructive room actions out of the rail and its menu", () => {
   expect(screen.queryByRole("menuitem", { name: "방 보관" })).toBeNull();
   expect(screen.queryByRole("menuitem", { name: "방 종료" })).toBeNull();
   expect(screen.queryByRole("button", { name: "방 관리" })).toBeNull();
+});
+
+const secondRoom: RoomDockItem = {
+  ...room, id: "server-room-two", label: "Second", meetingId: "second", roomUid: "room-two",
+};
+
+function renderSelectableRail(onSelectRoom: (roomId: string) => void) {
+  render(
+    <RoomRail
+      rooms={[room, secondRoom]} activeRoom={room} roomAppearances={{}} guestLocked={false} adminOpen={false}
+      roomMenu={null}
+      onSelectRoom={onSelectRoom} onAddRoom={vi.fn()} onOpenRoomMenu={vi.fn()} onMarkRoomRead={vi.fn()}
+      onInviteRoom={vi.fn()} onOpenRoomSettings={vi.fn()} onLeaveRoom={vi.fn()}
+    />
+  );
+  return screen.getByRole("button", { name: "Second" });
+}
+
+it("selects the room on a back-to-back press with no hold", () => {
+  const onSelectRoom = vi.fn();
+  const button = renderSelectableRail(onSelectRoom);
+  fireEvent.pointerDown(button, { button: 0, clientX: 10, clientY: 10, pointerType: "mouse" });
+  fireEvent.mouseDown(button, { button: 0, clientX: 10, clientY: 10 });
+  fireEvent.pointerUp(button, { button: 0, clientX: 10, clientY: 10, pointerType: "mouse" });
+  fireEvent.mouseUp(button, { button: 0, clientX: 10, clientY: 10 });
+  fireEvent.click(button);
+  expect(onSelectRoom).toHaveBeenCalledTimes(1);
+  expect(onSelectRoom).toHaveBeenCalledWith("server-room-two");
+});
+
+it("selects the room on pointerdown/pointerup alone when no click follows", () => {
+  const onSelectRoom = vi.fn();
+  const button = renderSelectableRail(onSelectRoom);
+  fireEvent.pointerDown(button, { button: 0, clientX: 10, clientY: 10, pointerType: "mouse" });
+  fireEvent.pointerUp(button, { button: 0, clientX: 10, clientY: 10, pointerType: "mouse" });
+  expect(onSelectRoom).toHaveBeenCalledTimes(1);
+  expect(onSelectRoom).toHaveBeenCalledWith("server-room-two");
+});
+
+it("still selects on click alone for keyboard and assistive activation", () => {
+  const onSelectRoom = vi.fn();
+  const button = renderSelectableRail(onSelectRoom);
+  fireEvent.click(button);
+  expect(onSelectRoom).toHaveBeenCalledTimes(1);
+  expect(onSelectRoom).toHaveBeenCalledWith("server-room-two");
+});
+
+it("does not select after a drag beyond the reorder tolerance", () => {
+  const onSelectRoom = vi.fn();
+  const button = renderSelectableRail(onSelectRoom);
+  fireEvent.pointerDown(button, { button: 0, clientX: 10, clientY: 10, pointerType: "mouse" });
+  fireEvent.pointerUp(button, { button: 0, clientX: 10, clientY: 40, pointerType: "mouse" });
+  fireEvent.click(button);
+  expect(onSelectRoom).not.toHaveBeenCalled();
 });

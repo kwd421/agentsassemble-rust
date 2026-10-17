@@ -1,5 +1,6 @@
 import { CONNECTION_LABELS } from "../../lib/serverConnectionState";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { useRef } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Activity, Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
 import {
   completeRoomAppearance,
@@ -24,6 +25,12 @@ export type RoomMenuState = {
 } | null;
 
 export const MOBILE_ROOM_RAIL_WIDTH = 68;
+
+// A press that never yields a `click` (back-to-back pointerdown/pointerup, as
+// observed in the desktop webview) must still select: room buttons activate on
+// pointerup within a small drag tolerance, and the follow-up click is then
+// consumed once so a tap never selects twice and a drag never selects at all.
+const RAIL_PRESS_TOLERANCE = 8;
 
 export default function RoomRail({
   rooms,
@@ -78,6 +85,47 @@ export default function RoomRail({
   onLeaveRoom: (roomId: string) => void;
 }) {
   const buttonStyle = mobileViewport ? { width: 44, height: 44, flexBasis: 44 } : undefined;
+  const pressRef = useRef<{ roomId: string; x: number; y: number } | null>(null);
+  const handledPressRef = useRef<string | null>(null);
+
+  function railPressIsPrimary(event: ReactPointerEvent<HTMLButtonElement>) {
+    return event.pointerType !== "mouse" || event.button === 0;
+  }
+
+  function handleRailPointerDown(roomId: string, event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!railPressIsPrimary(event)) {
+      pressRef.current = null;
+      return;
+    }
+    pressRef.current = { roomId, x: event.clientX, y: event.clientY };
+  }
+
+  function handleRailPointerUp(roomId: string, event: ReactPointerEvent<HTMLButtonElement>) {
+    const start = pressRef.current;
+    pressRef.current = null;
+    if (!start || start.roomId !== roomId || !railPressIsPrimary(event)) return;
+    // The press resolved here (select or drag), so its click — when one
+    // follows — belongs to this press and must not select again.
+    handledPressRef.current = roomId;
+    const moved =
+      Math.abs(event.clientX - start.x) > RAIL_PRESS_TOLERANCE ||
+      Math.abs(event.clientY - start.y) > RAIL_PRESS_TOLERANCE;
+    if (moved) return;
+    onSelectRoom(roomId);
+  }
+
+  function handleRailPointerCancel() {
+    pressRef.current = null;
+  }
+
+  function handleRailClick(roomId: string) {
+    if (handledPressRef.current === roomId) {
+      handledPressRef.current = null;
+      return;
+    }
+    handledPressRef.current = null;
+    onSelectRoom(roomId);
+  }
   return (
     <nav
       className="dc-rail flex shrink-0 flex-col items-center gap-2 py-3" data-tip-side="right"
@@ -101,7 +149,10 @@ export default function RoomRail({
             <button
               key={room.id}
               type="button"
-              onClick={() => onSelectRoom(room.id)}
+              onPointerDown={(event) => handleRailPointerDown(room.id, event)}
+              onPointerUp={(event) => handleRailPointerUp(room.id, event)}
+              onPointerCancel={handleRailPointerCancel}
+              onClick={() => handleRailClick(room.id)}
               onContextMenu={(event) => onOpenRoomMenu(event, room)}
               data-active={active}
               data-tone={room.tone}
