@@ -397,4 +397,65 @@ describe("member room selection on an owner local host", () => {
       alert.mockRestore();
     }
   });
+
+  it("never drives a member room with host auth when the rail menu opens it", async () => {
+    const { result } = renderHook(() => useAppController("device-test", "client-test"));
+    await waitFor(() => {
+      if (result.current.rooms.length !== 2) throw new Error("rail not merged yet");
+    });
+    const memberEntry = result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!;
+    await act(async () => {
+      result.current.openRoomMenu(
+        { preventDefault: () => undefined, stopPropagation: () => undefined, clientX: 10, clientY: 10 } as unknown as Parameters<typeof result.current.openRoomMenu>[0],
+        memberEntry,
+      );
+    });
+    // The menu opens without making the member room active: activation needs
+    // its own room session through the rail tap admission, never this
+    // computer's host authority.
+    expect(result.current.roomMenu?.roomId).toBe(memberEntry.id);
+    expect(result.current.activeRoom.meetingId).toBe(OWN_MEETING);
+    expect(hooks.select).not.toHaveBeenCalled();
+    for (const call of hooks.canonicalCalls) {
+      const auth = call.auth as { kind?: string; meetingId?: string } | undefined;
+      expect(auth?.kind === "host" && auth.meetingId === MEMBER_MEETING).toBe(false);
+    }
+  });
+
+  it("routes invite through member admission instead of host auth", async () => {
+    const { result } = renderHook(() => useAppController("device-test", "client-test"));
+    await waitFor(() => {
+      if (result.current.rooms.length !== 2) throw new Error("rail not merged yet");
+    });
+    const memberId = result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!.id;
+    await act(async () => { await result.current.inviteRoom(memberId); });
+    expect(hooks.select).toHaveBeenCalled();
+    await waitFor(() => expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING));
+    expect(result.current.inviteModalRoom?.id).toBe(memberId);
+    await waitFor(() => expect(hooks.canonicalCalls.at(-1)).toMatchObject({
+      roomId: MEMBER_MEETING, auth: { kind: "session", sessionToken: MEMBER_TOKEN },
+    }));
+    for (const call of hooks.canonicalCalls) {
+      const auth = call.auth as { kind?: string; meetingId?: string } | undefined;
+      expect(auth?.kind === "host" && auth.meetingId === MEMBER_MEETING).toBe(false);
+    }
+  });
+
+  it("routes settings through member admission instead of host auth", async () => {
+    const { result } = renderHook(() => useAppController("device-test", "client-test"));
+    await waitFor(() => {
+      if (result.current.rooms.length !== 2) throw new Error("rail not merged yet");
+    });
+    const memberId = result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!.id;
+    await act(async () => { await result.current.openRoomSettings(memberId); });
+    expect(hooks.select).toHaveBeenCalled();
+    await waitFor(() => expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING));
+    await waitFor(() => expect(hooks.canonicalCalls.at(-1)).toMatchObject({
+      roomId: MEMBER_MEETING, auth: { kind: "session", sessionToken: MEMBER_TOKEN },
+    }));
+    for (const call of hooks.canonicalCalls) {
+      const auth = call.auth as { kind?: string; meetingId?: string } | undefined;
+      expect(auth?.kind === "host" && auth.meetingId === MEMBER_MEETING).toBe(false);
+    }
+  });
 });

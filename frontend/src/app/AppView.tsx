@@ -52,7 +52,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     activeAppearance, activeChannelDisplay,
     activeChannelSettings,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities, activeRoomDisconnected,
-    activeRoomHistory, activeRoomMembers, activeRoomSession, addFreshRoom,
+    activeRoomHistory, activeRoomMembers, activeRoomNeedsAdmission, activeRoomSession, addFreshRoom,
     adjustSidebarWidthWithKeyboard, adminOpen,
     admittedSessionToken, agentActivityVisibility, cancelMobileShellPointer,
     canonicalRoom, canManageActiveRoom, changeAgentActivityVisibility, channel,
@@ -394,7 +394,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} />
           ) : activeRoomDisconnected || activeRoomSelectError ? (
-            <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={activeRoomSelectError ?? controller.activeMemberHostDetail} onRetry={activeRoomSelectError ? () => selectRoom(activeRoom.id) : () => controller.retryRoomConnection(activeRoom)} />
+            <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={activeRoomSelectError ?? controller.activeMemberHostDetail} onRetry={activeRoomSelectError || activeRoomNeedsAdmission ? () => selectRoom(activeRoom.id) : () => controller.retryRoomConnection(activeRoom)} />
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
               <h1 id="empty-room-title">열려 있는 방이 없어요</h1>
