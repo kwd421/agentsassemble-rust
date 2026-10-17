@@ -139,6 +139,11 @@ export default function RoomRail({
         {rooms.map((room) => {
           const active = !adminOpen && !friendsOpen && activeRoom.id === room.id;
           const disconnected = roomIsDisconnected(room);
+          // Discord-style rail state: an unread background room shows the
+          // small white pill (the active room keeps its taller active pill),
+          // and a mention shows a red badge (dot: no count is known).
+          const showUnreadPill = room.liveUnread === true && !active;
+          const showMentionBadge = room.liveMention === true;
           const roomAppearance = completeRoomAppearance(
             {
               ...room.appearance,
@@ -158,17 +163,25 @@ export default function RoomRail({
               data-tone={room.tone}
               data-has-image={Boolean(roomAppearance.iconImage)}
               data-connection-state={room.connectionState || "local"}
+              data-live-unread={room.liveUnread === true}
+              data-live-mention={room.liveMention === true}
               style={{ ...roomAppearanceStyle(roomAppearance), ...buttonStyle }}
               className="dc-server-btn"
               aria-label={`${room.label}${disconnected ? " · 연결이 끊긴 방" : ""}`}
               title={`${room.label} · ${room.connectionState && room.connectionState !== "local" ? CONNECTION_LABELS[room.connectionState] : "연결됨"}`}
             >
+              {showUnreadPill && (
+                <span className="dc-server-unread-pill" data-testid={`room-unread-${room.id}`} aria-hidden />
+              )}
               {roomAppearance.iconImage ? null : (
                 <span className="dc-server-initials" aria-hidden>
                   {roomAppearance.iconLabel || roomInitials(room.label)}
                 </span>
               )}
               {disconnected && <span className="dc-server-connection-dot" aria-hidden />}
+              {showMentionBadge && (
+                <span className="dc-server-mention-badge" data-testid={`room-mention-${room.id}`} aria-hidden />
+              )}
               <span className="sr-only">{room.shortLabel}</span>
             </button>
           );

@@ -39,3 +39,29 @@
 .dc-server-btn[data-connection-state="connecting"] .dc-server-connection-dot {
   background: #e9b949;
 }
+
+/* Discord-style rail state: unread background rooms show the small white
+   pill at the left rail edge (same colour as the active pill); a mention
+   shows a red dot badge at the bottom-right of the icon (no count is
+   known at the rail level). Disconnected dimming stays untouched. */
+.dc-server-unread-pill {
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  width: 4px;
+  height: 8px;
+  transform: translateY(-50%);
+  border-radius: 0 4px 4px 0;
+  background: #f2f3f5;
+}
+
+.dc-server-mention-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-server-rail);
+  border-radius: 999px;
+  background: var(--color-danger);
+}

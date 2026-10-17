@@ -58,6 +58,53 @@ const secondRoom: RoomDockItem = {
   ...room, id: "server-room-two", label: "Second", meetingId: "second", roomUid: "room-two",
 };
 
+function renderRail(rooms: RoomDockItem[], active: RoomDockItem) {
+  render(
+    <RoomRail
+      rooms={rooms} activeRoom={active} roomAppearances={{}} guestLocked={false} adminOpen={false}
+      roomMenu={null}
+      onSelectRoom={vi.fn()} onAddRoom={vi.fn()} onOpenRoomMenu={vi.fn()} onMarkRoomRead={vi.fn()}
+      onInviteRoom={vi.fn()} onOpenRoomSettings={vi.fn()} onLeaveRoom={vi.fn()}
+    />
+  );
+}
+
+it("draws the unread pill and mention badge only where live state says so", () => {
+  const unread: RoomDockItem = {
+    ...room, id: "server-room-unread", label: "Unread", meetingId: "unread",
+    roomOrigin: "remote_server", serverId: "friend-host", connectionState: "connected",
+    liveUnread: true,
+  };
+  const mentioned: RoomDockItem = {
+    ...room, id: "server-room-mentioned", label: "Mentioned", meetingId: "mentioned",
+    roomOrigin: "remote_server", serverId: "friend-host", connectionState: "connected",
+    liveUnread: true, liveMention: true,
+  };
+  renderRail([room, unread, mentioned], room);
+
+  // Unread background room renders the small white pill.
+  expect(screen.getByTestId("room-unread-server-room-unread")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Unread" }).getAttribute("data-live-unread")).toBe("true");
+  // Mention renders the red badge dot.
+  expect(screen.getByTestId("room-mention-server-room-mentioned")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Mentioned" }).getAttribute("data-live-mention")).toBe("true");
+  // Read room renders neither.
+  expect(screen.queryByTestId("room-unread-server-room-one")).toBeNull();
+  expect(screen.queryByTestId("room-mention-server-room-one")).toBeNull();
+  // Active room keeps its taller active pill, never the small unread pill.
+  const activeButton = screen.getByRole("button", { name: "General" });
+  expect(activeButton.getAttribute("data-active")).toBe("true");
+  expect(screen.queryByTestId("room-unread-server-room-one")).toBeNull();
+});
+
+it("keeps the active pill for an active room with stale live state", () => {
+  const staleActive: RoomDockItem = { ...room, liveUnread: true, liveMention: true };
+  renderRail([staleActive], staleActive);
+  const activeButton = screen.getByRole("button", { name: "General" });
+  expect(activeButton.getAttribute("data-active")).toBe("true");
+  expect(screen.queryByTestId(`room-unread-${staleActive.id}`)).toBeNull();
+});
+
 function renderSelectableRail(onSelectRoom: (roomId: string) => void) {
   render(
     <RoomRail
