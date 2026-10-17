@@ -1,8 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import {isDesktopWebview,requestDesktopServerBackup} from "../../lib/desktopBridge";
 import {bootstrapCentral,fetchLocalServerInfo,loadCentralSession,localHostingState,type CentralServer} from "../../lib/central/identity";
-import {isCentralTemporaryError} from "../../lib/central/connectionError";
-import {centralDailyQuotaWaitMs} from "../../lib/central/centralRequestGovernor";
 import {strictRecord} from "../../lib/strictJsonContract";
 
 type Progress={operation_id:string;phase:string;snapshot_at:string|null;bytes:number|null;failure_reason?:string|null};
@@ -20,6 +18,17 @@ const failureReasons:Record<string,string>={
   verification:"생성한 백업 파일의 무결성을 확인하지 못했어요. 다시 시도해 주세요.",
   internal:"백업 작업 상태를 처리하지 못했어요. 로그를 확인하고 다시 시도해 주세요.",
 };
+function firstKoreanLine(reason:unknown):string|null{
+  if(reason instanceof TypeError||(typeof DOMException!=="undefined"&&reason instanceof DOMException))return null;
+  const text=typeof reason==="string"?reason:reason instanceof Error?reason.message:"";
+  const line=text.split("\n")[0]?.trim()??"";
+  if(!line||!/[가-힣]/.test(line))return null;
+  return line;
+}
+function backupActionError(reason:unknown,fallback:string):string{return firstKoreanLine(reason)??fallback;}
+const STATUS_ERROR="백업 상태를 불러오지 못했어요.";
+const START_ERROR="백업을 시작하지 못했어요.";
+const CANCEL_ERROR="백업을 취소하지 못했어요.";
 function parse(value:unknown):Progress {
   const row=strictRecord(value,"백업 진행 상태");
   if(typeof row.operation_id!=="string" || !/^[0-9a-f-]{36}$/.test(row.operation_id) || typeof row.phase!=="string" || !Object.hasOwn(phases,row.phase) ||
@@ -43,24 +52,20 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
       Boolean(identity.host_key_fingerprint)&&server.host_key_fingerprint===identity.host_key_fingerprint);
     if(live)setOwner(owned||null);
     if(owned){const latest=await requestDesktopServerBackup({action:"latest"});if(live&&latest!==null)setProgress(parse(latest));}
-  }catch(reason){
-    // While the daily quota block is active the account settings show no
-    // governor line: a mount-time read the user never pressed stays silent.
-    if(isCentralTemporaryError(reason) && centralDailyQuotaWaitMs(loadCentralSession()?.person.person_id ?? "") > 0) {/* show nothing while blocked */}
-    else if(live)setError(reason instanceof Error?reason.message:String(reason));}finally{if(live)setChecked(true);}})();return()=>{live=false;};},[]);
+  }catch{/* Mount-time read the user never pressed stays silent: network/runtime/central states render nothing. */}finally{if(live)setChecked(true);}})();return()=>{live=false;};},[]);
   const running=Boolean(progress&&!['complete','failed','cancelled','interrupted'].includes(progress.phase));
   useEffect(()=>{
     if(!running||!progress)return;
     let stopped=false;let timer:ReturnType<typeof setTimeout>|undefined;
     const poll=async()=>{try{const value=parse(await requestDesktopServerBackup({action:"status",operation_id:progress.operation_id}));if(!stopped)setProgress(value);
       if(!stopped&&!['complete','failed','cancelled','interrupted'].includes(value.phase))timer=setTimeout(()=>void poll(),1000);
-    }catch(reason){if(!stopped)setError(reason instanceof Error?reason.message:String(reason));}};
+    }catch(reason){if(!stopped)setError(backupActionError(reason,STATUS_ERROR));}};
     timer=setTimeout(()=>void poll(),1000);
     return()=>{stopped=true;clearTimeout(timer);};
   },[running,progress?.operation_id,statusRetry]);
   async function refresh(){
     try{const latest=await requestDesktopServerBackup({action:"latest"});setProgress(latest===null?null:parse(latest));setError("");setStatusRetry(value=>value+1);}
-    catch(reason){setError(reason instanceof Error?reason.message:String(reason));}
+    catch(reason){setError(backupActionError(reason,STATUS_ERROR));}
   }
   async function start(){
     if(operation.current||!owner)return;operation.current=true;setBusy(true);setError("");
@@ -68,7 +73,7 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
       const result=await requestDesktopServerBackup({action:"start",owner_person_id:session.person.person_id,server_name:owner.alias,passphrase:encrypted?passphrase:null});
       if(result&&typeof result==="object"&&"cancelled"in result&&result.cancelled===true)return;
       setProgress(parse(result));
-    }catch(reason){setError(reason instanceof Error?reason.message:String(reason));
+    }catch(reason){setError(backupActionError(reason,START_ERROR));
       try{const latest=await requestDesktopServerBackup({action:"latest"});if(latest!==null)setProgress(parse(latest));}catch{/* Keep the original failure and expose explicit status retry. */}
     }
     finally{operation.current=false;setBusy(false);setPassphrase("");setConfirm("");}
@@ -81,7 +86,7 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
   const hint="text-[12px] text-text-muted";
   const mismatch=encrypted&&Boolean(confirm)&&passphrase!==confirm;
   if(!checked)return <section className="dc-guest-recovery-settings" aria-label="서버 백업" aria-busy="true"><h4>서버 백업</h4><p role="status" className={hint}>불러오는 중이에요…</p></section>;
-  if(!owner)return error?<section className="dc-guest-recovery-settings" aria-label="서버 백업"><p role="alert" className="text-[12px] text-[#f38b8b]">{error}</p></section>:null;
+  if(!owner)return null;
   return <section className="dc-guest-recovery-settings grid gap-3" aria-label="서버 백업">
     <h4>서버 백업</h4>
     {!isDesktopWebview()?<p className={hint}>서버 컴퓨터의 앱에서 저장할 수 있어요.</p>:<>
@@ -94,7 +99,7 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
         <p className={mismatch?"text-[12px] text-[#f38b8b]":hint}>{mismatch?"비밀번호가 서로 달라요.":"잊으면 백업을 열 수 없어요."}</p>
       </>:<p className="text-[12px] text-[#f0b232]">잠그지 않으면 이 파일을 가진 누구나 대화를 볼 수 있어요.</p>}
       <div className="flex items-center justify-end gap-2">
-        {running&&<button type="button" className={quiet} onClick={()=>void requestDesktopServerBackup({action:"cancel",operation_id:progress?.operation_id}).then(value=>setProgress(parse(value))).catch(reason=>setError(String(reason)))}>취소</button>}
+        {running&&<button type="button" className={quiet} onClick={()=>void requestDesktopServerBackup({action:"cancel",operation_id:progress?.operation_id}).then(value=>setProgress(parse(value))).catch(reason=>setError(backupActionError(reason,CANCEL_ERROR)))}>취소</button>}
         <button className={primary} type="button" disabled={disabled||busy||running||(encrypted&&(!passphrase||passphrase!==confirm))} onClick={()=>void start()}>백업 파일 저장</button>
       </div>
       {progress&&progress.phase!=="complete"&&<p role="status" className={hint}>{phases[progress.phase]}{progress.failure_reason&&<> {failureReasons[progress.failure_reason]}</>}</p>}

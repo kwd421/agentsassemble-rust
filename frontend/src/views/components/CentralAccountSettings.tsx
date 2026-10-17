@@ -19,7 +19,12 @@ export default function CentralAccountSettings({ disabled, showEntryLink = true 
       await logoutCentral();
       window.location.reload();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "로그아웃하지 못했어요. 다시 시도해 주세요.");
+      if (reason instanceof TypeError || (typeof DOMException !== "undefined" && reason instanceof DOMException)) setError("로그아웃하지 못했어요. 다시 시도해 주세요.");
+      else {
+        const text = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
+        const line = text.split("\n")[0]?.trim() ?? "";
+        setError(line && /[가-힣]/.test(line) ? line : "로그아웃하지 못했어요. 다시 시도해 주세요.");
+      }
       operation.current = false;
       setBusy(false);
     }
