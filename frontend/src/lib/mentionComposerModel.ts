@@ -83,14 +83,26 @@ function escapeMentionPattern(value: string) {
 // The composer shows the readable name; the wire markup is resolved at send time
 // so the visible draft never carries the raw token.
 export function resolveMentionMarkup(message: string, mentionables: MentionableInput[]): string {
-  const tokensByLabel = new Map<string, string>();
+  const tokensByLabel = new Map<string, string[]>();
   for (const raw of mentionables) {
     const mentionable = normalizedMentionable(raw);
     if (!mentionable || mentionable.label === mentionable.token) continue;
-    if (!tokensByLabel.has(mentionable.label)) tokensByLabel.set(mentionable.label, mentionable.token);
+    const known = tokensByLabel.get(mentionable.label);
+    if (known) {
+      if (!known.includes(mentionable.token)) known.push(mentionable.token);
+    } else {
+      tokensByLabel.set(mentionable.label, [mentionable.token]);
+    }
   }
-  if (tokensByLabel.size === 0) return message;
-  const labels = [...tokensByLabel.keys()]
+  // Only an unambiguous label rewrites to a mention: a duplicate or
+  // normalized-equal name stays plain text so no arbitrary participant (and
+  // no wrong AI) is notified. Picked mentions already carry `<@token>` from
+  // `insertMentionText` and pass through untouched below.
+  const uniqueLabels = [...tokensByLabel.entries()]
+    .filter(([, tokens]) => tokens.length === 1)
+    .map(([label]) => label);
+  if (uniqueLabels.length === 0) return message;
+  const labels = uniqueLabels
     .sort((left, right) => right.length - left.length)
     .map(escapeMentionPattern);
   const pattern = new RegExp(`(^|\\s)@(${labels.join("|")})(?=$|[\\s.,!?;:)\\]}>*~\`#])`, "gu");
@@ -98,7 +110,7 @@ export function resolveMentionMarkup(message: string, mentionables: MentionableI
     .split(MENTION_MARKUP_SPAN_PATTERN)
     .map((part, index) => {
       if (index % 2 === 1) return part;
-      return part.replace(pattern, (_match, prefix, label) => `${prefix}<@${tokensByLabel.get(label)}>`);
+      return part.replace(pattern, (_match, prefix, label) => `${prefix}<@${tokensByLabel.get(label)?.[0]}>`);
     })
     .join("");
 }
@@ -117,8 +129,11 @@ export function insertMentionText(
       cursor: safeCursor,
     };
   }
-  // The composer shows the readable name; the wire markup is resolved at send time.
-  const token = `@${display.label} `;
+  // Bind the pick to the participant id: the wire markup flows through send
+  // unchanged, so a duplicate or normalized-equal display name never resolves
+  // to another participant (and never wrongly notifies an AI). The room
+  // renders the readable name from the token.
+  const token = `<@${display.token}> `;
   const start = Math.max(0, Math.min(query.start, safeCursor));
   const nextMessage = `${message.slice(0, start)}${token}${message.slice(safeCursor)}`;
   return {

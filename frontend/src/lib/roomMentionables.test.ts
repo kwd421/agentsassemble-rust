@@ -93,8 +93,8 @@ describe("roomMentionables", () => {
     ]);
   });
 
-  it("inserts the readable display label while the wire markup resolves at send time", () => {
-    const expectedMention = "@Sol — 던전 마스터 ";
+  it("binds the picked mention to the participant id for send", () => {
+    const expectedMention = "<@sol-dm> ";
     const mentionable = roomMentionables({
       displayResourceBase: "http://127.0.0.1:43123",
       viewerParticipantId: "host",
