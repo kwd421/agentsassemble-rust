@@ -3471,7 +3471,10 @@ explicit user action or explicit removal. A member re-attach never closes the
 own room's socket: the own room keeps host authority and the local surface
 while member sessions are live, including across the member workspace install
 (which flips the default workspace origin). Every click ends in the live
-member room or the short Korean inline failure, never silence. Entry points:
+member room or the short Korean inline failure, never silence. (The "no
+speculative background room join" sentence above is superseded for JOINED
+rooms by "Joined rooms stay live" below; the host reap/fast-fail/retry
+semantics stay.) Entry points:
 `frontend/src/app/useMemberHosts.ts` (`selectRoom` transport liveness,
 re-attach without dropping the snapshot, `memberRoomRemovedWhileLive`),
 `frontend/src/app/useAppController.tsx` (active-room retention),
@@ -3479,3 +3482,63 @@ re-attach without dropping the snapshot, `memberRoomRemovedWhileLive`),
 install keeps content mounted, `MemberEndedOverlay` sibling),
 `frontend/src/useCanonicalRoom.ts` (per-owner scope origin),
 `frontend/src/lib/remote/remoteWorkspace.ts` (install side effects).
+
+### Joined rooms stay live — owner decision (2026-10-17)
+
+Joining a friend's room means being in it like a Discord server: every
+joined member room keeps a live subscription together with the user's own
+rooms. The earlier refusal of speculative background joins (M5 "no
+speculative background room join", 2026-10-17) is superseded for JOINED
+rooms only: the user's join IS the intent, so the client selects/joins
+each joined room on its host after attach. Unjoined previews, invites and
+listings still never join.
+
+Required:
+
+- After attach, each joined room is selected on its host (the existing
+  member-connect challenge/redeem/select path, one cycle per room —
+  the host admits exactly one room per challenge in
+  `member_connect_web.rs`), which also adopts the host channel so the
+  30 s admit-only reap (`secure_channel.rs`) never kills an attached
+  host. Each room then keeps a lightweight room event stream over the
+  SAME host channel (the existing per-room socket path, multiplexed
+  `RemoteTransport.openSocket` tickets; no new wire format, no new host
+  capability — old hosts keep working unchanged).
+- The stream tracks only what the rail needs: unread (a real message
+  arrived while the room was not open; the viewer's own messages and
+  lobby system lines are history, never unread — same owner as
+  `LobbyView`), a mention flag (`<@agentId>` / `@displayName` in a new
+  message), and the room's connection state. No history load, no chat
+  view. Opening the room marks it read and suspends its background
+  stream (the canonical socket owns the active room); leaving the room
+  resubscribes from the new snapshot floor.
+- Rail: each joined room's icon carries its unread/mention state
+  (`RoomDockItem.liveUnread` / `liveMention`, projected by
+  `applyMemberRoomLive` in `useAppController` from `useMemberRoomLive`); disconnected rooms show disconnected with the
+  per-host reason. Own rooms are unaffected (no background streams).
+- Host offline: its rooms show disconnected; the host reconnects
+  automatically with per-host bounded doubling backoff
+  (1 s → 30 s cap, reset on success/explicit retry), driven only by that
+  host's own channel close plus explicit retry — no global loop, no
+  central polling. Grants stay on demand per attempt.
+- Switching to a live room reuses its cached session instantly (no extra
+  admission round trip); a dead session falls back to the normal
+  select path. "읽음으로 표시하기" on a background room clears its badge
+  without opening it.
+- The "● 초대받은 방" chip at the top of member rooms is removed: when
+  the viewer can post it carries no action. The composer-disabled reason
+  (which does carry an action — why posting is blocked) stays.
+- Resource care: exactly one secure channel per host, never per room.
+  At most 8 concurrent background room sockets per host (LRU by recent
+  room activity; the active room is owned by the canonical socket and
+  never counted). Rooms past the cap stay listed with last-known state
+  and no live badge (unknown shown as unknown, never fabricated).
+
+Entry points: `frontend/src/lib/central/memberRoomLive.ts` (badge still
+needs `RoomRail` rendering by its owner — fields only),
+`frontend/src/lib/central/secureMemberEntry.ts` (background select on the
+shared transport), `frontend/src/app/useMemberRoomLive.ts` (lifecycle),
+`frontend/src/app/useMemberHosts.ts` (admission accessor),
+`frontend/src/app/useAppController.tsx` (instant switch, mark-read,
+badge projection into rooms),
+`frontend/src/views/LobbyView.tsx` (chip).
