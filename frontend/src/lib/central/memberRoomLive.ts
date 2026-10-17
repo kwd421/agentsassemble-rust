@@ -25,11 +25,29 @@ export const MEMBER_ROOM_LIVE_SOCKETS_PER_HOST = 8;
 // click) instead of timers. A 429 honors the server's Retry-After.
 export const MEMBER_HOST_RECONNECT_BASE_MS = 1_000;
 export const MEMBER_HOST_RECONNECT_CAP_MS = 30_000;
-// Slow cadence while the endpoint stays revoked: 60 s doubling to a 5 min
-// cap, so a revoked host costs at most 5 central previews per 10 minutes
-// (≈18 per hour) instead of a retry storm.
+// Slow cadence while the endpoint stays revoked: 1, 2, 5, 10, 20 min then
+// a steady 30–60 min with jitter (uniform in that band). A 5 min cap would
+// still spend ≈200 previews/day (≈600 units, far past the 240-unit daily
+// allowance where every signed request — even a refused 409 — costs 3
+// units); the day-long park below plus the origin probe keep a dead host
+// from burning the account. The ladder is per-host attempt count while the
+// cause stays offline; any success or explicit user retry restarts it.
 export const MEMBER_HOST_RECONNECT_SLOW_BASE_MS = 60_000;
-export const MEMBER_HOST_RECONNECT_SLOW_CAP_MS = 300_000;
+export const MEMBER_HOST_RECONNECT_SLOW_CAP_MS = 3_600_000;
+export const MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS = [60_000, 120_000, 300_000, 600_000, 1_200_000];
+export const MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS = 1_800_000;
+export const MEMBER_HOST_RECONNECT_SLOW_STEADY_MAX_MS = 3_600_000;
+// Daily central-reconnect budget while hosts stay unreachable: at most 8
+// member-preview requests per joined host per account per UTC day. Each
+// signed request costs 3 of the 240-unit daily allowance, so 8 previews =
+// 24 units = 10% for one host; the slow ladder above keeps the combined
+// spend of a few joined hosts far below the old 5-min-cap storm. Past the
+// cap the host parks until the next 00:00 UTC (or an explicit user action:
+// 다시 연결 / opening the room).
+export const MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP = 8;
+// Unsigned origin probe budget before any preview: short enough to keep the
+// slow schedule responsive, long enough for a public tunnel origin.
+export const MEMBER_HOST_ORIGIN_PROBE_TIMEOUT_MS = 5_000;
 // Default wait after a central 429 without a Retry-After header.
 export const MEMBER_HOST_RECONNECT_RATE_LIMIT_MS = 300_000;
 export const MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS = 600_000;
@@ -75,17 +93,73 @@ export function memberHostReconnectDelay(
     return withJitter(MEMBER_HOST_RECONNECT_RATE_LIMIT_MS, MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS, random);
   }
   if (cause === "offline") {
-    return withJitter(
-      MEMBER_HOST_RECONNECT_SLOW_BASE_MS * 2 ** Math.min(step, 3),
-      MEMBER_HOST_RECONNECT_SLOW_CAP_MS,
-      random,
-    );
+    if (step < MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS.length) {
+      return withJitter(
+        MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS[step],
+        MEMBER_HOST_RECONNECT_SLOW_CAP_MS,
+        random,
+      );
+    }
+    // Steady state: uniform 30–60 min. random() === 0.5 lands exactly on
+    // the 45 min midpoint so fake-timer tests stay deterministic.
+    const span = MEMBER_HOST_RECONNECT_SLOW_STEADY_MAX_MS - MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS;
+    const picked = MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS + Math.floor(random() * (span + 1));
+    return Math.min(Math.max(picked, MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS), MEMBER_HOST_RECONNECT_SLOW_CAP_MS);
   }
   return withJitter(
     MEMBER_HOST_RECONNECT_BASE_MS * 2 ** Math.min(step, 5),
     MEMBER_HOST_RECONNECT_CAP_MS,
     random,
   );
+}
+
+// Daily offline-preview budget: at most MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP
+// central previews per joined host per account per UTC day. Each signed
+// request costs 3 of the 240-unit daily allowance, so 8 previews = 24 units
+// = 10% for one host; across a few joined hosts the combined reconnect
+// spend stays an order of magnitude below the old 5-min-cap storm (≈200
+// previews/day) and leaves the rest for user-initiated joins, reconnects
+// and own-server ops. Only automatic retries after an offline (409
+// incarnation_conflict) failure spend it; an explicit user action
+// (다시 연결 / opening the room) still tries once immediately even when the
+// budget is spent. Counts reset at 00:00 UTC.
+type OfflineBudgetEntry = { dayStartMs: number; count: number };
+const offlinePreviewByAccountHost = new Map<string, OfflineBudgetEntry>();
+
+function offlineBudgetKey(accountId: string, serverId: string): string {
+  return `${accountId || "anonymous"}\0${serverId}`;
+}
+
+export function memberHostOfflineDayStartMs(now = Date.now()): number {
+  const at = new Date(now);
+  return Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate());
+}
+
+export function memberHostOfflinePreviewCount(accountId: string, serverId: string, now = Date.now()): number {
+  const entry = offlinePreviewByAccountHost.get(offlineBudgetKey(accountId, serverId));
+  if (!entry || entry.dayStartMs !== memberHostOfflineDayStartMs(now)) return 0;
+  return entry.count;
+}
+
+export function noteMemberHostOfflinePreview(accountId: string, serverId: string, now = Date.now()): number {
+  const key = offlineBudgetKey(accountId, serverId);
+  const dayStartMs = memberHostOfflineDayStartMs(now);
+  const entry = offlinePreviewByAccountHost.get(key);
+  const next = entry && entry.dayStartMs === dayStartMs ? entry.count + 1 : 1;
+  offlinePreviewByAccountHost.set(key, { dayStartMs, count: next });
+  return next;
+}
+
+export function memberHostOfflineBudgetExhausted(accountId: string, serverId: string, now = Date.now()): boolean {
+  return memberHostOfflinePreviewCount(accountId, serverId, now) >= MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP;
+}
+
+export function memberHostOfflineParkMs(now = Date.now()): number {
+  return Math.max(0, memberHostOfflineDayStartMs(now) + 24 * 3_600_000 - now);
+}
+
+export function resetMemberHostOfflineBudgetForTests(): void {
+  offlinePreviewByAccountHost.clear();
 }
 
 export type MemberRoomViewer = {

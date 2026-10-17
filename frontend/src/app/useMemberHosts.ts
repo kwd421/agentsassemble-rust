@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
-import { memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
+import { memberHostOfflineBudgetExhausted, memberHostOfflineParkMs, memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, noteMemberHostOfflinePreview, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
 import { remoteWorkspaceFor, closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
 import { ApiError, userFacingError } from "../lib/apiErrors";
@@ -198,13 +198,22 @@ export function useMemberHosts({
     const retryAfterMs = reconnectRetryAfter.current.get(serverId) ?? null;
     // A spent daily allowance parks the host until the UTC-midnight reset:
     // the per-host backoff never fires into the quota block. The holdback
-    // runs past the reset so the directory's own retry lands first.
-    const quotaWait = centralDailyQuotaWaitMs(identityRef.current.personId);
+    // runs past the reset so the directory's own retry lands first. The same
+    // park applies once the host's own offline-preview budget is spent (8
+    // previews = 24 units = 10% of the daily allowance): further automatic
+    // retries wait for midnight while an explicit 다시 연결 / room open
+    // still tries once immediately.
+    const activePerson = identityRef.current.personId;
+    const quotaWait = centralDailyQuotaWaitMs(activePerson);
     const quotaParked = quotaWait > 0;
-    if (quotaParked) quotaParkedHosts.current.add(serverId);
+    const offlineParked = !quotaParked && cause === "offline" &&
+      memberHostOfflineBudgetExhausted(activePerson, serverId);
+    if (quotaParked || offlineParked) quotaParkedHosts.current.add(serverId);
     const delay = quotaParked
       ? quotaWait + QUOTA_RETRY_STAGGER_MS
-      : memberHostReconnectDelay(attempt, cause, retryAfterMs);
+      : offlineParked
+        ? memberHostOfflineParkMs() + QUOTA_RETRY_STAGGER_MS
+        : memberHostReconnectDelay(attempt, cause, retryAfterMs);
     const fire = () => {
       reconnectTimers.current.delete(serverId);
       // One in-flight reconnect per host, shared by every subscription: a
@@ -216,9 +225,17 @@ export function useMemberHosts({
       // it while the directory refresh is in flight; attaching straight
       // from the anchor then would double the central request when
       // reconcile follows the landed retry. Hold back (timer only, no
-      // request) while central is unconfirmed instead.
+      // request) while central is unconfirmed instead. The same holdback
+      // covers an offline-budget park: a timer that fires while the budget
+      // is still spent re-parks instead of spending central.
       if (quotaParkedHosts.current.has(serverId) && directoryRef.current?.status === "central-unconfirmed") {
         reconnectTimers.current.set(serverId, window.setTimeout(fire, QUOTA_RETRY_STAGGER_MS));
+        return;
+      }
+      if (memberHostOfflineBudgetExhausted(identityRef.current.personId, serverId) &&
+        (reconnectCauses.current.get(serverId) ?? "transient") === "offline") {
+        quotaParkedHosts.current.add(serverId);
+        reconnectTimers.current.set(serverId, window.setTimeout(fire, memberHostOfflineParkMs() + QUOTA_RETRY_STAGGER_MS));
         return;
       }
       quotaParkedHosts.current.delete(serverId);
@@ -304,9 +321,13 @@ export function useMemberHosts({
       // The failure kind picks the backoff: a revoked endpoint (409
       // incarnation_conflict) rests on a slow cadence, a 429 honors the
       // server's Retry-After. The counter keeps growing across these
-      // timer-driven retries; only success or explicit retry resets it.
-      reconnectCauses.current.set(serverId, memberHostReconnectCause(error));
+      // timer-driven retries; only success or explicit retry resets it. An
+      // offline failure spends one unit of the host's daily preview budget
+      // (each signed preview costs central even when refused).
+      const cause = memberHostReconnectCause(error);
+      reconnectCauses.current.set(serverId, cause);
       reconnectRetryAfter.current.set(serverId, memberHostRetryAfterMs(error));
+      if (cause === "offline") noteMemberHostOfflinePreview(activePerson, serverId);
       scheduleReconnect(serverId);
     }
   }, [setPhase, dropHost, scheduleReconnect, clearReconnectTimer, cleanupConfirmedLoss]);
@@ -358,6 +379,10 @@ export function useMemberHosts({
         if (anchor.hidden || refused.current.has(anchor.server_id)) continue;
         if (flights.current.has(anchor.server_id) || reconnectTimers.current.has(anchor.server_id)) continue;
         if (admissions.current.has(anchor.server_id)) continue;
+        // An offline-budget park holds while central is unconfirmed too:
+        // the parked timer (not a new attach) owns the next attempt.
+        if (memberHostOfflineBudgetExhausted(activePerson, anchor.server_id) &&
+          (reconnectCauses.current.get(anchor.server_id) ?? "transient") === "offline") continue;
         reattachHostRef.current(anchor.server_id);
       }
       return;
@@ -429,6 +454,15 @@ export function useMemberHosts({
       if (anchor && anchor.registration_epoch === epoch &&
           (tuple.fingerprint === "" || anchor.host_key_fingerprint === tuple.fingerprint)) {
         refused.current.delete(server.server_id);
+      }
+      // An offline-budget park survives even a fresh directory tuple: the
+      // host stays parked until midnight while an explicit 다시 연결 /
+      // room open still tries once immediately.
+      if (anchor && memberHostOfflineBudgetExhausted(activePerson, server.server_id) &&
+        (reconnectCauses.current.get(server.server_id) ?? "transient") === "offline") {
+        if (!reconnectTimers.current.has(server.server_id)) scheduleReconnect(server.server_id);
+        attempted.current.set(server.server_id, tupleKey(tuple));
+        continue;
       }
       attempted.current.set(server.server_id, tupleKey(tuple));
       // A directory tuple the client has never tried (a republished host's

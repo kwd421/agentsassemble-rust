@@ -1,18 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
+  MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP,
   MEMBER_HOST_RECONNECT_BASE_MS,
   MEMBER_HOST_RECONNECT_CAP_MS,
   MEMBER_HOST_RECONNECT_RATE_LIMIT_MS,
   MEMBER_HOST_RECONNECT_SLOW_BASE_MS,
   MEMBER_HOST_RECONNECT_SLOW_CAP_MS,
+  MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS,
+  MEMBER_HOST_RECONNECT_SLOW_STEADY_MAX_MS,
+  MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS,
   MEMBER_ROOM_LIVE_SOCKETS_PER_HOST,
+  memberHostOfflineBudgetExhausted,
+  memberHostOfflineParkMs,
+  memberHostOfflinePreviewCount,
   memberHostReconnectCause,
   memberHostReconnectDelay,
   memberHostRetryAfterMs,
-  messageMentionsViewer,
-  pickLiveRoomIds,
-  projectMemberRoomBadge,
+  noteMemberHostOfflinePreview,
+  resetMemberHostOfflineBudgetForTests,
 } from "./memberRoomLive";
+import { messageMentionsViewer, pickLiveRoomIds, projectMemberRoomBadge } from "./memberRoomLive";
 
 const message = (overrides = {}) => ({
   v: 1,
@@ -107,12 +114,40 @@ describe("memberHostReconnectDelay", () => {
     expect(delay).toBeLessThanOrEqual(Math.ceil(MEMBER_HOST_RECONNECT_BASE_MS * 1.2));
   });
 
-  it("rests a revoked endpoint on a slow cadence, not per-second timers", () => {
+  it("rests a revoked endpoint on a slow ladder, then 30-60 min steady", () => {
     expect(memberHostReconnectDelay(0, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_BASE_MS);
-    expect(memberHostReconnectDelay(1, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_BASE_MS * 2);
-    expect(memberHostReconnectDelay(100, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_CAP_MS);
+    expect(memberHostReconnectDelay(1, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS[1]);
+    expect(memberHostReconnectDelay(2, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS[2]);
+    expect(memberHostReconnectDelay(3, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS[3]);
+    expect(memberHostReconnectDelay(4, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS[4]);
+    // Steady state is uniform 30–60 min: mid lands on the 45 min midpoint.
+    expect(memberHostReconnectDelay(5, "offline", null, mid)).toBe(
+      Math.floor((MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS + MEMBER_HOST_RECONNECT_SLOW_STEADY_MAX_MS) / 2),
+    );
+    expect(memberHostReconnectDelay(100, "offline", null, mid)).toBe(
+      Math.floor((MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS + MEMBER_HOST_RECONNECT_SLOW_STEADY_MAX_MS) / 2),
+    );
+    expect(memberHostReconnectDelay(5, "offline", null, () => 0)).toBe(MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS);
+    expect(memberHostReconnectDelay(5, "offline", null, () => 0.9999)).toBeLessThanOrEqual(MEMBER_HOST_RECONNECT_SLOW_CAP_MS);
     // Even the fastest jitter never drops below ~48 s on the slow path.
     expect(memberHostReconnectDelay(0, "offline", null, () => 0)).toBeGreaterThanOrEqual(48_000);
+  });
+
+  it("parks the host after the daily offline-preview budget is spent", () => {
+    resetMemberHostOfflineBudgetForTests();
+    const now = Date.UTC(2026, 9, 17, 12, 0, 0);
+    for (let i = 0; i < MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP; i += 1) {
+      expect(memberHostOfflineBudgetExhausted("person", "host", now)).toBe(false);
+      noteMemberHostOfflinePreview("person", "host", now);
+    }
+    expect(memberHostOfflinePreviewCount("person", "host", now)).toBe(MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP);
+    expect(memberHostOfflineBudgetExhausted("person", "host", now)).toBe(true);
+    // Another host on the same account keeps its own budget.
+    expect(memberHostOfflineBudgetExhausted("person", "other-host", now)).toBe(false);
+    expect(memberHostOfflineParkMs(now)).toBe(Date.UTC(2026, 9, 18) - now);
+    // The next UTC day resets the budget.
+    expect(memberHostOfflineBudgetExhausted("person", "host", Date.UTC(2026, 9, 18))).toBe(false);
+    resetMemberHostOfflineBudgetForTests();
   });
 
   it("honors the server's Retry-After on a 429 exactly", () => {
