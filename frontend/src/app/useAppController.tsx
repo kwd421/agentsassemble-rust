@@ -1,4 +1,5 @@
 import { useCentralDirectory } from "./useCentralDirectory";
+import { isLocalOwnedByAccount } from "../lib/central/localOwnership";
 import { useServerOpening } from "./useServerOpening";
 import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
 import { Hash } from "lucide-react";
@@ -231,6 +232,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     onResetToLobby: onGuestAdmissionReset,
   });
   const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
+  const localOwnedByAccount = isLocalOwnedByAccount(directoryRooms, centralDirectory);
   // Confirmed membership loss (kick/ban/revoke): rooms disappear from the
   // rail, their bearer clears, and a stranded selection falls back.
   const handleConfirmedMembershipLost = useCallback((serverId: string) => {
@@ -342,7 +344,10 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       authority: activeGuestLocked ? "session" : "host",
     });
   }, [activeRoomId, activeRoom.id, activeRoom.meetingId, activeRoom.serverId, activeRoomSession, activeGuestLocked]);
-  const canCreateRoom = startupHostEnabled || Boolean(ownerWorkspace.connect);
+  const canCreateRoom = (startupHostEnabled && localOwnedByAccount) || Boolean(ownerWorkspace.connect);
+  // Inviting to a joined member room goes through that host's own admission,
+  // never this computer's host authority, so it stays available even when the
+  // local server is not mine. Only creating new local rooms needs ownership.
   const canInviteRooms = startupHostEnabled || Boolean(ownerWorkspace.connect);
   const startupIdentityResolved =
     startupIdentityReady || Boolean(ownerWorkspace.connect) ||
@@ -956,7 +961,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     connectorJoinUrl: startupRoute.connectorJoinUrl,
     guestExpired, guestJoinRequested, guestJoinStatus, guestInviteRoomLabel, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
-    profileAuthorityReady: startupHostEnabled || Boolean(ownerWorkspace.connect) || Boolean(admittedSessionToken),
+    profileAuthorityReady: (startupHostEnabled && localOwnedByAccount) || Boolean(ownerWorkspace.connect) || Boolean(admittedSessionToken), localOwnedByAccount,
     ownerProfileRevision, hostingRestriction,
     ownerProfileSession: ownerWorkspace.connect ? { sessionToken: ownerWorkspace.connect.sessionToken, generation: ownerWorkspace.connect.generation } : undefined,
     guestLocked: activeGuestLocked, canCreateRoom, canInviteRooms, guestPanelProfile, guestRecoveryRequest, guestSession,
