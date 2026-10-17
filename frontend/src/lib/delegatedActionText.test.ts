@@ -58,12 +58,44 @@ describe("formatDelegatedActionText", () => {
     expect(unpinned).toContain("ㅏㄴ나나");
   });
 
-  it("covers mute and unmute through the English record", () => {
-    const muted = line("set_participant_mute", "x muted a participant on behalf of y.", { targetId: "target-1" });
-    const unmuted = line("set_participant_mute", "x unmuted a participant on behalf of y.", { targetId: "target-1" });
+  it("covers mute and unmute through the structured flag", () => {
+    const muted = line("set_participant_mute", "x muted a participant on behalf of y.", { targetId: "target-1", muted: true });
+    const unmuted = line("set_participant_mute", "x unmuted a participant on behalf of y.", { targetId: "target-1", muted: false });
     expect(muted).toContain("새내기");
     expect(unmuted).toContain("새내기");
     expect(unmuted).not.toBe(muted);
+  });
+
+  it("uses the structured mute flag even when a display name contains unmuted", () => {
+    const mutedSources = {
+      participantProfiles: {
+        "agent-1": { displayName: "진행자" },
+        "owner-1": { displayName: "방주인" },
+        "target-1": { displayName: "UnmutedUser" },
+      },
+      channelLabels: {},
+    };
+    const text = formatDelegatedActionText(
+      {
+        name: "진행자",
+        message: "x muted UnmutedUser on behalf of y.",
+        delegation: {
+          action: "set_participant_mute",
+          targetId: "target-1",
+          onBehalfOfParticipantId: "owner-1",
+          actorParticipantId: "agent-1",
+          muted: true,
+        },
+      },
+      mutedSources
+    );
+    expect(text).toContain("음소거했어요");
+    expect(text).not.toContain("해제");
+  });
+
+  it("stays neutral without the structured mute flag (old hosts)", () => {
+    const text = line("set_participant_mute", "x muted a participant on behalf of y.", { targetId: "target-1" });
+    expect(text).toContain("음소거 상태");
   });
 
   it("covers agent start, stop, create, reconfigure and remove", () => {
@@ -129,7 +161,7 @@ describe("formatDelegatedActionText", () => {
     expect(reconfigured).not.toContain("에이전트 에이전트");
     const knownAgent = line("start_agent", "x start on behalf of y.", { targetId: "target-1" });
     expect(knownAgent).toContain("새내기 에이전트를");
-    const muted = line("set_participant_mute", "x muted a participant on behalf of y.", { targetId: "missing-agent" });
+    const muted = line("set_participant_mute", "x muted a participant on behalf of y.", { targetId: "missing-agent", muted: true });
     expect(muted).toContain("참가자를 음소거했어요");
     expect(muted).not.toContain("참가자 참가자");
     const kicked = line("kick_participant", "x kicked someone on behalf of y.", { targetId: "missing-agent" });

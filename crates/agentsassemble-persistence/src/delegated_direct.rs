@@ -195,7 +195,7 @@ impl SqliteStore {
             &proof.delegate.principal_id,
             bytes,
         )?;
-        let event = attributed_action_event(
+        let mut event = attributed_action_event(
             &mut tx,
             proof.attribution(),
             request_id,
@@ -204,6 +204,12 @@ impl SqliteStore {
             description,
         )
         .await?;
+        // Structured mute state for the room-visible line: the UI must never
+        // parse the English sentence (it contains display names). Old clients
+        // ignore this key; new clients use it and stay neutral without it.
+        if let DirectRoomAction::SetParticipantMute(r) = request {
+            event.extra.insert("muted".into(), json!(r.muted));
+        }
         let canonical_id = mutation.outcome.event.id.clone();
         for canonical in mutation
             .outcome

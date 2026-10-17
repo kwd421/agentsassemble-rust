@@ -88,6 +88,7 @@ export interface LobbyEvent {
     confirmationId?: string;
     pinned?: boolean;
     targetChannelId?: string;
+    muted?: boolean;
   };
 }
 

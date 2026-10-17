@@ -78,6 +78,7 @@ type TimelineRoomEvent = Pick<
   confirmation_id?: unknown;
   pinned?: unknown;
   target_channel_id?: unknown;
+  muted?: unknown;
 };
 
 function actor(event: TimelineRoomEvent) {
@@ -149,6 +150,7 @@ function delegationOf(event: TimelineRoomEvent): LobbyEvent["delegation"] {
     confirmationId: typeof confirmationId === "string" && confirmationId ? confirmationId : undefined,
     pinned: typeof event.pinned === "boolean" ? event.pinned : undefined,
     targetChannelId: typeof targetChannelId === "string" && targetChannelId ? targetChannelId : undefined,
+    muted: typeof event.muted === "boolean" ? event.muted : undefined,
   };
 }
 

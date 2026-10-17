@@ -65,9 +65,15 @@ export function formatDelegatedActionText(
     }
     case "set_participant_mute": {
       const target = targetParticipant || "참가자";
-      return /unmuted/i.test(event.message)
-        ? `${head}${target}의 음소거를 해제했어요.`
-        : `${head}${target}${objectParticle(target)} 음소거했어요.`;
+      // Structured mute state from the server projection, never the English
+      // sentence (it contains display names). Old hosts without the flag get
+      // a neutral line instead of a guessed mute/unmute.
+      if (typeof delegation.muted === "boolean") {
+        return delegation.muted
+          ? `${head}${target}${objectParticle(target)} 음소거했어요.`
+          : `${head}${target}의 음소거를 해제했어요.`;
+      }
+      return `${head}${target}의 음소거 상태를 바꿨어요.`;
     }
     case "start_agent":
       return `${head}${agentDisplay}를 시작했어요.`;

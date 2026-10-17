@@ -205,6 +205,9 @@ async fn mute_shares_human_targets_and_next_call_revocation() -> TestResult {
             result.outcome.event.extra["target_id"],
             target.participant_id
         );
+        // The room-visible attribution line carries the structured mute state
+        // so the UI never parses the English sentence (it holds display names).
+        assert_eq!(result.outcome.event.extra["muted"], json!(muted));
         assert!(
             store
                 .execute_delegated_atomic(&authority, &request, |_, _, _| Ok(()))
