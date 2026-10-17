@@ -1,10 +1,12 @@
-import { isDesktopWebview } from "../lib/desktopBridge";
+import { isDesktopWebview, requestDesktopHostDeviceInfo } from "../lib/desktopBridge";
+import { centralAccountSelf } from "../lib/central/localOwnership";
+import { openCentralOwnedServer } from "../lib/central/identity";
 import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
 import CustomChannelView from "../views/CustomChannelView";
 import { isCustomChannelId } from "../lib/customChannelId";
 import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
-import { lazy, Suspense, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Bell,
   CalendarDays,
@@ -124,6 +126,42 @@ export default function AppView({ controller }: { controller: AppController }) {
       onToggleSideChat: canOpenSideChat ? () => setSideChatOpen(!sideChatOpen) : undefined };
   }
   const friendsVisible = friendsOpen && canManageFriends;
+  // This computer's server belongs to its registered owner. A mismatch is
+  // a quiet one-line entry offering an explicit action, never a gate.
+  const [localHostServerId, setLocalHostServerId] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!isDesktopWebview() || !controller.centralDirectory?.person) {
+      setLocalHostServerId(undefined);
+      return;
+    }
+    let active = true;
+    requestDesktopHostDeviceInfo()
+      .then((device) => { if (active) setLocalHostServerId(device.server_id ?? null); })
+      .catch(() => { if (active) setLocalHostServerId(null); });
+    return () => { active = false; };
+  }, [controller.centralDirectory?.person?.person_id]);
+  const ownedServers = (controller.centralDirectory?.servers || []).filter((server) => server.relation === "owner");
+  const ownedServer = ownedServers.length === 1 ? ownedServers[0] : undefined;
+  const ownerConflict = Boolean(controller.centralDirectory?.live?.owner_server_conflict);
+  const ownServerMismatch = Boolean(
+    controller.centralDirectory?.person && ownedServer && !ownerConflict &&
+      localHostServerId !== undefined && localHostServerId !== ownedServer.server_id,
+  );
+  const liveOwned = (controller.centralDirectory?.live?.servers || []).find(
+    (server) => ownedServer && server.server_id === ownedServer.server_id,
+  );
+  const ownedOnline = Boolean(
+    liveOwned?.endpoint?.status === "published" && liveOwned.endpoint.mode === "event_secure_v1",
+  );
+  const [ownServerError, setOwnServerError] = useState("");
+  const [ownServerBusy, setOwnServerBusy] = useState(false);
+  // The signed-in account and the displayed self must never disagree. When
+  // this computer's server is not mine, show the signed-in central account,
+  // never the foreign local operator.
+  const centralPerson = controller.centralDirectory?.person ?? null;
+  const centralSelfProfile = !ownerProfileSession && !guestPanelProfile && centralPerson && !controller.localOwnedByAccount
+    ? centralAccountSelf(centralPerson)
+    : undefined;
   const userArea = (
     <footer className="dc-user-area shrink-0" style={{ zIndex: 30 }}>
       <UserPanel
@@ -131,7 +169,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         agentCount={scopedAgents.length || 0}
         hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
         profileAuthorityReady={profileAuthorityReady}
-        guestProfile={ownerProfileSession ? undefined : guestPanelProfile}
+        guestProfile={ownerProfileSession ? undefined : (guestPanelProfile ?? centralSelfProfile)}
         pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
         publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
           const value = event.profile_revision;
@@ -158,6 +196,32 @@ export default function AppView({ controller }: { controller: AppController }) {
     <RoomSocketProvider socket={roomSocket}>
     <KnownChannels names={channelNames}>
     <div className="dc-app-layout">
+      {ownServerMismatch && (
+        <div
+          className="flex min-h-11 items-center justify-center gap-3 px-4 py-2 text-[12px] text-text-muted"
+          data-testid="own-server-mismatch"
+        >
+          <span>이 컴퓨터의 서버가 계정에 등록된 서버와 달라요.</span>
+          <button
+            type="button"
+            className="ops-button min-h-9 px-3"
+            disabled={ownServerBusy || !ownedOnline || !liveOwned}
+            onClick={() => {
+              if (!liveOwned || ownServerBusy) return;
+              setOwnServerBusy(true);
+              setOwnServerError("");
+              void openCentralOwnedServer(liveOwned)
+                .catch((reason: unknown) => {
+                  setOwnServerError(reason instanceof Error ? reason.message : "서버를 열지 못했어요.");
+                })
+                .finally(() => setOwnServerBusy(false));
+            }}
+          >
+            이 기기로 연결
+          </button>
+          {ownServerError && <span role="alert">{ownServerError}</span>}
+        </div>
+      )}
       <RoomSyncNotice
         connectionMessage={roomDirectorySyncIssue ? "서버 연결을 확인하고 있어요. 연결이 끊긴 방에서 다시 시도할 수 있어요."
           : centralQuotaNotice ?? (controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
