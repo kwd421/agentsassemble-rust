@@ -39,6 +39,7 @@ import {
   type RoomDockItem,
 } from "../lib/roomDockModel";
 import { useRailRooms } from "./useRailRooms";
+import { memberRoomRemovedWhileLive } from "./useMemberHosts";
 import { consumeOperatorPairingTokenFromUrl } from "../lib/roomGuestSession";
 import { roomPostingState } from "../lib/roomGuestPosting";
 import { currentServerProductSurface } from "../lib/roomDirectoryContract";
@@ -160,6 +161,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     adjustSidebarWidthWithKeyboard,
   } = useSidebarResize();
   const latestRooms = useRef<RoomDockItem[]>([]);
+  const retainedActiveRoom = useRef<RoomDockItem | null>(null);
   const onGuestRoomJoined = useCallback((room: RoomDockItem) => {
     // A member room selected from the rail keeps its existing rail entry:
     // the anchor list carries no room_uid, so the session-derived id would
@@ -237,7 +239,20 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   latestRooms.current = rooms;
   if (guestSession?.centralOwner && guestSession.roomUid) lastOwnerRoomUid.current = guestSession.roomUid;
   const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
-  const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? EMPTY_ROOM;
+  const foundRoom = rooms.find((room) => room.id === activeRoomId) ?? null;
+  useEffect(() => {
+    if (foundRoom) retainedActiveRoom.current = foundRoom;
+  }, [foundRoom]);
+  // The selection never silently falls back while its room is transiently
+  // missing: a member re-attach briefly unlists rooms, and falling back to
+  // another room then strands the click on the wrong room. The retained room
+  // covers only the transient case below (an explicitly removed room always
+  // resolves the selection itself); a genuinely removed member room still
+  // leaves the rail once its host confirms the removal.
+  const retainedRoom = !foundRoom && activeRoomId && retainedActiveRoom.current?.id === activeRoomId &&
+    !memberRoomRemovedWhileLive(retainedActiveRoom.current, memberHosts.snapshots)
+    ? retainedActiveRoom.current : null;
+  const activeRoom = foundRoom ?? retainedRoom ?? rooms[0] ?? EMPTY_ROOM;
   const activeRoomDisconnected = roomIsDisconnected(activeRoom);
   const activeMemberHostDetail = activeRoom.roomOrigin === "remote_server" && activeRoom.serverId
     ? memberHosts.snapshots.find((entry) => entry.serverId === activeRoom.serverId)?.detail ?? null

@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useMemberHosts } from "./useMemberHosts";
+import { memberRoomRemovedWhileLive, useMemberHosts } from "./useMemberHosts";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { saveMemberAnchor } from "../lib/central/memberAnchors";
 
@@ -226,5 +226,22 @@ describe("useMemberHosts", () => {
     act(() => { result.current.retryHost("friend"); });
     await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("connected"), { timeout: 5000 });
     expect(attach).toHaveBeenCalledTimes(2);
+  });
+
+  it("confirms a member removal only from a live host that lists without the room", () => {
+    const room = { roomOrigin: "remote_server" as const, serverId: "friend", meetingId: "general" };
+    const snapshot = (phase: "connecting" | "connected" | "disconnected", rooms: { room_id: string; name: string }[] | null) =>
+      ({ serverId: "friend", phase, origin: "https://friend.test", rooms, detail: null });
+    // A live host that lists its rooms without this one removed it: fall back.
+    expect(memberRoomRemovedWhileLive(room, [snapshot("connected", [{ room_id: "other", name: "다른" }])])).toBe(true);
+    // Every other state is transient and retains the selection.
+    expect(memberRoomRemovedWhileLive(room, [snapshot("connected", [{ room_id: "general", name: "일반" }])])).toBe(false);
+    expect(memberRoomRemovedWhileLive(room, [snapshot("connected", null)])).toBe(false);
+    expect(memberRoomRemovedWhileLive(room, [snapshot("connecting", [{ room_id: "general", name: "일반" }])])).toBe(false);
+    expect(memberRoomRemovedWhileLive(room, [snapshot("connecting", null)])).toBe(false);
+    expect(memberRoomRemovedWhileLive(room, [snapshot("disconnected", [{ room_id: "general", name: "일반" }])])).toBe(false);
+    expect(memberRoomRemovedWhileLive(room, [])).toBe(false);
+    expect(memberRoomRemovedWhileLive(
+      { roomOrigin: "local" as const, meetingId: "general" }, [snapshot("connected", [])])).toBe(false);
   });
 });

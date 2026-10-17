@@ -37,6 +37,22 @@ export type MemberHostSnapshot = {
   detail: string | null;
 };
 
+/**
+ * Whether a member room is genuinely gone: only a live host that lists its
+ * rooms without this one confirms a removal (friend removed/kicked/revoked
+ * it). Every other state (re-attaching, disconnected, unknown host, unlisted
+ * rooms) is transient and must retain the selection, never fall back.
+ */
+export function memberRoomRemovedWhileLive(
+  room: { roomOrigin?: string; serverId?: string; meetingId: string },
+  snapshots: MemberHostSnapshot[]
+): boolean {
+  if (room.roomOrigin !== "remote_server" || !room.serverId) return false;
+  const host = snapshots.find((entry) => entry.serverId === room.serverId);
+  return Boolean(host && host.phase === "connected" && host.rooms &&
+    !host.rooms.some((known) => known.room_id === room.meetingId));
+}
+
 type DirectoryTuple = {
   epoch: string;
   fingerprint: string;
@@ -351,14 +367,27 @@ export function useMemberHosts({
       const tuple = directoryTuple();
       if (!tuple) throw new Error("서버에 연결 중이에요. 연결이 끝나면 다시 시도해 주세요.");
       attempted.current.delete(serverId);
-      dropHost(serverId);
+      // A re-attach keeps the host's last-known rooms in the rail: only the
+      // stale flight/admission bookkeeping is reset, never the snapshot, so
+      // the clicked room stays listed (connecting) across the re-attach.
+      flights.current.get(serverId)?.abort();
+      flights.current.delete(serverId);
+      admissions.current.get(serverId)?.close();
+      admissions.current.delete(serverId);
       await attach(serverId, tuple.epoch, anchorOrigin() || tuple.origin, timeout.signal);
       markAttempted();
       return admissions.current.get(serverId);
     };
     try {
       let admission = admissions.current.get(serverId);
-      if (!admission) {
+      if (!admission || admission.transport.active === false) {
+        // The host reaps an admit-only channel 30 s after open, so a cached
+        // admission whose transport is already dead can never carry a select:
+        // attach fresh first instead of spending the click on a dead channel.
+        // A transport that dies mid-select still retries below.
+        if (import.meta.env.DEV && admission) console.debug("[member-select] cached channel dead, attaching fresh", {
+          serverId, roomId,
+        });
         admission = await attachFresh();
         if (!admission) throw timedOut() ?? new Error("서버에 연결 중이에요. 연결이 끝나면 다시 시도해 주세요.");
       }
@@ -409,11 +438,16 @@ export function useMemberHosts({
     } catch (error) {
       const expired = timedOut();
       if (expired) {
-        // The transport is suspect (hung or dead): drop it and let a fresh
-        // background attach restore the rooms as disconnected (anchor rooms
-        // stay visible with retry) instead of stranding a hung select.
-        dropHost(serverId);
+        // The transport is suspect (hung or dead): reset only the stale
+        // flight/admission bookkeeping and mark the host disconnected with its
+        // last-known rooms, then let a fresh background attach restore it,
+        // instead of unlisting the rooms mid-select.
+        flights.current.get(serverId)?.abort();
+        flights.current.delete(serverId);
+        admissions.current.get(serverId)?.close();
+        admissions.current.delete(serverId);
         attempted.current.delete(serverId);
+        setPhase(serverId, "disconnected");
         reconcile();
         throw expired;
       }

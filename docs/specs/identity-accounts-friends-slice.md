@@ -3440,3 +3440,42 @@ short Korean inline failure, never silence. Entry points:
 `frontend/src/app/useCentralDirectory.ts` (retained `central-unconfirmed`
 on `CentralTemporaryError`), `frontend/src/lib/central/connectionError.ts`
 (fetch boundary).
+
+### M5 member click survives a reaped listing channel (2026-10-17)
+
+Real-app trace (debug macOS build, one click on the member `Hihi room`
+~40 s after startup): the startup background attach holds an admit-only
+secure channel; the host reaps an un-admitted channel 30 s after open
+(`crates/agentsassemble-server/src/secure_channel.rs` first-admission rule
+and `monitor_lifetime`; `adopt` happens only on room select/join in
+`member_connect_web.rs`/`member_invite_web.rs`, never on the rooms listing),
+so the first `select` on the reaped channel fails with no HTTP status. The
+retry re-attaches and the admission completes, but the view stays on the own
+room, the rail tooltip still claims the member room is connected, the own
+room socket closes and reopens and then drops, and the member room socket
+never opens. The `중앙-미확인` banner around the click is only the central
+bootstrap failing with a temporary error (retained directory in
+`useCentralDirectory`); it never blocks a member click.
+Required: a click never selects on a dead listing channel — when the cached
+admission's transport is no longer active the click attaches fresh first and
+selects exactly once (no doomed first select; the stale-challenge retry stays
+for a transport that dies mid-select). The host reap/fast-fail/retry
+semantics stay; no speculative background room join may keep the channel
+alive, because joining creates server sessions and presence without user
+intent. The clicked member room stays in the rail (anchor/last-known rooms,
+connecting state) across the re-attach; after admission completes the clicked
+room becomes active and its socket opens with its own session auth and
+surface. The active room id never silently clears and never falls back to
+another room because a room is transiently missing; selection moves only by
+explicit user action or explicit removal. A member re-attach never closes the
+own room's socket: the own room keeps host authority and the local surface
+while member sessions are live, including across the member workspace install
+(which flips the default workspace origin). Every click ends in the live
+member room or the short Korean inline failure, never silence. Entry points:
+`frontend/src/app/useMemberHosts.ts` (`selectRoom` transport liveness,
+re-attach without dropping the snapshot, `memberRoomRemovedWhileLive`),
+`frontend/src/app/useAppController.tsx` (active-room retention),
+`frontend/src/views/components/StartupIdentityBoundary.tsx` (member-only
+install keeps content mounted, `MemberEndedOverlay` sibling),
+`frontend/src/useCanonicalRoom.ts` (per-owner scope origin),
+`frontend/src/lib/remote/remoteWorkspace.ts` (install side effects).

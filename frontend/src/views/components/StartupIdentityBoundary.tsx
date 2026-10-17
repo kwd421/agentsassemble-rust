@@ -1,6 +1,6 @@
 import MemberJoinPanel from "./MemberJoinPanel";
 import GoogleGLogo from "./GoogleGLogo";
-import RemoteMemberWorkspaceBoundary from "./RemoteMemberWorkspaceBoundary";
+import RemoteMemberWorkspaceBoundary, { MemberEndedOverlay } from "./RemoteMemberWorkspaceBoundary";
 import { remoteWorkspaceVersion, remoteWorkspacesSnapshot, subscribeRemoteWorkspace, pendingMemberSnapshot, selectRemoteMember } from "../../lib/remote/remoteWorkspace";
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 
@@ -89,6 +89,16 @@ export default function StartupIdentityBoundary({
   }, []);
 
   if (pendingMember) return <MemberJoinPanel secureEntry={pendingMember} onCancel={() => selectRemoteMember(null)} />;
+  if (remote && !remotes.some((entry) => entry.owner)) {
+    // Member-only hosts provide no workspace context (only an end-state
+    // overlay), so the app content stays at its stable tree position across
+    // member installs/ends. Wrapping it per transport remounts the whole app
+    // on every member select: the rail selection, admission and room sockets
+    // are wiped and the view falls back to the own room.
+    const content = children({ deviceToken: remote.deviceToken, clientId: remote.clientId });
+    return <>{content}{remotes.map((entry) => <MemberEndedOverlay
+      key={entry.transport.hello.channel_id} transport={entry.transport} serverId={entry.serverId} />)}</>;
+  }
   if (remote) {
     const content = children({ deviceToken: remote.deviceToken, clientId: remote.clientId });
     return remotes.reduceRight<ReactNode>((wrapped, entry) => entry.owner

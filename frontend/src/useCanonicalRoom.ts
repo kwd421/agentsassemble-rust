@@ -45,6 +45,7 @@ import {
 import type { RoomStream } from "./types/generated/RoomStream";
 import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
 import { useAcceptedRoomProjection } from "./lib/useAcceptedRoomProjection";
+import { defaultWorkspaceOrigin, sessionHostOrigin } from "./lib/remote/remoteWorkspace";
 import { parseChannelMessageCursors } from "./lib/channelUnread";
 import { scrubHistoricalAuthors, useAnonymousAuthors } from "./lib/participantAnonymization";
 
@@ -110,7 +111,16 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   >({});
 
   const eventsRef = useRef<Record<string, RoomEvent[]>>({});
-  const projectionScopeKey = canonicalRoomProjectionScopeKey(roomId, auth, viewerParticipantId);
+  // The scope origin is the room owner's own origin, never the global
+  // default: installing another host flips defaultWorkspaceOrigin(), and
+  // scoping by it would tear down and reopen every live room socket on each
+  // member install. Host authority stays on this computer's origin; a room
+  // session stays on its bound host (an unbound session keeps the legacy
+  // default until it binds).
+  const scopeOrigin = auth?.kind === "host"
+    ? window.location.origin
+    : auth ? sessionHostOrigin(auth.sessionToken) ?? defaultWorkspaceOrigin() : defaultWorkspaceOrigin();
+  const projectionScopeKey = canonicalRoomProjectionScopeKey(roomId, auth, viewerParticipantId, scopeOrigin);
   const anonymousAuthors = useAnonymousAuthors(projectionScopeKey);
   const roomSettingsSeqRef = useRef<Record<string, number>>({});
   const roomSettingsRef = useRef<Record<string, RoomGlobalSettings>>({});
@@ -268,7 +278,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     setProviderRequests([]);
     if (!roomId || !auth || !serverSurface) {
       if (import.meta.env.DEV) console.debug("[room-socket] no socket", {
-        roomId: roomId || null, hasAuth: Boolean(auth), hasSurface: Boolean(serverSurface),
+        roomId: roomId || null, hasAuth: Boolean(auth), hasSurface: Boolean(serverSurface), origin: scopeOrigin,
       });
       connectionGenerationRef.current += 1;
       clearAcceptedProjection();
@@ -280,7 +290,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     const connectionGeneration = connectionGenerationRef.current + 1;
     connectionGenerationRef.current = connectionGeneration;
     const connectionIsCurrent = () => connectionGenerationRef.current === connectionGeneration;
-    if (import.meta.env.DEV) console.debug("[room-socket] open", { roomId, auth: auth.kind });
+    if (import.meta.env.DEV) console.debug("[room-socket] open", { roomId, auth: auth.kind, origin: scopeOrigin });
     setLastError(null);
     setConnectionState("connecting");
     let acceptedRoomUid: unknown;
@@ -475,7 +485,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     setSocket(currentSocket);
     return () => {
       if (import.meta.env.DEV) console.debug("[room-socket] close", {
-        roomId, auth: auth.kind, superseded: !connectionIsCurrent(),
+        roomId, auth: auth.kind, superseded: !connectionIsCurrent(), origin: scopeOrigin,
       });
       if (connectionIsCurrent()) {
         connectionGenerationRef.current += 1;
