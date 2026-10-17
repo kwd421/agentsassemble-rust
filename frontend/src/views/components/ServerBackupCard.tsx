@@ -1,6 +1,8 @@
 import {useEffect,useRef,useState} from "react";
 import {isDesktopWebview,requestDesktopServerBackup} from "../../lib/desktopBridge";
 import {bootstrapCentral,fetchLocalServerInfo,loadCentralSession,localHostingState,type CentralServer} from "../../lib/central/identity";
+import {isCentralTemporaryError} from "../../lib/central/connectionError";
+import {centralDailyQuotaWaitMs} from "../../lib/central/centralRequestGovernor";
 import {strictRecord} from "../../lib/strictJsonContract";
 
 type Progress={operation_id:string;phase:string;snapshot_at:string|null;bytes:number|null;failure_reason?:string|null};
@@ -41,7 +43,11 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
       Boolean(identity.host_key_fingerprint)&&server.host_key_fingerprint===identity.host_key_fingerprint);
     if(live)setOwner(owned||null);
     if(owned){const latest=await requestDesktopServerBackup({action:"latest"});if(live&&latest!==null)setProgress(parse(latest));}
-  }catch(reason){if(live)setError(reason instanceof Error?reason.message:String(reason));}finally{if(live)setChecked(true);}})();return()=>{live=false;};},[]);
+  }catch(reason){
+    // While the daily quota block is active the account settings show no
+    // governor line: a mount-time read the user never pressed stays silent.
+    if(isCentralTemporaryError(reason) && centralDailyQuotaWaitMs(loadCentralSession()?.person.person_id ?? "") > 0) {/* show nothing while blocked */}
+    else if(live)setError(reason instanceof Error?reason.message:String(reason));}finally{if(live)setChecked(true);}})();return()=>{live=false;};},[]);
   const running=Boolean(progress&&!['complete','failed','cancelled','interrupted'].includes(progress.phase));
   useEffect(()=>{
     if(!running||!progress)return;

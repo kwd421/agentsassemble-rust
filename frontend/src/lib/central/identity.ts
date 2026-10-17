@@ -334,8 +334,13 @@ export async function logoutCentral(): Promise<void> {
   if (session) {
     try {
       await signedRequest(session, "/v1/logout", "POST");
-    } catch (error) {
-      if (!(error instanceof CentralAuthError) || error.code !== "invalid_session") throw error;
+    } catch {
+      // Best-effort server revoke: a refused (quota, 429, 5xx), offline,
+      // or governor-blocked revoke must never keep the user logged in.
+      // The governor throws before any fetch while blocked, so nothing is
+      // sent then. An unrevoked token simply expires server-side at the
+      // session's expires_at, which the client already enforces locally.
+      // Never retried: logout completes locally exactly once.
     }
   }
   clearCentralSession();

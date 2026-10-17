@@ -390,3 +390,24 @@ it.each(["resolve", "reject"])("ignores A's late %s after B logs in during delet
   expect(await screen.findByRole("heading", { name: "탈퇴했어요" })).toBeTruthy();
   expect(writes).toEqual([session.person.person_id, other.person.person_id]); expect(unsignedPost).not.toHaveBeenCalled();
 });
+
+it("shows the quota-owned line once when a pressed deletion is refused by the daily block", async () => {
+  const user = userEvent.setup();
+  const { CentralThrottledError, centralDailyQuotaActionNotice, noteCentralDailyQuotaExhausted, resetCentralRequestGovernorForTests } =
+    await import("../../lib/central/centralRequestGovernor");
+  resetCentralRequestGovernorForTests();
+  noteCentralDailyQuotaExhausted("person");
+  // The governor blocks the proof call before any fetch: the pressed
+  // action reports the quota-owned reset-time line, one line only.
+  vi.mocked(signedRequest).mockRejectedValueOnce(new CentralThrottledError("governor", 3_600_000, "other"));
+  try {
+    render(<AccountDeletionFlow disabled={false} />);
+    await user.type(screen.getByLabelText("복구 코드"), "fixture-input");
+    await user.click(screen.getByRole("button", { name: "복구 코드로 확인하고 탈퇴" }));
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].textContent).toBe(centralDailyQuotaActionNotice("person"));
+  } finally {
+    resetCentralRequestGovernorForTests();
+  }
+});

@@ -32,7 +32,7 @@ it("clears only the signed-out account's member anchors", async () => {
   expect(loadMemberAnchors("person-b")).toEqual([]);
 });
 
-it("keeps a failed logout retryable and persists logout only after a signed revocation", async () => {
+it("clears the local session even when the server revoke cannot be sent, without retrying it", async () => {
   vi.resetModules();
   vi.stubEnv("VITE_AGENTSASSEMBLE_CENTRAL_URL", "https://central.example.test");
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
@@ -46,16 +46,47 @@ it("keeps a failed logout retryable and persists logout only after a signed revo
   } });
   const fetcher = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(Response.json({ ok: true }));
   vi.stubGlobal("fetch", fetcher);
+  const { saveMemberAnchor, loadMemberAnchors } = await import("./memberAnchors");
+  saveMemberAnchor("fixture-person", anchorFor("server-a"));
   localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({ token: "fixture-session", expires_at: 9_999_999_999, device_id: device.deviceId, person: { person_id: "fixture-person", identity_kind: "google", display_name: "Name" } }));
   const { logoutCentral, loadCentralSession, centralSessionLoggedOut } = await import("./identity");
-  await expect(logoutCentral()).rejects.toThrow("offline");
-  expect(loadCentralSession()?.token).toBe("fixture-session");
-  expect(centralSessionLoggedOut()).toBe(false);
+  // An unsent revoke never keeps the user logged in: logout resolves and
+  // the local session (plus that account's anchors) is gone. The unrevoked
+  // server-side session simply expires at expires_at; nothing is retried.
   await logoutCentral();
-  expect(fetcher.mock.calls[1][0]).toMatch(/\/v1\/logout$/);
-  expect(fetcher.mock.calls[1][1].headers["x-aa-signature"]).toBeTruthy();
+  expect(fetcher).toHaveBeenCalledOnce();
   expect(loadCentralSession()).toBeNull();
   expect(centralSessionLoggedOut()).toBe(true);
+  expect(loadMemberAnchors("fixture-person")).toEqual([]);
+  await logoutCentral();
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(loadCentralSession()).toBeNull();
+  expect(centralSessionLoggedOut()).toBe(true);
+});
+
+it("quota-blocked session revokes nothing over the network yet logs out locally", async () => {
+  vi.resetModules();
+  vi.stubEnv("VITE_AGENTSASSEMBLE_CENTRAL_URL", "https://central.example.test");
+  const fetcher = vi.fn(async () => Response.json({ ok: true }));
+  vi.stubGlobal("fetch", fetcher);
+  const { noteCentralDailyQuotaExhausted, resetCentralRequestGovernorForTests } =
+    await import("./centralRequestGovernor");
+  resetCentralRequestGovernorForTests();
+  const { saveMemberAnchor, loadMemberAnchors } = await import("./memberAnchors");
+  saveMemberAnchor("fixture-person", anchorFor("server-a"));
+  saveMemberAnchor("other-person", anchorFor("server-b"));
+  localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({ token: "fixture-session", expires_at: 9_999_999_999, device_id: "fixture-device", person: { person_id: "fixture-person", identity_kind: "google", display_name: "Name" } }));
+  // The governor parks every central request until 00:00 UTC once the
+  // daily allowance is spent; the logout revoke stays unsent.
+  noteCentralDailyQuotaExhausted("fixture-person");
+  const { logoutCentral, loadCentralSession, centralSessionLoggedOut } = await import("./identity");
+  await logoutCentral();
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(loadCentralSession()).toBeNull();
+  expect(centralSessionLoggedOut()).toBe(true);
+  expect(loadMemberAnchors("fixture-person")).toEqual([]);
+  expect(loadMemberAnchors("other-person")).toHaveLength(1);
+  resetCentralRequestGovernorForTests();
 });
 
 it.each(["logged-out", "expired-session"])("replaces a %s account slot only after storage commits and keeps the new slot on retry", async (state) => {

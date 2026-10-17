@@ -2,6 +2,7 @@ import { AccountDeletionContext } from "./AccountDeletionContext";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AccountDeletion, checkDeletionReceipt, clearExpiredDeletionReceipt, loadDeletionReceipt } from "../../lib/central/accountDeletion";
+import { centralDailyQuotaActionNotice } from "../../lib/central/centralRequestGovernor";
 import { confirmDeletionGoogle } from "../../lib/central/accountDeletionGoogle";
 import { CENTRAL_SESSION_CLEARED_EVENT, CENTRAL_SESSION_CHANGED_EVENT, loadCentralSession } from "../../lib/central/identity";
 import ParticipantAvatarContent from "./ParticipantAvatarContent";
@@ -93,6 +94,12 @@ export function AccountDeletionFlow({ disabled, onClose, onDeleted }: { disabled
     } catch (reason) {
       if (!ownsUi()) return;
       try { setRetainedReceipt(loadDeletionReceipt()); } catch { /* The original storage/parse failure stays visible below. */ }
+      // A pressed central action refused by the daily block names the
+      // quota-owned reset-time line (one line), never the generic
+      // governor line.
+      const quotaNotice = centralDailyQuotaActionNotice(
+        loadCentralSession()?.person.person_id ?? operation.current?.session.person.person_id ?? retainedReceipt?.person_id ?? "");
+      if (quotaNotice) { setError(quotaNotice); return; }
       const message = reason instanceof Error ? reason.message : "";
       setError(/[가-힣]/.test(message) ? message : "완료를 확인하지 못했어요. 다시 시도해 주세요.");
     } finally { finishing.current = false; busyRef.current = false; setBusy(false); setChecking(false); update(); }

@@ -3745,6 +3745,45 @@ holdback), `frontend/src/lib/central/centralRequestGovernor.ts`
 (`centralDailyQuotaActionNotice`), `frontend/src/lib/central/
 identity.ts` (quota-refusal error message).
 
+#### Quota-blocked logout always succeeds locally (2026-10-17)
+
+User request (real desktop app, signed debug build): with the account's
+daily central allowance spent (`actor_quota_exhausted`, governor parks
+every central request until 00:00 UTC), 설정 → 계정 → 로그아웃 did
+nothing except show the generic governor line under the button; the user
+stayed logged in and could not switch accounts. The same generic line
+also appeared under 계정 탈퇴 and under the account section before
+anything was pressed.
+
+Required:
+
+- Logout always succeeds locally through the existing logout owner
+  (`logoutCentral` → `clearCentralSession`): clear this device's central
+  session, the signed-out account's member anchors and directory cache,
+  the pending recovery code and the logged-out marker, and return to the
+  sign-in state — even when the central session-revoke call
+  (`POST /v1/logout`) is refused (quota, 429, 5xx), fails offline, or is
+  blocked locally by the governor. A revoke that could not be sent is
+  never retried in a loop; the unrevoked server-side session simply
+  expires at the session's `expires_at` (the client already drops expired
+  sessions locally at the same timestamp). Never leave the user logged in
+  because central said no. The web startup gate shares the same
+  `logoutCentral` owner, so the same rule applies there.
+- While the daily quota block is active, the account settings show no
+  generic governor line. Mount-time central reads (server backup card)
+  show nothing while blocked; only an explicit user action that needs
+  central (account deletion) shows the quota line already owned by
+  `centralDailyQuotaNotice`/`centralDailyQuotaActionNotice`, one Korean
+  해요체 line, no English/jargon.
+
+Entry points: `frontend/src/lib/central/identity.ts` (`logoutCentral`,
+best-effort revoke), `frontend/src/views/components/
+CentralAccountSettings.tsx` (logout error path),
+`frontend/src/views/components/ServerBackupCard.tsx` (mount-time error
+suppression), `frontend/src/views/components/AccountDeletionSettings.tsx`
+(quota-owned action error), `frontend/src/views/components/
+StartupIdentityGate.tsx` (shared web logout path).
+
 ### Rail shows each joined room once (2026-10-17)
 
 Real-app failure (debug macOS build): after restart the rail showed the
