@@ -450,7 +450,60 @@ describe("useMemberHosts", () => {
     await waitFor(() => expect(result.current.snapshots).toEqual([]), { timeout: 5000 });
   });
 
-  it("confirms a member removal only from a live host that lists without the room", () => {    const room = { roomOrigin: "remote_server" as const, serverId: "friend", meetingId: "general" };
+  it("attaches a previously joined host on sign-in without manual retry", async () => {
+    saveMemberAnchor("person", {
+      server_id: "friend", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://friend.test", endpoint_generation: 2,
+      rooms: [{ room_id: "general", name: "일반" }], hidden: false, updated_at: 1,
+    });
+    attach.mockImplementation(async () => ({
+      admission: admissionFor([{ room_id: "general", name: "일반" }]),
+      rooms: [{ room_id: "general", name: "일반" }],
+      anchor: { server_id: "friend", registration_epoch: "epoch" },
+    }));
+    const { result, rerender } = renderHook(
+      ({ personId, sessionToken, directory }: {
+        personId: string; sessionToken: string; directory: CentralDirectoryState | null;
+      }) => useMemberHosts({ personId, sessionToken, directory }),
+      { initialProps: { personId: "", sessionToken: "", directory: null as CentralDirectoryState | null } },
+    );
+    // Signed-out shell: no anchor read, no attach attempt.
+    expect(result.current.snapshots).toEqual([]);
+    expect(attach).not.toHaveBeenCalled();
+    // Sign in as the account that previously joined the friend room: the
+    // session/directory change alone drives the attach, no retryHost call.
+    rerender({ personId: "person", sessionToken: "token", directory: directoryFor([liveServer()]) });
+    await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("connected"), { timeout: 5000 });
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(result.current.hostDirs[0]).toMatchObject({ serverId: "friend", state: "connected" });
+  });
+
+  it("re-attaches on its own after a transient failure without manual retry", async () => {
+    saveMemberAnchor("person", {
+      server_id: "friend", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://friend.test", endpoint_generation: 2,
+      rooms: [{ room_id: "general", name: "일반" }], hidden: false, updated_at: 1,
+    });
+    attach.mockRejectedValueOnce(new Error("참가 서버의 응답이 없어요. 다시 시도해 주세요."));
+    attach.mockImplementation(async () => ({
+      admission: admissionFor([{ room_id: "general", name: "일반" }]),
+      rooms: [{ room_id: "general", name: "일반" }],
+      anchor: { server_id: "friend", registration_epoch: "epoch" },
+    }));
+    const { result } = renderHook(() => useMemberHosts({
+      personId: "person", sessionToken: "token", directory: directoryFor([liveServer()]),
+    }));
+    // The first automatic attempt fails: the room reads disconnected with
+    // its last-known rooms and a scheduled re-attach parks behind it.
+    await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("disconnected"), { timeout: 5000 });
+    // The per-host backoff re-attaches on its own within a few seconds when
+    // the host is up — no explicit retry needed.
+    await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("connected"), { timeout: 5000 });
+    expect(attach).toHaveBeenCalledTimes(2);
+  });
+
+  it("confirms a member removal only from a live host that lists without the room", () => {
+    const room = { roomOrigin: "remote_server" as const, serverId: "friend", meetingId: "general" };
     const snapshot = (phase: "connecting" | "connected" | "disconnected", rooms: { room_id: string; name: string }[] | null) =>
       ({ serverId: "friend", phase, origin: "https://friend.test", rooms, detail: null });
     // A live host that lists its rooms without this one removed it: fall back.
