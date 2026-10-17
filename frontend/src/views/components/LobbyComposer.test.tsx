@@ -423,7 +423,7 @@ describe("LobbyComposer", () => {
     expect(screen.queryByText("map.png")).toBeNull();
   });
 
-  it("shows a picked mention by its readable name but sends the wire markup", async () => {
+  it("binds a picked mention to the participant id and sends it unchanged", async () => {
     const say = vi.fn().mockResolvedValue({ events: [] });
     const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
     render(
@@ -437,8 +437,9 @@ describe("LobbyComposer", () => {
     input.selectionStart = input.value.length;
     fireEvent.keyUp(input);
     fireEvent.click(await screen.findByRole("option", { name: "claude-haiku-5-5" }));
-    expect(input.value).toBe("@claude-haiku-5-5 ");
-    expect(input.value).not.toContain("opencode-87a106c9-test");
+    // The pick carries the participant id through send, so a duplicate or
+    // normalized-equal display name never resolves to another participant.
+    expect(input.value).toBe("<@opencode-87a106c9-test> ");
     fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
     await waitFor(() => expect(say).toHaveBeenCalledTimes(1));
     expect(say).toHaveBeenCalledWith(expect.objectContaining({ message: "<@opencode-87a106c9-test>" }));
