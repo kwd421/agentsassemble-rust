@@ -11,6 +11,12 @@ const RATE_LIMIT_MAX_MS = 600_000;
 
 import { CentralTemporaryError } from "./connectionError";
 
+// Single copy owner for the user-facing governor-throttle notice: one
+// plain Korean line with no internal jargon ("중앙"). Every
+// CentralThrottledError message and the `central_throttled` entry in the
+// apiErrors Korean map use this.
+export const CENTRAL_THROTTLED_NOTICE = "잠시 후 다시 연결해 볼게요.";
+
 export class CentralThrottledError extends CentralTemporaryError {
   readonly throttled = true as const;
   readonly status = 429 as const;
@@ -145,7 +151,7 @@ export function acquireCentralPermit(path: string, accountId: string): void {
   const quotaWait = centralDailyQuotaWaitMs(account, now);
   if (quotaWait > 0) {
     throw new CentralThrottledError(
-      "중앙 요청이 잠시 멈췄어요. 잠시 후 다시 시도해 주세요.",
+      CENTRAL_THROTTLED_NOTICE,
       quotaWait,
       parsed.family,
     );
@@ -155,7 +161,7 @@ export function acquireCentralPermit(path: string, accountId: string): void {
   const blocked = blockedUntilByKey.get(key) ?? 0;
   if (now < blocked) {
     throw new CentralThrottledError(
-      "중앙 요청이 잠시 멈췄어요. 잠시 후 다시 시도해 주세요.",
+      CENTRAL_THROTTLED_NOTICE,
       blocked - now,
       parsed.family,
     );
@@ -163,7 +169,7 @@ export function acquireCentralPermit(path: string, accountId: string): void {
   const globalBlocked = blockedUntilByKey.get(globalBlockKey) ?? 0;
   if (now < globalBlocked) {
     throw new CentralThrottledError(
-      "중앙 요청이 잠시 멈췄어요. 잠시 후 다시 시도해 주세요.",
+      CENTRAL_THROTTLED_NOTICE,
       globalBlocked - now,
       parsed.family,
     );
@@ -174,7 +180,7 @@ export function acquireCentralPermit(path: string, accountId: string): void {
     previewTimesByAccountHost.set(previewKey, times);
     if (times.length >= MEMBER_PREVIEW_PER_HOST_PER_10MIN) {
       throw new CentralThrottledError(
-        "중앙 요청이 잠시 멈췄어요. 잠시 후 다시 시도해 주세요.",
+        CENTRAL_THROTTLED_NOTICE,
         Math.max(1_000, times[0] + MEMBER_PREVIEW_WINDOW_MS - now),
         parsed.family,
       );
@@ -184,7 +190,7 @@ export function acquireCentralPermit(path: string, accountId: string): void {
   requestTimesByAccount.set(account, globalTimes);
   if (globalTimes.length >= CENTRAL_REQUESTS_PER_MIN) {
     throw new CentralThrottledError(
-      "중앙 요청이 잠시 멈췄어요. 잠시 후 다시 시도해 주세요.",
+      CENTRAL_THROTTLED_NOTICE,
       Math.max(1_000, globalTimes[0] + CENTRAL_WINDOW_MS - now),
       parsed.family,
     );

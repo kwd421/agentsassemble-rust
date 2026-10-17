@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { userFacingError } from "../apiErrors";
 import {
   CENTRAL_REQUESTS_PER_MIN,
+  CENTRAL_THROTTLED_NOTICE,
   MEMBER_PREVIEW_PER_HOST_PER_10MIN,
+  CentralThrottledError,
   acquireCentralPermit,
   centralDailyQuotaActionNotice,
   centralDailyQuotaNotice,
@@ -152,6 +155,63 @@ describe("centralRequestGovernor", () => {
       expect(centralDailyQuotaResetAtMs("person")).toBeNull();
       expect(centralDailyQuotaNotice("person")).toBeNull();
       expect(centralDailyQuotaActionNotice("person")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows one plain Korean line with no 중앙 for every throttle block", () => {
+    vi.useFakeTimers();
+    try {
+      const notices: string[] = [];
+      // Daily quota block.
+      noteCentralDailyQuotaExhausted("quota-person", Date.now(), 0);
+      try {
+        acquireCentralPermit("/v1/bootstrap", "quota-person");
+        expect.unreachable();
+      } catch (error) {
+        notices.push((error as Error).message);
+      }
+      // Server 429 family + global block.
+      acquireCentralPermit("/v1/bootstrap", "b429");
+      noteCentral429("/v1/bootstrap", "b429", 60_000);
+      try {
+        acquireCentralPermit("/v1/bootstrap", "b429");
+        expect.unreachable();
+      } catch (error) {
+        notices.push((error as Error).message);
+      }
+      // Member-preview per-host cap.
+      const preview = "/v1/servers/friend/member-preview";
+      for (let i = 0; i < MEMBER_PREVIEW_PER_HOST_PER_10MIN; i += 1) {
+        acquireCentralPermit(preview, "preview-person");
+        vi.advanceTimersByTime(61_000);
+      }
+      try {
+        acquireCentralPermit(preview, "preview-person");
+        expect.unreachable();
+      } catch (error) {
+        notices.push((error as Error).message);
+      }
+      // Per-minute total cap.
+      for (let i = 0; i < CENTRAL_REQUESTS_PER_MIN; i += 1) {
+        acquireCentralPermit(`/v1/other/${i}`, "minute-person");
+      }
+      try {
+        acquireCentralPermit("/v1/bootstrap", "minute-person");
+        expect.unreachable();
+      } catch (error) {
+        notices.push((error as Error).message);
+      }
+      expect(notices).toHaveLength(4);
+      for (const notice of notices) {
+        expect(notice).toBe(CENTRAL_THROTTLED_NOTICE);
+        expect(notice).not.toContain("중앙");
+        expect(notice.trim().split("\n")).toHaveLength(1);
+      }
+      // The single-owner Korean map resolves the throttle code to the same line.
+      expect(userFacingError(new CentralThrottledError("governor", 60_000, "other"), "다시 시도해 주세요."))
+        .toBe(CENTRAL_THROTTLED_NOTICE);
     } finally {
       vi.useRealTimers();
     }

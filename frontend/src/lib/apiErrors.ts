@@ -1,3 +1,5 @@
+import { CENTRAL_THROTTLED_NOTICE } from "./central/centralRequestGovernor";
+
 export const MEMBER_SESSION_ENDED_MESSAGE =
   "이 방의 접속이 해제됐어요. 다시 참가하려면 방장에게 문의해 주세요.";
 
@@ -33,7 +35,7 @@ const KNOWN_ERROR_KOREAN: Record<string, string> = {
   server_retirement_capacity: "잠시 후 다시 시도해 주세요.",
   actor_quota_exhausted: "오늘 요청 한도를 다 썼어요. 잠시 후 다시 시도해 주세요.",
   temporary_capacity_exhausted: "오늘 요청 한도를 다 썼어요. 잠시 후 다시 시도해 주세요.",
-  central_throttled: "중앙 요청이 잠시 멈췄어요. 잠시 후 다시 시도해 주세요.",
+  central_throttled: CENTRAL_THROTTLED_NOTICE,
   room_attachment_quota_reached: "이 방의 저장 공간이 가득 찼어요.",
   attachment_quota_reached: "이 방의 저장 공간이 가득 찼어요.",
   attachment_type_unsupported: "올릴 수 없는 파일 형식이에요.",
