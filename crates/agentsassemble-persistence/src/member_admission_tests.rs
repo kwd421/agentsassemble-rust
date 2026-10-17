@@ -481,8 +481,8 @@ async fn join_and_connect_restore_expired_live_roster_with_canonical_event() -> 
             .await?;
         let authority = crate::RoomMutationAuthority::TrustedPrincipal(&host);
         let before = store.snapshot_for(authority, 0, 200).await?;
-        // Joined membership outlives presence: an expired session keeps the
-        // member listed (offline section) until leave/kick.
+        // Account-bound membership outlives presence: an expired session keeps
+        // the member listed (offline section) until leave/kick.
         assert!(
             before
                 .participants
@@ -521,6 +521,47 @@ async fn join_and_connect_restore_expired_live_roster_with_canonical_event() -> 
         assert!(event.seq > before.last_seq);
         assert!(after.events.iter().any(|stored| stored == event));
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn kicked_account_member_leaves_live_roster() -> TestResult {
+    use agentsassemble_domain::{AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope};
+    let host = AuthenticatedPrincipal {
+        principal_id: "operator-local-user".into(),
+        participant_id: "operator-local".into(),
+        display_name: "Host".into(),
+        room_id: "general".into(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 1, now).await;
+    let first = admitted(store.admit_human(&member(2, 3, "Hihi"), now).await?);
+    let authority = crate::RoomMutationAuthority::TrustedPrincipal(&host);
+    assert!(
+        store
+            .snapshot_for(authority, 0, 200)
+            .await?
+            .participants
+            .iter()
+            .any(|p| p.participant_id == first.result().agent_id)
+    );
+    sqlx::query("UPDATE participants SET participant_json = json_set(participant_json, '$.status', 'kicked') WHERE participant_id = ?")
+        .bind(&first.result().agent_id)
+        .execute(&store.pool)
+        .await?;
+    assert!(
+        store
+            .snapshot_for(authority, 0, 200)
+            .await?
+            .participants
+            .iter()
+            .all(|p| p.participant_id != first.result().agent_id)
+    );
     Ok(())
 }
 
