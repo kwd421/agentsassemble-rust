@@ -12,6 +12,11 @@ export default function GuestRecoverySettings({
   const [recoveryUrl, setRecoveryUrl] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [copiedLabel, setCopiedLabel] = useState("");
+  const copiedTimer = useRef<number | undefined>(undefined);
+  useLayoutEffect(() => () => {
+    if (copiedTimer.current !== undefined) window.clearTimeout(copiedTimer.current);
+  }, []);
 
   const generation = useRef(0);
   const inFlight = useRef(false);
@@ -22,6 +27,7 @@ export default function GuestRecoverySettings({
     setRecoveryUrl("");
     setStatus("");
     setBusy(false);
+    setCopiedLabel("");
     return () => { generation.current += 1; };
   }, [identity.sessionToken, identity.deviceToken]);
 
@@ -41,7 +47,9 @@ export default function GuestRecoverySettings({
       if (scope !== generation.current) return;
       setCode(result.recovery_code);
       setRecoveryUrl(result.recovery_url);
-      setStatus("새 코드를 만들었어요. 이전 코드는 더 이상 사용할 수 없어요.");
+      // The new code fields are the only feedback; the warning above already
+      // says the old code stops working.
+      setStatus("");
     } catch (error) {
       if (scope !== generation.current) return;
       setStatus(error instanceof Error ? error.message : "복구 코드를 만들지 못했어요.");
@@ -58,7 +66,11 @@ export default function GuestRecoverySettings({
     try {
       await navigator.clipboard.writeText(value);
       if (scope !== generation.current) return;
-      setStatus(`${label}를 복사했어요.`);
+      setCopiedLabel(label);
+      if (copiedTimer.current !== undefined) window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => {
+        if (scope === generation.current) setCopiedLabel("");
+      }, 2000);
     } catch {
       if (scope !== generation.current) return;
       setStatus("값을 직접 선택해 복사해 주세요.");
@@ -87,14 +99,15 @@ export default function GuestRecoverySettings({
             일회용 복구 코드
             <span>
               <input style={{ minHeight: 44 }} value={code} readOnly spellCheck={false} />
-              <button style={{ minWidth: 44, minHeight: 44 }} type="button" aria-label="복구 코드 복사" onClick={() => void copy(code, "복구 코드")}>
+              <button style={{ minWidth: 44, minHeight: 44 }} type="button" aria-label={copiedLabel === "복구 코드" ? "복구 코드 복사됨" : "복구 코드 복사"} onClick={() => void copy(code, "복구 코드")}>
                 <Copy size={16} />
+                {copiedLabel === "복구 코드" ? "복사됨" : null}
               </button>
             </span>
           </label>
           <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => void copy(recoveryUrl, "복구 링크")}>
             <Link2 size={16} />
-            복구 링크 복사
+            {copiedLabel === "복구 링크" ? "복사됨" : "복구 링크 복사"}
           </button>
         </div>
       )}

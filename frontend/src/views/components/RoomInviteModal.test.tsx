@@ -1,5 +1,5 @@
 import "../../test/nativeDialog";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import type { OperatorPairingPresentation } from "../../app/useManagedOperatorPairings";
@@ -32,6 +32,7 @@ function renderInviteModal({
   humanInvites = [],
   pairingAvailable = false,
   operatorPairings = [],
+  copyStatus,
 }: {
   lastError?: string;
   publicAccess?: boolean;
@@ -42,6 +43,7 @@ function renderInviteModal({
   humanInvites?: HumanInvitePresentation[];
   pairingAvailable?: boolean;
   operatorPairings?: OperatorPairingPresentation[];
+  copyStatus?: string;
 } = {}) {
   const retry = vi.fn();
   const onGenerateSecureInvite = vi.fn();
@@ -80,6 +82,7 @@ function renderInviteModal({
       onRevokeHumanInvite={onRevokeHumanInvite}
       onStartTunnel={vi.fn()}
       onStopTunnel={onStopTunnel}
+      copyStatus={copyStatus}
     />
   );
   return {
@@ -265,6 +268,45 @@ it.each(["unknown", "revoking", "revoked"] as const)("hides a QR in %s state", s
   renderInviteModal({ pairingAvailable: true, operatorPairings: [{ key: "qr", expiresAt: "2099-01-01T00:00:00Z", state, copyable: false, expired: false, qrUrl: "https://host.example/pair?token=test" }] });
   fireEvent.click(screen.getByRole("tab", { name: "내 기기" }));
   expect(screen.queryByRole("img", { name: "기기 연결 1 QR 코드" })).toBeNull();
+});
+
+it("shows the copy button's own copied state and returns without a success box", async () => {
+  vi.useFakeTimers();
+  try {
+    const invite: HumanInvitePresentation = {
+      key: "current",
+      displayName: "Guest",
+      maxUses: 1,
+      ttlSeconds: 86400,
+      expiresAt: "2026-08-29T00:00:00+00:00",
+      expired: false,
+      retired: false,
+      originCurrent: true,
+      authorityCurrent: true,
+      revocation: "idle",
+      copyUrl: "https://room.example.com/join?token=aaj1_current",
+    };
+    const { onCopyHumanInvite } = renderInviteModal({ humanInvites: [invite] });
+    onCopyHumanInvite.mockResolvedValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "사람 초대 1 링크 복사" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByRole("button", { name: "사람 초대 1 링크 복사됨" })).toBeTruthy();
+    // No success box appears for the routine copy.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/복사됐|만들었어요|공개됐어요|닫았어요/)).toBeNull();
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(screen.getByRole("button", { name: "사람 초대 1 링크 복사" })).toBeTruthy();
+    expect(onCopyHumanInvite).toHaveBeenCalledWith("current");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("renders an error status without any success styling", () => {
+  renderInviteModal({ copyStatus: "보안 초대 링크 복사 실패" });
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toBe("보안 초대 링크 복사 실패");
+  expect(alert.className).not.toContain("success");
 });
 
 it("shows safe external-access failure copy", () => {

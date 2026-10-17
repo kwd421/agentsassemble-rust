@@ -87,11 +87,7 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
       setRecords((prior) => [...prior, record]);
       assertCurrent();
       if (record.origin !== inviteOrigin) throw new Error("초대 주소가 변경됐어요. 현재 주소를 확인한 뒤 복사해 주세요.");
-      publishStatus(friendId
-        ? "AI 친구 초대를 만들었어요. 참가 안내를 복사해 전달해 주세요."
-        : reach === "local"
-          ? "이 컴퓨터 전용 AI 초대를 만들었어요. 참가 안내를 복사해 이 컴퓨터의 AI 앱 대화에 붙여넣어 주세요."
-          : "AI 초대를 만들었어요. 참가 안내를 복사해 AI 앱 대화에 붙여넣어 주세요.");
+      // The new invite row is the only feedback; no success box.
     } catch (error) {
       if (active.current && (!proof || proof.isCurrent())) publishStatus(error instanceof Error ? error.message : "AI 초대를 만들지 못했어요. 다시 시도해 주세요.");
     } finally {
@@ -99,9 +95,9 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
       if (active.current) setCreating(false);
     }
   }
-  async function copy(key: string) {
+  async function copy(key: string): Promise<boolean> {
     const record = records.find((record) => record.result.invite_id === key);
-    if (!record || !copyable(record, { publicOrigin, localOrigin }, Date.now())) return;
+    if (!record || !copyable(record, { publicOrigin, localOrigin }, Date.now())) return false;
     const refresh = captureOriginRefresh();
     let proof: OriginProof | null = null;
     try {
@@ -115,9 +111,12 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
         }
         assertCurrent(); return assertCurrent;
       });
-      if (active.current && proof !== null && (proof as OriginProof).isCurrent()) publishStatus(copied ? "참가 안내를 복사했어요." : "초대 내용을 복사하지 못했어요.");
+      // Success shows only as the copy button's own "복사됨" state; publish failures.
+      if (active.current && proof !== null && (proof as OriginProof).isCurrent() && !copied) publishStatus("초대 내용을 복사하지 못했어요.");
+      return copied;
     } catch (error) {
       if (active.current) publishStatus(error instanceof Error ? error.message : "링크를 복사하지 못했어요.");
+      return false;
     }
   }
   const origins = { publicOrigin, localOrigin };

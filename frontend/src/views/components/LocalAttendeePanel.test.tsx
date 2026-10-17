@@ -55,7 +55,9 @@ it.each([false, true])("offers only supported companion permissions after catalo
   render(<LocalAttendeePanel />);
   await chooseDraft();
   await userEvent.click(screen.getByRole("button", { name: "AI 다시 확인" }));
-  await screen.findByText("모델 목록을 새로고침했어요.");
+  await waitFor(() => expect(refreshLocalProviderCatalog).toHaveBeenCalled());
+  // A manual refresh shows nothing beyond the refreshed catalog: no success box.
+  expect(screen.queryByText("모델 목록을 새로고침했어요.")).toBeNull();
   const control = screen.getByRole("combobox", { name: "권한" });
   expect(control.textContent).toContain("대화 전용");
   if (fullAccess) {
@@ -292,6 +294,7 @@ it("preserves the handoff name and local edits through catalog refresh", async (
   await waitFor(() => expect(name.value).toBe("Browser draft"));
   fireEvent.change(name, { target: { value: "Local draft" } });
   await userEvent.click(screen.getByRole("button", { name: "AI 다시 확인" }));
-  await screen.findByText("모델 목록을 새로고침했어요.");
+  await waitFor(() => expect(refreshLocalProviderCatalog).toHaveBeenCalled());
+  expect(screen.queryByText("모델 목록을 새로고침했어요.")).toBeNull();
   expect(name.value).toBe("Local draft");
 });

@@ -286,7 +286,8 @@ export default function AgentSessionDetails({
     try {
       if (settings.permission_mode === "full_access") await onConfigure(session, settings, true);
       else await onConfigure(session, settings);
-      setActionStatus("실행 설정을 저장했어요. 다음 시작부터 적용돼요.");
+      // The saved form state is the only feedback; no success box.
+      setActionStatus("");
     } catch (error) {
       setActionStatus(error instanceof Error ? error.message : "실행 설정을 저장하지 못했어요.");
     } finally {

@@ -247,9 +247,9 @@ export function useManagedHumanInvites({
     }
   }
 
-  async function copy(key: string) {
+  async function copy(key: string): Promise<boolean> {
     const record = recordsRef.current.find((candidate) => candidate.key === key);
-    if (!record) return;
+    if (!record) return false;
     const presentation = presentHumanInvite(
       record,
       resolveExactAuthority(record.roomDockId),
@@ -258,7 +258,7 @@ export function useManagedHumanInvites({
     );
     if (!presentation.copyUrl) {
       publishStatus("현재 확인된 활성 사람 초대만 복사할 수 있어요.");
-      return;
+      return false;
     }
     const refreshCurrentPublicOrigin = captureCurrentPublicOriginRefresh();
     let latestProof: HumanInviteOriginProof | null = null;
@@ -270,16 +270,19 @@ export function useManagedHumanInvites({
         latestProof = proof;
         return () => assertCopyEligible(record, proof);
       });
-      if (!latestProof) return;
+      if (!latestProof) return false;
       assertCopyEligible(record, latestProof);
-      publishStatus(copied ? "보안 초대 링크 복사됨" : "보안 초대 링크 복사 실패");
+      // Success shows only as the copy button's own "복사됨" state; publish failures.
+      if (!copied) publishStatus("보안 초대 링크 복사 실패");
+      return copied;
     } catch (error) {
-      if (error === COPY_NO_LONGER_ELIGIBLE) return;
+      if (error === COPY_NO_LONGER_ELIGIBLE) return false;
       publishStatus(
         error instanceof Error
           ? error.message
           : "현재 공개 초대 상태를 확인하지 못했어요."
       );
+      return false;
     }
   }
 
@@ -310,7 +313,7 @@ export function useManagedHumanInvites({
           : candidate
       )
     );
-    publishStatus("사람 초대 폐기 중...");
+    // The row button already shows "폐기 중"; no status box.
     try {
       const result = await revokeManagedHumanInvite(record.custody, () => {
         if (!revokeAttemptIsCurrent(key, generation)) {
@@ -323,11 +326,8 @@ export function useManagedHumanInvites({
           candidate.key === key ? { ...candidate, revocation: "dead" } : candidate
         )
       );
-      publishStatus(
-        result === "invite_not_found"
-          ? "사람 초대가 이미 폐기됐어요."
-          : "사람 초대를 폐기했어요."
-      );
+      // The row already shows "폐기됨"; no success box.
+      void result;
     } catch (error) {
       if (!revokeAttemptIsCurrent(key, generation)) return;
       const nextState: HumanInviteRevocationState =

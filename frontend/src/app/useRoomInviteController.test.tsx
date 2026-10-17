@@ -376,7 +376,7 @@ describe("useRoomInviteController", () => {
       configurable: true,
       value: execCommand,
     });
-    let copy!: Promise<void>;
+    let copy!: Promise<boolean>;
     let revoke!: Promise<void>;
 
     try {
@@ -397,7 +397,8 @@ describe("useRoomInviteController", () => {
       });
 
       expect(execCommand).not.toHaveBeenCalled();
-      expect(hook.result.current.copyStatus).toBe("사람 초대 폐기 중...");
+      // Revoking shows nothing beyond the row button: no success or progress box.
+      expect(hook.result.current.copyStatus).toBe("");
       await act(async () => {
         revokeResult.resolve("revoked");
         await revoke;
@@ -438,7 +439,7 @@ describe("useRoomInviteController", () => {
       configurable: true,
       value: execCommand,
     });
-    let copy!: Promise<void>;
+    let copy!: Promise<boolean>;
 
     try {
       const statusFetchesBeforeCopy = apiMocks.fetchPublicInviteStatus.mock.calls.length;
@@ -521,7 +522,7 @@ describe("useRoomInviteController", () => {
     timerSpy.mockRestore();
   });
 
-  it("publishes the exact stopped status returned by the operator route", async () => {
+  it("returns the stopped status without a success box", async () => {
     apiMocks.stopPublicInviteTunnel.mockResolvedValue(stoppedStatus);
     const hook = renderInviteController();
 
@@ -532,7 +533,8 @@ describe("useRoomInviteController", () => {
     expect(hook.result.current.publicAccessTransition).toBe("idle");
     expect(hook.result.current.publicInviteStatus?.public_url).toBe("");
     expect(apiMocks.fetchPublicInviteStatus).not.toHaveBeenCalled();
-    expect(hook.result.current.copyStatus).toContain("이 컴퓨터에서 계속 작동");
+    // Stopping shows nothing beyond the hosting footer ("외부 접속 꺼짐"): no success box.
+    expect(hook.result.current.copyStatus).toBe("");
   });
 
   it("retires readiness polling when Stop supersedes Start", async () => {
@@ -565,7 +567,8 @@ describe("useRoomInviteController", () => {
       expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalledTimes(1);
       expect(hook.result.current.publicInviteStatus).toEqual(stoppedStatus);
       expect(hook.result.current.publicAccessTransition).toBe("idle");
-      expect(hook.result.current.copyStatus).toContain("이 컴퓨터에서 계속 작동");
+      // Stopping shows nothing beyond the hosting footer ("외부 접속 꺼짐"): no success box.
+      expect(hook.result.current.copyStatus).toBe("");
     } finally {
       vi.useRealTimers();
     }

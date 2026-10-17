@@ -5,7 +5,7 @@ import { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import { AttendeeFriendInviteCard, type AttendeeInviteControls } from "./AttendeeFriendInviteCard";
 import { ConnectorInviteCard, type ConnectorInviteControls } from "./ConnectorInviteCard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Copy, Settings, X } from "lucide-react";
+import { Check, Copy, Settings, X } from "lucide-react";
 import type { PublicInviteStatus } from "../../api";
 import type {
   HumanInviteOptions,
@@ -84,7 +84,7 @@ export default function RoomInviteModal({
   operatorPairings?: readonly OperatorPairingPresentation[];
   pairingCreating?: boolean;
   onCreatePairing?: () => void;
-  onCopyPairing?: (key: string) => void;
+  onCopyPairing?: (key: string) => boolean | Promise<boolean> | void;
   onRevokePairing?: (key: string) => void;
   publicUrl?: string;
   publicAccessTransition?: PublicAccessTransition;
@@ -95,7 +95,7 @@ export default function RoomInviteModal({
   copyStatus?: string;
   onClose: () => void;
   onGenerateSecureInvite: (options: HumanInviteOptions, startTunnelIfNeeded: boolean) => void;
-  onCopyHumanInvite: (key: string) => void;
+  onCopyHumanInvite: (key: string) => boolean | Promise<boolean> | void;
   onRevokeHumanInvite: (key: string) => void;
   onStartTunnel: () => void;
   onStopTunnel: () => void;
@@ -114,6 +114,22 @@ export default function RoomInviteModal({
   const [linkSettingsOpen, setLinkSettingsOpen] = useState(false);
   const [pendingPublicAction, setPendingPublicAction] =
     useState<PendingPublicAction | null>(null);
+  // Copy feedback lives on the pressed button ("복사됨" for ~2 s), never in a box.
+  const [copiedKey, setCopiedKey] = useState("");
+  const copiedTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => {
+    if (copiedTimer.current !== undefined) window.clearTimeout(copiedTimer.current);
+  }, []);
+  function flashCopied(key: string) {
+    setCopiedKey(key);
+    if (copiedTimer.current !== undefined) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => setCopiedKey(""), 2000);
+  }
+  function handleCopy(key: string, copy: (key: string) => boolean | Promise<boolean> | void) {
+    void Promise.resolve(copy(key)).then((ok) => {
+      if (ok === true) flashCopied(key);
+    });
+  }
   const readOnlyInvite = inviteScope === "read_only";
   const currentHumanOptions = { maxUses: humanMaxUses, ttlSeconds: humanTtlSeconds, ...(friendDisplayName ? { displayName: friendDisplayName } : {}) };
   const selectedHumanInvite = humanInvites.find(
@@ -184,10 +200,13 @@ export default function RoomInviteModal({
           </button>
         </header>
 
-        {/* Results belong next to the header: the panel below scrolls away from them. */}
-        <p className="dc-invite-status" role="status" aria-live="polite" data-shown={Boolean(copyStatus)}>
-          {copyStatus}
-        </p>
+        {/* Errors only: success needs no box (the button shows "복사됨",
+            toggles show their own state, new links appear in the list). */}
+        {copyStatus && (
+          <p className="dc-invite-status" data-tone="error" role="alert" aria-live="polite">
+            {copyStatus}
+          </p>
+        )}
 
         {tabs.length > 1 && (
           <div className="dc-invite-tabs" role="tablist" aria-label="초대 종류">
@@ -230,11 +249,11 @@ export default function RoomInviteModal({
                   type="button"
                   className="dc-invite-copy-button"
                   style={{ minWidth: 44, minHeight: 44 }}
-                  aria-label="현재 사람 초대 링크 복사"
-                  onClick={() => onCopyHumanInvite(selectedHumanInvite.key)}
+                  aria-label={copiedKey === selectedHumanInvite.key ? "현재 사람 초대 링크 복사됨" : "현재 사람 초대 링크 복사"}
+                  onClick={() => handleCopy(selectedHumanInvite.key, onCopyHumanInvite)}
                 >
-                  <Copy size={15} />
-                  복사
+                  {copiedKey === selectedHumanInvite.key ? <Check size={15} /> : <Copy size={15} />}
+                  {copiedKey === selectedHumanInvite.key ? "복사됨" : "복사"}
                 </button>
               ) : (
                 <button
@@ -317,11 +336,11 @@ export default function RoomInviteModal({
                             type="button"
                             className="dc-invite-row-button"
                             style={{ minWidth: 44, minHeight: 44 }}
-                            aria-label={`사람 초대 ${index + 1} 링크 복사`}
+                            aria-label={`사람 초대 ${index + 1} 링크 ${copiedKey === invite.key ? "복사됨" : "복사"}`}
                             disabled={!invite.copyUrl}
-                            onClick={() => onCopyHumanInvite(invite.key)}
+                            onClick={() => handleCopy(invite.key, onCopyHumanInvite)}
                           >
-                            복사
+                            {copiedKey === invite.key ? "복사됨" : "복사"}
                           </button>
                           <button
                             type="button"
@@ -390,8 +409,8 @@ export default function RoomInviteModal({
                       )}
                       <button type="button" className="dc-invite-row-button"
                         style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
-                        aria-label={`기기 연결 ${index + 1} 링크 복사`}
-                        disabled={!pairing.copyable} onClick={() => onCopyPairing(pairing.key)}>복사</button>
+                        aria-label={`기기 연결 ${index + 1} 링크 ${copiedKey === pairing.key ? "복사됨" : "복사"}`}
+                        disabled={!pairing.copyable} onClick={() => handleCopy(pairing.key, onCopyPairing)}>{copiedKey === pairing.key ? "복사됨" : "복사"}</button>
                       <button type="button" className="dc-invite-row-button" data-tone="danger"
                         style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
                         aria-label={`기기 연결 ${index + 1} 해제`}

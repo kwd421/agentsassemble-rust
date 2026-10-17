@@ -1,13 +1,19 @@
+import { useEffect, useRef, useState } from "react";
 import type { ConnectorInvitePresentation } from "../../app/useManagedAiInvites";
 
 export type ConnectorInviteControls = {
   invites: readonly ConnectorInvitePresentation[];
   creating: boolean;
   create: () => void;
-  copy: (key: string) => void;
+  copy: (key: string) => boolean | Promise<boolean> | void;
 };
 
 export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }: { controls: ConnectorInviteControls; disabled: boolean; localOnly: boolean; mcpOrigin?: string }) {
+  const [copiedKey, setCopiedKey] = useState("");
+  const copiedTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => {
+    if (copiedTimer.current !== undefined) window.clearTimeout(copiedTimer.current);
+  }, []);
   return <section className="dc-invite-card" aria-labelledby="connector-invite-heading">
     <div className="dc-invite-card-copy">
       <h3 id="connector-invite-heading">사용 중인 AI 앱에서 참가</h3>
@@ -33,7 +39,14 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }
           <p>{invite.copyable ? `만료 ${new Date(invite.expiresAt).toLocaleTimeString()}` : "만료되었거나 현재 주소에서 사용할 수 없어요."}</p>
         </div>
         <button type="button" className="dc-invite-row-button" style={{ minWidth: 44, minHeight: 44 }}
-          disabled={!invite.copyable} onClick={() => controls.copy(invite.key)}>참가 안내 복사</button>
+          disabled={!invite.copyable} onClick={() => {
+            void Promise.resolve(controls.copy(invite.key)).then((ok) => {
+              if (ok !== true) return;
+              setCopiedKey(invite.key);
+              if (copiedTimer.current !== undefined) window.clearTimeout(copiedTimer.current);
+              copiedTimer.current = window.setTimeout(() => setCopiedKey(""), 2000);
+            });
+          }}>{copiedKey === invite.key ? "복사됨" : "참가 안내 복사"}</button>
       </div>)}
     </div>}
   </section>;

@@ -84,7 +84,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
             operatorPairings={roomInvite.pairings}
             pairingCreating={roomInvite.pairingCreating}
             onCreatePairing={() => void roomInvite.generatePairing(inviteModalRoom)}
-            onCopyPairing={(key) => void roomInvite.copyPairing(key)}
+            onCopyPairing={(key) => roomInvite.copyPairing(key)}
             onRevokePairing={(key) => void roomInvite.revokePairing(key)}
             publicUrl={invitePublicUrl}
             publicAccessTransition={roomInvite.publicAccessTransition}
@@ -102,7 +102,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
                 startTunnelIfNeeded
               )
             }
-            onCopyHumanInvite={(key) => void roomInvite.copyHumanInvite(key)}
+            onCopyHumanInvite={(key) => roomInvite.copyHumanInvite(key)}
             onRevokeHumanInvite={(key) => void roomInvite.revokeHumanInvite(key)}
             onStartTunnel={() => void startInviteTunnel()}
             onStopTunnel={() => void stopInviteTunnel()}

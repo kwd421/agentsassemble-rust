@@ -32,7 +32,8 @@ export default function ProviderModelRefresh({ title, compact = false, providerI
       if (!provider || provider.discovery_status !== "ready") {
         throw new Error(provider?.discovery_error || "이 AI의 모델 목록을 확인하지 못했어요.");
       }
-      setStatus(force ? "모델 목록을 새로고침했어요." : "");
+      // The refreshed catalog is the only feedback; no success box.
+      setStatus("");
     } catch (error) {
       if (!signal?.aborted && current === generation.current) {
         setStatus(error instanceof Error ? error.message : "모델 목록을 새로고침하지 못했어요.");

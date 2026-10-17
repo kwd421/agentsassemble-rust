@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { postJsonServerOperator } from "../../api/http";
 import ProviderLogin from "./ProviderLogin";
@@ -18,19 +18,26 @@ it("starts confirmed required login once across effect replay and rerenders", as
   view.rerender(<StrictMode><ProviderLogin providerId="codex" displayName="Codex" automatic /></StrictMode>);
   expect(postJsonServerOperator).toHaveBeenCalledExactlyOnceWith("/api/providers/login", { provider_id: "codex" });
   await act(async () => finish({ provider_id: "codex", status: "authenticated" }));
-  expect(screen.getByText("로그인을 완료했어요.")).toBeTruthy();
+  // Authenticated shows nothing beyond the refreshed catalog: no success box.
+  await waitFor(() => expect(screen.queryByText("로그인 창에서 안내를 따라 주세요.")).toBeNull());
+  expect(screen.queryByText("로그인을 완료했어요.")).toBeNull();
 });
 
-it.each([
-  ["started", "터미널에서 로그인을 마친 뒤 카탈로그를 갱신해 주세요."],
-  ["authenticated", "로그인을 완료했어요."],
-])("renders the server's %s receipt without inferring authentication", async (status, message) => {
-  vi.mocked(postJsonServerOperator).mockResolvedValue({ provider_id: "opencode", status });
+it("renders the server's started receipt with its terminal handoff instruction", async () => {
+  vi.mocked(postJsonServerOperator).mockResolvedValue({ provider_id: "opencode", status: "started" });
   render(<ProviderLogin providerId="opencode" displayName="OpenCode" />);
   fireEvent.click(screen.getByRole("button", { name: "OpenCode 로그인" }));
-  expect(await screen.findByText(message)).toBeTruthy();
+  expect(await screen.findByText("터미널에서 로그인을 마친 뒤 카탈로그를 갱신해 주세요.")).toBeTruthy();
   expect(postJsonServerOperator).toHaveBeenCalledExactlyOnceWith("/api/providers/login", { provider_id: "opencode" });
-  if (status === "started") expect(screen.queryByText("로그인을 완료했어요.")).toBeNull();
+});
+
+it("shows no success box for the server's authenticated receipt", async () => {
+  vi.mocked(postJsonServerOperator).mockResolvedValue({ provider_id: "opencode", status: "authenticated" });
+  render(<ProviderLogin providerId="opencode" displayName="OpenCode" />);
+  fireEvent.click(screen.getByRole("button", { name: "OpenCode 로그인" }));
+  await waitFor(() => expect(postJsonServerOperator).toHaveBeenCalledExactlyOnceWith("/api/providers/login", { provider_id: "opencode" }));
+  await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  expect(screen.queryByText("로그인을 완료했어요.")).toBeNull();
 });
 
 it.each([true, false])("keeps confirmed cancellation clear when cancel reply arrives first: %s", async (cancelFirst) => {
@@ -46,6 +53,8 @@ it.each([true, false])("keeps confirmed cancellation clear when cancel reply arr
   const receipt = () => resolveCancel({ provider_id: "codex", status: "cancelled" });
   await act(async () => { (cancelFirst ? receipt : cancelled)(); });
   await act(async () => { (cancelFirst ? cancelled : receipt)(); });
-  expect(screen.getByText("로그인을 취소했어요.")).toBeTruthy();
+  // Cancelling shows nothing beyond the idle login button: no success box.
+  expect(screen.queryByText("로그인을 취소했어요.")).toBeNull();
   expect(screen.queryByText("Provider login was cancelled.")).toBeNull();
+  expect(screen.getByRole("button", { name: "Codex 로그인" })).toBeTruthy();
 });

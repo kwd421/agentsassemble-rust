@@ -328,7 +328,8 @@ export default function AgentCreateModal({
       );
       setCredentialStatus(credentialStatus);
       setProviderApiKey("");
-      setStatus(`${selectedProvider.display_name} 키를 저장했어요.`);
+      // The credential status area already reflects the saved key; no success box.
+      setStatus("");
       if (localProviderActions && isDesktopWebview()) {
         const catalog = await refreshLocalProviderCatalog(selectedProvider.id);
         onCatalogChange?.(catalog);
@@ -351,7 +352,8 @@ export default function AgentCreateModal({
     try {
       setCredentialStatus(await deleteProviderCredential(selectedProvider.id));
       setProviderApiKey("");
-      setStatus(`${selectedProvider.display_name} 저장 키를 삭제했어요`);
+      // The credential status area already reflects the removal; no success box.
+      setStatus("");
       if (localProviderActions && isDesktopWebview()) {
         const catalog = await refreshLocalProviderCatalog(selectedProvider.id);
         onCatalogChange?.(catalog);

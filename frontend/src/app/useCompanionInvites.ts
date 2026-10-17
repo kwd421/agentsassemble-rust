@@ -51,7 +51,9 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
       if (!isCurrent(owner)) return;
       if (!isDesktopWebview()) setRecords((prior) => [...prior, { ...packet, sessionToken: owner.sessionToken }]);
       onIssued?.(localAttendeeLink(packet.result));
-      setStatus(isDesktopWebview() ? DESKTOP_HANDOFF_STATUS : "설정 준비가 됐어요. 이 컴퓨터에서 설정하기를 눌러 앱을 열어 주세요.");
+      // The new invite row (and its "이 컴퓨터에서 설정하기" link) is the only
+      // feedback; no success box. The desktop handoff hint still needs its banner.
+      if (isDesktopWebview()) setStatus(DESKTOP_HANDOFF_STATUS);
     } catch (error) {
       if (isCurrent(owner)) setStatus(error instanceof Error ? error.message : "초대 결과를 확인하지 못했어요. 다시 시도해 주세요.");
     } finally {
@@ -59,10 +61,10 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
       if (active.current) setCreating(false);
     }
   }
-  async function copy(inviteId: string) {
+  async function copy(inviteId: string): Promise<boolean> {
     const owner = current.current;
     const record = records.find((item) => item.result.invite_id === inviteId && item.sessionToken === owner?.sessionToken);
-    if (!owner || !record) return;
+    if (!owner || !record) return false;
     const assertCurrent = () => {
       if (!isCurrent(owner) || record.origin !== requireSessionHostOrigin(owner.sessionToken) || record.expiresAtMs <= Date.now()) {
         throw new Error("현재 사용할 수 없는 초대예요. 방에 다시 연결한 뒤 확인해 주세요.");
@@ -70,9 +72,12 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
     };
     try {
       const copied = await copyText(attendeePacketText(record.result), async () => { assertCurrent(); return assertCurrent; });
-      if (isCurrent(owner)) setStatus(copied ? "참가 안내를 복사했어요." : "복사하지 못했어요. 브라우저의 클립보드 권한을 확인해 주세요.");
+      // Success shows only as the copy button's own "복사됨" state; publish failures.
+      if (isCurrent(owner) && !copied) setStatus("복사하지 못했어요. 브라우저의 클립보드 권한을 확인해 주세요.");
+      return copied;
     } catch (error) {
       if (isCurrent(owner)) setStatus(error instanceof Error ? error.message : "참가 안내를 복사하지 못했어요.");
+      return false;
     }
   }
   return {

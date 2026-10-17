@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import type { AttendeeInvitePresentation } from "../../app/useManagedAiInvites";
 
-export type AttendeeInviteControls = { invites: readonly AttendeeInvitePresentation[]; creating: boolean; create: (friendId: string) => void; copy: (key: string) => void };
+export type AttendeeInviteControls = { invites: readonly AttendeeInvitePresentation[]; creating: boolean; create: (friendId: string) => void; copy: (key: string) => boolean | Promise<boolean> | void };
 
 export function AttendeeFriendInviteCard({ controls, disabled, directory }: { controls: AttendeeInviteControls; disabled: boolean; directory: ReturnType<typeof useFriendsDirectory> }) {
   const [selectedId, setSelectedId] = useState("");
+  const [copiedKey, setCopiedKey] = useState("");
+  const copiedTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => {
+    if (copiedTimer.current !== undefined) window.clearTimeout(copiedTimer.current);
+  }, []);
   const friends = directory.friends.filter((friend) => friend.details.participant_type !== "human" && friend.details.participant_type !== "unknown");
   const selected = friends.find((friend) => friend.friend_id === selectedId);
   return <section className="dc-invite-card" aria-labelledby="attendee-friend-heading">
@@ -24,7 +29,14 @@ export function AttendeeFriendInviteCard({ controls, disabled, directory }: { co
       onClick={() => { if (selected) controls.create(selected.friend_id); }}>{controls.creating ? "초대 만드는 중" : "AI 친구 초대 만들기"}</button>}
     {controls.invites.map((invite) => <div key={invite.key} className="dc-invite-friend-row" style={{ flexWrap: "wrap" }}>
       <div className="dc-invite-card-copy"><strong>{invite.displayName} · {invite.provider}</strong><p>{invite.copyable ? `만료 ${new Date(invite.expiresAt).toLocaleTimeString()}` : "현재 사용할 수 없는 초대예요."}</p></div>
-      <button type="button" className="dc-invite-row-button" style={{ minHeight: 44 }} disabled={!invite.copyable} onClick={() => controls.copy(invite.key)}>참가 안내 복사</button>
+      <button type="button" className="dc-invite-row-button" style={{ minHeight: 44 }} disabled={!invite.copyable} onClick={() => {
+        void Promise.resolve(controls.copy(invite.key)).then((ok) => {
+          if (ok !== true) return;
+          setCopiedKey(invite.key);
+          if (copiedTimer.current !== undefined) window.clearTimeout(copiedTimer.current);
+          copiedTimer.current = window.setTimeout(() => setCopiedKey(""), 2000);
+        });
+      }}>{copiedKey === invite.key ? "복사됨" : "참가 안내 복사"}</button>
     </div>)}
   </section>;
 }

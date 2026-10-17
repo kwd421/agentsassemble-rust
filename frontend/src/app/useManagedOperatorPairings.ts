@@ -84,9 +84,9 @@ export function useManagedOperatorPairings({
     setNow(Date.now());
   }
 
-  async function copy(key: string) {
+  async function copy(key: string): Promise<boolean> {
     const record = recordsRef.current.find((entry) => entry.key === key);
-    if (!record || !copyable(record, publicOrigin, Date.now())) return;
+    if (!record || !copyable(record, publicOrigin, Date.now())) return false;
     const refresh = captureOriginRefresh();
     function assertCurrent(proof: OriginProof) {
       if (!activeRef.current || !proof.isCurrent()) throw RETIRED_COPY;
@@ -104,12 +104,15 @@ export function useManagedOperatorPairings({
         lastProof = proof;
         return () => assertCurrent(proof);
       });
-      if (!lastProof) return;
+      if (!lastProof) return false;
       assertCurrent(lastProof);
-      publishStatus(copied ? "기기 연결 링크를 복사했어요." : "링크를 복사하지 못했어요.");
+      // Success shows only as the copy button's own "복사됨" state; publish failures.
+      if (!copied) publishStatus("링크를 복사하지 못했어요.");
+      return copied;
     } catch (error) {
-      if (error === RETIRED_COPY) return;
+      if (error === RETIRED_COPY) return false;
       if (activeRef.current) publishStatus(error instanceof Error ? error.message : "링크 복사에 실패했어요.");
+      return false;
     }
   }
 
@@ -125,7 +128,7 @@ export function useManagedOperatorPairings({
       }, remote);
       if (!activeRef.current) return;
       commit((prior) => prior.map((entry) => entry.key === key ? { ...entry, state: "revoked" } : entry));
-      publishStatus("이 링크와 연결된 기기의 방 접속을 해제했어요.");
+      // The row already shows "연결 해제됨"; no success box.
     } catch (error) {
       if (!activeRef.current) return;
       // An unconfirmed revocation never returns a link to copyable state.

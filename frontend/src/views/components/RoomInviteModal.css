@@ -232,20 +232,17 @@ dialog.dc-invite-modal {
   font-weight: 700;
 }
 
+/* The status line is error-only: successes need no box. */
 .dc-invite-status {
   margin: 10px 0 0;
   padding: 9px 12px;
-  color: #a7f3c4;
-  background: color-mix(in srgb, #23a559 14%, transparent);
-  border: 1px solid color-mix(in srgb, #23a559 34%, transparent);
+  color: #ffb4b8;
+  background: color-mix(in srgb, #f23f43 12%, transparent);
+  border: 1px solid color-mix(in srgb, #f23f43 34%, transparent);
   border-radius: 9px;
   font-size: 12px;
   font-weight: 800;
   overflow-wrap: anywhere;
-}
-
-.dc-invite-status[data-shown="false"] {
-  display: none;
 }
 
 .dc-invite-tabs {

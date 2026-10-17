@@ -20,12 +20,13 @@ it("does not probe before selection, then automatically inspects and manually re
   await waitFor(() => expect(refreshLocalProviderCatalog).toHaveBeenCalledWith("codex", false, expect.any(AbortSignal)));
   await waitFor(() => expect(screen.getByRole("button", { name: "AI 다시 확인" }).hasAttribute("disabled")).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: "AI 다시 확인" }));
-  expect(await screen.findByText("모델 목록을 새로고침했어요.")).toBeTruthy();
-  expect(refreshLocalProviderCatalog).toHaveBeenLastCalledWith("codex", true, undefined);
+  await waitFor(() => expect(refreshLocalProviderCatalog).toHaveBeenLastCalledWith("codex", true, undefined));
+  // A manual refresh shows nothing beyond the refreshed catalog: no success box.
+  await waitFor(() => expect(screen.getByRole("button", { name: "AI 다시 확인" }).hasAttribute("disabled")).toBe(false));
+  expect(screen.queryByText("모델 목록을 새로고침했어요.")).toBeNull();
   vi.mocked(refreshLocalProviderCatalog).mockRejectedValue(new Error("연결 실패"));
   fireEvent.click(screen.getByRole("button", { name: "AI 다시 확인" }));
   expect(await screen.findByText("연결 실패")).toBeTruthy();
-  expect(screen.queryByText("모델 목록을 새로고침했어요.")).toBeNull();
 });
 
 it("does not inspect an authentication-blocked provider or publish an old selection's completion", async () => {

@@ -272,7 +272,6 @@ export function useRoomInviteController({
       if (status.public_url) return status;
       if (!("tunnel" in status) || !status.tunnel.available) throw new Error(PUBLIC_INGRESS_START_ERROR);
       assertIngressOperation(generation);
-      setCopyStatus("외부 접속 주소를 준비하는 중...");
       status = await startPublicInviteTunnel(() => assertIngressOperation(generation));
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
@@ -360,7 +359,6 @@ export function useRoomInviteController({
       return;
     }
     const generation = beginIngressOperation("starting");
-    setCopyStatus("외부 접속 주소를 준비하는 중...");
     try {
       assertIngressOperation(generation);
       const started = await startPublicInviteTunnel(() =>
@@ -373,11 +371,8 @@ export function useRoomInviteController({
           ? started
           : await waitForTunnelReady(generation);
       assertIngressOperation(generation);
-      setCopyStatus(
-        latest.public_url
-          ? "서버가 공개됐어요. 이제 외부 초대 링크를 만들 수 있어요."
-          : PUBLIC_INGRESS_START_ERROR
-      );
+      // The hosting footer already shows "외부 접속 열림"; no success box.
+      if (!latest.public_url) setCopyStatus(PUBLIC_INGRESS_START_ERROR);
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(PUBLIC_INGRESS_START_ERROR);
@@ -394,7 +389,6 @@ export function useRoomInviteController({
       return;
     }
     const generation = beginIngressOperation("stopping");
-    setCopyStatus("외부 접속을 닫는 중...");
     try {
       assertIngressOperation(generation);
       const status = await stopPublicInviteTunnel(() =>
@@ -402,7 +396,7 @@ export function useRoomInviteController({
       );
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
-      setCopyStatus("외부 접속을 닫았어요. 방은 이 컴퓨터에서 계속 작동해요.");
+      // The hosting footer already shows "외부 접속 꺼짐"; no success box.
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(error instanceof Error ? error.message : "서버 비공개 전환 실패");
@@ -419,7 +413,6 @@ export function useRoomInviteController({
     options: HumanInviteOptions = { maxUses: 1, ttlSeconds: 86400 },
     startTunnelIfNeeded = false
   ) {
-    setCopyStatus("초대 링크를 만들고 있어요.");
     try {
       await createManagedHumanInviteForRoom({
         room,
@@ -429,7 +422,7 @@ export function useRoomInviteController({
         ttlSeconds: options.ttlSeconds,
         startTunnelIfNeeded,
       });
-      setCopyStatus("초대 링크를 만들었어요.");
+      // The new link row is the only feedback; no success box.
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(error instanceof Error ? error.message : "보안 초대 링크 생성 실패");
@@ -441,7 +434,6 @@ export function useRoomInviteController({
     pairingCreationRef.current = true;
     setPairingCreating(true);
     const generation = beginIngressOperation();
-    setCopyStatus("기기 연결 링크를 만들고 있어요.");
     try {
       const ready = await requirePublicInviteReady(generation);
       const authority = resolveManagerRoomAuthority(room.id);
@@ -453,7 +445,7 @@ export function useRoomInviteController({
       // Retain a confirmed but retired response so its grant can still be revoked.
       managedPairings.retain(custody, room.id, current);
       if (!current) return;
-      setCopyStatus("연결할 내 기기에서 링크를 열어 주세요.");
+      // The new pairing row (with QR) is the only feedback; no success box.
     } catch (error) {
       if (ingressOperationIsCurrent(generation)) {
         setCopyStatus(error instanceof Error ? error.message : "기기 연결 링크를 만들지 못했어요.");

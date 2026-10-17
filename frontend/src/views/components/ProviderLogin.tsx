@@ -39,10 +39,14 @@ export default function ProviderLogin({ providerId, displayName, onAuthenticated
     setStatus("로그인 창에서 안내를 따라 주세요.");
     try {
       const outcome = await loginProvider(providerId);
-      setStatus(outcome === "started" ? "터미널에서 로그인을 마친 뒤 카탈로그를 갱신해 주세요." : "로그인을 완료했어요.");
+      // Authenticated needs no box (the catalog refreshes); the terminal
+      // handoff still needs its instruction.
+      setStatus(outcome === "started" ? "터미널에서 로그인을 마친 뒤 카탈로그를 갱신해 주세요." : "");
       if (outcome === "authenticated" && currentProvider.current === providerId) onComplete?.();
     } catch (error) {
-      setStatus(errorMessage(error, "로그인하지 못했어요."));
+      // A cancelled login returns to the idle button with no box.
+      if (error instanceof ApiError && error.code === "provider_login_cancelled") setStatus("");
+      else setStatus(errorMessage(error, "로그인하지 못했어요."));
     } finally {
       inflight.current = false;
       setBusy(false);
@@ -62,7 +66,8 @@ export default function ProviderLogin({ providerId, displayName, onAuthenticated
   async function cancel() {
     setCancelling(true);
     try {
-      if (await cancelProviderLogin(providerId)) setStatus("로그인을 취소했어요.");
+      // The idle login button is the only feedback; no success box.
+      if (await cancelProviderLogin(providerId)) setStatus("");
     } catch (error) {
       setStatus(errorMessage(error, "로그인 취소를 확인하지 못했어요."));
     } finally {

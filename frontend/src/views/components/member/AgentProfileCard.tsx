@@ -26,7 +26,6 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   useEffect(() => () => uploadRef.current?.abort(), []);
   useEffect(() => {
     if (!photo) { setPhotoPreview(""); return; }
@@ -50,7 +49,6 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
     setClearPhoto(false);
     setCropFile(null);
     setError("");
-    setNotice("");
     setEditing(true);
   }
 
@@ -82,7 +80,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
       if (!controller.signal.aborted) {
         setEditing(false);
         setPhoto(null);
-        setNotice("프로필을 변경했어요.");
+        // The updated header is the only feedback; no success box.
       }
     } catch (failure) {
       if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "프로필을 저장하지 못했어요. 다시 시도해 주세요.");
@@ -151,7 +149,6 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
       {onSave && <button type="button" className="dc-modal-close" style={{ width: 44, height: 44 }} autoFocus aria-label="프로필 편집" title="프로필 편집" onClick={beginEditing}><Pencil size={18} /></button>}
       {onClose && <button type="button" className="dc-modal-close" aria-label="멤버 정보 닫기" onClick={onClose}><X size={18} /></button>}
     </header>
-    {notice && <p className="dc-member-session-status preserve-words" style={{ marginTop: 12 }} role="status">{notice}</p>}
     </>}
     <div hidden={editing && canEdit}>{children}</div>
   </>;
