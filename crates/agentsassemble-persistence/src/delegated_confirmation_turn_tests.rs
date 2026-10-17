@@ -652,3 +652,83 @@ async fn detached_reconciliation_still_cancels_real_authority_loss_with_cause() 
     tx.rollback().await?;
     Ok(())
 }
+
+// A confirmed start_agent belongs to the owner's decision, not the requesting
+// runtime: detaching the provider delegate (membership intact) must not cancel
+// approval. Uses the same shared principal gate as the other confirmed actions.
+#[tokio::test]
+async fn provider_detached_start_agent_approval_executes() -> TestResult {
+    let (store, authority, _generation, _execution_id, start, _directory) =
+        provider_store().await?;
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = json_set(session_json, '$.permission_mode', 'workspace_write') WHERE room_id='general' AND session_id=?",
+    )
+    .bind(PROVIDER_DELEGATE)
+    .execute(&store.pool)
+    .await?;
+    let request = agentsassemble_domain::StartAgent {
+        request_id: Uuid::new_v4().to_string(),
+        agent_id: PROVIDER_DELEGATE.into(),
+    };
+    let pending = store
+        .request_delegated_agent_start(&authority, &request, |_, _, _| Ok(()))
+        .await?
+        .ok_or("confirmation missing")?
+        .0;
+    assert_eq!(pending["status"], "pending_confirmation");
+    let confirmation_id = pending["confirmation_id"]
+        .as_str()
+        .ok_or("confirmation")?
+        .to_owned();
+    let completion_authority = crate::ProviderTurnAuthority {
+        room_id: &start.room_id,
+        session_id: &start.session_id,
+        turn_id: &start.turn_id,
+        turn_generation: start.turn_generation,
+        execution_id: &start.execution_id,
+        start_dispatch_nonce: &start.start_dispatch_nonce,
+        runtime_handle_id: &start.runtime_handle_id,
+        runtime_owner_id: &start.runtime_owner_id,
+        runtime_lease_token: &start.runtime_lease_token,
+        provider_turn_id: "provider-turn-test-1",
+        provider_session_id: Some("provider-thread-1"),
+    };
+    store
+        .complete_agent_turn(
+            "general",
+            PROVIDER_DELEGATE,
+            completion_authority,
+            "Finished the requested work.",
+            "",
+            None,
+            &[],
+        )
+        .await?;
+    let candidate = store
+        .load_runtime_reconciliation_candidate("general", PROVIDER_DELEGATE)
+        .await?
+        .ok_or("no reconciliation candidate for the idle session")?;
+    store.record_idle_runtime_failure(&candidate).await?;
+    let participant: Participant = serde_json::from_str(
+        &sqlx::query_scalar::<_, String>(
+            "SELECT participant_json FROM participants WHERE room_id='general' AND participant_id=?",
+        )
+        .bind(PROVIDER_DELEGATE)
+        .fetch_one(&store.pool)
+        .await?,
+    )?;
+    assert_eq!(participant.status, ParticipantStatus::Detached);
+    let local = local_owner();
+    let ack = store
+        .decide_delegated_action(
+            crate::RoomMutationAuthority::TrustedPrincipal(&local),
+            &approve(&confirmation_id),
+        )
+        .await?;
+    assert_eq!(
+        ack.result["state"], "executing",
+        "detached delegate start_agent approval must not cancel: {}",
+        ack.result
+    );
+    Ok(())
+}

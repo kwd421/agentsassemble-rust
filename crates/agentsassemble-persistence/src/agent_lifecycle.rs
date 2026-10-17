@@ -142,7 +142,20 @@ impl SqliteStore {
         let (agent_id, start_requested) = launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let operation_id = lifecycle_operation_id(principal, request_id, command_action);
-        active_room_for_principal(transaction, principal).await?;
+        // A confirmed start runs under the owner's approval: the delegate's
+        // current authority was already re-proven detached-tolerant by
+        // `authorize_in`, so only the room itself must still be active here.
+        // Live (unconfirmed) starts keep requiring the caller's active membership.
+        match authority {
+            crate::AgentControlAuthority::Delegated(control)
+                if control.confirmation_id.is_some() =>
+            {
+                crate::authority::load_active_room(transaction, &principal.room_id).await?;
+            }
+            _ => {
+                active_room_for_principal(transaction, principal).await?;
+            }
+        }
         if let Some(outcome) = existing_command(
             transaction,
             &principal.room_id,

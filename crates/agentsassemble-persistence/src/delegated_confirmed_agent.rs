@@ -4,7 +4,8 @@ use crate::delegated_confirmation_lifecycle::{item, load_in, receipt, refresh_in
 use crate::{DelegateRoomAuthority, DelegatedAgentControl, PersistenceError, SqliteStore};
 use agentsassemble_domain::{
     AgentStartConfiguration, ConfirmationState, ConfirmedAgentStart, ConfirmedRoomAction,
-    DelegatedActionRequest, DurableAgentSession, StartAgent, canonical_payload_hash,
+    DelegatedActionRequest, DurableAgentSession, InviteScope, ParticipantStatus, StartAgent,
+    canonical_payload_hash,
 };
 use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction, sqlite::SqliteRow};
@@ -197,14 +198,30 @@ pub(crate) async fn control_in(
         DelegateRoomAuthority::Connector(session) => session.principal().clone(),
         DelegateRoomAuthority::Attendee { session, .. } => session.principal().clone(),
         DelegateRoomAuthority::Provider { session_id, .. } => {
+            // Same shared principal gate as the other confirmed actions
+            // (`DelegatedRoomActionAuthority::current` / `resolve_session`):
+            // a runtime-detached provider delegate (membership intact, bridge
+            // gone) keeps its confirmation authority here. Real authority loss
+            // (removed/muted/role-changed/external session) still refuses.
             let session = crate::agent_lifecycle::load_session(tx, room_id, session_id).await?;
+            if session.public.external_owned || session.public.process_ownership != "server" {
+                return Err(rejected(
+                    "stale_provider_turn",
+                    "Room tool authority no longer matches an active Agent Session participant.",
+                ));
+            }
             let participant =
-                crate::authority::load_active_participant(tx, room_id, session_id).await?;
-            crate::room_turns::support::provider_room_principal(
-                &session,
-                &participant,
-                agentsassemble_domain::InviteScope::ReadWrite,
-            )?
+                crate::delegation_owner::load_delegate_member(tx, room_id, session_id, true)
+                    .await?;
+            if participant.status == ParticipantStatus::Detached {
+                crate::room_turns::support::detached_provider_principal(&session, &participant)?
+            } else {
+                crate::room_turns::support::provider_room_principal(
+                    &session,
+                    &participant,
+                    InviteScope::ReadWrite,
+                )?
+            }
         }
     };
     let payload = json!({"agent_id":action.agent_id,"_delegation":crate::delegated_agent_control::Attribution {actor_participant_id:request.delegate_participant_id.clone(),on_behalf_of_participant_id:request.owner_participant_id.clone(),confirmation_id:Some(request.confirmation_id.clone())}});
