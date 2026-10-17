@@ -242,8 +242,9 @@ describe("useMemberHosts", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
       expect(result.current.snapshots[0]?.phase).toBe("disconnected");
       const calls = attach.mock.calls.length;
-      // No central polling: the retry re-admits on the host's own backoff.
-      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      // No central polling: the retry re-admits on the host's own backoff
+      // (transient first step: 1 s ± jitter, so 2 s always covers it).
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
       expect(attach.mock.calls.length).toBeGreaterThan(calls);
     } finally {
       vi.useRealTimers();
@@ -271,8 +272,121 @@ describe("useMemberHosts", () => {
       await act(async () => { closeHost(); });
       expect(result.current.snapshots[0]?.phase).toBe("disconnected");
       const calls = attach.mock.calls.length;
-      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
       expect(attach.mock.calls.length).toBeGreaterThan(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("holds a revoked endpoint to a slow cadence instead of storming central", async () => {
+    vi.useFakeTimers();
+    try {
+      // Central revoked the endpoint row (host turned external access off):
+      // every preview answers 409 incarnation_conflict.
+      attach.mockRejectedValue(Object.assign(new Error("revoked"), { status: 409, code: "incarnation_conflict" }));
+      const { result } = renderHook(() => useMemberHosts({
+        personId: "person", sessionToken: "token", directory: directoryFor([liveServer()]),
+      }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(result.current.snapshots[0]?.phase).toBe("disconnected");
+      expect(attach).toHaveBeenCalledTimes(1);
+      // No per-second retry: the slow cadence never fires within 5 s.
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(attach).toHaveBeenCalledTimes(1);
+      // Ten revoked minutes cost at most 5 central previews (slow doubling
+      // 60 s → 5 min cap with jitter), never a per-second storm.
+      for (let minute = 0; minute < 10; minute += 1) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      }
+      expect(attach.mock.calls.length).toBeLessThanOrEqual(5);
+      expect(result.current.snapshots[0]?.phase).toBe("disconnected");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-attaches promptly when the host republishes on a fresh endpoint", async () => {
+    vi.useFakeTimers();
+    try {
+      saveMemberAnchor("person", {
+        server_id: "friend", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+        endpoint_origin: "https://old.test", endpoint_generation: 2,
+        rooms: [{ room_id: "general", name: "일반" }], hidden: false, updated_at: 1,
+      });
+      const oldServer = () => liveServer({
+        endpoint: { origin: "https://old.test", generation: 2, status: "published" as const, mode: "event_secure_v1", protocol: "secure_admission_v1" },
+      });
+      const newServer = () => liveServer({
+        endpoint: { origin: "https://new.test", generation: 3, status: "published" as const, mode: "event_secure_v1", protocol: "secure_admission_v1" },
+      });
+      attach.mockRejectedValue(Object.assign(new Error("revoked"), { status: 409, code: "incarnation_conflict" }));
+      const { result, rerender } = renderHook(({ directory }: { directory: CentralDirectoryState }) => useMemberHosts({
+        personId: "person", sessionToken: "token", directory,
+      }), { initialProps: { directory: directoryFor([oldServer()]) as CentralDirectoryState } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(result.current.snapshots[0]?.phase).toBe("disconnected");
+      expect(attach).toHaveBeenCalledTimes(1);
+      // The host turned external access back on with a new random origin:
+      // same identity, fresh endpoint tuple.
+      attach.mockImplementation(async () => ({
+        admission: admissionFor([{ room_id: "general", name: "일반" }]),
+        rooms: [{ room_id: "general", name: "일반" }],
+        anchor: { server_id: "friend", registration_epoch: "epoch" },
+      }));
+      rerender({ directory: directoryFor([newServer()]) });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      // Prompt reconnect on the refresh — no slow-timer wait, and the
+      // superseded slow timer never fires a duplicate behind it.
+      expect(attach).toHaveBeenCalledTimes(2);
+      expect(result.current.snapshots[0]?.phase).toBe("connected");
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      expect(attach).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("backs off for the server's Retry-After on central rate limiting", async () => {
+    vi.useFakeTimers();
+    try {
+      attach.mockRejectedValue(Object.assign(new Error("limited"), { status: 429, code: "rate_limited", retryAfterMs: 120_000 }));
+      const { result } = renderHook(() => useMemberHosts({
+        personId: "person", sessionToken: "token", directory: directoryFor([liveServer()]),
+      }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(result.current.snapshots[0]?.phase).toBe("disconnected");
+      expect(attach).toHaveBeenCalledTimes(1);
+      // The server asked for 120 s: 60 s is still quiet, 130 s retries.
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(attach).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(70_000); });
+      expect(attach).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rests a long default on a 429 without a Retry-After header", async () => {
+    vi.useFakeTimers();
+    try {
+      attach.mockRejectedValue(Object.assign(new Error("limited"), { status: 429, code: "rate_limited" }));
+      const { result } = renderHook(() => useMemberHosts({
+        personId: "person", sessionToken: "token", directory: directoryFor([liveServer()]),
+      }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(result.current.snapshots[0]?.phase).toBe("disconnected");
+      expect(attach).toHaveBeenCalledTimes(1);
+      // Default rest is 5 min ± jitter: nothing within the first minute.
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(attach).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(340_000); });
+      expect(attach.mock.calls.length).toBeGreaterThan(1);
     } finally {
       vi.useRealTimers();
     }

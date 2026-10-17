@@ -34,7 +34,26 @@ export function remoteTransportForOrigin(origin: string): RemoteTransport | null
   for (const entry of workspaces.values()) {
     if (entry.transport.hello.origin === origin && entry.transport.active) return entry.transport;
   }
+  // Background member rooms bind their sessions without installing a
+  // workspace (the foreground session alone owns the workspace slot), so a
+  // member host that is attached but not open is found here too.
+  for (const binding of sessions.values()) {
+    if (binding.origin === origin && binding.transport?.active) return binding.transport;
+  }
   return null;
+}
+// Whether an origin belongs to a host the client has bound (installed
+// workspace or bound session, live or not). Image render paths use this to
+// fail closed: a host-origin URL without a live transport renders nothing,
+// never a direct tunnel URL (desktop CSP blocks it and it carries no auth).
+export function isKnownHostOrigin(origin: string): boolean {
+  for (const entry of workspaces.values()) {
+    if (entry.transport.hello.origin === origin) return true;
+  }
+  for (const binding of sessions.values()) {
+    if (binding.origin === origin) return true;
+  }
+  return false;
 }
 export const hasRemoteWorkspace = (): boolean => workspaces.size > 0;
 /**

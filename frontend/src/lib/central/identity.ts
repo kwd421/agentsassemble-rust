@@ -343,6 +343,19 @@ export async function logoutCentral(): Promise<void> {
   devicePromise = undefined;
 }
 
+// Milliseconds the server asked to wait (Retry-After: delay seconds or an
+// HTTP date), or null when absent or unparseable. Callers back off for
+// exactly this long on a 429 instead of guessing.
+export function parseRetryAfterMs(value: string | null): number | null {
+  if (value === null) return null;
+  const text = value.trim();
+  if (!text) return null;
+  const seconds = Number(text);
+  if (Number.isFinite(seconds)) return seconds < 0 ? null : Math.ceil(seconds * 1000);
+  const time = Date.parse(text);
+  return Number.isNaN(time) ? null : Math.max(0, time - Date.now());
+}
+
 async function responsePayload<T>(response: Response, central = true, signal?: AbortSignal): Promise<T> {
   const payload = (await response.json().catch((error) => {
     if (response.ok) {
@@ -367,7 +380,11 @@ async function responsePayload<T>(response: Response, central = true, signal?: A
       (central ? payload?.error?.message : typeof payload?.error === "string" ? payload.error : undefined) ||
       `로그인 서버가 HTTP ${response.status}을 반환했습니다.`;
     if (response.status === 401) throw new CentralAuthError(message, code);
-    if (central && (response.status === 429 || response.status >= 500)) throw Object.assign(new CentralTemporaryError(message), { status: response.status, code });
+    if (central && (response.status === 429 || response.status >= 500)) {
+      const retryAfterMs = response.status === 429 ? parseRetryAfterMs(response.headers.get("Retry-After")) : null;
+      throw Object.assign(new CentralTemporaryError(message), { status: response.status, code,
+        ...(retryAfterMs !== null ? { retryAfterMs } : {}) });
+    }
     throw Object.assign(new Error(message), { status: response.status, code,
       server_id: payload?.error?.server_id, registration_epoch: payload?.error?.registration_epoch });
   }

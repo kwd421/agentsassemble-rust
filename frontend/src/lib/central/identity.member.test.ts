@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const native=vi.hoisted(()=>({open:vi.fn()}));
 vi.mock("../desktopBridge",async original=>({...await original<typeof import("../desktopBridge")>(),isDesktopWebview:()=>true,openDesktopCentralOwnedServer:native.open}));
-import { bootstrapCentral, openCentralMemberServer, saveSession } from "./identity";
+import { bootstrapCentral, openCentralMemberServer, parseRetryAfterMs, previewCentralMember, saveSession } from "./identity";
 import { pendingMemberSnapshot, selectRemoteMember } from "../remote/remoteWorkspace";
 
 const person={person_id:"person",display_name:"이름",identity_kind:"google" as const};
@@ -42,4 +42,40 @@ it("member bootstrap exposes only the approved member fields",async()=>{
 it("rejects a legacy endpoint without a downgrade", async () => {
   await expect(openCentralMemberServer({ ...server, endpoint: { ...server.endpoint, mode: "legacy_lease" } })).rejects.toThrow("서버 앱을 업데이트해 주세요");
   expect(fetcher).not.toHaveBeenCalled(); expect(native.open).not.toHaveBeenCalled();
+});
+
+it("parses Retry-After delay seconds and HTTP dates", () => {
+  expect(parseRetryAfterMs("120")).toBe(120_000);
+  expect(parseRetryAfterMs("0")).toBe(0);
+  expect(parseRetryAfterMs(null)).toBeNull();
+  expect(parseRetryAfterMs("")).toBeNull();
+  expect(parseRetryAfterMs("not-a-date")).toBeNull();
+  expect(parseRetryAfterMs("-5")).toBeNull();
+  const future = new Date(Date.now() + 90_000).toUTCString();
+  const wait = parseRetryAfterMs(future);
+  expect(wait).not.toBeNull();
+  expect(wait as number).toBeGreaterThan(0);
+  expect(wait as number).toBeLessThanOrEqual(90_000);
+});
+
+it("carries the server's Retry-After on a member-preview 429", async () => {
+  fetcher.mockResolvedValue(Response.json({ error: { code: "rate_limited", message: "slow" } },
+    { status: 429, headers: { "Retry-After": "120" } }));
+  const target = { server_id: "host", registration_epoch: "epoch", challenge_hash: "x", handoff_state: "y" };
+  await expect(previewCentralMember(target))
+    .rejects.toMatchObject({ status: 429, code: "rate_limited", retryAfterMs: 120_000 });
+});
+
+it("omits the wait on a 429 without a Retry-After header", async () => {
+  fetcher.mockResolvedValue(Response.json({ error: { code: "rate_limited", message: "slow" } }, { status: 429 }));
+  const target = { server_id: "host", registration_epoch: "epoch", challenge_hash: "x", handoff_state: "y" };
+  await expect(previewCentralMember(target))
+    .rejects.toMatchObject({ status: 429, code: "rate_limited" });
+  try {
+    await previewCentralMember(target);
+    expect.unreachable();
+  } catch (error) {
+    expect(error).toMatchObject({ status: 429 });
+    expect("retryAfterMs" in (error as object)).toBe(false);
+  }
 });

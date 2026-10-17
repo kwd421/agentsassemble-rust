@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   MEMBER_HOST_RECONNECT_BASE_MS,
   MEMBER_HOST_RECONNECT_CAP_MS,
+  MEMBER_HOST_RECONNECT_RATE_LIMIT_MS,
+  MEMBER_HOST_RECONNECT_SLOW_BASE_MS,
+  MEMBER_HOST_RECONNECT_SLOW_CAP_MS,
   MEMBER_ROOM_LIVE_SOCKETS_PER_HOST,
+  memberHostReconnectCause,
   memberHostReconnectDelay,
+  memberHostRetryAfterMs,
   messageMentionsViewer,
   pickLiveRoomIds,
   projectMemberRoomBadge,
@@ -87,9 +92,59 @@ describe("pickLiveRoomIds", () => {
 });
 
 describe("memberHostReconnectDelay", () => {
-  it("doubles from the base and caps", () => {
-    expect(memberHostReconnectDelay(0)).toBe(MEMBER_HOST_RECONNECT_BASE_MS);
-    expect(memberHostReconnectDelay(1)).toBe(MEMBER_HOST_RECONNECT_BASE_MS * 2);
-    expect(memberHostReconnectDelay(100)).toBe(MEMBER_HOST_RECONNECT_CAP_MS);
+  // Deterministic jitter: random () => 0.5 keeps the exact midpoint.
+  const mid = () => 0.5;
+
+  it("doubles the transient backoff from the base and caps it", () => {
+    expect(memberHostReconnectDelay(0, "transient", null, mid)).toBe(MEMBER_HOST_RECONNECT_BASE_MS);
+    expect(memberHostReconnectDelay(1, "transient", null, mid)).toBe(MEMBER_HOST_RECONNECT_BASE_MS * 2);
+    expect(memberHostReconnectDelay(100, "transient", null, mid)).toBe(MEMBER_HOST_RECONNECT_CAP_MS);
+  });
+
+  it("keeps transient retries within jitter of the base", () => {
+    const delay = memberHostReconnectDelay(0);
+    expect(delay).toBeGreaterThanOrEqual(Math.floor(MEMBER_HOST_RECONNECT_BASE_MS * 0.8));
+    expect(delay).toBeLessThanOrEqual(Math.ceil(MEMBER_HOST_RECONNECT_BASE_MS * 1.2));
+  });
+
+  it("rests a revoked endpoint on a slow cadence, not per-second timers", () => {
+    expect(memberHostReconnectDelay(0, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_BASE_MS);
+    expect(memberHostReconnectDelay(1, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_BASE_MS * 2);
+    expect(memberHostReconnectDelay(100, "offline", null, mid)).toBe(MEMBER_HOST_RECONNECT_SLOW_CAP_MS);
+    // Even the fastest jitter never drops below ~48 s on the slow path.
+    expect(memberHostReconnectDelay(0, "offline", null, () => 0)).toBeGreaterThanOrEqual(48_000);
+  });
+
+  it("honors the server's Retry-After on a 429 exactly", () => {
+    expect(memberHostReconnectDelay(0, "rate_limited", 120_000, mid)).toBe(120_000);
+    expect(memberHostReconnectDelay(3, "rate_limited", 500, mid)).toBe(1_000);
+    expect(memberHostReconnectDelay(0, "rate_limited", 3_600_000, mid)).toBe(600_000);
+  });
+
+  it("rests a long default without a Retry-After header", () => {
+    const delay = memberHostReconnectDelay(0, "rate_limited", null, mid);
+    expect(delay).toBe(MEMBER_HOST_RECONNECT_RATE_LIMIT_MS);
+  });
+});
+
+describe("memberHostReconnectCause", () => {
+  it("treats a revoked endpoint as host-offline", () => {
+    expect(memberHostReconnectCause(Object.assign(new Error("revoked"), { status: 409, code: "incarnation_conflict" }))).toBe("offline");
+  });
+
+  it("treats central rate limiting as rate-limited", () => {
+    expect(memberHostReconnectCause(Object.assign(new Error("slow"), { status: 429, code: "rate_limited" }))).toBe("rate_limited");
+  });
+
+  it("treats everything else as transient", () => {
+    expect(memberHostReconnectCause(new Error("boom"))).toBe("transient");
+    expect(memberHostReconnectCause(Object.assign(new Error("gone"), { status: 409, code: "other" }))).toBe("transient");
+    expect(memberHostReconnectCause(Object.assign(new Error("denied"), { status: 403, code: "forbidden" }))).toBe("transient");
+  });
+
+  it("reads the server's wait from retryAfterMs only", () => {
+    expect(memberHostRetryAfterMs(Object.assign(new Error("slow"), { status: 429, retryAfterMs: 45_000 }))).toBe(45_000);
+    expect(memberHostRetryAfterMs(new Error("boom"))).toBeNull();
+    expect(memberHostRetryAfterMs(Object.assign(new Error("bad"), { retryAfterMs: Number.NaN }))).toBeNull();
   });
 });

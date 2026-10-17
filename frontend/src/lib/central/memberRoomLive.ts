@@ -17,16 +17,72 @@ export type MemberRoomLiveBadge = {
 export const MEMBER_ROOM_LIVE_SOCKETS_PER_HOST = 8;
 
 // Per-host reconnect backoff: bounded doubling driven only by that host's
-// own channel close plus explicit retry. No global loop, no central
-// polling; grants stay on demand per attempt.
+// own channel close, attach failure, plus explicit retry. No global loop,
+// no central polling; grants stay on demand per attempt. A 409
+// incarnation_conflict (endpoint revoked / host offline) means the host is
+// gone, so it backs off to a slow cadence and wakes on real signals
+// (directory refresh on focus/visible/online, republish tuple change, user
+// click) instead of timers. A 429 honors the server's Retry-After.
 export const MEMBER_HOST_RECONNECT_BASE_MS = 1_000;
 export const MEMBER_HOST_RECONNECT_CAP_MS = 30_000;
+// Slow cadence while the endpoint stays revoked: 60 s doubling to a 5 min
+// cap, so a revoked host costs at most 5 central previews per 10 minutes
+// (≈18 per hour) instead of a retry storm.
+export const MEMBER_HOST_RECONNECT_SLOW_BASE_MS = 60_000;
+export const MEMBER_HOST_RECONNECT_SLOW_CAP_MS = 300_000;
+// Default wait after a central 429 without a Retry-After header.
+export const MEMBER_HOST_RECONNECT_RATE_LIMIT_MS = 300_000;
+export const MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS = 600_000;
 
-export function memberHostReconnectDelay(attempt: number): number {
+export type MemberHostReconnectCause = "offline" | "rate_limited" | "transient";
+
+// 409 incarnation_conflict is the host being offline (central revoked its
+// endpoint row or the epoch moved on); 429 is central asking for quiet.
+// Both central (plain Error with status/code) and host (ApiError) failures
+// carry status/code, so both are classified here.
+export function memberHostReconnectCause(error: unknown): MemberHostReconnectCause {
+  const status = (error as { status?: unknown } | null)?.status;
+  const code = (error as { code?: unknown } | null)?.code;
+  if (status === 429) return "rate_limited";
+  if (status === 409 && code === "incarnation_conflict") return "offline";
+  return "transient";
+}
+
+// Milliseconds the server asked to wait on a 429 (parsed from its
+// Retry-After header by the central owner), or null when absent.
+export function memberHostRetryAfterMs(error: unknown): number | null {
+  const wait = (error as { retryAfterMs?: unknown } | null)?.retryAfterMs;
+  return typeof wait === "number" && Number.isFinite(wait) && wait >= 0 ? wait : null;
+}
+
+function withJitter(delayMs: number, capMs: number, random: () => number): number {
+  return Math.min(capMs, Math.floor(delayMs * (0.8 + 0.4 * random())));
+}
+
+export function memberHostReconnectDelay(
+  attempt: number,
+  cause: MemberHostReconnectCause = "transient",
+  retryAfterMs: number | null = null,
+  random: () => number = Math.random,
+): number {
   const step = Number.isSafeInteger(attempt) && attempt > 0 ? attempt : 0;
-  return Math.min(
+  if (cause === "rate_limited") {
+    // The server dictated this wait: honor it exactly instead of jittering
+    // below it. Without a header, rest a long default with jitter.
+    if (retryAfterMs !== null) return Math.min(Math.max(Math.ceil(retryAfterMs), 1_000), MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS);
+    return withJitter(MEMBER_HOST_RECONNECT_RATE_LIMIT_MS, MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS, random);
+  }
+  if (cause === "offline") {
+    return withJitter(
+      MEMBER_HOST_RECONNECT_SLOW_BASE_MS * 2 ** Math.min(step, 3),
+      MEMBER_HOST_RECONNECT_SLOW_CAP_MS,
+      random,
+    );
+  }
+  return withJitter(
+    MEMBER_HOST_RECONNECT_BASE_MS * 2 ** Math.min(step, 5),
     MEMBER_HOST_RECONNECT_CAP_MS,
-    MEMBER_HOST_RECONNECT_BASE_MS * 2 ** Math.min(step, 5)
+    random,
   );
 }
 

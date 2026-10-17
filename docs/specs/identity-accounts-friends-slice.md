@@ -3542,3 +3542,49 @@ shared transport), `frontend/src/app/useMemberRoomLive.ts` (lifecycle),
 `frontend/src/app/useAppController.tsx` (instant switch, mark-read,
 badge projection into rooms),
 `frontend/src/views/LobbyView.tsx` (chip).
+
+### Joined-host reconnect never storms central; member images ride the member transport (2026-10-17)
+
+Real-app failure (debug macOS build): after the friend host turned external
+access OFF and then ON again (new random public origin, new endpoint
+generation), the joined room never reconnected. The client hammered central
+`POST /v1/servers/<id>/member-preview` → 409 `incarnation_conflict` (central
+`infra/identity-directory/src/server_connect_grants.js` `memberEndpoint`
+throws it when the endpoint row is revoked or the epoch differs), then →
+429 (central rate limit), so even the republished host could not reconnect.
+Separately, desktop CSP blocked member-host images
+(`https://<tunnel>/api/attachments/<id>?view=1` not in `img-src`): member
+room attachments/avatars rendered by direct URL instead of through the
+member transport.
+
+Required:
+
+- Reconnect is at most one in-flight attempt per HOST (not per room),
+  shared by all that host's subscriptions; a timer that fires while an
+  attempt is already in flight stands down instead of aborting it.
+- Capped exponential backoff with jitter. 409 `incarnation_conflict`
+  (endpoint revoked / host offline) means "host offline": slow cadence
+  (60 s doubling to a 5 min cap, ±20% jitter — at most 5 central preview
+  requests per 10 minutes, at most 18 per host per hour while revoked, and
+  no grant calls follow a 409), waking on real signals instead of timers:
+  the central directory refresh that already happens on focus/visible/
+  online, a changed directory tuple (republish), or a user click on the
+  room. 429 backs off for the server's `Retry-After` (exact, clamped to
+  1 s–10 min) or a 5 min jittered default when absent.
+- When the directory shows a fresh live endpoint for the same identity
+  (same registration epoch and host key, new origin/generation), the host
+  re-attaches promptly on that refresh — the pending slow timer is
+  superseded, never an extra attempt.
+- Member-host images (message attachments, avatars, persona/agent images)
+  load through the member transport as blobs like own-host resources do,
+  never by direct tunnel URL; the desktop CSP is not widened. A host-origin
+  image with no live transport renders nothing rather than a direct URL.
+- The attempt counter grows across timer-driven retries (a timer retry
+  never resets it); only success or an explicit user retry resets it.
+
+Entry points: `frontend/src/lib/central/memberRoomLive.ts` (backoff
+policy, cause classification), `frontend/src/lib/central/identity.ts`
+(`Retry-After` on central 429s), `frontend/src/app/useMemberHosts.ts`
+(per-host single flight and timers), `frontend/src/lib/remote/
+remoteWorkspace.ts` (host-origin transport lookup),
+`frontend/src/views/components/ResourceImage.tsx` (fail-closed render).

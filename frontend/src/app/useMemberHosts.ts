@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
-import { memberHostReconnectDelay } from "../lib/central/memberRoomLive";
+import { memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { remoteWorkspaceFor } from "../lib/remote/remoteWorkspace";
 import { ApiError } from "../lib/apiErrors";
 import type { SecureMemberAdmission } from "../lib/central/secureMemberEntry";
@@ -94,11 +94,18 @@ export function useMemberHosts({
   const admissions = useRef(new Map<string, SecureMemberAdmission>());
   const attempted = useRef(new Map<string, string>());
   const refused = useRef(new Set<string>());
-  // Per-host automatic reconnect: bounded doubling backoff driven only by
-  // that host's own channel close or attach failure, plus explicit retry.
-  // No global loop, no central polling; each attempt re-admits on demand.
+  // Per-host automatic reconnect: bounded doubling backoff with jitter,
+  // driven only by that host's own channel close, attach failure, or
+  // explicit retry. No global loop, no central polling; each attempt
+  // re-admits on demand. A 409 incarnation_conflict (endpoint revoked)
+  // backs off to a slow cadence that wakes on real signals (directory
+  // refresh, republish, user click); a 429 honors the server's Retry-After.
+  // The attempt counter grows across timer-driven retries — only success
+  // or an explicit user retry resets it.
   const reconnectTimers = useRef(new Map<string, number>());
   const reconnectAttempts = useRef(new Map<string, number>());
+  const reconnectCauses = useRef(new Map<string, MemberHostReconnectCause>());
+  const reconnectRetryAfter = useRef(new Map<string, number | null>());
   const snapshotsRef = useRef<MemberHostSnapshot[]>([]);
   snapshotsRef.current = snapshots;
   const directoryRef = useRef(directory);
@@ -127,7 +134,6 @@ export function useMemberHosts({
     const timer = reconnectTimers.current.get(serverId);
     if (timer !== undefined) window.clearTimeout(timer);
     reconnectTimers.current.delete(serverId);
-    reconnectAttempts.current.delete(serverId);
     flights.current.get(serverId)?.abort();
     flights.current.delete(serverId);
     const admission = admissions.current.get(serverId);
@@ -137,7 +143,7 @@ export function useMemberHosts({
     setSnapshots((current) => current.filter((entry) => entry.serverId !== serverId));
   }, []);
 
-  const retryHostRef = useRef<(serverId: string) => void>(() => undefined);
+  const reattachHostRef = useRef<(serverId: string) => void>(() => undefined);
 
   const scheduleReconnect = useCallback((serverId: string) => {
     // An identity refusal blocks silent re-entry (fresh consent overwrites
@@ -145,10 +151,16 @@ export function useMemberHosts({
     if (reconnectTimers.current.has(serverId) || refused.current.has(serverId)) return;
     const attempt = reconnectAttempts.current.get(serverId) ?? 0;
     reconnectAttempts.current.set(serverId, attempt + 1);
+    const cause = reconnectCauses.current.get(serverId) ?? "transient";
+    const retryAfterMs = reconnectRetryAfter.current.get(serverId) ?? null;
     reconnectTimers.current.set(serverId, window.setTimeout(() => {
       reconnectTimers.current.delete(serverId);
-      retryHostRef.current(serverId);
-    }, memberHostReconnectDelay(attempt)));
+      // One in-flight reconnect per host, shared by every subscription: a
+      // timer that fires into a running attempt stands down instead of
+      // aborting it — that attempt's own outcome schedules the next step.
+      if (flights.current.has(serverId)) return;
+      reattachHostRef.current(serverId);
+    }, memberHostReconnectDelay(attempt, cause, retryAfterMs)));
   }, []);
 
   const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal) => {
@@ -193,6 +205,8 @@ export function useMemberHosts({
       if (timer !== undefined) window.clearTimeout(timer);
       reconnectTimers.current.delete(serverId);
       reconnectAttempts.current.delete(serverId);
+      reconnectCauses.current.delete(serverId);
+      reconnectRetryAfter.current.delete(serverId);
       setPhase(serverId, "connected", attached.rooms, attached.anchor.endpoint_origin, null);
     } catch (error) {
       flights.current.delete(serverId);
@@ -212,6 +226,12 @@ export function useMemberHosts({
         return;
       }
       setPhase(serverId, "disconnected", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin, null);
+      // The failure kind picks the backoff: a revoked endpoint (409
+      // incarnation_conflict) rests on a slow cadence, a 429 honors the
+      // server's Retry-After. The counter keeps growing across these
+      // timer-driven retries; only success or explicit retry resets it.
+      reconnectCauses.current.set(serverId, memberHostReconnectCause(error));
+      reconnectRetryAfter.current.set(serverId, memberHostRetryAfterMs(error));
       scheduleReconnect(serverId);
     }
   }, [setPhase, dropHost, scheduleReconnect]);
@@ -226,6 +246,8 @@ export function useMemberHosts({
       for (const timer of reconnectTimers.current.values()) window.clearTimeout(timer);
       reconnectTimers.current.clear();
       reconnectAttempts.current.clear();
+      reconnectCauses.current.clear();
+      reconnectRetryAfter.current.clear();
       for (const serverId of [...flights.current.keys()]) {
         flights.current.get(serverId)?.abort();
         flights.current.delete(serverId);
@@ -254,6 +276,9 @@ export function useMemberHosts({
     for (const snapshot of snapshotsRef.current) {
       if (!seen.has(snapshot.serverId)) {
         dropHost(snapshot.serverId);
+        reconnectAttempts.current.delete(snapshot.serverId);
+        reconnectCauses.current.delete(snapshot.serverId);
+        reconnectRetryAfter.current.delete(snapshot.serverId);
         removeMemberAnchor(activePerson, snapshot.serverId);
       }
     }
@@ -310,6 +335,13 @@ export function useMemberHosts({
         refused.current.delete(server.server_id);
       }
       attempted.current.set(server.server_id, tupleKey(tuple));
+      // A directory tuple the client has never tried (a republished host's
+      // fresh origin/generation) supersedes a pending slow timer: drop it so
+      // the prompt attempt below is the single in-flight reconnect and no
+      // stale timer fires a duplicate behind it.
+      const pendingTimer = reconnectTimers.current.get(server.server_id);
+      if (pendingTimer !== undefined) window.clearTimeout(pendingTimer);
+      reconnectTimers.current.delete(server.server_id);
       // Another in-place flow may already hold this host's live session
       // (first-join consent just completed): adopt its rooms without opening
       // a second transport.
@@ -336,32 +368,48 @@ export function useMemberHosts({
     reconcile();
   }, [directory, anchorRevision, personId, sessionToken, reconcile]);
 
-  const retryHost = useCallback((serverId: string) => {
+  // Timer-driven reattach: a real signal (channel close, attach failure)
+  // already recorded the cause and grew the counter, so this preserves the
+  // backoff instead of resetting it.
+  const reattachHost = useCallback((serverId: string) => {
     const { personId: activePerson } = identityRef.current;
     const live = directoryRef.current?.status === "connected" ? directoryRef.current.live?.servers ?? null : null;
     const server = live?.find((entry) => entry.server_id === serverId && entry.relation === "member");
     // An identity refusal stays on its re-join message until fresh consent
-    // overwrites the anchor; explicit retry never attaches past it blind.
+    // overwrites the anchor; a timer never attaches past it blind.
     if (refused.current.has(serverId) && !server) return;
     const anchor = activePerson ? loadMemberAnchor(activePerson, serverId) : null;
     const epoch = server?.registration_epoch || anchor?.registration_epoch || "";
     if (!epoch) return;
-    refused.current.delete(serverId);
     attempted.current.delete(serverId);
     const timer = reconnectTimers.current.get(serverId);
     if (timer !== undefined) window.clearTimeout(timer);
     reconnectTimers.current.delete(serverId);
-    reconnectAttempts.current.delete(serverId);
     dropHost(serverId);
     if (server) {
       reconcile();
       return;
     }
     // Central is unconfirmed so reconcile cannot run: attach straight from
-    // the anchor instead of stranding the explicit retry in silence.
+    // the anchor instead of stranding the retry in silence.
     void attach(serverId, epoch, anchor?.endpoint_origin || "");
   }, [attach, dropHost, reconcile]);
-  retryHostRef.current = retryHost;
+
+  const retryHost = useCallback((serverId: string) => {
+    // Explicit user retry is fresh intent: restart the backoff and lift a
+    // recorded refusal so the attempt re-runs (an identity mismatch
+    // re-refuses with its re-join reason instead of stranding the retry).
+    // Without a listed server the refusal stands and the retry stays put.
+    const live = directoryRef.current?.status === "connected" ? directoryRef.current.live?.servers ?? null : null;
+    const listed = live?.some((entry) => entry.server_id === serverId && entry.relation === "member") ?? false;
+    if (refused.current.has(serverId) && !listed) return;
+    refused.current.delete(serverId);
+    reconnectAttempts.current.delete(serverId);
+    reconnectCauses.current.delete(serverId);
+    reconnectRetryAfter.current.delete(serverId);
+    reattachHost(serverId);
+  }, [reattachHost]);
+  reattachHostRef.current = reattachHost;
 
   const selectRoom = useCallback(async (serverId: string, roomId: string) => {
     if (import.meta.env.DEV) console.debug("[member-select] select start", { serverId, roomId });
