@@ -838,4 +838,72 @@ it("keeps failed remote authentication distinct from confirmed off and retries i
         vi.useRealTimers();
       }
     });
+
+    it("owner Stop during a pending reopen retry never reopens (slow stop race)", async () => {
+      vi.useFakeTimers();
+      try {
+        window.localStorage.setItem(preferenceKey, "open");
+        apiMocks.fetchPublicInviteStatus
+          .mockRejectedValueOnce(new Error("앱을 준비하고 있어요. 잠시 후 다시 시도해 주세요."))
+          .mockResolvedValue(stoppedStatus);
+        apiMocks.startPublicInviteTunnel.mockResolvedValue(publicStatus);
+        const stopGate = deferred<PublicInviteStatus>();
+        apiMocks.stopPublicInviteTunnel.mockReturnValue(stopGate.promise);
+        const hook = renderInviteController();
+        // First startup attempt fails while the runtime starts; a 2s retry is armed.
+        await act(async () => {});
+        expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+        expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalledTimes(1);
+
+        // Owner presses Stop while the retry is pending; the stop request is slow.
+        let stopPromise!: Promise<void>;
+        act(() => {
+          stopPromise = hook.result.current.stopTunnel();
+        });
+        // Explicit close wins synchronously, before any await.
+        expect(window.localStorage.getItem(preferenceKey)).toBe("closed");
+
+        // The armed retry fires during the slow stop await: it must not start.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2_000);
+        });
+        await act(async () => {});
+        expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+
+        // Slow stop completes; the stop itself is preserved, never retired.
+        await act(async () => {
+          stopGate.resolve(stoppedStatus);
+          await stopPromise;
+        });
+        await act(async () => {});
+        expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+        expect(window.localStorage.getItem(preferenceKey)).toBe("closed");
+        expect(hook.result.current.publicInviteStatus).toEqual(stoppedStatus);
+
+        // No later retry may start the tunnel either.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600_000);
+        });
+        await act(async () => {});
+        expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+        expect(window.localStorage.getItem(preferenceKey)).toBe("closed");
+        hook.unmount();
+
+        // A remount (restart) with the remembered closed choice starts nothing.
+        vi.resetAllMocks();
+        apiMocks.fetchPublicInviteStatus.mockResolvedValue(stoppedStatus);
+        apiMocks.startPublicInviteTunnel.mockResolvedValue(publicStatus);
+        const restarted = renderInviteController();
+        await act(async () => {});
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600_000);
+        });
+        await act(async () => {});
+        expect(apiMocks.fetchPublicInviteStatus).not.toHaveBeenCalled();
+        expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+        restarted.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });

@@ -240,6 +240,25 @@ export function useRoomInviteController({
   const AUTO_REOPEN_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 30_000, 60_000, 60_000];
   const autoReopenTimerRef = useRef<number | undefined>(undefined);
   const autoReopenDoneRef = useRef(false);
+  // Generation the pending retry expects to still be current when it fires.
+  // Every explicit ingress operation bumps ingressGenerationRef, so a mismatch
+  // means an explicit owner operation took over after this retry was scheduled
+  // and the retry must not bump (must never retire the explicit operation).
+  const autoReopenExpectedGenerationRef = useRef<number | null>(null);
+
+  // Owner's explicit close always wins over the background auto-reopen.
+  // Synchronous (no await): cancel any pending retry timer, finish auto-reopen
+  // for this session, and persist "closed" — before the stop request starts.
+  // A retry firing during the stop await then sees done/closed and never
+  // starts the tunnel or retires this stop.
+  function cancelAutoReopenForOwnerClose() {
+    if (autoReopenTimerRef.current !== undefined) {
+      window.clearTimeout(autoReopenTimerRef.current);
+      autoReopenTimerRef.current = undefined;
+    }
+    autoReopenDoneRef.current = true;
+    autoReopenExpectedGenerationRef.current = null;
+  }
   useEffect(() => () => {
     if (autoReopenTimerRef.current !== undefined) {
       window.clearTimeout(autoReopenTimerRef.current);
@@ -259,15 +278,30 @@ export function useRoomInviteController({
       }
       const delay = AUTO_REOPEN_RETRY_DELAYS_MS[Math.min(attempt, AUTO_REOPEN_RETRY_DELAYS_MS.length - 1)];
       attempt += 1;
+      autoReopenExpectedGenerationRef.current = ingressGenerationRef.current;
+      const expectedGeneration = autoReopenExpectedGenerationRef.current;
       autoReopenTimerRef.current = window.setTimeout(() => {
         autoReopenTimerRef.current = undefined;
-        void runReopen();
+        void runReopen(expectedGeneration);
       }, delay);
     }
-    async function runReopen() {
+    async function runReopen(expectedGeneration: number | null) {
       if (cancelled || autoReopenDoneRef.current) return;
+      // Re-check at fire time: an owner Stop saves "closed" synchronously
+      // before its await, so a retry due during that await sees closed here.
       if (!loadPublicIngressPreference()) {
         autoReopenDoneRef.current = true;
+        return;
+      }
+      // Explicit operations take priority: if any ingress operation bumped
+      // the generation since this retry was scheduled, an explicit owner
+      // operation took over — skip this attempt without bumping (never retire
+      // it) and keep the remaining budget for a later quiet moment.
+      if (
+        expectedGeneration !== null &&
+        ingressGenerationRef.current !== expectedGeneration
+      ) {
+        scheduleRetry();
         return;
       }
       const generation = beginIngressOperation();
@@ -279,7 +313,7 @@ export function useRoomInviteController({
         scheduleRetry();
       }
     }
-    void runReopen();
+    void runReopen(null);
     return () => {
       cancelled = true;
       if (autoReopenTimerRef.current !== undefined) {
@@ -490,6 +524,13 @@ export function useRoomInviteController({
       setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있어요.");
       return;
     }
+    // Owner's explicit "외부 접속 끄기" wins synchronously, before any await:
+    // cancel every pending reopen retry, finish auto-reopen for this session,
+    // and persist "closed" first. Only then perform the stop request, so a
+    // retry firing during the await below sees closed/done and never starts
+    // the tunnel or retires this stop.
+    cancelAutoReopenForOwnerClose();
+    if (!remote) savePublicIngressPreference(false);
     const generation = beginIngressOperation("stopping");
     try {
       assertIngressOperation(generation);
