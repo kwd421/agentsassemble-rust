@@ -311,8 +311,8 @@ pub(crate) async fn mint_session(
         .bind(admission).execute(&mut **tx).await?;
     crate::secure_session::bind_member(tx, &issued.fingerprint, member.secure.as_ref()).await?;
     crate::member_sessions::prune(tx, admission).await?;
-    // A Joined membership can be absent from live snapshots after all sessions expire.
-    // Publish its canonical row again when a new session makes it visible.
+    // The roster retains joined members while offline; a fresh session
+    // re-publishes their canonical row so reconnects stay visible.
     let participant =
         crate::participant_rows::load_participant_by_key(tx, &result.meeting_id, participant)
             .await?

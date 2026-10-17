@@ -423,16 +423,18 @@ async fn load_snapshot_participants(
     include_departed: bool,
 ) -> Result<Vec<Participant>, PersistenceError> {
     let now = chrono::Utc::now().timestamp_micros();
-    // Terminal external memberships belong to history, not the live roster. Keep
-    // managed session participants for re-add eligibility and exported exclusions;
-    // their count is bounded by the existing Agent Session capacity owner.
+    // Joined membership outlives connection presence: a `joined` human stays in
+    // the live roster while offline (Discord-style offline section). Only
+    // terminal statuses (`left`/`kicked`/`exported`) and revoked/expired
+    // connector invites leave the roster. Session expiry only revokes
+    // authorization, never roster membership. Keep managed session participants
+    // for re-add eligibility and exported exclusions; their count is bounded by
+    // the existing Agent Session capacity owner.
     let participant_rows = sqlx::query(
         "SELECT p.participant_json, json_extract(u.profile_json, '$.avatar_label') AS profile_avatar_label \
          FROM participants AS p LEFT JOIN user_profiles AS u ON u.participant_id = p.participant_id \
          WHERE p.room_id = ? \
          AND (? OR (coalesce(json_extract(p.participant_json, '$.status'), '') NOT IN ('left', 'kicked', 'exported') \
-         AND p.participant_id NOT IN (SELECT h.participant_id FROM human_room_sessions AS h \
-         WHERE h.room_id = ? GROUP BY h.participant_id HAVING MAX(h.state = 'active' AND h.expires_at > ?) = 0) \
          AND NOT EXISTS (SELECT 1 FROM room_connector_invites AS c WHERE c.room_id = p.room_id AND c.participant_id = p.participant_id AND (c.revoked = 1 OR c.session_expires_at <= ?))) \
          OR EXISTS (SELECT 1 FROM agent_sessions AS s WHERE s.room_id = p.room_id \
          AND json_extract(s.session_json, '$.participant_id') = p.participant_id)) \
@@ -440,8 +442,6 @@ async fn load_snapshot_participants(
     )
     .bind(room_id)
     .bind(include_departed)
-    .bind(room_id)
-    .bind(now)
     .bind(now)
     .fetch_all(&mut **transaction)
     .await?;

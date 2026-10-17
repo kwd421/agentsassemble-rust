@@ -481,11 +481,13 @@ async fn join_and_connect_restore_expired_live_roster_with_canonical_event() -> 
             .await?;
         let authority = crate::RoomMutationAuthority::TrustedPrincipal(&host);
         let before = store.snapshot_for(authority, 0, 200).await?;
+        // Joined membership outlives presence: an expired session keeps the
+        // member listed (offline section) until leave/kick.
         assert!(
             before
                 .participants
                 .iter()
-                .all(|p| p.participant_id != first.result().agent_id)
+                .any(|p| p.participant_id == first.result().agent_id)
         );
         let request = member(2, 4, "Ignored changed name");
         let decision = if connect {

@@ -209,6 +209,11 @@ not an authority.
   user for a one-use invite without registering a reusable device credential.
   Therefore two unrelated one-use invites do not silently merge one person, while
   every admitted human still has one authenticated profile.
+- Joined membership outlives connection presence: a `joined` human stays in the
+  canonical snapshot roster and room member list while offline, through the same
+  `snapshot_for` / `participants` path the app renders. Only `left`/`kicked`/`exported`
+  leave the live roster. A stored `<@participant_id>` mention renders that member's
+  current display name; a truly unknown id renders neutral Korean, never the raw id.
 
 ## Authority and persistence
 

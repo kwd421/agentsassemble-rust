@@ -18,7 +18,7 @@ const JOIN: [u8; 32] = [0x42; 32];
 const BROWSER: [u8; 32] = [0x43; 32];
 
 #[tokio::test]
-async fn expired_human_membership_leaves_public_roster_without_destroying_history()
+async fn expired_human_session_keeps_joined_roster_without_destroying_history()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, now) = admitted_fixture(InviteScope::ReadWrite).await;
     let principal = local_operator_principal();
@@ -31,11 +31,9 @@ async fn expired_human_membership_leaves_public_roster_without_destroying_histor
         .await?;
     set_session_expiry(&store, now - Duration::seconds(1)).await;
     let expired = store.snapshot_for(authority, 0, 200).await?;
-    assert_eq!(expired.participants.len(), 1);
-    assert_eq!(
-        expired.participants[0].participant_id,
-        LOCAL_OPERATOR_PARTICIPANT_ID
-    );
+    // Joined membership outlives presence: an expired session revokes
+    // authorization but the member stays listed (offline section).
+    assert_eq!(expired.participants.len(), 2);
     assert_eq!(expired.events, before.events);
     assert_eq!(
         store.snapshot("general", 0, 200).await?.participants.len(),
