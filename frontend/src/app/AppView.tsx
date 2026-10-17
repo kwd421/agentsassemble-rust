@@ -1,12 +1,12 @@
-import { isDesktopWebview, requestDesktopHostDeviceInfo } from "../lib/desktopBridge";
-import { centralAccountSelf } from "../lib/central/localOwnership";
+import { isDesktopWebview } from "../lib/desktopBridge";
+import { centralAccountSelf, shouldShowOwnServerMismatch } from "../lib/central/localOwnership";
 import { openCentralOwnedServer } from "../lib/central/identity";
 import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
 import CustomChannelView from "../views/CustomChannelView";
 import { isCustomChannelId } from "../lib/customChannelId";
 import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Bell,
   CalendarDays,
@@ -127,26 +127,14 @@ export default function AppView({ controller }: { controller: AppController }) {
   }
   const friendsVisible = friendsOpen && canManageFriends;
   // This computer's server belongs to its registered owner. A mismatch is
-  // a quiet one-line entry offering an explicit action, never a gate.
-  const [localHostServerId, setLocalHostServerId] = useState<string | null | undefined>(undefined);
-  useEffect(() => {
-    if (!isDesktopWebview() || !controller.centralDirectory?.person) {
-      setLocalHostServerId(undefined);
-      return;
-    }
-    let active = true;
-    requestDesktopHostDeviceInfo()
-      .then((device) => { if (active) setLocalHostServerId(device.server_id ?? null); })
-      .catch(() => { if (active) setLocalHostServerId(null); });
-    return () => { active = false; };
-  }, [controller.centralDirectory?.person?.person_id]);
+  // a quiet one-line entry offering an explicit action, never a gate. It is
+  // decided only from registration identity (this host's server id vs the
+  // central owned entry); while unknown (runtime starting, central
+  // unconfirmed) it shows nothing.
+  const localHostServerId = controller.localHostServerId;
   const ownedServers = (controller.centralDirectory?.servers || []).filter((server) => server.relation === "owner");
   const ownedServer = ownedServers.length === 1 ? ownedServers[0] : undefined;
-  const ownerConflict = Boolean(controller.centralDirectory?.live?.owner_server_conflict);
-  const ownServerMismatch = Boolean(
-    controller.centralDirectory?.person && ownedServer && !ownerConflict &&
-      localHostServerId !== undefined && localHostServerId !== ownedServer.server_id,
-  );
+  const ownServerMismatch = shouldShowOwnServerMismatch(localHostServerId, controller.centralDirectory);
   const liveOwned = (controller.centralDirectory?.live?.servers || []).find(
     (server) => ownedServer && server.server_id === ownedServer.server_id,
   );

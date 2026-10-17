@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createFreshRoom } from "../lib/roomDockModel";
 import { useRailRooms } from "./useRailRooms";
@@ -17,7 +17,9 @@ const gateMocks = vi.hoisted(() => ({
   openServer: vi.fn(),
   deviceInfo: vi.fn(),
   bootstrapStatus: vi.fn(),
+  productSurface: vi.fn(),
   fetchRooms: vi.fn(),
+  ensureStarted: vi.fn(),
 }));
 vi.mock("../lib/central/identity", () => ({
   hasPendingLocalDemotion: vi.fn(() => false),
@@ -44,8 +46,10 @@ vi.mock("../lib/desktopBridge", () => ({
   fetchDesktopOperatorRuntime: gateMocks.fetchRooms,
   initializeDesktopBootstrap: vi.fn(),
   requestDesktopBootstrapStatus: gateMocks.bootstrapStatus,
-  requestDesktopHostProductSurface: vi.fn().mockResolvedValue({ revision: 1, digest: "1".repeat(64), commands: [] }),
+  requestDesktopHostProductSurface: gateMocks.productSurface,
   requestDesktopHostDeviceInfo: gateMocks.deviceInfo,
+  ensureDesktopRuntimeStarted: gateMocks.ensureStarted,
+  __resetDesktopRuntimeStartedForTest: vi.fn(),
 }));
 vi.mock("../lib/deviceIdentity", () => ({
   rememberGuestProfile: vi.fn(),
@@ -83,13 +87,25 @@ afterEach(() => {
   cleanup();
   window.localStorage.clear();
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
   gateMocks.configured = true;
   gateMocks.loggedOut = false;
   gateMocks.session = null;
   gateMocks.deviceInfo.mockReset();
   gateMocks.bootstrap.mockReset();
   gateMocks.bootstrapStatus.mockReset();
+  gateMocks.productSurface.mockReset();
+  gateMocks.ensureStarted.mockReset();
   gateMocks.fetchRooms.mockReset();
+  gateMocks.productSurface.mockResolvedValue({ revision: 1, digest: "1".repeat(64), commands: [] });
+  // The real starter runs product-surface then bootstrap-status once; the
+  // mock keeps that owner path so the boundary regression is observable.
+  gateMocks.ensureStarted.mockImplementation(async () => {
+    await gateMocks.productSurface();
+    await gateMocks.bootstrapStatus();
+  });
 });
 
 describe("startup goes straight in", () => {
@@ -235,5 +251,66 @@ describe("rail retry stays in place for member rooms", () => {
     });
     expect(retryHost).toHaveBeenCalledWith(MEMBER_ID);
     expect(refreshCentral).not.toHaveBeenCalled();
+  });
+});
+
+describe("desktop runtime starts even when the gate is skipped", () => {
+  it("invokes the desktop bootstrap command once for a signed-in session", async () => {
+    const { default: Boundary } = await import("../views/components/StartupIdentityBoundary");
+    gateMocks.session = {
+      person: { person_id: "hihi", display_name: "Hihi" },
+      token: "token",
+    } as unknown as typeof gateMocks.session;
+    gateMocks.bootstrapStatus.mockResolvedValue({ phase: "complete" });
+    render(
+      <Boundary>
+        {() => <main aria-label="app shell" />}
+      </Boundary>,
+    );
+    expect(await screen.findByRole("main", { name: "app shell" })).toBeTruthy();
+    await waitFor(() => expect(gateMocks.ensureStarted).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    expect(gateMocks.productSurface).toHaveBeenCalledTimes(1);
+    expect(gateMocks.bootstrapStatus).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ownership mismatch is registration-only", () => {
+  it("never shows the mismatch line for the matching owner even with zero rooms loaded", async () => {
+    const { isLocalOwnedByRegistration, shouldShowOwnServerMismatch } = await import(
+      "../lib/central/localOwnership"
+    );
+    const person = { person_id: "hihi", display_name: "Hihi", identity_kind: "google" as const };
+    const directory = {
+      status: "connected" as const,
+      person,
+      servers: [{ server_id: OWN_ID, relation: "owner" as const, alias: "hihi-pc" }],
+      live: { person, servers: [], server_time: 1 },
+    };
+    // Zero rooms loaded (runtime still starting): matching registration is
+    // still mine and shows no mismatch line.
+    expect(isLocalOwnedByRegistration(OWN_ID, directory)).toBe(true);
+    expect(shouldShowOwnServerMismatch(OWN_ID, directory)).toBe(false);
+  });
+
+  it("shows nothing while the registration identity is unknown", async () => {
+    const { isLocalOwnedByRegistration, shouldShowOwnServerMismatch } = await import(
+      "../lib/central/localOwnership"
+    );
+    const person = { person_id: "hihi", display_name: "Hihi", identity_kind: "google" as const };
+    const connected = {
+      status: "connected" as const,
+      person,
+      servers: [{ server_id: OWN_ID, relation: "owner" as const, alias: "hihi-pc" }],
+      live: { person, servers: [], server_time: 1 },
+    };
+    const unconfirmed = { ...connected, status: "central-unconfirmed" as const };
+    expect(shouldShowOwnServerMismatch(undefined, connected)).toBe(false);
+    expect(shouldShowOwnServerMismatch(null, connected)).toBe(false);
+    expect(shouldShowOwnServerMismatch(OWN_ID, unconfirmed)).toBe(false);
+    expect(shouldShowOwnServerMismatch(FOREIGN_ID, unconfirmed)).toBe(false);
+    expect(isLocalOwnedByRegistration(undefined, connected)).toBe(false);
+    // A proven foreign registration still mismatches once known.
+    expect(shouldShowOwnServerMismatch(FOREIGN_ID, connected)).toBe(true);
+    expect(isLocalOwnedByRegistration(FOREIGN_ID, connected)).toBe(false);
   });
 });

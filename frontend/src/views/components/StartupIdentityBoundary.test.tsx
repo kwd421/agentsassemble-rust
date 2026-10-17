@@ -19,6 +19,7 @@ const boundaryMocks = vi.hoisted(() => ({ desktop: true, bundled: true, session:
 vi.mock("../../lib/desktopBridge", () => ({
   isDesktopWebview: () => boundaryMocks.desktop,
   isBundledDesktopWebview: () => boundaryMocks.desktop && boundaryMocks.bundled,
+  ensureDesktopRuntimeStarted: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("../../lib/roomGuestSession", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/roomGuestSession")>()),

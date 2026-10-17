@@ -61,8 +61,7 @@ describe("UserPanel", () => {
     apiMocks.uploadUserProfileAvatar.mockReset();
   });
 
-  it("does not present the local default as authority before server hydration", async () => {
-    let resolveProfile: ((profile: UserProfileSnapshot) => void) | undefined;
+  it("does not present the local default as authority before server hydration", async () => {    let resolveProfile: ((profile: UserProfileSnapshot) => void) | undefined;
     apiMocks.fetchUserProfile.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -533,5 +532,27 @@ describe("UserPanel", () => {
       2,
       { sessionToken: "guest-session" }
     );
+  });
+
+  it("stays neutral without internal text while the startup profile fails", async () => {
+    apiMocks.fetchUserProfile.mockRejectedValue(
+      new Error("데스크톱 호스트 제품 표면이 아직 고정되지 않았습니다.")
+    );
+    const view = render(
+      <UserPanel
+        onlineCount={1}
+        agentCount={0}
+        hasBackendError={false}
+        profileIdentity={{ deviceToken: "device-token" }}
+      />
+    );
+    await waitFor(() => expect(apiMocks.fetchUserProfile).toHaveBeenCalled());
+    // Neutral Korean loading/failure copy only; internal jargon never
+    // appears in the visible status (raw detail stays collapsed).
+    const status = within(view.container).getByRole("status");
+    expect(status.textContent).toContain("프로필을 불러오지 못했어요");
+    expect(status.textContent).not.toContain("제품 표면");
+    expect(status.textContent).not.toContain("고정");
+    expect(within(view.container).getByText("자세히")).toBeTruthy();
   });
 });

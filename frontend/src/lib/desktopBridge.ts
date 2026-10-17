@@ -146,7 +146,7 @@ function requireDesktopHostCommand(command: string, target?: DesktopHostCommandT
   // command even though this check lets own-host work continue.
   if (target?.kind === "remote") throw new Error("원격 서버에서는 이 컴퓨터의 호스트 권한을 사용할 수 없어요.");
   if (!desktopHostSurface) {
-    throw new Error("데스크톱 호스트 제품 표면이 아직 고정되지 않았습니다.");
+    throw new Error("앱을 준비하고 있어요. 잠시 후 다시 시도해 주세요.");
   }
   if (!desktopHostSurface.commands.includes(command)) {
     throw new Error(`데스크톱 호스트 명령 ${command}은 현재 제품 표면에 없습니다.`);
@@ -212,6 +212,33 @@ export async function requestDesktopHostProductSurface(): Promise<HostProductSur
   }
   desktopHostSurface = surface;
   return structuredClone(surface);
+}
+
+/**
+ * The bundled desktop always starts its local host runtime at launch,
+ * independent of whether the startup gate UI renders. The gate used to own
+ * this path (`runtime_bootstrap_status`, which lazily spawns the owner's
+ * server via `ensure_runtime`); the straight-in boundary skips the gate,
+ * so this starter runs the same owner path once at launch instead.
+ */
+let desktopRuntimeStarted: Promise<void> | null = null;
+
+export function ensureDesktopRuntimeStarted(): Promise<void> {
+  if (!isDesktopWebview()) return Promise.resolve();
+  if (!desktopRuntimeStarted) {
+    desktopRuntimeStarted = (async () => {
+      await requestDesktopHostProductSurface();
+      await requestDesktopBootstrapStatus();
+    })().then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+  return desktopRuntimeStarted;
+}
+
+export function __resetDesktopRuntimeStartedForTest(): void {
+  desktopRuntimeStarted = null;
 }
 
 export async function requestDesktopServerBackup(request: Record<string,unknown>): Promise<unknown> {

@@ -1,13 +1,13 @@
 import MemberJoinPanel from "./MemberJoinPanel";
 import GoogleGLogo from "./GoogleGLogo";
 import { remoteWorkspaceVersion, remoteWorkspacesSnapshot, subscribeRemoteWorkspace, pendingMemberSnapshot, selectRemoteMember } from "../../lib/remote/remoteWorkspace";
-import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import {
   getOrCreateBrowserCredential,
   getOrCreateClientId,
 } from "../../lib/deviceIdentity";
-import { isBundledDesktopWebview } from "../../lib/desktopBridge";
+import { isBundledDesktopWebview, ensureDesktopRuntimeStarted } from "../../lib/desktopBridge";
 import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
 import { consumeCentralOwnerConnectFromUrl } from "../../lib/central/ownerConnect";
 import { clearStoredCentralOwnerWorkspace, type CentralOwnerWorkspace } from "../../lib/central/ownerWorkspace";
@@ -86,6 +86,13 @@ export default function StartupIdentityBoundary({
     setOwnerWorkspace(session);
     setReady(true);
   }, []);
+
+  // The local host runtime always starts at launch through the same owner
+  // path the gate used (`runtime_bootstrap_status`), independent of whether
+  // the gate UI renders. Straight-in skips the gate but never the runtime.
+  useEffect(() => {
+    if (desktop) void ensureDesktopRuntimeStarted();
+  }, [desktop]);
 
   if (pendingMember) return <MemberJoinPanel secureEntry={pendingMember} onCancel={() => selectRemoteMember(null)} />;
   if (remote && !remotes.some((entry) => entry.owner)) {

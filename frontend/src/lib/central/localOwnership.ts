@@ -25,23 +25,67 @@ export function localRoomServerIds(rooms: RoomDockItem[]): string[] {
 }
 
 /**
+ * Registration-only ownership: this computer's local rooms are mine only
+ * when this host's registered server id matches one of the signed-in
+ * account's owned server ids (the same authority the old chooser used:
+ * owned server id vs `host_device_info` server id). It never depends on
+ * whether rooms loaded: while unknown (runtime starting, central
+ * unconfirmed, device info unavailable) it is not mine, so the signed-in
+ * account is shown instead of a foreign local operator.
+ *
+ * Without a signed-in central person (guest/local mode) the local host
+ * stays authoritative, preserving existing behaviour.
+ */
+export function isLocalOwnedByRegistration(
+  localServerId: string | null | undefined,
+  directory: CentralDirectoryState | null,
+): boolean {
+  if (!directory?.person) return true;
+  if (directory.status === "central-unconfirmed") return false;
+  if (typeof localServerId !== "string" || !localServerId) return false;
+  const owned = new Set(ownedServerIds(directory));
+  if (owned.size === 0) return false;
+  return owned.has(localServerId);
+}
+
+/**
  * Whether this computer's local rooms may be shown as the signed-in
- * account's own rooms. Without a signed-in central person (guest/local
- * mode) the local host stays authoritative, preserving existing behaviour.
- * A local room with a known server id is mine only when that id matches one
- * of my owned server ids; rooms without an id (fresh/legacy) keep existing
- * behaviour so a just-created room is never hidden.
+ * account's own rooms. Registration identity owns the answer; the room
+ * list is never the authority. Callers pass this host's registered
+ * server id (third argument) when available; older two-argument calls
+ * keep the previous per-room fallback only for tests.
  */
 export function isLocalOwnedByAccount(
   rooms: RoomDockItem[],
   directory: CentralDirectoryState | null,
+  localServerId?: string | null | undefined,
 ): boolean {
+  if (arguments.length >= 3) return isLocalOwnedByRegistration(localServerId ?? undefined, directory);
   if (!directory?.person) return true;
   const owned = new Set(ownedServerIds(directory));
   if (owned.size === 0) return false;
   const locals = rooms.filter((room) => room.roomOrigin !== "remote_server");
   if (locals.length === 0) return true;
   return locals.some((room) => !room.serverId || owned.has(room.serverId));
+}
+
+/**
+ * Quiet mismatch entry: shown only when registration proves a mismatch
+ * (known different ids, central confirmed, no conflict, exactly one owned
+ * server). While unknown (runtime starting, central unconfirmed, device
+ * info unavailable) or without a single owned server, it shows nothing.
+ */
+export function shouldShowOwnServerMismatch(
+  localServerId: string | null | undefined,
+  directory: CentralDirectoryState | null,
+): boolean {
+  if (!directory?.person) return false;
+  if (directory.status === "central-unconfirmed") return false;
+  if (directory.live?.owner_server_conflict) return false;
+  if (typeof localServerId !== "string" || !localServerId) return false;
+  const owned = (directory.servers || []).filter((server) => server.relation === "owner");
+  if (owned.length !== 1) return false;
+  return owned[0].server_id !== localServerId;
 }
 
 /**

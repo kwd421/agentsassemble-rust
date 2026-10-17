@@ -1,5 +1,5 @@
 import { useCentralDirectory } from "./useCentralDirectory";
-import { isLocalOwnedByAccount } from "../lib/central/localOwnership";
+import { useLocalHostOwnership } from "./useLocalHostOwnership";
 import { useServerOpening } from "./useServerOpening";
 import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
 import { Hash } from "lucide-react";
@@ -232,7 +232,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     onResetToLobby: onGuestAdmissionReset,
   });
   const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
-  const localOwnedByAccount = isLocalOwnedByAccount(directoryRooms, centralDirectory);
+  const { localHostServerId, localOwnedByAccount } = useLocalHostOwnership(directoryRooms, centralDirectory);
   // Confirmed membership loss (kick/ban/revoke): rooms disappear from the
   // rail, their bearer clears, and a stranded selection falls back.
   const handleConfirmedMembershipLost = useCallback((serverId: string) => {
@@ -961,7 +961,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     connectorJoinUrl: startupRoute.connectorJoinUrl,
     guestExpired, guestJoinRequested, guestJoinStatus, guestInviteRoomLabel, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
-    profileAuthorityReady: (startupHostEnabled && localOwnedByAccount) || Boolean(ownerWorkspace.connect) || Boolean(admittedSessionToken), localOwnedByAccount,
+    profileAuthorityReady: (startupHostEnabled && localOwnedByAccount) || Boolean(ownerWorkspace.connect) || Boolean(admittedSessionToken), localOwnedByAccount, localHostServerId,
     ownerProfileRevision, hostingRestriction,
     ownerProfileSession: ownerWorkspace.connect ? { sessionToken: ownerWorkspace.connect.sessionToken, generation: ownerWorkspace.connect.generation } : undefined,
     guestLocked: activeGuestLocked, canCreateRoom, canInviteRooms, guestPanelProfile, guestRecoveryRequest, guestSession,

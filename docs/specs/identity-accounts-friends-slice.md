@@ -3927,3 +3927,31 @@ StartupIdentityGate.tsx` (login + nothing-openable only),
 `frontend/src/app/useRailRooms.ts` (hide foreign local rooms),
 `frontend/src/app/AppView.tsx` (quiet mismatch notice + central self),
 `frontend/src/app/useServerOpening.ts` (rail retry stays in place).
+
+### Startup straight-in desktop correction: runtime always starts, mismatch is registration-only (2026-10-17)
+
+Required alongside the straight-in decision above (same chooser/ownership
+decisions unchanged):
+
+- The bundled desktop always starts its local host runtime at launch
+  exactly as before (same `runtime_bootstrap_status`/bootstrap path),
+  independent of whether the startup gate UI renders. Skipping the gate
+  for a signed-in session must never skip the runtime start; otherwise
+  the owner's own server never runs and its rooms stay disconnected.
+- The own-server mismatch is decided only from registration identity
+  (this host's `server_id` from device info vs the central directory's
+  owned `server_id`, the same authority the old chooser used), never
+  from whether rooms loaded. While unknown (runtime starting, central
+  unconfirmed, device info unavailable) it shows nothing, never a false
+  mismatch line.
+- The user panel never shows internal/English text during startup; while
+  the profile authority is unconfirmed it stays a neutral loading state.
+
+Entry points: `frontend/src/views/components/StartupIdentityBoundary.tsx`
+(runtime starter, gate-independent), `frontend/src/lib/desktopBridge.ts`
+(`ensureDesktopRuntimeStarted`, neutral surface message),
+`frontend/src/lib/central/localOwnership.ts` (registration-only
+ownership/mismatch), `frontend/src/app/useAppController.tsx` (registration
+`localHostServerId`), `frontend/src/app/AppView.tsx` (quiet mismatch only
+when known), `frontend/src/views/components/UserPanel.tsx` (neutral
+loading).
