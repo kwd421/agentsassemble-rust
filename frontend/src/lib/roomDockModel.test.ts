@@ -3,6 +3,7 @@ import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 import { persistRoomGuestSession, type RoomGuestSession } from "./roomGuestSession";
 import { consumeOperatorPairingTokenFromUrl } from "./roomGuestSession";
 import {
+  applyMemberRoomLive,
   createStartupRoute,
   createFreshRoom, roomIsDisconnected,
   mergeHostRoomsIntoDock,
@@ -10,6 +11,7 @@ import {
   roomDockIdentity,
   type RoomDockItem,
 } from "./roomDockModel";
+import { memberRoomLiveKey } from "./central/memberRoomLive";
 
 const SESSION: RoomGuestSession = {
   inviteToken: "older-invite",
@@ -243,5 +245,28 @@ describe("multihost merge", () => {
     });
     expect(merged.find((room) => room.serverId === "server-gone")?.connectionState).toBe("disconnected");
     expect(merged.some((room) => room.meetingId === "local-room")).toBe(true);
+  });
+});
+
+describe("applyMemberRoomLive", () => {
+  const memberRoom = (meeting: string): RoomDockItem => ({
+    ...createFreshRoom(),
+    id: `server-friend-${meeting}`,
+    meetingId: meeting,
+    serverId: "friend",
+    roomOrigin: "remote_server",
+    connectionState: "connected",
+  });
+
+  it("badges only joined member rooms and keeps other items identical", () => {
+    const member = memberRoom("general");
+    const own = { ...createFreshRoom(), meetingId: "own-room" };
+    const badges = { [memberRoomLiveKey("friend", "general")]: { unread: true, mention: true } };
+    const merged = applyMemberRoomLive([member, own], badges);
+    expect(merged[0]).toMatchObject({ liveUnread: true, liveMention: true });
+    expect(merged[1]).toBe(own);
+    // No badge change anywhere: the same array comes back untouched.
+    expect(applyMemberRoomLive(merged, {})[0]).toMatchObject({ liveUnread: undefined, liveMention: undefined });
+    expect(applyMemberRoomLive([own], badges)).toHaveLength(1);
   });
 });

@@ -35,9 +35,11 @@ import { consumeGuestRecoveryRequestFromUrl } from "../lib/guestRecovery";
 import { roomAppearanceStyle } from "../lib/roomAppearance";
 import {
   createStartupRoute,
+  applyMemberRoomLive,
   roomIsDisconnected,
   type RoomDockItem,
 } from "../lib/roomDockModel";
+import { useMemberRoomLive } from "./useMemberRoomLive";
 import { useRailRooms } from "./useRailRooms";
 import { memberRoomRemovedWhileLive } from "./useMemberHosts";
 import { consumeOperatorPairingTokenFromUrl } from "../lib/roomGuestSession";
@@ -218,7 +220,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     onResetToLobby: onGuestAdmissionReset,
   });
   const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
-  const { rooms, memberHosts } = useRailRooms({
+  const { rooms: railRooms, memberHosts } = useRailRooms({
     directoryRooms,
     startupHostEnabled,
     roomDirectorySyncIssue,
@@ -236,10 +238,9 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     isMemberRefused: memberHosts.isRefused,
     retryMemberHost: memberHosts.retryHost,
   });
-  latestRooms.current = rooms;
   if (guestSession?.centralOwner && guestSession.roomUid) lastOwnerRoomUid.current = guestSession.roomUid;
   const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
-  const foundRoom = rooms.find((room) => room.id === activeRoomId) ?? null;
+  const foundRoom = railRooms.find((room) => room.id === activeRoomId) ?? null;
   useEffect(() => {
     if (foundRoom) retainedActiveRoom.current = foundRoom;
   }, [foundRoom]);
@@ -252,7 +253,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const retainedRoom = !foundRoom && activeRoomId && retainedActiveRoom.current?.id === activeRoomId &&
     !memberRoomRemovedWhileLive(retainedActiveRoom.current, memberHosts.snapshots)
     ? retainedActiveRoom.current : null;
-  const activeRoom = foundRoom ?? retainedRoom ?? rooms[0] ?? EMPTY_ROOM;
+  const activeRoom = foundRoom ?? retainedRoom ?? railRooms[0] ?? EMPTY_ROOM;
   const activeRoomDisconnected = roomIsDisconnected(activeRoom);
   const activeMemberHostDetail = activeRoom.roomOrigin === "remote_server" && activeRoom.serverId
     ? memberHosts.snapshots.find((entry) => entry.serverId === activeRoom.serverId)?.detail ?? null
@@ -262,6 +263,20 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   // which must never drive another host's room.
   const activeRoomSelectError = memberSelectError && memberSelectError.roomId === activeRoom.id
     ? memberSelectError.message : null;
+  // Joined member rooms stay live in the background: each covered room keeps
+  // a lightweight event stream for its rail unread/mention badge. The active
+  // room suspends its background stream (the canonical socket owns it).
+  const memberRoomLive = useMemberRoomLive({
+    snapshots: memberHosts.snapshots,
+    admissionFor: memberHosts.admissionFor,
+    activeServerId: activeRoom.roomOrigin === "remote_server" ? activeRoom.serverId ?? "" : "",
+    activeMeetingId: activeRoom.roomOrigin === "remote_server" ? activeRoom.meetingId : "",
+  });
+  const rooms = useMemo(
+    () => applyMemberRoomLive(railRooms, memberRoomLive.badges),
+    [railRooms, memberRoomLive.badges]
+  );
+  latestRooms.current = rooms;
   // A member room session belongs to exactly one host room. While the local
   // host owns the surface, that session authorizes only its own room: the
   // own rooms keep host authority (and the local operator viewer) instead of
@@ -574,16 +589,32 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
             guestSession.meetingId === room.meetingId &&
             guestSession.serverSurface.server_id === room.serverId)) {
         try {
-          const payload = await memberHosts.selectRoom(memberServerId, room.meetingId);
-          if (import.meta.env.DEV) console.debug("[member-select] admission complete", {
-            roomId, meetingId: payload.meeting_id, serverId: payload.server_id,
-          });
-          // A superseded admission applies nothing: stay on the click with
-          // the short Korean failure instead of abandoning it in silence.
-          if (!await acceptMemberRoomSession(payload)) {
-            setMemberSelectError({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
-          } else {
+          // A live background subscription opens instantly: its cached
+          // session needs no extra admission round trip. A dead session
+          // falls through to the normal select path below.
+          const live = memberRoomLive.liveSessionFor(memberServerId, room.meetingId);
+          let opened = false;
+          if (live) {
+            try {
+              opened = await acceptMemberRoomSession(live);
+            } catch {
+              opened = false;
+            }
+          }
+          if (opened) {
             setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
+          } else {
+            const payload = await memberHosts.selectRoom(memberServerId, room.meetingId);
+            if (import.meta.env.DEV) console.debug("[member-select] admission complete", {
+              roomId, meetingId: payload.meeting_id, serverId: payload.server_id,
+            });
+            // A superseded admission applies nothing: stay on the click with
+            // the short Korean failure instead of abandoning it in silence.
+            if (!await acceptMemberRoomSession(payload)) {
+              setMemberSelectError({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+            } else {
+              setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
+            }
           }
         } catch (error) {
           if (import.meta.env.DEV) console.debug("[member-select] select failed", {
@@ -647,9 +678,19 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     canonicalRoom.roomSettings && canonicalRoom.history.initialized &&
     roomSettings.preferenceStateFor(activeRoom).status === "ready"
   );
-  const roomReadReady = channelReadReady && menuRoom?.id === activeRoom.id;
+  const roomReadReady = (channelReadReady && menuRoom?.id === activeRoom.id) ||
+    Boolean(menuRoom && menuRoom.id !== activeRoom.id && menuRoom.roomOrigin === "remote_server" &&
+      menuRoom.serverId && memberRoomLive.hasLive(menuRoom.serverId, menuRoom.meetingId));
 
   async function markRoomRead(roomId: string) {
+    const target = rooms.find((room) => room.id === roomId);
+    if (target && target.id !== activeRoom.id && target.roomOrigin === "remote_server" && target.serverId &&
+        memberRoomLive.hasLive(target.serverId, target.meetingId)) {
+      // A background room clears its live badge without opening it.
+      memberRoomLive.markRoomRead(target.serverId, target.meetingId);
+      setRoomMenu((current) => current === roomMenu ? null : current);
+      return;
+    }
     if (!roomReadReady || roomId !== activeRoom.id || !canonicalRoom.socket?.ready()) return;
     const cursor = `seq:${canonicalRoom.history.lastSeq}`;
     const channelIds = ["lobby", ...roomChannels.activeChannels.filter((item) => item.type === "text").map((item) => item.id)];

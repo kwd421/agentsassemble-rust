@@ -503,17 +503,15 @@ export default function LobbyView({
         </div>
       )}
 
-      {!canManageRoom && (
+      {!canManageRoom && !canPostMessages && (
         <div className="dc-room-status-line">
           <div className="dc-room-status-chip">
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-idle" />
-              {canPostMessages ? "초대받은 방" : composerDisabledReason || "초대 세션 필요"}
+              {composerDisabledReason || "초대 세션 필요"}
             </span>
             <span className="min-w-0 truncate text-text-muted preserve-words">
-              {canPostMessages
-                ? ""
-                : composerDisabledReason || "이 링크에서는 메시지를 보낼 수 없어요"}
+              {composerDisabledReason || "이 링크에서는 메시지를 보낼 수 없어요"}
             </span>
           </div>
         </div>

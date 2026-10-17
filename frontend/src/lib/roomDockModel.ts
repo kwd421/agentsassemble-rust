@@ -1,5 +1,6 @@
 import { sessionHostDisplayOrigin } from "./remote/remoteWorkspace";
 import type { ServerConnectionState } from "./serverConnectionState";
+import { memberRoomLiveKey, type MemberRoomLiveBadge } from "./central/memberRoomLive";
 import type { LucideIcon } from "lucide-react";
 import { Bot, Gamepad2, LayoutDashboard, Radio, Sparkles, Users } from "lucide-react";
 import {
@@ -34,6 +35,11 @@ export type RoomDockItem = {
   icon: LucideIcon;
   createdAt: string;
   tone: "fresh" | "resident" | "mafia" | "work";
+  // Live background state for joined member rooms (projected by
+  // applyMemberRoomLive from useMemberRoomLive; ephemeral, never persisted).
+  // True while an unopened room has unread messages / a mention.
+  liveUnread?: boolean;
+  liveMention?: boolean;
 };
 
 export type StartupRoute = {
@@ -136,6 +142,32 @@ export function hydratePersistedRoom(room: PersistedRoomDockItem): RoomDockItem 
 export function roomIsDisconnected(room: RoomDockItem) {
   return room.connectionState === "disconnected" || room.connectionState === "central-unconfirmed" ||
     room.connectionState === "connecting" || (room.roomOrigin === "remote_server" && room.connectionState !== "connected");
+}
+
+/**
+ * Projects live background badges onto rail rooms. Only joined member rooms
+ * carry badges (own rooms have no background streams); every other room
+ * keeps its item identity so the rail does not re-render.
+ */
+export function applyMemberRoomLive(
+  rooms: RoomDockItem[],
+  badges: Record<string, MemberRoomLiveBadge>
+): RoomDockItem[] {
+  let changed = false;
+  const next = rooms.map((room) => {
+    if (room.roomOrigin !== "remote_server" || !room.serverId) {
+      if (!room.liveUnread && !room.liveMention) return room;
+      changed = true;
+      return { ...room, liveUnread: undefined, liveMention: undefined };
+    }
+    const badge = badges[memberRoomLiveKey(room.serverId, room.meetingId)];
+    const liveUnread = badge?.unread ?? undefined;
+    const liveMention = badge?.mention ?? undefined;
+    if ((room.liveUnread ?? undefined) === liveUnread && (room.liveMention ?? undefined) === liveMention) return room;
+    changed = true;
+    return { ...room, liveUnread, liveMention };
+  });
+  return changed ? next : rooms;
 }
 
 export function roomDockIdentity(
