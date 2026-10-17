@@ -220,24 +220,73 @@ export function useRoomInviteController({
   }, [localOperatorEligible, remote?.sessionToken, remote?.deviceToken, modal?.roomId]);
 
   // Owner decision (2026-10-17): external access remembers its last state.
-  // If the owner left it open, reopen it once at startup through the same
+  // If the owner left it open, reopen it at startup through the same
   // local-operator path the "외부 접속 열기" button uses (same server-side
   // authority check, no bypass). Closed stays closed; remote and other
   // non-operator surfaces never auto-open. A failed reopen stays quiet:
   // the hosting footer already shows the closed state.
-  const autoReopenAttemptedRef = useRef(false);
+  //
+  // The local runtime (host surface, tunnel backend) is still starting at
+  // first paint, so a single attempt can fail while nothing is wrong and
+  // never run again. Retries therefore repeat the same owner start until it
+  // succeeds, with an explicit budget: six waits (2 s, 5 s, 10 s, 30 s,
+  // 60 s, 60 s — seven attempts total, only while the remembered choice is
+  // still open). Each attempt is one status read plus at most one local
+  // start. Retries stop on success, on an explicit close/stop (the
+  // preference flips to closed), when this surface becomes ineligible, on
+  // unmount, or when the budget runs out; a superseding ingress operation
+  // (user pressed open/stop, modal refresh) retires a pending retry via its
+  // generation. Cleanup owner: the effect cleanup below clears the timer.
+  const AUTO_REOPEN_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 30_000, 60_000, 60_000];
+  const autoReopenTimerRef = useRef<number | undefined>(undefined);
+  const autoReopenDoneRef = useRef(false);
+  useEffect(() => () => {
+    if (autoReopenTimerRef.current !== undefined) {
+      window.clearTimeout(autoReopenTimerRef.current);
+      autoReopenTimerRef.current = undefined;
+    }
+  }, []);
   useEffect(() => {
-    if (!localOperatorEligible || remote || autoReopenAttemptedRef.current) return;
+    if (!localOperatorEligible || remote || autoReopenDoneRef.current) return;
     if (!loadPublicIngressPreference()) return;
-    autoReopenAttemptedRef.current = true;
-    const generation = beginIngressOperation();
-    void (async () => {
+    let cancelled = false;
+    let attempt = 0;
+    function scheduleRetry() {
+      if (cancelled) return;
+      if (attempt > AUTO_REOPEN_RETRY_DELAYS_MS.length) {
+        autoReopenDoneRef.current = true;
+        return;
+      }
+      const delay = AUTO_REOPEN_RETRY_DELAYS_MS[Math.min(attempt, AUTO_REOPEN_RETRY_DELAYS_MS.length - 1)];
+      attempt += 1;
+      autoReopenTimerRef.current = window.setTimeout(() => {
+        autoReopenTimerRef.current = undefined;
+        void runReopen();
+      }, delay);
+    }
+    async function runReopen() {
+      if (cancelled || autoReopenDoneRef.current) return;
+      if (!loadPublicIngressPreference()) {
+        autoReopenDoneRef.current = true;
+        return;
+      }
+      const generation = beginIngressOperation();
       try {
         await preparePublicInvite(generation);
+        if (!cancelled && ingressOperationIsCurrent(generation)) autoReopenDoneRef.current = true;
       } catch {
-        // Quiet: a later start (next app start, or the button) retries.
+        if (cancelled || !ingressOperationIsCurrent(generation)) return;
+        scheduleRetry();
       }
-    })();
+    }
+    void runReopen();
+    return () => {
+      cancelled = true;
+      if (autoReopenTimerRef.current !== undefined) {
+        window.clearTimeout(autoReopenTimerRef.current);
+        autoReopenTimerRef.current = undefined;
+      }
+    };
   }, [localOperatorEligible, remote?.sessionToken, remote?.deviceToken]);
 
   async function refreshPublicInviteState(generation: number) {

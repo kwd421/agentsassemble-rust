@@ -3928,9 +3928,19 @@ non-operator surfaces never auto-open. First start with no recorded
 choice stays closed, as today.
 
 Entry points: `frontend/src/app/useRoomInviteController.ts` (records the
-choice on successful start/stop, reopens once at startup when the
+choice on successful start/stop, reopens at startup when the
 remembered choice is open and the local operator path is eligible),
 `frontend/src/lib/publicIngressPreference.ts` (single boolean owner).
+
+Required: the startup reopen is a bounded retry of the same owner
+start (status read plus at most one local start per attempt), because
+the local runtime is still starting at first paint and a single
+attempt can fail while nothing is wrong. Retries run only while the
+remembered choice is still open and stop on success, on an explicit
+close/stop, when the surface becomes ineligible, on unmount, or when
+the budget (seven attempts) runs out; a superseding ingress operation
+retires a pending retry. A reopen that never succeeds stays quiet
+(hosting footer shows the closed state).
 
 ### Startup goes straight in; this computer's server belongs to its registered owner (2026-10-17)
 
