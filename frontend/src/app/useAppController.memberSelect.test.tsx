@@ -333,6 +333,40 @@ describe("member room selection on an owner local host", () => {
     expect(hooks.refresh).not.toHaveBeenCalled();
   });
 
+  it("surfaces the inline Korean failure for a stale rail click instead of silence", async () => {
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    try {
+      const { result } = renderHook(() => useAppController("device-test", "client-test"));
+      await waitFor(() => {
+        if (result.current.rooms.length !== 2) throw new Error("rail not merged yet");
+      });
+      await act(async () => { await result.current.selectRoom("stale-room-id"); });
+      expect(result.current.memberSelectError).toEqual({
+        roomId: "stale-room-id", message: "방을 열지 못했어요. 다시 시도해 주세요.",
+      });
+      expect(alert).not.toHaveBeenCalled();
+    } finally {
+      alert.mockRestore();
+    }
+  });
+
+  it("stays on the clicked member room with the inline failure when the admission is superseded", async () => {
+    const { result } = renderHook(() => useAppController("device-test", "client-test"));
+    await waitFor(() => {
+      if (result.current.rooms.length !== 2) throw new Error("rail not merged yet");
+    });
+    const memberId = result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!.id;
+    const { verifyAndBindRoomSessionSurface } = await import("../lib/roomDirectoryContract");
+    vi.mocked(verifyAndBindRoomSessionSurface).mockResolvedValueOnce(false);
+    await act(async () => { await result.current.selectRoom(memberId); });
+    // Silence is the defect: the selection still moves to the clicked room
+    // and carries the short Korean message instead of abandoning the tap.
+    expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING);
+    expect(result.current.memberSelectError).toEqual({
+      roomId: memberId, message: "방을 열지 못했어요. 다시 시도해 주세요.",
+    });
+  });
+
   it("moves the selection to the member room with an inline Korean message when select fails", async () => {
     const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
     try {

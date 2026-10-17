@@ -537,7 +537,12 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
 
   async function selectRoom(roomId: string) {
     const room = rooms.find(item => item.id === roomId);
-    if (!room) return;
+    // A stale rail id is still a failed click: record the short Korean
+    // failure instead of abandoning the tap in silence.
+    if (!room) {
+      setMemberSelectError({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+      return;
+    }
     try {
       // An anchored member room needs its own room session before it can
       // open: select it on demand through the live host admission. Rooms
@@ -558,8 +563,13 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
           if (import.meta.env.DEV) console.debug("[member-select] admission complete", {
             roomId, meetingId: payload.meeting_id, serverId: payload.server_id,
           });
-          if (!await acceptMemberRoomSession(payload)) return;
-          setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
+          // A superseded admission applies nothing: stay on the click with
+          // the short Korean failure instead of abandoning it in silence.
+          if (!await acceptMemberRoomSession(payload)) {
+            setMemberSelectError({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+          } else {
+            setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
+          }
         } catch (error) {
           if (import.meta.env.DEV) console.debug("[member-select] select failed", {
             roomId, meetingId: room.meetingId, serverId: room.serverId ?? null,

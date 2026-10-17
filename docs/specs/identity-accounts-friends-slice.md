@@ -3418,3 +3418,25 @@ change: its reap/fast-fail/retry semantics stay. Entry points:
 `frontend/src/app/useMemberHosts.ts` (`selectRoom` bound),
 `frontend/src/app/useAppController.tsx` (`selectRoom` failure surface),
 `frontend/src/app/AppView.tsx` (disconnected view reason/retry).
+
+### M4 member click survives central-unconfirmed (2026-10-17)
+
+Real-app failure after the bounded-select fix: clicking the member `Hihi
+room` shows the `로그인 서버에 연결하지 못했어요…` banner, the room leaves
+the rail, the view stays on the own room, and no inline failure ever
+appears (the 30 s bound does not surface either). Required: joined rooms
+never vanish from the rail because central is briefly unconfirmed — they
+stay from the anchor/last-known list and show their own connection state;
+a rail click on a member room never waits on a central refresh first (it
+uses the existing anchor/directory data and refreshes central in the
+background at most); every click ends in the live member room or the
+short Korean inline failure, never silence. Entry points:
+`frontend/src/views/components/RoomRail.tsx` (`onSelectRoom`),
+`frontend/src/app/AppView.tsx` (banner condition, rail wiring),
+`frontend/src/app/useAppController.tsx` (`selectRoom`),
+`frontend/src/app/useServerOpening.ts` (`openRailServer`,
+`retryRoomConnection`), `frontend/src/app/useMemberHosts.ts`
+(`selectRoom`, `retryHost`, attach bookkeeping),
+`frontend/src/app/useCentralDirectory.ts` (retained `central-unconfirmed`
+on `CentralTemporaryError`), `frontend/src/lib/central/connectionError.ts`
+(fetch boundary).

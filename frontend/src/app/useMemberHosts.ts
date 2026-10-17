@@ -124,11 +124,18 @@ export function useMemberHosts({
       const attached = await attachMemberHost({ server_id: serverId, registration_epoch: epoch },
         activeToken, activePerson, controller.signal);
       const current = identityRef.current;
-      const live = directoryRef.current?.status === "connected" ? directoryRef.current.live?.servers ?? null : null;
-      if (controller.signal.aborted || current.personId !== activePerson || current.sessionToken !== activeToken ||
-          !live?.some((server) => server.server_id === serverId && server.relation === "member")) {
+      if (controller.signal.aborted || current.personId !== activePerson || current.sessionToken !== activeToken) {
         detachMemberHost(attached.admission);
-        if (current.personId === activePerson && current.sessionToken === activeToken) dropHost(serverId);
+        return;
+      }
+      // While central is unconfirmed its membership list cannot confirm a
+      // removal: the fresh admission stays with its own rooms. Only a
+      // connected directory that no longer lists the membership drops it.
+      const directory = directoryRef.current;
+      const live = directory?.status === "connected" ? directory.live?.servers ?? null : null;
+      if (live && !live.some((server) => server.server_id === serverId && server.relation === "member")) {
+        detachMemberHost(attached.admission);
+        dropHost(serverId);
         return;
       }
       flights.current.delete(serverId);
@@ -274,14 +281,26 @@ export function useMemberHosts({
   }, [directory, anchorRevision, personId, sessionToken, reconcile]);
 
   const retryHost = useCallback((serverId: string) => {
+    const { personId: activePerson } = identityRef.current;
     const live = directoryRef.current?.status === "connected" ? directoryRef.current.live?.servers ?? null : null;
     const server = live?.find((entry) => entry.server_id === serverId && entry.relation === "member");
-    if (!server?.registration_epoch) return;
+    // An identity refusal stays on its re-join message until fresh consent
+    // overwrites the anchor; explicit retry never attaches past it blind.
+    if (refused.current.has(serverId) && !server) return;
+    const anchor = activePerson ? loadMemberAnchor(activePerson, serverId) : null;
+    const epoch = server?.registration_epoch || anchor?.registration_epoch || "";
+    if (!epoch) return;
     refused.current.delete(serverId);
     attempted.current.delete(serverId);
     dropHost(serverId);
-    reconcile();
-  }, [dropHost, reconcile]);
+    if (server) {
+      reconcile();
+      return;
+    }
+    // Central is unconfirmed so reconcile cannot run: attach straight from
+    // the anchor instead of stranding the explicit retry in silence.
+    void attach(serverId, epoch, anchor?.endpoint_origin || "");
+  }, [attach, dropHost, reconcile]);
 
   const selectRoom = useCallback(async (serverId: string, roomId: string) => {
     if (import.meta.env.DEV) console.debug("[member-select] select start", { serverId, roomId });
@@ -295,28 +314,45 @@ export function useMemberHosts({
     const liveServer = () => directoryRef.current?.status === "connected"
       ? directoryRef.current.live?.servers.find((entry) => entry.server_id === serverId) ?? null
       : null;
+    // While central is unconfirmed the directory cannot supply the epoch:
+    // the saved anchor (identity pin) carries it instead, so a rail click
+    // never waits on a central refresh first.
+    const directoryTuple = () => {
+      const entry = liveServer();
+      const { personId: activePerson } = identityRef.current;
+      const anchor = activePerson ? loadMemberAnchor(activePerson, serverId) : null;
+      const epoch = entry?.registration_epoch || anchor?.registration_epoch || "";
+      if (!epoch) return null;
+      return {
+        epoch,
+        fingerprint: entry?.host_key_fingerprint || anchor?.host_key_fingerprint || "",
+        origin: entry?.endpoint?.origin || anchor?.endpoint_origin || "",
+        mode: entry?.endpoint?.mode || "",
+        status: entry?.endpoint?.status || "",
+      };
+    };
+    const anchorOrigin = () => {
+      const { personId: activePerson } = identityRef.current;
+      return (activePerson ? loadMemberAnchor(activePerson, serverId)?.endpoint_origin : "") || "";
+    };
     // A manual attach replaces the reconcile bookkeeping for the directory's
     // current tuple; otherwise the anchor save at the end of the attach
     // triggers reconcile into an immediate duplicate attach.
     const markAttempted = () => {
-      const entry = liveServer();
-      const epoch = entry?.registration_epoch || "";
-      if (!epoch) return;
-      attempted.current.set(serverId, tupleKey({
-        epoch,
-        fingerprint: entry?.host_key_fingerprint || "",
-        origin: entry?.endpoint?.origin || "",
-        mode: entry?.endpoint?.mode || "",
-        status: entry?.endpoint?.status || "",
-      }));
+      const tuple = directoryTuple();
+      if (!tuple) return;
+      attempted.current.set(serverId, tupleKey(tuple));
     };
     const attachFresh = async () => {
-      const entry = liveServer();
-      const epoch = entry?.registration_epoch || "";
-      if (!epoch) throw new Error("서버에 연결 중이에요. 연결이 끝나면 다시 시도해 주세요.");
+      if (refused.current.has(serverId) && !liveServer()) {
+        const known = snapshotsRef.current.find((entry) => entry.serverId === serverId);
+        throw new Error(known?.detail ?? "참가 서버 정보가 바뀌었어요. 새 초대로 다시 참가해 주세요.");
+      }
+      const tuple = directoryTuple();
+      if (!tuple) throw new Error("서버에 연결 중이에요. 연결이 끝나면 다시 시도해 주세요.");
       attempted.current.delete(serverId);
       dropHost(serverId);
-      await attach(serverId, epoch, loadMemberAnchor(identityRef.current.personId, serverId)?.endpoint_origin || "", timeout.signal);
+      await attach(serverId, tuple.epoch, anchorOrigin() || tuple.origin, timeout.signal);
       markAttempted();
       return admissions.current.get(serverId);
     };
@@ -343,11 +379,12 @@ export function useMemberHosts({
             status: error instanceof ApiError ? error.status : undefined,
             code: error instanceof ApiError ? error.code || undefined : undefined,
           });
-          if (identityRef.current.personId && liveServer()?.registration_epoch) {
+          const refreshTuple = directoryTuple();
+          if (identityRef.current.personId && refreshTuple) {
             try {
               attempted.current.delete(serverId);
-              await attach(serverId, liveServer()?.registration_epoch || "",
-                loadMemberAnchor(identityRef.current.personId, serverId)?.endpoint_origin || "", timeout.signal);
+              await attach(serverId, refreshTuple.epoch,
+                anchorOrigin() || refreshTuple.origin, timeout.signal);
               markAttempted();
             } catch {
               // The refresh is best-effort; the original refusal below is

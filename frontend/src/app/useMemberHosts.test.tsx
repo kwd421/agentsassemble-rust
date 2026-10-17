@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMemberHosts } from "./useMemberHosts";
+import type { CentralDirectoryState } from "./useCentralDirectory";
 import { saveMemberAnchor } from "../lib/central/memberAnchors";
 
 const attach = vi.fn();
@@ -22,6 +23,14 @@ const liveServer = (overrides = {}) => ({
   host_key_fingerprint: "fingerprint", host_public_key_jwk: {},
   endpoint: { origin: "https://friend.test", generation: 3, status: "published" as const, mode: "event_secure_v1", protocol: "secure_admission_v1" },
   ...overrides,
+});
+
+const unconfirmedDirectory = (): CentralDirectoryState => ({
+  status: "central-unconfirmed",
+  person: { person_id: "person", display_name: "나", identity_kind: "google" },
+  servers: [],
+  live: null,
+  error: undefined,
 });
 
 const directoryFor = (servers: ReturnType<typeof liveServer>[]) => ({
@@ -148,6 +157,59 @@ describe("useMemberHosts", () => {
     await waitFor(() => expect(result.current.snapshots).toEqual([]), { timeout: 5000 });
     expect(window.localStorage.getItem("agentsassemble.memberAnchors.v1:person")).toBeNull();
     expect(result.current.hostDirs).toEqual([]);
+  });
+
+  it("selects from the saved anchor while central is unconfirmed", async () => {
+    saveMemberAnchor("person", {
+      server_id: "friend", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://friend.test", endpoint_generation: 2,
+      rooms: [{ room_id: "general", name: "일반" }], hidden: false, updated_at: 1,
+    });
+    const admission = admissionFor([{ room_id: "general", name: "일반" }]);
+    admission.select.mockResolvedValue({ meeting_id: "general" });
+    attach.mockImplementation(async () => ({
+      admission,
+      rooms: [{ room_id: "general", name: "일반" }],
+      anchor: { server_id: "friend", registration_epoch: "epoch" },
+    }));
+    const { result } = renderHook(() => useMemberHosts({
+      personId: "person", sessionToken: "token", directory: unconfirmedDirectory(),
+    }));
+    let selected: unknown;
+    await act(async () => { selected = await result.current.selectRoom("friend", "general"); });
+    // A rail click never waits on a central refresh: the anchor carries the
+    // registration epoch while central is unconfirmed.
+    expect(attach).toHaveBeenCalled();
+    expect(admission.select).toHaveBeenCalledWith("general", expect.anything());
+    expect(selected).toEqual({ meeting_id: "general" });
+  });
+
+  it("keeps a freshly attached host connected when central turns unconfirmed", async () => {
+    let resolveAttach!: (attached: {
+      admission: ReturnType<typeof admissionFor>;
+      rooms: { room_id: string; name: string }[];
+      anchor: { server_id: string; registration_epoch: string };
+    }) => void;
+    attach.mockImplementation(() => new Promise((resolve) => { resolveAttach = resolve; }));
+    const { result, rerender } = renderHook(({ directory }: { directory: CentralDirectoryState }) => useMemberHosts({
+      personId: "person", sessionToken: "token", directory,
+    }), { initialProps: { directory: directoryFor([liveServer()]) as CentralDirectoryState } });
+    await waitFor(() => expect(attach).toHaveBeenCalled(), { timeout: 5000 });
+    rerender({ directory: unconfirmedDirectory() });
+    const admission = admissionFor([{ room_id: "general", name: "일반" }]);
+    await act(async () => {
+      resolveAttach({
+        admission,
+        rooms: [{ room_id: "general", name: "일반" }],
+        anchor: { server_id: "friend", registration_epoch: "epoch" },
+      });
+    });
+    // Joined rooms stay from the last-known list with their own state; a
+    // transient central blip never drops the host.
+    await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("connected"), { timeout: 5000 });
+    expect(result.current.hostDirs[0]).toMatchObject({
+      serverId: "friend", state: "connected", rooms: [{ room_id: "general", label: "일반" }],
+    });
   });
 
   it("retries an offline host on explicit retry", async () => {
