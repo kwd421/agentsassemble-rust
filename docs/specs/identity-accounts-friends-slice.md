@@ -3672,6 +3672,47 @@ directory retry), `frontend/src/app/useMemberHosts.ts` (`reconcile` /
 accessor, unchanged budgets), `frontend/src/lib/central/identity.ts`
 (`signedFetch` / `unsignedPost` 429 diagnostics).
 
+### Daily central quota refusal parks retries until UTC midnight (2026-10-17)
+
+Real-app evidence (build of `d78c9883`, dev console line added by
+`d78c9883`): at startup a signed central request to `/v1/servers`
+answered 429 with body error code `actor_quota_exhausted` and no
+`Retry-After` header. The central Worker (read-only fact) uses this
+code when the account's or session's DAILY signed-request allowance is
+spent; counters reset at the next 00:00 UTC and a rejected request
+spends nothing. Older and current central versions send no
+`Retry-After` for it. The client must treat it as spent-until-reset,
+not as a short rate limit: no central request for that account until
+the reset, then exactly one bounded retry.
+
+Required:
+
+- The single central-429 owner (`frontend/src/lib/central/identity.ts`,
+  where 429 responses are parsed and fed to the governor) recognises
+  `actor_quota_exhausted` and parks that account's central requests in
+  `frontend/src/lib/central/centralRequestGovernor.ts` until the next
+  00:00 UTC plus 0-60 s jitter, for every path family. All other 429
+  handling (Retry-After honor, 5/10 min backoff, budgets) stays
+  unchanged.
+- The directory retry (`useCentralDirectory`) and the per-host member
+  reconnect (`useMemberHosts`) honour that block instead of their
+  minute-scale caps, so zero central requests go out before the reset
+  and one bounded retry reconnects a joined host after it.
+- While the block is active, the existing central-unconfirmed notice
+  and the joined-room disconnected reason say in one Korean 해요체 line
+  that friend rooms reconnect after the reset time in local time. Own
+  rooms on this computer keep working and show no error. Existing
+  notice components are reused; no English/jargon on screen.
+
+Entry points: `frontend/src/lib/central/identity.ts` (429 parse +
+quota record), `frontend/src/lib/central/centralRequestGovernor.ts`
+(quota block, reset-time accessors), `frontend/src/app/
+useCentralDirectory.ts` (uncapped quota retry delay),
+`frontend/src/app/useMemberHosts.ts` (quota-honoring reconnect delay +
+disconnected reason), `frontend/src/app/useAppController.tsx` /
+`frontend/src/app/AppView.tsx` / `frontend/src/views/components/
+StartupIdentityGate.tsx` (quota notice text, existing components).
+
 ### Rail shows each joined room once (2026-10-17)
 
 Real-app failure (debug macOS build): after restart the rail showed the

@@ -33,6 +33,7 @@ import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel"
 import { RIGHT_PANEL_WIDTH_MAX, RIGHT_PANEL_WIDTH_MIN, useRightPanelResize } from "./useRightPanelResize";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 import { filterCollapsedChannels } from "../lib/channelUnread";
+import { centralDailyQuotaNotice } from "../lib/central/centralRequestGovernor";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
 const FriendsView = lazy(() => import("../views/FriendsView"));
@@ -148,14 +149,19 @@ export default function AppView({ controller }: { controller: AppController }) {
     </footer>
   );
   const channelNames = visibleChannels.map((item) => item.label);
+  // While the daily central allowance is spent, friend rooms reconnect
+  // after the local reset time; this computer's rooms keep working.
+  const centralQuotaNotice = controller.centralDirectory?.person?.person_id
+    ? centralDailyQuotaNotice(controller.centralDirectory.person.person_id)
+    : null;
   return (
     <RoomSocketProvider socket={roomSocket}>
     <KnownChannels names={channelNames}>
     <div className="dc-app-layout">
       <RoomSyncNotice
         connectionMessage={roomDirectorySyncIssue ? "서버 연결을 확인하고 있어요. 연결이 끊긴 방에서 다시 시도할 수 있어요."
-          : controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
-          : controller.serverConnectionError}
+          : centralQuotaNotice ?? (controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
+          : controller.serverConnectionError)}
         issue={canonicalRoom.syncIssue || roomDirectorySyncIssue}
         lifecycle={roomLifecycle.enabled ? roomLifecycle : undefined}
       />

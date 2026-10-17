@@ -3,8 +3,14 @@ import {
   CENTRAL_REQUESTS_PER_MIN,
   MEMBER_PREVIEW_PER_HOST_PER_10MIN,
   acquireCentralPermit,
+  centralDailyQuotaNotice,
+  centralDailyQuotaResetAtMs,
+  centralDailyQuotaWaitMs,
+  centralThrottledWaitMs,
   isCentralThrottledError,
+  nextCentralQuotaResetMs,
   noteCentral429,
+  noteCentralDailyQuotaExhausted,
   noteCentralSuccess,
   resetCentralRequestGovernorForTests,
 } from "./centralRequestGovernor";
@@ -91,6 +97,53 @@ describe("centralRequestGovernor", () => {
       noteCentralSuccess(path, "alice");
       vi.advanceTimersByTime(61_000);
       acquireCentralPermit(path, "alice");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("parks every path family until UTC midnight on daily quota exhaustion", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 17, 1, 0, 0)));
+      expect(nextCentralQuotaResetMs()).toBe(Date.UTC(2026, 9, 18));
+      noteCentralDailyQuotaExhausted("person", Date.now(), 5_000);
+      // Every path family is blocked for this account ...
+      for (const path of [
+        "/v1/bootstrap",
+        "/v1/servers",
+        "/v1/servers/friend/member-preview",
+        "/v1/servers/friend/member-connect-grants",
+      ]) {
+        expect(() => acquireCentralPermit(path, "person")).toThrowError();
+      }
+      expect(centralThrottledWaitMs("/v1/bootstrap", "person")).toBeGreaterThan(20 * 3_600_000);
+      // ... but another account is unaffected.
+      acquireCentralPermit("/v1/bootstrap", "bob");
+      expect(centralDailyQuotaResetAtMs("person")).toBe(Date.UTC(2026, 9, 18));
+      expect(centralDailyQuotaNotice("person")).toContain("이후에 다시 연결돼요.");
+      expect(centralDailyQuotaNotice("bob")).toBeNull();
+      // Just before the reset the block still holds; past reset+jitter it lifts.
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 18) - 1_000));
+      expect(() => acquireCentralPermit("/v1/bootstrap", "person")).toThrowError();
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 18) + 5_000));
+      acquireCentralPermit("/v1/bootstrap", "person");
+      expect(centralDailyQuotaResetAtMs("person")).toBeNull();
+      expect(centralDailyQuotaNotice("person")).toBeNull();
+      expect(centralDailyQuotaWaitMs("person")).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves ordinary 429 handling quota-free", () => {
+    vi.useFakeTimers();
+    try {
+      acquireCentralPermit("/v1/bootstrap", "person");
+      noteCentral429("/v1/bootstrap", "person", 60_000);
+      expect(centralDailyQuotaWaitMs("person")).toBe(0);
+      expect(centralDailyQuotaResetAtMs("person")).toBeNull();
+      expect(centralDailyQuotaNotice("person")).toBeNull();
     } finally {
       vi.useRealTimers();
     }

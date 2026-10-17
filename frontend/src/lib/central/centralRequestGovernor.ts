@@ -51,6 +51,69 @@ const previewTimesByAccountHost = new Map<string, number[]>();
 const blockedUntilByKey = new Map<string, number>();
 const consecutive429ByKey = new Map<string, number>();
 
+// Daily signed-request allowance: central answers 429
+// `actor_quota_exhausted` (never with Retry-After) when the account's or
+// session's daily allowance is spent. Counters reset at the next 00:00 UTC
+// and a rejected request spends nothing, so the account parks every path
+// family until then instead of polling like a short rate limit.
+const quotaBlockedUntilByAccount = new Map<string, number>();
+const quotaResetAtByAccount = new Map<string, number>();
+const QUOTA_JITTER_MAX_MS = 60_000;
+
+export function nextCentralQuotaResetMs(now = Date.now()): number {
+  const at = new Date(now);
+  return Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate() + 1);
+}
+
+// Records a spent daily allowance for the account. Returns the remaining
+// block in milliseconds. The block ends at the next 00:00 UTC plus a small
+// jitter so many clients do not retry in the same second.
+export function noteCentralDailyQuotaExhausted(accountId: string, now = Date.now(), jitterMs?: number): number {
+  const account = accountId || "anonymous";
+  const resetAt = nextCentralQuotaResetMs(now);
+  const jitter = jitterMs === undefined
+    ? Math.floor(Math.random() * (QUOTA_JITTER_MAX_MS + 1))
+    : Math.min(Math.max(Math.ceil(jitterMs), 0), QUOTA_JITTER_MAX_MS);
+  const blockedUntil = resetAt + jitter;
+  if (blockedUntil > (quotaBlockedUntilByAccount.get(account) ?? 0)) {
+    quotaBlockedUntilByAccount.set(account, blockedUntil);
+    quotaResetAtByAccount.set(account, resetAt);
+  }
+  return Math.max(0, (quotaBlockedUntilByAccount.get(account) ?? blockedUntil) - now);
+}
+
+// Milliseconds until the account's daily quota block lifts, or zero when
+// no block is in force. Expired blocks are dropped so the reset time reads
+// empty afterwards.
+export function centralDailyQuotaWaitMs(accountId: string, now = Date.now()): number {
+  const account = accountId || "anonymous";
+  const blocked = quotaBlockedUntilByAccount.get(account) ?? 0;
+  if (now >= blocked) {
+    quotaBlockedUntilByAccount.delete(account);
+    quotaResetAtByAccount.delete(account);
+    return 0;
+  }
+  return blocked - now;
+}
+
+// The 00:00 UTC reset this block waits for, or null when unblocked.
+export function centralDailyQuotaResetAtMs(accountId: string, now = Date.now()): number | null {
+  if (centralDailyQuotaWaitMs(accountId, now) <= 0) return null;
+  return quotaResetAtByAccount.get(accountId || "anonymous") ?? null;
+}
+
+export function formatCentralQuotaResetLocal(resetAtMs: number): string {
+  return new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(resetAtMs));
+}
+
+// One Korean line shown while the daily block is active, or null when
+// unblocked. The single copy owner for the quota notice.
+export function centralDailyQuotaNotice(accountId: string, now = Date.now()): string | null {
+  const resetAt = centralDailyQuotaResetAtMs(accountId, now);
+  if (resetAt === null) return null;
+  return `오늘 연결 한도를 다 써서 친구 방은 ${formatCentralQuotaResetLocal(resetAt)} 이후에 다시 연결돼요.`;
+}
+
 function prune(times: number[], now: number, windowMs: number): number[] {
   while (times.length > 0 && times[0] <= now - windowMs) times.shift();
   return times;
@@ -60,6 +123,14 @@ export function acquireCentralPermit(path: string, accountId: string): void {
   const account = accountId || "anonymous";
   const now = Date.now();
   const parsed = centralPathFamily(path);
+  const quotaWait = centralDailyQuotaWaitMs(account, now);
+  if (quotaWait > 0) {
+    throw new CentralThrottledError(
+      "중앙 요청이 잠시 멈췄어요. 잠시 후 다시 시도해 주세요.",
+      quotaWait,
+      parsed.family,
+    );
+  }
   const key = familyKey(account, parsed);
   const globalBlockKey = `${account}\0global`;
   const blocked = blockedUntilByKey.get(key) ?? 0;
@@ -129,16 +200,17 @@ export function noteCentralSuccess(path: string, accountId: string): void {
 }
 
 // Milliseconds until this path may be tried again under the governor:
-// the longest of the path-family block and the account global block, or
-// zero when no block is in force. Lets bounded retry schedules honor the
-// governor instead of firing into a local throttle (budgets unchanged).
+// the longest of the path-family block, the account global block and the
+// daily quota block, or zero when no block is in force. Lets bounded retry
+// schedules honor the governor instead of firing into a local throttle
+// (budgets unchanged).
 export function centralThrottledWaitMs(path: string, accountId: string): number {
   const account = accountId || "anonymous";
   const now = Date.now();
   const parsed = centralPathFamily(path);
   const familyBlocked = blockedUntilByKey.get(familyKey(account, parsed)) ?? 0;
   const globalBlocked = blockedUntilByKey.get(`${account}\0global`) ?? 0;
-  return Math.max(0, familyBlocked - now, globalBlocked - now);
+  return Math.max(0, familyBlocked - now, globalBlocked - now, centralDailyQuotaWaitMs(account, now));
 }
 
 export function resetCentralRequestGovernorForTests(): void {
@@ -146,4 +218,6 @@ export function resetCentralRequestGovernorForTests(): void {
   previewTimesByAccountHost.clear();
   blockedUntilByKey.clear();
   consecutive429ByKey.clear();
+  quotaBlockedUntilByAccount.clear();
+  quotaResetAtByAccount.clear();
 }

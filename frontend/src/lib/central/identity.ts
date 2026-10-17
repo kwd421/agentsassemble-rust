@@ -6,7 +6,7 @@ import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
 import { CentralTemporaryError, fetchCentral } from "./connectionError";
-import { acquireCentralPermit, centralPathFamily, noteCentral429, noteCentralSuccess } from "./centralRequestGovernor";
+import { acquireCentralPermit, centralDailyQuotaNotice, centralDailyQuotaWaitMs, centralPathFamily, noteCentral429, noteCentralDailyQuotaExhausted, noteCentralSuccess } from "./centralRequestGovernor";
 import {
   fetchDesktopCentralRegistration,
   fetchDesktopOperatorRuntime,
@@ -381,7 +381,7 @@ function logCentralRateLimit(path: string, response: Response): void {
   } catch { /* diagnostics never break the request path */ }
 }
 
-async function responsePayload<T>(response: Response, central = true, signal?: AbortSignal): Promise<T> {
+async function responsePayload<T>(response: Response, central = true, signal?: AbortSignal, accountId = "anonymous"): Promise<T> {
   const payload = (await response.json().catch((error) => {
     if (response.ok) {
       if (signal?.aborted && signal.reason?.name !== "TimeoutError") throw error;
@@ -400,11 +400,19 @@ async function responsePayload<T>(response: Response, central = true, signal?: A
     const message =
       (response.status === 409 && code === "server_move_unsupported" ? "서버 옮기기는 아직 지원하지 않아요"
         : code === "duplicate_resolution_conflict" ? "다른 기기에서 서버를 선택했어요. 목록을 다시 확인해 주세요."
-        : central && code === "actor_quota_exhausted" ? "오늘 계정·기기·서버의 변경 요청 한도를 다 썼어요. UTC 자정(한국 시간 오전 9시) 이후 다시 시도해 주세요."
         : code === "server_retirement_capacity" ? "잠시 후 다시 시도해 주세요" : undefined) ||
       (central ? payload?.error?.message : typeof payload?.error === "string" ? payload.error : undefined) ||
       `로그인 서버가 HTTP ${response.status}을 반환했습니다.`;
     if (response.status === 401) throw new CentralAuthError(message, code);
+    if (central && response.status === 429 && code === "actor_quota_exhausted") {
+      // Spent daily allowance, never a short rate limit: park the whole
+      // account until the next 00:00 UTC instead of polling. The governor
+      // stays the single owner of the block; the error carries the same
+      // wait so per-host backoffs honor it too.
+      noteCentralDailyQuotaExhausted(accountId);
+      throw Object.assign(new CentralTemporaryError(centralDailyQuotaNotice(accountId) ?? message),
+        { status: response.status, code, retryAfterMs: centralDailyQuotaWaitMs(accountId) });
+    }
     if (central && (response.status === 429 || response.status >= 500)) {
       const retryAfterMs = response.status === 429 ? parseRetryAfterMs(response.headers.get("Retry-After")) : null;
       throw Object.assign(new CentralTemporaryError(message), { status: response.status, code,
@@ -438,7 +446,7 @@ export async function unsignedPost<T>(
     logCentralRateLimit(path, response);
     noteCentral429(path, "anonymous", parseRetryAfterMs(response.headers.get("Retry-After")));
   } else if (response.ok) noteCentralSuccess(path, "anonymous");
-  return responsePayload<T>(response);
+  return responsePayload<T>(response, true, signal, "anonymous");
 }
 
 function fetchLocalRuntime(path: string, init: RequestInit = {}): Promise<Response> {
@@ -503,7 +511,7 @@ export async function signedRequest<T>(
   bodyValue?: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<T> {
-  return responsePayload<T>(await signedFetch(session, path, method, bodyValue, signal), true, signal);
+  return responsePayload<T>(await signedFetch(session, path, method, bodyValue, signal), true, signal, session.person.person_id);
 }
 
 export async function signCentralNativeRequest(session: CentralSession, path: string, method: "GET" | "POST" | "DELETE", body = ""): Promise<Record<string,string>> {
@@ -852,7 +860,7 @@ export async function fetchCentralServerIcon(reference: string): Promise<Blob> {
   if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
   if (!SERVER_ICON_REFERENCE.test(reference)) throw new Error("서버 아이콘 주소가 올바르지 않습니다.");
   const response = await signedFetch(session, reference, "GET");
-  if (!response.ok) await responsePayload<never>(response);
+  if (!response.ok) await responsePayload<never>(response, true, undefined, session.person.person_id);
   return response.blob();
 }
 

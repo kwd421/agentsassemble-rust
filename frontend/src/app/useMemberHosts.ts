@@ -3,6 +3,7 @@ import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
 import { memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
+import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
 import { remoteWorkspaceFor } from "../lib/remote/remoteWorkspace";
 import { ApiError } from "../lib/apiErrors";
 import type { SecureMemberAdmission } from "../lib/central/secureMemberEntry";
@@ -14,6 +15,11 @@ import type { RemoteHostConnection } from "../lib/serverConnectionState";
 // no timeout of its own, so without this a rail click would await forever
 // with no error and the selection would never move.
 const MEMBER_SELECT_TIMEOUT_MS = 30_000;
+
+// After a day-long quota park the directory's own retry fires at the same
+// reset instant. Host timers hold back past it so that retry lands first
+// and reconcile supersedes them instead of doubling the central request.
+const QUOTA_RETRY_STAGGER_MS = 30_000;
 
 function memberSelectErrorNeedsFreshChallenge(error: unknown): boolean {
   // Only a stale challenge (401) or a dead transport (no HTTP answer at
@@ -153,6 +159,13 @@ export function useMemberHosts({
     reconnectAttempts.current.set(serverId, attempt + 1);
     const cause = reconnectCauses.current.get(serverId) ?? "transient";
     const retryAfterMs = reconnectRetryAfter.current.get(serverId) ?? null;
+    // A spent daily allowance parks the host until the UTC-midnight reset:
+    // the per-host backoff never fires into the quota block. The holdback
+    // runs past the reset so the directory's own retry lands first.
+    const quotaWait = centralDailyQuotaWaitMs(identityRef.current.personId);
+    const delay = quotaWait > 0
+      ? quotaWait + QUOTA_RETRY_STAGGER_MS
+      : memberHostReconnectDelay(attempt, cause, retryAfterMs);
     reconnectTimers.current.set(serverId, window.setTimeout(() => {
       reconnectTimers.current.delete(serverId);
       // One in-flight reconnect per host, shared by every subscription: a
@@ -160,7 +173,7 @@ export function useMemberHosts({
       // aborting it — that attempt's own outcome schedules the next step.
       if (flights.current.has(serverId)) return;
       reattachHostRef.current(serverId);
-    }, memberHostReconnectDelay(attempt, cause, retryAfterMs)));
+    }, delay));
   }, []);
 
   const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal) => {
@@ -229,9 +242,11 @@ export function useMemberHosts({
       const rateLimited = throttled || (error as { status?: unknown } | null)?.status === 429;
       // A governor-throttled or central-429 failure surfaces as the room's
       // disconnected reason and retries only through the per-host backoff,
-      // never immediately.
+      // never immediately. While the daily allowance is spent the reason is
+      // the reset-time line, whatever the failure kind.
+      const quotaNotice = centralDailyQuotaNotice(activePerson);
       setPhase(serverId, "disconnected", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin,
-        rateLimited && error instanceof Error ? error.message : null);
+        quotaNotice ?? (rateLimited && error instanceof Error ? error.message : null));
       // The failure kind picks the backoff: a revoked endpoint (409
       // incarnation_conflict) rests on a slow cadence, a 429 honors the
       // server's Retry-After. The counter keeps growing across these

@@ -42,6 +42,7 @@ import {
 import { useMemberRoomLive } from "./useMemberRoomLive";
 import { useRailRooms } from "./useRailRooms";
 import { memberRoomRemovedWhileLive } from "./useMemberHosts";
+import { centralDailyQuotaNotice } from "../lib/central/centralRequestGovernor";
 import { consumeOperatorPairingTokenFromUrl } from "../lib/roomGuestSession";
 import { roomPostingState } from "../lib/roomGuestPosting";
 import { currentServerProductSurface } from "../lib/roomDirectoryContract";
@@ -256,7 +257,11 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const activeRoom = foundRoom ?? retainedRoom ?? railRooms[0] ?? EMPTY_ROOM;
   const activeRoomDisconnected = roomIsDisconnected(activeRoom);
   const activeMemberHostDetail = activeRoom.roomOrigin === "remote_server" && activeRoom.serverId
-    ? memberHosts.snapshots.find((entry) => entry.serverId === activeRoom.serverId)?.detail ?? null
+    ? memberHosts.snapshots.find((entry) => entry.serverId === activeRoom.serverId)?.detail
+      // A disconnected friend room with no recorded reason still waits for
+      // the daily reset while the quota block is active.
+      ?? (activeRoomDisconnected && centralDirectory?.person?.person_id
+        ? centralDailyQuotaNotice(centralDirectory.person.person_id) : null)
     : null;
   // A room whose select just failed opens nothing until the next tap
   // succeeds: without a session the host authority would be this computer's,

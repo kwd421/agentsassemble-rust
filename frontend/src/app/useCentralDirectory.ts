@@ -3,20 +3,24 @@ import { CENTRAL_SESSION_CLEARED_EVENT, bootstrapCentral, centralIdentityConfigu
   type CentralBootstrap, type CentralPerson, type CentralSession } from "../lib/central/identity";
 import { loadCentralDirectoryCache, type CentralServerDisplay } from "../lib/central/directoryCache";
 import { isCentralTemporaryError } from "../lib/central/connectionError";
-import { centralThrottledWaitMs } from "../lib/central/centralRequestGovernor";
+import { centralDailyQuotaWaitMs, centralThrottledWaitMs } from "../lib/central/centralRequestGovernor";
 
 // Focus/visible checks are throttled; online and explicit actions refresh immediately.
 const FOCUS_CHECK_MS = 5 * 60_000;
 
 // Bounded directory retry after a temporary/429 failure: generic outages
 // back off 30 s doubling to a 5 min cap, while a 429 honors the server's
-// Retry-After and the governor block (up to 10 min). A pending timer is
+// Retry-After and the governor block (up to 10 min). A spent daily
+// allowance instead waits uncapped until the UTC-midnight reset, so no
+// central request goes out before it. A pending timer is
 // kept instead of reset so repeated focus churn cannot starve the retry.
 const DIRECTORY_RETRY_OFFLINE_BASE_MS = 30_000;
 const DIRECTORY_RETRY_OFFLINE_CAP_MS = 300_000;
 const DIRECTORY_RETRY_RATE_LIMIT_MAX_MS = 600_000;
 
 function directoryRetryDelayMs(error: unknown, failures: number, accountId: string): number {
+  const quotaMs = centralDailyQuotaWaitMs(accountId);
+  if (quotaMs > 0) return Math.ceil(quotaMs);
   const serverWait = (error as { retryAfterMs?: unknown } | null)?.retryAfterMs;
   const serverMs = typeof serverWait === "number" && Number.isFinite(serverWait) && serverWait >= 0
     ? serverWait : null;

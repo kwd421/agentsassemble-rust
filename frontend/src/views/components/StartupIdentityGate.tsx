@@ -6,6 +6,7 @@ import { GoogleRegistrationRequired } from "../../lib/central/googleRegistration
 import GoogleRegistrationChoice from "./GoogleRegistrationChoice";
 import { useCentralDirectory } from "../../app/useCentralDirectory";
 import { isCentralTemporaryError } from "../../lib/central/connectionError";
+import { centralDailyQuotaNotice } from "../../lib/central/centralRequestGovernor";
 import type { CentralServerDisplay } from "../../lib/central/directoryCache";
 import ConnectionBanner from "./ConnectionBanner";
 import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
@@ -488,9 +489,9 @@ export default function StartupIdentityGate({
 
   return (
     <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
-      {centralUnavailable && <ConnectionBanner message={directory?.status === "error" ? "로그인 정보를 확인하지 못했어요. 다시 시도해 주세요."
+      {centralUnavailable && <ConnectionBanner message={centralDailyQuotaNotice(directory?.person?.person_id ?? "") ?? (directory?.status === "error" ? "로그인 정보를 확인하지 못했어요. 다시 시도해 주세요."
         : directory?.error ? "로그인 서버에 연결하지 못했고 저장된 목록을 읽지 못했어요. 서버 목록을 다시 확인해 주세요."
-        : webEntry ? "로그인 서버에 연결하지 못했어요. 연결을 다시 확인하고 있어요." : "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."} />}
+        : webEntry ? "로그인 서버에 연결하지 못했어요. 연결을 다시 확인하고 있어요." : "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요.")} />}
       <main
         className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
         aria-label="시작 로그인"
