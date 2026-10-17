@@ -40,12 +40,13 @@ afterEach(() => {
 });
 
 describe("MemberList component wiring", () => {
-  it.each([true, false])("marks the host as HOST, the viewer as 나, and ordinary members with no badge (host=%s)", (host) => {
+  it.each([true, false])("marks the host as 방장, the viewer as 나, and ordinary members with no badge (host=%s)", (host) => {
     render(<MemberList agents={[]} members={[participantFixture(), participantFixture({ participant_id: "central-member", display_name: "Hihi" })]}
       viewerParticipantId={host ? "operator-local" : "central-member"} canEditRoles={host} roomId="general" roomName="General" />);
-    expect(screen.getByText(host ? "HOST" : "나")).toBeTruthy();
+    expect(screen.getByText(host ? "방장" : "나")).toBeTruthy();
     expect(screen.getByText("Hihi")).toBeTruthy();
-    for (const label of ["Guest", "게스트", "방장", "YOU"]) expect(screen.queryByText(label)).toBeNull();
+    expect(screen.queryByText("HOST")).toBeNull();
+    for (const label of ["Guest", "게스트", "YOU"]) expect(screen.queryByText(label)).toBeNull();
   });
 
   it("opens only moderation from the row's context menu, without an overflow button", () => {

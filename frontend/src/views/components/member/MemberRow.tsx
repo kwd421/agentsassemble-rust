@@ -125,11 +125,11 @@ export default function MemberRow({
           {assignedRole && <span className="dc-member-role-tag">{assignedRole}</span>}
           {entry.owner && (
             // canEditRoles is only true for the room host's own view, so the
-            // host sees HOST on themselves while other viewers see 나 on themselves.
+            // host sees 방장 on themselves while other viewers see 나 on themselves.
             <span
               className="rounded bg-accent/20 px-1 py-0.5 text-[10px] font-bold leading-none tracking-wide text-accent"
             >
-              {canEditRoles ? "HOST" : "나"}
+              {canEditRoles ? "방장" : "나"}
             </span>
           )}
           {entry.muted && (
