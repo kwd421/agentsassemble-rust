@@ -89,7 +89,7 @@ describe("guest room projection", () => {
     expect(room.topic).toBe("Old elevator");
     expect(room.createdAt).toBe("2026-07-10T00:00:00Z");
     expect(roomDockIdentity(room)).toBe(
-      "remote:http://localhost:3000:room-1"
+      "11111111-1111-4111-8111-111111111111:room-1"
     );
   });
 

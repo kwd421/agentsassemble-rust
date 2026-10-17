@@ -9,6 +9,7 @@ import {
   type RoomAppearance,
 } from "../../lib/roomAppearance";
 import {
+  roomDockIdentity,
   roomSettingsKey,
   roomIsDisconnected,
   type RoomDockItem,
@@ -152,7 +153,7 @@ export default function RoomRail({
           );
           return (
             <button
-              key={room.id}
+              key={roomDockIdentity(room)}
               type="button"
               onPointerDown={(event) => handleRailPointerDown(room.id, event)}
               onPointerUp={(event) => handleRailPointerUp(room.id, event)}

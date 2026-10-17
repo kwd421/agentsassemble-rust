@@ -3588,3 +3588,22 @@ policy, cause classification), `frontend/src/lib/central/identity.ts`
 (per-host single flight and timers), `frontend/src/lib/remote/
 remoteWorkspace.ts` (host-origin transport lookup),
 `frontend/src/views/components/ResourceImage.tsx` (fail-closed render).
+
+### Rail shows each joined room once (2026-10-17)
+
+Real-app failure (debug macOS build): after restart the rail showed the
+joined friend room twice with the React duplicate-key warning for one
+`server-<serverId>-<roomId>` id. The persisted dock entry and the member
+anchor's last-known room list describe the same room (`server_id` +
+`room_uid`/`meeting_id`) with different display origins, and the merge
+keyed uid-less member rooms by display origin while the dock id and rail
+key use `server_id`, so the same room passed the merge twice.
+
+Required: one rail entry per room no matter how many sources know it.
+A uid-less member room's stable identity is `server_id` + `meeting_id`
+(display origin never identifies it); the merge drops duplicate
+identities from every source, and the rail key is that same identity.
+
+Entry points: `frontend/src/lib/roomDockModel.ts` (`roomDockIdentity`,
+`mergeHostRoomsIntoDock`), `frontend/src/views/components/RoomRail.tsx`
+(rail key).

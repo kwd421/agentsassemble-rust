@@ -246,6 +246,41 @@ describe("multihost merge", () => {
     expect(merged.find((room) => room.serverId === "server-gone")?.connectionState).toBe("disconnected");
     expect(merged.some((room) => room.meetingId === "local-room")).toBe(true);
   });
+
+  it("shows one rail item when the persisted dock and the anchor cache know the same uid-less member room", () => {
+    // Startup after a restart: the persisted dock entry carries the stale
+    // display origin while the member anchor cache reports the same room
+    // under the fresh origin. Both share server_id + meeting_id and no
+    // room_uid, so the merge must keep exactly one disconnected rail item.
+    const serverId = "fc4a4058-83a8-4b4b-a3f8-08534f868fea";
+    const meetingId = "room-20261017T062012";
+    const persisted: RoomDockItem = {
+      ...createFreshRoom(),
+      id: `server-${serverId}-${meetingId}`,
+      label: "Hr",
+      meetingId,
+      serverId,
+      roomOrigin: "remote_server",
+      serverOrigin: "https://old-origin.test",
+      connectionState: "disconnected",
+    };
+    const merged = mergeHostRoomsIntoDock(
+      [persisted],
+      [
+        { serverId: "", serverOrigin: "", rooms: null, state: "connected", local: true },
+        {
+          serverId,
+          serverOrigin: "https://fresh-origin.test",
+          rooms: [{ room_id: meetingId, label: "Hr" }],
+          state: "disconnected",
+        },
+      ]
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ serverId, meetingId, connectionState: "disconnected" });
+    expect(roomDockIdentity(merged[0])).toBe(`${serverId}:${meetingId}`);
+    expect(new Set(merged.map((room) => roomDockIdentity(room))).size).toBe(merged.length);
+  });
 });
 
 describe("applyMemberRoomLive", () => {

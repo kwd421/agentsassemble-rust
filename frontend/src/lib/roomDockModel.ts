@@ -177,6 +177,13 @@ export function roomDockIdentity(
     return `${room.serverId}:${room.roomUid}`;
   }
   if (room.roomOrigin === "remote_server") {
+    // Member directory rooms carry no room_uid; scope them by host server_id
+    // (the stable identity, like the dock id), never by the display origin
+    // which changes on republish and differs between the persisted dock and
+    // the anchor cache for the same room.
+    if (room.serverId) {
+      return `${room.serverId}:${room.meetingId}`;
+    }
     return `remote:${room.serverOrigin || "unknown"}:${room.meetingId}`;
   }
   return `local:${room.meetingId}`;
@@ -185,7 +192,15 @@ export function roomDockIdentity(
 export function initialOperatorRooms(directRoom?: RoomDockItem | null) {
   const persisted = loadRoomDockItems()
     .map(hydratePersistedRoom);
-  const rooms = persisted;
+  // The persisted dock itself must never seed a duplicate rail entry: keep
+  // the first room per stable identity.
+  const seenPersisted = new Set<string>();
+  const rooms = persisted.filter((room) => {
+    const identity = roomDockIdentity(room);
+    if (seenPersisted.has(identity)) return false;
+    seenPersisted.add(identity);
+    return true;
+  });
   if (!directRoom) return rooms;
   const existingIndex = rooms.findIndex(
     (room) => room.id === directRoom.id || roomDockIdentity(room) === roomDockIdentity(directRoom)
@@ -358,7 +373,20 @@ export function mergeHostRoomsIntoDock(
 ): RoomDockItem[] {
   const indexed = hosts.map(indexHostRooms);
   const next: RoomDockItem[] = [];
+  const seenRoomIdentities = new Set<string>();
   let changed = false;
+
+  const pushOnce = (room: RoomDockItem) => {
+    // Every source (persisted dock, anchor cache, live directory) can know
+    // the same room: the first entry wins so one room is always one rail item.
+    const identity = roomDockIdentity(room);
+    if (seenRoomIdentities.has(identity)) {
+      changed = true;
+      return;
+    }
+    seenRoomIdentities.add(identity);
+    next.push(room);
+  };
 
   for (const room of currentRooms) {
     const owner = hostForRoom(room, hosts);
@@ -368,17 +396,17 @@ export function mergeHostRoomsIntoDock(
       // is never silently dropped or revived by another host's directory.
       const resolved = disconnectRoom(room, "disconnected");
       if (resolved.changed) changed = true;
-      next.push(resolved.room);
+      pushOnce(resolved.room);
       continue;
     }
     if (!owner.rooms || owner.state !== "connected") {
       if (!owner.rooms && owner.state === "connected") {
-        next.push(room);
+        pushOnce(room);
         continue;
       }
       const resolved = disconnectRoom(room, owner.state);
       if (resolved.changed) changed = true;
-      next.push(resolved.room);
+      pushOnce(resolved.room);
       continue;
     }
     const serverRoom = index.byIdentity.get(roomDockIdentity(room))
@@ -391,10 +419,9 @@ export function mergeHostRoomsIntoDock(
       continue;
     }
     if (resolved.changed) changed = true;
-    next.push(resolved.room);
+    pushOnce(resolved.room);
   }
 
-  const seenRoomIdentities = new Set(next.map(roomDockIdentity));
   for (const { host } of indexed) {
     if (!host.rooms) continue;
     for (const serverRoom of host.rooms) {
