@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 // - useActiveMafiaGame: internal "Mafia game was not found"/404 control flow.
 // - useRoomSettingsController / useMemberHosts return line: returns Error objects.
 // - useMemberRoomLive category check: reads `category`, not `.message` render.
-// - useAppController console.debug logging line (never rendered).
+// - useAppController / useMemberRoomAutoReselect console.debug logging line (never rendered).
 // - StartupIdentityGate `detail` behind the existing "자세히" disclosure and
 //   its `"code" in reason` code checks.
 const ALLOWLIST: Array<{ file: string; snippet: string }> = [
@@ -17,6 +17,7 @@ const ALLOWLIST: Array<{ file: string; snippet: string }> = [
   { file: "useMemberHosts.ts", snippet: "return reason instanceof Error ? reason :" },
   { file: "useMemberRoomLive.ts", snippet: '"category" in error' },
   { file: "useAppController.tsx", snippet: "message: error instanceof Error ? error.message : String(error)" },
+  { file: "useMemberRoomAutoReselect.ts", snippet: "message: error instanceof Error ? error.message : String(error)" },
   { file: "useRoomSettingsController.ts", snippet: "return errorValue instanceof Error ? errorValue :" },
   { file: "StartupIdentityGate.tsx", snippet: "const detail = reason instanceof Error ? reason.message" },
   { file: "StartupIdentityGate.tsx", snippet: '"code" in reason' },

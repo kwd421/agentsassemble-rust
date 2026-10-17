@@ -276,8 +276,30 @@ export function useMemberHosts({
         return;
       }
       flights.current.delete(serverId);
-      admissions.current.get(serverId)?.close();
+      const previousAdmission = admissions.current.get(serverId);
+      const staleWorkspace = remoteWorkspaceFor(serverId);
+      previousAdmission?.close();
       admissions.current.set(serverId, attached.admission);
+      // A re-attach replaces the host channel: sessions bound to the old
+      // origin/channel must never outlive it. When the installed workspace
+      // still points at a different (dead or superseded) transport, drop it
+      // and every bearer bound to this host so the open room and background
+      // subscriptions re-select fresh sessions on the new admission below
+      // instead of looping on a refused stale bearer. Fake transports in
+      // tests may omit hello: only drop when the workspace is provably
+      // superseded (dead, or a different known origin).
+      const staleOldOrigin = (staleWorkspace?.transport as { hello?: { origin?: string } } | undefined)?.hello?.origin;
+      const freshOrigin = (attached.admission.transport as { hello?: { origin?: string } } | undefined)?.hello?.origin;
+      if (staleWorkspace && staleWorkspace.transport !== attached.admission.transport &&
+        (!staleWorkspace.transport.active ||
+          (Boolean(staleOldOrigin) && Boolean(freshOrigin) && staleOldOrigin !== freshOrigin))) {
+        if (import.meta.env.DEV) console.debug("[member-host] dropping stale workspace sessions", {
+          serverId, oldOrigin: staleOldOrigin ?? null,
+          newOrigin: freshOrigin ?? null,
+        });
+        closeRemoteWorkspace(serverId);
+        unbindRemoteSessionsForServer(serverId);
+      }
       attached.admission.transport.onClose(() => {
         if (identityRef.current.sessionToken !== activeToken) return;
         // A deliberate drop already removed the admission, so its close
@@ -366,7 +388,10 @@ export function useMemberHosts({
 
   const reconcile = useCallback(() => {
     const { personId: activePerson } = identityRef.current;
-    if (!activePerson) return;
+    if (!activePerson) {
+      if (import.meta.env.DEV) console.debug("[member-auto-attach] reconcile skipped: no signed-in person");
+      return;
+    }
     const live = directoryRef.current?.status === "connected" ? directoryRef.current.live?.servers ?? null : null;
     if (!live) {
       // Central is unconfirmed so its membership list cannot confirm or
@@ -375,7 +400,11 @@ export function useMemberHosts({
       // reattachHost. A startup 429 must never strand the rail in silence;
       // a governor block inside the attempt ends in that host's scheduled
       // retry, and an identity refusal keeps blocking silently-retrying.
-      for (const anchor of loadMemberAnchors(activePerson)) {
+      const anchors = loadMemberAnchors(activePerson);
+      if (import.meta.env.DEV) console.debug("[member-auto-attach] central unconfirmed, anchors drive attach", {
+        anchors: anchors.map((anchor) => anchor.server_id),
+      });
+      for (const anchor of anchors) {
         if (anchor.hidden || refused.current.has(anchor.server_id)) continue;
         if (flights.current.has(anchor.server_id) || reconnectTimers.current.has(anchor.server_id)) continue;
         if (admissions.current.has(anchor.server_id)) continue;
@@ -435,8 +464,20 @@ export function useMemberHosts({
           known?.detail ?? "참가 서버 정보가 바뀌었어요. 새 초대로 다시 참가해 주세요.");
         continue;
       }
-      if (flights.current.has(server.server_id) || refused.current.has(server.server_id)) continue;
-      if (attempted.current.get(server.server_id) === tupleKey(tuple)) continue;
+      if (flights.current.has(server.server_id) || refused.current.has(server.server_id)) {
+        if (import.meta.env.DEV) console.debug("[member-auto-attach] skip: in-flight or refused", {
+          serverId: server.server_id,
+          flight: flights.current.has(server.server_id),
+          refused: refused.current.has(server.server_id),
+        });
+        continue;
+      }
+      if (attempted.current.get(server.server_id) === tupleKey(tuple)) {
+        if (import.meta.env.DEV) console.debug("[member-auto-attach] skip: tuple already attempted", {
+          serverId: server.server_id, origin: tuple.origin,
+        });
+        continue;
+      }
       // Identity-only pin: epoch or host key fingerprint mismatch refuses.
       // Endpoint origin/generation comes fresh from the directory every
       // time; a new random public origin re-attaches silently. The stale

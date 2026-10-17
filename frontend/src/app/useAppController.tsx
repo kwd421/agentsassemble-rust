@@ -77,6 +77,7 @@ import {
 import { useSidebarResize } from "./useSidebarResize";
 import { projectChannelUnread } from "../lib/channelUnread";
 import { closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
+import { useMemberRoomAutoReselect, selectMemberRoomOnDemand } from "./useMemberRoomAutoReselect";
 import { userFacingError } from "../lib/apiErrors";
 import {  NO_SURFACE_STREAMS,
   applyConfirmedMembershipLost,
@@ -597,6 +598,22 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     visibleChannels.find((item) => item.id === channel) ?? { id: channel, label: "채널 연결 중", icon: Hash };
   const channelSearchNeedle = channelSearchQuery.trim().toLowerCase();
 
+  const { markAdmissionSeen } = useMemberRoomAutoReselect({
+    activeRoom,
+    ownerServerId: ownerWorkspace.connect?.serverId,
+    hasAnchor: memberHosts.hasAnchor,
+    isRefused: memberHosts.isRefused,
+    snapshots: memberHosts.snapshots,
+    admissionFor: memberHosts.admissionFor,
+    guestSession,
+    guestExpired,
+    admittedSessionToken,
+    liveSessionFor: memberRoomLive.liveSessionFor,
+    selectRoom: memberHosts.selectRoom,
+    acceptSession: acceptMemberRoomSession,
+    setSelectError: setMemberSelectError,
+  });
+
   async function selectRoom(roomId: string) {
     const room = rooms.find(item => item.id === roomId);
     // A stale rail id is still a failed click: record the short Korean
@@ -619,39 +636,18 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
             guestSession.meetingId === room.meetingId &&
             guestSession.serverSurface.server_id === room.serverId)) {
         try {
-          // A live background subscription opens instantly: its cached
-          // session needs no extra admission round trip. A dead session
-          // falls through to the normal select path below.
-          const live = memberRoomLive.liveSessionFor(memberServerId, room.meetingId);
-          let opened = false;
-          if (live) {
-            try {
-              opened = await acceptMemberRoomSession(live);
-            } catch {
-              opened = false;
-            }
-          }
-          if (opened) {
-            setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
-          } else {
-            const payload = await memberHosts.selectRoom(memberServerId, room.meetingId);
-            if (import.meta.env.DEV) console.debug("[member-select] admission complete", {
-              roomId, meetingId: payload.meeting_id, serverId: payload.server_id,
-            });
-            // A superseded admission applies nothing: stay on the click with
-            // the short Korean failure instead of abandoning it in silence.
-            if (!await acceptMemberRoomSession(payload)) {
-              setMemberSelectError({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
-            } else {
-              setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
-            }
-          }
-        } catch (error) {
-          if (import.meta.env.DEV) console.debug("[member-select] select failed", {
-            roomId, meetingId: room.meetingId, serverId: room.serverId ?? null,
-            message: error instanceof Error ? error.message : String(error),
+          await selectMemberRoomOnDemand({
+            roomId, meetingId: room.meetingId, memberServerId,
+            liveSessionFor: memberRoomLive.liveSessionFor,
+            selectRoom: memberHosts.selectRoom,
+            acceptSession: acceptMemberRoomSession,
+            setSelectError: setMemberSelectError,
           });
-          setMemberSelectError({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+        } finally {
+          // The manual tap consumed this admission for this room: the
+          // automatic re-select must not spend a second attempt on
+          // the same host channel.
+          markAdmissionSeen(memberServerId, room.meetingId);
         }
       } else if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
     } catch (error) {
