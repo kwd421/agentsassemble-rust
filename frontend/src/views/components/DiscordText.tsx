@@ -14,6 +14,10 @@ type HastNode = {
 
 export type MentionLabels = Readonly<Record<string, string>>;
 
+/// A stored `<@participant_id>` whose member left or was removed keeps a
+/// neutral Korean pill; the raw id never reaches the screen.
+export const UNKNOWN_MENTION_LABEL = "알 수 없는 사용자";
+
 /// Channel names this room actually has, so ordinary text like "(#107)에서" stays text.
 const KnownChannelsContext = createContext<ReadonlySet<string>>(new Set());
 
@@ -78,7 +82,7 @@ function roomReferenceNodes(
     const mention = structuredMention || raw.startsWith("@");
     const mentionToken = structuredMention ? raw.slice(2, -1).trim() : "";
     const mentionLabel = structuredMention
-      ? mentionLabels[mentionToken] || mentionToken
+      ? mentionLabels[mentionToken] || UNKNOWN_MENTION_LABEL
       : raw.slice(1);
     if (!mention && !knownChannels.has(raw.slice(1).toLocaleLowerCase())) {
       nodes.push({ type: "text", value: raw });

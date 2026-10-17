@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import DiscordText, { KnownChannels } from "./DiscordText";
+import DiscordText, { KnownChannels, UNKNOWN_MENTION_LABEL } from "./DiscordText";
 
 describe("DiscordText", () => {
   it("colours only channels the room actually has", () => {
@@ -69,6 +69,20 @@ describe("DiscordText", () => {
       />
     );
     expect(container.querySelector(".dc-mention")?.textContent).toBe("@Opus Prime");
+  });
+
+  it("renders a left member's stored mention as a neutral label, never the raw id", () => {
+    const departedId = "member-2412bc67-e8fe-44e8-8fbc-639004ba27af";
+    const { container } = render(
+      <DiscordText
+        text={`<@${departedId}> hi there`}
+        mentionLabels={{ "agent-uid-123": "Opus 5" }}
+      />
+    );
+
+    const pill = container.querySelector(".dc-mention");
+    expect(pill?.textContent).toBe(`@${UNKNOWN_MENTION_LABEL}`);
+    expect(container.textContent).not.toContain(departedId);
   });
 
   it("keeps numeric ranges with single tildes while rendering explicit strikethrough", () => {
