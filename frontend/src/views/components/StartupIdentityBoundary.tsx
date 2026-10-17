@@ -18,7 +18,7 @@ import {
   operatorPairingTokenFromUrl,
   roomGuestSessionExpired,
 } from "../../lib/roomGuestSession";
-import { centralAccountEntryUrl, centralIdentityConfigured, centralSessionLoggedOut, isCentralWebEntry, loadCentralSession } from "../../lib/central/identity";
+import { centralAccountEntryUrl, isCentralWebEntry } from "../../lib/central/identity";
 import StartupIdentityGate from "./StartupIdentityGate";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
 import { type MemberReturn } from "../../lib/central/memberConnect";
@@ -171,13 +171,6 @@ export default function StartupIdentityBoundary({
   if (ready) {
     const content = children({ deviceToken: browserIdentity.deviceToken, clientId: browserIdentity.clientId });
     return ownerWorkspace ? <CentralOwnerWorkspaceBoundary session={ownerWorkspace}>{content}</CentralOwnerWorkspaceBoundary> : content;
-  }
-  // Startup goes straight into the app: a signed-in desktop session renders
-  // the shell immediately (rail with own + joined rooms loading/disconnected
-  // in place). The chooser remains only for nothing-openable (conflict,
-  // retired, empty setup), which the app shell re-opens as an overlay.
-  if (desktop && centralIdentityConfigured() && !centralSessionLoggedOut() && loadCentralSession()) {
-    return children({ deviceToken: browserIdentity.deviceToken, clientId: browserIdentity.clientId });
   }
   return (
     <StartupIdentityGate

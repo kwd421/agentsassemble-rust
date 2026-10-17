@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { loadCentralSession } from "../lib/central/identity";
-import { visibleLocalRooms } from "../lib/central/localOwnership";
 import { mergeHostRoomsIntoDock, type RoomDockItem } from "../lib/roomDockModel";
 import { projectRoomConnections } from "../lib/serverConnectionState";
 import { remoteSessionTransport } from "../lib/remote/remoteWorkspace";
@@ -44,12 +43,6 @@ export function useRailRooms({
     directory: centralDirectory,
     onConfirmedMembershipLost,
   });
-  // This computer's server belongs to its registered owner; proven foreign
-  // local rooms never appear as mine (member rooms still come from anchors).
-  const visibleDirectoryRooms = useMemo(
-    () => visibleLocalRooms(directoryRooms, centralDirectory),
-    [directoryRooms, centralDirectory],
-  );
   // Every live host besides the directory owner below: their rooms are
   // preserved by the merge while their own session projects their state.
   const remoteHostStates = useMemo(() => {
@@ -72,7 +65,7 @@ export function useRailRooms({
   }, [ownerConnect, admittedSessionToken, guestSession, guestExpired, roomDirectorySyncIssue]);
   const rooms = useMemo(() => {
     const memberServerIds = new Set(memberHosts.hostDirs.map((host) => host.serverId));
-    const merged = mergeHostRoomsIntoDock(visibleDirectoryRooms, [
+    const merged = mergeHostRoomsIntoDock(directoryRooms, [
       { serverId: "", serverOrigin: "", rooms: null, state: "connected", local: true },
       ...(ownerConnect
         ? [{ serverId: ownerConnect.serverId, serverOrigin: "", rooms: null,
@@ -90,7 +83,7 @@ export function useRailRooms({
       ? roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected"
       : null, centralDirectory?.status === "central-unconfirmed",
       [...remoteHostStates.filter((entry) => !memberServerIds.has(entry.serverId)), ...memberHosts.hostStates]);
-  }, [visibleDirectoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory,
+  }, [directoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory,
     remoteHostStates, memberHosts.hostDirs, memberHosts.hostStates,
     ownerConnect, admittedSessionToken, guestSession, guestExpired]);
   return { rooms, memberHosts };

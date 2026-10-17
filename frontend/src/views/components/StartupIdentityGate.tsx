@@ -5,7 +5,6 @@ import LocalAccountDataChoice from "./LocalAccountDataChoice";
 import { GoogleRegistrationRequired } from "../../lib/central/googleRegistration";
 import GoogleRegistrationChoice from "./GoogleRegistrationChoice";
 import { useCentralDirectory } from "../../app/useCentralDirectory";
-import { loadMemberAnchors } from "../../lib/central/memberAnchors";
 import { isCentralTemporaryError } from "../../lib/central/connectionError";
 import { centralDailyQuotaNotice } from "../../lib/central/centralRequestGovernor";
 import type { CentralServerDisplay } from "../../lib/central/directoryCache";
@@ -251,45 +250,6 @@ export default function StartupIdentityGate({
     void selectCentralServer();
   }, [screen, webEntry, hostingChecked, hostingState, accountDeviceOnly, busy, ownedServer?.server_id, localHost?.server_id, directory?.status]);
 
-  // Startup goes straight into the app: once a signed-in account has an
-  // openable shell (local owned match, joined member host/anchor, or an
-  // online owned remote), enter immediately instead of waiting for the local
-  // host or a manual 열기. A sole offline owned server with no member stays
-  // on the chooser notice; a mismatch never gates (the app shows it quietly).
-  const straightIn = useRef(false);
-  useEffect(() => {
-    if (screen !== "servers" || webEntry || straightIn.current || autoOpened.current) return;
-    if (!centralPerson || ownerConflict || hostingState === "retired" || hostingState === "account_deleted") return;
-    const hasMember = centralServers.some((server) => server.relation === "member");
-    let hasAnchor = false;
-    try {
-      hasAnchor = Boolean(centralPerson.person_id && loadMemberAnchors(centralPerson.person_id).length > 0);
-    } catch {
-      hasAnchor = false;
-    }
-    if (hasMember || hasAnchor) {
-      straightIn.current = true;
-      onComplete();
-      return;
-    }
-    if (ownedServers.length === 0) return;
-    const ownedIsLocalNow = Boolean(localHost?.server_id) && ownedServer?.server_id === localHost?.server_id;
-    if (ownedIsLocalNow) {
-      // The local auto-open below owns registration; a member-less owned
-      // local still enters through it, not here.
-      return;
-    }
-    // A single online owned remote opens by itself (no manual 열기); an
-    // offline owned remote with no member stays for the chooser notice.
-    const liveOwned = (directory?.live?.servers || []).find((server) => server.server_id === ownedServer?.server_id);
-    const ownedOnline = Boolean(liveOwned?.endpoint?.status === "published" && liveOwned.endpoint.mode === "event_secure_v1");
-    if (ownedOnline && ownedServer && !busy) {
-      straightIn.current = true;
-      autoOpened.current = true;
-      void selectCentralServer(ownedServer);
-    }
-  }, [screen, webEntry, centralPerson, ownerConflict, hostingState, centralServers, ownedServers.length, ownedServer, localHost?.server_id, directory?.live?.servers, busy, onComplete]);
-
   async function refreshLocalHost() {
     if (webEntry) return;
     try {
@@ -332,21 +292,14 @@ export default function StartupIdentityGate({
         else {
           await requestDesktopHostProductSurface();
           if (centralEnabled) {
-            // The app shell opens without waiting for the local host: device
-            // info resolves in the background while central login proceeds.
-            void (async () => {
-              try {
-                await retryPendingLocalDemotion(deviceToken);
-                const device = await requestDesktopHostDeviceInfo();
-                const restriction = device.hosting_state;
-                if (active) { setLocalHost(device); setHostingState(restriction); setHostingChecked(true); setLocalHostError(""); }
-              } catch (reason) {
-                if (active) {
-                  setHostingChecked(true);
-                  setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했어요."));
-                }
-              }
-            })();
+            try {
+              await retryPendingLocalDemotion(deviceToken);
+              const device = await requestDesktopHostDeviceInfo();
+              const restriction = device.hosting_state;
+              if (active) { setLocalHost(device); setHostingState(restriction); setHostingChecked(true); setLocalHostError(""); }
+            } catch (reason) {
+              if (active) setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했어요."));
+            }
           }
         }
         if (centralEnabled && centralSessionLoggedOut()) {
