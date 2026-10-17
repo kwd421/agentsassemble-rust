@@ -373,7 +373,10 @@ export default function UserPanel({
     avatarImage: centralAccount?.avatarImage,
   };
 
-  if (guestProfile && (guestProfile.expired || guestAwaitingAdmission || pairedRoomSession)) {
+  // A signed-in central account keeps its own bottom panel even inside a
+  // joined friend room: the member/guest profile never hides the central
+  // settings entry. Paired operator presentation stays separate.
+  if (guestProfile && (pairedRoomSession || (!centralAccount && (guestProfile.expired || guestAwaitingAdmission)))) {
     return (
       <div className="dc-user-panel" ref={rootRef}>
         <div className="dc-current-user">
@@ -428,9 +431,11 @@ export default function UserPanel({
 
   // Signed-in central account on a computer whose server is not mine: the
   // local profile authority never represents this user, so the panel shows
-  // the central account with settings always reachable. Only server-owned
-  // profile/device edits stay disabled inside the dialog.
-  if (centralAccount && !profileAuthorityReady && !pairedRoomSession) {
+  // the central account with settings always reachable in every app state
+  // (own room, friend room, no room, disconnected room). Only server-owned
+  // profile/device edits stay disabled inside the dialog; member/host
+  // profile edits stay in their own member flow and are never mixed here.
+  if (centralAccount && !pairedRoomSession) {
     return (
       <div className="dc-user-panel" ref={rootRef}>
         {settingsOpen && (
@@ -447,7 +452,7 @@ export default function UserPanel({
             onReset={() => undefined}
             onSave={() => undefined}
             onEditAvatar={() => undefined}
-            profileIdentity={profileIdentity}
+            profileIdentity={{ deviceToken: profileIdentity.deviceToken }}
             displayResourceBase=""
             serverAuthorityAvailable={false}
           />
@@ -482,6 +487,17 @@ export default function UserPanel({
             <button ref={settingsButtonRef} type="button" aria-label="사용자 설정" data-tip="사용자 설정" onClick={() => openSettings("account")}>
               <Settings size={16} />
             </button>
+            {guestProfile?.expired && onGuestExit && (
+              <button
+                type="button"
+                aria-label="게스트 화면 나가기"
+                title="게스트 화면 나가기"
+                data-danger
+                onClick={onGuestExit}
+              >
+                <LogOut size={18} />
+              </button>
+            )}
           </div>
         </div>
       </div>

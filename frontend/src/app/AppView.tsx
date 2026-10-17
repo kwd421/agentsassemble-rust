@@ -158,7 +158,7 @@ export default function AppView({ controller }: { controller: AppController }) {
   // this computer's server is not mine, show the signed-in central account,
   // never the foreign local operator.
   const centralPerson = controller.centralDirectory?.person ?? null;
-  const centralSelfProfile = !ownerProfileSession && !guestPanelProfile && centralPerson && !controller.localOwnedByAccount
+  const centralSelfProfile = !ownerProfileSession && centralPerson && !controller.localOwnedByAccount
     ? centralAccountSelf(centralPerson)
     : undefined;
   const userArea = (
@@ -169,7 +169,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
         profileAuthorityReady={profileAuthorityReady}
         guestProfile={ownerProfileSession ? undefined : guestPanelProfile}
-        centralAccount={ownerProfileSession || guestPanelProfile ? undefined : centralSelfProfile ?? undefined}
+        centralAccount={ownerProfileSession ? undefined : centralSelfProfile ?? undefined}
         pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
         publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
           const value = event.profile_revision;
