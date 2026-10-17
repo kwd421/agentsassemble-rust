@@ -158,7 +158,8 @@ export default function AppView({ controller }: { controller: AppController }) {
         agentCount={scopedAgents.length || 0}
         hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
         profileAuthorityReady={profileAuthorityReady}
-        guestProfile={ownerProfileSession ? undefined : (guestPanelProfile ?? centralSelfProfile)}
+        guestProfile={ownerProfileSession ? undefined : guestPanelProfile}
+        centralAccount={ownerProfileSession || guestPanelProfile ? undefined : centralSelfProfile ?? undefined}
         pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
         publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
           const value = event.profile_revision;

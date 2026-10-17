@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { loadCentralSession } from "../lib/central/identity";
-import { visibleLocalRooms } from "../lib/central/localOwnership";
+import { loadMemberAnchor } from "../lib/central/memberAnchors";
+import { visibleAccountRemoteRooms, visibleLocalRooms } from "../lib/central/localOwnership";
 import { mergeHostRoomsIntoDock, type RoomDockItem } from "../lib/roomDockModel";
 import { projectRoomConnections } from "../lib/serverConnectionState";
 import { remoteSessionTransport } from "../lib/remote/remoteWorkspace";
@@ -45,11 +46,23 @@ export function useRailRooms({
     onConfirmedMembershipLost,
   });
   // This computer's server belongs to its registered owner; proven foreign
-  // local rooms never appear as mine (member rooms still come from anchors).
-  const visibleDirectoryRooms = useMemo(
-    () => visibleLocalRooms(directoryRooms, centralDirectory),
-    [directoryRooms, centralDirectory],
-  );
+  // local rooms never appear as mine. Remote rooms stay only while joined by
+  // this account (anchor or listed membership), never from a previous
+  // account's global dock cache.
+  const visibleDirectoryRooms = useMemo(() => {
+    const personId = centralDirectory?.person?.person_id ?? "";
+    return visibleAccountRemoteRooms(
+      visibleLocalRooms(directoryRooms, centralDirectory),
+      centralDirectory,
+      (serverId) => {
+        try {
+          return Boolean(personId && loadMemberAnchor(personId, serverId));
+        } catch {
+          return false;
+        }
+      },
+    );
+  }, [directoryRooms, centralDirectory]);
   // Every live host besides the directory owner below: their rooms are
   // preserved by the merge while their own session projects their state.
   const remoteHostStates = useMemo(() => {

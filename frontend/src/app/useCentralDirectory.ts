@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CENTRAL_SESSION_CLEARED_EVENT, bootstrapCentral, centralIdentityConfigured, loadCentralSession, isCentralAuthenticationError,
+import { CENTRAL_SESSION_CHANGED_EVENT, CENTRAL_SESSION_CLEARED_EVENT, bootstrapCentral, centralIdentityConfigured, loadCentralSession, isCentralAuthenticationError,
   type CentralBootstrap, type CentralPerson, type CentralSession } from "../lib/central/identity";
 import { loadCentralDirectoryCache, type CentralServerDisplay } from "../lib/central/directoryCache";
 import { isCentralTemporaryError } from "../lib/central/connectionError";
@@ -141,8 +141,30 @@ export function useCentralDirectory(autoStart = false) {
       clearDirectoryRetry();
       setDirectory({ status: "authentication-required", person: null, servers: [], live: null });
     };
+    // Account switch without reload must never keep the previous account's
+    // directory (owned/member lists) visible: retain the new session's cached
+    // display and refresh, so the rail and mismatch notice follow the new
+    // account immediately.
+    const changed = () => {
+      controller.current?.abort();
+      flight.current = null;
+      lastSuccess.current = null;
+      tempFailures.current = 0;
+      clearDirectoryRetry();
+      const session = loadCentralSession();
+      if (session) {
+        setDirectory(retainedDirectory(session));
+        void refreshRef.current().catch(() => undefined);
+      } else {
+        setDirectory({ status: "authentication-required", person: null, servers: [], live: null });
+      }
+    };
     window.addEventListener(CENTRAL_SESSION_CLEARED_EVENT, cleared);
-    return () => window.removeEventListener(CENTRAL_SESSION_CLEARED_EVENT, cleared);
+    window.addEventListener(CENTRAL_SESSION_CHANGED_EVENT, changed);
+    return () => {
+      window.removeEventListener(CENTRAL_SESSION_CLEARED_EVENT, cleared);
+      window.removeEventListener(CENTRAL_SESSION_CHANGED_EVENT, changed);
+    };
   }, [clearDirectoryRetry]);
 
   useEffect(() => {

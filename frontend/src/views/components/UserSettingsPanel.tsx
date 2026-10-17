@@ -37,6 +37,7 @@ export default function UserSettingsPanel({
   onEditAvatar,
   profileIdentity,
   displayResourceBase,
+  serverAuthorityAvailable = true,
 }: {
   onClose: () => void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
@@ -52,6 +53,7 @@ export default function UserSettingsPanel({
   onEditAvatar: () => void;
   profileIdentity?: UserProfileIdentity;
   displayResourceBase: string;
+  serverAuthorityAvailable?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function UserSettingsPanel({
     dialog?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
     return () => { dialog?.close(); returnFocusRef.current?.focus(); };
   }, [returnFocusRef]);
-  const canManageDevices = Boolean(profileIdentity?.centralSession) || (!profileIdentity?.sessionToken && isDesktopWebview());
+  const canManageDevices = serverAuthorityAvailable && (Boolean(profileIdentity?.centralSession) || (!profileIdentity?.sessionToken && isDesktopWebview()));
   const sections = USER_SETTINGS_SECTIONS.filter(section => section.id === "recovery"
     ? profileIdentity?.sessionToken && !profileIdentity.centralOwner
     : section.id !== "devices" || canManageDevices);
@@ -113,12 +115,15 @@ export default function UserSettingsPanel({
           {settingsSection === "account" && (
             <>
               <p className="dc-user-settings-lead">이 서버에서 사용할 이름과 표시 상태를 바꿔요.</p>
+              {!serverAuthorityAvailable && (
+                <p className="dc-user-settings-lead">이 컴퓨터의 서버 프로필은 서버를 등록한 뒤 바꿀 수 있어요. 계정 로그아웃은 아래에서 할 수 있어요.</p>
+              )}
               <div className="dc-user-settings-grid">
                 <label>
                   표시 이름
                   <input
                     style={{ minHeight: 44 }}
-                    disabled={saving}
+                    disabled={saving || !serverAuthorityAvailable}
                     value={draft.displayName}
                     onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value })}
                     maxLength={120}
@@ -128,7 +133,7 @@ export default function UserSettingsPanel({
                   핸들
                   <input
                     style={{ minHeight: 44 }}
-                    disabled={saving}
+                    disabled={saving || !serverAuthorityAvailable}
                     value={draft.handle}
                     onChange={(event) => onDraftChange({ ...draft, handle: event.target.value })}
                     maxLength={120}
@@ -138,7 +143,7 @@ export default function UserSettingsPanel({
                   상태
                   <select
                     style={{ minHeight: 44, appearance: "none" }}
-                    disabled={saving}
+                    disabled={saving || !serverAuthorityAvailable}
                     value={draft.status}
                     onChange={(event) =>
                       onDraftChange({
@@ -167,6 +172,9 @@ export default function UserSettingsPanel({
           {settingsSection === "profile" && (
             <>
               <p className="dc-user-settings-lead">프로필 카드의 사진, 배너와 상태 문구를 바꿔요.</p>
+              {!serverAuthorityAvailable && (
+                <p className="dc-user-settings-lead">이 컴퓨터의 서버 프로필은 서버를 등록한 뒤 바꿀 수 있어요.</p>
+              )}
               <div className="dc-user-settings-profile-layout">
               <div className="dc-user-settings-grid">
                 <div className="dc-user-settings-avatar-field">
@@ -175,7 +183,7 @@ export default function UserSettingsPanel({
                     <button
                       type="button"
                       className="dc-user-settings-avatar-tile"
-                      disabled={saving}
+                      disabled={saving || !serverAuthorityAvailable}
                       onClick={onEditAvatar}
                       aria-label="프로필 사진 변경"
                       title="프로필 사진 변경"
@@ -199,7 +207,7 @@ export default function UserSettingsPanel({
                         <button
                           type="button"
                           className="dc-user-settings-text-button"
-                          disabled={saving}
+                          disabled={saving || !serverAuthorityAvailable}
                           onClick={() => onDraftChange({ ...draft, avatarImage: "" })}
                         >
                           사진 제거
@@ -212,7 +220,7 @@ export default function UserSettingsPanel({
                   사용자 지정 상태
                   <input
                     style={{ minHeight: 44 }}
-                    disabled={saving}
+                    disabled={saving || !serverAuthorityAvailable}
                     value={draft.customStatus}
                     onChange={(event) => onDraftChange({ ...draft, customStatus: event.target.value })}
                     maxLength={160}
@@ -222,7 +230,7 @@ export default function UserSettingsPanel({
                   배너
                   <select
                     style={{ minHeight: 44, appearance: "none" }}
-                    disabled={saving}
+                    disabled={saving || !serverAuthorityAvailable}
                     value={draft.bannerPreset}
                     onChange={(event) =>
                       onDraftChange({
@@ -242,7 +250,7 @@ export default function UserSettingsPanel({
                   사진 대신 보일 글자
                   <input
                     style={{ minHeight: 44 }}
-                    disabled={saving}
+                    disabled={saving || !serverAuthorityAvailable}
                     value={draft.avatarLabel}
                     onChange={(event) => onDraftChange({ ...draft, avatarLabel: event.target.value })}
                     maxLength={2}
@@ -252,7 +260,7 @@ export default function UserSettingsPanel({
                   포인트 색상
                   <input
                     style={{ minHeight: 44 }}
-                    disabled={saving}
+                    disabled={saving || !serverAuthorityAvailable}
                     type="color"
                     value={draft.accentColor}
                     onChange={(event) => onDraftChange({ ...draft, accentColor: event.target.value })}
@@ -289,7 +297,7 @@ export default function UserSettingsPanel({
         </section>
         {profileError && <p className="dc-user-settings-error" role="alert" style={{ position: "relative", inset: "auto", padding: "12px 32px", whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }}>{profileError}</p>}
         {/* Discord's save bar: it appears only once there is something to save. */}
-        {settingsSection !== "recovery" && (changed || saving) && (
+        {serverAuthorityAvailable && settingsSection !== "recovery" && (changed || saving) && (
           <div className="dc-user-settings-savebar" role="region" aria-label="저장하지 않은 변경 사항">
             <span className="dc-user-settings-savebar-text">저장하지 않은 변경 사항이 있어요.</span>
             <button type="button" onClick={onReset} style={{ minWidth: 44, minHeight: 44 }} disabled={saving || !changed}>

@@ -292,6 +292,27 @@ describe("ownership mismatch is registration-only", () => {
     expect(shouldShowOwnServerMismatch(OWN_ID, directory)).toBe(false);
   });
 
+  it("shows nothing for an account with no owned server on someone else's computer", async () => {
+    const { shouldShowOwnServerMismatch, visibleAccountRemoteRooms } = await import(
+      "../lib/central/localOwnership"
+    );
+    const person = { person_id: "person-b", display_name: "B", identity_kind: "google" as const };
+    const noServer = {
+      status: "connected" as const,
+      person,
+      servers: [],
+      live: { person, servers: [], server_time: 1 },
+    };
+    // B owns none: quiet line stays hidden even though this computer has A's server.
+    expect(shouldShowOwnServerMismatch(FOREIGN_ID, noServer)).toBe(false);
+    // A stale persisted remote from the previous account never survives for B.
+    const stale = {
+      ...createFreshRoom(), id: "server-old-hihi", meetingId: "hihi-room",
+      label: "Hihi room", serverId: MEMBER_ID, roomOrigin: "remote_server" as const,
+    };
+    expect(visibleAccountRemoteRooms([stale], noServer, () => false)).toHaveLength(0);
+  });
+
   it("shows nothing while the registration identity is unknown", async () => {
     const { isLocalOwnedByRegistration, shouldShowOwnServerMismatch } = await import(
       "../lib/central/localOwnership"

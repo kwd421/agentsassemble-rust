@@ -6,6 +6,7 @@ import { useCentralDirectory } from "./useCentralDirectory";
 const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), session: null as object | null }));
 vi.mock("../lib/central/identity", () => ({ bootstrapCentral: mocks.bootstrap,
   CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
+  CENTRAL_SESSION_CHANGED_EVENT: "agentsassemble:central-session-changed",
   centralIdentityConfigured: () => true, loadCentralSession: () => mocks.session,
   isCentralAuthenticationError: (e: Error) => e.message === "401",
 }));
@@ -196,6 +197,20 @@ it("ignores hidden visibility and coalesces focus, visible, online and explicit 
     await pending;
   });
   expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+});
+
+it("follows an account switch without showing the previous account's servers", async () => {
+  mocks.session = { token: "old", person };
+  mocks.bootstrap.mockResolvedValueOnce({ person, servers: [server], server_time: 1 });
+  const { result } = renderHook(() => useCentralDirectory(true));
+  await act(async () => {});
+  expect(result.current.directory).toMatchObject({ person, servers: [server] });
+  const nextPerson = { ...person, person_id: "person-b" };
+  mocks.session = { token: "new", person: nextPerson };
+  mocks.bootstrap.mockResolvedValueOnce({ person: nextPerson, servers: [], server_time: 1 });
+  await act(async () => { window.dispatchEvent(new Event("agentsassemble:central-session-changed")); });
+  expect(result.current.directory?.person?.person_id).toBe("person-b");
+  expect(result.current.directory?.servers).toEqual([]);
 });
 
 it("does not throttle a new account using the old account's successful check", async () => {

@@ -313,10 +313,12 @@ export function useMemberHosts({
 
   // Account switch or logout ends every member session; anchors are cleared
   // by the central identity owner, so re-login re-attaches from membership.
+  // The previous account's snapshots never stay visible for the next account.
   const identityKey = `${personId}\0${sessionToken}`;
   useEffect(() => {
     refused.current.clear();
     attempted.current.clear();
+    setSnapshots((current) => (current.length === 0 ? current : []));
     return () => {
       for (const timer of reconnectTimers.current.values()) window.clearTimeout(timer);
       reconnectTimers.current.clear();

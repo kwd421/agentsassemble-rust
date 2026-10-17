@@ -33,6 +33,7 @@ export default function UserPanel({
   agentCount,
   hasBackendError,
   guestProfile,
+  centralAccount,
   pairedRoomSession = false,
   profileAuthorityReady = true,
   profileIdentity = {},
@@ -48,6 +49,12 @@ export default function UserPanel({
     avatarImage?: string;
     statusLabel: string;
     expired?: boolean;
+  };
+  centralAccount?: {
+    displayName: string;
+    avatarLabel: string;
+    avatarImage?: string;
+    statusLabel: string;
   };
   pairedRoomSession?: boolean;
   profileAuthorityReady?: boolean;
@@ -352,6 +359,19 @@ export default function UserPanel({
   }
 
   const guestAvatar = useResourceImage(guestProfile?.avatarImage).url;
+  const centralDisplayName = String(centralAccount?.displayName || "").trim() || "게스트";
+  const centralAvatarLabel = String(centralAccount?.avatarLabel || centralDisplayName.slice(0, 1) || "G")
+    .trim()
+    .slice(0, 2)
+    .toUpperCase();
+  const centralHasAvatarImage = Boolean(centralAccount?.avatarImage);
+  const centralAvatar = useResourceImage(centralAccount?.avatarImage).url;
+  const centralDraft: UserProfile = {
+    ...DEFAULT_USER_PROFILE,
+    displayName: centralDisplayName,
+    avatarLabel: centralAvatarLabel,
+    avatarImage: centralAccount?.avatarImage,
+  };
 
   if (guestProfile && (guestProfile.expired || guestAwaitingAdmission || pairedRoomSession)) {
     return (
@@ -401,6 +421,68 @@ export default function UserPanel({
               </button>
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Signed-in central account on a computer whose server is not mine: the
+  // local profile authority never represents this user, so the panel shows
+  // the central account with settings always reachable. Only server-owned
+  // profile/device edits stay disabled inside the dialog.
+  if (centralAccount && !profileAuthorityReady && !pairedRoomSession) {
+    return (
+      <div className="dc-user-panel" ref={rootRef}>
+        {settingsOpen && (
+          <UserSettingsPanel
+            returnFocusRef={settingsButtonRef}
+            onClose={() => setSettingsOpen(false)}
+            changed={false}
+            draft={centralDraft}
+            saving={false}
+            profileError=""
+            settingsSection={settingsSection}
+            onSectionChange={setSettingsSection}
+            onDraftChange={() => undefined}
+            onReset={() => undefined}
+            onSave={() => undefined}
+            onEditAvatar={() => undefined}
+            profileIdentity={profileIdentity}
+            displayResourceBase=""
+            serverAuthorityAvailable={false}
+          />
+        )}
+        <div className="dc-current-user">
+          <button
+            type="button"
+            className="dc-user-identity"
+            onClick={() => openSettings("account")}
+            aria-label={`${centralDisplayName} 계정 설정 열기`}
+          >
+            <span className="relative shrink-0">
+              <span
+                className="dc-self-avatar"
+                data-has-image={centralHasAvatarImage}
+                style={centralHasAvatarImage ? { backgroundImage: `url(${centralAvatar})` } : undefined}
+              >
+                {centralHasAvatarImage ? null : centralAvatarLabel}
+              </span>
+              <span className="dc-self-status online" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-[14px] font-bold leading-5 text-text-primary">
+                {centralDisplayName}
+              </span>
+              <span className="block truncate text-[12px] leading-4 text-text-muted">
+                {centralAccount.statusLabel}
+              </span>
+            </span>
+          </button>
+          <div className="dc-user-actions">
+            <button ref={settingsButtonRef} type="button" aria-label="사용자 설정" data-tip="사용자 설정" onClick={() => openSettings("account")}>
+              <Settings size={16} />
+            </button>
+          </div>
         </div>
       </div>
     );

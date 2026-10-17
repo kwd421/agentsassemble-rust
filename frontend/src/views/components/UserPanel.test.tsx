@@ -555,4 +555,33 @@ describe("UserPanel", () => {
     expect(status.textContent).not.toContain("고정");
     expect(within(view.container).getByText("자세히")).toBeTruthy();
   });
+
+  it("keeps signed-in central settings reachable without local server authority", async () => {
+    vi.stubEnv("VITE_AGENTSASSEMBLE_CENTRAL_URL", "https://central.example.test");
+    window.localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({
+      token: "token-b", expires_at: 9_999_999_999, device_id: "device",
+      person: { person_id: "person-b", identity_kind: "google", display_name: "B계정" },
+    }));
+    try {
+      const view = render(
+        <UserPanel
+          onlineCount={1}
+          agentCount={0}
+          hasBackendError={false}
+          profileAuthorityReady={false}
+          centralAccount={{ displayName: "B계정", avatarLabel: "B", statusLabel: "온라인" }}
+          profileIdentity={{ deviceToken: "device-token" }}
+        />
+      );
+      // No local profile fetch: the foreign host must never represent B.
+      expect(apiMocks.fetchUserProfile).not.toHaveBeenCalled();
+      expect(within(view.container).getByRole("button", { name: /B계정 계정 설정 열기/ })).toBeTruthy();
+      fireEvent.click(within(view.container).getByRole("button", { name: "사용자 설정" }));
+      expect(await within(view.container).findByRole("button", { name: "로그아웃" })).toBeTruthy();
+      expect(within(view.container).getByText("이 컴퓨터의 서버 프로필은 서버를 등록한 뒤 바꿀 수 있어요. 계정 로그아웃은 아래에서 할 수 있어요.")).toBeTruthy();
+    } finally {
+      vi.unstubAllEnvs();
+      window.localStorage.clear();
+    }
+  });
 });

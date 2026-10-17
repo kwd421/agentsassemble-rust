@@ -121,3 +121,42 @@ export function visibleLocalRooms(
       (owned.size > 0 && owned.has(room.serverId)),
   );
 }
+
+/**
+ * Whether a remote server belongs to the signed-in account's membership
+ * (cached display list or live directory). Persisted remote rooms from a
+ * previous account on this computer never satisfy this for the new account.
+ */
+export function isJoinedMemberServer(
+  serverId: string | undefined,
+  directory: CentralDirectoryState | null,
+): boolean {
+  if (!directory?.person || !serverId) return false;
+  if ((directory.servers || []).some((server) => server.server_id === serverId && server.relation === "member")) {
+    return true;
+  }
+  return Boolean(
+    directory.live?.servers?.some((server) => server.server_id === serverId && server.relation === "member"),
+  );
+}
+
+/**
+ * Remote rooms visible in my rail. An account only ever sees its own joined
+ * rooms: a persisted remote room stays only while its server is still my
+ * membership (anchor for this person or listed member) — never because a
+ * previous account left it in the global dock cache.
+ */
+export function visibleAccountRemoteRooms(
+  rooms: RoomDockItem[],
+  directory: CentralDirectoryState | null,
+  hasAnchor?: (serverId: string) => boolean,
+): RoomDockItem[] {
+  if (!directory?.person) return rooms;
+  return rooms.filter((room) => {
+    if (room.roomOrigin !== "remote_server") return true;
+    const serverId = room.serverId;
+    if (!serverId) return false;
+    if (hasAnchor?.(serverId)) return true;
+    return isJoinedMemberServer(serverId, directory);
+  });
+}

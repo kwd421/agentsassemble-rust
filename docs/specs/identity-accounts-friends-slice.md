@@ -3999,3 +3999,49 @@ ownership/mismatch), `frontend/src/app/useAppController.tsx` (registration
 `localHostServerId`), `frontend/src/app/AppView.tsx` (quiet mismatch only
 when known), `frontend/src/views/components/UserPanel.tsx` (neutral
 loading).
+
+### Signed-in account without an owned server on someone else's computer (2026-10-17)
+
+Recorded behavior, no new flow. `shouldShowOwnServerMismatch` shows the
+quiet line only for exactly one owned server that differs from this host's
+id (`owned.length !== 1` shows nothing), so an account with no server never
+sees "이 컴퓨터의 서버가 계정에 등록된 서버와 달라요. [이 기기로 연결]".
+With no owned server, no joined member and no anchor the shell stays in the
+existing first-server setup (`App.tsx` nothing-openable → gate
+"아직 내 서버가 없어요. ..." with `onOpenLocal` when
+`ownedServers.length === 0` → `registerLocalServer`). Inside the shell
+(joined members exist) `canCreateRoom` stays false
+(`startupHostEnabled && localOwnedByAccount`), so "새 방 만들기" stays
+hidden; rooms are created only through that first-server flow.
+
+Entry points: `frontend/src/lib/central/localOwnership.ts`
+(`shouldShowOwnServerMismatch`, `visibleAccountRemoteRooms`),
+`frontend/src/App.tsx` (nothing-openable), `frontend/src/views/components/
+StartupIdentityGate.tsx` (first-server `onOpenLocal`),
+`frontend/src/app/useAppController.tsx` (`canCreateRoom`).
+
+### Signed-in account keeps user settings without this computer's authority (2026-10-17)
+
+The bottom-left panel and user settings stay reachable for the signed-in
+account whatever this computer's ownership. Only this computer's
+server-owned edits stay hidden/disabled (profile fields, save bar, devices).
+
+Entry points: `frontend/src/app/AppView.tsx` (signed-in `centralAccount`),
+`frontend/src/views/components/UserPanel.tsx` (central-only panel),
+`frontend/src/views/components/UserSettingsPanel.tsx`
+(`serverAuthorityAvailable`).
+
+### Rail shows only the signed-in account's joined rooms (2026-10-17)
+
+`memberAnchors` stay keyed per person and `directoryCache` stays
+person-checked; the rail additionally drops a previous account's global dock
+remotes (`visibleAccountRemoteRooms`: anchor for this person or listed
+member only), member snapshots clear on identity change, the directory
+follows `CENTRAL_SESSION_CHANGED_EVENT`, and the global dock clears on
+switch/logout.
+
+Entry points: `frontend/src/lib/central/localOwnership.ts`,
+`frontend/src/app/useRailRooms.ts`, `frontend/src/app/useMemberHosts.ts`,
+`frontend/src/app/useCentralDirectory.ts`,
+`frontend/src/lib/central/identity.ts`,
+`frontend/src/lib/roomDockPersistence.ts`.

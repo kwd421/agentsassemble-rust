@@ -79,4 +79,35 @@ describe("useRailRooms", () => {
     expect(byMeeting["local-1"]?.connectionState).toBe("local");
     expect(byMeeting["general"]).toMatchObject({ connectionState: "disconnected", roomOrigin: "remote_server" });
   });
+
+  it("hides a previous account's persisted remote room for the signed-in account", async () => {
+    attach.mockImplementation(() => new Promise(() => undefined));
+    // Previous account's anchor stays under its own person key only.
+    window.localStorage.setItem("agentsassemble.memberAnchors.v1:person-a", JSON.stringify({ anchors: [{
+      server_id: "friend-old", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://friend-old.test", endpoint_generation: 2,
+      rooms: [{ room_id: "hihi-room", name: "Hihi room" }], hidden: false, updated_at: 1,
+    }] }));
+    const staleRemote = {
+      ...createFreshRoom(), id: "server-friend-old-hihi-room", meetingId: "hihi-room",
+      label: "Hihi room", serverId: "friend-old", roomOrigin: "remote_server" as const,
+      serverOrigin: "https://friend-old.test",
+    };
+    const directoryB = {
+      status: "connected" as const,
+      person: { person_id: "person-b", display_name: "B", identity_kind: "google" as const },
+      servers: [],
+      live: { person: { person_id: "person-b", display_name: "B", identity_kind: "google" as const }, servers: [], server_time: 1 },
+    };
+    window.localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({
+      token: "token-b", expires_at: 9_999_999_999, device_id: "device",
+      person: { person_id: "person-b", identity_kind: "google", display_name: "B" },
+    }));
+    const { result } = renderHook(() => useRailRooms({
+      directoryRooms: [staleRemote], startupHostEnabled: true, roomDirectorySyncIssue: null,
+      centralDirectory: { ...directoryB, person: { person_id: "person", display_name: "나", identity_kind: "google" as const } },
+      ownerConnect: null, admittedSessionToken: "", guestSession: null, guestExpired: false,
+    }));
+    await waitFor(() => expect(result.current.rooms.some((room) => room.meetingId === "hihi-room")).toBe(false), { timeout: 5000 });
+  });
 });

@@ -154,3 +154,27 @@ it.each([
   await expect(signedRequest(session, path, path === "/v1/account" ? "DELETE" : "POST", {})).rejects.toMatchObject({ status: responseStatus, code });
   expect(loadCentralSession()?.token ?? null).toBe(["invalid_session", "authentication_required", "invalid_signed_request"].includes(code) || path === "/v1/logout" ? null : "fixture-session");
 });
+
+it("clears the global room dock cache on account switch and logout", async () => {
+  vi.resetModules();
+  const { saveSession, clearCentralSession } = await import("./identity");
+  const { persistRoomDockItems, loadRoomDockItems } = await import("../roomDockPersistence");
+  const { persistableRoom } = await import("../roomDockModel");
+  const { createFreshRoom } = await import("../roomDockModel");
+  const room = { ...createFreshRoom(), id: "a-room", meetingId: "a-room", label: "A 방" };
+  persistRoomDockItems([persistableRoom(room)]);
+  expect(loadRoomDockItems()).toHaveLength(1);
+  localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({
+    token: "session-a", expires_at: 9_999_999_999, device_id: "device",
+    person: { person_id: "person-a", identity_kind: "google", display_name: "A" },
+  }));
+  saveSession({
+    session: { token: "session-b", expires_at: 9_999_999_999, device_id: "device" },
+    person: { person_id: "person-b", identity_kind: "google", display_name: "B" },
+  });
+  expect(loadRoomDockItems()).toEqual([]);
+  persistRoomDockItems([persistableRoom(room)]);
+  expect(loadRoomDockItems()).toHaveLength(1);
+  clearCentralSession();
+  expect(loadRoomDockItems()).toEqual([]);
+});

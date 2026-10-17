@@ -142,3 +142,15 @@ export function persistRoomDockItems(rooms: PersistedRoomDockItem[]) {
     // Room dock persistence is a browser convenience; keep the live UI state if storage is unavailable.
   }
 }
+
+// Account switch/logout must never show the previous account's rooms: the
+// dock cache is global, so the central identity owner clears it whenever the
+// signed-in person changes or logs out. The live directory re-hydrates from
+// the current host/membership afterwards.
+export function clearRoomDockItems() {
+  try {
+    window.localStorage.removeItem(ROOM_DOCK_STORAGE_KEY);
+  } catch {
+    // Clearing stays best-effort; rail filtering below still hides stale rooms.
+  }
+}

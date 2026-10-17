@@ -422,6 +422,34 @@ describe("useMemberHosts", () => {
     expect(attach).toHaveBeenCalledTimes(1);
   });
 
+  it("drops the previous account's snapshots on account switch", async () => {
+    attach.mockImplementation(async () => ({
+      admission: admissionFor([{ room_id: "hihi-room", name: "Hihi room" }]),
+      rooms: [{ room_id: "hihi-room", name: "Hihi room" }],
+      anchor: { server_id: "friend", registration_epoch: "epoch" },
+    }));
+    const directoryA: CentralDirectoryState = {
+      status: "connected",
+      person: { person_id: "person-a", display_name: "A", identity_kind: "google" },
+      servers: [{ server_id: "friend", relation: "member", alias: "Hihi" }],
+      live: {
+        person: { person_id: "person-a", display_name: "A", identity_kind: "google" },
+        servers: [liveServer()], server_time: 1,
+      },
+    };
+    const { result, rerender } = renderHook(({ personId }: { personId: string }) => useMemberHosts({
+      personId, sessionToken: `${personId}-token`, directory: personId === "person-a" ? directoryA : {
+        status: "connected" as const,
+        person: { person_id: "person-b", display_name: "B", identity_kind: "google" as const },
+        servers: [], live: { person: { person_id: "person-b", display_name: "B", identity_kind: "google" as const }, servers: [], server_time: 1 },
+      },
+    }), { initialProps: { personId: "person-a" } });
+    await waitFor(() => expect(result.current.snapshots).toHaveLength(1), { timeout: 5000 });
+    expect(result.current.snapshots[0]).toMatchObject({ serverId: "friend" });
+    rerender({ personId: "person-b" });
+    await waitFor(() => expect(result.current.snapshots).toEqual([]), { timeout: 5000 });
+  });
+
   it("confirms a member removal only from a live host that lists without the room", () => {    const room = { roomOrigin: "remote_server" as const, serverId: "friend", meetingId: "general" };
     const snapshot = (phase: "connecting" | "connected" | "disconnected", rooms: { room_id: string; name: string }[] | null) =>
       ({ serverId: "friend", phase, origin: "https://friend.test", rooms, detail: null });
