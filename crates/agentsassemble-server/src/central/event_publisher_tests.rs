@@ -80,20 +80,240 @@ async fn idle_directory_has_no_timer_wakes_and_failure_retries_keep_generation()
         tokio::time::resume();
         cancel.cancel();
         sender.await??;
-        let offline = requests.recv().await.ok_or("offline")?;
-        assert_eq!(offline.1, Method::DELETE);
-        assert_eq!(offline.2["origin"], "");
-        assert_eq!(offline.2["account_deletion_protocol"], "v1");
-        assert!(
-            offline.2["generation"]
-                .as_i64()
-                .ok_or("offline generation")?
-                > generation
-        );
+        // Quit publishes nothing: the dead origin is liveness, revoked
+        // implicitly when the restart PUT replaces the row.
         assert!(requests.try_recv().is_err());
         http_cancel.cancel();
         http.await??;
     }
+    Ok(())
+}
+
+#[test]
+fn endpoint_reserve_rule_keeps_explicit_stop_revocation_only() {
+    let live = (
+        Some("event-epoch".to_owned()),
+        (4_u64, "https://fourth.trycloudflare.com".to_owned()),
+    );
+    // A live origin always reserves.
+    assert!(super::should_reserve_endpoint_event(
+        None,
+        "event-epoch",
+        "https://first.trycloudflare.com"
+    ));
+    assert!(super::should_reserve_endpoint_event(
+        Some(&live),
+        "event-epoch",
+        "https://fifth.trycloudflare.com"
+    ));
+    // Cold boot, fresh epoch, or repeat empty reserves nothing: liveness is
+    // not a revocation.
+    assert!(!super::should_reserve_endpoint_event(
+        None,
+        "event-epoch",
+        ""
+    ));
+    assert!(!super::should_reserve_endpoint_event(
+        Some(&live),
+        "replacement-epoch",
+        ""
+    ));
+    assert!(!super::should_reserve_endpoint_event(
+        Some(&(Some("event-epoch".to_owned()), (5_u64, String::new()))),
+        "event-epoch",
+        ""
+    ));
+    // Explicit owner close revokes the same-epoch origin this run observed.
+    assert!(super::should_reserve_endpoint_event(
+        Some(&live),
+        "event-epoch",
+        ""
+    ));
+}
+
+#[tokio::test]
+async fn cold_start_with_closed_ingress_publishes_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    store
+        .bootstrap_local_authority("2d697cab-366f-4b22-82d0-2c96b67bab42", "Owner")
+        .await?;
+    store.set_registration_epoch(Some("event-epoch")).await?;
+    let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
+    let (tx, mut requests) = tokio::sync::mpsc::unbounded_channel();
+    let app = capture_requests(tx, false);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let directory = CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
+    let inner = directory.0.as_ref().ok_or("directory")?.clone();
+    let mut probe = inner.publisher_probe.subscribe();
+    let http_cancel = CancellationToken::new();
+    let stop = http_cancel.clone();
+    let http = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(stop.cancelled_owned())
+            .await
+    });
+    // Disabled ingress holds the channel boot value (0, ""): the cold start
+    // marks it observed without reserving, so no endpoint event goes out.
+    // The default-name publication is ingress-independent and still fires.
+    let cancel = CancellationToken::new();
+    let sender = tokio::spawn(directory.run(
+        store.clone(),
+        PublicIngress::disabled(),
+        identity,
+        cancel.clone(),
+    ));
+    probe.wait_for(|(_, waiting)| *waiting).await?;
+    assert_eq!(requests.recv().await.ok_or("name")?.0, "name");
+    assert!(requests.try_recv().is_err());
+    assert!(store.pending_central_endpoint_event().await?.is_none());
+    cancel.cancel();
+    sender.await??;
+    assert!(requests.try_recv().is_err());
+    http_cancel.cancel();
+    http.await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn stale_pre_quit_online_event_is_superseded_while_offline_revocation_delivers()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (stale_origin, expect_request) in [
+        ("https://dead.trycloudflare.com", false),
+        ("", true),
+    ] {
+        let store = SqliteStore::open("sqlite::memory:").await?;
+        store
+            .bootstrap_local_authority("2d697cab-366f-4b22-82d0-2c96b67bab42", "Owner")
+            .await?;
+        store.set_registration_epoch(Some("event-epoch")).await?;
+        store
+            .reserve_central_endpoint_event(
+                "event-epoch",
+                stale_origin,
+                Utc::now().timestamp_millis(),
+            )
+            .await?;
+        let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
+        let (tx, mut requests) = tokio::sync::mpsc::unbounded_channel();
+        let app = capture_requests(tx, false);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let directory =
+            CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
+        let inner = directory.0.as_ref().ok_or("directory")?.clone();
+        let mut probe = inner.publisher_probe.subscribe();
+        let http_cancel = CancellationToken::new();
+        let stop = http_cancel.clone();
+        let http = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(stop.cancelled_owned())
+                .await
+        });
+        let cancel = CancellationToken::new();
+        let sender = tokio::spawn(directory.run(
+            store.clone(),
+            PublicIngress::disabled(),
+            identity,
+            cancel.clone(),
+        ));
+        probe.wait_for(|(_, waiting)| *waiting).await?;
+        if expect_request {
+            // The pending explicit-stop revocation is never dropped: the
+            // endpoint DELETE goes out first, then the ingress-independent
+            // default name.
+            let revoked = requests.recv().await.ok_or("offline revocation")?;
+            assert_eq!(revoked.0, "endpoint");
+            assert_eq!(revoked.1, Method::DELETE);
+            assert_eq!(revoked.2["origin"], "");
+            assert_eq!(requests.recv().await.ok_or("name")?.0, "name");
+        } else {
+            // The pre-quit PUT names a dead origin: superseded locally, never
+            // published, so the restart costs nothing yet. Only the
+            // ingress-independent default name goes out.
+            assert_eq!(requests.recv().await.ok_or("name")?.0, "name");
+        }
+        assert!(requests.try_recv().is_err());
+        assert!(store.pending_central_endpoint_event().await?.is_none());
+        cancel.cancel();
+        sender.await??;
+        http_cancel.cancel();
+        http.await??;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn restart_publishes_only_the_new_origin() -> Result<(), Box<dyn std::error::Error>> {
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    store
+        .bootstrap_local_authority("2d697cab-366f-4b22-82d0-2c96b67bab42", "Owner")
+        .await?;
+    store.set_registration_epoch(Some("event-epoch")).await?;
+    let identity = CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
+    let (tx, mut requests) = tokio::sync::mpsc::unbounded_channel();
+    let app = capture_requests(tx, false);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let origin = format!("http://{}", listener.local_addr()?);
+    let directory = CentralDirectory::configured(&origin)?;
+    let inner = directory.0.as_ref().ok_or("directory")?.clone();
+    let mut probe = inner.publisher_probe.subscribe();
+    let http_cancel = CancellationToken::new();
+    let stop = http_cancel.clone();
+    let http = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(stop.cancelled_owned())
+            .await
+    });
+    let manual = || {
+        PublicIngress::configured_manual(
+            "127.0.0.1:41955".parse().unwrap_or_else(|e| panic!("listener: {e}")),
+            "https://event.test",
+            &"s".repeat(32),
+        )
+        .unwrap_or_else(|e| panic!("ingress: {e}"))
+    };
+    let cancel = CancellationToken::new();
+    let first_run = tokio::spawn(directory.clone().run(
+        store.clone(),
+        manual(),
+        identity.clone(),
+        cancel.clone(),
+    ));
+    let first = requests.recv().await.ok_or("first endpoint")?;
+    assert_eq!(first.0, "endpoint");
+    assert_eq!(first.1, Method::PUT);
+    assert_eq!(first.2["origin"], "https://event.test");
+    let first_generation = first.2["generation"].as_i64().ok_or("generation")?;
+    assert_eq!(requests.recv().await.ok_or("first name")?.0, "name");
+    probe.wait_for(|(_, waiting)| *waiting).await?;
+    cancel.cancel();
+    first_run.await??;
+    // Quit publishes nothing.
+    assert!(requests.try_recv().is_err());
+    // Restart publishes exactly one endpoint event: the new origin PUT with
+    // a strictly higher durable generation. Quiesce before asserting.
+    let restart_cancel = CancellationToken::new();
+    let second_run = tokio::spawn(directory.run(
+        store.clone(),
+        manual(),
+        identity,
+        restart_cancel.clone(),
+    ));
+    let second = requests.recv().await.ok_or("restart endpoint")?;
+    assert_eq!(second.0, "endpoint");
+    assert_eq!(second.1, Method::PUT);
+    assert_eq!(second.2["origin"], "https://event.test");
+    assert!(
+        second.2["generation"].as_i64().ok_or("restart generation")? > first_generation
+    );
+    assert_eq!(requests.recv().await.ok_or("restart name")?.0, "name");
+    probe.wait_for(|(_, waiting)| *waiting).await?;
+    assert!(requests.try_recv().is_err());
+    restart_cancel.cancel();
+    second_run.await??;
+    assert!(requests.try_recv().is_err());
+    http_cancel.cancel();
+    http.await??;
     Ok(())
 }
 
@@ -166,10 +386,11 @@ async fn quota_refusal_parks_all_delivery_until_utc_midnight()
     );
     tokio::time::resume();
     cancel.cancel();
+    // Quit publishes nothing, so a spent allowance cannot fail the shutdown.
     let result = sender.await?;
     assert!(
-        matches!(result, Err(CentralDirectoryError::QuotaExhausted)),
-        "shutdown publish stays parked instead of polling"
+        matches!(result, Ok(())),
+        "quit sends no offline event, got {result:?}"
     );
     assert!(requests.try_recv().is_err());
     http_cancel.cancel();
@@ -238,9 +459,11 @@ async fn per_minute_rate_limit_honours_retry_after_without_quota_park()
         identity,
         cancel.clone(),
     ));
-    assert_eq!(requests.recv().await.ok_or("endpoint")?.0, "endpoint");
+    // Disabled ingress with a closed channel reserves no endpoint event;
+    // only the ingress-independent name publication fires (and 429s).
     assert_eq!(requests.recv().await.ok_or("name")?.0, "name");
     probe.wait_for(|(_, waiting)| *waiting).await?;
+    assert!(requests.try_recv().is_err());
     assert_eq!(status_reader.status().quota_parked_until, 0);
     // The short 2 s backoff would already have fired; Retry-After holds it.
     tokio::time::pause();
@@ -252,13 +475,10 @@ async fn per_minute_rate_limit_honours_retry_after_without_quota_park()
     );
     tokio::time::resume();
     cancel.cancel();
-    // Shutdown stays behind the same gate: no offline publish fires into the
+    // Quit publishes nothing, so no offline publish fires into the
     // rate limit either.
     let result = sender.await?;
-    assert!(
-        matches!(result, Err(CentralDirectoryError::CapacityExhausted)),
-        "shutdown publish honours Retry-After, got {result:?}"
-    );
+    assert!(matches!(result, Ok(())), "quit sends nothing, got {result:?}");
     assert!(requests.try_recv().is_err());
     http_cancel.cancel();
     http.await??;

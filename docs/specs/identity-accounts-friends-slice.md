@@ -1082,6 +1082,50 @@ name/member durable retry policy remains, scheduler waits only actual pending wo
 due time/events. No /v2 family, GET-preview, quota/cleanup, online TTL/history redesign.
 Independent transport and scheduler owners keep existing file/structure ceilings.
 
+### Halve host address events (owner decision, 2026-10-17)
+
+Central limits each host/server to 16 endpoint events per UTC day (then 429
+`temporary_capacity_exhausted` until 00:00 UTC). The host uses free Cloudflare
+quick tunnels whose random origin dies with the process, so every restart
+published twice: an offline DELETE on quit/ingress close, then the new origin
+PUT on start. Required: a host restart costs exactly one endpoint event (the
+new origin). The graceful-stop offline event above is dropped; the publisher
+sends nothing on quit. Per-path decision (revocation stays, liveness goes):
+
+- Process quit / runtime shutdown (old publisher-exit `publish_offline`):
+  DROP. Liveness only. The dead quick-tunnel origin is unreachable, members
+  fail closed and retry on the existing bounded transient cadence (per-host
+  single flight, 1 s doubling to a 30 s cap, governor-capped previews), and
+  the restart PUT with the durable-monotonic higher generation replaces the
+  row (same epoch, CAS higher-applies). Host-key verification still pins
+  identity, so a stale row can never admit to the wrong host.
+- Cold boot with ingress still closed (channel boot value `(0, "")`):
+  DROP. Liveness only. The publisher marks the empty baseline observed
+  without reserving; the tunnel PUT follows when ready. An undelivered
+  pre-quit PUT naming a dead origin is superseded locally at startup instead
+  of published.
+- Explicit owner close of external access (`PublicIngress::stop` while the
+  runtime lives, origin to empty): KEEP as revocation. Security requirement:
+  the owner explicitly closing external access must revoke admission to the
+  old origin promptly, so members see 409 `incarnation_conflict` (slow
+  cadence, grey offline) instead of receiving grants for a dead origin.
+- Demotion (`demote()` on server retirement / account deletion, terminal
+  410): no publish, unchanged. Central is already terminal (the 410 drives
+  the demotion) or the account disable removes everything; the publisher
+  stays parked through `reconcile_demotion` as today.
+- Account deletion / server retirement flows: unchanged. Revocation is owned
+  by the existing ingress-stop plus central-disable sequence, not by an
+  endpoint DELETE.
+
+Member-side follow-through (no change, verified): `useMemberHosts` /
+`memberAutoAttach` treat an unreachable origin as transient (bounded retry,
+never a storm, never a blocking dialog); a directory refresh carrying a
+republished tuple (same identity, new origin/generation) supersedes the
+pending slow timer, so member-preview hands out the fresh origin once the
+host republishes. Affected entries: `central/event_publisher.rs`
+(observe/reserve rule, publisher-exit path), `public_ingress.rs`
+(`begin_stop` emission kept for explicit stop).
+
 Acceptance: stolen grant/other key cannot commit; wrong-key bearer/child tickets,
 tampered transcript/AEAD replay/order and authority races fail; exact member retry/
 leave/kick stays correct; old clients denied event and legacy expiry preserved;

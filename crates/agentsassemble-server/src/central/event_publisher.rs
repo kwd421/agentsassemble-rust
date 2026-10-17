@@ -158,10 +158,14 @@ pub(super) async fn run(
         let desired = (epoch.clone(), endpoint);
         if observed.as_ref() != Some(&desired) {
             if let Some(epoch) = &epoch {
-                store
-                    .reserve_central_endpoint_event(epoch, &desired.1.1, clock.now())
-                    .await?;
-                inner.status.write().last_error.clear();
+                if should_reserve_endpoint_event(observed.as_ref(), epoch, &desired.1.1) {
+                    store
+                        .reserve_central_endpoint_event(epoch, &desired.1.1, clock.now())
+                        .await?;
+                    inner.status.write().last_error.clear();
+                } else if observed.is_none() {
+                    drop_superseded_stale_online_event(&store, epoch).await?;
+                }
             }
             observed = Some(desired);
         }
@@ -225,9 +229,55 @@ pub(super) async fn run(
             () = wait_for_delivery(due, &clock) => {},
         }
     }
-    // Unknown in-flight network outcomes are fenced by the newer fixed offline generation.
+    // Unknown in-flight network outcomes are fenced by the exact pending
+    // compare-and-clear plus the durable-monotonic generation: a stale
+    // response cannot clear or park a newer event, and the next run reserves
+    // strictly above every prior reservation. No offline event is published
+    // on quit: the dead origin is liveness, revoked implicitly when the
+    // restart PUT replaces the row; see should_reserve_endpoint_event.
     abort_delivery(flight).await;
-    publish_offline(&inner, &store, &ingress, &identity, &clock).await
+    Ok(())
+}
+
+/// Whether an observed endpoint change reserves a new central event.
+///
+/// A live origin always reserves. An empty origin reserves only when it
+/// revokes a same-epoch origin this run already observed (the owner
+/// explicitly closed external access while the runtime lives). A cold start,
+/// a fresh epoch, or a repeat empty carries no revocation and reserves
+/// nothing, so a restart costs the single new-origin event instead of an
+/// offline/online pair.
+fn should_reserve_endpoint_event(
+    observed: Option<&(Option<String>, (u64, String))>,
+    epoch: &str,
+    origin: &str,
+) -> bool {
+    if !origin.is_empty() {
+        return true;
+    }
+    observed.is_some_and(|previous| {
+        previous.0.as_deref() == Some(epoch) && !previous.1.1.is_empty()
+    })
+}
+
+/// A fresh publisher run starts with no live origin when the channel still
+/// holds its boot value. An undelivered pre-quit PUT names a dead
+/// quick-tunnel origin, so it is superseded locally instead of published;
+/// the restart then costs nothing until the tunnel (or an explicit stop)
+/// produces an actual event. A pending offline revocation is never dropped:
+/// the owner explicitly closed external access and central must hear it.
+async fn drop_superseded_stale_online_event(
+    store: &SqliteStore,
+    epoch: &str,
+) -> Result<(), CentralDirectoryError> {
+    if let Some(stale) = store
+        .pending_central_endpoint_event()
+        .await?
+        .filter(|pending| pending.online() && pending.registration_epoch == epoch)
+    {
+        store.finish_central_endpoint_event(&stale, true).await?;
+    }
+    Ok(())
 }
 
 async fn abort_delivery(flight: Option<AbortOnDropHandle<Delivered>>) {
@@ -276,32 +326,6 @@ async fn wait_for_registration_resume(
             result = endpoints.changed() => if result.is_err() { return Ok(false); },
         }
     }
-}
-
-async fn publish_offline(
-    inner: &CentralDirectoryInner,
-    store: &SqliteStore,
-    ingress: &PublicIngress,
-    identity: &CentralHostIdentity,
-    clock: &Clock,
-) -> Result<(), CentralDirectoryError> {
-    if reconcile_demotion(store, ingress).await? {
-        return Ok(());
-    }
-    if let Some(epoch) = store.registration_epoch().await? {
-        let event = store
-            .reserve_central_endpoint_event(&epoch, "", clock.now())
-            .await?;
-        let result = publish(inner, store, identity, &event).await;
-        store
-            .finish_central_endpoint_event(&event, result.is_ok())
-            .await?;
-        if let Err(error) = &result {
-            inner.status.write().last_error = error.to_string();
-        }
-        return result;
-    }
-    Ok(())
 }
 
 pub(super) async fn publish(

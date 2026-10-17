@@ -153,6 +153,56 @@ fn identity_authorization_keeps_the_origin_from_its_trust_snapshot() {
 }
 
 #[test]
+fn explicit_stop_emits_the_empty_endpoint_revocation_while_child_exit_stays_local() {
+    // The owner explicitly closing external access must revoke admission to
+    // the old origin: begin_stop broadcasts the empty endpoint so central
+    // hears the DELETE. A dead child only clears local trust; the publisher
+    // never sees an event for it.
+    let mut projection = ManagedProjection::new("http://127.0.0.1:41955", true);
+    let generation = projection.begin_start();
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://first.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Changed
+    ));
+    assert_eq!(
+        projection.endpoint_changes.borrow().clone(),
+        (generation, "https://first.trycloudflare.com".to_owned())
+    );
+    projection.begin_stop(generation);
+    assert_eq!(
+        projection.endpoint_changes.borrow().clone(),
+        (generation, String::new())
+    );
+
+    let mut crashed = ManagedProjection::new("http://127.0.0.1:41955", true);
+    let failed = crashed.begin_start();
+    assert!(matches!(
+        crashed.ready_managed(
+            failed,
+            origin("https://doomed.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Changed
+    ));
+    crashed.finish(
+        failed,
+        GenerationOutcome {
+            error: Some("child exited".to_owned()),
+            cleanup_failed: false,
+        },
+    );
+    assert!(crashed.ready_snapshot().is_none());
+    assert_eq!(
+        crashed.endpoint_changes.borrow().clone(),
+        (failed, "https://doomed.trycloudflare.com".to_owned())
+    );
+}
+
+#[test]
 fn stable_readiness_requires_the_same_direct_target_and_lifecycle() {
     let mut projection = ManagedProjection::new("http://127.0.0.1:41955", true);
     let generation = projection.begin_start();
