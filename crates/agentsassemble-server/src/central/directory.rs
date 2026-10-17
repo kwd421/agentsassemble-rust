@@ -56,8 +56,9 @@ pub(crate) struct CentralDirectoryStatus {
     pub(crate) last_error: String,
     pub(crate) name_sync_error: String,
     /// Unix seconds of the next 00:00 UTC (+0-60 s jitter) while a daily
-    /// `actor_quota_exhausted` refusal parks host->central delivery; 0 when
-    /// unparked. Older hosts omit it and newer clients must accept its absence.
+    /// (`actor_quota_exhausted` or `temporary_capacity_exhausted`) refusal
+    /// parks host->central delivery; 0 when unparked. Older hosts omit it
+    /// and newer clients must accept its absence.
     pub(crate) quota_parked_until: i64,
 }
 
@@ -408,9 +409,11 @@ async fn send_signed(
 }
 
 /// Maps a 429 to either the daily quota park or a transient capacity error. A
-/// `{"error":{"code":"actor_quota_exhausted"}}` body parks ALL host->central
-/// delivery until the next 00:00 UTC plus 0-60 s jitter; any other 429 honours
-/// Retry-After when present and otherwise keeps the existing bounded backoff.
+/// `{"error":{"code":"actor_quota_exhausted"}}` or
+/// `{"error":{"code":"temporary_capacity_exhausted"}}` body parks ALL
+/// host->central delivery until the next 00:00 UTC plus 0-60 s jitter; any
+/// other 429 honours Retry-After when present and otherwise keeps the
+/// existing bounded backoff.
 async fn map_rate_limit(
     inner: &CentralDirectoryInner,
     response: reqwest::Response,
@@ -426,7 +429,9 @@ async fn map_rate_limit(
         && serde_json::from_slice::<serde_json::Value>(&body)
             .ok()
             .and_then(|value| value["error"]["code"].as_str().map(str::to_owned))
-            == Some("actor_quota_exhausted".to_owned());
+            .is_some_and(|code| {
+                code == "actor_quota_exhausted" || code == "temporary_capacity_exhausted"
+            });
     if quota {
         let parked_until = quota_park_until_secs(Utc::now().timestamp(), quota_jitter_secs());
         inner.status.write().quota_parked_until = parked_until;

@@ -87,7 +87,7 @@ mod tests {
                 assert!(value["results"][0].get("person_id").is_none());
                 (
                     axum::http::StatusCode::TOO_MANY_REQUESTS,
-                    axum::Json(json!({"error":{"code":"temporary_capacity_exhausted"}})),
+                    axum::Json(json!({"error":{"code":"per_minute_limited"}})),
                 )
             }),
         );

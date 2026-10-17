@@ -409,13 +409,15 @@ async function responsePayload<T>(response: Response, central = true, signal?: A
       (central ? payload?.error?.message : typeof payload?.error === "string" ? payload.error : undefined) ||
       `로그인 서버가 HTTP ${response.status}을 반환했습니다.`;
     if (response.status === 401) throw new CentralAuthError(message, code);
-    if (central && response.status === 429 && code === "actor_quota_exhausted") {
+    if (central && response.status === 429 && (code === "actor_quota_exhausted" || code === "temporary_capacity_exhausted")) {
       // Spent daily allowance, never a short rate limit: park the whole
-      // account until the next 00:00 UTC instead of polling. The governor
-      // stays the single owner of the block; the error carries the same
-      // wait so per-host backoffs honor it too. The message is the neutral
-      // explicit-action line (no friend-room wording): reconnect surfaces
-      // render their own reset-time notice from the governor.
+      // account until the next 00:00 UTC instead of polling. Both daily
+      // 429 codes mean "spent until next 00:00 UTC" and share this park.
+      // The governor stays the single owner of the block; the error
+      // carries the same wait so per-host backoffs honor it too. The
+      // message is the neutral explicit-action line (no friend-room
+      // wording): reconnect surfaces render their own reset-time notice
+      // from the governor.
       noteCentralDailyQuotaExhausted(accountId);
       throw Object.assign(new CentralTemporaryError(centralDailyQuotaActionNotice(accountId) ?? message),
         { status: response.status, code, retryAfterMs: centralDailyQuotaWaitMs(accountId) });

@@ -52,10 +52,11 @@ const blockedUntilByKey = new Map<string, number>();
 const consecutive429ByKey = new Map<string, number>();
 
 // Daily signed-request allowance: central answers 429
-// `actor_quota_exhausted` (never with Retry-After) when the account's or
-// session's daily allowance is spent. Counters reset at the next 00:00 UTC
-// and a rejected request spends nothing, so the account parks every path
-// family until then instead of polling like a short rate limit.
+// `actor_quota_exhausted` or `temporary_capacity_exhausted` (never with
+// Retry-After) when the account's or session's daily allowance is spent.
+// Counters reset at the next 00:00 UTC and a rejected request spends
+// nothing, so the account parks every path family until then instead of
+// polling like a short rate limit.
 const quotaBlockedUntilByAccount = new Map<string, number>();
 const quotaResetAtByAccount = new Map<string, number>();
 const QUOTA_JITTER_MAX_MS = 60_000;
