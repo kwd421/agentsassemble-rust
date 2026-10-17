@@ -22,6 +22,7 @@ import {
 import { createOperatorPairing } from "../api/operatorPairing";
 import { useManagedAiInvites } from "./useManagedAiInvites";
 import { useManagedOperatorPairings } from "./useManagedOperatorPairings";
+import { userFacingError } from "../lib/apiErrors";
 
 type InviteModalState = { roomId: string } | null;
 
@@ -210,7 +211,7 @@ export function useRoomInviteController({
     refreshPublicInviteState(generation)
       .catch((error) => {
         if (ingressOperationIsCurrent(generation)) {
-          setCopyStatus(error instanceof Error ? error.message : "공개 초대 상태를 불러오지 못했어요.");
+          setCopyStatus(userFacingError(error, "공개 초대 상태를 불러오지 못했어요."));
         }
       });
     return () => {
@@ -273,7 +274,7 @@ export function useRoomInviteController({
     const generation = beginIngressOperation();
     setCopyStatus("");
     void refreshPublicInviteState(generation).catch(error => {
-      if (ingressOperationIsCurrent(generation)) setCopyStatus(error instanceof Error ? error.message : "외부 접속 상태를 확인하지 못했어요.");
+      if (ingressOperationIsCurrent(generation)) setCopyStatus(userFacingError(error, "외부 접속 상태를 확인하지 못했어요."));
     });
   }
 
@@ -452,7 +453,7 @@ export function useRoomInviteController({
       // The hosting footer already shows "외부 접속 꺼짐"; no success box.
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
-      setCopyStatus(error instanceof Error ? error.message : "서버 비공개 전환 실패");
+      setCopyStatus(userFacingError(error, "서버 비공개 전환 실패"));
     } finally {
       if (ingressOperationIsCurrent(generation)) {
         setPublicAccessTransition("idle");
@@ -478,7 +479,7 @@ export function useRoomInviteController({
       // The new link row is the only feedback; no success box.
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
-      setCopyStatus(error instanceof Error ? error.message : "보안 초대 링크 생성 실패");
+      setCopyStatus(userFacingError(error, "보안 초대 링크 생성 실패"));
     }
   }
 
@@ -501,7 +502,7 @@ export function useRoomInviteController({
       // The new pairing row (with QR) is the only feedback; no success box.
     } catch (error) {
       if (ingressOperationIsCurrent(generation)) {
-        setCopyStatus(error instanceof Error ? error.message : "기기 연결 링크를 만들지 못했어요.");
+        setCopyStatus(userFacingError(error, "기기 연결 링크를 만들지 못했어요."));
       }
     } finally {
       pairingCreationRef.current = false;

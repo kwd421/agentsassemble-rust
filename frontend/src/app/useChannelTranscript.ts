@@ -4,6 +4,7 @@ import type { RoomSocketHandle, RoomSocketSayError } from "../roomSocketTypes";
 import type { ChannelHistoryPage } from "../types/generated/ChannelHistoryPage";
 import { CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE } from "../types/generated/TEXT_CHAT_WIRE";
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
+import { userFacingError } from "../lib/apiErrors";
 
 type Window = { events: RoomEvent[]; hasMore: boolean; following: boolean; newMessages: boolean };
 type Owner = { scope: object; window: Window | null; buffer: RoomEvent[]; trimmed: boolean; reading: boolean; readVersion: number; active: boolean };
@@ -48,7 +49,7 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
       };
       owner.buffer = [];
     } catch (error) {
-      if (currentRead()) { owner.reading = false; publish(owner, error instanceof Error ? error.message : "채널 기록을 불러오지 못했어요."); }
+      if (currentRead()) { owner.reading = false; publish(owner, userFacingError(error, "채널 기록을 불러오지 못했어요.")); }
       return;
     }
     if (currentRead()) { owner.reading = false; publish(owner, ""); }

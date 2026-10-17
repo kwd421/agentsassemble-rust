@@ -151,7 +151,7 @@ describe("room admission retry custody", () => {
     apiMocks.joinRoomInvite.mockRejectedValue(new Error("network unavailable"));
     const { result } = renderAdmission();
 
-    await waitFor(() => expect(result.current.guestJoinStatus).toBe("network unavailable"));
+    await waitFor(() => expect(result.current.guestJoinStatus).toBe("초대 링크 입장 실패"));
     expect(result.current.guestJoinRetryable).toBe(true);
     await new Promise((resolve) => window.setTimeout(resolve, 20));
 
@@ -224,7 +224,7 @@ describe("room admission retry custody", () => {
       .mockResolvedValueOnce(joinedPayload("session-retried"));
     const { result } = renderAdmission();
 
-    await waitFor(() => expect(result.current.guestJoinStatus).toBe("network unavailable"));
+    await waitFor(() => expect(result.current.guestJoinStatus).toBe("초대 링크 입장 실패"));
     const firstIntent = apiMocks.joinRoomInvite.mock.calls[0][0];
     act(() => {
       result.current.setPendingGuestDisplayName("Edited after dispatch");
@@ -491,7 +491,7 @@ describe("room admission retry custody", () => {
     const { result } = renderAdmission();
 
     await waitFor(() =>
-      expect(result.current.guestJoinStatus).toBe("response lost after reusable admission")
+      expect(result.current.guestJoinStatus).toBe("초대 링크 입장 실패")
     );
     act(() => result.current.requestGuestJoin());
     await waitFor(() =>
@@ -516,7 +516,7 @@ describe("room admission retry custody", () => {
       .mockResolvedValueOnce(joinedPayload("session-after-reload"));
     const first = renderAdmission();
 
-    await waitFor(() => expect(first.result.current.guestJoinStatus).toBe("response lost"));
+    await waitFor(() => expect(first.result.current.guestJoinStatus).toBe("초대 링크 입장 실패"));
     const firstIntent = apiMocks.joinRoomInvite.mock.calls[0][0];
     first.unmount();
     apiMocks.preflightRoomInvite.mockClear();

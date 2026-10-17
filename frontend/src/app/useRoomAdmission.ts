@@ -9,7 +9,7 @@ import {
   type RoomInviteJoinResponse,
 } from "../api";
 import type { MemberReturn } from "../lib/central/memberConnect";
-import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
+import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE, userFacingError } from "../lib/apiErrors";
 import { loadRememberedGuestProfile, rememberGuestProfile } from "../lib/deviceIdentity";
 import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
 import {
@@ -146,9 +146,7 @@ export function useRoomAdmission({
       dispatchAdmission({
         type: "session_surface_failed",
         message:
-          error instanceof Error
-            ? error.message
-            : SERVER_SURFACE_INVALID_MESSAGE,
+          userFacingError(error, SERVER_SURFACE_INVALID_MESSAGE),
       });
     });
     return attempt.cancel;
@@ -334,18 +332,14 @@ export function useRoomAdmission({
         if (!(await bindSessionSurface(nextSession, isCurrent))) return false;
       } catch (error) {
         throw new SessionSurfaceError(
-          error instanceof Error
-            ? error.message
-            : SERVER_SURFACE_INVALID_MESSAGE
+          userFacingError(error, SERVER_SURFACE_INVALID_MESSAGE)
         );
       }
       try {
         persistRoomGuestSession(nextSession);
       } catch (error) {
         throw new SessionCustodyError(
-          error instanceof Error
-            ? error.message
-            : "방 세션을 브라우저에 영구 저장할 수 없어요."
+          userFacingError(error, "방 세션을 브라우저에 영구 저장할 수 없어요.")
         );
       }
       rememberGuestProfile({
@@ -382,9 +376,7 @@ export function useRoomAdmission({
       } catch (error) {
         const surfaceFailure = error instanceof SessionSurfaceError;
         const message =
-          error instanceof Error
-            ? error.message
-            : SERVER_SURFACE_INVALID_MESSAGE;
+          userFacingError(error, SERVER_SURFACE_INVALID_MESSAGE);
         dispatchAdmission({
           type: "failed",
           operation: "join",
@@ -430,7 +422,7 @@ export function useRoomAdmission({
         const retryable =
           !(error instanceof SessionSurfaceError) && pairingFailureIsRetryable(error);
         if (!retryable) onPairingTokenConsumedRef.current();
-        const message = error instanceof Error ? error.message : "운영자 기기 연결 실패";
+        const message = userFacingError(error, "운영자 기기 연결 실패");
         dispatchAdmission({
           type: "failed",
           operation: "pairing",
@@ -598,7 +590,7 @@ export function useRoomAdmission({
         if (!attempt.isCurrent()) return;
         const surfaceFailure = error instanceof SessionSurfaceError;
         const custodyFailure = error instanceof SessionCustodyError;
-        const message = error instanceof Error ? error.message : "초대 확인 실패";
+        const message = userFacingError(error, "초대 확인 실패");
         dispatchAdmission({
           type: "failed",
           operation: "preflight",
@@ -692,7 +684,7 @@ export function useRoomAdmission({
         const custodyFailure = error instanceof SessionCustodyError;
         const retryable =
           custodyFailure || (!surfaceFailure && pairingFailureIsRetryable(error));
-        const message = error instanceof Error ? error.message : "초대 링크 입장 실패";
+        const message = userFacingError(error, "초대 링크 입장 실패");
         const code = !networkDispatched
           ? "request_id_unavailable"
           : surfaceFailure

@@ -4,6 +4,7 @@ import { MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
 
 import type { LobbyEvent } from "../../api";
 import { MAX_MESSAGE_CHARACTERS } from "../../types/generated/ROOM_MESSAGE_WIRE";
+import { userFacingError } from "../../lib/apiErrors";
 
 type MutationKind = "edit" | "delete" | null;
 
@@ -54,7 +55,7 @@ export default function MessageMutationControls({
       await onEdit(draft);
       setMutation(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "메시지를 수정하지 못했어요.");
+      setError(userFacingError(reason, "메시지를 수정하지 못했어요."));
     } finally {
       setBusy(false);
     }
@@ -69,7 +70,7 @@ export default function MessageMutationControls({
       setMutation(null);
     } catch (reason) {
       if (showDialogOnFailure) setMutation("delete");
-      setError(reason instanceof Error ? reason.message : "메시지를 삭제하지 못했어요.");
+      setError(userFacingError(reason, "메시지를 삭제하지 못했어요."));
     } finally {
       setBusy(false);
     }

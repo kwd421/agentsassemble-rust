@@ -6,6 +6,7 @@ import type { RevokeOwnerDevices } from "../../types/generated/RevokeOwnerDevice
 import { listOwnerDevices, revokeOwnerDevices } from "../../api/ownerDevices";
 import { CentralOwnerWorkspaceContext } from "../../lib/central/ownerWorkspaceContext";
 import "./OwnerDevicesPanel.css";
+import { userFacingError } from "../../lib/apiErrors";
 
 type Selection = { request: RevokeOwnerDevices; name: string; current: boolean };
 
@@ -30,7 +31,7 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
       const result = await listOwnerDevices(authority, controller.signal);
       if (!controller.signal.aborted) setSessions(result.sessions);
     } catch (reason) {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "기기 목록을 불러오지 못했어요.");
+      if (!controller.signal.aborted) setError(userFacingError(reason, "기기 목록을 불러오지 못했어요."));
     } finally {
       if (!controller.signal.aborted) setBusy(false);
     }
@@ -48,7 +49,7 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
       }
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "기기 연결을 해제하지 못했어요.");
+      setError(userFacingError(reason, "기기 연결을 해제하지 못했어요."));
     } finally { setBusy(false); }
   };
   return <div className="owner-devices">

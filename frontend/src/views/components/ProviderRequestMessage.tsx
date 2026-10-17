@@ -6,6 +6,7 @@ import type { ProviderRequestQuestion } from "../../types/generated/ProviderRequ
 import type { ProviderRequestResolution } from "../../types/generated/ProviderRequestResolution";
 import { RoomSocketSayError, type RoomSocketHandle } from "../../roomSocketTypes";
 import { resolveProviderPresentation } from "./providerBranding";
+import { userFacingError } from "../../lib/apiErrors";
 
 const controlStyle = { minHeight: 44, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-panel-separator)", background: "var(--color-panel)", color: "var(--color-text-primary)" } as const;
 const terminalLabels: Record<string, string> = {
@@ -76,7 +77,7 @@ function RequestForm({ entry, socket, enabled, providerName, providerKind }: { e
       setAnswers({}); setOptionId(""); attempt.current = null;
     } catch (failure) {
       const unknown = failure instanceof RoomSocketSayError && failure.category === "outcome_unknown";
-      setError(unknown ? "응답 결과를 확인하지 못했어요. 같은 응답으로 다시 확인할 수 있어요." : failure instanceof Error ? failure.message : "응답을 보내지 못했어요.");
+      setError(unknown ? "응답 결과를 확인하지 못했어요. 같은 응답으로 다시 확인할 수 있어요." : userFacingError(failure, "응답을 보내지 못했어요."));
       if (!unknown) attempt.current = null;
     } finally { inFlight.current = false; setBusy(false); }
   }

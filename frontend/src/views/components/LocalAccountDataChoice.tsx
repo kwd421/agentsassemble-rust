@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { wipeDesktopAccountData } from "../../lib/desktopBridge";
+import { userFacingError } from "../../lib/apiErrors";
 /** Same-installation native capability and persisted terminal fence own actual reset. */
 export default function LocalAccountDataChoice({ disabled }: { disabled: boolean }) {
   const [choice, setChoice] = useState("keep");
@@ -9,7 +10,7 @@ export default function LocalAccountDataChoice({ disabled }: { disabled: boolean
     if (disabled || claimed.current) return;
     claimed.current = true; setBusy(true); setError("");
     try { const result = await wipeDesktopAccountData(); setDone(true); setError(result.cleanup_errors.join("\n")); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "방 데이터 삭제 결과를 확인하지 못했어요."); }
+    catch (reason) { setError(userFacingError(reason, "방 데이터 삭제 결과를 확인하지 못했어요.")); }
     finally { claimed.current = false; setBusy(false); }
   }
   return <fieldset aria-busy={busy}><legend>이 컴퓨터의 방 데이터도 지울까요?</legend>

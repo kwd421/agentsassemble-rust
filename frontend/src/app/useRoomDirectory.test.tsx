@@ -546,7 +546,7 @@ describe("useRoomDirectory", () => {
     expect(await olderOutcome).toBeInstanceOf(Error);
     expect(hook.result.current.syncIssue).toMatchObject({
       category: "room_directory_unavailable",
-      message: "newer unavailable",
+      message: "방 목록을 확인하지 못했어요.",
     });
     expect(hook.result.current.rooms[0].meetingId).toBe("general");
   });

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { revokeOperatorPairing, type OperatorPairingCustody } from "../api/operatorPairing";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import { sameManagerAuthority } from "./useManagedHumanInvites";
+import { userFacingError } from "../lib/apiErrors";
 
 type PairingRecord = {
   key: string;
@@ -111,7 +112,7 @@ export function useManagedOperatorPairings({
       return copied;
     } catch (error) {
       if (error === RETIRED_COPY) return false;
-      if (activeRef.current) publishStatus(error instanceof Error ? error.message : "링크 복사에 실패했어요.");
+      if (activeRef.current) publishStatus(userFacingError(error, "링크 복사에 실패했어요."));
       return false;
     }
   }
@@ -133,7 +134,7 @@ export function useManagedOperatorPairings({
       if (!activeRef.current) return;
       // An unconfirmed revocation never returns a link to copyable state.
       commit((prior) => prior.map((entry) => entry.key === key ? { ...entry, state: "unknown" } : entry));
-      publishStatus(error instanceof Error ? error.message : "연결 해제 결과를 확인할 수 없어요. 다시 시도해 주세요.");
+      publishStatus(userFacingError(error, "연결 해제 결과를 확인할 수 없어요. 다시 시도해 주세요."));
     }
   }
 

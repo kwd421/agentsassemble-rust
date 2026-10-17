@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cancelProviderLogin, loginProvider } from "../../api/providerOperations";
 import { isDesktopWebview } from "../../lib/desktopBridge";
-import { ApiError } from "../../lib/apiErrors";
+import { ApiError, userFacingError } from "../../lib/apiErrors";
 
 const LOGIN_ERRORS: Record<string, string> = {
   provider_login_unsupported: "이 AI는 앱에서 로그인을 지원하지 않아요.",
@@ -15,7 +15,7 @@ const LOGIN_ERRORS: Record<string, string> = {
 
 function errorMessage(error: unknown, message: string): string {
   if (error instanceof ApiError && LOGIN_ERRORS[error.code]) return LOGIN_ERRORS[error.code];
-  return error instanceof Error ? error.message : message;
+  return userFacingError(error, message);
 }
 
 export default function ProviderLogin({ providerId, displayName, onAuthenticated, automatic = false }: {

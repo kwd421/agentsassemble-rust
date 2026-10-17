@@ -27,7 +27,7 @@ describe("LobbyComposer", () => {
     const { rerender } = render(view("first"));
     fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "reply" } });
     fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
-    await screen.findByText("uncertain");
+    await screen.findByText("채팅 메시지 전송 실패");
     rerender(view("second"));
     fireEvent.click(screen.getByLabelText("같은 요청 다시 보내기"));
     await waitFor(() => expect(onReplySent).toHaveBeenCalledWith("second"));
@@ -120,7 +120,7 @@ describe("LobbyComposer", () => {
     fireEvent.change(input, { target: { value: "committed once" } });
     fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
     fireEvent.click(await screen.findByLabelText("같은 요청 다시 보내기"));
-    await screen.findByText("still offline");
+    await screen.findByText("채팅 메시지 전송 실패");
     expect(say).toHaveBeenCalledTimes(1);
     expect(input.value).toBe("committed once");
     fireEvent.click(screen.getByLabelText("같은 요청 다시 보내기"));
@@ -232,9 +232,9 @@ describe("LobbyComposer", () => {
     for (const [name, value] of [["질문", "One vote"], ["선택지 1", "A"], ["선택지 2", "B"]])
       fireEvent.change(within(dialog).getByRole("textbox", { name }), { target: { value } });
     fireEvent.click(within(dialog).getByRole("button", { name: "만들기" }));
-    await within(dialog).findByText("uncertain vote");
+    await within(dialog).findByText("투표를 만들지 못했어요.");
     fireEvent.click(within(dialog).getByRole("button", { name: "만들기" }));
-    await within(dialog).findByText("offline");
+    await within(dialog).findByText("투표를 만들지 못했어요.");
     expect(say).toHaveBeenCalledTimes(1);
     fireEvent.click(within(dialog).getByRole("button", { name: "만들기" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "투표 만들기" })).toBeNull());

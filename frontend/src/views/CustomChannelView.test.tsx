@@ -28,7 +28,7 @@ it("keeps failed text, clears only on the send receipt and restores input focus"
   const input = screen.getByRole("textbox", { name: "채널 메시지 입력" }) as HTMLTextAreaElement;
   fireEvent.change(input, { target: { value: "retained text" } });
   fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
-  expect((await screen.findByRole("alert")).textContent).toContain("send denied");
+  expect((await screen.findByRole("alert")).textContent).toContain("메시지를 보내지 못했어요.");
   expect(input.value).toBe("retained text");
   fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
   await waitFor(() => expect(input.value).toBe(""));
@@ -109,10 +109,10 @@ it("retains exact channel retry until the draft changes", async () => {
   const input = screen.getByRole("textbox", { name: "채널 메시지 입력" });
   fireEvent.change(input, { target: { value: "committed once" } });
   fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
-  await screen.findByText("uncertain channel");
+  await screen.findByText("메시지를 보내지 못했어요.");
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("committed once", retry));
-  await screen.findByText("still offline");
+  await screen.findByText("메시지를 보내지 못했어요.");
   fireEvent.change(input, { target: { value: "different intent" } });
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("different intent"));

@@ -26,6 +26,7 @@ import {
 } from "../../lib/userProfileModel";
 import ImageCropDialog from "./ImageCropDialog";
 import UserSettingsPanel, { type UserSettingsSection } from "./UserSettingsPanel";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function UserPanel({
   onlineCount,
@@ -128,9 +129,7 @@ export default function UserPanel({
         if (profileScopeGeneration.current !== generation) return;
         setProfileHydrated(false);
         setProfileError(
-          error instanceof Error && error.message
-            ? error.message
-            : "프로필을 불러오지 못했어요."
+          userFacingError(error, "프로필을 불러오지 못했어요.")
         );
       }
     });
@@ -174,7 +173,7 @@ export default function UserPanel({
         setProfileError("");
       } catch (error) {
         if (current && generation === profileScopeGeneration.current) {
-          setProfileError(error instanceof Error ? error.message : "프로필 변경을 확인하지 못했어요.");
+          setProfileError(userFacingError(error, "프로필 변경을 확인하지 못했어요."));
         }
       }
     });
@@ -262,7 +261,7 @@ export default function UserPanel({
         } catch (error) {
           if (profileScopeGeneration.current !== scopeGeneration) return "stale";
           const message =
-            error instanceof Error ? error.message : "프로필을 저장하지 못했어요.";
+            userFacingError(error, "프로필을 저장하지 못했어요.");
           const recoveryIntentGeneration = ++profileIntentGeneration.current;
           setProfileHydrated(false);
           setProfileError(message);
@@ -276,9 +275,7 @@ export default function UserPanel({
           } catch (recoveryError) {
             if (profileScopeGeneration.current !== scopeGeneration) return "stale";
             const recoveryMessage =
-              recoveryError instanceof Error && recoveryError.message
-                ? recoveryError.message
-                : "서버 프로필을 다시 확인하지 못했어요.";
+              userFacingError(recoveryError, "서버 프로필을 다시 확인하지 못했어요.");
             setProfileError(`${message} ${recoveryMessage}`);
           } finally {
             if (
@@ -348,7 +345,7 @@ export default function UserPanel({
       setAvatarCropFile(null);
       setAvatarStatus("");
     } catch (error) {
-      setAvatarStatus(error instanceof Error ? error.message : "프로필 사진 저장 실패");
+      setAvatarStatus(userFacingError(error, "프로필 사진 저장 실패"));
     } finally {
       avatarSubmissionInFlight.current = false;
     }

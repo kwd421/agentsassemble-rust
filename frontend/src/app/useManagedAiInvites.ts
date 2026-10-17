@@ -5,6 +5,7 @@ import { createFriendAttendeeInvite, attendeePacketText, type AttendeePacketCust
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import type { InviteReach } from "../types/generated/InviteReach";
 import { sameManagerAuthority } from "./useManagedHumanInvites";
+import { userFacingError } from "../lib/apiErrors";
 
 type Origins = { publicOrigin: string; localOrigin: string };
 type OriginProof = Origins & { isCurrent: () => boolean };
@@ -89,7 +90,7 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
       if (record.origin !== inviteOrigin) throw new Error("초대 주소가 변경됐어요. 현재 주소를 확인한 뒤 복사해 주세요.");
       // The new invite row is the only feedback; no success box.
     } catch (error) {
-      if (active.current && (!proof || proof.isCurrent())) publishStatus(error instanceof Error ? error.message : "AI 초대를 만들지 못했어요. 다시 시도해 주세요.");
+      if (active.current && (!proof || proof.isCurrent())) publishStatus(userFacingError(error, "AI 초대를 만들지 못했어요. 다시 시도해 주세요."));
     } finally {
       busy.current = false;
       if (active.current) setCreating(false);
@@ -115,7 +116,7 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
       if (active.current && proof !== null && (proof as OriginProof).isCurrent() && !copied) publishStatus("초대 내용을 복사하지 못했어요.");
       return copied;
     } catch (error) {
-      if (active.current) publishStatus(error instanceof Error ? error.message : "링크를 복사하지 못했어요.");
+      if (active.current) publishStatus(userFacingError(error, "링크를 복사하지 못했어요."));
       return false;
     }
   }

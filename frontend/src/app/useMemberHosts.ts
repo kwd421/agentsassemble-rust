@@ -5,7 +5,7 @@ import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, remo
 import { memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
 import { remoteWorkspaceFor, closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
-import { ApiError } from "../lib/apiErrors";
+import { ApiError, userFacingError } from "../lib/apiErrors";
 import type { SecureMemberAdmission } from "../lib/central/secureMemberEntry";
 import type { HostRoomDirectory, ServerRoomDockSource } from "../lib/roomDockModel";
 import type { RemoteHostConnection } from "../lib/serverConnectionState";
@@ -300,7 +300,7 @@ export function useMemberHosts({
       // the reset-time line, whatever the failure kind.
       const quotaNotice = centralDailyQuotaNotice(activePerson);
       setPhase(serverId, "disconnected", loadMemberAnchor(activePerson, serverId)?.rooms ?? null, origin,
-        quotaNotice ?? (rateLimited && error instanceof Error ? error.message : null));
+        quotaNotice ?? (rateLimited ? userFacingError(error, "다시 시도해 주세요.") : null));
       // The failure kind picks the backoff: a revoked endpoint (409
       // incarnation_conflict) rests on a slow cadence, a 429 honors the
       // server's Retry-After. The counter keeps growing across these

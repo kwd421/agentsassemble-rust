@@ -7,8 +7,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { Plus, Trash2, X } from "lucide-react";
-import {
-  MAX_VOTE_DURATION_SECONDS,
+import { userFacingError } from "../../lib/apiErrors";
+import {  MAX_VOTE_DURATION_SECONDS,
   MAX_VOTE_OPTIONS,
   MIN_VOTE_DURATION_SECONDS,
   MIN_VOTE_OPTIONS,
@@ -155,9 +155,7 @@ export default function VoteComposerDialog({
       onClose();
     } catch (errorValue) {
       setError(
-        errorValue instanceof Error
-          ? errorValue.message
-          : "투표를 만들지 못했어요."
+        userFacingError(errorValue, "투표를 만들지 못했어요.")
       );
       setBusy(false);
     }

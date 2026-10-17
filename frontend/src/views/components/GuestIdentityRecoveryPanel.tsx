@@ -6,6 +6,7 @@ import {
   type GuestRecoveryRedeemResponse,
 } from "../../api";
 import type { GuestRecoveryRequest } from "../../lib/guestRecovery";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function GuestIdentityRecoveryPanel({
   deviceToken,
@@ -56,7 +57,7 @@ export default function GuestIdentityRecoveryPanel({
       setStatus("");
     } catch (error) {
       if (scope !== generation.current) return;
-      setStatus(error instanceof Error ? error.message : "신원을 복구하지 못했어요.");
+      setStatus(userFacingError(error, "신원을 복구하지 못했어요."));
     } finally {
       if (scope === generation.current) {
         inFlight.current = false;

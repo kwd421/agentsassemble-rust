@@ -3,7 +3,7 @@ import { SecureMemberAdmission, previewSecureMember, type SecureMemberEntry } fr
 import { loginMemberPopup } from "../../lib/central/memberPopup";
 import { useEffect, useRef, useState } from "react";
 import { challengeMemberConnect, redeemMemberConnect, selectMemberConnect, challengeRoomMember, joinRoomMember, type RoomInviteJoinResponse } from "../../api/invites";
-import { ApiError } from "../../lib/apiErrors";
+import { ApiError, userFacingError } from "../../lib/apiErrors";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 import { createSecureRequestId } from "../../lib/secureRequestId";
 import {
@@ -49,18 +49,7 @@ function failureMessage(error: unknown): string {
     return messages[error.code] || "참가를 마치지 못했어요. 다시 시도해 주세요.";
   }
   if (error instanceof TypeError) return "참가를 마치지 못했어요. 다시 시도해 주세요.";
-  // Only exact user-facing messages may cross the native/parser error boundary.
-  const messages = [
-    "로그인 창이 차단됐어요. 팝업을 허용한 뒤 Google로 다시 시도해 주세요.",
-    "로그인을 마치지 못했어요. 초대 창에서 다시 시도해 주세요.",
-    "참가 요청이 만료됐어요. 다시 시도해 주세요.",
-    "참가를 마치지 못했어요. 다시 시도해 주세요.",
-    "참가 요청이 없어요. 원래 초대 링크를 다시 열어 주세요.",
-    "로그인 계정이 바뀌었어요. 다시 시도해 주세요.",
-    "서버 주소가 변경됐어요. 다시 시도해 주세요.",
-  ];
-  return error instanceof Error && messages.includes(error.message)
-    ? error.message : "참가를 마치지 못했어요. 다시 시도해 주세요.";
+  return userFacingError(error, "참가를 마치지 못했어요. 다시 시도해 주세요.");
 }
 
 export default function MemberJoinPanel({ host, request, entryError, onCancel, secureEntry }: {

@@ -17,6 +17,7 @@ import type { RoomDockItem } from "../../lib/roomDockModel";
 import RoomDeleteDialog, { type RoomLifecycleController } from "./room/RoomDeleteDialog";
 import RoomSettingTextInput from "./RoomSettingTextInput";
 import ImageCropDialog from "./ImageCropDialog";
+import { userFacingError } from "../../lib/apiErrors";
 
 const CHANNEL_NOTIFICATION_LABELS: Array<{
   value: ChannelNotificationSetting;
@@ -159,7 +160,7 @@ export default function RoomSettingsModal({
         setUploadStatus("배너 이미지 저장됨");
       }
     } catch (error) {
-      setUploadStatus(error instanceof Error ? error.message : "배너 업로드 실패");
+      setUploadStatus(userFacingError(error, "배너 업로드 실패"));
     }
   }
 
@@ -170,7 +171,7 @@ export default function RoomSettingsModal({
         setUploadStatus("채팅방 아이콘 저장됨");
       }
     } catch (error) {
-      setUploadStatus(error instanceof Error ? error.message : "아이콘 업로드 실패");
+      setUploadStatus(userFacingError(error, "아이콘 업로드 실패"));
     }
   }
 

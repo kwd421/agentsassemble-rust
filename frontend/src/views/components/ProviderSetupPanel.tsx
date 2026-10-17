@@ -6,6 +6,7 @@ import type { ProviderAvailability } from "../../types/generated/ProviderAvailab
 import ProviderLogin from "./ProviderLogin";
 import { providerUnavailableText } from "./agentCreateModel";
 import ProviderSetupActions from "./ProviderSetupActions";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function ProviderSetupPanel({ providerId }: { providerId: string }) {
   const destination = providerSetupDestination(providerId);
@@ -26,7 +27,7 @@ export default function ProviderSetupPanel({ providerId }: { providerId: string 
       if (!current) throw new Error("이 앱에서 해당 제공자를 사용할 수 없어요.");
       setProvider(current);
     } catch (failure) {
-      if (!signal?.aborted && generation === readGeneration.current) setError(failure instanceof Error ? failure.message : "상태를 확인하지 못했어요.");
+      if (!signal?.aborted && generation === readGeneration.current) setError(userFacingError(failure, "상태를 확인하지 못했어요."));
     } finally {
       if (!signal?.aborted && generation === readGeneration.current) setBusy(false);
     }

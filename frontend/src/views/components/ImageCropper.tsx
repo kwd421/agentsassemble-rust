@@ -1,6 +1,7 @@
 import { createResourceUrl, revokeResourceUrl } from "../../lib/remote/remoteResources";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { userFacingError } from "../../lib/apiErrors";
 
 export type ImageCropShape = "circle" | "square" | "banner";
 
@@ -96,7 +97,7 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
         if (!cancelled) setNatural({ width: image.naturalWidth, height: image.naturalHeight });
       })
       .catch((error: unknown) => {
-        if (!cancelled) setStatus(error instanceof Error ? error.message : "이미지를 불러오지 못했어요.");
+        if (!cancelled) setStatus(userFacingError(error, "이미지를 불러오지 못했어요."));
       });
     return () => {
       cancelled = true;
@@ -230,7 +231,7 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
         onCropped(new File([blob], `${shape}-${Date.now()}.png`, { type: "image/png" }));
       }, "image/png");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "이미지 처리 실패");
+      setStatus(userFacingError(error, "이미지 처리 실패"));
     }
   }
 

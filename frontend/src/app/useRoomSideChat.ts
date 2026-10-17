@@ -7,6 +7,7 @@ import { SIDE_CHAT_MAX_MESSAGES } from "../types/generated/SIDE_CHAT_WIRE";
 import type { SideChatSnapshot } from "../types/generated/SideChatSnapshot";
 import type { SideChatUpdate } from "../types/generated/SideChatUpdate";
 import type { RoomSocketHandle } from "../roomSocketTypes";
+import { userFacingError } from "../lib/apiErrors";
 
 type Connection = {
   scope: object;
@@ -32,7 +33,7 @@ export function useRoomSideChat(roomId: string, authority: RoomHttpAuthority | u
     connection.failed = true;
     connection.snapshot = null;
     connection.buffered = [];
-    setView({ scope, snapshot: null, busy: false, error: error instanceof Error ? error.message : "사이드챗을 불러오지 못했어요." });
+    setView({ scope, snapshot: null, busy: false, error: userFacingError(error, "사이드챗을 불러오지 못했어요.") });
   }, [current, scope]);
   const disconnect = useCallback(() => {
     if (currentScope.current !== scope) return;

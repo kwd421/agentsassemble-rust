@@ -77,8 +77,8 @@ import {
 import { useSidebarResize } from "./useSidebarResize";
 import { projectChannelUnread } from "../lib/channelUnread";
 import { closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
-import {
-  NO_SURFACE_STREAMS,
+import { userFacingError } from "../lib/apiErrors";
+import {  NO_SURFACE_STREAMS,
   applyConfirmedMembershipLost,
   canonicalRoomAuthFor,
   memberAdmissionServerFor,
@@ -655,7 +655,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
         }
       } else if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "방을 열지 못했어요.");
+      window.alert(userFacingError(error, "방을 열지 못했어요."));
       return;
     }
     setActiveRoomId(roomId);
@@ -746,7 +746,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
       try {
         if (!await ownerWorkspace.enter(room, acceptOwnerSession)) return;
       } catch (error) {
-        window.alert(error instanceof Error ? error.message : "방 초대를 열지 못했어요.");
+        window.alert(userFacingError(error, "방 초대를 열지 못했어요."));
         return;
       }
       setActiveRoomId(roomId);

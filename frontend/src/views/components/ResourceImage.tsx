@@ -2,6 +2,7 @@ import { useEffect, useState, type ImgHTMLAttributes } from "react";
 import { hasRemoteWorkspace, isKnownHostOrigin, remoteTransportForOrigin } from "../../lib/remote/remoteWorkspace";
 import { createResourceUrl, releaseResourceBlob, readResourceBlob, remoteResourcePath, revokeResourceUrl } from "../../lib/remote/remoteResources";
 import type { RemoteTransport } from "../../lib/remote/remoteTransport";
+import { userFacingError } from "../../lib/apiErrors";
 
 function originOf(source: string): string | null {
   try {
@@ -55,7 +56,7 @@ export function useResourceImage(source: string | undefined, origin?: string | n
       if (!/^image\/(png|jpeg|webp)$/.test(blob.type)) throw new Error("사진 형식을 확인하지 못했어요.");
       controller.signal.throwIfAborted(); url = createResourceUrl(blob); setLoaded({ source, url });
       } catch (error) { releaseResourceBlob(blob); throw error; }
-    }).catch(error => { if (!controller.signal.aborted) setLoaded({ source, url: "", error: error instanceof Error ? error.message : "사진을 불러오지 못했어요." }); });
+    }).catch(error => { if (!controller.signal.aborted) setLoaded({ source, url: "", error: userFacingError(error, "사진을 불러오지 못했어요.") }); });
     return () => { controller.abort(); if (url) revokeResourceUrl(url); };
     // `path`/`transport` are derived from `source`/`origin` above; the
     // transport is a dep so a reconnected host refetches instead of

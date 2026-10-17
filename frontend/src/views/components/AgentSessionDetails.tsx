@@ -15,6 +15,7 @@ import AgentActivitySettings from "./AgentActivitySettings";
 import ProviderModelRefresh from "./ProviderModelRefresh";
 import { resolveProviderPresentation } from "./providerBranding";
 import ProviderRuntimeSettingField from "./ProviderRuntimeSettingField";
+import { userFacingError } from "../../lib/apiErrors";
 
 export type AgentSessionControlAction = "start" | "pause" | "stop" | "resume" | "interrupt";
 
@@ -267,7 +268,7 @@ export default function AgentSessionDetails({
       await onControl(session, action);
       setActionStatus(actionCompletedLabel(action));
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : "세션 제어 요청 실패");
+      setActionStatus(userFacingError(error, "세션 제어 요청 실패"));
     } finally {
       setPendingAction(null);
     }
@@ -289,7 +290,7 @@ export default function AgentSessionDetails({
       // The saved form state is the only feedback; no success box.
       setActionStatus("");
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : "실행 설정을 저장하지 못했어요.");
+      setActionStatus(userFacingError(error, "실행 설정을 저장하지 못했어요."));
     } finally {
       setSettingsBusy(false);
     }

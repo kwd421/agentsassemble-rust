@@ -265,7 +265,7 @@ describe("room appearance object URL lifecycle", () => {
     const hook = renderAssets(appearance);
 
     await waitFor(() =>
-      expect(hook.result.current.errorFor(room)).toBe("bound read rejected")
+      expect(hook.result.current.errorFor(room)).toBe("방 외형 자산을 읽을 수 없어요.")
     );
     expect(hook.result.current.appearanceFor(room).bannerImage).toBeUndefined();
     expect(api.fetchBlob).toHaveBeenCalledOnce();

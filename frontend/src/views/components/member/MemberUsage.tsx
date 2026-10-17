@@ -3,6 +3,7 @@ import { readProviderUsage } from "../../../api/providerUsage";
 import { isDesktopWebview } from "../../../lib/desktopBridge";
 import type { ProviderUsage } from "../../../types/generated/ProviderUsage";
 import type { NativeCliProviderAvailability } from "../../../roomSocketClient";
+import { userFacingError } from "../../../lib/apiErrors";
 
 export default function MemberUsage({ displayName, provider }: {
   displayName: string;
@@ -19,7 +20,7 @@ export default function MemberUsage({ displayName, provider }: {
     setError("");
     setUsage(null);
     try { setUsage(await readProviderUsage(provider.id)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "사용량을 조회하지 못했어요."); }
+    catch (cause) { setError(userFacingError(cause, "사용량을 조회하지 못했어요.")); }
     finally { setBusy(false); }
   }
   return (

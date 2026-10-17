@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from "react";
 import {isDesktopWebview,requestDesktopServerBackup} from "../../lib/desktopBridge";
 import {bootstrapCentral,fetchLocalServerInfo,loadCentralSession,localHostingState,type CentralServer} from "../../lib/central/identity";
 import {strictRecord} from "../../lib/strictJsonContract";
+import { userFacingError } from "../../lib/apiErrors";
 
 type Progress={operation_id:string;phase:string;snapshot_at:string|null;bytes:number|null;failure_reason?:string|null};
 const phases:Record<string,string>={snapshot:"서버 내용을 준비하고 있어요",encoding:"백업 파일을 만들고 있어요",verifying:"파일을 확인하고 있어요",publishing:"백업 파일을 저장하고 있어요",complete:"백업 파일을 저장했어요",failed:"백업 파일을 만들지 못했어요. 기존 파일은 덮어쓰지 않았어요.",cancelled:"백업을 취소했어요",interrupted:"백업 저장 완료를 확인하지 못했어요. 저장 위치를 확인한 뒤 새 백업을 만들어 주세요."};
@@ -18,14 +19,7 @@ const failureReasons:Record<string,string>={
   verification:"생성한 백업 파일의 무결성을 확인하지 못했어요. 다시 시도해 주세요.",
   internal:"백업 작업 상태를 처리하지 못했어요. 로그를 확인하고 다시 시도해 주세요.",
 };
-function firstKoreanLine(reason:unknown):string|null{
-  if(reason instanceof TypeError||(typeof DOMException!=="undefined"&&reason instanceof DOMException))return null;
-  const text=typeof reason==="string"?reason:reason instanceof Error?reason.message:"";
-  const line=text.split("\n")[0]?.trim()??"";
-  if(!line||!/[가-힣]/.test(line))return null;
-  return line;
-}
-function backupActionError(reason:unknown,fallback:string):string{return firstKoreanLine(reason)??fallback;}
+function backupActionError(reason:unknown,fallback:string):string{return userFacingError(reason,fallback);}
 const STATUS_ERROR="백업 상태를 불러오지 못했어요.";
 const START_ERROR="백업을 시작하지 못했어요.";
 const CANCEL_ERROR="백업을 취소하지 못했어요.";

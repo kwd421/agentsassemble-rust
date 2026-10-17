@@ -34,7 +34,7 @@ describe("MemberUsage", () => {
     expect(screen.getByText(/123456789123456789.123456789/)).toBeTruthy();
     expect(screen.getByText(/API를 사용할 수 없어요/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "계정 사용량 조회" }));
-    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Account authorization rejected");
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "사용량을 조회하지 못했어요.");
     expect(screen.queryByText(/USD 잔액/)).toBeNull();
   });
 

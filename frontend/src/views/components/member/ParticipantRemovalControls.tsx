@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal } from "lucide-react";
+import { userFacingError } from "../../../lib/apiErrors";
 
 export type ParticipantRemovalAction = (participantId: string, action: "kick" | "export") => Promise<void>;
 
@@ -46,7 +47,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
       setConfirmAction(null);
       setMenuOpen(false);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "참가자를 제거하지 못했어요.");
+      setError(userFacingError(failure, "참가자를 제거하지 못했어요."));
     } finally {
       busyRef.current = false;
       setBusy(false);

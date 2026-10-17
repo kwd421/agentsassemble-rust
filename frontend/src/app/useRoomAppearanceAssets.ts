@@ -12,6 +12,7 @@ import {
 import { roomAppearanceAssetReference } from "../lib/roomAppearanceAsset";
 import { roomSettingsKey, type RoomDockItem } from "../lib/roomDockModel";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
+import { userFacingError } from "../lib/apiErrors";
 
 type SettingsStatus = "loading" | "ready" | "saving" | "stale" | "error";
 
@@ -153,7 +154,7 @@ export function useRoomAppearanceAssets({
         }
       } catch (error) {
         nextStaticErrors[roomKey] =
-          error instanceof Error ? error.message : "방 외형 조회 권위를 확인할 수 없습니다.";
+          userFacingError(error, "방 외형 조회 권위를 확인할 수 없어요.");
         continue;
       }
 
@@ -172,7 +173,7 @@ export function useRoomAppearanceAssets({
           });
         } catch (error) {
           nextStaticErrors[roomKey] =
-            error instanceof Error ? error.message : "방 외형 자산 참조가 올바르지 않아요.";
+            userFacingError(error, "방 외형 자산 참조가 올바르지 않아요.");
         }
       }
     }
@@ -241,7 +242,7 @@ export function useRoomAppearanceAssets({
           setRequestErrors((errors) => ({
             ...errors,
             [key]:
-              error instanceof Error ? error.message : "방 외형 자산을 읽을 수 없어요.",
+              userFacingError(error, "방 외형 자산을 읽을 수 없어요."),
           }));
         });
     }

@@ -4,6 +4,7 @@ import type { SaveFriend } from "../types/generated/SaveFriend";
 import type { SavedFriend } from "../types/generated/SavedFriend";
 
 import type { SavedFriendsAuthority } from "../api/friends";
+import { userFacingError } from "../lib/apiErrors";
 
 export function useFriendsDirectory(authority: SavedFriendsAuthority = { kind: "local" }) {
   const scope = JSON.stringify(authority);
@@ -27,7 +28,7 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority = { kind: "
       return true;
     } catch (reason) {
       if (active.current && generation.current === epoch) {
-        setError(reason instanceof Error ? reason.message : "친구 목록을 저장하지 못했어요. 다시 시도해 주세요.");
+        setError(userFacingError(reason, "친구 목록을 저장하지 못했어요. 다시 시도해 주세요."));
       }
       return false;
     } finally {

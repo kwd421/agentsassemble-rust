@@ -247,7 +247,7 @@ it("retries pending local retirement after the conflict list has disappeared", a
   const refresh = vi.fn().mockResolvedValue(undefined);
   const view = render(<CentralServerList deviceToken="device" servers={[host]} liveServers={[host]} busy={false} onOpen={vi.fn()} onRefresh={refresh} />);
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-  expect(screen.getByRole("alert").textContent).toContain("local write unavailable");
+  expect(screen.getByRole("alert").textContent).toContain("이 컴퓨터의 은퇴를 다시 확인하고 있어요.");
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(retryPendingLocalDemotion).toHaveBeenCalledTimes(2);
   expect(resolveCentralServerDuplicates).not.toHaveBeenCalled();

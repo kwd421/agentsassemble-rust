@@ -6,6 +6,7 @@ import { FileDown, X } from "lucide-react";
 import type { LobbyAttachmentRef } from "../../api/messageAttachments";
 import { startMessageAttachmentDownload } from "../../lib/messageAttachmentDownload";
 import type { MessageAttachmentReadScheduler } from "../../lib/messageAttachmentReadScheduler";
+import { userFacingError } from "../../lib/apiErrors";
 
 function formatAttachmentSize(size: number) {
   if (!Number.isFinite(size) || size <= 0) return "";
@@ -43,7 +44,7 @@ function LobbyFileAttachment({
       await startMessageAttachmentDownload(blob, attachment.filename);
     } catch (errorValue) {
       if (!controller.signal.aborted && activeRead.current === controller) {
-        setError(errorValue instanceof Error ? errorValue.message : "첨부 다운로드 실패");
+        setError(userFacingError(errorValue, "첨부 다운로드 실패"));
       }
     } finally {
       if (activeRead.current === controller) {
@@ -114,12 +115,12 @@ function LobbyImageAttachment({
       (blob) => {
         if (controller.signal.aborted) { releaseResourceBlob(blob); return; }
         previewBlobRef.current = blob;
-        try { createdUrl = createResourceUrl(blob); } catch (errorValue) { releaseResourceBlob(blob); setError(errorValue instanceof Error ? errorValue.message : "이미지 미리보기 실패"); return; }
+        try { createdUrl = createResourceUrl(blob); } catch (errorValue) { releaseResourceBlob(blob); setError(userFacingError(errorValue, "이미지 미리보기 실패")); return; }
         setObjectUrl(createdUrl);
       },
       (errorValue) => {
         if (!controller.signal.aborted) {
-          setError(errorValue instanceof Error ? errorValue.message : "이미지 미리보기 실패");
+          setError(userFacingError(errorValue, "이미지 미리보기 실패"));
         }
       }
     );
@@ -151,7 +152,7 @@ function LobbyImageAttachment({
     }).catch(errorValue => {
       if (originalRef.current === read) {
         originalRef.current = null;
-        if (!controller.signal.aborted) setError(errorValue instanceof Error ? errorValue.message : "이미지 불러오기 실패");
+        if (!controller.signal.aborted) setError(userFacingError(errorValue, "이미지 불러오기 실패"));
       }
       throw errorValue;
     });
@@ -170,7 +171,7 @@ function LobbyImageAttachment({
       const blob = await loadOriginal();
       await startMessageAttachmentDownload(blob, attachment.filename, originalRef.current?.url || objectUrl);
     } catch (errorValue) {
-      setError(errorValue instanceof Error ? errorValue.message : "첨부 다운로드 실패");
+      setError(userFacingError(errorValue, "첨부 다운로드 실패"));
     } finally {
       setDownloading(false);
     }

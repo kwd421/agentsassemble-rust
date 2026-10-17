@@ -23,6 +23,7 @@ import StartupIdentityGate from "./StartupIdentityGate";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
 import { type MemberReturn } from "../../lib/central/memberConnect";
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
+import { userFacingError } from "../../lib/apiErrors";
 
 function browserEntranceHasAuthority(): boolean {
   const url = window.location.href;
@@ -75,9 +76,7 @@ export default function StartupIdentityBoundary({
         deviceToken: "",
         clientId: "",
         error:
-          error instanceof Error
-            ? error.message
-            : "이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없어요.",
+          userFacingError(error, "이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없어요."),
       };
     }
   });

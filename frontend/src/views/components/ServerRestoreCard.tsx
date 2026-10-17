@@ -1,4 +1,5 @@
 import { useEffect,useRef,useState } from "react";
+import { userFacingError } from "../../lib/apiErrors";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 import { bootstrapCentral,loadCentralSession } from "../../lib/central/identity";
 import { serverRestoreAvailable,cancelServerRestore,inspectServerRestore,prepareServerRestore,selectServerRestore,resumeServerRestore,switchServerRestore,type RestoreJournal } from "../../lib/central/serverMove";
@@ -12,19 +13,19 @@ export default function ServerRestoreCard({onOpen,liveHost=false}:{onOpen:()=>Pr
   const [busy,setBusy]=useState(false),[status,setStatus]=useState(""),[error,setError]=useState("");
   const operation=useRef(false),abort=useRef<AbortController|null>(null);
   useEffect(()=>{let live=true;void serverRestoreAvailable().then(value=>{if(live)setAvailable(value);}).catch(()=>{if(live)setAvailable(false);});return()=>{live=false;};},[]);
-  useEffect(()=>{let live=true;if(isDesktopWebview()) void inspectServerRestore().then(value=>{if(live){setJob(value);if(value)setOpen(true);}}).catch(reason=>{if(live)setError(String(reason));});return()=>{live=false;abort.current?.abort();};},[]);
+  useEffect(()=>{let live=true;if(isDesktopWebview()) void inspectServerRestore().then(value=>{if(live){setJob(value);if(value)setOpen(true);}}).catch(reason=>{if(live)setError(userFacingError(reason,"서버 옮기기를 확인하지 못했어요."));});return()=>{live=false;abort.current?.abort();};},[]);
   useEffect(()=>{
     let live=true;setCurrentServer(null);
     if(job?.manifest && ["prepared","switch_unknown"].includes(job.phase)) {
       void bootstrapCentral().then(central=>{const current=central?.servers.find(server=>server.relation==="owner"&&server.server_id===job.manifest?.server_id);
         if(live&&current?.registration_epoch)setCurrentServer({name:current.default_name||current.alias,epoch:current.registration_epoch});
-      }).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:String(reason));});
+      }).catch(reason=>{if(live)setError(userFacingError(reason,"서버 옮기기를 확인하지 못했어요."));});
     }
     return()=>{live=false;};
   },[job?.operation_id,job?.phase]);
   async function run(action:()=>Promise<void>) {
     if(operation.current)return;operation.current=true;setBusy(true);setError("");
-    try{await action();}catch(reason){setError(reason instanceof Error?reason.message:String(reason));
+    try{await action();}catch(reason){setError(userFacingError(reason,"서버 옮기기를 확인하지 못했어요."));
       try{setJob(await inspectServerRestore());}catch{/* Preserve the explicit operation error. */}}
     finally{operation.current=false;setBusy(false);setStatus("");setPassphrase("");setRecovery("");}
   }

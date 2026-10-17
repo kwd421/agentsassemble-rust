@@ -35,6 +35,7 @@ import ProviderControlToggle from "./ProviderControlToggle";
 import AgentPersonaPicker from "./AgentPersonaPicker";
 import ProviderCredentialField from "./ProviderCredentialField";
 import WorkspacePickerField from "./WorkspacePickerField";
+import { userFacingError } from "../../lib/apiErrors";
 import {
   defaultAgentDisplayName,
   deriveAgentCreateStatus,
@@ -206,7 +207,7 @@ export default function AgentCreateModal({
     let current = true;
     fetchProviderCredentialStatus(selectedProvider.id)
       .then((result) => { if (current) setCredentialStatus(result); })
-      .catch((error) => { if (current) setStatus(error instanceof Error ? error.message : "키 상태 확인 실패"); });
+      .catch((error) => { if (current) setStatus(userFacingError(error, "키 상태 확인 실패")); });
     return () => { current = false; };
   }, [open, localProviderActions, selectedProvider?.id, selectedProvider?.credential_available]);
 
@@ -312,7 +313,7 @@ export default function AgentCreateModal({
       if (error instanceof RoomSocketSayError && error.retry) {
         createRetry.current = { key, retry: error.retry };
       }
-      setStatus(error instanceof Error ? error.message : "에이전트 추가 실패");
+      setStatus(userFacingError(error, "에이전트 추가 실패"));
     } finally {
       setBusy(false);
     }
@@ -336,9 +337,7 @@ export default function AgentCreateModal({
       }
     } catch (error) {
       setStatus(
-        error instanceof Error
-          ? error.message
-          : `${selectedProvider.display_name} 키 저장 실패`
+        userFacingError(error, `${selectedProvider.display_name} 키를 저장하지 못했어요.`)
       );
     } finally {
       setCredentialBusy(false);
@@ -360,9 +359,7 @@ export default function AgentCreateModal({
       }
     } catch (error) {
       setStatus(
-        error instanceof Error
-          ? error.message
-          : `${selectedProvider.display_name} 키 삭제 실패`
+        userFacingError(error, `${selectedProvider.display_name} 키를 삭제하지 못했어요.`)
       );
     } finally {
       setCredentialBusy(false);
@@ -372,7 +369,7 @@ export default function AgentCreateModal({
   async function readUpdatedCatalog() {
     if (!onCatalogChange) return;
     try { onCatalogChange(await fetchLocalProviderCatalog()); }
-    catch (error) { setStatus(error instanceof Error ? error.message : "AI 상태를 확인하지 못했어요."); }
+    catch (error) { setStatus(userFacingError(error, "AI 상태를 확인하지 못했어요.")); }
   }
 
   if (!open) return null;

@@ -59,6 +59,7 @@ import {
 } from "./useRoomMessageSearch";
 import type { MessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 import { isVoteTransitionKind } from "../lib/voteEventKind";
+import { userFacingError } from "../lib/apiErrors";
 
 export default function LobbyView({
   activeRoom,
@@ -303,7 +304,7 @@ export default function LobbyView({
             void navigateToSearchResult(result.event_id).catch((reason) => {
               setPendingMessageTarget("");
               messageSearch.setError(
-                reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했어요."
+                userFacingError(reason, "검색한 메시지로 이동하지 못했어요.")
               );
             });
           },
@@ -391,7 +392,7 @@ export default function LobbyView({
       .catch((reason) => {
         setPendingMessageTarget("");
         messageSearch.setError(
-          reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했어요."
+          userFacingError(reason, "검색한 메시지로 이동하지 못했어요.")
         );
       })
       .finally(() => {
@@ -621,7 +622,7 @@ export default function LobbyView({
                   if (!id) return;
                   const source = visibleEvents.find((item) => (item.record_id || item.id) === id);
                   if (source) { suppressAutomaticHistoryLoad(); jumpToEvent(source.id); }
-                  else void navigateToSearchResult(id).catch((error: unknown) => messageSearch.setError(error instanceof Error ? error.message : "답장 원문을 열지 못했어요."));
+                  else void navigateToSearchResult(id).catch((error: unknown) => messageSearch.setError(userFacingError(error, "답장 원문을 열지 못했어요.")));
                 }}
                 providerKind={
                   event.provider_kind ||

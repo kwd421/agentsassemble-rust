@@ -21,7 +21,7 @@ import {
   lobbySubmitSuccessDraft,
   selectLobbyAttachmentFiles,
 } from "../../lib/lobbyComposerModel";
-import { isUnauthorizedApiError } from "../../lib/apiErrors";
+import { isUnauthorizedApiError, userFacingError } from "../../lib/apiErrors";
 import type { RoomPostingMode } from "../../lib/roomGuestPosting";
 import type { OutgoingDraft } from "../../lib/outgoingMessages";
 import type { Mentionable } from "../../lib/mentionComposerModel";
@@ -428,7 +428,7 @@ export default function LobbyComposer({
       const restored = lobbySubmitFailureDraft(
         draftMessage,
         draftAttachments,
-        errorValue instanceof Error ? errorValue.message : "채팅 메시지 전송 실패"
+        userFacingError(errorValue, "채팅 메시지 전송 실패")
       );
       setDraftsByRoom((previous) => ({
         ...previous,

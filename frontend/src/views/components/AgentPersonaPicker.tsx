@@ -7,6 +7,7 @@ import {
   type PersonaAssetSummary,
 } from "../../api/personas";
 import { usePersonaThumbnails } from "./usePersonaThumbnails";
+import { userFacingError } from "../../lib/apiErrors";
 
 const VISIBLE_RESULT_LIMIT = 8;
 
@@ -47,7 +48,7 @@ export default function AgentPersonaPicker({
       })
       .catch((error) => {
         if (!active) return;
-        setStatus(error instanceof Error ? error.message : "라이브러리를 불러오지 못했어요.");
+        setStatus(userFacingError(error, "라이브러리를 불러오지 못했어요."));
       });
     return () => {
       active = false;
@@ -100,7 +101,7 @@ export default function AgentPersonaPicker({
       setQuery("");
       setStatus(`${imported.display_name} 가져오기 완료`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "가져오기에 실패했어요.");
+      setStatus(userFacingError(error, "가져오기에 실패했어요."));
     } finally {
       setImporting(false);
     }

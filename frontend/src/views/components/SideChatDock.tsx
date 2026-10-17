@@ -7,6 +7,7 @@ import { resolveMentionMarkup } from "../../lib/mentionComposerModel";
 import { MAX_TEXT_CHAT_CHARACTERS } from "../../types/generated/TEXT_CHAT_WIRE";
 import DiscordText from "./DiscordText";
 import MentionInput from "./MentionInput";
+import { userFacingError } from "../../lib/apiErrors";
 
 type SideChat = ReturnType<typeof useRoomSideChat>;
 const actionStyle = { minWidth: 44, minHeight: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" } as const;
@@ -74,7 +75,7 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
       chat.updateDraft("");
       focusAfterSend.current = true;
     } catch (cause) {
-      if (currentScope.current === scope) setSendError({ scope, message: cause instanceof Error ? cause.message : "메시지를 보내지 못했어요." });
+      if (currentScope.current === scope) setSendError({ scope, message: userFacingError(cause, "메시지를 보내지 못했어요.") });
     }
   }
   if (!open) return null;

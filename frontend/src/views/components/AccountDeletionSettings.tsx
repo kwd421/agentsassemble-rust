@@ -8,6 +8,7 @@ import { CENTRAL_SESSION_CLEARED_EVENT, CENTRAL_SESSION_CHANGED_EVENT, loadCentr
 import ParticipantAvatarContent from "./ParticipantAvatarContent";
 import LocalAccountDataChoice from "./LocalAccountDataChoice";
 import GoogleGLogo from "./GoogleGLogo";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function AccountDeletionSettings({ disabled }: { disabled: boolean }) {
   const open = useContext(AccountDeletionContext);
@@ -100,8 +101,7 @@ export function AccountDeletionFlow({ disabled, onClose, onDeleted }: { disabled
       const quotaNotice = centralDailyQuotaActionNotice(
         loadCentralSession()?.person.person_id ?? operation.current?.session.person.person_id ?? retainedReceipt?.person_id ?? "");
       if (quotaNotice) { setError(quotaNotice); return; }
-      const message = reason instanceof Error ? reason.message : "";
-      setError(/[가-힣]/.test(message) ? message : "완료를 확인하지 못했어요. 다시 시도해 주세요.");
+      setError(userFacingError(reason, "완료를 확인하지 못했어요. 다시 시도해 주세요."));
     } finally { finishing.current = false; busyRef.current = false; setBusy(false); setChecking(false); update(); }
   }
   function close() { generation.current++; operation.current?.cancel(); cancel.current.abort(); setCode(""); onClose?.(); }

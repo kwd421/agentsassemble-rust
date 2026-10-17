@@ -4,6 +4,7 @@ import { verifyCentralOwnerHost, type CentralOwnerConnect } from "../../lib/cent
 import { exchangeCentralOwnerSession, fetchCentralOwnerRooms, type CentralOwnerWorkspace } from "../../lib/central/ownerWorkspace";
 import { bindRoomDirectoryAuthority } from "../../lib/roomDirectoryContract";
 import { centralAccountEntryUrl } from "../../lib/central/identity";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function CentralOwnerConnectGate({ connect, deviceToken, onComplete }: {
   connect: CentralOwnerConnect; deviceToken: string; onComplete: (session: CentralOwnerWorkspace) => void;
@@ -25,7 +26,7 @@ export default function CentralOwnerConnectGate({ connect, deviceToken, onComple
         if (!active || !await bindRoomDirectoryAuthority(directory, null, window.location.origin, () => active)) return;
         onComplete(session);
       } catch (reason) {
-        if (active) setError(reason instanceof Error ? reason.message : "서버에 연결하지 못했어요.");
+        if (active) setError(userFacingError(reason, "서버에 연결하지 못했어요."));
       }
     })();
     return () => { active = false; };

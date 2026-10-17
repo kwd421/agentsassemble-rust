@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { refreshLocalProviderCatalog } from "../../api/providerOperations";
 import type { ProviderCatalog } from "../../types/generated/ProviderCatalog";
 import { isDesktopWebview } from "../../lib/desktopBridge";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function ProviderModelRefresh({ title, compact = false, providerId, automaticAllowed, localAvailable = true, onCatalogChange }: {
   compact?: boolean; title: string; providerId: string; automaticAllowed: boolean; localAvailable?: boolean; onCatalogChange?: (catalog: ProviderCatalog) => void;
@@ -36,7 +37,7 @@ export default function ProviderModelRefresh({ title, compact = false, providerI
       setStatus("");
     } catch (error) {
       if (!signal?.aborted && current === generation.current) {
-        setStatus(error instanceof Error ? error.message : "모델 목록을 새로고침하지 못했어요.");
+        setStatus(userFacingError(error, "모델 목록을 새로고침하지 못했어요."));
       }
     } finally {
       if (!signal?.aborted && current === generation.current) setBusy(false);

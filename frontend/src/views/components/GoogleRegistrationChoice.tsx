@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { GoogleRegistrationRequired } from "../../lib/central/googleRegistration";
 import GoogleGLogo from "./GoogleGLogo";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function GoogleRegistrationChoice({ request, onComplete, onCancel }: { request: GoogleRegistrationRequired; onComplete: () => Promise<void>; onCancel: () => void }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -9,7 +10,7 @@ export default function GoogleRegistrationChoice({ request, onComplete, onCancel
     if (operation.current) return;
     operation.current = true; setBusy(true); setError("");
     try { await request.register(); await onComplete(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "새 계정을 만들지 못했어요."); }
+    catch (reason) { setError(userFacingError(reason, "새 계정을 만들지 못했어요.")); }
     finally { operation.current = false; setBusy(false); }
   }
   return <section aria-label="Google 새 계정 만들기" aria-busy={busy} className="grid gap-5">

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function CreateChannelModal({ onClose, onCreate, room = false, initialName = "" }: {
   room?: boolean;
@@ -51,7 +52,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
       }
     } catch (err) {
       if (active.current) {
-        setError(err instanceof Error ? err.message : room ? "방을 만들지 못했어요." : "채널을 만들지 못했어요.");
+        setError(userFacingError(err, room ? "방을 만들지 못했어요." : "채널을 만들지 못했어요."));
         setBusy(false);
       }
     } finally { submitting.current = false; }

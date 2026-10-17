@@ -20,6 +20,7 @@ import { buildMemberOwnerGroups } from "./member/memberOwnerGroups";
 import { useMemberEntries } from "./member/useMemberEntries";
 import type { MemberEntry, RoleId } from "./member/memberTypes";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
+import { userFacingError } from "../../lib/apiErrors";
 
 export type { RoleId };
 
@@ -142,7 +143,7 @@ export default function MemberList({
       await onParticipantMute(entry.id, !entry.muted);
       onSessionActionComplete?.();
     } catch (error) {
-      window.alert(`뮤트 변경 실패: ${error instanceof Error ? error.message : String(error)}`);
+      window.alert(userFacingError(error, "뮤트를 변경하지 못했어요."));
     } finally {
       setMuteBusy(false);
       setMemberMenu(null);
@@ -156,7 +157,7 @@ export default function MemberList({
         await onRoleChange(memberId, role);
       } catch (error) {
         setRoleChangeError(
-          error instanceof Error ? error.message : "역할을 변경하지 못했어요."
+          userFacingError(error, "역할을 변경하지 못했어요.")
         );
       }
       return;

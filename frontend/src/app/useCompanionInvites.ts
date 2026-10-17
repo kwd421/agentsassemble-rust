@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { attendeePacketText, createCompanionAttendeeInvite, type AttendeePacketCustody } from "../api/attendeeInvite";
 import { copyText } from "../lib/copyInviteText";
 import { roomGuestSessionExpired, type RoomGuestSession } from "../lib/roomGuestSession";
+import { userFacingError } from "../lib/apiErrors";
 
 const DESKTOP_HANDOFF_STATUS = "이 컴퓨터에 뜬 창에서 마저 설정해 주세요.";
 
@@ -55,7 +56,7 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
       // feedback; no success box. The desktop handoff hint still needs its banner.
       if (isDesktopWebview()) setStatus(DESKTOP_HANDOFF_STATUS);
     } catch (error) {
-      if (isCurrent(owner)) setStatus(error instanceof Error ? error.message : "초대 결과를 확인하지 못했어요. 다시 시도해 주세요.");
+      if (isCurrent(owner)) setStatus(userFacingError(error, "초대 결과를 확인하지 못했어요. 다시 시도해 주세요."));
     } finally {
       busy.current = false;
       if (active.current) setCreating(false);
@@ -76,7 +77,7 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
       if (isCurrent(owner) && !copied) setStatus("복사하지 못했어요. 브라우저의 클립보드 권한을 확인해 주세요.");
       return copied;
     } catch (error) {
-      if (isCurrent(owner)) setStatus(error instanceof Error ? error.message : "참가 안내를 복사하지 못했어요.");
+      if (isCurrent(owner)) setStatus(userFacingError(error, "참가 안내를 복사하지 못했어요."));
       return false;
     }
   }

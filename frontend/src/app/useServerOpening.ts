@@ -4,6 +4,7 @@ import type { CentralServerDisplay } from "../lib/central/directoryCache";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import type { RoomDirectoryContinuity } from "./useRoomDirectory";
+import { userFacingError } from "../lib/apiErrors";
 
 /**
  * Opening servers from the rail: owned servers through the consent gate,
@@ -38,7 +39,7 @@ export function useServerOpening({
       if (!live) throw new Error("서버 연결이 끊겼어요. 로그인 서버 연결을 다시 확인하고 있어요.");
       if (live.relation === "member") await openCentralMemberServer(live);
       else await openCentralOwnedServer(live);
-    } catch (error) { setServerConnectionError(error instanceof Error ? error.message : "서버 연결이 끊겼어요."); }
+    } catch (error) { setServerConnectionError(userFacingError(error, "서버 연결이 끊겼어요.")); }
     finally { serverOpening.current = false; setConnectingServerId(""); }
   }
   async function retryRoomConnection(room: RoomDockItem) {

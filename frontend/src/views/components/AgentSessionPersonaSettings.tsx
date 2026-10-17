@@ -4,6 +4,7 @@ import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { providerCatalogGroup } from "../../lib/providerCatalogGroups";
 import AgentPersonaPicker from "./AgentPersonaPicker";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function AgentSessionPersonaSettings({
   session,
@@ -40,7 +41,7 @@ export default function AgentSessionPersonaSettings({
       await onConfigure(session, { persona_card_id: personaCardId });
       onStatus(personaCardId ? "봇카드·모듈 교체 완료 · 다음 시작부터 적용" : "봇카드·모듈 적용 해제 완료");
     } catch (error) {
-      onStatus(error instanceof Error ? error.message : "봇카드·모듈 저장 실패");
+      onStatus(userFacingError(error, "봇카드·모듈 저장 실패"));
     } finally {
       setBusy(false);
     }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fetchMessagePins, setMessagePinned, type MessagePin, type MessagePinsAuthority } from "../api";
+import { userFacingError } from "../lib/apiErrors";
 
 type Mutation = { eventId: string; pinned: boolean };
 type PinView = { scope: object; items: MessagePin[]; loading: boolean; busyId: string; error: string };
@@ -34,7 +35,7 @@ export function useMessagePins({ roomId, roomUid = "", channelId, authority, ide
       const items = mutation ? await setMessagePinned({ ...request, ...mutation }) : await fetchMessagePins(request);
       publish({ items });
     } catch (cause) {
-      publish({ error: cause instanceof Error ? cause.message : "고정 메시지를 불러오거나 바꾸지 못했어요." });
+      publish({ error: userFacingError(cause, "고정 메시지를 불러오거나 바꾸지 못했어요.") });
     } finally {
       if (current()) { publish({ loading: false, busyId: "" }); operationRef.current = null; }
     }

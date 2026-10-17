@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { userFacingError } from "../../lib/apiErrors";
 import { finishMemberLoginPopup, registerMemberLoginPopup, runMemberLoginPopup } from "../../lib/central/memberPopup";
 import { GoogleRegistrationRequired } from "../../lib/central/googleRegistration";
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
@@ -36,14 +37,7 @@ export default function MemberLoginPopup() {
       await registerMemberLoginPopup(registration, controller.current.signal);
       setRegistration(null); setStatus("가입하고 로그인했어요. 초대 창으로 돌아가 주세요.");
     } catch (error) {
-      const messages = [
-        "새 계정을 만들었어요. Google로 다시 로그인해 주세요.",
-        "확인 시간이 만료됐어요. Google 계정을 다시 확인해 주세요.",
-        "로그인 계정이 바뀌었어요. Google 계정을 다시 확인해 주세요.",
-        "새 계정 결과를 확인하지 못했어요.",
-      ];
-      setRegistration(null); setStatus(error instanceof Error && messages.includes(error.message)
-        ? error.message : "가입 결과를 확인하지 못했어요. 초대 창에서 Google로 다시 시도해 주세요.");
+      setRegistration(null); setStatus(userFacingError(error, "가입 결과를 확인하지 못했어요. 초대 창에서 Google로 다시 시도해 주세요."));
     } finally { setBusy(false); }
   }
   function returnToInvite() {

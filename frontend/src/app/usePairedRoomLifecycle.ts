@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { changeRoomLifecycle, type RoomLifecycleIntent } from "../api/roomLifecycle";
-import { ApiError } from "../lib/apiErrors";
+import { ApiError, userFacingError } from "../lib/apiErrors";
 import type { RoomGuestSession } from "../lib/roomGuestSession";
 import type { ServerRoomDockSource } from "../lib/roomDockModel";
 import { createSecureRequestId } from "../lib/secureRequestId";
@@ -83,7 +83,7 @@ export function usePairedRoomLifecycle(options: Options) {
         setRetirement("deleting");
         setNotice("방 삭제 요청이 접수되어 이 기기의 연결이 종료됐어요. 삭제 완료 여부는 원래 앱에서 확인해 주세요.");
       } else {
-        setError(`${failure instanceof Error ? failure.message : "방 관리 결과를 확인하지 못했어요."} 연결이 종료됐다면 원래 앱에서 방 상태를 확인해 주세요.`);
+        setError(`${userFacingError(failure, "방 관리 결과를 확인하지 못했어요.")} 연결이 종료됐다면 원래 앱에서 방 상태를 확인해 주세요.`);
       }
     } finally {
       if (resultIsCurrent()) {

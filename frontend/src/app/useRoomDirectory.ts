@@ -21,8 +21,8 @@ import {
   type StrictRoomDirectory,
   type TrustedServerProductSurface,
 } from "../lib/roomDirectoryContract";
-import {
-  isDesktopWebview,
+import { userFacingError } from "../lib/apiErrors";
+import {  isDesktopWebview,
   parseDesktopManagerRoomAuthority,
   requestDesktopBootstrapStatus,
   type DesktopManagerRoomAuthority,
@@ -374,7 +374,7 @@ export function useRoomDirectory({
         if (!isCurrentEpoch(epoch)) throw new RoomDirectoryOperationSuperseded();
         publishSyncIssue({
           category: "room_directory_unavailable",
-          message: error instanceof Error ? error.message : "Room directory verification failed.",
+          message: userFacingError(error, "방 목록을 확인하지 못했어요."),
         });
         return { ok: false, continuity: continuityForEpoch(epoch), error };
       }
@@ -469,7 +469,7 @@ export function useRoomDirectory({
         if (!isCurrentEpoch(epoch)) throw new RoomDirectoryOperationSuperseded();
         publishSyncIssue({
           category: "room_directory_unavailable",
-          message: error instanceof Error ? error.message : "Room directory synchronization failed.",
+          message: userFacingError(error, "방 목록을 확인하지 못했어요."),
         });
         return { ok: false, continuity: continuityForEpoch(epoch), error };
       }
@@ -587,7 +587,7 @@ export function useRoomDirectory({
       if (!isCurrentEpoch(epoch)) return;
       publishSyncIssue({
         category: "room_directory_unavailable",
-        message: error instanceof Error ? error.message : "Room directory synchronization failed.",
+        message: userFacingError(error, "방 목록을 확인하지 못했어요."),
       });
     });
   }, [
@@ -622,7 +622,7 @@ export function useRoomDirectory({
         if (!active) return;
         managerSnapshotRef.current = null;
         publishSyncIssue({ category: "room_directory_unavailable",
-          message: error instanceof Error ? error.message : "방 목록 변경 연결을 확인하지 못했어요." });
+          message: userFacingError(error, "방 목록 변경 연결을 확인하지 못했어요.") });
       },
       remoteOwner?.onStatus,
       !remoteOwner

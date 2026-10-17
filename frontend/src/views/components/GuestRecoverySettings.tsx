@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Copy, KeyRound, Link2 } from "lucide-react";
 
 import { issueGuestRecoveryCode, type UserProfileIdentity } from "../../api";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function GuestRecoverySettings({
   identity,
@@ -52,7 +53,7 @@ export default function GuestRecoverySettings({
       setStatus("");
     } catch (error) {
       if (scope !== generation.current) return;
-      setStatus(error instanceof Error ? error.message : "복구 코드를 만들지 못했어요.");
+      setStatus(userFacingError(error, "복구 코드를 만들지 못했어요."));
     } finally {
       if (scope === generation.current) {
         inFlight.current = false;

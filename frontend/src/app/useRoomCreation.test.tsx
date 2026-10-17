@@ -287,7 +287,7 @@ describe("useRoomCreation", () => {
 
     await act(result.current.addFreshRoom);
     const terminalIntent = apiMocks.createRoom.mock.calls[0];
-    expect(window.alert).toHaveBeenCalledWith("invalid room");
+    expect(window.alert).toHaveBeenCalledWith("방을 만들지 못했어요.");
 
     let staleAttempt!: Promise<boolean>;
     await act(async () => {

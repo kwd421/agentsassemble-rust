@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import {
-  fetchRoomMessageContext,
+import { userFacingError } from "../lib/apiErrors";
+import {  fetchRoomMessageContext,
   searchRoomMessages,
   type MessageSearchAuthority,
   type RoomSearchResult,
@@ -90,7 +90,7 @@ export function useRoomMessageSearch({
           if (requestVersionRef.current !== version) return;
           setResults([]);
           setNextCursor("");
-          setError(reason instanceof Error ? reason.message : "메시지를 검색하지 못했어요.");
+          setError(userFacingError(reason, "메시지를 검색하지 못했어요."));
         })
         .finally(() => {
           if (requestVersionRef.current === version) setLoading(false);
@@ -123,7 +123,7 @@ export function useRoomMessageSearch({
       setError("");
     } catch (reason) {
       if (requestVersionRef.current !== version) return;
-      setError(reason instanceof Error ? reason.message : "검색 결과를 더 불러오지 못했어요.");
+      setError(userFacingError(reason, "검색 결과를 더 불러오지 못했어요."));
     } finally {
       if (requestVersionRef.current === version) setLoadingMore(false);
     }

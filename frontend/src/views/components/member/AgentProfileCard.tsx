@@ -6,6 +6,7 @@ import { AGENT_PROFILE_NAME_CHARACTER_LIMIT } from "../../../types/generated/AGE
 import type { RoomAgentSession } from "../../../api";
 import ImageCropper from "../ImageCropper";
 import ProviderLogo from "../ProviderLogo";
+import { userFacingError } from "../../../lib/apiErrors";
 
 export default function AgentProfileCard({ session, avatarImage, detail, onClose, onSave, onAvatarUpdate, children }: {
   session: RoomAgentSession;
@@ -83,7 +84,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
         // The updated header is the only feedback; no success box.
       }
     } catch (failure) {
-      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "프로필을 저장하지 못했어요. 다시 시도해 주세요.");
+      if (!controller.signal.aborted) setError(userFacingError(failure, "프로필을 저장하지 못했어요. 다시 시도해 주세요."));
     } finally {
       if (!controller.signal.aborted) setBusy(false);
       if (uploadRef.current === controller) uploadRef.current = null;

@@ -34,7 +34,7 @@ it("shows hidden/skipped servers and requires explicit receipt lookup after a lo
   expect(screen.queryByRole("list", { name: "서버별 탈퇴 정리 결과" })).toBeNull();
   await user.type(screen.getByLabelText("복구 코드"), "fixture-input");
   await user.click(screen.getByRole("button", { name: "복구 코드로 확인하고 탈퇴" }));
-  expect((await screen.findByRole("alert")).textContent).toContain("최종 응답");
+  expect((await screen.findByRole("alert")).textContent).toContain("완료를 확인하지 못했어요. 다시 시도해 주세요.");
   expect(screen.getByRole("list", { name: "서버별 탈퇴 정리 결과" }).textContent).toContain("지금 연결할 수 없어요.");
   expect(disableCalls).toBe(1); expect(unsignedPost).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "다시 시도" }));

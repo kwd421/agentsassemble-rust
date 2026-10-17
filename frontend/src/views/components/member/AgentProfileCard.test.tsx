@@ -28,7 +28,7 @@ it("keeps editing with identity, preserves failed drafts and views only canonica
   rerender(<AgentProfileCard session={{ ...session, display_name: "Canonical change" }} onSave={onSave}>{runtimeDraft}</AgentProfileCard>);
   expect((screen.getByLabelText("표시 이름") as HTMLInputElement).value).toBe("New name");
   fireEvent.click(screen.getByRole("button", { name: "변경사항 저장" }));
-  await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Save failed"));
+  await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("프로필을 저장하지 못했어요. 다시 시도해 주세요."));
   expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ session_id: session.session_id }), { display_name: "New name" });
   fireEvent.click(screen.getByRole("button", { name: "변경사항 저장" }));
   // Saving shows nothing beyond the updated header: no success box.

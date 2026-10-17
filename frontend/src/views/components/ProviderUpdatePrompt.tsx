@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Check, CircleAlert, ExternalLink, LoaderCircle, RotateCw } from "lucide-react";
-import { ApiError } from "../../lib/apiErrors";
+import { ApiError, userFacingError } from "../../lib/apiErrors";
 import { providerUpdateOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
 import type { ProviderAvailability } from "../../types/generated/ProviderAvailability";
@@ -51,7 +51,7 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
         "provider_update_installation_unconfirmed", "provider_update_catalog_unavailable",
       ].includes(failure.code);
       if (terminalFailure) updatingCallback.current?.(false);
-      const message = failure instanceof Error ? failure.message : "버전을 확인하지 못했어요.";
+      const message = userFacingError(failure, "버전을 확인하지 못했어요.");
       setError({ message: version && !terminalFailure ? `${message} 업데이트 결과를 다시 확인해 주세요.` : message,
         code: failure instanceof ApiError ? failure.code : undefined });
     } finally {
@@ -115,7 +115,7 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
         ? <button type="button" className="dc-setup-button" data-variant="primary" onClick={() => void update()}>업데이트</button>
         : <button type="button" className="dc-setup-button" data-variant="primary"
           onClick={() => void openProviderSetupHelp(providerId).catch((failure: unknown) =>
-            setError({ message: failure instanceof Error ? failure.message : "공식 안내를 열지 못했어요." }))}>
+            setError({ message: userFacingError(failure, "공식 안내를 열지 못했어요.") }))}>
           업데이트 방법 보기<ExternalLink size={13} aria-hidden="true" /></button>}
     </>}>
     <p className="dc-setup-text" role="status"><strong>새 버전</strong>

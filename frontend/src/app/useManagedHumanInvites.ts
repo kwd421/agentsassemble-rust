@@ -7,6 +7,7 @@ import {
   type ManagedHumanInviteCustody,
 } from "../api";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
+import { userFacingError } from "../lib/apiErrors";
 
 export type HumanInviteRevocationState =
   | "idle"
@@ -278,9 +279,7 @@ export function useManagedHumanInvites({
     } catch (error) {
       if (error === COPY_NO_LONGER_ELIGIBLE) return false;
       publishStatus(
-        error instanceof Error
-          ? error.message
-          : "현재 공개 초대 상태를 확인하지 못했어요."
+        userFacingError(error, "현재 공개 초대 상태를 확인하지 못했어요.")
       );
       return false;
     }

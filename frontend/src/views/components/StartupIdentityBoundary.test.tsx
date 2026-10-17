@@ -282,5 +282,5 @@ it.each([true, false])("keeps startup paths collapsed on desktop=%s", (desktop) 
   render(<StartupIdentityBoundary>{() => <main>room</main>}</StartupIdentityBoundary>);
   expect(screen.getByRole("heading").textContent).toBe("앱을 시작하지 못했어요.");
   expect(screen.getByRole("alert").textContent).not.toContain("/Users/");
-  expect(screen.getByText("Storage failed at /Users/test/private").closest("details")?.open).toBe(false);
+  expect(screen.getByText("이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없어요.").closest("details")?.open).toBe(false);
 });

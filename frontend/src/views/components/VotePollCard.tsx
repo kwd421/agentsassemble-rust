@@ -5,6 +5,7 @@ import {
   type VoteSummary,
 } from "../../api";
 import { useRoomSocket } from "../../RoomSocketContext";
+import { userFacingError } from "../../lib/apiErrors";
 
 function remainingTimeLabel(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
@@ -46,7 +47,7 @@ export default function VotePollCard({
         setError("");
       })
       .catch((errorValue) => {
-        setError(errorValue instanceof Error ? errorValue.message : "투표 현황을 불러오지 못했어요.");
+        setError(userFacingError(errorValue, "투표 현황을 불러오지 못했어요."));
       });
   }, [revision, roomSocket, voteId]);
 
@@ -85,7 +86,7 @@ export default function VotePollCard({
         ...(option === myChoice ? {} : { voteChoice: option }),
       });
     } catch (errorValue) {
-      setError(errorValue instanceof Error ? errorValue.message : "투표 실패");
+      setError(userFacingError(errorValue, "투표 실패"));
     } finally {
       setBusyOption("");
     }
@@ -103,7 +104,7 @@ export default function VotePollCard({
         voteId,
       });
     } catch (errorValue) {
-      setError(errorValue instanceof Error ? errorValue.message : "투표 종료 실패");
+      setError(userFacingError(errorValue, "투표 종료 실패"));
     } finally {
       setBusyOption("");
     }

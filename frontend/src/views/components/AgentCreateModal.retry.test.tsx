@@ -23,9 +23,9 @@ it.each([false, true])("recovers the same creation after uncertain outcome (star
   const startToggle = screen.getByRole("switch", { name: "추가하자마자 실행" });
   if ((startToggle.getAttribute("aria-checked") === "true") !== start) await userEvent.click(startToggle);
   await userEvent.click(primaryActionButton());
-  await screen.findByText("uncertain");
+  await screen.findByText("에이전트 추가 실패");
   await userEvent.click(primaryActionButton());
-  await screen.findByText("connection unavailable");
+  await screen.findByText("에이전트 추가 실패");
   await userEvent.click(primaryActionButton());
   await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   expect(onCreate).toHaveBeenCalledOnce();
@@ -42,7 +42,7 @@ it("uses a new creation intent after the user changes the retained form", async 
   await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
   await chooseWorkspace();
   await userEvent.click(primaryActionButton());
-  await screen.findByText("uncertain");
+  await screen.findByText("에이전트 추가 실패");
   await userEvent.type(screen.getByPlaceholderText("방에 표시될 이름"), " changed");
   await userEvent.click(primaryActionButton());
   await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
@@ -59,7 +59,7 @@ it("retains the exact creation retry when only the catalog revision refreshes", 
   await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
   await chooseWorkspace();
   await userEvent.click(primaryActionButton());
-  await screen.findByText("uncertain");
+  await screen.findByText("에이전트 추가 실패");
   view.rerender(<AgentCreateModal {...props} catalogRevision="cat-after" />);
   await userEvent.click(primaryActionButton());
   await waitFor(() => expect(retry).toHaveBeenCalledOnce());

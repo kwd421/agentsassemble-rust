@@ -281,7 +281,7 @@ describe("MemberList component wiring", () => {
 
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
-        "canonical role update rejected"
+        "역할을 변경하지 못했어요."
       )
     );
     expect(onRoleChange).toHaveBeenCalledWith("agent-1", "reviewer");

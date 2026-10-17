@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { registerFreshLocalHost } from "../../lib/central/freshHostRegistration";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function FreshHostRegistrationButton({ serverId, deviceToken, disabled, onRegistered }: { serverId: string; deviceToken: string; disabled: boolean; onRegistered: () => Promise<void> }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -8,7 +9,7 @@ export default function FreshHostRegistrationButton({ serverId, deviceToken, dis
     if (disabled || operation.current) return;
     operation.current = true; setBusy(true); setError("");
     try { await registerFreshLocalHost(serverId, deviceToken); await onRegistered(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "새 서버를 등록하지 못했어요."); }
+    catch (reason) { setError(userFacingError(reason, "새 서버를 등록하지 못했어요.")); }
     finally { operation.current = false; setBusy(false); }
   }
   return <section aria-label="새 계정으로 서버 등록" aria-busy={busy}>

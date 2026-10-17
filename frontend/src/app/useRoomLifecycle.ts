@@ -1,5 +1,5 @@
 import { currentRoomDirectoryAuthority } from "../lib/roomDirectoryContract";
-import { ApiError } from "../lib/apiErrors";
+import { ApiError, userFacingError } from "../lib/apiErrors";
 import { useCallback, useRef, useState } from "react";
 import { changeRoomLifecycle, type RoomLifecycleIntent, type RoomLifecycleTransport } from "../api/roomLifecycle";
 import { createSecureRequestId } from "../lib/secureRequestId";
@@ -33,7 +33,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
       } while (directoryInvalidatedRef.current);
     } catch (failure) {
       if (!(failure instanceof RoomDirectoryOperationSuperseded)) {
-        setError(failure instanceof Error ? failure.message : "방 목록을 확인하지 못했어요.");
+        setError(userFacingError(failure, "방 목록을 확인하지 못했어요."));
       }
     } finally {
       busyRef.current = false;
@@ -67,7 +67,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
       if (failure instanceof ApiError && failure.code === "room_deletion_pending" && failure.resolution === "unresolved") {
         setNotice("방 삭제를 처리하고 있어요. 에이전트 정리가 끝난 뒤 같은 요청으로 완료 여부를 확인할 수 있어요.");
         directoryInvalidatedRef.current = true;
-      } else setError(failure instanceof Error ? failure.message : "방 관리 결과를 확인하지 못했어요.");
+      } else setError(userFacingError(failure, "방 관리 결과를 확인하지 못했어요."));
     } finally {
       busyRef.current = false;
       setBusy(false);

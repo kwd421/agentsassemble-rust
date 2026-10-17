@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 
 import { createRoom } from "../api";
-import { ApiError } from "../lib/apiErrors";
+import { ApiError, userFacingError } from "../lib/apiErrors";
 import { createFreshRoom, type RoomDockItem } from "../lib/roomDockModel";
 import type { RoomDirectoryAuthority } from "../lib/roomDirectoryContract";
 import { createSecureRequestId } from "../lib/secureRequestId";
@@ -46,7 +46,7 @@ function ambiguousFailure(error: unknown): boolean {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "방을 만들지 못했어요.";
+  return userFacingError(error, "방을 만들지 못했어요.");
 }
 
 export function useRoomCreation({

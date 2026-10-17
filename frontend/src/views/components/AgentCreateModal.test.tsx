@@ -810,7 +810,7 @@ describe("AgentCreateModal", () => {
     await userEvent.click(deleteButton);
 
     await waitFor(() =>
-      expect(screen.getByText("secure store unavailable")).toBeTruthy()
+      expect(screen.getByText("DeepSeek 키를 삭제하지 못했어요.")).toBeTruthy()
     );
     expect(screen.getByRole("dialog", { name: "에이전트 추가" })).toBeTruthy();
     expect((deleteButton as HTMLButtonElement).disabled).toBe(false);

@@ -2,6 +2,7 @@ import ServerBackupCard from "./ServerBackupCard";
 import AccountDeletionSettings from "./AccountDeletionSettings";
 import { useEffect, useRef, useState } from "react";
 import { CENTRAL_SESSION_CLEARED_EVENT, CENTRAL_SESSION_CHANGED_EVENT, centralAccountEntryUrl, centralIdentityConfigured, loadCentralSession, logoutCentral } from "../../lib/central/identity";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function CentralAccountSettings({ disabled, showEntryLink = true }: { disabled: boolean; showEntryLink?: boolean }) {
   const [session, setSession] = useState(loadCentralSession);
@@ -19,12 +20,7 @@ export default function CentralAccountSettings({ disabled, showEntryLink = true 
       await logoutCentral();
       window.location.reload();
     } catch (reason) {
-      if (reason instanceof TypeError || (typeof DOMException !== "undefined" && reason instanceof DOMException)) setError("로그아웃하지 못했어요. 다시 시도해 주세요.");
-      else {
-        const text = typeof reason === "string" ? reason : reason instanceof Error ? reason.message : "";
-        const line = text.split("\n")[0]?.trim() ?? "";
-        setError(line && /[가-힣]/.test(line) ? line : "로그아웃하지 못했어요. 다시 시도해 주세요.");
-      }
+      setError(userFacingError(reason, "로그아웃하지 못했어요. 다시 시도해 주세요."));
       operation.current = false;
       setBusy(false);
     }

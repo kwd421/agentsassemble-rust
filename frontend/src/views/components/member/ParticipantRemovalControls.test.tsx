@@ -19,7 +19,7 @@ describe("participant removal confirmation", () => {
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(onRemove).toHaveBeenCalledWith("guest", action);
     reject(new Error("Removal was rejected"));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Removal was rejected"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("참가자를 제거하지 못했어요."));
     expect((screen.getByRole("button", { name: action === "kick" ? "내보내기" : "영구 퇴장" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

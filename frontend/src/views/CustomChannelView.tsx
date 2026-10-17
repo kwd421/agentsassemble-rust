@@ -16,6 +16,7 @@ import { ReplyDraft } from "./components/MessageReply";
 import { useMessagePins } from "./useMessagePins";
 import { anonymousAuthorRevision } from "../lib/participantAnonymization";
 import type { RoomMessageSearchController } from "./useRoomMessageSearch";
+import { userFacingError } from "../lib/apiErrors";
 
 type Transcript = ReturnType<typeof useChannelTranscript>;
 
@@ -104,7 +105,7 @@ export default function CustomChannelView({
       setAtBottom(false); restoreScroll.current = null;
       transcript.showContext(context.events);
     } catch (cause) {
-      if (mounted.current && scopeRef.current === scope) setSendError({ identity, message: cause instanceof Error ? cause.message : "메시지를 열지 못했어요." });
+      if (mounted.current && scopeRef.current === scope) setSendError({ identity, message: userFacingError(cause, "메시지를 열지 못했어요.") });
     }
   }
   useEffect(() => {
@@ -125,7 +126,7 @@ export default function CustomChannelView({
       setDraft({ identity, value: "" }); focusAfterSend.current = true;
     } catch (cause) {
       if (mounted.current && selectionRef.current === selection) {
-        setSendError({ identity, message: cause instanceof Error ? cause.message : "메시지를 보내지 못했어요." });
+        setSendError({ identity, message: userFacingError(cause, "메시지를 보내지 못했어요.") });
         if (cause instanceof RoomSocketSayError && cause.retry) {
           setDraft((current) => current.identity === identity && current.value === value
             ? { ...current, retry: cause.retry } : current);

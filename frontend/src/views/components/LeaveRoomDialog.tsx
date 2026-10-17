@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { LogOut, X } from "lucide-react";
+import { userFacingError } from "../../lib/apiErrors";
 
 export default function LeaveRoomDialog({
   roomLabel,
@@ -37,9 +38,7 @@ export default function LeaveRoomDialog({
       onClose();
     } catch (errorValue) {
       setError(
-        errorValue instanceof Error
-          ? errorValue.message
-          : "방에서 나가지 못했어요."
+        userFacingError(errorValue, "방에서 나가지 못했어요.")
       );
       setBusy(false);
     }

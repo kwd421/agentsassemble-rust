@@ -99,7 +99,7 @@ describe("member invite screen", () => {
 
   it.each([
     ["host", "참가를 마치지 못했어요. 다시 시도해 주세요.", new TypeError("fetch failed")],
-    ["central", "참가를 마치지 못했어요. 다시 시도해 주세요.", new Error("로그인 서버에 연결할 수 없어요")],
+    ["central", "로그인 서버에 연결할 수 없어요", new Error("로그인 서버에 연결할 수 없어요")],
     ["expiry", "참가 요청을 사용할 수 없어요", new ApiError(401, "private internal failure", "member_challenge_invalid")],
     ["redeem", "참가를 마치지 못했어요. 다시 시도해 주세요.", new ApiError(502, "internal", "member_redeem_failed")],
     ["left/kicked", "이 방에는 다시 참가할 수 없어요. 방 관리자에게 문의해 주세요.", new ApiError(403, "internal", "member_membership_ended")],

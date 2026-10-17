@@ -8,8 +8,9 @@ import { isDesktopWebview } from "../../lib/desktopBridge";
 import { clearRememberedGuestProfile } from "../../lib/deviceIdentity";
 import { googleIdentityApi, loadGoogleIdentityScript } from "../../lib/googleIdentity";
 import { persistRoomGuestSession } from "../../lib/roomGuestSession";
+import { userFacingError } from "../../lib/apiErrors";
 
-const errorMessage = (error: unknown) => error instanceof Error ? error.message : "계정 요청을 완료하지 못했어요.";
+const errorMessage = (error: unknown) => userFacingError(error, "계정 요청을 완료하지 못했어요.");
 
 export default function GoogleAccountSettings({ identity }: { identity: UserProfileIdentity }) {
   const [status, setStatus] = useState<AccountStatus | null>(null);

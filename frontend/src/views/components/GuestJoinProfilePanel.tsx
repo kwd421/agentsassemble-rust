@@ -4,6 +4,7 @@ import { LogIn, RotateCcw } from "lucide-react";
 import { fileToBase64 } from "../../api/http";
 import type { OperatorPairingState } from "../../app/useRoomAdmission";
 import ImageCropper from "./ImageCropper";
+import { userFacingError } from "../../lib/apiErrors";
 
 type GuestJoinProfilePanelProps = {
   children?: ReactNode;
@@ -63,7 +64,7 @@ export default function GuestJoinProfilePanel({
       setCropFile(null);
       setUploadStatus("입장할 때 사진이 저장돼요.");
     } catch (error) {
-      setUploadStatus(error instanceof Error ? error.message : "프로필 사진 준비 실패");
+      setUploadStatus(userFacingError(error, "프로필 사진 준비 실패"));
     } finally {
       setAvatarPreparing(false);
     }

@@ -16,6 +16,7 @@ import { hasRemoteWorkspace, remoteSessionTransport, sessionHostServerId, subscr
 import { roomMessagePayload } from "../../lib/roomMessagePayload";
 import { RoomSocketSayError, type RoomSocketHandle } from "../../roomSocketTypes";
 import type { RoomEvent } from "../../types/generated/RoomEvent";
+import { userFacingError } from "../../lib/apiErrors";
 
 // One owner per host and person: its scheduler shares the three upload slots across
 // every room that person has open there. A room is registered under it with the exact authority
@@ -119,7 +120,7 @@ subscribeRemoteWorkspace(() => {
 });
 
 export function uploadFailureMessage(error: unknown, fileLimit?: number): string {
-  if (!(error instanceof UploadFailure)) return error instanceof Error ? error.message : "파일을 올리지 못했어요.";
+  if (!(error instanceof UploadFailure)) return userFacingError(error, "파일을 올리지 못했어요.");
   if (error.code === "file_size_limit") {
     return fileLimit ? `파일은 최대 ${Math.floor(fileLimit / (1024 * 1024))}MB까지 올릴 수 있어요.` : "파일이 너무 커요.";
   }

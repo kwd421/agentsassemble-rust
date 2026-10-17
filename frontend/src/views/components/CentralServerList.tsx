@@ -13,6 +13,7 @@ import {
 } from "../../lib/central/identity";
 import { loadRoomDockItems } from "../../lib/roomDockPersistence";
 import ImageCropDialog from "./ImageCropDialog";
+import { userFacingError } from "../../lib/apiErrors";
 
 const OS_LABELS = { macos: "macOS", windows: "Windows", linux: "Linux", other: "기타 OS" };
 
@@ -94,7 +95,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         if (!stopped) { setError(""); await onRefresh(); }
       } catch (reason) {
         if (!stopped) {
-          setError(reason instanceof Error ? reason.message : "이 컴퓨터의 은퇴를 다시 확인하고 있어요.");
+          setError(userFacingError(reason, "이 컴퓨터의 은퇴를 다시 확인하고 있어요."));
           timer = setTimeout(() => void retry(), 1000);
         }
       }
@@ -111,7 +112,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
       setIconFile(null); setIconTarget(null); setIconStatus("");
       await onRefresh();
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "서버 아이콘을 저장하지 못했어요.";
+      const message = userFacingError(reason, "서버 아이콘을 저장하지 못했어요.");
       if (icon) setIconStatus(message); else setError(message);
     } finally { operation.current = false; setSaving(false); }
   }
@@ -131,7 +132,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
       setEditingId(null);
       await onRefresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "서버 이름을 저장하지 못했어요.");
+      setError(userFacingError(reason, "서버 이름을 저장하지 못했어요."));
     } finally { operation.current = false; setSaving(false); }
   }
 
@@ -169,9 +170,9 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
       operation.current = true; setSaving(true); setError("");
       try { await resolveCentralServerDuplicates(conflict, confirmed.server_id, localHost?.server_id ? { serverId: localHost.server_id, deviceToken } : undefined); setConfirmKeeper(""); await onRefresh(); }
       catch (reason) {
-        setError(reason instanceof Error ? reason.message : "서버를 정리하지 못했어요. 다시 확인해 주세요.");
+        setError(userFacingError(reason, "서버를 정리하지 못했어요. 다시 확인해 주세요."));
         // Re-read the central keeper/revision after conflicts or a partial completion.
-        try { await onRefresh(); } catch (refreshError) { setError(refreshError instanceof Error ? refreshError.message : "서버 목록을 다시 확인하지 못했어요."); }
+        try { await onRefresh(); } catch (refreshError) { setError(userFacingError(refreshError, "서버 목록을 다시 확인하지 못했어요.")); }
       } finally { operation.current = false; setSaving(false); }
     };
     return <section className="dc-server-list" aria-label="중복 서버 정리" aria-busy={saving}>

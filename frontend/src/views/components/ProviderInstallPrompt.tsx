@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Check, CircleAlert, Copy, Download, ExternalLink, LoaderCircle } from "lucide-react";
-import { ApiError } from "../../lib/apiErrors";
+import { ApiError, userFacingError } from "../../lib/apiErrors";
 import { providerInstallOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
 import { shellCommandText } from "../../lib/shellCommandText";
@@ -63,7 +63,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
       }
       setOffer(null);
       setPhase("idle");
-      setError(failure instanceof Error ? failure.message : "설치 정보를 확인하지 못했어요.");
+      setError(userFacingError(failure, "설치 정보를 확인하지 못했어요."));
     } finally {
       inflight.current = false;
     }
@@ -84,7 +84,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
       if (failure instanceof ApiError && failure.code === "provider_install_catalog_unavailable") onInstalled?.();
       setOffer(null);
       setPhase("idle");
-      const message = failure instanceof Error ? failure.message : "설치하지 못했어요.";
+      const message = userFacingError(failure, "설치하지 못했어요.");
       setError(terminal ? message : `${message} 설치가 끝났는지 상태를 다시 확인해 주세요.`);
     } finally {
       inflight.current = false;
@@ -95,7 +95,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
     try {
       await openProviderSetupHelp(providerId);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "공식 안내를 열지 못했어요.");
+      setError(userFacingError(failure, "공식 안내를 열지 못했어요."));
     }
   }
 
