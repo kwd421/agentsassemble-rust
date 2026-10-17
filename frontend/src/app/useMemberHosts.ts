@@ -19,6 +19,11 @@ const MEMBER_SELECT_TIMEOUT_MS = 30_000;
 // After a day-long quota park the directory's own retry fires at the same
 // reset instant. Host timers hold back past it so that retry lands first
 // and reconcile supersedes them instead of doubling the central request.
+// Deadline stagger alone cannot order them: coalesced timers (one big clock
+// jump, sleep, a throttled tab) fire the host while the directory refresh
+// is still in flight, so quota-parked hosts (tracked below) never attach
+// straight from the anchor while central is unconfirmed — they hold back
+// until the directory retry lands and reconcile follows it.
 const QUOTA_RETRY_STAGGER_MS = 30_000;
 
 function memberSelectErrorNeedsFreshChallenge(error: unknown): boolean {
@@ -112,6 +117,19 @@ export function useMemberHosts({
   const reconnectAttempts = useRef(new Map<string, number>());
   const reconnectCauses = useRef(new Map<string, MemberHostReconnectCause>());
   const reconnectRetryAfter = useRef(new Map<string, number | null>());
+  // Hosts whose reconnect timer was scheduled while the daily allowance was
+  // spent. While central is unconfirmed such a timer never attaches on its
+  // own: the directory owns the next attempt, so it holds back (timer only,
+  // no central request) until the directory retry lands and reconcile
+  // drives the single attach. Cleared together with the timer everywhere
+  // the timer is superseded, dropped, or consumed.
+  const quotaParkedHosts = useRef(new Set<string>());
+  const clearReconnectTimer = useCallback((serverId: string) => {
+    const timer = reconnectTimers.current.get(serverId);
+    if (timer !== undefined) window.clearTimeout(timer);
+    reconnectTimers.current.delete(serverId);
+    quotaParkedHosts.current.delete(serverId);
+  }, []);
   const snapshotsRef = useRef<MemberHostSnapshot[]>([]);
   snapshotsRef.current = snapshots;
   const directoryRef = useRef(directory);
@@ -137,9 +155,7 @@ export function useMemberHosts({
   }, []);
 
   const dropHost = useCallback((serverId: string) => {
-    const timer = reconnectTimers.current.get(serverId);
-    if (timer !== undefined) window.clearTimeout(timer);
-    reconnectTimers.current.delete(serverId);
+    clearReconnectTimer(serverId);
     flights.current.get(serverId)?.abort();
     flights.current.delete(serverId);
     const admission = admissions.current.get(serverId);
@@ -147,7 +163,7 @@ export function useMemberHosts({
     attempted.current.delete(serverId);
     detachMemberHost(admission);
     setSnapshots((current) => current.filter((entry) => entry.serverId !== serverId));
-  }, []);
+  }, [clearReconnectTimer]);
 
   const reattachHostRef = useRef<(serverId: string) => void>(() => undefined);
 
@@ -163,18 +179,32 @@ export function useMemberHosts({
     // the per-host backoff never fires into the quota block. The holdback
     // runs past the reset so the directory's own retry lands first.
     const quotaWait = centralDailyQuotaWaitMs(identityRef.current.personId);
-    const delay = quotaWait > 0
+    const quotaParked = quotaWait > 0;
+    if (quotaParked) quotaParkedHosts.current.add(serverId);
+    const delay = quotaParked
       ? quotaWait + QUOTA_RETRY_STAGGER_MS
       : memberHostReconnectDelay(attempt, cause, retryAfterMs);
-    reconnectTimers.current.set(serverId, window.setTimeout(() => {
+    const fire = () => {
       reconnectTimers.current.delete(serverId);
       // One in-flight reconnect per host, shared by every subscription: a
       // timer that fires into a running attempt stands down instead of
       // aborting it — that attempt's own outcome schedules the next step.
       if (flights.current.has(serverId)) return;
+      // A quota-parked host never jumps the directory's reset retry. Its
+      // deadline runs past the reset, but coalesced timers can still fire
+      // it while the directory refresh is in flight; attaching straight
+      // from the anchor then would double the central request when
+      // reconcile follows the landed retry. Hold back (timer only, no
+      // request) while central is unconfirmed instead.
+      if (quotaParkedHosts.current.has(serverId) && directoryRef.current?.status === "central-unconfirmed") {
+        reconnectTimers.current.set(serverId, window.setTimeout(fire, QUOTA_RETRY_STAGGER_MS));
+        return;
+      }
+      quotaParkedHosts.current.delete(serverId);
       reattachHostRef.current(serverId);
-    }, delay));
-  }, []);
+    };
+    reconnectTimers.current.set(serverId, window.setTimeout(fire, delay));
+  }, [clearReconnectTimer]);
 
   const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal) => {
     const { personId: activePerson, sessionToken: activeToken } = identityRef.current;
@@ -217,6 +247,7 @@ export function useMemberHosts({
       const timer = reconnectTimers.current.get(serverId);
       if (timer !== undefined) window.clearTimeout(timer);
       reconnectTimers.current.delete(serverId);
+      quotaParkedHosts.current.delete(serverId);
       reconnectAttempts.current.delete(serverId);
       reconnectCauses.current.delete(serverId);
       reconnectRetryAfter.current.delete(serverId);
@@ -232,9 +263,7 @@ export function useMemberHosts({
         // auto-reconcile nor retry re-attaches silently; fresh consent
         // overwrites it (re-join path).
         refused.current.add(serverId);
-        const timer = reconnectTimers.current.get(serverId);
-        if (timer !== undefined) window.clearTimeout(timer);
-        reconnectTimers.current.delete(serverId);
+        clearReconnectTimer(serverId);
         setPhase(serverId, "disconnected", previousAnchor?.rooms ?? null, origin, error.message);
         return;
       }
@@ -255,7 +284,7 @@ export function useMemberHosts({
       reconnectRetryAfter.current.set(serverId, memberHostRetryAfterMs(error));
       scheduleReconnect(serverId);
     }
-  }, [setPhase, dropHost, scheduleReconnect]);
+  }, [setPhase, dropHost, scheduleReconnect, clearReconnectTimer]);
 
   // Account switch or logout ends every member session; anchors are cleared
   // by the central identity owner, so re-login re-attaches from membership.
@@ -266,6 +295,7 @@ export function useMemberHosts({
     return () => {
       for (const timer of reconnectTimers.current.values()) window.clearTimeout(timer);
       reconnectTimers.current.clear();
+      quotaParkedHosts.current.clear();
       reconnectAttempts.current.clear();
       reconnectCauses.current.clear();
       reconnectRetryAfter.current.clear();
@@ -374,9 +404,7 @@ export function useMemberHosts({
       // fresh origin/generation) supersedes a pending slow timer: drop it so
       // the prompt attempt below is the single in-flight reconnect and no
       // stale timer fires a duplicate behind it.
-      const pendingTimer = reconnectTimers.current.get(server.server_id);
-      if (pendingTimer !== undefined) window.clearTimeout(pendingTimer);
-      reconnectTimers.current.delete(server.server_id);
+      clearReconnectTimer(server.server_id);
       // Another in-place flow may already hold this host's live session
       // (first-join consent just completed): adopt its rooms without opening
       // a second transport.
@@ -393,7 +421,7 @@ export function useMemberHosts({
       }
       void attach(server.server_id, epoch, origin);
     }
-  }, [attach, dropHost, scheduleReconnect, setPhase]);
+  }, [attach, dropHost, scheduleReconnect, setPhase, clearReconnectTimer]);
 
   useEffect(() => {
     if (!personId || !sessionToken) {
@@ -417,9 +445,9 @@ export function useMemberHosts({
     const epoch = server?.registration_epoch || anchor?.registration_epoch || "";
     if (!epoch) return;
     attempted.current.delete(serverId);
-    const timer = reconnectTimers.current.get(serverId);
-    if (timer !== undefined) window.clearTimeout(timer);
-    reconnectTimers.current.delete(serverId);
+    // Explicit timer/refresh intent takes over the parked holdback: the
+    // attempt below either succeeds or schedules its own next step.
+    clearReconnectTimer(serverId);
     dropHost(serverId);
     if (server) {
       reconcile();
@@ -428,7 +456,7 @@ export function useMemberHosts({
     // Central is unconfirmed so reconcile cannot run: attach straight from
     // the anchor instead of stranding the retry in silence.
     void attach(serverId, epoch, anchor?.endpoint_origin || "");
-  }, [attach, dropHost, reconcile]);
+  }, [attach, dropHost, reconcile, clearReconnectTimer]);
 
   const retryHost = useCallback((serverId: string) => {
     // Explicit user retry is fresh intent: restart the backoff and lift a

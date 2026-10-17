@@ -6,7 +6,7 @@ import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
 import { CentralTemporaryError, fetchCentral } from "./connectionError";
-import { acquireCentralPermit, centralDailyQuotaNotice, centralDailyQuotaWaitMs, centralPathFamily, noteCentral429, noteCentralDailyQuotaExhausted, noteCentralSuccess } from "./centralRequestGovernor";
+import { acquireCentralPermit, centralDailyQuotaActionNotice, centralDailyQuotaWaitMs, centralPathFamily, noteCentral429, noteCentralDailyQuotaExhausted, noteCentralSuccess } from "./centralRequestGovernor";
 import {
   fetchDesktopCentralRegistration,
   fetchDesktopOperatorRuntime,
@@ -408,9 +408,11 @@ async function responsePayload<T>(response: Response, central = true, signal?: A
       // Spent daily allowance, never a short rate limit: park the whole
       // account until the next 00:00 UTC instead of polling. The governor
       // stays the single owner of the block; the error carries the same
-      // wait so per-host backoffs honor it too.
+      // wait so per-host backoffs honor it too. The message is the neutral
+      // explicit-action line (no friend-room wording): reconnect surfaces
+      // render their own reset-time notice from the governor.
       noteCentralDailyQuotaExhausted(accountId);
-      throw Object.assign(new CentralTemporaryError(centralDailyQuotaNotice(accountId) ?? message),
+      throw Object.assign(new CentralTemporaryError(centralDailyQuotaActionNotice(accountId) ?? message),
         { status: response.status, code, retryAfterMs: centralDailyQuotaWaitMs(accountId) });
     }
     if (central && (response.status === 429 || response.status >= 500)) {

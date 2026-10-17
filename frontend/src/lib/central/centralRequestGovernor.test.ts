@@ -3,6 +3,7 @@ import {
   CENTRAL_REQUESTS_PER_MIN,
   MEMBER_PREVIEW_PER_HOST_PER_10MIN,
   acquireCentralPermit,
+  centralDailyQuotaActionNotice,
   centralDailyQuotaNotice,
   centralDailyQuotaResetAtMs,
   centralDailyQuotaWaitMs,
@@ -123,6 +124,11 @@ describe("centralRequestGovernor", () => {
       expect(centralDailyQuotaResetAtMs("person")).toBe(Date.UTC(2026, 9, 18));
       expect(centralDailyQuotaNotice("person")).toContain("이후에 다시 연결돼요.");
       expect(centralDailyQuotaNotice("bob")).toBeNull();
+      // Explicit actions get the neutral line with the local reset time,
+      // never the friend-room reconnect line.
+      expect(centralDailyQuotaActionNotice("person")).toContain("이후에 다시 해 주세요.");
+      expect(centralDailyQuotaActionNotice("person")).not.toContain("친구 방");
+      expect(centralDailyQuotaActionNotice("bob")).toBeNull();
       // Just before the reset the block still holds; past reset+jitter it lifts.
       vi.setSystemTime(new Date(Date.UTC(2026, 9, 18) - 1_000));
       expect(() => acquireCentralPermit("/v1/bootstrap", "person")).toThrowError();
@@ -130,6 +136,7 @@ describe("centralRequestGovernor", () => {
       acquireCentralPermit("/v1/bootstrap", "person");
       expect(centralDailyQuotaResetAtMs("person")).toBeNull();
       expect(centralDailyQuotaNotice("person")).toBeNull();
+      expect(centralDailyQuotaActionNotice("person")).toBeNull();
       expect(centralDailyQuotaWaitMs("person")).toBe(0);
     } finally {
       vi.useRealTimers();
@@ -144,6 +151,7 @@ describe("centralRequestGovernor", () => {
       expect(centralDailyQuotaWaitMs("person")).toBe(0);
       expect(centralDailyQuotaResetAtMs("person")).toBeNull();
       expect(centralDailyQuotaNotice("person")).toBeNull();
+      expect(centralDailyQuotaActionNotice("person")).toBeNull();
     } finally {
       vi.useRealTimers();
     }

@@ -114,6 +114,16 @@ export function centralDailyQuotaNotice(accountId: string, now = Date.now()): st
   return `오늘 연결 한도를 다 써서 친구 방은 ${formatCentralQuotaResetLocal(resetAt)} 이후에 다시 연결돼요.`;
 }
 
+// One neutral Korean line for an explicit user action (rename, icon, …)
+// refused by the daily block, or null when unblocked. The friend-room
+// reconnect line stays on the reconnect/notice surfaces only; an explicit
+// action names no room and carries the local reset time instead.
+export function centralDailyQuotaActionNotice(accountId: string, now = Date.now()): string | null {
+  const resetAt = centralDailyQuotaResetAtMs(accountId, now);
+  if (resetAt === null) return null;
+  return `오늘 요청 한도를 다 썼어요. ${formatCentralQuotaResetLocal(resetAt)} 이후에 다시 해 주세요.`;
+}
+
 function prune(times: number[], now: number, windowMs: number): number[] {
   while (times.length > 0 && times[0] <= now - windowMs) times.shift();
   return times;

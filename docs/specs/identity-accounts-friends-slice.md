@@ -3713,6 +3713,38 @@ disconnected reason), `frontend/src/app/useAppController.tsx` /
 `frontend/src/app/AppView.tsx` / `frontend/src/views/components/
 StartupIdentityGate.tsx` (quota notice text, existing components).
 
+#### Quota-reset retry order + explicit-action message (2026-10-17)
+
+Reviewer evidence (build of `e0b16128`): the quota-reconnect test
+flaked 1-in-3 with two member-preview requests after the reset instead
+of one. Cause: the 0-60 s quota jitter moves the parked host timer
+relative to the directory's reset retry, and deadline stagger alone
+cannot order them — coalesced timers (one clock jump, sleep, throttled
+tab) fire the host while the directory refresh is still in flight, so
+the host attaches straight from the anchor and reconcile attaches
+again behind it.
+
+Required:
+
+- After the reset exactly one central request family goes out first
+  (the directory retry) and joined hosts follow from reconcile,
+  regardless of the jitter value. A host timer scheduled while the
+  daily allowance is spent never attaches on its own while central is
+  unconfirmed; it holds back (timer only, no central request) until
+  the directory retry lands. Explicit user retries still attach
+  immediately.
+- The friend-room reconnect line stays on the reconnect/notice
+  surfaces only (central-unconfirmed notice, joined-room disconnected
+  reason). The shared 429 owner reports an explicit central action
+  refused by the quota (server rename, icon change, …) with a neutral
+  one-line Korean 해요체 message naming the local reset time, never
+  the friend-room line.
+
+Entry points: `frontend/src/app/useMemberHosts.ts` (quota-parked host
+holdback), `frontend/src/lib/central/centralRequestGovernor.ts`
+(`centralDailyQuotaActionNotice`), `frontend/src/lib/central/
+identity.ts` (quota-refusal error message).
+
 ### Rail shows each joined room once (2026-10-17)
 
 Real-app failure (debug macOS build): after restart the rail showed the

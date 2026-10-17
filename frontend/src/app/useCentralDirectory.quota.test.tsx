@@ -85,8 +85,16 @@ describe("daily central quota refusal (real hooks, stub central)", () => {
     vi.useRealTimers();
   });
 
-  it("sends nothing for 20 hours after a startup quota refusal, then reconnects with one retry", async () => {
+  // The quota jitter (0-60 s) decides whether the parked host timer lands
+  // inside the same clock jump as the directory's reset retry (jitter 0) or
+  // still pends past it (jitter 60 s). Both extremes must reconnect with
+  // exactly one retry: the directory first, the host following from
+  // reconcile — never a doubled preview from a coalesced host timer.
+  it.each([0, 0.999999])("sends nothing for 20 hours after a startup quota refusal, then reconnects with one retry (jitter random %f)", async (randomValue) => {
     vi.useFakeTimers();
+    // Pin the quota jitter; without this the 0-60 s draw flakes the timer
+    // overlap above from run to run.
+    const random = vi.spyOn(Math, "random").mockReturnValue(randomValue);
     try {
       // Start 23 hours before the UTC-midnight reset so the 20-hour parked
       // window below never crosses it.
@@ -163,6 +171,7 @@ describe("daily central quota refusal (real hooks, stub central)", () => {
       expect(centralDailyQuotaNotice("person")).toBeNull();
       unmount();
     } finally {
+      random.mockRestore();
       vi.useRealTimers();
     }
   });
