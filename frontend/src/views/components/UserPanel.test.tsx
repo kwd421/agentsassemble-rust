@@ -579,6 +579,13 @@ describe("UserPanel", () => {
       fireEvent.click(within(view.container).getByRole("button", { name: "사용자 설정" }));
       expect(await within(view.container).findByRole("button", { name: "로그아웃" })).toBeTruthy();
       expect(within(view.container).getByText("이 컴퓨터의 서버 프로필은 서버를 등록한 뒤 바꿀 수 있어요. 계정 로그아웃은 아래에서 할 수 있어요.")).toBeTruthy();
+      // The foreign local operator's identity never appears as B's own:
+      // no handle field (a central account has no handle), while the
+      // signed-in account's own display name is shown.
+      const dialog = within(view.container).getByRole("dialog", { name: "사용자 설정" });
+      expect(within(dialog).queryByText("핸들")).toBeNull();
+      expect(within(dialog).queryByDisplayValue("seinel.")).toBeNull();
+      expect(within(dialog).getAllByText("B계정").length).toBeGreaterThan(0);
     } finally {
       vi.unstubAllEnvs();
       window.localStorage.clear();

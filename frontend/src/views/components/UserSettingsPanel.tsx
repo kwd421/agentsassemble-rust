@@ -118,6 +118,11 @@ export default function UserSettingsPanel({
               {!serverAuthorityAvailable && (
                 <p className="dc-user-settings-lead">이 컴퓨터의 서버 프로필은 서버를 등록한 뒤 바꿀 수 있어요. 계정 로그아웃은 아래에서 할 수 있어요.</p>
               )}
+              {/* A non-owner never sees the local operator's profile as their
+                  own: the signed-in central account is shown below (with its
+                  own display name), so the local display name/handle/status
+                  fields stay hidden here. */}
+              {serverAuthorityAvailable && (
               <div className="dc-user-settings-grid">
                 <label>
                   표시 이름
@@ -159,6 +164,7 @@ export default function UserSettingsPanel({
                   </select>
                 </label>
               </div>
+              )}
               {centralIdentityConfigured() ? <>
                 <CentralAccountSettings disabled={saving} />
                 {profileIdentity?.sessionToken && !profileIdentity.centralOwner && <details className="mt-4">
@@ -281,7 +287,7 @@ export default function UserSettingsPanel({
                   </span>
                   <div className="dc-user-settings-preview-body">
                     <strong className="preserve-words">{draft.displayName || "이름 없음"}</strong>
-                    <small className="preserve-words">{draft.handle}</small>
+                    {serverAuthorityAvailable && <small className="preserve-words">{draft.handle}</small>}
                     {draft.customStatus && <p className="preserve-words">{draft.customStatus}</p>}
                   </div>
                 </div>
