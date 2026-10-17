@@ -345,7 +345,6 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
 
 export function LobbySystemRow({
   event,
-  mentionLabels,
   nameSources,
 }: {
   event: LobbyEvent;
@@ -353,7 +352,9 @@ export function LobbySystemRow({
   nameSources?: DelegationNameSources;
 }) {
   // Delegation attributions render in Korean from the structured fields;
-  // other system lines keep their stored text.
+  // other system lines keep their stored text. Both render as plain text:
+  // the sentences embed profile display names, which must never parse as
+  // mention or markdown markup (links, mentions, formatting).
   const text = formatDelegatedActionText(event, nameSources) || event.message || "";
   return (
     <div
@@ -361,9 +362,7 @@ export function LobbySystemRow({
       data-room-event-id={event.id}
       role="status"
     >
-      <span>
-        <DiscordText text={text} mentionLabels={mentionLabels} />
-      </span>
+      <span className="preserve-words">{text}</span>
     </div>
   );
 }
