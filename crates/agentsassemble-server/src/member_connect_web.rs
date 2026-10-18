@@ -148,6 +148,16 @@ async fn challenge(
         if !lapsed_channel_bound {
             return Err(invalid_challenge());
         }
+        // The lapsed path stays bound to a present secure channel. The
+        // binding check above also passes when both sides are absent, but a
+        // challenge issued over plain HTTP (entry.secure == None) selected
+        // over plain HTTP (client == None) must keep the exact old 300 s
+        // wall: otherwise an expired redeemed challenge would stay reusable
+        // forever by anyone holding only the device token + challenge id.
+        if !matches!((&entry.secure, client), (Some(expected), Some(present)) if expected == present.binding())
+        {
+            return Err(invalid_challenge());
+        }
         let record = match &entry.purpose {
             ChallengePurpose::Connect(record) => record.clone(),
             _ => return Err(invalid_challenge()),
@@ -280,7 +290,7 @@ pub(crate) async fn select(
             "A bounded client ID is required.",
         ));
     }
-    let (_, record) = challenge(
+    let (entry, record) = challenge(
         &state,
         &body.challenge,
         browser,
@@ -304,8 +314,14 @@ pub(crate) async fn select(
     if !rooms.iter().any(|r| r.room_id == body.room) {
         return Err(invalid_challenge());
     }
-    if member.challenge_expires_at <= Utc::now() {
-        if !channel_bound {
+    // A channel-bound select is only ever a bound-channel select: `challenge`
+    // already required a present secure client matching the stored binding on
+    // the lapsed path, and the same equality holds on the live path. Plain
+    // HTTP (both sides absent) never takes the sliding path below.
+    let bound_channel = matches!((&entry.secure, secure_client.as_ref()), (Some(expected), Some(present)) if expected == present.binding());
+    let now = Utc::now();
+    if member.challenge_expires_at <= now {
+        if !channel_bound || !bound_channel {
             return Err(invalid_challenge());
         }
         // Same live channel that redeemed the challenge (verified in
@@ -314,9 +330,19 @@ pub(crate) async fn select(
         // new central grant. The channel itself is the expiry from here on:
         // it cannot present once closed, and a new channel needs its own
         // challenge and grant.
-        member.challenge_expires_at = member
-            .challenge_expires_at
-            .max(Utc::now() + super::CHALLENGE_TTL);
+        member.challenge_expires_at = member.challenge_expires_at.max(now + super::CHALLENGE_TTL);
+    }
+    if channel_bound && bound_channel {
+        // Keep the stored map entry alive alongside the member window so a
+        // prune triggered by any later challenge issue (any member, any
+        // admission) does not drop a channel that keeps selecting. The slide
+        // only ever moves the window forward to now + CHALLENGE_TTL; a
+        // channel that goes quiet for >300 s still lapses and needs a new
+        // grant.
+        member.challenge_expires_at = member.challenge_expires_at.max(now + super::CHALLENGE_TTL);
+        state
+            .member_challenges
+            .slide_connect_window(&body.challenge, now);
     }
     let (client, request_id) = {
         let entry = selected
@@ -385,6 +411,7 @@ pub(crate) async fn select(
 #[cfg(test)]
 mod tests {
     use super::{client_advertises_room_select_channel_bound, client_advertises_room_select_reuse};
+    use sha2::Digest as _;
 
     #[test]
     fn room_select_reuse_advertisement_is_an_exact_query_pair() {
@@ -457,5 +484,484 @@ mod tests {
         }))
         .unwrap_or_else(|error| panic!("legacy redeem body: {error}"));
         assert_eq!(body.challenge_id, "challenge");
+    }
+
+    /// Host coverage for the channel-bound lapse path drives the real `select`
+    /// handler (real store, real challenge map) with a fabricated secure
+    /// channel standing in for the encrypted transport a plain-HTTP test
+    /// harness cannot complete. Wall-clock lapse is forced by moving the
+    /// stored expiries, exactly like the existing
+    /// `challenge_browser_invite_epoch_expiry_claim_and_capacity_are_enforced`
+    /// unit test lapses by handing `claim` an expired `now`: no clock
+    /// abstraction, no production test hook, no 300 s wait. The fixture
+    /// leaves central disabled (`AppState::local` without
+    /// `with_central_directory`), so any successful `select` proves no new
+    /// central grant was spent: `select` has no central path at all.
+    const LAPSE_TEST_EPOCH: &str = "member-channel-bound-epoch";
+    const LAPSE_TEST_ISSUER: &str = "https://central-channel-bound.test";
+    const LAPSE_TEST_PERSON: &str = "person-channel-bound";
+
+    struct LapseFixture {
+        state: crate::AppState,
+        device: String,
+        browser: [u8; 32],
+        secure: crate::secure_client::SecureClient,
+    }
+
+    async fn lapse_fixture(room_ids: &[(&str, &str)]) -> LapseFixture {
+        use agentsassemble_domain::{
+            InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, ProviderCatalog,
+        };
+        use agentsassemble_persistence::{
+            HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence,
+            NewHumanInvite, PreparedHumanAdmission, RoomManagerAuthority, SqliteStore,
+        };
+
+        let store = SqliteStore::open(&format!(
+            "sqlite:file:{}?mode=memory&cache=shared",
+            uuid::Uuid::new_v4()
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("open lapse fixture store: {error:?}"));
+        store
+            .bootstrap_local_authority("325bb3a2-4964-42a2-8490-afcf6f99b164", "SeiNel")
+            .await
+            .unwrap_or_else(|error| panic!("bootstrap lapse fixture: {error:?}"));
+        store
+            .set_registration_epoch(Some(LAPSE_TEST_EPOCH))
+            .await
+            .unwrap_or_else(|error| panic!("set lapse fixture epoch: {error:?}"));
+        let device = format!(
+            "aad1_{}",
+            base64::Engine::encode(
+                &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+                [9_u8; 32]
+            )
+        );
+        let seed_browser = [3_u8; 32];
+        let now = chrono::Utc::now();
+        let seed_member = agentsassemble_persistence::MemberAdmission {
+            secure: None,
+            projection_id: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+            issuer: LAPSE_TEST_ISSUER.into(),
+            person_id: LAPSE_TEST_PERSON.into(),
+            display_name: "Member snapshot".into(),
+            registration_epoch: LAPSE_TEST_EPOCH.into(),
+            challenge_fingerprint: [9; 32],
+            challenge_expires_at: now + chrono::Duration::seconds(30),
+        };
+        let authority = crate::HumanInviteCredentialAuthority::from_persistent(
+            &store
+                .host_identity()
+                .await
+                .unwrap_or_else(|error| panic!("load lapse fixture identity: {error:?}")),
+        );
+        for (room_uid, room_id) in room_ids {
+            store
+                .create_room_for_local_operator(room_uid, room_id, room_id)
+                .await
+                .unwrap_or_else(|error| panic!("create lapse fixture room: {error:?}"));
+            let credentials = authority
+                .issue(&crate::HumanInviteCredentialDraft {
+                    room_url: "http://127.0.0.1:8765".into(),
+                    public_room_url: String::new(),
+                    room_id: (*room_id).to_owned(),
+                    base_participant_id: format!("{room_id}-guest"),
+                    display_name: format!("{room_id} Guest"),
+                    invite_scope: InviteScope::ReadWrite,
+                    issued_at: now,
+                    expires_at: now + chrono::Duration::days(1),
+                })
+                .unwrap_or_else(|error| panic!("issue lapse fixture invite: {error:?}"));
+            let manager = store
+                .authorize_local_room_manager(
+                    room_id,
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("authorize lapse fixture manager: {error:?}"));
+            store
+                .create_human_invite_for_manager(
+                    &RoomManagerAuthority::Local(manager),
+                    NewHumanInvite {
+                        signed_token_fingerprint: *credentials.signed_token_fingerprint(),
+                        join_code_fingerprint: *credentials.join_code_fingerprint(),
+                        base_participant_id: format!("{room_id}-guest"),
+                        display_name: format!("{room_id} Guest"),
+                        invite_scope: InviteScope::ReadWrite,
+                        max_uses: 1,
+                        expires_at: now + chrono::Duration::days(1),
+                        created_at: now,
+                    },
+                )
+                .await
+                .unwrap_or_else(|error| panic!("persist lapse fixture invite: {error:?}"));
+            let prepared = PreparedHumanAdmission::prepare(
+                HumanInviteCredentialEvidence::JoinCode {
+                    fingerprint: *credentials.join_code_fingerprint(),
+                },
+                seed_browser,
+                &HumanAdmissionInput {
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    meeting_id_assertion: (*room_id).into(),
+                    display_name: String::new(),
+                    participant_type: "human".into(),
+                    owner_display_name: String::new(),
+                    client_id: "seed-second-client".into(),
+                    avatar_image_url: String::new(),
+                },
+            )
+            .unwrap_or_else(|error| panic!("prepare lapse fixture admission: {error:?}"))
+            .with_member(seed_member.clone());
+            let HumanAdmissionDecision::Admitted(_) = store
+                .admit_human(&prepared, now)
+                .await
+                .unwrap_or_else(|error| panic!("commit lapse fixture admission: {error:?}"))
+            else {
+                panic!("seeding the lapse fixture room must commit");
+            };
+        }
+        let state = crate::AppState::local(
+            store,
+            crate::TicketStore::new(std::time::Duration::from_secs(30), 4096),
+            agentsassemble_provider::ProviderCatalogService::fixed(ProviderCatalog::default()),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("build lapse fixture state: {error:?}"));
+        let browser = crate::human_browser_credential::fingerprint_browser_credential(&device)
+            .expect("fixture device token must fingerprint");
+        let hello = crate::central::host_identity::SecureClientHello {
+            protocol: "secure_admission_v1".into(),
+            server_id: "channel-bound-test-server".into(),
+            registration_epoch: LAPSE_TEST_EPOCH.into(),
+            origin: "https://channel-bound.test".into(),
+            generation: 3,
+            purpose: "member_connect".into(),
+            client_nonce: "fixture-nonce".into(),
+            client_public_key: base64::Engine::encode(
+                &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+                [7_u8; 32],
+            ),
+        };
+        let secure = crate::secure_client::SecureClient::new(hello, "a".repeat(43), false)
+            .unwrap_or_else(|()| panic!("fixture secure channel"));
+        LapseFixture {
+            state,
+            device,
+            browser,
+            secure,
+        }
+    }
+
+    /// Issues a connect challenge and marks it redeemed without spending a
+    /// central grant (the grant is spent only in `redeem`, which these tests
+    /// bypass by installing the post-redeem state directly).
+    async fn issue_redeemed(
+        fixture: &LapseFixture,
+        secure: Option<agentsassemble_persistence::SecureSessionBinding>,
+    ) -> String {
+        let (challenge_id, _) = fixture
+            .state
+            .member_challenges
+            .issue_for(
+                super::super::ChallengePurpose::Connect(std::sync::Arc::new(
+                    tokio::sync::Mutex::new(super::ConnectState::Issued),
+                )),
+                fixture.browser,
+                LAPSE_TEST_EPOCH.to_owned(),
+                chrono::Utc::now(),
+                secure.clone(),
+            )
+            .unwrap_or_else(|error| panic!("issue lapse fixture challenge: {error:?}"));
+        let member = agentsassemble_persistence::MemberAdmission {
+            secure,
+            projection_id: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+            issuer: LAPSE_TEST_ISSUER.into(),
+            person_id: LAPSE_TEST_PERSON.into(),
+            display_name: "Member snapshot".into(),
+            registration_epoch: LAPSE_TEST_EPOCH.into(),
+            challenge_fingerprint: sha2::Sha256::digest(challenge_id.as_bytes()).into(),
+            challenge_expires_at: chrono::Utc::now() + chrono::Duration::seconds(300),
+        };
+        let rooms = fixture
+            .state
+            .store
+            .member_connect_rooms(&member, chrono::Utc::now())
+            .await
+            .unwrap_or_else(|error| panic!("list lapse fixture rooms: {error:?}"));
+        assert!(
+            !rooms.is_empty(),
+            "the redeemed challenge must list joined rooms"
+        );
+        let record = {
+            let entries = fixture.state.member_challenges.0.lock();
+            let entry = entries
+                .get(&challenge_id)
+                .expect("issued challenge must be stored");
+            match &entry.purpose {
+                super::super::ChallengePurpose::Connect(record) => record.clone(),
+                _ => panic!("issued challenge must be a connect challenge"),
+            }
+        };
+        *record.lock().await = super::ConnectState::ConnectRedeemed {
+            member: Box::new(member),
+            rooms,
+            selected: std::collections::HashMap::new(),
+        };
+        challenge_id
+    }
+
+    /// Moves both the stored map entry and the redeemed member window into
+    /// the past, simulating a challenge that lapsed without any clock
+    /// abstraction.
+    async fn lapse_challenge(fixture: &LapseFixture, challenge_id: &str) {
+        let past = chrono::Utc::now() - chrono::Duration::seconds(1);
+        let record = {
+            let mut entries = fixture.state.member_challenges.0.lock();
+            let entry = entries
+                .get_mut(challenge_id)
+                .expect("lapsed challenge must be stored");
+            entry.expires = past;
+            match &entry.purpose {
+                super::super::ChallengePurpose::Connect(record) => record.clone(),
+                _ => panic!("lapsed challenge must be a connect challenge"),
+            }
+        };
+        let mut guard = record.lock().await;
+        match &mut *guard {
+            super::ConnectState::ConnectRedeemed { member, .. } => {
+                member.challenge_expires_at = past;
+            }
+            _ => panic!("lapsed challenge must be redeemed"),
+        }
+    }
+
+    /// Issues one more challenge on the host, running the prune that drops
+    /// every lapsed entry.
+    fn prune_with_fresh_challenge(fixture: &LapseFixture) {
+        fixture
+            .state
+            .member_challenges
+            .issue_for(
+                super::super::ChallengePurpose::Admission([1; 32]),
+                [2; 32],
+                LAPSE_TEST_EPOCH.to_owned(),
+                chrono::Utc::now(),
+                None,
+            )
+            .unwrap_or_else(|error| panic!("issue prune trigger challenge: {error:?}"));
+    }
+
+    fn select_request(
+        fixture: &LapseFixture,
+        query: &str,
+        challenge_id: &str,
+        room: &str,
+        secure: bool,
+    ) -> super::Request {
+        let body = serde_json::to_vec(&serde_json::json!({
+            "challenge_id": challenge_id,
+            "room_id": room,
+            "client_id": "channel-bound-client",
+        }))
+        .expect("select body must encode");
+        let mut request = super::Request::builder()
+            .uri(format!("/api/member-connect/select{query}"))
+            .method("POST")
+            .header("x-device-token", &fixture.device)
+            .body(axum::body::Body::from(body))
+            .expect("select request must build");
+        if secure {
+            request.extensions_mut().insert(fixture.secure.clone());
+        }
+        request
+    }
+
+    async fn select(
+        fixture: &LapseFixture,
+        query: &str,
+        challenge_id: &str,
+        room: &str,
+        secure: bool,
+    ) -> Result<serde_json::Value, crate::human_invite_web::HumanInviteHttpError> {
+        super::select(
+            axum::extract::State(fixture.state.clone()),
+            select_request(fixture, query, challenge_id, room, secure),
+        )
+        .await
+        .map(|response| response.0)
+    }
+
+    fn entry_expires(
+        fixture: &LapseFixture,
+        challenge_id: &str,
+    ) -> Option<chrono::DateTime<chrono::Utc>> {
+        fixture
+            .state
+            .member_challenges
+            .0
+            .lock()
+            .get(challenge_id)
+            .map(|entry| entry.expires)
+    }
+
+    #[tokio::test]
+    async fn lapsed_channel_bound_select_without_secure_channel_is_refused() {
+        let fixture = lapse_fixture(&[
+            ("78ba8995-4ef7-4584-9d73-22caee9b3ac5", "general"),
+            ("9c4b2e11-6a1e-4f3a-9d2b-2b8f2f4c5a01", "second"),
+        ])
+        .await;
+        // Issued and redeemed over plain HTTP: no secure channel on either side.
+        let challenge_id = issue_redeemed(&fixture, None).await;
+        // Control: a live plain-HTTP select keeps working exactly as before.
+        let live = select(&fixture, "", &challenge_id, "general", false)
+            .await
+            .unwrap_or_else(|error| panic!("live plain select must succeed: {error:?}"));
+        assert_eq!(live["meeting_id"], "general");
+        lapse_challenge(&fixture, &challenge_id).await;
+        // The lapsed path with the channel-bound opt-in but still no secure
+        // channel is refused: an expired redeemed challenge must not stay
+        // reusable by device token + challenge id alone.
+        let refused = select(
+            &fixture,
+            "?room_select_channel_bound=1",
+            &challenge_id,
+            "second",
+            false,
+        )
+        .await;
+        let error = refused
+            .err()
+            .unwrap_or_else(|| panic!("lapsed plain select must be refused"));
+        assert_eq!(error.status, axum::http::StatusCode::UNAUTHORIZED);
+        assert_eq!(error.code, "member_challenge_invalid");
+        // Nothing was minted or spent: the second room was never selected and
+        // the lapsed windows were left untouched.
+        let record = {
+            let entries = fixture.state.member_challenges.0.lock();
+            let entry = entries
+                .get(&challenge_id)
+                .expect("refused challenge must still be stored");
+            match &entry.purpose {
+                super::super::ChallengePurpose::Connect(record) => record.clone(),
+                _ => panic!("refused challenge must be a connect challenge"),
+            }
+        };
+        match &*record.lock().await {
+            super::ConnectState::ConnectRedeemed {
+                member, selected, ..
+            } => {
+                assert!(selected.contains_key("general"));
+                assert!(
+                    !selected.contains_key("second"),
+                    "the refused select must mint no session and spend no grant"
+                );
+                assert!(
+                    member.challenge_expires_at <= chrono::Utc::now(),
+                    "the refused select must not extend the member window"
+                );
+            }
+            _ => panic!("refused challenge must stay redeemed"),
+        }
+        assert!(
+            entry_expires(&fixture, &challenge_id)
+                .is_some_and(|expires| expires <= chrono::Utc::now()),
+            "the refused select must not slide the stored entry"
+        );
+    }
+
+    #[tokio::test]
+    async fn channel_bound_select_slides_lapsed_entry_past_later_prune() {
+        let fixture = lapse_fixture(&[
+            ("78ba8995-4ef7-4584-9d73-22caee9b3ac5", "general"),
+            ("9c4b2e11-6a1e-4f3a-9d2b-2b8f2f4c5a01", "second"),
+            ("7d3f9a21-8b4e-4c2a-9e1f-3c7d5a6b8e02", "third"),
+        ])
+        .await;
+        let binding = fixture.secure.binding().clone();
+        let challenge_id = issue_redeemed(&fixture, Some(binding)).await;
+        // Live channel-bound select on the redeeming channel: no new grant.
+        let first = select(
+            &fixture,
+            "?room_select_channel_bound=1",
+            &challenge_id,
+            "general",
+            true,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("live bound select must succeed: {error:?}"));
+        assert_eq!(first["meeting_id"], "general");
+        // Advance past the window, then select again on the same live
+        // channel: the lapsed path succeeds and slides the stored entry
+        // forward together with the member window.
+        lapse_challenge(&fixture, &challenge_id).await;
+        let second = select(
+            &fixture,
+            "?room_select_channel_bound=1",
+            &challenge_id,
+            "second",
+            true,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("lapsed bound select must succeed: {error:?}"));
+        assert_eq!(second["meeting_id"], "second");
+        assert_ne!(
+            second["session_token"], first["session_token"],
+            "distinct rooms mint separate sessions on one challenge"
+        );
+        assert!(
+            entry_expires(&fixture, &challenge_id)
+                .is_some_and(|expires| expires > chrono::Utc::now()),
+            "the bound select must slide the stored entry past now"
+        );
+        // Another member issuing a challenge runs the prune over every entry:
+        // the slid entry survives, so the next bound select still spends no
+        // new grant.
+        prune_with_fresh_challenge(&fixture);
+        assert!(
+            entry_expires(&fixture, &challenge_id).is_some(),
+            "a channel that keeps selecting must keep its entry across prunes"
+        );
+        let third = select(
+            &fixture,
+            "?room_select_channel_bound=1",
+            &challenge_id,
+            "third",
+            true,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("post-prune bound select must succeed: {error:?}"));
+        assert_eq!(third["meeting_id"], "third");
+    }
+
+    #[tokio::test]
+    async fn quiet_lapsed_entry_is_pruned_and_needs_new_grant() {
+        let fixture = lapse_fixture(&[("78ba8995-4ef7-4584-9d73-22caee9b3ac5", "general")]).await;
+        let binding = fixture.secure.binding().clone();
+        let challenge_id = issue_redeemed(&fixture, Some(binding)).await;
+        // A channel that goes quiet lapses: the next issue on this host
+        // prunes the entry, and the following bound select fails closed so
+        // the client takes a fresh challenge and grant.
+        lapse_challenge(&fixture, &challenge_id).await;
+        prune_with_fresh_challenge(&fixture);
+        assert!(
+            entry_expires(&fixture, &challenge_id).is_none(),
+            "a quiet lapsed entry must still be pruned"
+        );
+        let refused = select(
+            &fixture,
+            "?room_select_channel_bound=1",
+            &challenge_id,
+            "general",
+            true,
+        )
+        .await;
+        let error = refused
+            .err()
+            .unwrap_or_else(|| panic!("select on a pruned challenge must be refused"));
+        assert_eq!(error.status, axum::http::StatusCode::UNAUTHORIZED);
+        assert_eq!(error.code, "member_challenge_invalid");
     }
 }

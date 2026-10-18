@@ -4160,9 +4160,20 @@ Host owner: `select` on a lapsed challenge is accepted only with the
 `?room_select_channel_bound=1` URL opt-in AND the request arriving over the
 same live secure channel that redeemed the challenge (the existing
 `entry.secure`/browser/epoch checks already prove the binding; the state must
-be `ConnectRedeemed`). The member expiry is then extended past now so the mint
+be `ConnectRedeemed`). The lapsed path additionally requires a PRESENT secure
+client whose binding equals the stored one (both `Some`): a challenge issued
+over plain HTTP and selected over plain HTTP keeps the exact old 300-second
+wall, otherwise an expired redeemed challenge would stay reusable forever by
+device token + challenge id alone. The member expiry is then extended past now so the mint
 rechecks run as at mint (`member_connect_web.rs` select handler, `challenge`
-helper). `redeem` advertises `room_select_channel_bound: true` in the rooms
+helper). Every successful channel-bound select on the matching secure channel
+additionally slides the stored map entry (`Challenge.expires` in
+`state.member_challenges`, via `MemberChallenges::slide_connect_window`) to
+`now + CHALLENGE_TTL` together with the member window, so the prune that runs
+on every later challenge issue (any member, any admission) keeps a channel
+that keeps selecting; only connect entries slide, capacity rules are
+unchanged, and a channel quiet for >300 s still lapses and needs a new grant.
+`redeem` advertises `room_select_channel_bound: true` in the rooms
 response ONLY to an opted-in client, mirroring the `room_select_reuse` gate;
 old hosts ignore the query, old clients keep the exact old shapes and the old
 300-second wall. `start`/`select` stay grant-free; the grant is still spent
@@ -4201,7 +4212,12 @@ nothing after attach; post-window re-tap, background re-auth and kick spend
 nothing) fails on the pre-fix client (one wasted grant each) and passes after;
 `secureMemberEntry.background.test.ts` covers the channel-bound lapse unit;
 `member_invite_boundary::member_connect_advertises_channel_bound_select_only_to_opted_in_clients`
-covers the gating shapes.
+covers the gating shapes; `member_connect_web::tests::lapsed_channel_bound_select_without_secure_channel_is_refused`
+proves a lapsed plain-HTTP channel-bound select stays `401` without minting,
+`channel_bound_select_slides_lapsed_entry_past_later_prune` proves a bound
+lapsed select slides the entry across a later prune with no new grant, and
+`quiet_lapsed_entry_is_pruned_and_needs_new_grant` proves a quiet lapsed entry
+is still pruned.
 
 ### Friend-room settings reads use the friend host transport (2026-10-18)
 

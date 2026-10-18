@@ -106,6 +106,25 @@ impl MemberChallenges {
         Ok((id, expires))
     }
 
+    /// Slides a connect challenge's stored window after a successful
+    /// channel-bound select on its secure channel, so a channel that keeps
+    /// selecting keeps its entry across the prune that runs on every later
+    /// challenge issue. Only connect challenges move; admission/deletion
+    /// windows stay fixed, entries still lapse 300 s after their last bound
+    /// select, and capacity rules are unchanged. Returns whether an entry
+    /// was slid.
+    fn slide_connect_window(&self, id: &str, now: DateTime<Utc>) -> bool {
+        let mut entries = self.0.lock();
+        let Some(entry) = entries.get_mut(id) else {
+            return false;
+        };
+        if !matches!(entry.purpose, ChallengePurpose::Connect(_)) {
+            return false;
+        }
+        entry.expires = entry.expires.max(now + CHALLENGE_TTL);
+        true
+    }
+
     fn claim(
         &self,
         id: &str,
