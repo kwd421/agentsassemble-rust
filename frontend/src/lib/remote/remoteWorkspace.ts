@@ -120,8 +120,18 @@ export function installRemoteWorkspace(next: WorkspaceInstall) {
   if (!serverId) throw new Error("서버를 확인하지 못했어요. 서버 목록에서 다시 연결해 주세요.");
   const advertised = next.transport.hello.server_id;
   if (advertised && advertised !== serverId) throw new Error("선택한 서버와 연결이 일치하지 않습니다.");
+  const existing = workspaces.get(serverId);
+  if (existing && existing.transport === next.transport) {
+    // Same live channel: never close it; only bind the new room session and
+    // keep the workspace on the live transport.
+    workspaces.set(serverId, { ...next, serverId });
+    pendingMember = null;
+    bindRemoteSession(next.owner?.sessionToken || next.member!.sessionToken, next.transport, serverId);
+    notifyWorkspaceListeners();
+    return;
+  }
   // Replacing one host closes only that host's previous transport.
-  workspaces.get(serverId)?.transport.close();
+  existing?.transport.close();
   workspaces.delete(serverId);
   workspaces.set(serverId, { ...next, serverId });
   pendingMember = null;

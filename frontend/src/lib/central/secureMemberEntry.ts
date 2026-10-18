@@ -6,7 +6,7 @@ import { strictRecord, assertExactKeys } from "../strictJsonContract";
 import { parseRoomInviteAdmissionResponse, parseRoomInviteJoinResponse, type RoomInviteJoinResponse } from "../roomAdmissionContract";
 import { roomGuestSessionFromJoinPayload } from "../roomGuestSession";
 import { RemoteTransport } from "../remote/remoteTransport";
-import { installRemoteWorkspace, bindRemoteSession } from "../remote/remoteWorkspace";
+import { installRemoteWorkspace, bindRemoteSession, remoteWorkspaceFor } from "../remote/remoteWorkspace";
 import { SECURE_PROTOCOL, type SecureTarget } from "../remote/secureCrypto";
 import { loadCentralSession, signedRequest, type CentralSession } from "./identity";
 import { parseMemberChallenge } from "./memberConnect";
@@ -89,6 +89,15 @@ export class SecureMemberAdmission {
     return rooms;
   }
   async select(roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
+    // A select that reused the live admission/challenge stays on the same
+    // live channel the workspace already holds: never re-install the
+    // transport, only bind the new room session. A genuinely new transport
+    // (re-attach after a stale challenge) still falls through to install so
+    // it replaces and closes the old channel.
+    if (this.roomSelectReuse && this.challengeLive() &&
+        remoteWorkspaceFor(this.entry.server_id)?.transport === this.transport) {
+      return await this.selectWithChallenge(this.challengeId, roomId, signal);
+    }
     const payload = await this.post("/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId }, signal);
     return this.install(payload, payload.request_id, roomId);
   }
