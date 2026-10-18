@@ -26,6 +26,7 @@ import type {
 } from "./components/ChannelHeader";
 import type { RoomAppearance } from "../lib/roomAppearance";
 import type { RoomPostingMode } from "../lib/roomGuestPosting";
+import { messageAttachmentAuthorityForRoom } from "../lib/roomGuestPosting";
 import type { RoomTypingIndicator } from "../lib/roomTypingIndicators";
 import type { CanonicalParticipantProfile } from "../lib/canonicalRoomProjection";
 import type { Mentionable } from "../lib/mentionComposerModel";
@@ -201,12 +202,15 @@ export default function LobbyView({
     authority: messagePinsAuthority,
   });
   const messageSearch = sharedMessageSearch || localMessageSearch;
-  const messageAttachmentAuthority = useMemo<MessageAttachmentAuthority>(
+  const messageAttachmentAuthority = useMemo<MessageAttachmentAuthority | undefined>(
     () =>
-      postingMode === "guest"
-        ? { kind: "remote", sessionToken: roomSessionToken, deviceToken: roomDeviceToken }
-        : { kind: "local" },
-    [postingMode, roomSessionToken, roomDeviceToken]
+      messageAttachmentAuthorityForRoom({
+        roomOrigin: activeRoom.roomOrigin,
+        postingMode,
+        sessionToken: roomSessionToken,
+        deviceToken: roomDeviceToken,
+      }),
+    [activeRoom.roomOrigin, postingMode, roomSessionToken, roomDeviceToken]
   );
   const outgoing = useOutgoingMessages({
     roomUid, roomId: activeRoom.meetingId, participantId: viewerParticipantId,

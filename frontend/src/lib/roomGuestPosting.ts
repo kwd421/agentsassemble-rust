@@ -1,3 +1,5 @@
+import type { MessageAttachmentAuthority } from "../api/messageAttachments";
+
 export type RoomPostingMode = "host" | "guest";
 export type RoomPostingTransport = "host-lobby" | "room-say" | "blocked";
 
@@ -53,4 +55,30 @@ export function roomPostingState({
     sessionToken: cleanSessionToken,
     disabledReason: "",
   };
+}
+
+/**
+ * Attachment authority for a room: a remote (member) room always resolves
+ * through its own session, never through this computer's local host
+ * authority. Without a session the room has no authority at all (undefined):
+ * attachment clients probe room settings on creation, and a local request
+ * would read or write another host's room.
+ */
+export function messageAttachmentAuthorityForRoom({
+  roomOrigin,
+  postingMode,
+  sessionToken,
+  deviceToken,
+}: {
+  roomOrigin?: string;
+  postingMode: RoomPostingMode;
+  sessionToken?: string;
+  deviceToken?: string;
+}): MessageAttachmentAuthority | undefined {
+  if (postingMode === "guest") {
+    if (!sessionToken && roomOrigin === "remote_server") return undefined;
+    return { kind: "remote", sessionToken: sessionToken || "", deviceToken };
+  }
+  if (roomOrigin === "remote_server") return undefined;
+  return { kind: "local" };
 }

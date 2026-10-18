@@ -141,8 +141,19 @@ describe("room preference HTTP authority", () => {
   it.each([
     { sessionToken: "aas1.guest-session", deviceToken: undefined },
     { sessionToken: "aops1.paired", deviceToken: "paired-device" },
-  ])("presents each preference operation with session/device authority ($sessionToken)", async ({ sessionToken, deviceToken }) => {
-    const invoke = vi.fn();
+  ])("desktop routes an unbound session through the local desktop ticket, never a relative fetch ($sessionToken)", async ({ sessionToken, deviceToken }) => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ticket: "a".repeat(64),
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49155",
+      })
+      .mockResolvedValueOnce({
+        ticket: "b".repeat(64),
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49155",
+      });
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     const fetchMock = vi
       .fn()
@@ -171,15 +182,20 @@ describe("room preference HTTP authority", () => {
       identity,
     });
 
-    expect(invoke).not.toHaveBeenCalled();
+    // A session without a live host binding is a local session on desktop:
+    // it resolves through the desktop ticket (absolute loopback origin),
+    // never through a relative fetch that the desktop CSP would block as
+    // tauri://localhost.
+    expect(invoke).toHaveBeenNthCalledWith(1, "runtime_preferences_read_ticket", { roomId: "general" });
+    expect(invoke).toHaveBeenNthCalledWith(2, "runtime_preferences_write_ticket", { roomId: "general" });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "/api/room-settings?room_id=general",
+      "http://127.0.0.1:49155/api/room-settings?room_id=general",
       expect.objectContaining({ cache: "no-store", headers: expect.any(Headers) })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "/api/room-settings",
+      "http://127.0.0.1:49155/api/room-settings",
       expect.objectContaining({
         cache: "no-store",
         method: "POST",
@@ -189,11 +205,8 @@ describe("room preference HTTP authority", () => {
     const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     const writeInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
     const writeHeaders = writeInit.headers as Headers;
-    expect(readHeaders.get("Authorization")).toBe(`Bearer ${sessionToken}`);
-    expect(readHeaders.get("X-Device-Token")).toBe(deviceToken ?? null);
-    expect(writeHeaders.get("Authorization")).toBe(`Bearer ${sessionToken}`);
-    expect(writeHeaders.get("X-Device-Token")).toBe(deviceToken ?? null);
-    expect(writeHeaders.get("Content-Type")).toBe("application/json");
+    expect(readHeaders.get("Authorization")).toBe(`Bearer ${"a".repeat(64)}`);
+    expect(writeHeaders.get("Authorization")).toBe(`Bearer ${"b".repeat(64)}`);
     expect(JSON.parse(String(writeInit.body))).toEqual({
       room_id: "general",
       room_uid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
@@ -258,5 +271,67 @@ describe("room preference HTTP authority", () => {
 
     await requestDesktopHostProductSurface();
     await expect(fetchRoomSettings("general")).rejects.toThrow("방 권위");
+  });
+
+  it("routes a bound friend-room session through the remote transport, never the local origin", async () => {
+    const { bindRemoteSession } = await import("../lib/remote/remoteWorkspace");
+    const origin = "https://friend.test";
+    const transportFetch = vi.fn(async () =>
+      new Response(JSON.stringify(response("general")), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    const transport = {
+      hello: { origin },
+      active: true,
+      fetch: transportFetch,
+      close: vi.fn(),
+      onClose: vi.fn(),
+    };
+    bindRemoteSession("friend-session-live", transport as never, "friend-server");
+    const globalFetch = vi.fn();
+    vi.stubGlobal("fetch", globalFetch);
+
+    const loaded = await fetchRoomSettings("general", { sessionToken: "friend-session-live" });
+    expect(loaded.roomId).toBe("general");
+    expect(transportFetch).toHaveBeenCalledOnce();
+    const [fetchPath, fetchInit] = transportFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(fetchPath).toBe("/api/room-settings?room_id=general");
+    const headers = fetchInit.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer friend-session-live");
+    expect(globalFetch).not.toHaveBeenCalled();
+  });
+
+  it("fails a dead friend-room session closed instead of fetching the local origin", async () => {
+    const { bindRemoteSession, sessionHostOrigin } = await import("../lib/remote/remoteWorkspace");
+    const origin = "https://friend-dead.test";
+    const closeListeners = new Set<() => void>();
+    const transport = {
+      hello: { origin },
+      active: true,
+      fetch: vi.fn(),
+      close: vi.fn(),
+      onClose: vi.fn((listener: () => void) => {
+        closeListeners.add(listener);
+        return () => {
+          closeListeners.delete(listener);
+        };
+      }),
+    };
+    bindRemoteSession("friend-session-dead", transport as never, "friend-server");
+    expect(sessionHostOrigin("friend-session-dead")).toBe(origin);
+    // The channel dies while the app still holds the token: the binding
+    // remembers the host origin but no longer has a live transport.
+    for (const listener of [...closeListeners]) listener();
+    const globalFetch = vi.fn();
+    vi.stubGlobal("fetch", globalFetch);
+    // Desktop: no relative fetch (CSP would block tauri://localhost) and no
+    // local-ticket fallback for a dead remote session.
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke: vi.fn() } });
+    await expect(fetchRoomSettings("general", { sessionToken: "friend-session-dead" })).rejects.toThrow(
+      "연결이 끝났어요"
+    );
+    expect(globalFetch).not.toHaveBeenCalled();
   });
 });

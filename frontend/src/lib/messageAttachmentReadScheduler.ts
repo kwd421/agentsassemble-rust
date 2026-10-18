@@ -43,12 +43,16 @@ export type MessageAttachmentReadScheduler = Readonly<{
 export type MessageAttachmentReadOwner = Readonly<{
   forAuthority: (
     roomId: string,
-    authority: MessageAttachmentAuthority
+    authority: MessageAttachmentAuthority | undefined
   ) => MessageAttachmentReadScheduler;
 }>;
 
 function aborted(signal: AbortSignal) {
   return signal.reason || new DOMException("Attachment read aborted.", "AbortError");
+}
+
+function noAuthority(): Error {
+  return new Error("서버 연결이 끝났어요. 서버 목록에서 다시 연결해 주세요.");
 }
 
 export function createMessageAttachmentReadOwner(
@@ -122,31 +126,40 @@ export function createMessageAttachmentReadOwner(
   }
 
   return {
-    forAuthority: (roomId, authority) => ({
-      read: (attachment, mode, signal) => {
-        if (signal.aborted) return Promise.reject(aborted(signal));
-        return new Promise<Blob>((resolve, reject) => {
-          const controller = new AbortController();
-          let task: ReadTask;
-          const cancelFromCaller = () => cancel(task, aborted(signal));
-          task = {
-            attachment,
-            roomId,
-            authority,
-            mode,
-            controller,
-            state: "queued",
-            transportStarted: false,
-            callerSettled: false,
-            resolve,
-            reject,
-            detachCaller: () => signal.removeEventListener("abort", cancelFromCaller),
-          };
-          signal.addEventListener("abort", cancelFromCaller, { once: true });
-          queue.push(task);
-          pump();
-        });
-      },
-    }),
+    forAuthority: (roomId, authority) => {
+      // A remote room without its own session has no authority: fail reads
+      // closed instead of resolving them against the local host.
+      if (!authority) {
+        return {
+          read: () => Promise.reject(noAuthority()),
+        };
+      }
+      return {
+        read: (attachment, mode, signal) => {
+          if (signal.aborted) return Promise.reject(aborted(signal));
+          return new Promise<Blob>((resolve, reject) => {
+            const controller = new AbortController();
+            let task: ReadTask;
+            const cancelFromCaller = () => cancel(task, aborted(signal));
+            task = {
+              attachment,
+              roomId,
+              authority,
+              mode,
+              controller,
+              state: "queued",
+              transportStarted: false,
+              callerSettled: false,
+              resolve,
+              reject,
+              detachCaller: () => signal.removeEventListener("abort", cancelFromCaller),
+            };
+            signal.addEventListener("abort", cancelFromCaller, { once: true });
+            queue.push(task);
+            pump();
+          });
+        },
+      };
+    },
   };
 }

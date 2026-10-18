@@ -131,8 +131,7 @@ describe("message attachment read scheduler", () => {
     expect(remaining).toHaveLength(4);
   });
 
-  it("shares actual transport capacity across room and authority generations", async () => {
-    const pending: Array<{ resolve: (blob: Blob) => void }> = [];
+  it("shares actual transport capacity across room and authority generations", async () => {    const pending: Array<{ resolve: (blob: Blob) => void }> = [];
     const transport = vi.fn(
       (_attachment: LobbyAttachmentRef, _roomId: string) =>
         new Promise<Blob>((resolve) => pending.push({ resolve }))
@@ -172,5 +171,21 @@ describe("message attachment read scheduler", () => {
     await expect(nextRead).resolves.toBeInstanceOf(Blob);
     expect((await firstSettlements).every((result) => result.status === "rejected"))
       .toBe(true);
+  });
+
+  it("rejects reads without authority instead of resolving them locally", async () => {
+    const transport = vi.fn();
+    const scheduler = createMessageAttachmentReadOwner(transport).forAuthority(
+      "friend-room",
+      undefined
+    );
+    await expect(
+      scheduler.read(
+        attachment(0),
+        "view",
+        new AbortController().signal
+      )
+    ).rejects.toThrow("연결이 끝났어요");
+    expect(transport).not.toHaveBeenCalled();
   });
 });

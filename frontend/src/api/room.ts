@@ -1,7 +1,7 @@
 import { roomAttachmentPolicyIsValid } from "../lib/roomAttachmentPolicy";
 import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
-import { remoteSessionTransport } from "../lib/remote/remoteWorkspace";
-import { fetchProductTransport } from "../lib/remote/remoteWorkspace";
+import { fetchProductTransport, remoteSessionTransport, sessionHostOrigin } from "../lib/remote/remoteWorkspace";
+import { connectionEnded } from "../lib/remote/remoteTransport";
 import { isCustomChannelId } from "../lib/customChannelId";
 import type { RoomAppearance } from "../lib/roomAppearance";
 import type { Participant } from "../types/generated/Participant";
@@ -461,29 +461,61 @@ type RoomSettingsUpdate = {
   identity?: RoomSettingsIdentity;
 };
 
+/**
+ * Fail-closed gate for session-bound room-settings reads. A presented session
+ * whose host binding is gone (closed channel, confirmed loss) must never
+ * degrade to a local or same-origin fetch: that would read another host's
+ * room or hit a blocked origin (desktop CSP refuses `tauri://localhost`).
+ * Callers surface the dead channel and offer reconnect instead.
+ */
+function deadRoomSettingsSession(sessionToken: string | undefined): boolean {
+  return Boolean(
+    sessionToken &&
+      !remoteSessionTransport(sessionToken) &&
+      sessionHostOrigin(sessionToken)
+  );
+}
+
+function sessionHeaders(
+  sessionToken: string,
+  deviceToken: string | undefined,
+  initHeaders: HeadersInit | undefined
+): Headers {
+  const headers = new Headers(initHeaders);
+  headers.set("Authorization", `Bearer ${sessionToken}`);
+  if (deviceToken) headers.set("X-Device-Token", deviceToken);
+  return headers;
+}
+
 export function fetchRoomSettings(
   roomId: string,
   identity: RoomSettingsIdentity = {},
   signal?: AbortSignal
 ): Promise<RoomSettings> {
-  const request =
-    identity.sessionToken
-      ? requestSessionRoomPreferences(
-          identity.sessionToken,
-          identity.deviceToken,
-          `/api/room-settings${queryString({ room_id: roomId })}`,
-          { signal }
-        )
-      : isDesktopWebview()
+  const token = identity.sessionToken || "";
+  // A dead remote binding fails closed (never the local origin). A desktop
+  // session without a binding is a local session: it resolves through the
+  // desktop ticket (absolute loopback origin), never a relative fetch the
+  // desktop CSP would block as `tauri://localhost`.
+  const request = deadRoomSettingsSession(token)
+    ? Promise.reject(connectionEnded())
+    : isDesktopWebview() && !remoteSessionTransport(token)
       ? fetchDesktopRoomPreferences(roomId, { signal }, { kind: "local" }).then(async (response) => {
           if (!response.ok) throw await responseError(response);
           return response.json() as Promise<unknown>;
         })
-      : fetchJsonWithIdentity<unknown>(
-          `/api/room-settings${queryString({ room_id: roomId })}`,
-          identity,
-          signal
-        );
+      : token
+        ? requestSessionRoomPreferences(
+            token,
+            identity.deviceToken,
+            `/api/room-settings${queryString({ room_id: roomId })}`,
+            { signal }
+          )
+        : fetchJsonWithIdentity<unknown>(
+            `/api/room-settings${queryString({ room_id: roomId })}`,
+            identity,
+            signal
+          );
   return request.then((payload) => parseRoomSettingsResponse(payload, roomId));
 }
 
@@ -504,19 +536,11 @@ export function saveRoomSettings({
       ? { channel_settings: channelSettingsToApi(channelSettings) }
       : {}),
   };
-  const request =
-    identity.sessionToken
-      ? requestSessionRoomPreferences(
-          identity.sessionToken,
-          identity.deviceToken,
-          "/api/room-settings",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }
-        )
-      : isDesktopWebview()
+  const token = identity.sessionToken || "";
+  const dead = deadRoomSettingsSession(token);
+  const request = dead
+    ? Promise.reject(connectionEnded())
+    : isDesktopWebview() && !remoteSessionTransport(token)
       ? fetchDesktopRoomPreferences(roomId, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -525,7 +549,18 @@ export function saveRoomSettings({
           if (!response.ok) throw await responseError(response);
           return response.json() as Promise<unknown>;
         })
-      : postJsonWithIdentity<unknown>("/api/room-settings", body, identity);
+      : token
+        ? requestSessionRoomPreferences(
+            token,
+            identity.deviceToken,
+            "/api/room-settings",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            }
+          )
+        : postJsonWithIdentity<unknown>("/api/room-settings", body, identity);
   return request.then((payload) => parseRoomSettingsResponse(payload, roomId));
 }
 
@@ -535,9 +570,21 @@ async function requestSessionRoomPreferences(
   url: string,
   init: RequestInit = {}
 ): Promise<unknown> {
-  const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${sessionToken}`);
-  if (deviceToken) headers.set("X-Device-Token", deviceToken);
+  // A live host binding resolves through that host's own transport (absolute
+  // origin). A dead binding fails closed: it must never degrade to a local
+  // or relative fetch. The only legacy case left is a session the client
+  // never bound (a local web guest), which keeps the exact previous
+  // same-origin request. Desktop never reaches the legacy case: unbound
+  // sessions resolve through desktop tickets above, and the desktop CSP would
+  // block a relative fetch as `tauri://localhost`.
+  const headers = sessionHeaders(sessionToken, deviceToken, init.headers);
+  const transport = remoteSessionTransport(sessionToken);
+  if (transport) {
+    const response = await transport.fetch(url, { ...init, cache: "no-store", headers });
+    if (!response.ok) throw await responseError(response);
+    return readBoundedJson(response);
+  }
+  if (sessionHostOrigin(sessionToken) || isDesktopWebview()) throw connectionEnded();
   const response = await fetchProductTransport(url, { ...init, cache: "no-store", headers });
   if (!response.ok) throw await responseError(response);
   return readBoundedJson(response);
