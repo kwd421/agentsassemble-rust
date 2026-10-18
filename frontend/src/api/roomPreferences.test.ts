@@ -141,77 +141,34 @@ describe("room preference HTTP authority", () => {
   it.each([
     { sessionToken: "aas1.guest-session", deviceToken: undefined },
     { sessionToken: "aops1.paired", deviceToken: "paired-device" },
-  ])("desktop routes an unbound session through the local desktop ticket, never a relative fetch ($sessionToken)", async ({ sessionToken, deviceToken }) => {
-    const invoke = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ticket: "a".repeat(64),
-        ttl_seconds: 30,
-        http_base_url: "http://127.0.0.1:49155",
-      })
-      .mockResolvedValueOnce({
-        ticket: "b".repeat(64),
-        ttl_seconds: 30,
-        http_base_url: "http://127.0.0.1:49155",
-      });
+  ])("desktop fails a forgotten session closed, never the local host ($sessionToken)", async ({ sessionToken, deviceToken }) => {
+    const invoke = vi.fn();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(response()), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(response("general", "mute")), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      );
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     const identity = {
       sessionToken, deviceToken,
     };
-    await fetchRoomSettings("general", identity);
-    await saveRoomSettings({
-      roomId: "general",
-      roomUid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
-      appearance: { notifications: "mute" },
-      identity,
-    });
-
-    // A session without a live host binding is a local session on desktop:
-    // it resolves through the desktop ticket (absolute loopback origin),
-    // never through a relative fetch that the desktop CSP would block as
-    // tauri://localhost.
-    expect(invoke).toHaveBeenNthCalledWith(1, "runtime_preferences_read_ticket", { roomId: "general" });
-    expect(invoke).toHaveBeenNthCalledWith(2, "runtime_preferences_write_ticket", { roomId: "general" });
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "http://127.0.0.1:49155/api/room-settings?room_id=general",
-      expect.objectContaining({ cache: "no-store", headers: expect.any(Headers) })
+    // A presented session token without a live transport is never a local
+    // session on desktop: after a channel loss or confirmed-loss unbind, a
+    // friend-room read or save must not run against the local host with
+    // owner authority on the same room id, nor hit the blocked
+    // `tauri://localhost` origin. Only calls with NO session token take the
+    // desktop local-ticket path.
+    await expect(fetchRoomSettings("general", identity)).rejects.toThrow(
+      "연결이 끝났어요"
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "http://127.0.0.1:49155/api/room-settings",
-      expect.objectContaining({
-        cache: "no-store",
-        method: "POST",
-        headers: expect.any(Headers),
+    await expect(
+      saveRoomSettings({
+        roomId: "general",
+        roomUid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
+        appearance: { notifications: "mute" },
+        identity,
       })
-    );
-    const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    const writeInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
-    const writeHeaders = writeInit.headers as Headers;
-    expect(readHeaders.get("Authorization")).toBe(`Bearer ${"a".repeat(64)}`);
-    expect(writeHeaders.get("Authorization")).toBe(`Bearer ${"b".repeat(64)}`);
-    expect(JSON.parse(String(writeInit.body))).toEqual({
-      room_id: "general",
-      room_uid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
-      appearance: { notifications: "mute" },
-    });
+    ).rejects.toThrow("연결이 끝났어요");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("surfaces a read-only denial from the preference target", async () => {

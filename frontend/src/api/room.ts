@@ -1,6 +1,6 @@
 import { roomAttachmentPolicyIsValid } from "../lib/roomAttachmentPolicy";
 import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
-import { fetchProductTransport, remoteSessionTransport, sessionHostOrigin } from "../lib/remote/remoteWorkspace";
+import { fetchProductTransport, hasRemoteWorkspace, remoteSessionTransport, sessionHostOrigin } from "../lib/remote/remoteWorkspace";
 import { connectionEnded } from "../lib/remote/remoteTransport";
 import { isCustomChannelId } from "../lib/customChannelId";
 import type { RoomAppearance } from "../lib/roomAppearance";
@@ -461,21 +461,6 @@ type RoomSettingsUpdate = {
   identity?: RoomSettingsIdentity;
 };
 
-/**
- * Fail-closed gate for session-bound room-settings reads. A presented session
- * whose host binding is gone (closed channel, confirmed loss) must never
- * degrade to a local or same-origin fetch: that would read another host's
- * room or hit a blocked origin (desktop CSP refuses `tauri://localhost`).
- * Callers surface the dead channel and offer reconnect instead.
- */
-function deadRoomSettingsSession(sessionToken: string | undefined): boolean {
-  return Boolean(
-    sessionToken &&
-      !remoteSessionTransport(sessionToken) &&
-      sessionHostOrigin(sessionToken)
-  );
-}
-
 function sessionHeaders(
   sessionToken: string,
   deviceToken: string | undefined,
@@ -493,29 +478,33 @@ export function fetchRoomSettings(
   signal?: AbortSignal
 ): Promise<RoomSettings> {
   const token = identity.sessionToken || "";
-  // A dead remote binding fails closed (never the local origin). A desktop
-  // session without a binding is a local session: it resolves through the
-  // desktop ticket (absolute loopback origin), never a relative fetch the
-  // desktop CSP would block as `tauri://localhost`.
-  const request = deadRoomSettingsSession(token)
-    ? Promise.reject(connectionEnded())
-    : isDesktopWebview() && !remoteSessionTransport(token)
-      ? fetchDesktopRoomPreferences(roomId, { signal }, { kind: "local" }).then(async (response) => {
-          if (!response.ok) throw await responseError(response);
-          return response.json() as Promise<unknown>;
-        })
-      : token
-        ? requestSessionRoomPreferences(
-            token,
-            identity.deviceToken,
-            `/api/room-settings${queryString({ room_id: roomId })}`,
-            { signal }
-          )
-        : fetchJsonWithIdentity<unknown>(
-            `/api/room-settings${queryString({ room_id: roomId })}`,
-            identity,
-            signal
-          );
+  // A presented session token always resolves through its own host binding
+  // and fails closed without one (never the local origin): after a channel
+  // loss or confirmed-loss unbind, a friend-room read must not run against
+  // the local host with owner authority on the same room id, nor hit the
+  // blocked `tauri://localhost` origin on desktop. Only calls with NO
+  // session token take the desktop local-ticket path; the legacy plain
+  // same-origin case (local web guest) lives inside
+  // requestSessionRoomPreferences, which allows it only when no host is
+  // live and the session was never bound.
+  if (token) {
+    return requestSessionRoomPreferences(
+      token,
+      identity.deviceToken,
+      `/api/room-settings${queryString({ room_id: roomId })}`,
+      { signal }
+    ).then((payload) => parseRoomSettingsResponse(payload, roomId));
+  }
+  const request = isDesktopWebview()
+    ? fetchDesktopRoomPreferences(roomId, { signal }, { kind: "local" }).then(async (response) => {
+        if (!response.ok) throw await responseError(response);
+        return response.json() as Promise<unknown>;
+      })
+    : fetchJsonWithIdentity<unknown>(
+        `/api/room-settings${queryString({ room_id: roomId })}`,
+        identity,
+        signal
+      );
   return request.then((payload) => parseRoomSettingsResponse(payload, roomId));
 }
 
@@ -537,30 +526,28 @@ export function saveRoomSettings({
       : {}),
   };
   const token = identity.sessionToken || "";
-  const dead = deadRoomSettingsSession(token);
-  const request = dead
-    ? Promise.reject(connectionEnded())
-    : isDesktopWebview() && !remoteSessionTransport(token)
-      ? fetchDesktopRoomPreferences(roomId, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }, { kind: "local" }).then(async (response) => {
-          if (!response.ok) throw await responseError(response);
-          return response.json() as Promise<unknown>;
-        })
-      : token
-        ? requestSessionRoomPreferences(
-            token,
-            identity.deviceToken,
-            "/api/room-settings",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            }
-          )
-        : postJsonWithIdentity<unknown>("/api/room-settings", body, identity);
+  if (token) {
+    return requestSessionRoomPreferences(
+      token,
+      identity.deviceToken,
+      "/api/room-settings",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    ).then((payload) => parseRoomSettingsResponse(payload, roomId));
+  }
+  const request = isDesktopWebview()
+    ? fetchDesktopRoomPreferences(roomId, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }, { kind: "local" }).then(async (response) => {
+        if (!response.ok) throw await responseError(response);
+        return response.json() as Promise<unknown>;
+      })
+    : postJsonWithIdentity<unknown>("/api/room-settings", body, identity);
   return request.then((payload) => parseRoomSettingsResponse(payload, roomId));
 }
 
@@ -635,8 +622,25 @@ export async function getWsTicket(auth: RoomSocketAuth): Promise<RoomSocketTicke
     return requestDesktopRuntimeTicket(auth.meetingId, { kind: "local" });
   }
   if (auth.kind === "session") {
+    // A session socket without a live binding must fail closed before any
+    // local-origin request: never fall back to `tauri://localhost`, the
+    // local host, or a relative same-origin fetch for a remote (friend)
+    // room whose channel just died. Desktop has no plain fallback (its CSP
+    // blocks the relative fetch); web keeps the exact legacy plain exchange
+    // only when no host is live and the session was never bound.
+    const transport = remoteSessionTransport(auth.sessionToken);
+    if (!transport) {
+      if (
+        isDesktopWebview() ||
+        hasRemoteWorkspace() ||
+        sessionHostOrigin(auth.sessionToken)
+      ) {
+        throw connectionEnded();
+      }
+    }
     const payload = await exchangeSessionSocketTicket(auth.sessionToken, auth.deviceToken);
-    return parseBrowserRoomRuntimeTicket(payload, remoteSessionTransport(auth.sessionToken)?.hello.origin || window.location.href);
+    const origin = transport?.hello.origin ?? window.location.href;
+    return parseBrowserRoomRuntimeTicket(payload, origin);
   }
   throw new Error("Host WebSocket authority requires the desktop Rust runtime.");
 }

@@ -364,4 +364,49 @@ describe("browser session WebSocket ticket routing", () => {
       displayResourceBase: window.location.origin,
     });
   });
+
+  it("fails a session socket ticket closed when its host binding is gone, never the local origin", async () => {
+    const { bindRemoteSession, closeRemoteWorkspace, installRemoteWorkspace } = await import("../lib/remote/remoteWorkspace");
+    closeRemoteWorkspace();
+    const listeners = new Set<() => void>();
+    const live = {
+      hello: { origin: "https://friend-ticket.test", server_id: "friend-ticket-server" },
+      active: true,
+      fetch: vi.fn(),
+      onClose: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+      close: vi.fn(),
+    };
+    installRemoteWorkspace({
+      transport: live as never,
+      owner: { sessionToken: "owner-ticket", serverId: "friend-ticket-server" } as never,
+      deviceToken: "device",
+      clientId: "client",
+    });
+    bindRemoteSession("friend-socket-token", live as never, "friend-ticket-server");
+    // The channel dies while the app still holds the bearer: the binding
+    // remembers the host origin but no longer has a live transport.
+    for (const listener of [...listeners]) listener();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      getWsTicket({ kind: "session", sessionToken: "friend-socket-token" })
+    ).rejects.toThrow("연결이 끝났어요");
+    expect(fetchMock).not.toHaveBeenCalled();
+    closeRemoteWorkspace();
+  });
+
+  it("fails a desktop session socket ticket closed without a binding, never a local request", async () => {
+    const { closeRemoteWorkspace } = await import("../lib/remote/remoteWorkspace");
+    closeRemoteWorkspace();
+    const invoke = vi.fn();
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      getWsTicket({ kind: "session", sessionToken: "forgotten-friend-token" })
+    ).rejects.toThrow("연결이 끝났어요");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
 });
