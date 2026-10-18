@@ -1,4 +1,4 @@
-use crate::support::human_invite::{fixture, open_session_socket};
+use crate::support::human_invite::{fixture, open_session_socket, persist_invite_in_room};
 use agentsassemble_domain::{InviteScope, ProviderCatalog};
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, TicketStore, serve};
@@ -103,6 +103,170 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
     worker_cancellation.cancel();
     worker_task.await??;
     Ok(())
+}
+
+#[tokio::test]
+async fn member_connect_reuses_one_redeemed_challenge_across_joined_rooms() -> TestResult {
+    use agentsassemble_persistence::{
+        HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence,
+        MemberAdmission, PreparedHumanAdmission,
+    };
+
+    let (store, invite) = fixture(InviteScope::ReadWrite).await;
+    store.set_registration_epoch(Some("member-epoch")).await?;
+    let identity = store.host_identity().await?;
+    let pair = ring::signature::Ed25519KeyPair::from_pkcs8(identity.private_key_pkcs8())
+        .map_err(|_| "fixture signing key")?;
+    let key = pair.public_key().as_ref().to_vec();
+    let server_id = identity.server_id().to_owned();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let central = format!("http://{}", listener.local_addr()?);
+    let issuer = central.clone();
+    let (calls, mut received) = tokio::sync::mpsc::unbounded_channel();
+    let worker = worker_router(key, server_id, issuer, calls);
+    let worker_cancellation = CancellationToken::new();
+    let worker_shutdown = worker_cancellation.clone();
+    let worker_task = tokio::spawn(async move {
+        axum::serve(listener, worker)
+            .with_graceful_shutdown(worker_shutdown.cancelled_owned())
+            .await
+    });
+    let host = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let base = format!("http://{}", host.local_addr()?);
+    let state = AppState::local(
+        store.clone(),
+        TicketStore::new(Duration::from_secs(30), 4096),
+        ProviderCatalogService::fixed(ProviderCatalog::default()),
+    )
+    .await?
+    .with_central_directory(&central)?;
+    let cancellation = CancellationToken::new();
+    let host_shutdown = cancellation.clone();
+    let host_task =
+        tokio::spawn(async move { serve(host, state, host_shutdown, async { Ok(()) }).await });
+    let client = reqwest::Client::new();
+
+    // Establish the central person with a canonical member admission in "general".
+    assert_admission(&client, &base, invite.join_code(), &mut received).await?;
+    // Seed a second active room the same central person is joined to, so one
+    // redeemed connect challenge has two rooms to reuse.
+    store
+        .create_room_for_local_operator("9c4b2e11-6a1e-4f3a-9d2b-2b8f2f4c5a01", "second", "Second")
+        .await?;
+    let second_invite = persist_invite_in_room(
+        &store,
+        "second",
+        InviteScope::ReadWrite,
+        1,
+        "second-guest",
+        "Second Guest",
+    )
+    .await;
+    let now = chrono::Utc::now();
+    let seeded = PreparedHumanAdmission::prepare(
+        HumanInviteCredentialEvidence::JoinCode {
+            fingerprint: *second_invite.join_code_fingerprint(),
+        },
+        [3; 32],
+        &HumanAdmissionInput {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            meeting_id_assertion: "second".into(),
+            display_name: String::new(),
+            participant_type: "human".into(),
+            owner_display_name: String::new(),
+            client_id: "seed-second-client".into(),
+            avatar_image_url: String::new(),
+        },
+    )?
+    .with_member(MemberAdmission {
+        secure: None,
+        projection_id: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+        issuer: central.clone(),
+        person_id: "person-1".into(),
+        display_name: "Member snapshot".into(),
+        registration_epoch: "member-epoch".into(),
+        challenge_fingerprint: [9; 32],
+        challenge_expires_at: now + chrono::Duration::seconds(30),
+    });
+    let HumanAdmissionDecision::Admitted(_) = store.admit_human(&seeded, now).await? else {
+        return Err("seeding the second room member admission must commit".into());
+    };
+
+    let device = format!("aad1_{}", URL_SAFE_NO_PAD.encode([9_u8; 32]));
+    let challenge: Value = client
+        .post(format!("{base}/api/member-connect/challenge"))
+        .header("x-device-token", &device)
+        .json(&json!({}))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let listed = client
+        .post(format!("{base}/api/member-connect/rooms"))
+        .header("x-device-token", &device)
+        .json(&json!({"challenge_id":challenge["challenge_id"],"grant_token":"aamc1.connect"}))
+        .send()
+        .await?;
+    assert_eq!(listed.status(), StatusCode::OK);
+    let listed: Value = listed.json().await?;
+    assert_eq!(listed["room_select_reuse"], true);
+    let mut rooms: Vec<String> = listed["rooms"]
+        .as_array()
+        .ok_or("rooms")?
+        .iter()
+        .map(|room| room["room_id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    rooms.sort();
+    assert_eq!(rooms, vec!["general".to_owned(), "second".to_owned()]);
+    // One central grant redeems the whole admission.
+    received.recv().await.ok_or("connect redeem")?;
+    let challenge_id = challenge["challenge_id"].as_str().ok_or("challenge")?;
+
+    let general = select_member_room(&client, &base, &device, challenge_id, "general").await?;
+    assert_eq!(general.status(), StatusCode::OK);
+    let general: Value = general.json().await?;
+    assert_eq!(general["meeting_id"], "general");
+    // A second joined room selects over the SAME redeemed challenge.
+    let second = select_member_room(&client, &base, &device, challenge_id, "second").await?;
+    assert_eq!(second.status(), StatusCode::OK);
+    let second: Value = second.json().await?;
+    assert_eq!(second["meeting_id"], "second");
+    assert_ne!(second["session_token"], general["session_token"]);
+    assert!(
+        received.try_recv().is_err(),
+        "reusing the redeemed challenge must not spend another central grant"
+    );
+    // Exact retry of a reused room replays its own session.
+    let retry = select_member_room(&client, &base, &device, challenge_id, "second").await?;
+    assert_eq!(retry.status(), StatusCode::OK);
+    assert!(
+        retry.json::<Value>().await? == second,
+        "exact retry must replay the room's own response"
+    );
+    // A room the person is not joined to still fails closed.
+    let other = select_member_room(&client, &base, &device, challenge_id, "other").await?;
+    assert_eq!(other.status(), StatusCode::UNAUTHORIZED);
+
+    cancellation.cancel();
+    host_task.await??;
+    worker_cancellation.cancel();
+    worker_task.await??;
+    Ok(())
+}
+
+async fn select_member_room(
+    client: &reqwest::Client,
+    base: &str,
+    device: &str,
+    challenge_id: &str,
+    room: &str,
+) -> Result<reqwest::Response, reqwest::Error> {
+    client
+        .post(format!("{base}/api/member-connect/select"))
+        .header("x-device-token", device)
+        .json(&json!({"challenge_id":challenge_id,"room_id":room,"client_id":"connect-client"}))
+        .send()
+        .await
 }
 
 async fn challenge(

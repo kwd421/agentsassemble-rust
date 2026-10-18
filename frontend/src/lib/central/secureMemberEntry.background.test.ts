@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadCentralSession, signedRequest } from "./identity";
 import { RemoteTransport } from "../remote/remoteTransport";
-import { remoteSessionTransport, remoteWorkspaceFor } from "../remote/remoteWorkspace";
+import { closeRemoteWorkspace, remoteSessionTransport, remoteWorkspaceFor } from "../remote/remoteWorkspace";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../../test/serverProductSurface";
 import { SecureMemberAdmission } from "./secureMemberEntry";
 
@@ -87,11 +87,12 @@ describe("member background room select", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
+    closeRemoteWorkspace();
     vi.clearAllMocks();
     vi.mocked(loadCentralSession).mockReturnValue(session as never);
   });
 
-  async function openAdmission(calls: { path: string; body: unknown }[]) {
+  async function openAdmission(calls: { path: string; body: unknown }[], { reuse = false } = {}) {
     const fetch = vi.fn(async (path: string, init?: RequestInit) => {
       const body = init?.body ? JSON.parse(String(init.body)) : {};
       calls.push({ path, body });
@@ -100,7 +101,7 @@ describe("member background room select", () => {
       }
       if (path === "/api/member-connect/rooms") {
         return new Response(
-          JSON.stringify({ rooms: [{ room_id: "general", name: "일반" }, { room_id: "second", name: "둘째" }] })
+          JSON.stringify({ rooms: [{ room_id: "general", name: "일반" }, { room_id: "second", name: "둘째" }], ...(reuse ? { room_select_reuse: true } : {}) })
         );
       }
       if (path === "/api/member-connect/select") {
@@ -152,6 +153,35 @@ describe("member background room select", () => {
     expect(remoteWorkspaceFor(entry.server_id)).toBeNull();
     // The primary admission challenge is untouched: a later foreground
     // select still goes out on the original challenge.
+    await admission.select("general", new AbortController().signal).catch(() => undefined);
+    const selects = calls.filter((call) => call.path === "/api/member-connect/select");
+    expect(selects[selects.length - 1].body).toMatchObject({ challenge_id: primaryChallenge, room_id: "general" });
+    admission.close();
+    vi.restoreAllMocks();
+  });
+
+  it("reuses one redeemed challenge for every room when the host advertises it", async () => {
+    const calls: { path: string; body: unknown }[] = [];
+    const { admission, transport } = await openAdmission(calls, { reuse: true });
+    await admission.admit(new AbortController().signal);
+    const primaryChallenge = (calls.find((call) => call.path === "/api/member-connect/rooms")?.body as { challenge_id: string }).challenge_id;
+    const grantsBefore = vi.mocked(signedRequest).mock.calls.length;
+
+    const parsed = await admission.selectBackgroundRoom("second", new AbortController().signal);
+    expect(parsed.meeting_id).toBe("second");
+    expect(parsed.session_token).toBe("background-session-second");
+    // The reused challenge spends no new central grant: one challenge, one
+    // redeem and one grant for the whole admission.
+    expect(calls.filter((call) => call.path === "/api/member-connect/challenge")).toHaveLength(1);
+    expect(calls.filter((call) => call.path === "/api/member-connect/rooms")).toHaveLength(1);
+    expect(vi.mocked(signedRequest).mock.calls.length).toBe(grantsBefore);
+    const backgroundSelect = calls.filter((call) => call.path === "/api/member-connect/select");
+    expect(backgroundSelect).toHaveLength(1);
+    expect(backgroundSelect[0].body).toMatchObject({ challenge_id: primaryChallenge, room_id: "second" });
+    expect(remoteSessionTransport("background-session-second")).toBe(transport);
+    expect(remoteWorkspaceFor(entry.server_id)).toBeNull();
+
+    // The foreground select for another joined room reuses it too.
     await admission.select("general", new AbortController().signal).catch(() => undefined);
     const selects = calls.filter((call) => call.path === "/api/member-connect/select");
     expect(selects[selects.length - 1].body).toMatchObject({ challenge_id: primaryChallenge, room_id: "general" });

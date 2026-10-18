@@ -98,6 +98,25 @@ pub async fn persist_invite(
     base_participant_id: &str,
     display_name: &str,
 ) -> agentsassemble_server::IssuedHumanInviteCredentials {
+    persist_invite_in_room(
+        store,
+        "general",
+        invite_scope,
+        max_uses,
+        base_participant_id,
+        display_name,
+    )
+    .await
+}
+
+pub async fn persist_invite_in_room(
+    store: &SqliteStore,
+    room_id: &str,
+    invite_scope: InviteScope,
+    max_uses: i64,
+    base_participant_id: &str,
+    display_name: &str,
+) -> agentsassemble_server::IssuedHumanInviteCredentials {
     let identity = store
         .host_identity()
         .await
@@ -107,7 +126,7 @@ pub async fn persist_invite(
     let draft = HumanInviteCredentialDraft {
         room_url: "http://127.0.0.1:8765".to_owned(),
         public_room_url: String::new(),
-        room_id: "general".to_owned(),
+        room_id: room_id.to_owned(),
         base_participant_id: base_participant_id.to_owned(),
         display_name: display_name.to_owned(),
         invite_scope,
@@ -119,7 +138,7 @@ pub async fn persist_invite(
         .unwrap_or_else(|error| panic!("issue human invite credentials: {error}"));
     let manager = store
         .authorize_local_room_manager(
-            "general",
+            room_id,
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
         )

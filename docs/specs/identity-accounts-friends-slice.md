@@ -4083,3 +4083,55 @@ Entry points: `frontend/src/lib/central/localOwnership.ts`,
 `frontend/src/app/useCentralDirectory.ts`,
 `frontend/src/lib/central/identity.ts`,
 `frontend/src/lib/roomDockPersistence.ts`.
+
+### One central connect grant per host admission (2026-10-18)
+
+The member connect flow spends exactly one central `member-connect-grants`
+(`aamc1.`) redemption per host admission, not one per room select. A redeemed
+connect challenge stays usable for every room the admitted person is joined to
+until its 300-second window (`CHALLENGE_TTL` in
+`crates/agentsassemble-server/src/human_invite_web.rs`) closes.
+
+Host owner: `ConnectState::ConnectRedeemed.selected` is keyed by room
+(`crates/agentsassemble-server/src/member_connect_web.rs:13`,
+`member_connect_web.rs:25`). `select` first requires the requested room to be
+one this channel's admission is joined to and the challenge window to be open
+(`member_connect_web.rs` select handler), then mints or replays that room's own
+session; a different joined room mints a separate session on the same
+challenge, while a room the person is not joined to stays `401`
+(`invalid_challenge`). Every select still rechecks join state, room state and
+admission currency inside the mint transaction
+(`crates/agentsassemble-persistence/src/member_connect.rs:61`
+`select_member_connect_room`, `is_current` and the membership query there), so
+kick/leave/ban/removal and epoch changes keep refusing and the channel still
+closes on membership loss. Exact retries replay one response per room. The
+`/api/member-connect/rooms` redeem response advertises the capability as
+`room_select_reuse` (`member_connect_web.rs:167`); the grant is still spent
+only at redeem (`POST /api/member-connect/rooms`), and `start`/`select` stay
+grant-free.
+
+Client owner: `SecureMemberAdmission` records the capability and the live
+challenge expiry (`frontend/src/lib/central/secureMemberEntry.ts:45`,
+`secureMemberEntry.ts:141`) and reuses the existing `challengeId` for a
+background or foreground select while the window is open
+(`secureMemberEntry.ts:118` `selectBackgroundRoom`, `secureMemberEntry.ts:144`
+`challengeLive`, `secureMemberEntry.ts:149` `selectWithChallenge`). A host that
+omits `room_select_reuse` (old host) or a lapsed window keeps the legacy
+per-room challenge+grant cycle (`secureMemberEntry.ts:132`
+`freshConnectChallenge`); the lapsed-reuse fallback adopts the fresh admission
+so later selects reuse it. A foreground `401` still recovers through the
+existing fresh-challenge owner
+(`frontend/src/app/useMemberHosts.ts:30` `memberSelectErrorNeedsFreshChallenge`);
+background select failures stay silent and retry on the next snapshot/host
+change (`frontend/src/app/useMemberRoomLive.ts`).
+
+Verification: `member_invite_boundary::member_connect_reuses_one_redeemed_challenge_across_joined_rooms`
+(`crates/agentsassemble-server/tests/member_invite_boundary.rs`) proves one
+redeem lists two joined rooms, both select on the same challenge with distinct
+sessions, an exact retry replays, no second central grant is redeemed and a
+non-joined room stays `401`; the existing
+`member_http_signs_redeem_binds_browser_replays_and_fails_closed` still covers
+concurrent same-room selection, the kick refusal and the cached replay after
+kick. Frontend
+`frontend/src/lib/central/secureMemberEntry.background.test.ts` covers the
+reuse path and the old-host fallback.

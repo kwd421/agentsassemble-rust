@@ -1,7 +1,20 @@
 use super::*;
 use crate::central::directory::MemberGrantPurpose;
 use agentsassemble_persistence::MemberConnectRoom;
+use std::collections::HashMap;
 use std::sync::Arc;
+
+/// One redeemed connect challenge remains usable for every joined room on the
+/// same admitted channel until its 300-second window closes, so a member
+/// device spends exactly one central grant per host admission instead of one
+/// per room select. Each room keeps its own minted session and is keyed by
+/// room so exact retries replay one response while distinct rooms mint
+/// separate sessions.
+pub(super) struct SelectedRoom {
+    client: String,
+    request_id: String,
+    completed: Option<Value>,
+}
 
 pub(super) enum ConnectState {
     Issued,
@@ -9,7 +22,7 @@ pub(super) enum ConnectState {
     ConnectRedeemed {
         member: Box<MemberAdmission>,
         rooms: Vec<MemberConnectRoom>,
-        selected: Option<(String, String, String, Option<Value>)>,
+        selected: HashMap<String, SelectedRoom>,
     },
 }
 
@@ -147,11 +160,15 @@ pub(crate) async fn redeem(
             "No joined rooms on this server.",
         ));
     }
-    let response = json!({"rooms":rooms});
+    // Capability advertisement: this host keeps one redeemed connect
+    // challenge usable across every joined room on the channel, so the client
+    // never mints another central grant for a select on a live admission. An
+    // older host omits the field and keeps the per-room grant path.
+    let response = json!({"rooms":rooms, "room_select_reuse":true});
     *record = ConnectState::ConnectRedeemed {
         member: Box::new(member),
         rooms,
-        selected: None,
+        selected: HashMap::new(),
     };
     Ok(Json(response))
 }
@@ -186,29 +203,46 @@ pub(crate) async fn select(
     else {
         return Err(invalid_challenge());
     };
+    // The reused challenge is bound to this channel by `challenge`; the room
+    // must still be one this admitted person is joined to and the admission
+    // window must still be open.
     if !rooms.iter().any(|r| r.room_id == body.room) {
         return Err(invalid_challenge());
     }
     if member.challenge_expires_at <= Utc::now() {
         return Err(invalid_challenge());
     }
-    let (room, client, request_id, completed) = selected.get_or_insert_with(|| {
-        (
-            body.room.clone(),
-            body.client.clone(),
-            uuid::Uuid::new_v4().to_string(),
-            None,
-        )
-    });
-    if room != &body.room {
-        return Err(invalid_challenge());
-    }
-    if let Some(response) = completed {
-        return Ok(Json(response.clone()));
-    }
+    let (client, request_id) = {
+        let entry = selected
+            .entry(body.room.clone())
+            .or_insert_with(|| SelectedRoom {
+                client: body.client.clone(),
+                request_id: uuid::Uuid::new_v4().to_string(),
+                completed: None,
+            });
+        // One room keeps one client identity on this challenge; a different
+        // client presenting it is a stale/foreign request.
+        if entry.client != body.client {
+            return Err(invalid_challenge());
+        }
+        if let Some(response) = &entry.completed {
+            return Ok(Json(response.clone()));
+        }
+        (entry.client.clone(), entry.request_id.clone())
+    };
+    // Every select rechecks the canonical join, room state and admission
+    // currency inside the mint transaction: kick/leave/ban/removal/epoch still
+    // refuse here even though no new central grant is spent.
     let decision = state
         .store
-        .select_member_connect_room(member, &body.room, &browser, request_id, client, Utc::now())
+        .select_member_connect_room(
+            member,
+            &body.room,
+            &browser,
+            &request_id,
+            &client,
+            Utc::now(),
+        )
         .await?;
     let HumanAdmissionDecision::Admitted(commit) = decision else {
         if let HumanAdmissionDecision::Rejected(reason) = decision {
@@ -233,7 +267,9 @@ pub(crate) async fn select(
         server_product_surface: state.server_product_surface.as_ref().clone(),
     })
     .map_err(|_| invalid_challenge())?;
-    *completed = Some(response.clone());
+    if let Some(entry) = selected.get_mut(&body.room) {
+        entry.completed = Some(response.clone());
+    }
     if let Some(client) = &secure_client {
         client.adopt(&state, None)?;
     }

@@ -42,6 +42,8 @@ export class SecureMemberAdmission {
   readonly deviceToken: string;
   readonly clientId = getOrCreateClientId();
   private challengeId = "";
+  private challengeExpiresAt = 0;
+  private roomSelectReuse = false;
   private session: CentralSession;
   private entry: SecureMemberEntry;
   private adopted = false;
@@ -62,10 +64,10 @@ export class SecureMemberAdmission {
   }
   async admit(signal?: AbortSignal): Promise<{ room_id: string; name: string }[] | null> {
     const invite = this.entry.inviteToken;
-    const challenge = parseMemberChallenge(await this.post(invite ? "/api/room-invite/member-challenge" : "/api/member-connect/challenge", invite ? { invite_token: invite } : {}, signal));
-    if (challenge.server_id !== this.entry.server_id || challenge.registration_epoch !== this.entry.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 연결해 주세요.");
-    this.challengeId = challenge.challenge_id;
     if (invite) {
+      const challenge = parseMemberChallenge(await this.post("/api/room-invite/member-challenge", { invite_token: invite }, signal));
+      if (challenge.server_id !== this.entry.server_id || challenge.registration_epoch !== this.entry.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 연결해 주세요.");
+      this.challengeId = challenge.challenge_id;
       const { protocol, client_public_key, channel_id, origin, generation } = this.transport.hello;
       const binding = { protocol, client_public_key, channel_id, origin, generation, purpose: "admission", registration_epoch: this.entry.registration_epoch };
       const grant = strictRecord(await signedRequest(this.session, `/v1/servers/${encodeURIComponent(this.entry.server_id)}/member-grants`, "POST", { ...binding, challenge_hash: challenge.challenge_hash }, signal), "서버 입장권");
@@ -80,11 +82,11 @@ export class SecureMemberAdmission {
       const payload = await this.post("/api/room-invite/member-join", { invite_token: invite, challenge_id: this.challengeId, grant_token: grant.grant_token, request_id: requestId, client_id: this.clientId });
       this.install(payload, requestId, preflight.room_id); return null;
     }
-    const grantToken = await this.connectGrant(challenge, signal);
-    const value = strictRecord(await this.post("/api/member-connect/rooms", { challenge_id: this.challengeId, grant_token: grantToken }, signal), "참가 중인 방");
-    assertExactKeys(value, ["rooms"], "참가 중인 방");
-    if (!Array.isArray(value.rooms) || !value.rooms.length || value.rooms.length > 50 || !value.rooms.every(r => r && typeof r.room_id === "string" && r.room_id && typeof r.name === "string")) throw new Error("참가 중인 방을 확인하지 못했어요.");
-    return value.rooms;
+    const { challenge, rooms } = await this.freshConnectChallenge(signal);
+    this.challengeId = challenge.challenge_id;
+    this.challengeExpiresAt = challenge.expires_at;
+    if (!rooms.length) throw new Error("참가 중인 방을 확인하지 못했어요.");
+    return rooms;
   }
   async select(roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
     const payload = await this.post("/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId }, signal);
@@ -103,21 +105,49 @@ export class SecureMemberAdmission {
   }
   /**
    * Background select of one more joined room over the SAME host channel.
-   * The host admits exactly one room per challenge, so each background room
-   * runs its own challenge/redeem/select cycle; the primary admission's
-   * challenge is untouched. The room session is bound for socket tickets
-   * without installing a workspace (the workspace keeps the foreground
-   * session only). Selecting also adopts the channel, so an attached host
-   * is never reaped as admit-only.
+   * A host that advertises `room_select_reuse` keeps one redeemed connect
+   * challenge usable for every joined room until its window closes, so a
+   * reused challenge spends no new central grant and each room is rechecked
+   * (join, room, admission currency) at the host on the select itself. An old
+   * host (no capability) or a lapsed window takes a fresh challenge+grant and
+   * selects on it. The room session is bound for socket tickets without
+   * installing a workspace (the workspace keeps the foreground session only).
+   * Selecting also adopts the channel, so an attached host is never reaped as
+   * admit-only.
    */
   async selectBackgroundRoom(roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
+    if (this.roomSelectReuse && this.challengeLive()) {
+      return await this.selectWithChallenge(this.challengeId, roomId, signal);
+    }
+    const { challenge, rooms } = await this.freshConnectChallenge(signal);
+    if (!rooms.some((room) => room && typeof room.room_id === "string" && room.room_id === roomId)) throw new Error("참가 중인 방을 확인하지 못했어요.");
+    if (this.roomSelectReuse) {
+      // This host supports reuse but our window lapsed; adopt the fresh
+      // admission so later selects reuse it instead of spending per-room.
+      this.challengeId = challenge.challenge_id;
+      this.challengeExpiresAt = challenge.expires_at;
+    }
+    return await this.selectWithChallenge(challenge.challenge_id, roomId, signal);
+  }
+  private async freshConnectChallenge(signal?: AbortSignal): Promise<{ challenge: ReturnType<typeof parseMemberChallenge>; rooms: { room_id: string; name: string }[] }> {
     const challenge = parseMemberChallenge(await this.post("/api/member-connect/challenge", {}, signal));
     if (challenge.server_id !== this.entry.server_id || challenge.registration_epoch !== this.entry.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 연결해 주세요.");
     const grantToken = await this.connectGrant(challenge, signal);
     const value = strictRecord(await this.post("/api/member-connect/rooms", { challenge_id: challenge.challenge_id, grant_token: grantToken }, signal), "참가 중인 방");
-    assertExactKeys(value, ["rooms"], "참가 중인 방");
-    if (!Array.isArray(value.rooms) || !value.rooms.some((room) => room && typeof room.room_id === "string" && room.room_id === roomId)) throw new Error("참가 중인 방을 확인하지 못했어요.");
-    const payload = await this.post("/api/member-connect/select", { challenge_id: challenge.challenge_id, room_id: roomId, client_id: this.clientId }, signal);
+    assertExactKeys(value, ["rooms"], "참가 중인 방", ["room_select_reuse"]);
+    if (!Array.isArray(value.rooms) || value.rooms.length > 50 || !value.rooms.every((room) => room && typeof room.room_id === "string" && room.room_id && typeof room.name === "string")) throw new Error("참가 중인 방을 확인하지 못했어요.");
+    // A host that omits the capability keeps the per-room grant path, so the
+    // reuse flag is only ever raised by a host that vouches for it.
+    this.roomSelectReuse = value.room_select_reuse === true;
+    return { challenge, rooms: value.rooms as { room_id: string; name: string }[] };
+  }
+  private challengeLive(): boolean {
+    // A select must reach the host before its challenge window closes; keep a
+    // small margin so the reuse decision never races the host-side expiry.
+    return this.challengeExpiresAt > Date.now() / 1000 + 5;
+  }
+  private async selectWithChallenge(challengeId: string, roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
+    const payload = await this.post("/api/member-connect/select", { challenge_id: challengeId, room_id: roomId, client_id: this.clientId }, signal);
     const parsed = parseRoomInviteJoinResponse(payload, payload.request_id, roomId, this.clientId);
     if (parsed.server_id !== this.entry.server_id || loadCentralSession()?.token !== this.session.token || !this.transport.active) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
     bindRemoteSession(parsed.session_token, this.transport, parsed.server_id);
