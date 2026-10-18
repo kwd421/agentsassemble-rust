@@ -4144,3 +4144,81 @@ concurrent same-room selection, the kick refusal and the cached replay after
 kick. Frontend
 `frontend/src/lib/central/secureMemberEntry.background.test.ts` covers the
 reuse path and the old-host fallback.
+
+### Idle member channel spends no central grants past the 300-second window (2026-10-18)
+
+Required behavior: while a member's secure channel stays alive, keeping the
+open room (and background rooms) alive costs zero central requests. A redeemed
+connect challenge stays usable for selects on the same live channel past its
+300-second window without a fresh central grant; sessions are effectively bound
+to the live admitted channel (the host re-checks join/room/admission/epoch
+exactly as at mint) and only a NEW channel needs a new central grant. Kick,
+leave, ban, removal and epoch changes keep refusing on the bound channel
+exactly as at mint.
+
+Host owner: `select` on a lapsed challenge is accepted only with the
+`?room_select_channel_bound=1` URL opt-in AND the request arriving over the
+same live secure channel that redeemed the challenge (the existing
+`entry.secure`/browser/epoch checks already prove the binding; the state must
+be `ConnectRedeemed`). The member expiry is then extended past now so the mint
+rechecks run as at mint (`member_connect_web.rs` select handler, `challenge`
+helper). `redeem` advertises `room_select_channel_bound: true` in the rooms
+response ONLY to an opted-in client, mirroring the `room_select_reuse` gate;
+old hosts ignore the query, old clients keep the exact old shapes and the old
+300-second wall. `start`/`select` stay grant-free; the grant is still spent
+only at redeem.
+
+Client owner: `SecureMemberAdmission` records `room_select_channel_bound`
+(`frontend/src/lib/central/secureMemberEntry.ts`) and reuses the cached
+challenge on the live channel past the window for foreground
+(`select`) and background (`selectBackgroundRoom`) selects, carrying the
+channel-bound query pair on every `selectWithChallenge`. Without the
+capability (old host) or on a dead channel the legacy paths stay: background
+takes a fresh challenge+grant, a foreground `401` recovers through the
+existing fresh-challenge owner (`useMemberHosts.ts`
+`memberSelectErrorNeedsFreshChallenge` → `attachFresh`).
+
+Member-room settings reads follow the same authority as other member-room API
+calls: a presented session resolves through its bound friend-host transport
+(`frontend/src/api/room.ts` `requestSessionRoomPreferences`), a dead binding
+fails closed instead of degrading to the local origin (desktop CSP refuses
+`tauri://localhost`), and a remote room without a session has no local-host
+fallback (`frontend/src/lib/roomGuestPosting.ts`
+`messageAttachmentAuthorityForRoom`, `LobbyView.tsx` attachment authority,
+`frontend/src/lib/messageAttachmentReadScheduler.ts` rejecting scheduler).
+Local sessions keep their existing paths (desktop ticket, web same-origin).
+
+Entry points: `crates/agentsassemble-server/src/member_connect_web.rs`
+(`challenge`, `redeem`, `select`, `ROOM_SELECT_CHANNEL_BOUND_QUERY`),
+`frontend/src/lib/central/secureMemberEntry.ts`
+(`roomSelectChannelBound`, `selectWithChallenge`),
+`frontend/src/app/useMemberHosts.ts` (unchanged `attachFresh` recovery),
+`frontend/src/app/useMemberRoomLive.ts` (unchanged re-auth heal).
+
+Verification: `frontend/src/app/useMemberIdleGrants.test.tsx` (fake timers,
+real admission/hooks: 60 idle minutes with foreground+background rooms spend
+nothing after attach; post-window re-tap, background re-auth and kick spend
+nothing) fails on the pre-fix client (one wasted grant each) and passes after;
+`secureMemberEntry.background.test.ts` covers the channel-bound lapse unit;
+`member_invite_boundary::member_connect_advertises_channel_bound_select_only_to_opted_in_clients`
+covers the gating shapes.
+
+### Friend-room settings reads use the friend host transport (2026-10-18)
+
+Member-room settings reads follow the same authority as other member-room API
+calls: a presented session resolves through its bound friend-host transport
+(`frontend/src/api/room.ts` `requestSessionRoomPreferences`), a dead binding
+fails closed instead of degrading to the local origin (desktop CSP refuses
+`tauri://localhost`), and a remote room without a session has no local-host
+fallback (`frontend/src/lib/roomGuestPosting.ts`
+`messageAttachmentAuthorityForRoom`, `LobbyView.tsx` attachment authority,
+`frontend/src/lib/messageAttachmentReadScheduler.ts` rejecting scheduler).
+Local sessions keep their existing paths (desktop ticket, web same-origin).
+
+Entry points: `frontend/src/api/room.ts`, `frontend/src/lib/roomGuestPosting.ts`,
+`frontend/src/views/LobbyView.tsx`,
+`frontend/src/lib/messageAttachmentReadScheduler.ts`.
+
+Verification: `roomPreferences.test.ts` covers the remote transport routing
+and the dead-binding fail-closed; `roomGuestPosting.test.ts` and
+`messageAttachmentReadScheduler.test.ts` cover the no-authority fail-closed.

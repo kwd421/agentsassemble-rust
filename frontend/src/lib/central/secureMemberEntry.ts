@@ -44,6 +44,7 @@ export class SecureMemberAdmission {
   private challengeId = "";
   private challengeExpiresAt = 0;
   private roomSelectReuse = false;
+  private roomSelectChannelBound = false;
   private session: CentralSession;
   private entry: SecureMemberEntry;
   private adopted = false;
@@ -93,9 +94,17 @@ export class SecureMemberAdmission {
     // live channel the workspace already holds: never re-install the
     // transport, only bind the new room session. A genuinely new transport
     // (re-attach after a stale challenge) still falls through to install so
-    // it replaces and closes the old channel.
-    if (this.roomSelectReuse && this.challengeLive() &&
-        remoteWorkspaceFor(this.entry.server_id)?.transport === this.transport) {
+    // it replaces and closes the old channel. Past the 300-second window the
+    // same live channel stays usable when the host advertised channel-bound
+    // selects: the host re-checks join/room/admission/epoch exactly as at
+    // mint instead of requiring a fresh central grant.
+    const workspaceMatches =
+      remoteWorkspaceFor(this.entry.server_id)?.transport === this.transport;
+    if (
+      workspaceMatches &&
+      ((this.roomSelectReuse && this.challengeLive()) ||
+        (this.roomSelectChannelBound && this.transport.active))
+    ) {
       return await this.selectWithChallenge(this.challengeId, roomId, signal);
     }
     const payload = await this.post("/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId }, signal);
@@ -125,14 +134,17 @@ export class SecureMemberAdmission {
    * admit-only.
    */
   async selectBackgroundRoom(roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
-    if (this.roomSelectReuse && this.challengeLive()) {
+    if ((this.roomSelectReuse && this.challengeLive()) ||
+        (this.roomSelectChannelBound && this.transport.active)) {
       return await this.selectWithChallenge(this.challengeId, roomId, signal);
     }
     const { challenge, rooms } = await this.freshConnectChallenge(signal);
     if (!rooms.some((room) => room && typeof room.room_id === "string" && room.room_id === roomId)) throw new Error("참가 중인 방을 확인하지 못했어요.");
-    if (this.roomSelectReuse) {
+    if (this.roomSelectReuse || this.roomSelectChannelBound) {
       // This host supports reuse but our window lapsed; adopt the fresh
       // admission so later selects reuse it instead of spending per-room.
+      // (Channel-bound selects normally never reach this fallback on a live
+      // channel; a dead transport still takes a fresh challenge+grant.)
       this.challengeId = challenge.challenge_id;
       this.challengeExpiresAt = challenge.expires_at;
     }
@@ -144,13 +156,17 @@ export class SecureMemberAdmission {
     const grantToken = await this.connectGrant(challenge, signal);
     // The reuse advertisement rides the URL query so old hosts (whose
     // `RedeemRequest` body keeps `deny_unknown_fields`) accept the request
-    // untouched and keep serving the exact old `{"rooms":[...]}` shape.
-    const value = strictRecord(await this.post("/api/member-connect/rooms?room_select_reuse=1", { challenge_id: challenge.challenge_id, grant_token: grantToken }, signal), "참가 중인 방");
-    assertExactKeys(value, ["rooms"], "참가 중인 방", ["room_select_reuse"]);
+    // untouched and keep serving the exact old `{"rooms":[...]}` shape. The
+    // channel-bound pair rides along the same way: an old host ignores it,
+    // while a new host additionally vouches that selects on this live channel
+    // stay usable past the 300-second window without a fresh central grant.
+    const value = strictRecord(await this.post("/api/member-connect/rooms?room_select_reuse=1&room_select_channel_bound=1", { challenge_id: challenge.challenge_id, grant_token: grantToken }, signal), "참가 중인 방");
+    assertExactKeys(value, ["rooms"], "참가 중인 방", ["room_select_reuse", "room_select_channel_bound"]);
     if (!Array.isArray(value.rooms) || value.rooms.length > 50 || !value.rooms.every((room) => room && typeof room.room_id === "string" && room.room_id && typeof room.name === "string")) throw new Error("참가 중인 방을 확인하지 못했어요.");
     // A host that omits the capability keeps the per-room grant path, so the
     // reuse flag is only ever raised by a host that vouches for it.
     this.roomSelectReuse = value.room_select_reuse === true;
+    this.roomSelectChannelBound = value.room_select_channel_bound === true;
     return { challenge, rooms: value.rooms as { room_id: string; name: string }[] };
   }
   private challengeLive(): boolean {
@@ -159,7 +175,11 @@ export class SecureMemberAdmission {
     return this.challengeExpiresAt > Date.now() / 1000 + 5;
   }
   private async selectWithChallenge(challengeId: string, roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
-    const payload = await this.post("/api/member-connect/select", { challenge_id: challengeId, room_id: roomId, client_id: this.clientId }, signal);
+    // The channel-bound opt-in rides the select URL so the host can tell a
+    // capable client past the 300-second window from an old one: old hosts
+    // ignore the query, and a new host keeps the exact old wall for clients
+    // that did not opt in.
+    const payload = await this.post(`/api/member-connect/select?room_select_channel_bound=1`, { challenge_id: challengeId, room_id: roomId, client_id: this.clientId }, signal);
     const parsed = parseRoomInviteJoinResponse(payload, payload.request_id, roomId, this.clientId);
     if (parsed.server_id !== this.entry.server_id || loadCentralSession()?.token !== this.session.token || !this.transport.active) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
     bindRemoteSession(parsed.session_token, this.transport, parsed.server_id);

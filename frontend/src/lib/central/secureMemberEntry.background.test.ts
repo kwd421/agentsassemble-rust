@@ -92,7 +92,7 @@ describe("member background room select", () => {
     vi.mocked(loadCentralSession).mockReturnValue(session as never);
   });
 
-  async function openAdmission(calls: { path: string; body: unknown }[], { reuse = false } = {}) {
+  async function openAdmission(calls: { path: string; body: unknown }[], { reuse = false, channelBound = false } = {}) {
     const fetch = vi.fn(async (path: string, init?: RequestInit) => {
       const body = init?.body ? JSON.parse(String(init.body)) : {};
       calls.push({ path, body });
@@ -101,10 +101,10 @@ describe("member background room select", () => {
       }
       if (path.startsWith("/api/member-connect/rooms")) {
         return new Response(
-          JSON.stringify({ rooms: [{ room_id: "general", name: "일반" }, { room_id: "second", name: "둘째" }], ...(reuse ? { room_select_reuse: true } : {}) })
+          JSON.stringify({ rooms: [{ room_id: "general", name: "일반" }, { room_id: "second", name: "둘째" }], ...(reuse ? { room_select_reuse: true } : {}), ...(channelBound ? { room_select_reuse: true, room_select_channel_bound: true } : {}) })
         );
       }
-      if (path === "/api/member-connect/select") {
+      if (path.startsWith("/api/member-connect/select")) {
         return new Response(JSON.stringify(joinFor(body.room_id, `request-${calls.length}`)));
       }
       throw new Error(`unexpected host path ${path}`);
@@ -151,7 +151,7 @@ describe("member background room select", () => {
     expect(backgroundRooms).toHaveLength(2);
     const backgroundChallenge = (backgroundRooms[1].body as { challenge_id: string }).challenge_id;
     expect(backgroundChallenge).not.toBe(primaryChallenge);
-    const backgroundSelect = calls.filter((call) => call.path === "/api/member-connect/select");
+    const backgroundSelect = calls.filter((call) => call.path.startsWith("/api/member-connect/select"));
     expect(backgroundSelect).toHaveLength(1);
     expect(backgroundSelect[0].body).toMatchObject({ challenge_id: backgroundChallenge, room_id: "second" });
     expect(remoteSessionTransport("background-session-second")).toBe(transport);
@@ -159,7 +159,7 @@ describe("member background room select", () => {
     // The primary admission challenge is untouched: a later foreground
     // select still goes out on the original challenge.
     await admission.select("general", new AbortController().signal).catch(() => undefined);
-    const selects = calls.filter((call) => call.path === "/api/member-connect/select");
+    const selects = calls.filter((call) => call.path.startsWith("/api/member-connect/select"));
     expect(selects[selects.length - 1].body).toMatchObject({ challenge_id: primaryChallenge, room_id: "general" });
     admission.close();
     vi.restoreAllMocks();
@@ -180,7 +180,7 @@ describe("member background room select", () => {
     expect(calls.filter((call) => call.path === "/api/member-connect/challenge")).toHaveLength(1);
     expect(calls.filter((call) => call.path.startsWith("/api/member-connect/rooms"))).toHaveLength(1);
     expect(vi.mocked(signedRequest).mock.calls.length).toBe(grantsBefore);
-    const backgroundSelect = calls.filter((call) => call.path === "/api/member-connect/select");
+    const backgroundSelect = calls.filter((call) => call.path.startsWith("/api/member-connect/select"));
     expect(backgroundSelect).toHaveLength(1);
     expect(backgroundSelect[0].body).toMatchObject({ challenge_id: primaryChallenge, room_id: "second" });
     expect(remoteSessionTransport("background-session-second")).toBe(transport);
@@ -188,7 +188,7 @@ describe("member background room select", () => {
 
     // The foreground select for another joined room reuses it too.
     await admission.select("general", new AbortController().signal).catch(() => undefined);
-    const selects = calls.filter((call) => call.path === "/api/member-connect/select");
+    const selects = calls.filter((call) => call.path.startsWith("/api/member-connect/select"));
     expect(selects[selects.length - 1].body).toMatchObject({ challenge_id: primaryChallenge, room_id: "general" });
     admission.close();
     vi.restoreAllMocks();
@@ -213,5 +213,39 @@ describe("member background room select", () => {
     assertExactKeys(legacy, ["rooms"], "참가 중인 방");
     // A new host shape without the opt-in stays identical, so the check passes.
     expect(Object.keys(legacy).sort()).toEqual(["rooms"]);
+  });
+
+  it("selects past the 300s window on the live channel without a new grant when the host vouches channel-bound", async () => {
+    vi.useFakeTimers();
+    try {
+      const calls: { path: string; body: unknown }[] = [];
+      const { admission } = await openAdmission(calls, { channelBound: true });
+      await admission.admit(new AbortController().signal);
+      const redeemPaths = calls
+        .filter((call) => call.path.startsWith("/api/member-connect/rooms"))
+        .map((call) => call.path);
+      expect(redeemPaths).toHaveLength(1);
+      expect(redeemPaths[0]).toContain("room_select_reuse=1");
+      expect(redeemPaths[0]).toContain("room_select_channel_bound=1");
+      const grantsBefore = vi.mocked(signedRequest).mock.calls.length;
+      const first = await admission.selectBackgroundRoom("general", new AbortController().signal);
+      expect(first.meeting_id).toBe("general");
+      expect(vi.mocked(signedRequest).mock.calls.length).toBe(grantsBefore);
+      // Past the 300-second challenge window the same live channel keeps
+      // selecting without a fresh central grant; the select carries the
+      // channel-bound opt-in so the host can tell it from an old client.
+      await vi.advanceTimersByTimeAsync(301_000);
+      const second = await admission.selectBackgroundRoom("second", new AbortController().signal);
+      expect(second.meeting_id).toBe("second");
+      expect(vi.mocked(signedRequest).mock.calls.length).toBe(grantsBefore);
+      const selects = calls.filter((call) => call.path.startsWith("/api/member-connect/select"));
+      expect(selects).toHaveLength(2);
+      expect(selects[1].path).toContain("room_select_channel_bound=1");
+      expect(calls.filter((call) => call.path === "/api/member-connect/challenge")).toHaveLength(1);
+      admission.close();
+    } finally {
+      vi.useRealTimers();
+    }
+    vi.restoreAllMocks();
   });
 });

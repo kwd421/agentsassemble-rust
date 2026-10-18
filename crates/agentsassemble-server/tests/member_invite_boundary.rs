@@ -309,6 +309,164 @@ async fn select_member_room(
         .await
 }
 
+#[tokio::test]
+async fn member_connect_advertises_channel_bound_select_only_to_opted_in_clients() -> TestResult {
+    let (store, invite) = fixture(InviteScope::ReadWrite).await;
+    store.set_registration_epoch(Some("member-epoch")).await?;
+    let identity = store.host_identity().await?;
+    let pair = ring::signature::Ed25519KeyPair::from_pkcs8(identity.private_key_pkcs8())
+        .map_err(|_| "fixture signing key")?;
+    let key = pair.public_key().as_ref().to_vec();
+    let server_id = identity.server_id().to_owned();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let central = format!("http://{}", listener.local_addr()?);
+    let issuer = central.clone();
+    let (calls, mut received) = tokio::sync::mpsc::unbounded_channel();
+    let worker = worker_router(key, server_id, issuer, calls);
+    let worker_cancellation = CancellationToken::new();
+    let worker_shutdown = worker_cancellation.clone();
+    let worker_task = tokio::spawn(async move {
+        axum::serve(listener, worker)
+            .with_graceful_shutdown(worker_shutdown.cancelled_owned())
+            .await
+    });
+    let host = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let base = format!("http://{}", host.local_addr()?);
+    let state = AppState::local(
+        store.clone(),
+        TicketStore::new(Duration::from_secs(30), 4096),
+        ProviderCatalogService::fixed(ProviderCatalog::default()),
+    )
+    .await?
+    .with_central_directory(&central)?;
+    let cancellation = CancellationToken::new();
+    let host_shutdown = cancellation.clone();
+    let host_task =
+        tokio::spawn(async move { serve(host, state, host_shutdown, async { Ok(()) }).await });
+    let client = reqwest::Client::new();
+
+    assert_admission(&client, &base, invite.join_code(), &mut received).await?;
+    let device = format!("aad1_{}", URL_SAFE_NO_PAD.encode([9_u8; 32]));
+
+    async fn listed_rooms(
+        client: &reqwest::Client,
+        base: &str,
+        device: &str,
+        query: &str,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        let challenge: Value = client
+            .post(format!("{base}/api/member-connect/challenge"))
+            .header("x-device-token", device)
+            .json(&json!({}))
+            .send()
+            .await?
+            .json()
+            .await?;
+        let listed = client
+            .post(format!("{base}/api/member-connect/rooms{query}"))
+            .header("x-device-token", device)
+            .json(&json!({"challenge_id":challenge["challenge_id"],"grant_token":"aamc1.connect"}))
+            .send()
+            .await?;
+        assert_eq!(listed.status(), StatusCode::OK);
+        Ok(listed.json().await?)
+    }
+    let keys_of = |listed: &Value| {
+        let mut keys: Vec<String> = listed
+            .as_object()
+            .ok_or("rooms object")
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        keys.sort_unstable();
+        keys
+    };
+
+    // No opt-in: exactly {"rooms"}, so an old strict client keeps working.
+    let legacy = listed_rooms(&client, &base, &device, "").await?;
+    assert_eq!(keys_of(&legacy), vec!["rooms".to_owned()]);
+    received.recv().await.ok_or("legacy redeem")?;
+    // Reuse-only opt-in: no channel-bound field for a client that cannot parse it.
+    let reuse_only = listed_rooms(&client, &base, &device, "?room_select_reuse=1").await?;
+    assert_eq!(
+        keys_of(&reuse_only),
+        vec!["room_select_reuse".to_owned(), "rooms".to_owned()]
+    );
+    assert_eq!(reuse_only["room_select_reuse"], true);
+    assert!(reuse_only.get("room_select_channel_bound").is_none());
+    received.recv().await.ok_or("reuse redeem")?;
+    // Channel-bound-only opt-in: the field rides its own pair.
+    let bound_only = listed_rooms(&client, &base, &device, "?room_select_channel_bound=1").await?;
+    assert_eq!(
+        keys_of(&bound_only),
+        vec!["room_select_channel_bound".to_owned(), "rooms".to_owned()]
+    );
+    assert_eq!(bound_only["room_select_channel_bound"], true);
+    assert!(bound_only.get("room_select_reuse").is_none());
+    received.recv().await.ok_or("bound redeem")?;
+    // Both opt-ins: both capabilities advertised.
+    let both = listed_rooms(
+        &client,
+        &base,
+        &device,
+        "?room_select_reuse=1&room_select_channel_bound=1",
+    )
+    .await?;
+    assert_eq!(
+        keys_of(&both),
+        vec![
+            "room_select_channel_bound".to_owned(),
+            "room_select_reuse".to_owned(),
+            "rooms".to_owned()
+        ]
+    );
+    received.recv().await.ok_or("both redeem")?;
+
+    // A select carrying the channel-bound pair on a live challenge follows
+    // the normal path and spends no further central grant.
+    let both_challenge: Value = client
+        .post(format!("{base}/api/member-connect/challenge"))
+        .header("x-device-token", &device)
+        .json(&json!({}))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let both_challenge_id = both_challenge["challenge_id"].as_str().ok_or("challenge")?;
+    let both_redeem = client
+        .post(format!(
+            "{base}/api/member-connect/rooms?room_select_reuse=1&room_select_channel_bound=1"
+        ))
+        .header("x-device-token", &device)
+        .json(&json!({"challenge_id":both_challenge_id,"grant_token":"aamc1.connect"}))
+        .send()
+        .await?;
+    assert_eq!(both_redeem.status(), StatusCode::OK);
+    received.recv().await.ok_or("select redeem")?;
+    let with_query = client
+        .post(format!(
+            "{base}/api/member-connect/select?room_select_channel_bound=1"
+        ))
+        .header("x-device-token", &device)
+        .json(&json!({"challenge_id":both_challenge_id,"room_id":"general","client_id":"connect-client"}))
+        .send()
+        .await?;
+    assert_eq!(with_query.status(), StatusCode::OK);
+    let plain = select_member_room(&client, &base, &device, both_challenge_id, "general").await?;
+    assert_eq!(plain.status(), StatusCode::OK);
+    assert!(
+        received.try_recv().is_err(),
+        "selects on a live channel must not spend another central grant"
+    );
+
+    cancellation.cancel();
+    host_task.await??;
+    worker_cancellation.cancel();
+    worker_task.await??;
+    Ok(())
+}
+
 async fn challenge(
     client: &reqwest::Client,
     base: &str,

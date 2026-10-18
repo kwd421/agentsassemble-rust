@@ -114,7 +114,7 @@ async function openAdmissionWithRooms(
     if (path.startsWith("/api/member-connect/rooms")) {
       return new Response(JSON.stringify({ rooms, room_select_reuse: true }));
     }
-    if (path === "/api/member-connect/select") {
+    if (path.startsWith("/api/member-connect/select")) {
       return new Response(JSON.stringify(joinFor(body.room_id, `request-${calls.length}`)));
     }
     throw new Error(`unexpected host path ${path}`);

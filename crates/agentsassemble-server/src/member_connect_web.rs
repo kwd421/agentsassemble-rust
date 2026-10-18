@@ -35,6 +35,26 @@ pub(crate) fn client_advertises_room_select_reuse(query: Option<&str>) -> bool {
     })
 }
 
+/// URL query pair through which a client build advertises that it selects on
+/// a live admitted channel past the 300-second challenge window without a new
+/// central grant. Same gating as `room_select_reuse`: old hosts ignore the
+/// query, and the host only ever sends the capability field to a client that
+/// advertised it, so old clients keep their strict exact-keys shape.
+pub(crate) const ROOM_SELECT_CHANNEL_BOUND_QUERY: &str = "room_select_channel_bound";
+const ROOM_SELECT_CHANNEL_BOUND_VALUE: &str = "1";
+
+pub(crate) fn client_advertises_room_select_channel_bound(query: Option<&str>) -> bool {
+    query.is_some_and(|query| {
+        query.split('&').any(|pair| {
+            pair.split_once('=')
+                == Some((
+                    ROOM_SELECT_CHANNEL_BOUND_QUERY,
+                    ROOM_SELECT_CHANNEL_BOUND_VALUE,
+                ))
+        })
+    })
+}
+
 pub(super) enum ConnectState {
     Issued,
     Failed,
@@ -99,6 +119,7 @@ async fn challenge(
     id: &str,
     browser: [u8; 32],
     client: Option<&crate::secure_client::SecureClient>,
+    lapsed_channel_bound: bool,
 ) -> Result<(Challenge, Arc<tokio::sync::Mutex<ConnectState>>), HumanInviteHttpError> {
     let epoch = state
         .store
@@ -115,9 +136,25 @@ async fn challenge(
     if entry.secure.as_ref() != client.map(crate::secure_client::SecureClient::binding)
         || entry.browser != browser
         || entry.epoch != epoch
-        || entry.expires <= Utc::now()
     {
         return Err(invalid_challenge());
+    }
+    if entry.expires <= Utc::now() {
+        // The 300-second window lapsed. A select on the same live secure
+        // channel that redeemed the challenge stays usable without a new
+        // central grant: the channel binding already matched above, so only
+        // the redeemed state remains to verify. Every other admission check
+        // (epoch, membership, room, scope) still runs at mint.
+        if !lapsed_channel_bound {
+            return Err(invalid_challenge());
+        }
+        let record = match &entry.purpose {
+            ChallengePurpose::Connect(record) => record.clone(),
+            _ => return Err(invalid_challenge()),
+        };
+        if !matches!(*record.lock().await, ConnectState::ConnectRedeemed { .. }) {
+            return Err(invalid_challenge());
+        }
     }
     let ChallengePurpose::Connect(record) = &entry.purpose else {
         return Err(invalid_challenge());
@@ -135,11 +172,19 @@ pub(crate) async fn redeem(
     // Read the capability advertisement before the body move consumes the
     // request; the query is ignored by old hosts and old clients alike.
     let reuse_advertised = client_advertises_room_select_reuse(request.uri().query());
+    let channel_bound_advertised =
+        client_advertises_room_select_channel_bound(request.uri().query());
     let body: RedeemRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
         .map_err(HumanInviteHttpError::from_body)?;
-    let (entry, record) =
-        challenge(&state, &body.challenge_id, browser, secure_client.as_ref()).await?;
+    let (entry, record) = challenge(
+        &state,
+        &body.challenge_id,
+        browser,
+        secure_client.as_ref(),
+        false,
+    )
+    .await?;
     let mut record = record.lock().await;
     if !matches!(*record, ConnectState::Issued) {
         return Err(invalid_challenge());
@@ -188,9 +233,17 @@ pub(crate) async fn redeem(
     // This host keeps one redeemed connect challenge usable across every
     // joined room on the channel, so the client never mints another central
     // grant for a select on a live admission. An older host omits the field
-    // and keeps the per-room grant path.
+    // and keeps the per-room grant path. The channel-bound field rides its own
+    // opt-in pair for the same reason: a client that only opted into reuse
+    // keeps its strict shape.
     let response = if reuse_advertised {
-        json!({"rooms":rooms, "room_select_reuse":true})
+        if channel_bound_advertised {
+            json!({"rooms":rooms, "room_select_reuse":true, "room_select_channel_bound":true})
+        } else {
+            json!({"rooms":rooms, "room_select_reuse":true})
+        }
+    } else if channel_bound_advertised {
+        json!({"rooms":rooms, "room_select_channel_bound":true})
     } else {
         json!({"rooms":rooms})
     };
@@ -208,6 +261,12 @@ pub(crate) async fn select(
 ) -> Result<Json<Value>, HumanInviteHttpError> {
     let secure_client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
+    // The channel-bound opt-in rides the URL query like the reuse precedent:
+    // old hosts ignore it and keep the exact old 300-second wall for every
+    // select, while a new host lets a select on the same live secure channel
+    // that redeemed the challenge proceed past the window. Read before the
+    // body move consumes the request.
+    let channel_bound = client_advertises_room_select_channel_bound(request.uri().query());
     let body: SelectRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
         .map_err(HumanInviteHttpError::from_body)?;
@@ -221,7 +280,14 @@ pub(crate) async fn select(
             "A bounded client ID is required.",
         ));
     }
-    let (_, record) = challenge(&state, &body.challenge, browser, secure_client.as_ref()).await?;
+    let (_, record) = challenge(
+        &state,
+        &body.challenge,
+        browser,
+        secure_client.as_ref(),
+        channel_bound,
+    )
+    .await?;
     // Lock one existing challenge across mint: exact concurrent retries await its result.
     let mut record = record.lock().await;
     let ConnectState::ConnectRedeemed {
@@ -239,7 +305,18 @@ pub(crate) async fn select(
         return Err(invalid_challenge());
     }
     if member.challenge_expires_at <= Utc::now() {
-        return Err(invalid_challenge());
+        if !channel_bound {
+            return Err(invalid_challenge());
+        }
+        // Same live channel that redeemed the challenge (verified in
+        // `challenge` above): extend the window so the mint rechecks join,
+        // room, admission and epoch exactly as at mint instead of spending a
+        // new central grant. The channel itself is the expiry from here on:
+        // it cannot present once closed, and a new channel needs its own
+        // challenge and grant.
+        member.challenge_expires_at = member
+            .challenge_expires_at
+            .max(Utc::now() + super::CHALLENGE_TTL);
     }
     let (client, request_id) = {
         let entry = selected
@@ -307,7 +384,7 @@ pub(crate) async fn select(
 
 #[cfg(test)]
 mod tests {
-    use super::client_advertises_room_select_reuse;
+    use super::{client_advertises_room_select_channel_bound, client_advertises_room_select_reuse};
 
     #[test]
     fn room_select_reuse_advertisement_is_an_exact_query_pair() {
@@ -330,6 +407,33 @@ mod tests {
         ] {
             assert!(
                 !client_advertises_room_select_reuse(query),
+                "query must not opt in: {query:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn room_select_channel_bound_advertisement_is_an_exact_query_pair() {
+        assert!(client_advertises_room_select_channel_bound(Some(
+            "room_select_channel_bound=1"
+        )));
+        assert!(client_advertises_room_select_channel_bound(Some(
+            "room_select_reuse=1&room_select_channel_bound=1"
+        )));
+        for query in [
+            None,
+            Some(""),
+            Some("room_select_reuse=1"),
+            Some("room_select_channel_bound=0"),
+            Some("room_select_channel_bound="),
+            Some("room_select_channel_bound=10"),
+            Some("room_select_channel_bound=true"),
+            Some("xroom_select_channel_bound=1"),
+            Some("room_select_channel_bound=1 "),
+            Some("ticket=room_select_channel_bound%3D1"),
+        ] {
+            assert!(
+                !client_advertises_room_select_channel_bound(query),
                 "query must not opt in: {query:?}"
             );
         }
