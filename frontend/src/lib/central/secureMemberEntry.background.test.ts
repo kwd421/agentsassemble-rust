@@ -99,7 +99,7 @@ describe("member background room select", () => {
       if (path === "/api/member-connect/challenge") {
         return new Response(JSON.stringify(challengeFor(`challenge-${calls.length}`)));
       }
-      if (path === "/api/member-connect/rooms") {
+      if (path.startsWith("/api/member-connect/rooms")) {
         return new Response(
           JSON.stringify({ rooms: [{ room_id: "general", name: "일반" }, { room_id: "second", name: "둘째" }], ...(reuse ? { room_select_reuse: true } : {}) })
         );
@@ -134,7 +134,12 @@ describe("member background room select", () => {
     const calls: { path: string; body: unknown }[] = [];
     const { admission, transport } = await openAdmission(calls);
     await admission.admit(new AbortController().signal);
-    const primaryChallenge = (calls.find((call) => call.path === "/api/member-connect/rooms")?.body as { challenge_id: string }).challenge_id;
+    // The new client opts into the capability on the URL so an old host
+    // ignores it and keeps serving the exact old shape.
+    const redeemPaths = calls.filter((call) => call.path.startsWith("/api/member-connect/rooms")).map((call) => call.path);
+    expect(redeemPaths).toHaveLength(1);
+    expect(redeemPaths[0]).toContain("room_select_reuse=1");
+    const primaryChallenge = (calls.find((call) => call.path.startsWith("/api/member-connect/rooms"))?.body as { challenge_id: string }).challenge_id;
 
     const parsed = await admission.selectBackgroundRoom("second", new AbortController().signal);
     expect(parsed.meeting_id).toBe("second");
@@ -142,7 +147,7 @@ describe("member background room select", () => {
     // The background select ran a fresh challenge/grant cycle and bound the
     // room session for socket tickets on the same transport, without
     // installing a workspace (the foreground session keeps that slot).
-    const backgroundRooms = calls.filter((call) => call.path === "/api/member-connect/rooms");
+    const backgroundRooms = calls.filter((call) => call.path.startsWith("/api/member-connect/rooms"));
     expect(backgroundRooms).toHaveLength(2);
     const backgroundChallenge = (backgroundRooms[1].body as { challenge_id: string }).challenge_id;
     expect(backgroundChallenge).not.toBe(primaryChallenge);
@@ -164,7 +169,7 @@ describe("member background room select", () => {
     const calls: { path: string; body: unknown }[] = [];
     const { admission, transport } = await openAdmission(calls, { reuse: true });
     await admission.admit(new AbortController().signal);
-    const primaryChallenge = (calls.find((call) => call.path === "/api/member-connect/rooms")?.body as { challenge_id: string }).challenge_id;
+    const primaryChallenge = (calls.find((call) => call.path.startsWith("/api/member-connect/rooms"))?.body as { challenge_id: string }).challenge_id;
     const grantsBefore = vi.mocked(signedRequest).mock.calls.length;
 
     const parsed = await admission.selectBackgroundRoom("second", new AbortController().signal);
@@ -173,7 +178,7 @@ describe("member background room select", () => {
     // The reused challenge spends no new central grant: one challenge, one
     // redeem and one grant for the whole admission.
     expect(calls.filter((call) => call.path === "/api/member-connect/challenge")).toHaveLength(1);
-    expect(calls.filter((call) => call.path === "/api/member-connect/rooms")).toHaveLength(1);
+    expect(calls.filter((call) => call.path.startsWith("/api/member-connect/rooms"))).toHaveLength(1);
     expect(vi.mocked(signedRequest).mock.calls.length).toBe(grantsBefore);
     const backgroundSelect = calls.filter((call) => call.path === "/api/member-connect/select");
     expect(backgroundSelect).toHaveLength(1);
@@ -198,5 +203,15 @@ describe("member background room select", () => {
     );
     admission.close();
     vi.restoreAllMocks();
+  });
+
+  it("keeps the old strict rooms shape working against a host without the opt-in", async () => {
+    const { assertExactKeys, strictRecord } = await import("../strictJsonContract");
+    // An old client checks exactly ["rooms"]; a new host that did not see the
+    // opt-in must serve exactly that shape.
+    const legacy = strictRecord({ rooms: [{ room_id: "general", name: "일반" }] }, "참가 중인 방");
+    assertExactKeys(legacy, ["rooms"], "참가 중인 방");
+    // A new host shape without the opt-in stays identical, so the check passes.
+    expect(Object.keys(legacy).sort()).toEqual(["rooms"]);
   });
 });

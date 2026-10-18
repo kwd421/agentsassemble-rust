@@ -133,7 +133,10 @@ export class SecureMemberAdmission {
     const challenge = parseMemberChallenge(await this.post("/api/member-connect/challenge", {}, signal));
     if (challenge.server_id !== this.entry.server_id || challenge.registration_epoch !== this.entry.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 연결해 주세요.");
     const grantToken = await this.connectGrant(challenge, signal);
-    const value = strictRecord(await this.post("/api/member-connect/rooms", { challenge_id: challenge.challenge_id, grant_token: grantToken }, signal), "참가 중인 방");
+    // The reuse advertisement rides the URL query so old hosts (whose
+    // `RedeemRequest` body keeps `deny_unknown_fields`) accept the request
+    // untouched and keep serving the exact old `{"rooms":[...]}` shape.
+    const value = strictRecord(await this.post("/api/member-connect/rooms?room_select_reuse=1", { challenge_id: challenge.challenge_id, grant_token: grantToken }, signal), "참가 중인 방");
     assertExactKeys(value, ["rooms"], "참가 중인 방", ["room_select_reuse"]);
     if (!Array.isArray(value.rooms) || value.rooms.length > 50 || !value.rooms.every((room) => room && typeof room.room_id === "string" && room.room_id && typeof room.name === "string")) throw new Error("참가 중인 방을 확인하지 못했어요.");
     // A host that omits the capability keeps the per-room grant path, so the

@@ -202,7 +202,7 @@ async fn member_connect_reuses_one_redeemed_challenge_across_joined_rooms() -> T
         .json()
         .await?;
     let listed = client
-        .post(format!("{base}/api/member-connect/rooms"))
+        .post(format!("{base}/api/member-connect/rooms?room_select_reuse=1"))
         .header("x-device-token", &device)
         .json(&json!({"challenge_id":challenge["challenge_id"],"grant_token":"aamc1.connect"}))
         .send()
@@ -210,6 +210,16 @@ async fn member_connect_reuses_one_redeemed_challenge_across_joined_rooms() -> T
     assert_eq!(listed.status(), StatusCode::OK);
     let listed: Value = listed.json().await?;
     assert_eq!(listed["room_select_reuse"], true);
+    {
+        let mut keys: Vec<&str> = listed
+            .as_object()
+            .ok_or("rooms object")?
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(keys, vec!["room_select_reuse", "rooms"]);
+    }
     let mut rooms: Vec<String> = listed["rooms"]
         .as_array()
         .ok_or("rooms")?
@@ -220,6 +230,36 @@ async fn member_connect_reuses_one_redeemed_challenge_across_joined_rooms() -> T
     assert_eq!(rooms, vec!["general".to_owned(), "second".to_owned()]);
     // One central grant redeems the whole admission.
     received.recv().await.ok_or("connect redeem")?;
+    // Without the opt-in the response stays exactly {"rooms":[...]} so an
+    // old strict ["rooms"] client keeps joining on a new host.
+    let legacy_challenge: Value = client
+        .post(format!("{base}/api/member-connect/challenge"))
+        .header("x-device-token", &device)
+        .json(&json!({}))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let legacy = client
+        .post(format!("{base}/api/member-connect/rooms"))
+        .header("x-device-token", &device)
+        .json(&json!({"challenge_id":legacy_challenge["challenge_id"],"grant_token":"aamc1.connect"}))
+        .send()
+        .await?;
+    assert_eq!(legacy.status(), StatusCode::OK);
+    let legacy: Value = legacy.json().await?;
+    assert!(legacy.get("room_select_reuse").is_none());
+    {
+        let mut keys: Vec<&str> = legacy
+            .as_object()
+            .ok_or("legacy rooms object")?
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(keys, vec!["rooms"]);
+    }
+    received.recv().await.ok_or("legacy connect redeem")?;
     let challenge_id = challenge["challenge_id"].as_str().ok_or("challenge")?;
 
     let general = select_member_room(&client, &base, &device, challenge_id, "general").await?;

@@ -16,6 +16,25 @@ pub(super) struct SelectedRoom {
     completed: Option<Value>,
 }
 
+/// URL query pair through which a client build advertises that it tolerates
+/// the optional `room_select_reuse` redeem field. Old hosts never read the
+/// query beyond the JSON body (`RedeemRequest` keeps `deny_unknown_fields`,
+/// so a body field would be rejected there), so the advertisement rides the
+/// URL exactly like the `channel_message_cursors=1` precedent and is ignored
+/// there. Old clients keep a strict `["rooms"]` exact-keys check, so the host
+/// only ever sends the capability to a client that advertised it.
+pub(crate) const ROOM_SELECT_REUSE_QUERY: &str = "room_select_reuse";
+const ROOM_SELECT_REUSE_VALUE: &str = "1";
+
+pub(crate) fn client_advertises_room_select_reuse(query: Option<&str>) -> bool {
+    query.is_some_and(|query| {
+        query.split('&').any(|pair| {
+            pair.split_once('=')
+                == Some((ROOM_SELECT_REUSE_QUERY, ROOM_SELECT_REUSE_VALUE))
+        })
+    })
+}
+
 pub(super) enum ConnectState {
     Issued,
     Failed,
@@ -113,6 +132,9 @@ pub(crate) async fn redeem(
 ) -> Result<Json<Value>, HumanInviteHttpError> {
     let secure_client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
+    // Read the capability advertisement before the body move consumes the
+    // request; the query is ignored by old hosts and old clients alike.
+    let reuse_advertised = client_advertises_room_select_reuse(request.uri().query());
     let body: RedeemRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
         .map_err(HumanInviteHttpError::from_body)?;
@@ -160,11 +182,18 @@ pub(crate) async fn redeem(
             "No joined rooms on this server.",
         ));
     }
-    // Capability advertisement: this host keeps one redeemed connect
-    // challenge usable across every joined room on the channel, so the client
-    // never mints another central grant for a select on a live admission. An
-    // older host omits the field and keeps the per-room grant path.
-    let response = json!({"rooms":rooms, "room_select_reuse":true});
+    // Capability advertisement, gated on the client opt-in: only a client
+    // that requested `?room_select_reuse=1` can parse the extra field, so an
+    // older strict `["rooms"]` client keeps joining on the exact old shape.
+    // This host keeps one redeemed connect challenge usable across every
+    // joined room on the channel, so the client never mints another central
+    // grant for a select on a live admission. An older host omits the field
+    // and keeps the per-room grant path.
+    let response = if reuse_advertised {
+        json!({"rooms":rooms, "room_select_reuse":true})
+    } else {
+        json!({"rooms":rooms})
+    };
     *record = ConnectState::ConnectRedeemed {
         member: Box::new(member),
         rooms,
@@ -274,4 +303,55 @@ pub(crate) async fn select(
         client.adopt(&state, None)?;
     }
     Ok(Json(response))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::client_advertises_room_select_reuse;
+
+    #[test]
+    fn room_select_reuse_advertisement_is_an_exact_query_pair() {
+        assert!(client_advertises_room_select_reuse(Some(
+            "room_select_reuse=1"
+        )));
+        assert!(client_advertises_room_select_reuse(Some(
+            "ticket=fixture&room_select_reuse=1"
+        )));
+        for query in [
+            None,
+            Some(""),
+            Some("room_select_reuse=0"),
+            Some("room_select_reuse="),
+            Some("room_select_reuse=10"),
+            Some("room_select_reuse=true"),
+            Some("xroom_select_reuse=1"),
+            Some("room_select_reuse=1 "),
+            Some("ticket=room_select_reuse%3D1"),
+        ] {
+            assert!(
+                !client_advertises_room_select_reuse(query),
+                "query must not opt in: {query:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_redeem_query_ignores_the_new_advertisement() {
+        // Mirrors the pre-gating `RedeemRequest` body shape (`deny_unknown_fields`
+        // on `challenge_id`/`grant_token` only): an old host decodes the same
+        // JSON body whether or not the new client appends the URL query, so the
+        // opt-in never breaks an old host.
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct LegacyRedeemRequest {
+            challenge_id: String,
+            grant_token: String,
+        }
+        let body: LegacyRedeemRequest = serde_json::from_value(serde_json::json!({
+            "challenge_id": "challenge",
+            "grant_token": "aamc1.connect",
+        }))
+        .unwrap_or_else(|error| panic!("legacy redeem body: {error}"));
+        assert_eq!(body.challenge_id, "challenge");
+    }
 }

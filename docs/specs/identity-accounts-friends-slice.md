@@ -4106,7 +4106,16 @@ admission currency inside the mint transaction
 kick/leave/ban/removal and epoch changes keep refusing and the channel still
 closes on membership loss. Exact retries replay one response per room. The
 `/api/member-connect/rooms` redeem response advertises the capability as
-`room_select_reuse` (`member_connect_web.rs:167`); the grant is still spent
+`room_select_reuse` (`member_connect_web.rs:167`) ONLY when the client opts
+in with the `?room_select_reuse=1` URL query pair. The query rides the URL
+exactly like the `channel_message_cursors=1` precedent: an old host never
+reads the query beyond the JSON body (`RedeemRequest` keeps
+`deny_unknown_fields`, so a body field would be rejected there) and keeps
+serving the exact old `{"rooms":[...]}` shape, while an old strict `["rooms"]`
+client keeps joining on a new host that did not see the opt-in. The new
+client always sends the opt-in and accepts both shapes (`{rooms}` from old
+hosts, `{rooms, room_select_reuse}` from new hosts); missing capability keeps
+the legacy per-room grant path. The grant is still spent
 only at redeem (`POST /api/member-connect/rooms`), and `start`/`select` stay
 grant-free.
 
