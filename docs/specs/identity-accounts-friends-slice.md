@@ -4172,7 +4172,7 @@ additionally slides the stored map entry (`Challenge.expires` in
 `now + CHALLENGE_TTL` together with the member window, so the prune that runs
 on every later challenge issue (any member, any admission) keeps a channel
 that keeps selecting; only connect entries slide, capacity rules are
-unchanged, and a channel quiet for >300 s still lapses and needs a new grant.
+unchanged, and a channel quiet for >300 s still lapses and needs a new grant. The per-room cached completed response replays only inside a 30-second retry window; past it the same-room select mints a fresh session with a fresh request id (rechecking join/room/admission/epoch, revoking the replaced bearer).
 `redeem` advertises `room_select_channel_bound: true` in the rooms
 response ONLY to an opted-in client, mirroring the `room_select_reuse` gate;
 old hosts ignore the query, old clients keep the exact old shapes and the old
