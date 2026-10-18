@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  MEMBER_HOST_LIVE_LOSS_FAST_MAX_MS,
+  MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS,
   MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP,
   MEMBER_HOST_RECONNECT_BASE_MS,
   MEMBER_HOST_RECONNECT_CAP_MS,
@@ -11,6 +13,7 @@ import {
   MEMBER_HOST_RECONNECT_SLOW_STEADY_MIN_MS,
   MEMBER_ROOM_LIVE_SOCKETS_PER_HOST,
   memberHostOfflineBudgetExhausted,
+  memberHostLiveLossFastDelay,
   memberHostOfflineParkMs,
   memberHostOfflinePreviewCount,
   memberHostReconnectCause,
@@ -159,6 +162,21 @@ describe("memberHostReconnectDelay", () => {
   it("rests a long default without a Retry-After header", () => {
     const delay = memberHostReconnectDelay(0, "rate_limited", null, mid);
     expect(delay).toBe(MEMBER_HOST_RECONNECT_RATE_LIMIT_MS);
+  });
+});
+
+describe("memberHostLiveLossFastDelay", () => {
+  it("lands in the 15-30 s jittered band so a restarting host can publish", () => {
+    expect(memberHostLiveLossFastDelay(() => 0)).toBe(MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS);
+    expect(memberHostLiveLossFastDelay(() => 0.5)).toBe(22_500);
+    expect(memberHostLiveLossFastDelay(() => 1)).toBe(MEMBER_HOST_LIVE_LOSS_FAST_MAX_MS);
+    for (const random of [0.1, 0.33, 0.75, 0.99]) {
+      const delay = memberHostLiveLossFastDelay(() => random);
+      expect(delay).toBeGreaterThanOrEqual(MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS);
+      expect(delay).toBeLessThanOrEqual(MEMBER_HOST_LIVE_LOSS_FAST_MAX_MS);
+    }
+    // The fast slot is well ahead of the slow ladder's first step.
+    expect(memberHostLiveLossFastDelay(() => 1)).toBeLessThan(memberHostReconnectDelay(0, "offline", null, () => 0));
   });
 });
 

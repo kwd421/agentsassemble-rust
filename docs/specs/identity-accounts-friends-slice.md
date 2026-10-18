@@ -1138,6 +1138,34 @@ UI states use 해요체: 확인 중이에요 / 서버를 확인하지 못했어�
 잠시 후 다시 시도해 주세요. Protocol/key/epoch/channel jargon stays off screen.
 Unknown runtime/Windows/member outcomes stay separate from test/review evidence.
 
+### Fast first reconnect after a live member host transport loss (owner decision, 2026-10-18)
+
+Observed: a friend host restarted on a new quick-tunnel origin at 09:36:06 and
+published it at 09:36:17, but a member who was live on the old origin only
+reconnected at ~09:44 — it kept probing the dead stored origin and waited out the
+slow offline ladder (1, 2, 5 min…) before the first central member-preview. The
+member flow is correct but ~8 minutes late.
+
+Required behavior: right after a confirmed loss of a **live** member host
+transport (the host was connected and that channel dropped), if the stored origin
+does not answer the direct probe, ask central for the current origin **once**
+soon — 15-30 s after the loss, jittered, so a restarting host has time to publish
+its new public origin — instead of dropping straight onto the slow offline
+ladder. If central still lists the old/no origin, fall back to the existing slow
+ladder and daily caps unchanged. Exactly one fast central lookup per loss event,
+never repeated in a loop; the per-host daily preview budget and the central
+governor stay the hard limits. A directory refresh carrying a republished tuple
+still supersedes any pending timer as above.
+
+Affected entries: `useMemberHosts` (fast slot after the admission transport
+`onClose`, consumed once and not advancing the backoff ladder), `memberRoomLive`
+(`memberHostLiveLossFastDelay`, `MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS/…MAX_MS`).
+`memberAutoAttach` is unchanged: the slot's attempt still probes the stored origin
+first and only then spends a preview. Acceptance: fake-timer regressions prove no
+lookup in the first ~14 s, one preview at the fast slot, a republished host
+reconnected and its room re-selected within ~1 min, a still-down host falling to
+the slow ladder without extra previews, and the daily cap respected over 6 h.
+
 ## Event-driven central directory (owner decision, 2026-10-07)
 
 Signed GET `/v1/bootstrap` through `useCentralDirectory` must never poll or retry

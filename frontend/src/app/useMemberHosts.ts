@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
-import { memberHostOfflineBudgetExhausted, memberHostOfflineParkMs, memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, noteMemberHostOfflinePreview, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
+import { memberHostLiveLossFastDelay, memberHostOfflineBudgetExhausted, memberHostOfflineParkMs, memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, noteMemberHostOfflinePreview, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { noteMemberHostExternalReselectAttach } from "../lib/central/memberRoomAutoReselectBudget";
 import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
 import { remoteWorkspaceFor, closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
@@ -127,11 +127,19 @@ export function useMemberHosts({
   // drives the single attach. Cleared together with the timer everywhere
   // the timer is superseded, dropped, or consumed.
   const quotaParkedHosts = useRef(new Set<string>());
+  // Hosts whose live transport just dropped: the next automatic reconnect
+  // (if any) is the one fast central origin lookup (memberHostLiveLossFastDelay)
+  // instead of dropping straight onto the slow offline ladder. Consumed once
+  // by scheduleReconnect; a genuine republish is usually adopted through the
+  // directory tuple before it fires. A deliberately replaced/dropped
+  // admission clears it with the timer, so it never fast-looks twice.
+  const liveLossFastPending = useRef(new Set<string>());
   const clearReconnectTimer = useCallback((serverId: string) => {
     const timer = reconnectTimers.current.get(serverId);
     if (timer !== undefined) window.clearTimeout(timer);
     reconnectTimers.current.delete(serverId);
     quotaParkedHosts.current.delete(serverId);
+    liveLossFastPending.current.delete(serverId);
   }, []);
   const snapshotsRef = useRef<MemberHostSnapshot[]>([]);
   snapshotsRef.current = snapshots;
@@ -194,9 +202,14 @@ export function useMemberHosts({
     // the anchor); explicit retry past it stays manual.
     if (reconnectTimers.current.has(serverId) || refused.current.has(serverId)) return;
     const attempt = reconnectAttempts.current.get(serverId) ?? 0;
-    reconnectAttempts.current.set(serverId, attempt + 1);
     const cause = reconnectCauses.current.get(serverId) ?? "transient";
     const retryAfterMs = reconnectRetryAfter.current.get(serverId) ?? null;
+    // One fast origin lookup right after a confirmed live transport loss. It
+    // is consumed once and does not advance the backoff ladder, so when it
+    // still fails the existing slow ladder starts at its own first step
+    // (daily preview budget and governor unchanged).
+    const liveLossFast = liveLossFastPending.current.delete(serverId);
+    if (!liveLossFast) reconnectAttempts.current.set(serverId, attempt + 1);
     // A spent daily allowance parks the host until the UTC-midnight reset:
     // the per-host backoff never fires into the quota block. The holdback
     // runs past the reset so the directory's own retry lands first. The same
@@ -214,7 +227,9 @@ export function useMemberHosts({
       ? quotaWait + QUOTA_RETRY_STAGGER_MS
       : offlineParked
         ? memberHostOfflineParkMs() + QUOTA_RETRY_STAGGER_MS
-        : memberHostReconnectDelay(attempt, cause, retryAfterMs);
+        : liveLossFast
+          ? memberHostLiveLossFastDelay()
+          : memberHostReconnectDelay(attempt, cause, retryAfterMs);
     const fire = () => {
       reconnectTimers.current.delete(serverId);
       // One in-flight reconnect per host, shared by every subscription: a
@@ -307,12 +322,17 @@ export function useMemberHosts({
         // never schedules a reconnect.
         if (!admissions.current.has(serverId)) return;
         setPhase(serverId, "disconnected");
+        // The previously live host channel dropped: the stored origin may
+        // already be the tunnel it just left, so the next automatic attempt
+        // is one fast central origin lookup rather than the slow ladder.
+        liveLossFastPending.current.add(serverId);
         scheduleReconnect(serverId);
       });
       const timer = reconnectTimers.current.get(serverId);
       if (timer !== undefined) window.clearTimeout(timer);
       reconnectTimers.current.delete(serverId);
       quotaParkedHosts.current.delete(serverId);
+      liveLossFastPending.current.delete(serverId);
       reconnectAttempts.current.delete(serverId);
       reconnectCauses.current.delete(serverId);
       reconnectRetryAfter.current.delete(serverId);
@@ -375,6 +395,7 @@ export function useMemberHosts({
       for (const timer of reconnectTimers.current.values()) window.clearTimeout(timer);
       reconnectTimers.current.clear();
       quotaParkedHosts.current.clear();
+      liveLossFastPending.current.clear();
       reconnectAttempts.current.clear();
       reconnectCauses.current.clear();
       reconnectRetryAfter.current.clear();
@@ -529,6 +550,7 @@ export function useMemberHosts({
         liveWorkspace.transport.onClose(() => {
           if (admissions.current.has(adoptedId)) return;
           setPhase(adoptedId, "disconnected");
+          liveLossFastPending.current.add(adoptedId);
           scheduleReconnect(adoptedId);
         });
         setPhase(server.server_id, "connected", anchor.rooms, anchor.endpoint_origin);

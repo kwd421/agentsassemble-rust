@@ -272,7 +272,12 @@ describe("useMemberHosts", () => {
       await act(async () => { closeHost(); });
       expect(result.current.snapshots[0]?.phase).toBe("disconnected");
       const calls = attach.mock.calls.length;
-      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      // A live channel drop waits out the fast origin-lookup slot (15-30 s)
+      // so a restarting host has time to publish its new origin; nothing
+      // fires inside the first 14 s.
+      await act(async () => { await vi.advanceTimersByTimeAsync(14_000); });
+      expect(attach.mock.calls.length).toBe(calls);
+      await act(async () => { await vi.advanceTimersByTimeAsync(17_000); });
       expect(attach.mock.calls.length).toBeGreaterThan(calls);
     } finally {
       vi.useRealTimers();

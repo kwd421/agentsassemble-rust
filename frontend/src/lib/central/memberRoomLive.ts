@@ -31,7 +31,9 @@ export const MEMBER_HOST_RECONNECT_CAP_MS = 30_000;
 // allowance where every signed request — even a refused 409 — costs 3
 // units); the day-long park below plus the origin probe keep a dead host
 // from burning the account. The ladder is per-host attempt count while the
-// cause stays offline; any success or explicit user retry restarts it.
+// cause stays offline; any success or explicit user retry restarts it. A
+// live transport loss is handled by one fast origin lookup before this
+// ladder (MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS/…MAX_MS), then falls back here.
 export const MEMBER_HOST_RECONNECT_SLOW_BASE_MS = 60_000;
 export const MEMBER_HOST_RECONNECT_SLOW_CAP_MS = 3_600_000;
 export const MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS = [60_000, 120_000, 300_000, 600_000, 1_200_000];
@@ -48,6 +50,23 @@ export const MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP = 8;
 // Unsigned origin probe budget before any preview: short enough to keep the
 // slow schedule responsive, long enough for a public tunnel origin.
 export const MEMBER_HOST_ORIGIN_PROBE_TIMEOUT_MS = 5_000;
+// After a confirmed loss of a live member host transport (the host was
+// connected and the channel dropped), the stored anchor origin is often the
+// dead public tunnel the restarting host just left, while the host publishes
+// a fresh random origin a few seconds later. Rather than dropping straight
+// onto the slow offline ladder (1, 2, 5 min before the origin is re-read),
+// make exactly one central origin lookup soon after the loss — jittered so a
+// freshly restarted host has time to publish. If central still lists the
+// old/no origin, the ordinary slow ladder and the per-host daily preview
+// budget take over unchanged. One fast lookup per loss event, never repeated
+// in a loop.
+export const MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS = 15_000;
+export const MEMBER_HOST_LIVE_LOSS_FAST_MAX_MS = 30_000;
+export function memberHostLiveLossFastDelay(random: () => number = Math.random): number {
+  const span = MEMBER_HOST_LIVE_LOSS_FAST_MAX_MS - MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS;
+  const picked = MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS + Math.floor(random() * (span + 1));
+  return Math.min(Math.max(picked, MEMBER_HOST_LIVE_LOSS_FAST_MIN_MS), MEMBER_HOST_LIVE_LOSS_FAST_MAX_MS);
+}
 // Default wait after a central 429 without a Retry-After header.
 export const MEMBER_HOST_RECONNECT_RATE_LIMIT_MS = 300_000;
 export const MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS = 600_000;
