@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
-import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom } from "../lib/central/memberAnchors";
+import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom, saveMemberAnchor } from "../lib/central/memberAnchors";
 import { memberHostLiveLossFastDelay, memberHostOfflineBudgetExhausted, memberHostOfflineParkMs, memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, noteMemberHostOfflinePreview, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { noteMemberHostExternalReselectAttach } from "../lib/central/memberRoomAutoReselectBudget";
 import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
@@ -502,6 +502,39 @@ export function useMemberHosts({
         });
         continue;
       }
+      // A connected host with an unchanged identity and origin costs zero
+      // central: directory status/mode flaps and focus-driven refreshes never
+      // re-attach while the live channel already serves the listed origin.
+      // The bookkeeping still advances to the current tuple so a later real
+      // change (new origin/epoch) is the only thing that re-attaches.
+      {
+        const existing = snapshotsRef.current.find((entry) => entry.serverId === server.server_id);
+        const admitted = admissions.current.get(server.server_id);
+        const workspace = remoteWorkspaceFor(server.server_id);
+        const liveChannel = Boolean(admitted?.transport.active) || Boolean(workspace?.transport.active);
+        const identitySame = Boolean(anchor) && anchor!.registration_epoch === epoch &&
+          (tuple.fingerprint === "" || anchor!.host_key_fingerprint === tuple.fingerprint);
+        const originSame = Boolean(anchor) && (!tuple.origin || anchor!.endpoint_origin === tuple.origin);
+        if (existing?.phase === "connected" && liveChannel && identitySame && originSame && anchor) {
+          attempted.current.set(server.server_id, tupleKey(tuple));
+          // The anchor follows the origin actually attached: a live channel
+          // on a different origin than the stored anchor rewrites the anchor
+          // locally (no central) so the disconnected screen never shows a
+          // stale pre-restart origin.
+          const actualOrigin = workspace?.transport.active
+            ? (workspace.transport as { hello?: { origin?: string } }).hello?.origin || ""
+            : (admitted?.transport as { hello?: { origin?: string } } | undefined)?.hello?.origin || "";
+          if (actualOrigin && anchor.endpoint_origin !== actualOrigin) {
+            try {
+              saveMemberAnchor(activePerson, { ...anchor, endpoint_origin: actualOrigin, updated_at: Date.now() });
+            } catch { /* anchor rewrite stays best-effort */ }
+            setPhase(server.server_id, "connected", anchor.rooms ?? null, actualOrigin, null);
+          } else if (existing.origin !== anchor.endpoint_origin) {
+            setPhase(server.server_id, "connected", existing.rooms ?? null, anchor.endpoint_origin, null);
+          }
+          continue;
+        }
+      }
       if (attempted.current.get(server.server_id) === tupleKey(tuple)) {
         if (import.meta.env.DEV) console.debug("[member-auto-attach] skip: tuple already attempted", {
           serverId: server.server_id, origin: tuple.origin,
@@ -546,15 +579,27 @@ export function useMemberHosts({
       // a second transport.
       const liveWorkspace = remoteWorkspaceFor(server.server_id);
       if (liveWorkspace?.transport.active && anchor) {
-        const adoptedId = server.server_id;
-        liveWorkspace.transport.onClose(() => {
-          if (admissions.current.has(adoptedId)) return;
-          setPhase(adoptedId, "disconnected");
-          liveLossFastPending.current.add(adoptedId);
-          scheduleReconnect(adoptedId);
-        });
-        setPhase(server.server_id, "connected", anchor.rooms, anchor.endpoint_origin);
-        continue;
+        const workspaceOrigin = (liveWorkspace.transport as { hello?: { origin?: string } }).hello?.origin || "";
+        // A live channel on a stale origin never pins the anchor there: fall
+        // through to a fresh attach below so the anchor follows the
+        // directory's current origin (the origin actually attached next).
+        if (!tuple.origin || !workspaceOrigin || workspaceOrigin === tuple.origin) {
+          const adoptedId = server.server_id;
+          const actualOrigin = workspaceOrigin || anchor.endpoint_origin;
+          if (anchor.endpoint_origin !== actualOrigin && actualOrigin) {
+            try {
+              saveMemberAnchor(activePerson, { ...anchor, endpoint_origin: actualOrigin, updated_at: Date.now() });
+            } catch { /* anchor rewrite stays best-effort */ }
+          }
+          liveWorkspace.transport.onClose(() => {
+            if (admissions.current.has(adoptedId)) return;
+            setPhase(adoptedId, "disconnected");
+            liveLossFastPending.current.add(adoptedId);
+            scheduleReconnect(adoptedId);
+          });
+          setPhase(server.server_id, "connected", anchor.rooms, actualOrigin);
+          continue;
+        }
       }
       void attach(server.server_id, epoch, origin);
     }

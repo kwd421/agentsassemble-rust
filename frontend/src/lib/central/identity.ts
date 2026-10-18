@@ -365,6 +365,37 @@ export function parseRetryAfterMs(value: string | null): number | null {
   return Number.isNaN(time) ? null : Math.max(0, time - Date.now());
 }
 
+// Development-only central request trace: one cheap console.debug per
+// network request with the path family (never the host id), the HTTP
+// method, the response status and a short caller tag. No ids, tokens or
+// bodies. Callers stay cheap: the tag is a short stack-derived name.
+function centralCallerTag(): string {
+  try {
+    const stack = new Error().stack || "";
+    for (const line of stack.split("\n").slice(1)) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("at ")) continue;
+      if (trimmed.includes("centralCallerTag") || trimmed.includes("logCentralRequest") ||
+        trimmed.includes("/central/identity.")) continue;
+      const named = /at ([^\s(]+)/.exec(trimmed);
+      const raw = named ? named[1] : trimmed.slice(3);
+      const short = raw.split("/").pop()?.split("?")[0] || raw;
+      if (short === "Object.<anonymous>" || short === "<anonymous>") continue;
+      return short.slice(0, 80);
+    }
+  } catch { /* diagnostics never break the request path */ }
+  return "";
+}
+
+function logCentralRequest(path: string, method: string, status: number, caller: string): void {
+  if (!import.meta.env.DEV) return;
+  try {
+    const family = centralPathFamily(path).family;
+    // eslint-disable-next-line no-console
+    console.debug("[central]", { family, method, status, caller });
+  } catch { /* diagnostics never break the request path */ }
+}
+
 // Development-only 429 diagnosis: one console line per throttled central
 // answer with the path family (never the host id), the HTTP status, the
 // raw Retry-After header and the server's error code from the body, so a
@@ -442,6 +473,7 @@ export async function unsignedPost<T>(
   signal?: AbortSignal
 ): Promise<T> {
   localStorage.removeItem(SERVERS_KEY);
+  const caller = import.meta.env.DEV ? centralCallerTag() : "";
   acquireCentralPermit(path, "anonymous");
   const response = await fetch(`${configuredUrl()}${path}`, {
     method: "POST",
@@ -454,6 +486,7 @@ export async function unsignedPost<T>(
     body: JSON.stringify(body),
     signal,
   });
+  if (import.meta.env.DEV) logCentralRequest(path, "POST", response.status, caller);
   if (response.status === 429) {
     logCentralRateLimit(path, response);
     noteCentral429(path, "anonymous", parseRetryAfterMs(response.headers.get("Retry-After")));
@@ -569,6 +602,7 @@ async function signedFetch(
   bodyValue?: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<Response> {
+  const caller = import.meta.env.DEV ? centralCallerTag() : "";
   acquireCentralPermit(path, session.person.person_id);
   const body = bodyValue ? JSON.stringify(bodyValue) : "";
   const headers = await signCentralNativeRequest(session,path,method,body);
@@ -583,6 +617,7 @@ async function signedFetch(
     body: body || undefined,
     signal,
   });
+  if (import.meta.env.DEV) logCentralRequest(path, method, response.status, caller);
   if (response.status === 429) {
     logCentralRateLimit(path, response);
     noteCentral429(path, session.person.person_id, parseRetryAfterMs(response.headers.get("Retry-After")));
