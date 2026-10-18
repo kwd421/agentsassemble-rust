@@ -2,9 +2,21 @@
 use crate::secure_queue::{Budget, Feedback, Queued};
 use axum::extract::ws::Message;
 use futures_util::SinkExt;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    time::Duration,
+};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
+
+/// WebSocket control keepalive for every open secure channel connection.
+/// Cloudflare-proxied idle channels close near ~100 s without frames;
+/// a control Ping every 30 s keeps the tunnel alive. Browsers answer Ping
+/// with Pong automatically, so there is no client wire or protocol change
+/// and no version skew (an old client still works; an old host never pings).
+/// Ping is a control frame and never interleaves with encrypted records:
+/// the single writer task sends it sequentially on the same sink.
+pub(crate) const SECURE_CHANNEL_KEEPALIVE: Duration = Duration::from_secs(30);
 
 struct Emitted {
     at: Instant,
@@ -41,6 +53,14 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
     // deadlines always come from their own oldest emitted record.
     let mut last_credit = Instant::now();
     let mut input_done = false;
+    // Idle keepalive owns no sequence or budget: the single writer sends it
+    // sequentially on the same sink, so it never interleaves with encrypted
+    // records. It stops with the connection via the closed token below.
+    let mut keepalive = tokio::time::interval_at(
+        Instant::now() + SECURE_CHANNEL_KEEPALIVE,
+        SECURE_CHANNEL_KEEPALIVE,
+    );
+    keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         pending.retain(|item| !item.cancel.is_cancelled());
         for (_, _, item) in &mut controls {
@@ -179,6 +199,18 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
             biased;
             () = closed.cancelled() => break,
             () = cancelled => {},
+            _ = keepalive.tick() => {
+                let sent = tokio::select! {
+                    () = closed.cancelled() => break,
+                    sent = tokio::time::timeout(
+                        crate::http_body_policy::IDLE,
+                        sender.send(Message::Ping(axum::body::Bytes::new())),
+                    ) => sent,
+                };
+                if !matches!(sent, Ok(Ok(()))) {
+                    break;
+                }
+            }
             frame = feedback.recv() => match frame {
                 Some(Feedback::Cancel { id, receipt }) => {
                     let receipt = receipt || headers.contains(&id) || bodies.contains_key(&id) || pending.iter().any(|item| item.http == Some(id) && (item.header || item.window.is_some()));

@@ -301,7 +301,15 @@ mod tests {
         assert!(closed.is_cancelled());
         assert_eq!(global.available_permits(), GLOBAL_BYTES);
         assert_eq!(output.budget.direction.available_permits(), DIRECTION_BYTES);
-        assert!(records.recv().await.is_none());
+        // Idle keepalive Pings share the sink; only they may precede close.
+        loop {
+            match records.recv().await {
+                None => break,
+                Some(axum::extract::ws::Message::Ping(_))
+                | Some(axum::extract::ws::Message::Pong(_)) => continue,
+                Some(_) => panic!("expected close after keepalive-aware idle cleanup"),
+            }
+        }
     }
 
     #[tokio::test(start_paused = true)]

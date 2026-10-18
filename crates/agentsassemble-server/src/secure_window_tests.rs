@@ -167,6 +167,20 @@ async fn stalled_body_releases_share_while_healthy_consumers_and_control_continu
         .unwrap();
     records.recv().await.unwrap();
     let mut error_handled = false;
+    // Idle keepalive Pings share the sink; application assertions skip them
+    // so timed tests stay focused on encrypted records.
+    async fn recv_data(
+        records: &mut tokio::sync::mpsc::UnboundedReceiver<axum::extract::ws::Message>,
+    ) -> axum::extract::ws::Message {
+        loop {
+            let message = records.recv().await.unwrap();
+            match &message {
+                axum::extract::ws::Message::Ping(_)
+                | axum::extract::ws::Message::Pong(_) => continue,
+                _ => return message,
+            }
+        }
+    }
     for id in 2..5 {
         tokio::time::advance(std::time::Duration::from_secs(10)).await;
         output
@@ -178,7 +192,7 @@ async fn stalled_body_releases_share_while_healthy_consumers_and_control_continu
             .await
             .unwrap();
         // At t=30, the timeout control can arrive before the healthy piece.
-        let mut piece = records.recv().await.unwrap();
+        let mut piece = recv_data(&mut records).await;
         if matches!(&piece, axum::extract::ws::Message::Binary(bytes) if bytes[0] == b'{') {
             feedback
                 .send(Feedback::Credit {
@@ -189,7 +203,7 @@ async fn stalled_body_releases_share_while_healthy_consumers_and_control_continu
                 .unwrap();
             feedback.send(Feedback::Ack(id as u64 - 1)).await.unwrap();
             error_handled = true;
-            piece = records.recv().await.unwrap();
+            piece = recv_data(&mut records).await;
         }
         assert!(
             matches!(piece, axum::extract::ws::Message::Binary(bytes) if bytes[0] == secure_body_record::RESPONSE)
@@ -203,7 +217,7 @@ async fn stalled_body_releases_share_while_healthy_consumers_and_control_continu
             .unwrap();
     }
     if !error_handled {
-        let error = records.recv().await.unwrap();
+        let error = recv_data(&mut records).await;
         assert!(matches!(error, axum::extract::ws::Message::Binary(bytes) if bytes[0] == b'{'));
         feedback.send(Feedback::Ack(4)).await.unwrap();
     }

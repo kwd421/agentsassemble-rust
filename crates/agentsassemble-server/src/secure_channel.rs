@@ -193,7 +193,7 @@ async fn handshake(
 
 #[path = "secure_writer.rs"]
 mod writer;
-pub(crate) use writer::write_records;
+pub(crate) use writer::{SECURE_CHANNEL_KEEPALIVE, write_records};
 
 fn run(
     mut socket: WebSocket,

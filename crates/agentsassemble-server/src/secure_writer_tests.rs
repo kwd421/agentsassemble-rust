@@ -57,10 +57,19 @@ impl Writer {
         }
     }
     async fn record(&mut self) -> Vec<u8> {
-        let Message::Binary(bytes) = self.records.recv().await.expect("writer record") else {
-            panic!("binary record")
-        };
-        bytes.to_vec()
+        // Idle keepalive Pings share the sink; application assertions skip
+        // them so timed tests stay focused on encrypted records.
+        loop {
+            let record = self.records.recv().await.expect("writer record");
+            match record {
+                Message::Binary(bytes) => return bytes.to_vec(),
+                Message::Ping(_) | Message::Pong(_) => continue,
+                _ => panic!("binary record"),
+            }
+        }
+    }
+    async fn next_message(&mut self) -> Message {
+        self.records.recv().await.expect("writer message")
     }
     async fn credit(&self, id: u32, offset: u64) {
         self.feedback
@@ -226,6 +235,32 @@ async fn local_ack_backlog_before_emission_preserves_the_full_peer_allowance() {
     writer.credit(1, 5).await;
     drop(download);
     writer.finish().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn idle_channel_pings_every_thirty_seconds_and_stops_after_close() {
+    use crate::secure_channel::SECURE_CHANNEL_KEEPALIVE;
+
+    assert_eq!(SECURE_CHANNEL_KEEPALIVE, Duration::from_secs(30));
+    let mut writer = Writer::new(false);
+    // An idle channel gets exactly one control Ping per interval and stays
+    // open past five minutes (ten intervals, the ~100 s tunnel idle limit).
+    for _ in 0..10 {
+        tokio::time::advance(SECURE_CHANNEL_KEEPALIVE).await;
+        let message = writer.next_message().await;
+        assert!(
+            matches!(message, Message::Ping(_)),
+            "idle keepalive must be a control Ping, never an encrypted record"
+        );
+        assert!(!writer.closed.is_cancelled());
+    }
+    // Closing the connection stops the keepalive: dropping the last output
+    // ends the writer without further control frames.
+    drop(writer.output);
+    writer.task.await.unwrap();
+    assert!(writer.closed.is_cancelled());
+    tokio::time::advance(SECURE_CHANNEL_KEEPALIVE * 2).await;
+    assert!(writer.records.try_recv().is_err());
 }
 
 #[tokio::test]
