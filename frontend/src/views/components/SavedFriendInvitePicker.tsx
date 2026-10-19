@@ -21,6 +21,6 @@ export default function SavedFriendInvitePicker({ onSelect, directory }: { onSel
         {people.map((friend) => <option key={friend.friend_id} value={friend.friend_id}>{[friend.details.display_name, friend.details.handle].filter(Boolean).join(" · ")}</option>)}
       </select>
     </label>}
-    {directory.error && <div role="alert" className="dc-invite-inline-error">{directory.error}<button type="button" className="dc-invite-row-button" style={{ minHeight: 44, marginLeft: 12 }} disabled={directory.busy} onClick={() => void directory.reload()}>다시 읽기</button></div>}
+    {directory.error && <div role="alert" className="dc-invite-inline-error">{directory.error}<button type="button" className="dc-invite-row-button" disabled={directory.busy} onClick={() => void directory.reload()}>다시 읽기</button></div>}
   </section>;
 }

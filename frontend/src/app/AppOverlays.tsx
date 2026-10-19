@@ -1,3 +1,4 @@
+import type { SavedFriendsAuthority } from "../api/friends";
 import { centralIdentityConfigured, loadCentralSession } from "../lib/central/identity";
 import ConnectionBanner from "../views/components/ConnectionBanner";
 import { useEffect, useState } from "react";
@@ -16,7 +17,7 @@ import LeaveRoomDialog from "../views/components/LeaveRoomDialog";
 import RoomInviteModal from "../views/components/RoomInviteModal";
 import RoomSettingsModal from "../views/components/RoomSettingsModal";
 
-export default function AppOverlays({ controller, companionInvites }: { controller: AppController; companionInvites: CompanionInviteControls }) {
+export default function AppOverlays({ controller, companionInvites, friendAuthority = null }: { controller: AppController; companionInvites: CompanionInviteControls; friendAuthority?: SavedFriendsAuthority | null }) {
   const [hostCreation, setHostCreation] = useState(false);
   const [memberSelected, setMemberSelected] = useState(false);
   const ownComputer = companionInvites.available && (!hostCreation || !controller.canControlActiveAgents || !(controller.guestSession?.operator || controller.guestSession?.centralOwner));
@@ -76,7 +77,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
         {inviteModalRoom && (
           <RoomInviteModal
             roomLabel={inviteModalRoom.label}
-            friendAuthority={controller.roomHttpAuthority}
+            friendAuthority={friendAuthority}
             canControlIngress={roomInvite.canControlIngress && inviteModalRoom.roomOrigin !== "remote_server"}
             showHosting={inviteModalRoom.roomOrigin !== "remote_server"}
             humanInvites={roomInvite.humanInvites}

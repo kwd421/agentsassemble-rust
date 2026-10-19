@@ -103,7 +103,13 @@ export default function AppView({ controller }: { controller: AppController }) {
     return () => { currentChannelScope.current = ""; };
   }, [channelScope]);
   const canManageFriends = roomLifecycle.enabled || Boolean(ownerProfileSession) || Boolean(guestSession?.centralOwner && admittedSessionToken && !guestExpired);
-  const friendAuthority = ownerProfileSession ? { kind: "server_owner" as const, credential: ownerProfileSession, deviceToken } : roomHttpAuthority;
+  // Saved friends live on the person's own server: this computer's server when
+  // they own it, their own server over the owner session, or the web owner
+  // session. Never a friend's room authority (that host has no such list).
+  const friendAuthority = ownerProfileSession ? { kind: "server_owner" as const, credential: ownerProfileSession, deviceToken }
+    : roomLifecycle.enabled ? { kind: "local" as const }
+    : guestSession?.centralOwner && admittedSessionToken && !guestExpired ? roomHttpAuthority
+    : null;
   const canCreateChannel = canManageActiveRoom && canonicalRoom.connectionState === "connected";
   const canPostHumanMessage = lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) &&
     canonicalRoom.participants.some((participant) => participant.participant_id === (activeRoomSession?.agentId || "operator-local") &&
@@ -293,7 +299,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         }}
       />
 
-      <AppOverlays controller={controller} companionInvites={companionInvites} />
+      <AppOverlays controller={controller} companionInvites={companionInvites} friendAuthority={friendAuthority} />
       {/* Channel sidebar */}
       <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록" inert={mobileViewport && !mobileSidebarOpen}
         style={friendsVisible ? { display: "none" } : mobileViewport ? { left: MOBILE_ROOM_RAIL_WIDTH, width: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, minWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, maxWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)` } : undefined}>
@@ -470,7 +476,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" style={{ paddingTop: persistentRail ? 48 : 0 }} inert={mobileViewport && (mobileSidebarOpen || (!friendsVisible && mobileRoomInfoOpen))}>
         <Suspense fallback={<DeferredViewFallback />}>
           {friendsOpen && canManageFriends ? (
-            <FriendsView authority={friendAuthority} userArea={userArea} onClose={() => setFriendsOpen(false)} />
+            <FriendsView authority={friendAuthority ?? undefined} userArea={userArea} onClose={() => setFriendsOpen(false)} />
           ) : friendsOpen && friendsEntryVisible ? (
             <section className="dc-disconnected-room" aria-labelledby="friends-unavailable-title">
               <div className="dc-disconnected-room-icon" aria-hidden><Users size={30} /></div>

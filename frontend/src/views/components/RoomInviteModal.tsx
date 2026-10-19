@@ -79,7 +79,8 @@ export default function RoomInviteModal({
   onStopTunnel,
 }: {
   roomLabel: string;
-  friendAuthority?: SavedFriendsAuthority;
+  /** `null`: this person has no saved friends here, so friend pickers stay hidden. */
+  friendAuthority?: SavedFriendsAuthority | null;
   canControlIngress?: boolean;
   /** False for a friend's room: this computer's external access has nothing to do with it. */
   showHosting?: boolean;
@@ -241,7 +242,7 @@ export default function RoomInviteModal({
           aria-labelledby={tabs.length > 1 ? `invite-tab-${tab}` : "room-invite-title"}
         >
           {tab === "people" && <section className="dc-invite-people" aria-label="사람 초대">
-            <SavedFriendInvitePicker directory={friendsDirectory} onSelect={setFriendDisplayName} />
+            {friendAuthority !== null && <SavedFriendInvitePicker directory={friendsDirectory} onSelect={setFriendDisplayName} />}
             <p className="dc-invite-lead">초대받은 사람은 브라우저에서 이 링크로 참가해요.</p>
             <div className="dc-invite-link-field">
               <input
@@ -375,7 +376,7 @@ export default function RoomInviteModal({
             )}
           </section>}
 
-          {tab === "ai" && attendeeInvites && <AttendeeFriendInviteCard directory={friendsDirectory} controls={attendeeInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
+          {tab === "ai" && attendeeInvites && friendAuthority !== null && <AttendeeFriendInviteCard directory={friendsDirectory} controls={attendeeInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
           {tab === "ai" && connectorInvites && <ConnectorInviteCard controls={connectorInvites} localOnly={!publicAccessRunning}
             mcpOrigin={publicAccessBusy ? undefined : publicUrl}
             disabled={publicAccessBusy || (!publicAccessRunning && !tunnelStatus?.local_url)} />}

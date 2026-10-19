@@ -6,7 +6,9 @@ import type { SavedFriend } from "../types/generated/SavedFriend";
 import type { SavedFriendsAuthority } from "../api/friends";
 import { userFacingError } from "../lib/apiErrors";
 
-export function useFriendsDirectory(authority: SavedFriendsAuthority = { kind: "local" }) {
+// `null` means this person has no friends list here (no own server on this
+// computer): nothing is fetched and nothing errors.
+export function useFriendsDirectory(authority: SavedFriendsAuthority | null = { kind: "local" }) {
   const scope = JSON.stringify(authority);
   const [loadedScope, setLoadedScope] = useState("");
   const [friends, setFriends] = useState<SavedFriend[] | null>(null);
@@ -39,7 +41,10 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority = { kind: "
     }
   }
 
-  function reload() { return run(() => fetchSavedFriends(authority)); }
+  function reload() {
+    if (!authority) return Promise.resolve(false);
+    return run(() => fetchSavedFriends(authority));
+  }
   useEffect(() => {
     active.current = true;
     generation.current += 1;
@@ -51,6 +56,7 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority = { kind: "
   function save(request: SaveFriend) {
     if (!friends || loadedScope !== scope) return Promise.resolve(false);
     return run(async () => {
+      if (!authority) return friends;
       const friend = await saveFriend(request, authority);
       return [...friends.filter((item) => item.friend_id !== friend.friend_id), friend];
     });
@@ -58,6 +64,7 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority = { kind: "
   function remove(friendId: string) {
     if (!friends || loadedScope !== scope) return Promise.resolve(false);
     return run(async () => {
+      if (!authority) return friends;
       await deleteFriend(friendId, authority);
       return friends.filter((item) => item.friend_id !== friendId);
     });

@@ -18,7 +18,7 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }
     <div className="dc-invite-card-copy">
       <h3 id="connector-invite-heading">사용 중인 AI 앱에서 참가</h3>
       <p>사용 중인 AI 앱에 참가 안내를 붙여넣어 주세요.<br />초대는 한 번 쓸 수 있고 1시간 뒤 만료돼요.</p>
-      <details><summary className="min-h-11 cursor-pointer content-center">자세히</summary>
+      <details className="dc-invite-details"><summary>자세히</summary>
       <p>Codex, Claude Code 같은 AI 앱에 AgentsAssemble 연결 도구가 있어야 해요. 링크만 열어서는 참가할 수 없어요.</p>
       {mcpOrigin && <>
         <p>웹 ChatGPT의 설정 → 플러그인 → MCP 앱 만들기에서 서버 URL로 등록해 주세요. 인증은 ‘인증 없음’을 선택해요.</p>
