@@ -1,4 +1,4 @@
-import { MoreHorizontal, UserRound, Bot, Cloud, Cpu, Wifi, Users, Search, Plus, RefreshCw, X } from "lucide-react";
+import { MoreHorizontal, UserRound, Bot, Cloud, Cpu, Wifi, Users, Search, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFriendsDirectory } from "../app/useFriendsDirectory";
 import type { FriendParticipantType } from "../types/generated/FriendParticipantType";
@@ -47,10 +47,6 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
           const Icon = icons[value as FriendParticipantType];
           return <button key={value} type="button" className="dc-home-nav-item" aria-pressed={type === value} onClick={() => setType(value as FriendParticipantType)}><Icon size={20} />{label}</button>;
         })}
-        <div className="dc-dm-title"><span>저장된 친구</span><button type="button" aria-label="친구 추가하기" disabled={directory.busy || !directory.loaded} onClick={add}><Plus size={16} /></button></div>
-        {visible.map((friend) => <button key={friend.friend_id} className="dc-dm-row" type="button" aria-pressed={selected?.friend_id === friend.friend_id} onClick={() => setSelectedId(friend.friend_id)}>
-          <FriendAvatar friend={friend} /><span>{friend.details.display_name}</span>
-        </button>)}
       </nav>
       {userArea}
     </aside>
@@ -67,10 +63,13 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
       <div className="dc-friends-body">
         <div className="dc-friends-main">
           <label className="dc-friends-search"><Search size={16} /><input aria-label="친구 검색" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="검색하기" /></label>
-          <div className="dc-friend-section-head"><h2>{onlineOnly ? "온라인" : "모든 친구"} — {visible.length}</h2><button type="button" className="dc-friends-icon-button" aria-label="새로고침" title="새로고침" disabled={directory.busy} onClick={() => void directory.reload()}><RefreshCw size={16} /></button></div>
+          <div className="dc-friend-section-head"><h2>{onlineOnly ? "온라인" : "모든 친구"}{directory.loaded ? ` — ${visible.length}` : ""}</h2><button type="button" className="dc-friends-icon-button" aria-label="새로고침" title="새로고침" disabled={directory.busy} onClick={() => void directory.reload()}><RefreshCw size={16} /></button></div>
           {onlineOnly && <p className="dc-friend-empty">마지막으로 저장된 상태를 기준으로 표시해요.</p>}
-          {!editing && !deleting && directory.error && <p role="alert">{directory.error}</p>}
-          {directory.busy && <p role="status">친구 목록을 처리하고 있어요…</p>}
+          {!editing && !deleting && directory.error && <div role="alert" className="dc-friends-error">
+            <span>{directory.error}</span>
+            {!directory.loaded && <button type="button" className="ops-button dc-friends-small-button" disabled={directory.busy} onClick={() => void directory.reload()}>다시 시도</button>}
+          </div>}
+          {directory.busy && !directory.loaded && <p role="status" className="dc-friend-empty">친구 목록을 불러오는 중이에요…</p>}
           {directory.loaded && !directory.busy && !directory.error && visible.length === 0 && <p className="dc-friend-empty">{query || type !== "all" || onlineOnly ? "일치하는 친구가 없어요." : "친구를 추가해 보세요."}</p>}
           {visible.map((friend) => <FriendRow key={friend.friend_id} friend={friend} busy={directory.busy} selected={selected?.friend_id === friend.friend_id}
             onSelect={() => setSelectedId(friend.friend_id)} onEdit={() => edit(friend)} onDelete={() => setDeleting(friend)} />)}
@@ -100,13 +99,15 @@ function FriendAvatar({ friend }: { friend: SavedFriend }) {
 
 function FriendProfile({ friend, busy, onEdit }: { friend: SavedFriend; busy: boolean; onEdit: () => void }) {
   const { details } = friend;
-  const facts = [["종류", types[details.participant_type]], ["저장된 상태", presenceStatusLabel(details.status)],
-    ["제공자", details.provider_kind || "미지정"], ["에이전트", details.source_agent_id || details.agent_id || "미지정"], ["최근 방", details.last_meeting_id || "기록 없음"]];
+  // Only what a person can read: ids (agent, last room) never reach the screen,
+  // and a provider is shown only for an AI that has one.
+  const facts = [["종류", types[details.participant_type]], ["마지막 상태", presenceStatusLabel(details.status)],
+    ...(details.participant_type !== "human" && details.provider_kind ? [["제공자", details.provider_kind]] : [])];
   return <article className="dc-friend-profile-card">
     <div className="dc-friend-profile-banner" aria-hidden />
     <div className="dc-friend-profile-body"><FriendAvatar friend={friend} /><h3>{details.display_name}</h3>
       {details.handle && <p className="dc-friend-profile-handle">{details.handle}</p>}
-      <button type="button" className="ops-button" style={buttonStyle} disabled={busy} onClick={onEdit}>친구 편집</button>
+      <button type="button" className="ops-button dc-friends-small-button" disabled={busy} onClick={onEdit}>친구 편집</button>
       <dl className="dc-friend-profile-facts">{facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     </div>
   </article>;
@@ -132,7 +133,7 @@ function FriendRow({ friend, busy, selected, onSelect, onEdit, onDelete }: { fri
     <button type="button" className="dc-friend-main-button" aria-label={`${friend.details.display_name} 프로필 보기`} aria-pressed={selected} onClick={onSelect}><FriendAvatar friend={friend} /><span><strong className="dc-friend-name">{friend.details.display_name}</strong>
       <span className="dc-friend-detail">{[types[friend.details.participant_type], friend.details.provider_kind, friend.details.handle].filter(Boolean).join(" · ")}</span>
     </span></button>
-    <button ref={trigger} type="button" className="ops-button" style={{ ...buttonStyle, flexShrink: 0 }} disabled={busy}
+    <button ref={trigger} type="button" className="dc-friends-more" disabled={busy}
       aria-label={`${friend.details.display_name} 더보기`} aria-haspopup="dialog"
       onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openMenu(rect.right - 208, rect.bottom + 8); }}><MoreHorizontal size={20} /></button>
     <dialog ref={menu} className="dc-member-context-menu" aria-label="친구 동작"

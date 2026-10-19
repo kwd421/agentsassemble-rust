@@ -18,7 +18,7 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority | null = { 
   const operation = useRef(false);
   const generation = useRef(0);
 
-  async function run(action: () => Promise<SavedFriend[] | void>): Promise<boolean> {
+  async function run(action: () => Promise<SavedFriend[] | void>, failure: string): Promise<boolean> {
     if (operation.current) return false;
     operation.current = true;
     const epoch = generation.current;
@@ -30,7 +30,7 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority | null = { 
       return true;
     } catch (reason) {
       if (active.current && generation.current === epoch) {
-        setError(userFacingError(reason, "친구 목록을 저장하지 못했어요. 다시 시도해 주세요."));
+        setError(userFacingError(reason, failure));
       }
       return false;
     } finally {
@@ -43,7 +43,7 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority | null = { 
 
   function reload() {
     if (!authority) return Promise.resolve(false);
-    return run(() => fetchSavedFriends(authority));
+    return run(() => fetchSavedFriends(authority), "친구 목록을 불러오지 못했어요.");
   }
   useEffect(() => {
     active.current = true;
@@ -59,7 +59,7 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority | null = { 
       if (!authority) return friends;
       const friend = await saveFriend(request, authority);
       return [...friends.filter((item) => item.friend_id !== friend.friend_id), friend];
-    });
+    }, "친구를 저장하지 못했어요. 다시 시도해 주세요.");
   }
   function remove(friendId: string) {
     if (!friends || loadedScope !== scope) return Promise.resolve(false);
@@ -67,7 +67,7 @@ export function useFriendsDirectory(authority: SavedFriendsAuthority | null = { 
       if (!authority) return friends;
       await deleteFriend(friendId, authority);
       return friends.filter((item) => item.friend_id !== friendId);
-    });
+    }, "친구를 삭제하지 못했어요. 다시 시도해 주세요.");
   }
   return { friends: loadedScope === scope ? friends ?? [] : [], loaded: loadedScope === scope && friends !== null, busy, error, reload, save, remove };
 }
