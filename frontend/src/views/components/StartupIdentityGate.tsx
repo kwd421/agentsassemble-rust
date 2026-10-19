@@ -134,7 +134,11 @@ export default function StartupIdentityGate({
     : "";
   // Only someone who deleted their account on this device needs the signed-out
   // way back to the deletion status (and restore window).
-  const retainedDeletionReceipt = Boolean(loadDeletionReceipt());
+  // A receipt that cannot be read still means a deletion happened here: show
+  // the link and let the status panel report the problem, never crash login.
+  const retainedDeletionReceipt = (() => {
+    try { return Boolean(loadDeletionReceipt()); } catch { return true; }
+  })();
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("앱을 준비하는 중이에요");

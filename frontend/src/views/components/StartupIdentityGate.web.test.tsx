@@ -151,3 +151,12 @@ it("shows a guest's member servers and opens them through member admission", asy
   expect(mocks.open).not.toHaveBeenCalled();
   expect(screen.queryByText(/아직 내 서버가 없어요/)).toBeNull();
 });
+
+it("keeps the login screen up when a stored deletion receipt cannot be read", async () => {
+  window.history.replaceState({}, "", "/");
+  sessionStorage.setItem("agentsassemble.accountDeletionReceipt.v1", "{not json");
+  render(<AccountDeletionSurface><StartupIdentityGate deviceToken="" onComplete={completeStartup} /></AccountDeletionSurface>);
+  expect(await screen.findByRole("button", { name: "Google로 계속" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "탈퇴 진행 상황" })).toBeTruthy();
+  sessionStorage.removeItem("agentsassemble.accountDeletionReceipt.v1");
+});
