@@ -5,6 +5,7 @@ import type { FriendParticipantType } from "../types/generated/FriendParticipant
 import type { SaveFriend } from "../types/generated/SaveFriend";
 import type { SavedFriend } from "../types/generated/SavedFriend";
 import { isActivePresence, presenceStatusLabel } from "../lib/presenceStatus";
+import { PROVIDER_BRANDS, providerBrandKey } from "./components/providerBranding";
 
 import type { SavedFriendsAuthority } from "../api/friends";
 
@@ -31,6 +32,7 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
   const [editing, setEditing] = useState<SaveFriend | null>(null);
   const [deleting, setDeleting] = useState<SavedFriend | null>(null);
   const [selectedId, setSelectedId] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const needle = query.trim().toLocaleLowerCase();
   const visible = directory.friends.filter((friend) => (type === "all" || friend.details.participant_type === type)
     && (!onlineOnly || isActivePresence(friend.details.status))
@@ -40,7 +42,9 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
   const edit = (friend: SavedFriend) => setEditing({ friend_id: friend.friend_id, expected_revision: friend.revision, details: { ...friend.details } });
   return <section className="dc-friends-workspace" aria-label="친구" data-testid="friends-workspace">
     <aside className="dc-home-sidebar" aria-label="친구 탐색">
-      <header className="dc-home-search"><Users size={20} /><strong>친구</strong></header>
+      <header className="dc-home-search">
+        <button type="button" className="dc-home-search-button" onClick={() => searchRef.current?.focus()}>친구 찾기</button>
+      </header>
       <nav className="dc-home-directory" aria-label="친구 분류">
         <button className="dc-home-nav-item" type="button" aria-pressed={type === "all"} onClick={() => setType("all")}><Users size={20} />친구</button>
         {Object.entries(types).map(([value, label]) => {
@@ -56,13 +60,13 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
         <nav className="dc-friends-tabs" aria-label="친구 필터">
           <button type="button" aria-pressed={onlineOnly} onClick={() => setOnlineOnly(true)}>온라인</button>
           <button type="button" aria-pressed={!onlineOnly} onClick={() => setOnlineOnly(false)}>모두</button>
-          <button type="button" className="add-tab" disabled={directory.busy || !directory.loaded} onClick={add}>친구 추가</button>
+          <button type="button" className="add-tab" disabled={directory.busy || !directory.loaded} onClick={add}>친구 추가하기</button>
         </nav>
         <button type="button" className="dc-friends-icon-button dc-friends-close" aria-label="대화로 돌아가기" title="대화로 돌아가기" onClick={onClose}><X size={20} /></button>
       </header>
       <div className="dc-friends-body">
         <div className="dc-friends-main">
-          <label className="dc-friends-search"><Search size={16} /><input aria-label="친구 검색" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="검색하기" /></label>
+          <label className="dc-friends-search"><input ref={searchRef} aria-label="친구 검색" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="검색하기" /><Search size={18} aria-hidden /></label>
           <div className="dc-friend-section-head"><h2>{onlineOnly ? "온라인" : "모든 친구"}{directory.loaded ? ` — ${visible.length}` : ""}</h2><button type="button" className="dc-friends-icon-button" aria-label="새로고침" title="새로고침" disabled={directory.busy} onClick={() => void directory.reload()}><RefreshCw size={16} /></button></div>
           {onlineOnly && <p className="dc-friend-empty">마지막으로 저장된 상태를 기준으로 표시해요.</p>}
           {!editing && !deleting && directory.error && <div role="alert" className="dc-friends-error">
@@ -92,6 +96,12 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
   </section>;
 }
 
+// A provider shows by its product name (Codex, DeepSeek), never its raw kind id.
+function providerName(kind: string): string {
+  const key = providerBrandKey(undefined, kind);
+  return key ? PROVIDER_BRANDS[key].productName : "";
+}
+
 function FriendAvatar({ friend }: { friend: SavedFriend }) {
   const Icon = icons[friend.details.participant_type];
   return <span className="dc-friend-avatar" data-type={friend.details.participant_type} aria-hidden><Icon size={22} /></span>;
@@ -102,7 +112,7 @@ function FriendProfile({ friend, busy, onEdit }: { friend: SavedFriend; busy: bo
   // Only what a person can read: ids (agent, last room) never reach the screen,
   // and a provider is shown only for an AI that has one.
   const facts = [["종류", types[details.participant_type]], ["마지막 상태", presenceStatusLabel(details.status)],
-    ...(details.participant_type !== "human" && details.provider_kind ? [["제공자", details.provider_kind]] : [])];
+    ...(details.participant_type !== "human" && providerName(details.provider_kind) ? [["제공자", providerName(details.provider_kind)]] : [])];
   return <article className="dc-friend-profile-card">
     <div className="dc-friend-profile-banner" aria-hidden />
     <div className="dc-friend-profile-body"><FriendAvatar friend={friend} /><h3>{details.display_name}</h3>
@@ -131,7 +141,7 @@ function FriendRow({ friend, busy, selected, onSelect, onEdit, onDelete }: { fri
   return <article className="dc-friend-row" data-selected={selected}
     onContextMenu={(event) => { event.preventDefault(); openMenu(event.clientX, event.clientY); }}>
     <button type="button" className="dc-friend-main-button" aria-label={`${friend.details.display_name} 프로필 보기`} aria-pressed={selected} onClick={onSelect}><FriendAvatar friend={friend} /><span><strong className="dc-friend-name">{friend.details.display_name}</strong>
-      <span className="dc-friend-detail">{[types[friend.details.participant_type], friend.details.provider_kind, friend.details.handle].filter(Boolean).join(" · ")}</span>
+      <span className="dc-friend-detail">{[types[friend.details.participant_type], providerName(friend.details.provider_kind), friend.details.handle].filter(Boolean).join(" · ")}</span>
     </span></button>
     <button ref={trigger} type="button" className="dc-friends-more" disabled={busy}
       aria-label={`${friend.details.display_name} 더보기`} aria-haspopup="dialog"

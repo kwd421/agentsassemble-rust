@@ -18,7 +18,7 @@ it.each([false, true])("keeps failed creation custody and cancels edits (server 
   api.save.mockRejectedValueOnce(new Error("저장 실패"));
   const authority = grant ? { kind: "server_owner" as const, credential: { sessionToken: "owner-grant", generation: 3 }, deviceToken: "owner-device" } : { kind: "remote" as const, sessionToken: "owner-session", deviceToken: "owner-device" };
   render(<FriendsView authority={authority} onClose={vi.fn()} />);
-  const add = screen.getByRole("button", { name: "친구 추가" });
+  const add = screen.getByRole("button", { name: "친구 추가하기" });
   await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(add);
   fireEvent.change(screen.getByLabelText("이름"), { target: { value: "새 친구" } });
@@ -52,10 +52,10 @@ it("requires a successful initial read and keeps failed deletion pending until a
   api.list.mockRejectedValueOnce(new Error("목록 읽기 실패"));
   render(<FriendsView onClose={vi.fn()} />);
   await screen.findByText("목록 읽기 실패");
-  expect((screen.getByRole("button", { name: "친구 추가" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "친구 추가하기" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "새로고침" }));
-  await waitFor(() => expect((screen.getByRole("button", { name: "친구 추가" }) as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(screen.getByRole("button", { name: "친구 추가" }));
+  await waitFor(() => expect((screen.getByRole("button", { name: "친구 추가하기" }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "친구 추가하기" }));
   fireEvent.change(screen.getByLabelText("이름"), { target: { value: "지울 친구" } });
   fireEvent.click(screen.getByRole("button", { name: "저장" }));
   fireEvent.click(await screen.findByRole("button", { name: "지울 친구 더보기" }));
