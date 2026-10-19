@@ -1,4 +1,5 @@
 import { MoreHorizontal, UserRound, Bot, Cloud, Cpu, Wifi, Users, Search, RefreshCw, X } from "lucide-react";
+import ParticipantAvatarContent from "./components/ParticipantAvatarContent";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFriendsDirectory } from "../app/useFriendsDirectory";
 import type { FriendParticipantType } from "../types/generated/FriendParticipantType";
@@ -99,9 +100,13 @@ function providerName(kind: string): string {
   return key ? PROVIDER_BRANDS[key].productName : "";
 }
 
-function FriendAvatar({ friend }: { friend: SavedFriend }) {
+// The same person looks the same here as in the room's member list.
+function FriendAvatar({ friend, size = 32 }: { friend: SavedFriend; size?: number }) {
   const Icon = icons[friend.details.participant_type];
-  return <span className="dc-friend-avatar" data-type={friend.details.participant_type} aria-hidden><Icon size={22} /></span>;
+  return <span className="dc-friend-avatar" data-type={friend.details.participant_type} aria-hidden>
+    <ParticipantAvatarContent participantType={friend.details.participant_type} displayName={friend.details.display_name}
+      providerKind={friend.details.provider_kind} size={size} fallback={<Icon size={Math.round(size / 2)} />} />
+  </span>;
 }
 
 function FriendProfile({ friend, busy, onEdit }: { friend: SavedFriend; busy: boolean; onEdit: () => void }) {
@@ -112,7 +117,7 @@ function FriendProfile({ friend, busy, onEdit }: { friend: SavedFriend; busy: bo
     ...(details.participant_type !== "human" && providerName(details.provider_kind) ? [["제공자", providerName(details.provider_kind)]] : [])];
   return <article className="dc-friend-profile-card">
     <div className="dc-friend-profile-banner" aria-hidden />
-    <div className="dc-friend-profile-body"><FriendAvatar friend={friend} /><h3>{details.display_name}</h3>
+    <div className="dc-friend-profile-body"><FriendAvatar friend={friend} size={64} /><h3>{details.display_name}</h3>
       {details.handle && <p className="dc-friend-profile-handle">{details.handle}</p>}
       <button type="button" className="ops-button dc-friends-small-button" disabled={busy} onClick={onEdit}>친구 편집</button>
       <dl className="dc-friend-profile-facts">{facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>

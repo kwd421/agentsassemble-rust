@@ -33,10 +33,9 @@
 .dc-friend-row[data-selected="true"] { background: rgba(255, 255, 255, .035); }
 .dc-friend-main-button { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; min-height: 44px; border-radius: 5px; padding: 4px 6px; text-align: left; }
 .dc-friend-main-button > span:last-child { min-width: 0; overflow-wrap: anywhere; }
-.dc-friend-avatar { display: grid; width: 32px; height: 32px; flex-shrink: 0; place-items: center; border-radius: 50%; background: #474851; color: #fff; }
-.dc-friend-avatar[data-type="subscription_ai"] { background: var(--color-accent); }
-.dc-friend-avatar[data-type="human"] { background: #f23f42; }
-.dc-friend-avatar[data-type="local"] { background: #23a55a; }
+/* Matches the room member list: people are brand initials, AIs a grey provider mark. */
+.dc-friend-avatar { display: grid; width: 32px; height: 32px; flex-shrink: 0; place-items: center; overflow: hidden; border-radius: 50%; background: #474851; color: #fff; font-size: 12px; font-weight: 700; }
+.dc-friend-avatar[data-type="human"] { background: var(--color-accent); }
 .dc-friend-name { display: block; font-size: 16px; font-weight: 600; }
 .dc-friend-detail { display: block; font-size: 14px; color: var(--color-text-muted); }
 .dc-friends-activity { min-height: 0; overflow-y: auto; padding: 26px 22px; }
@@ -45,7 +44,7 @@
 .dc-friend-profile-card { margin-top: 20px; overflow: hidden; border-radius: 8px; background: var(--color-sidebar); }
 .dc-friend-profile-banner { height: 64px; background: var(--color-accent); }
 .dc-friend-profile-body { padding: 0 20px 24px; overflow-wrap: anywhere; }
-.dc-friend-profile-body > .dc-friend-avatar { width: 64px; height: 64px; margin-top: -28px; position: relative; border: 5px solid var(--color-sidebar); }
+.dc-friend-profile-body > .dc-friend-avatar { width: 64px; height: 64px; font-size: 22px; margin-top: -28px; position: relative; border: 5px solid var(--color-sidebar); }
 .dc-friend-profile-body h3 { margin: 12px 0 8px; font-size: 20px; font-weight: 800; }
 .dc-friend-profile-handle { margin: 0 0 20px; color: var(--color-text-muted); font-size: 13px; }
 .dc-friend-profile-facts { display: grid; gap: 16px; margin: 20px 0 0; }
