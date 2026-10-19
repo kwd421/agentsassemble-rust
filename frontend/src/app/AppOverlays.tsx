@@ -77,15 +77,16 @@ export default function AppOverlays({ controller, companionInvites }: { controll
           <RoomInviteModal
             roomLabel={inviteModalRoom.label}
             friendAuthority={controller.roomHttpAuthority}
-            canControlIngress={roomInvite.canControlIngress}
+            canControlIngress={roomInvite.canControlIngress && inviteModalRoom.roomOrigin !== "remote_server"}
+            showHosting={inviteModalRoom.roomOrigin !== "remote_server"}
             humanInvites={roomInvite.humanInvites}
             connectorInvites={roomInvite.connectorInvites}
             attendeeInvites={roomInvite.attendeeInvites}
             operatorPairings={roomInvite.pairings}
             pairingCreating={roomInvite.pairingCreating}
-            onCreatePairing={() => void roomInvite.generatePairing(inviteModalRoom)}
-            onCopyPairing={(key) => roomInvite.copyPairing(key)}
-            onRevokePairing={(key) => void roomInvite.revokePairing(key)}
+            onCreatePairing={inviteModalRoom.roomOrigin === "remote_server" ? undefined : () => void roomInvite.generatePairing(inviteModalRoom)}
+            onCopyPairing={inviteModalRoom.roomOrigin === "remote_server" ? undefined : (key) => roomInvite.copyPairing(key)}
+            onRevokePairing={inviteModalRoom.roomOrigin === "remote_server" ? undefined : (key) => void roomInvite.revokePairing(key)}
             publicUrl={invitePublicUrl}
             publicAccessTransition={roomInvite.publicAccessTransition}
             publicAccessQuery={roomInvite.publicAccessQuery}

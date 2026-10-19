@@ -54,6 +54,7 @@ export default function RoomInviteModal({
   roomLabel,
   friendAuthority,
   canControlIngress = true,
+  showHosting = true,
   humanInvites = [],
   connectorInvites,
   attendeeInvites,
@@ -80,6 +81,8 @@ export default function RoomInviteModal({
   roomLabel: string;
   friendAuthority?: SavedFriendsAuthority;
   canControlIngress?: boolean;
+  /** False for a friend's room: this computer's external access has nothing to do with it. */
+  showHosting?: boolean;
   humanInvites?: readonly HumanInvitePresentation[];
   connectorInvites?: ConnectorInviteControls;
   attendeeInvites?: AttendeeInviteControls;
@@ -244,7 +247,7 @@ export default function RoomInviteModal({
               <input
                 className="dc-invite-link-input"
                 value={secureInviteReady ? "초대 링크가 준비됐어요" : ""}
-                placeholder={!publicAccessKnown ? "외부 접속 상태를 확인해 주세요" : publicAccessRunning ? "링크를 만들면 바로 복사할 수 있어요" : "링크를 만들 때 외부 접속을 함께 열어요"}
+                placeholder={!publicAccessKnown ? "외부 접속 상태를 확인해 주세요" : publicAccessRunning ? "링크를 만들면 바로 복사할 수 있어요" : canControlIngress ? "링크를 만들 때 외부 접속을 함께 열어요" : "서버 주인이 외부 접속을 열면 링크를 만들 수 있어요"}
                 readOnly
                 aria-label="사람 초대 링크"
               />
@@ -430,7 +433,7 @@ export default function RoomInviteModal({
           )}
         </div>
 
-        <footer
+        {showHosting && <footer
           className="dc-invite-hosting"
           data-state={publicAccessBusy ? "busy" : publicAccessRunning ? "public" : "local"}
           aria-labelledby="room-hosting-heading"
@@ -491,7 +494,7 @@ export default function RoomInviteModal({
             </button>
           ))}
           {!canControlIngress && <span className="dc-invite-hosting-note">호스트 기기에서 접속을 관리해요.</span>}
-        </footer>
+        </footer>}
         {pendingPublicAction && (
           <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>
               <h3 id="public-access-confirm-title">외부 접속을 열까요?</h3>

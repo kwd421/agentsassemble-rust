@@ -34,6 +34,7 @@ function renderInviteModal({
   operatorPairings = [],
   copyStatus,
   quotaParkedUntil = null,
+  friendRoom = false,
 }: {
   lastError?: string;
   publicAccess?: boolean;
@@ -46,6 +47,7 @@ function renderInviteModal({
   operatorPairings?: OperatorPairingPresentation[];
   copyStatus?: string;
   quotaParkedUntil?: number | null;
+  friendRoom?: boolean;
 } = {}) {
   const retry = vi.fn();
   const onGenerateSecureInvite = vi.fn();
@@ -86,6 +88,8 @@ function renderInviteModal({
       onStopTunnel={onStopTunnel}
       copyStatus={copyStatus}
       quotaParkedUntil={quotaParkedUntil}
+      canControlIngress={!friendRoom}
+      showHosting={!friendRoom}
     />
   );
   return {
@@ -97,6 +101,13 @@ function renderInviteModal({
 }
 
 describe("RoomInviteModal", () => {
+  it("keeps this computer's external access out of a friend's room invite", () => {
+    renderInviteModal({ publicAccess: false, friendRoom: true });
+    expect(screen.queryByRole("button", { name: "외부 접속 열기" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "내 기기" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "사람 초대 링크" }).getAttribute("placeholder")).toBe("서버 주인이 외부 접속을 열면 링크를 만들 수 있어요");
+  });
+
   it("does not expose the removed client-only preview entrance", () => {
     renderInviteModal();
 
