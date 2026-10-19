@@ -30,6 +30,11 @@ describe("userFacingError", () => {
     ).toBe("로그인 서버에 연결할 수 없어요.");
   });
 
+  it("falls back for formal internal check messages", () => {
+    expect(userFacingError(new Error("현재 확인된 로컬 방 관리자 권위가 없습니다."), "초대를 만들지 못했어요.")).toBe("초대를 만들지 못했어요.");
+    expect(userFacingError(new Error("이름은 32자까지 입력할 수 있어요."), "x")).toBe("이름은 32자까지 입력할 수 있어요.");
+  });
+
   it("falls back when a Korean line carries internal ids", () => {
     expect(
       userFacingError(

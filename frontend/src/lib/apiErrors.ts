@@ -77,6 +77,13 @@ function firstKoreanLine(value: string): string {
   return line;
 }
 
+// Product copy is written in 해요체; formal '~습니다' lines are internal contract
+// and invariant checks (authority, surface, ACK wording) the caller's own
+// sentence should replace.
+function isInternalCheck(line: string): boolean {
+  return /습니다[.!]?$/.test(line.trim());
+}
+
 export function userFacingError(error: unknown, fallback: string): string {
   const safeFallback = firstKoreanLine(fallback) || "다시 시도해 주세요.";
   const code = errorCodeOf(error);
@@ -93,12 +100,12 @@ export function userFacingError(error: unknown, fallback: string): string {
   if (typeof DOMException !== "undefined" && error instanceof DOMException) return safeFallback;
   if (error instanceof Error) {
     const line = firstKoreanLine(error.message);
-    if (line && /[가-힣]/.test(line) && !looksLikeInternalId(line)) return line;
+    if (line && /[가-힣]/.test(line) && !looksLikeInternalId(line) && !isInternalCheck(line)) return line;
     return safeFallback;
   }
   if (typeof error === "string") {
     const line = firstKoreanLine(error);
-    if (line && /[가-힣]/.test(line) && !looksLikeInternalId(line)) return line;
+    if (line && /[가-힣]/.test(line) && !looksLikeInternalId(line) && !isInternalCheck(line)) return line;
     return safeFallback;
   }
   return safeFallback;

@@ -39,7 +39,7 @@ export default function GuestRecoverySettings({
     setBusy(true);
     setCode("");
     setRecoveryUrl("");
-    setStatus("복구 코드를 만드는 중...");
+    setStatus("");
     try {
       const result = await issueGuestRecoveryCode({
         sessionToken: identity.sessionToken,
@@ -74,7 +74,7 @@ export default function GuestRecoverySettings({
       }, 2000);
     } catch {
       if (scope !== generation.current) return;
-      setStatus("값을 직접 선택해 복사해 주세요.");
+      setStatus("복사하지 못했어요. 직접 선택해서 복사해 주세요.");
     }
   }
 
@@ -83,8 +83,8 @@ export default function GuestRecoverySettings({
       <header>
         <KeyRound size={18} />
         <div>
-          <h3>게스트 신원 복구</h3>
-          <p>다른 기기에서도 지금 이름과 참여한 방을 이어갈 수 있어요.</p>
+          <h3>복구 코드</h3>
+          <p>복구 코드가 있으면 다른 기기에서도 지금 이름과 참여한 방을 이어서 쓸 수 있어요.</p>
         </div>
       </header>
       <p className="dc-guest-recovery-warning">
@@ -92,7 +92,7 @@ export default function GuestRecoverySettings({
       </p>
       <button style={{ minWidth: 44, minHeight: 44 }} type="button" className="dc-guest-recovery-issue" disabled={busy} onClick={() => void issue()}>
         <KeyRound size={16} />
-        {busy ? "발급 중..." : code ? "새 코드로 교체" : "복구 코드 만들기"}
+        {busy ? "만드는 중…" : code ? "새 코드 만들기" : "복구 코드 만들기"}
       </button>
       {code && (
         <div className="dc-guest-recovery-result">

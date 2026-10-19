@@ -24,7 +24,7 @@ it("retires issued codes and pending issuance when the account device changes", 
   fireEvent.click(within(view.container).getByRole("button", { name: "복구 코드 만들기" }));
   await waitFor(() => expect(within(view.container).getByDisplayValue("current-code")).toBeTruthy());
   api.issue.mockRejectedValueOnce(new Error("응답을 확인하지 못했어요. 다시 시도해 주세요."));
-  fireEvent.click(within(view.container).getByRole("button", { name: "새 코드로 교체" }));
+  fireEvent.click(within(view.container).getByRole("button", { name: "새 코드 만들기" }));
   await waitFor(() => expect(within(view.container).getByText(/응답을 확인하지 못했어요/)).toBeTruthy());
   expect(within(view.container).queryByDisplayValue("current-code")).toBeNull();
 });
@@ -36,9 +36,9 @@ it("retries an uncertain recovery with the same code and retires late results af
   const accept = vi.fn();
   const request = { recoveryCode: "opaque-Code", roomId: "general" };
   const view = render(<GuestIdentityRecoveryPanel deviceToken="device-a" clientId="client-a" request={request} onRecovered={accept} />);
-  fireEvent.click(within(view.container).getByRole("button", { name: "신원 복구" }));
+  fireEvent.click(within(view.container).getByRole("button", { name: "계속" }));
   await waitFor(() => expect(within(view.container).getByText("응답 없음")).toBeTruthy());
-  fireEvent.click(within(view.container).getByRole("button", { name: "신원 복구" }));
+  fireEvent.click(within(view.container).getByRole("button", { name: "계속" }));
   expect(api.redeem.mock.calls[0]).toEqual(api.redeem.mock.calls[1]);
   expect((within(view.container).getByDisplayValue("opaque-Code") as HTMLInputElement).readOnly).toBe(true);
   view.rerender(<GuestIdentityRecoveryPanel deviceToken="device-b" clientId="client-a" request={request} onRecovered={accept} />);

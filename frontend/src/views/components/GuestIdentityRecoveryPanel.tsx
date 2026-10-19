@@ -75,22 +75,22 @@ export default function GuestIdentityRecoveryPanel({
       setCopied(true);
     } catch {
       if (scope !== generation.current) return;
-      setStatus("코드를 직접 선택해 복사해 주세요.");
+      setStatus("복사하지 못했어요. 코드를 직접 선택해서 복사해 주세요.");
     }
   }
 
   return (
     <div className="dc-guest-join-panel">
-      <section className="dc-guest-recovery-card" aria-label="게스트 신원 복구">
+      <section className="dc-guest-recovery-card" aria-label="복구 코드로 계속">
         <span className="dc-guest-recovery-icon" aria-hidden>
           {recovered ? <Check size={24} /> : <KeyRound size={24} />}
         </span>
         <div>
-          <h1>{recovered ? "신원을 복구했어요" : "기존 신원으로 돌아가기"}</h1>
+          <h1>{recovered ? "다시 이어서 쓸 수 있어요" : "복구 코드로 계속"}</h1>
           <p>
             {recovered
-              ? `${recovered.display_name} 이름과 기존 방 멤버십을 이 기기에 연결했어요.`
-              : "복구 코드는 기존 게스트 이름과 방 멤버십을 이 기기에 연결해요."}
+              ? `이 기기에서 ${recovered.display_name}(으)로 참여한 방을 이어서 써요.`
+              : "복구 코드를 넣으면 전에 쓰던 게스트 이름과 참여한 방을 이 기기에서 이어서 써요."}
           </p>
         </div>
 
@@ -109,7 +109,7 @@ export default function GuestIdentityRecoveryPanel({
         {recovered ? (
           <>
             <p className="dc-guest-recovery-warning">
-              이전 코드는 폐기됐어요. 다음 복구에 쓸 새 코드를 지금 안전한 곳에 보관하세요.
+              방금 쓴 코드는 이제 쓸 수 없어요. 다음에 쓸 새 코드를 안전한 곳에 보관해 주세요.
             </p>
             <div className="dc-guest-recovery-actions">
               <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => void copyReplacementCode()}>
@@ -130,7 +130,7 @@ export default function GuestIdentityRecoveryPanel({
             onClick={() => void recover()}
           >
             {busy ? <LoaderCircle className="animate-spin" size={16} /> : <KeyRound size={16} />}
-            신원 복구
+            계속
           </button>
         )}
         {status && <p className="dc-member-session-status preserve-words" role="status">{status}</p>}

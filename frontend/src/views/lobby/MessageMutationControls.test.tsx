@@ -40,7 +40,7 @@ describe("MessageMutationControls", () => {
 
   it("keeps a failed edit in its dialog and closes only after success", async () => {
     const onEdit = vi.fn()
-      .mockRejectedValueOnce(new Error("서버가 수정을 거부했습니다."))
+      .mockRejectedValueOnce(new Error("서버가 수정을 거부했어요."))
       .mockResolvedValueOnce(undefined);
     render(
       <MessageMutationControls
@@ -66,7 +66,7 @@ describe("MessageMutationControls", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
 
     expect((await within(dialog).findByRole("alert")).textContent).toContain(
-      "서버가 수정을 거부했습니다."
+      "서버가 수정을 거부했어요."
     );
     expect(onEdit).toHaveBeenCalledWith("수정된 메시지");
     fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));

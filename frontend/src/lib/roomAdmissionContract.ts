@@ -384,7 +384,7 @@ export function parseGuestRecoveryRedeemResponse(
   expectedRoomId: string,
   expectedClientId: string
 ): GuestRecoveryRedeemResponse {
-  const label = "게스트 신원 복구";
+  const label = "복구 코드 확인 결과";
   const payload = strictRecord(value, label);
   assertExactKeys(
     payload,
@@ -400,7 +400,7 @@ export function parseGuestRecoveryRedeemResponse(
     label
   );
   if (payload.status !== "recovered") {
-    throw new Error("게스트 신원 복구 상태가 올바르지 않습니다.");
+    throw new Error("복구 코드 확인 결과가 올바르지 않아요.");
   }
   const common = validateCommon(payload, label);
   if (common.meeting_id !== expectedRoomId) {

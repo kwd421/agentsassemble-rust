@@ -48,7 +48,7 @@ it("matches the local installation by ID, opens it explicitly and keeps rename",
 
 it("retains failed edits and excludes bookmarks from owner controls", async () => {
   const user = userEvent.setup();
-  vi.mocked(renameCentralServer).mockRejectedValue(new Error("목록이 바뀌었습니다"));
+  vi.mocked(renameCentralServer).mockRejectedValue(new Error("목록이 바뀌었어요"));
   render(<CentralServerList servers={[host, { ...host, server_id: "bookmark-0002", relation: "bookmark", alias: "Friend" }]} liveServers={[host]} busy={false} onOpen={async () => {}} onRefresh={async () => {}} />);
   expect((screen.getByRole("button", { name: "Mac Studio 서버 열기" }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.queryByRole("button", { name: "Friend 이름 변경" })).toBeNull();
@@ -56,7 +56,7 @@ it("retains failed edits and excludes bookmarks from owner controls", async () =
   await user.clear(screen.getByRole("textbox"));
   await user.type(screen.getByRole("textbox"), "보존할 입력");
   await user.click(screen.getByRole("button", { name: "이름 저장" }));
-  expect((await screen.findByRole("alert")).textContent).toContain("목록이 바뀌었습니다");
+  expect((await screen.findByRole("alert")).textContent).toContain("목록이 바뀌었어요");
   expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("보존할 입력");
 });
 
@@ -64,7 +64,7 @@ it("uses the refreshed name when retrying a conflicting edit", async () => {
   const user = userEvent.setup();
   let stored = "Other device's new name";
   vi.mocked(renameCentralServer).mockImplementation(async (server, name) => {
-    if (server.alias !== stored) throw new Error("목록이 바뀌었습니다");
+    if (server.alias !== stored) throw new Error("목록이 바뀌었어요");
     stored = name === null ? "Mac Studio" : name;
   });
   function Harness() {
