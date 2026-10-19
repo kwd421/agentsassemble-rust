@@ -52,9 +52,11 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
     {/* Sits right under the Google button: the card's 20px gap minus 12px leaves
         the 8px Discord puts between sign-in buttons. */}
     {screen === "choice" && <div className="-mt-3 grid gap-3">
+            {/* Google's own button keeps Google's branded style; ours is a Discord
+                secondary button so the two read as different actions. */}
             <button
               type="button"
-              className="dc-google-signin w-full"
+              className="dc-startup-secondary w-full"
               disabled={busy}
               onClick={() => {
                 setError("");
@@ -63,17 +65,20 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             >
               <UserRound size={18} aria-hidden /> 게스트로 계속
             </button>
-            <button
-              type="button"
-              className="min-h-10 text-[13px] font-medium text-[#aeb4ff] hover:underline"
-              disabled={busy}
-              onClick={() => {
-                setError("");
-                setScreen("recover");
-              }}
-            >
-              복구 코드로 계속
-            </button>
+            <p className="dc-startup-recover-line">
+              복구 코드가 있나요?{" "}
+              <button
+                type="button"
+                className="dc-startup-link"
+                disabled={busy}
+                onClick={() => {
+                  setError("");
+                  setScreen("recover");
+                }}
+              >
+                입력하기
+              </button>
+            </p>
     </div>}
         {screen === "guest" && (
           <section className="grid gap-3 rounded-lg bg-[#24242a] p-4">

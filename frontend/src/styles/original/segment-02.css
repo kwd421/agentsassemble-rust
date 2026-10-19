@@ -73,6 +73,80 @@
   opacity: 0.55;
 }
 
+/* First-run secondary action: Discord's filled grey button, same height as
+   Google's button so the stack lines up. */
+.dc-startup-secondary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 8px;
+  background: #4e5058;
+  padding: 0 16px;
+  color: #fff;
+  /* Same type size as Google's button (14px by its branding) beside it. */
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dc-startup-secondary:hover:not(:disabled) {
+  background: #6d6f78;
+}
+
+.dc-startup-secondary:disabled,
+.dc-startup-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dc-startup-recover-line {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Discord's dark-theme text link color. */
+.dc-startup-link {
+  color: #00a8fc;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.dc-startup-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+/* Blocking startup error: 14px like the rest of the card, a bold first line,
+   even 16px padding and the card's 8px radius. */
+.dc-startup-error {
+  display: grid;
+  gap: 2px;
+  border-radius: 8px;
+  background: #3a2526;
+  padding: 16px;
+  color: #ffb4b5;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.dc-startup-error-retry {
+  justify-self: start;
+  min-height: 32px;
+  margin-top: 10px;
+  border-radius: 8px;
+  background: #4e5058;
+  padding: 0 14px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dc-startup-error-retry:hover {
+  background: #6d6f78;
+}
+
 .dc-google-signin {
   display: inline-flex;
   min-height: 44px;

@@ -54,7 +54,7 @@ it("requires live validation and exposes an owner grant failure without entering
   mocks.bootstrap.mockRejectedValueOnce(new Error("session revoked")).mockResolvedValue(account);
   mocks.open.mockRejectedValue(new Error("host went offline"));
   render(<StartupIdentityGate deviceToken="" onComplete={completeStartup} />);
-  expect((await screen.findByRole("alert")).textContent).toContain("session revoked");
+  expect((await screen.findByRole("alert")).textContent).not.toContain("session revoked");
   expect(screen.queryByText("My Mac")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "다시 확인" }));
   const open = await screen.findByRole("button", { name: "My Mac 서버 열기" });
@@ -64,8 +64,7 @@ it("requires live validation and exposes an owner grant failure without entering
   fireEvent.click(open);
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toContain("서버를 열지 못했어요.");
-  expect(alert.querySelector("details")?.textContent).toContain("host went offline");
-  expect(alert.querySelector("details")?.open).toBe(false);
+  expect(alert.textContent).not.toContain("host went offline");
   mocks.logout.mockResolvedValue(undefined);
   fireEvent.click(screen.getByRole("button", { name: "로그아웃" }));
   await screen.findByRole("button", { name: "Google로 계속" });

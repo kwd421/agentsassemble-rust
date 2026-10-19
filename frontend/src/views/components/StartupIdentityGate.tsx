@@ -1,4 +1,5 @@
 import AppUpdateIndicator from "./AppUpdateIndicator";
+import { userFacingError } from "../../lib/apiErrors";
 import { loadDeletionReceipt } from "../../lib/central/accountDeletion";
 import CentralGuestEntry, { type CentralGuestScreen } from "./CentralGuestEntry";
 import ServerRestoreCard from "./ServerRestoreCard";
@@ -65,12 +66,14 @@ type Screen = CentralGuestScreen | "servers";
 const CENTRAL_RETRY_DELAY_MS = 3000;
 
 // Keep native strings and browser errors available without exposing them by default.
-function failureMessage(reason: unknown, message: string): ReactNode {
-  const detail = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
+// One plain sentence pair, never raw diagnostics: the cause line is the
+// error's own product sentence when it has one (internal checks fall back).
+function failureMessage(reason: unknown, message: string, onRetry?: () => void): ReactNode {
+  const cause = userFacingError(reason, message);
   return <>
-    <p>{message}</p>
-    <p>잠시 후 다시 시도해 주세요.</p>
-    {detail && <details><summary>자세히</summary><p className="break-all whitespace-pre-wrap">{detail}</p></details>}
+    <p className="font-semibold">{message}</p>
+    <p>{cause !== message ? cause : "잠시 후 다시 시도해 주세요."}</p>
+    {onRetry && <button type="button" className="dc-startup-error-retry" onClick={onRetry}>다시 시도</button>}
   </>;
 }
 
@@ -129,9 +132,6 @@ export default function StartupIdentityGate({
         ? "이 컴퓨터의 서버가 계정에 등록된 서버와 달라요."
         : "이 컴퓨터가 다른 기기로 등록돼 있어요.")
     : "";
-  const ownedRemoteDetail = ownedRemoteReason
-    ? `이 컴퓨터 서버 ID: ${localHost?.server_id ? `${localHost.server_id.slice(0, 8)}…` : "없음"}\n계정 서버 ID: ${ownedServer?.server_id.slice(0, 8)}…${hostingState === "device" || accountDeviceOnly ? "\n기기로 등록됨" : ""}`
-    : "";
   // Only someone who deleted their account on this device needs the signed-out
   // way back to the deletion status (and restore window).
   // A receipt that cannot be read still means a deletion happened here: show
@@ -141,6 +141,8 @@ export default function StartupIdentityGate({
   })();
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Starting failed: nothing on this screen can work until the app starts.
+  const [startupFailed, setStartupFailed] = useState(false);
   const [status, setStatus] = useState("앱을 준비하는 중이에요");
   const [error, setError] = useState<ReactNode>("");
   const googleAbortController = useRef<AbortController | null>(null);
@@ -374,7 +376,8 @@ export default function StartupIdentityGate({
       } catch (reason) {
         if (active) {
           if (reason instanceof GoogleRegistrationRequired) { setGoogleRegistration(reason); setError(""); setChecking(false); return; }
-          setError(failureMessage(reason, "앱을 시작하지 못했어요."));
+          setStartupFailed(true);
+          setError(failureMessage(reason, "앱을 시작하지 못했어요.", () => window.location.reload()));
           setChecking(false);
         }
         return;
@@ -493,10 +496,10 @@ export default function StartupIdentityGate({
   if (!centralEnabled) {
     return (
       <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
-        <main className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl">
+        <main className="grid w-full max-w-[480px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-8 shadow-2xl">
           <div className="flex justify-end empty:hidden"><AppUpdateIndicator /></div>
           <header className="grid gap-2">
-            <h1 className="text-2xl font-black text-text-primary">어떻게 사용할까요?</h1>
+            <h1 className="text-2xl font-bold text-text-primary">어떻게 사용할까요?</h1>
             <p className="text-[13px] font-semibold leading-5 text-text-muted">
               로그인 서버가 설정되지 않았어요. 이 기기에서 사용할 이름을 입력해 주세요.
             </p>
@@ -504,7 +507,7 @@ export default function StartupIdentityGate({
           {error && (
             <div
               role="alert"
-              className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
+              className="dc-startup-error"
             >
               {error}
             </div>
@@ -534,7 +537,7 @@ export default function StartupIdentityGate({
 
   if (googleRegistration) return (
     <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
-      <main className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl" aria-label="시작 로그인">
+      <main className="grid w-full max-w-[480px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-8 shadow-2xl" aria-label="시작 로그인">
         <GoogleRegistrationChoice request={googleRegistration}
           onCancel={() => { setGoogleRegistration(null); setError(""); setScreen("choice"); setAccountSettingsOpen(false); }}
           onComplete={async () => { await finishCentralStartup(); setGoogleRegistration(null); setError(""); }} />
@@ -548,7 +551,7 @@ export default function StartupIdentityGate({
         : directory?.error ? "로그인 서버에 연결하지 못했고 저장된 목록을 읽지 못했어요. 서버 목록을 다시 확인해 주세요."
         : webEntry ? "로그인 서버에 연결하지 못했어요. 연결을 다시 확인하고 있어요." : "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요.")} />}
       <main
-        className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
+        className="grid w-full max-w-[480px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-8 shadow-2xl"
         aria-label="시작 로그인"
       >
         <div className="flex items-center justify-end gap-2 empty:hidden">
@@ -563,7 +566,7 @@ export default function StartupIdentityGate({
           <CentralAccountSettings disabled={busy} showEntryLink={false} />
         </> : <>
         <header className={screen === "choice" && !centralPerson ? "grid gap-2 text-center" : "grid gap-2"}>
-          <h1 className="text-2xl font-black text-text-primary">
+          <h1 className="text-2xl font-bold leading-[28px] text-text-primary">
             {screen === "recovery-code"
               ? "복구 코드를 보관하세요"
               : screen === "servers"
@@ -576,6 +579,15 @@ export default function StartupIdentityGate({
               : ""}
           </p>
         </header>
+        {error && (
+          <div
+            role="alert"
+            className="dc-startup-error"
+          >
+            {error}
+            {screen === "choice" && loadCentralSession() && <button type="button" className="ops-button mt-2 block" disabled={busy} onClick={() => void refreshServers()}>다시 확인</button>}
+          </div>
+        )}
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
 
 
@@ -584,7 +596,7 @@ export default function StartupIdentityGate({
             <button
               type="button"
               className="dc-google-signin min-h-12 w-full"
-              disabled={busy}
+              disabled={busy || startupFailed}
               onClick={() => void googleLogin()}
             >
               {busy ? (
@@ -617,17 +629,14 @@ export default function StartupIdentityGate({
             {localHostError && <div role="alert" className="text-sm text-red-300">{localHostError}<p>서버 목록 새로고침으로 다시 확인해 주세요.</p></div>}
             {!webEntry && hostingState === "account_deleted" && localHost?.server_id && <FreshHostRegistrationButton serverId={localHost.server_id} deviceToken={deviceToken} disabled={busy} onRegistered={refreshServers} />}
             <ServerRestoreCard onOpen={() => enterApplication()} liveHost={Boolean(localHost?.server_id) && !hostingState} />
-            {ownedRemoteReason && <div className="grid gap-1">
-              <p className="text-[12px] text-text-muted">{ownedRemoteReason}</p>
-              <details><summary className="text-[12px] text-text-muted">자세히</summary><p className="break-all whitespace-pre-wrap text-[12px] text-text-muted">{ownedRemoteDetail}</p></details>
-            </div>}
+            {ownedRemoteReason && <p className="text-[13px] text-text-muted">{ownedRemoteReason}</p>}
             <CentralServerList deviceToken={deviceToken} deviceConnect={Boolean(ownedServer)} conflict={ownerConflict} key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} localChecking={localChecking} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={!webEntry && !hostingState && !accountDeviceOnly ? localHost : null} onOpenLocal={!webEntry && !ownerConflict && (ownedServers.length === 0 || ownedServer?.server_id === localHost?.server_id) && !hostingState && !accountDeviceOnly ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}
 
         {screen !== "servers" && <CentralGuestEntry screen={screen} setScreen={setScreen}
-          disabled={busy} onBusyChange={setBusy} onComplete={finishCentralStartup} />}
+          disabled={busy || startupFailed} onBusyChange={setBusy} onComplete={finishCentralStartup} />}
 
 
         {busy && screen === "choice" && (
@@ -636,15 +645,6 @@ export default function StartupIdentityGate({
           </p>
         )}
         </>}
-        {error && (
-          <div
-            role="alert"
-            className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
-          >
-            {error}
-            {screen === "choice" && loadCentralSession() && <button type="button" className="ops-button mt-2 block" disabled={busy} onClick={() => void refreshServers()}>다시 확인</button>}
-          </div>
-        )}
       </main>
       {!centralPerson && screen === "choice" && !accountSettingsOpen && retainedDeletionReceipt && <button type="button" className="mt-4 min-h-11 w-fit justify-self-center text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>탈퇴 진행 상황</button>}
     </div>

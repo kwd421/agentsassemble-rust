@@ -152,13 +152,9 @@ export default function StartupIdentityBoundary({
           <h1 className="text-2xl font-black text-text-primary">
             앱을 시작하지 못했어요.
           </h1>
-          <p
-            role="alert"
-            className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
-          >
+          <p role="alert" className="dc-startup-error">
             브라우저의 저장소 접근을 허용한 뒤 다시 열어 주세요.
           </p>
-          <details><summary>자세히</summary><p className="break-all whitespace-pre-wrap">{browserIdentity.error}</p></details>
         </main>
       </div>
     );

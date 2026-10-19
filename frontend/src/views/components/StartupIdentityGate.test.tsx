@@ -1,6 +1,6 @@
 import { saveCentralDirectoryCache } from "../../lib/central/directoryCache";
 import { CentralTemporaryError, fetchCentral } from "../../lib/central/connectionError";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -152,7 +152,7 @@ describe("StartupIdentityGate", () => {
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
     const onComplete = vi.fn();
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-    expect((await screen.findByRole("alert")).textContent).toContain("central session was revoked");
+    expect((await screen.findByRole("alert")).textContent).not.toContain("central session was revoked");
     expect(onComplete).not.toHaveBeenCalled();
   });
 
@@ -224,7 +224,7 @@ describe("StartupIdentityGate", () => {
 
     const remoteButton = await screen.findByRole("button", { name: "이 기기로 연결" });
     expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
-    expect(screen.getByRole("alert").textContent).toContain("local database is unreadable");
+    expect(screen.getByRole("alert").textContent).not.toContain("local database is unreadable");
     expect(onComplete).not.toHaveBeenCalled();
     expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
@@ -256,7 +256,7 @@ describe("StartupIdentityGate", () => {
         await userEvent.type(screen.getByRole("textbox", { name: "표시 이름" }), "Guest");
         await userEvent.click(screen.getByRole("button", { name: "게스트 만들기" }));
       } else if (entry === "recover") {
-        await userEvent.click(await screen.findByRole("button", { name: "복구 코드로 계속" }));
+        await userEvent.click(await screen.findByRole("button", { name: "입력하기" }));
         await userEvent.type(screen.getByRole("textbox", { name: "게스트 복구 코드" }), "OLD-CODE");
         await userEvent.click(screen.getByRole("button", { name: "같은 게스트로 로그인" }));
       }
@@ -283,7 +283,7 @@ describe("StartupIdentityGate", () => {
     await userEvent.click(screen.getByRole("button", { name: "서버 목록 새로고침" }));
     centralMocks.openServer.mockRejectedValueOnce(new Error("host unavailable"));
     await userEvent.click(await screen.findByRole("button", { name: "이 기기로 연결" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("host unavailable");
+    expect((await screen.findByRole("alert")).textContent).not.toContain("host unavailable");
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
     expect(centralMocks.register).not.toHaveBeenCalled();
   });
@@ -414,20 +414,19 @@ describe("StartupIdentityGate", () => {
     expect(screen.getByRole("alert").textContent).toContain("취소");
   });
 
-  it("keeps the native cause when a desktop command rejects with its error string", async () => {
+  it("shows a plain startup failure with a retry when a desktop command rejects", async () => {
     desktopMocks.requestHostProductSurface.mockRejectedValue(
       "runtime failed at /Users/test/Library/Application Support/AgentsAssemble/runtime"
     );
 
     render(<StartupIdentityGate deviceToken="device-1" onComplete={vi.fn()} />);
 
+    // Raw native text (paths, English) never reaches the screen; the person gets
+    // the plain failure and a retry.
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("앱을 시작하지 못했어요.");
-    expect(alert.querySelector("details")?.open).toBe(false);
-    expect(alert.querySelector("details")?.textContent).toContain("/Users/test/");
-    expect(alert.textContent).toContain(
-      "runtime failed at /Users/test/Library/Application Support/AgentsAssemble/runtime"
-    );
+    expect(alert.textContent).not.toContain("/Users/test/");
+    expect(within(alert).getByRole("button", { name: "다시 시도" })).toBeTruthy();
   });
 });
 
@@ -535,7 +534,7 @@ it("states the local cause when the owned server is shown as a remote device", a
   const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
   expect((remote as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByText("이 컴퓨터에서 서버 데이터를 찾지 못했어요.")).toBeTruthy();
-  expect(screen.getByText(/이 컴퓨터 서버 ID: 없음/)).toBeTruthy();
+  expect(screen.queryByText(/서버 ID/)).toBeNull();
   expect(centralMocks.register).not.toHaveBeenCalled();
   expect(complete).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).toBeNull();
@@ -550,7 +549,7 @@ it("states the mismatch when the local server differs from the account server", 
   const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
   expect((remote as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByText("이 컴퓨터의 서버가 계정에 등록된 서버와 달라요.")).toBeTruthy();
-  expect(screen.getByText(/이 컴퓨터 서버 ID: 40000000/)).toBeTruthy();
+  expect(screen.queryByText(/40000000/)).toBeNull();
   expect(centralMocks.register).not.toHaveBeenCalled();
   expect(complete).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).toBeNull();
@@ -569,7 +568,7 @@ it("states device-only guidance after the owned registration is refused", async 
   const remote = await screen.findByRole("button", { name: "이 기기로 연결" });
   expect((remote as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByText("이 컴퓨터가 다른 기기로 등록돼 있어요.")).toBeTruthy();
-  expect(screen.getByText(/기기로 등록됨/)).toBeTruthy();
+  expect(screen.queryByText(/서버 ID/)).toBeNull();
   expect(complete).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).toBeNull();
 });
