@@ -192,6 +192,29 @@ impl SqliteStore {
         }
         sqlx::query("UPDATE member_projection_outbox SET parked=2 WHERE registration_epoch != COALESCE(?, '')")
             .bind(epoch).execute(&mut *tx).await?;
+        // A fixed-address tunnel token is bound to its exact registration
+        // epoch. Any epoch change (including clearing) revokes it locally so
+        // the next open provisions a fresh token instead of serving the old
+        // hostname with a stale credential. The comparison runs in Rust so a
+        // malformed stored row can never fail the epoch update itself.
+        let stored: Option<String> =
+            sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key = 'named_tunnel'")
+                .fetch_optional(&mut *tx)
+                .await?;
+        let stale = match (stored, epoch) {
+            (_, None) => true,
+            (None, Some(_)) => false,
+            (Some(value), Some(epoch)) => serde_json::from_str::<
+                crate::named_tunnel::StoredPayloadForCleanup,
+            >(&value)
+            .map(|payload| payload.registration_epoch != epoch)
+            .unwrap_or(true),
+        };
+        if stale {
+            sqlx::query("DELETE FROM runtime_metadata WHERE key = 'named_tunnel'")
+                .execute(&mut *tx)
+                .await?;
+        }
         tx.commit().await?;
         self.notify_room_directory_changed();
         Ok(())

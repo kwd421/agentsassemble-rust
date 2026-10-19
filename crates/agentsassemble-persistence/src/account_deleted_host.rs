@@ -155,6 +155,9 @@ impl SqliteStore {
             .bind(new_epoch)
             .execute(&mut *tx)
             .await?;
+        sqlx::query("DELETE FROM runtime_metadata WHERE key='named_tunnel'")
+            .execute(&mut *tx)
+            .await?;
         tx.commit().await?;
         self.notify_room_directory_changed();
         Ok(())

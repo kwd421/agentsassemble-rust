@@ -93,6 +93,8 @@ pub use room_session_authority::RoomSessionAuthorization;
 mod bootstrap;
 mod central_endpoint;
 pub use central_endpoint::CentralEndpointEvent;
+mod named_tunnel;
+pub use named_tunnel::{StoredNamedTunnel, is_valid_named_tunnel_hostname};
 mod channel_messages;
 mod command_admission;
 mod runtime_restart;

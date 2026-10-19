@@ -145,6 +145,11 @@ impl RestoreJob {
             sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES('central_endpoint_generation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
                 .bind(self.journal.endpoint_generation.ok_or_else(invalid)?.to_string())
                 .execute(&mut connection).await?;
+            // The staged database carries the restored epoch; any token baked
+            // into the backup must not survive the move to a new incarnation.
+            sqlx::query("DELETE FROM runtime_metadata WHERE key='named_tunnel'")
+                .execute(&mut connection)
+                .await?;
             connection.close().await?;
             self.journal.database_hash = Some(file_hash(&database)?);
             self.journal.key_hash = Some(file_hash(&key)?);
