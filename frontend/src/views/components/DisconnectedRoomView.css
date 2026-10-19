@@ -1,11 +1,12 @@
+/* Center empty/blocked state: text on the chat background, no card (as
+   Discord's own empty states); Korean never breaks inside a word. */
 .dc-disconnected-room {
-  width: min(560px, calc(100% - 48px));
+  width: min(480px, calc(100% - 48px));
   margin: auto;
-  padding: 44px;
+  padding: 24px;
   text-align: center;
-  background: var(--color-panel-soft);
-  border: 1px solid var(--color-panel-border);
-  border-radius: 20px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .dc-disconnected-room-icon {
@@ -33,8 +34,10 @@
 }
 
 .dc-disconnected-room h1 {
-  margin: 8px 0 14px;
-  font-size: 28px;
+  margin: 8px 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 30px;
 }
 
 .dc-disconnected-room-name {
@@ -45,7 +48,8 @@
 
 .dc-disconnected-room-description {
   color: var(--color-text-secondary);
-  line-height: 1.65;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .dc-disconnected-room-description + button {

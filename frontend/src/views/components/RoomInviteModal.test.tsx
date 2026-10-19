@@ -114,7 +114,7 @@ describe("RoomInviteModal", () => {
     expect(screen.queryByRole("textbox", { name: "사람 초대 링크" })).toBeNull();
     // No own friends list here: nothing is fetched, no picker or error shows.
     expect(friendsApi.list).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "다시 읽기" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "다시 시도" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

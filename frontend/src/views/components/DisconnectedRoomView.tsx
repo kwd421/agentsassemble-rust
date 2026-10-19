@@ -37,7 +37,7 @@ export default function DisconnectedRoomView({ room, reason, hostDisplayName, au
       <p className="dc-disconnected-room-description">
         {description}
       </p>
-      {!autoReconnectAt && !connecting && <button type="button" className="ops-button min-h-11 px-4" disabled={busy} onClick={() => void retry()}>{busy ? "연결 중…" : "다시 연결"}</button>}
+      {!autoReconnectAt && !connecting && <button type="button" className="ops-button min-h-10 min-w-[96px] px-4" disabled={busy} onClick={() => void retry()}>{busy ? "연결 중…" : "다시 연결"}</button>}
       {error && <p role="alert">{error}</p>}
     </section>
   );

@@ -49,7 +49,7 @@ export default function LeaveRoomDialog({
       ref={dialogRef}
       className="dc-create-channel-modal"
       aria-labelledby={titleId}
-      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(480px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", padding: 24, color: "var(--color-text-primary)" }}
+      style={{ position: "fixed", inset: 0, margin: "auto", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", color: "var(--color-text-primary)" }}
       onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
       onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}
     >
@@ -61,9 +61,8 @@ export default function LeaveRoomDialog({
             onClick={onClose}
             disabled={busy}
             aria-label="방 나가기 취소"
-            style={{ minWidth: 44, minHeight: 44 }}
           >
-            <X size={18} />
+            <X size={24} />
           </button>
         </header>
 
@@ -90,7 +89,7 @@ export default function LeaveRoomDialog({
             autoFocus
             type="button"
             className="dc-agent-create-secondary"
-            style={{ minHeight: 44 }}
+            style={{ minHeight: 40 }}
             onClick={onClose}
             disabled={busy}
           >
@@ -99,7 +98,7 @@ export default function LeaveRoomDialog({
           <button
             type="button"
             className="dc-agent-create-primary dc-leave-room-confirm"
-            style={{ minHeight: 44 }}
+            style={{ minHeight: 40 }}
             onClick={() => void confirmLeave()}
             disabled={busy}
           >

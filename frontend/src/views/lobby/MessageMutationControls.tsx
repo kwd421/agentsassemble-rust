@@ -153,7 +153,7 @@ export default function MessageMutationControls({
                 disabled={busy}
                 onClick={() => setMutation(null)}
               >
-                <X size={20} />
+                <X size={24} />
               </button>
             </header>
 

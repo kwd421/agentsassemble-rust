@@ -24,7 +24,7 @@ export function AttendeeFriendInviteCard({ controls, disabled, directory }: { co
       </select>
     </label></div>}
     {selected && !selected.details.provider_kind && <p>친구 정보에 사용할 제공자 이름을 먼저 저장해 주세요.</p>}
-    {directory.error && <div role="alert" className="dc-invite-inline-error">{directory.error}<button type="button" className="dc-invite-row-button" onClick={() => void directory.reload()} disabled={directory.busy}>다시 읽기</button></div>}
+    {directory.error && <div role="alert" className="dc-invite-inline-error">{directory.error}<button type="button" className="dc-invite-row-button" onClick={() => void directory.reload()} disabled={directory.busy}>다시 시도</button></div>}
     {friends.length > 0 && <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }} disabled={disabled || controls.creating || !selected?.details.provider_kind}
       onClick={() => { if (selected) controls.create(selected.friend_id); }}>{controls.creating ? "초대 만드는 중" : "AI 친구 초대 만들기"}</button>}
     {controls.invites.map((invite) => <div key={invite.key} className="dc-invite-friend-row" style={{ flexWrap: "wrap" }}>

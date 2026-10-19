@@ -198,16 +198,15 @@ export default function RoomInviteModal({
       >
         <header className="dc-invite-header">
           <h2 id="room-invite-title" className="preserve-words">
-            {roomLabel}에 초대하기
+            ‘{roomLabel}’에 초대하기
           </h2>
           <button
             type="button"
-            className="dc-modal-close"
-            style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
+            className="dc-dialog-close"
             onClick={onClose}
             aria-label="초대 닫기"
           >
-            <X size={18} />
+            <X size={24} />
           </button>
         </header>
 
@@ -260,7 +259,7 @@ export default function RoomInviteModal({
                 <button
                   type="button"
                   className="dc-invite-copy-button"
-                  style={{ minWidth: 44, minHeight: 44 }}
+                  style={{ minHeight: 32 }}
                   aria-label={copiedKey === selectedHumanInvite.key ? "현재 사람 초대 링크 복사됨" : "현재 사람 초대 링크 복사"}
                   onClick={() => handleCopy(selectedHumanInvite.key, onCopyHumanInvite)}
                 >
@@ -271,7 +270,7 @@ export default function RoomInviteModal({
                 <button
                   type="button"
                   className="dc-invite-copy-button"
-                  style={{ minWidth: 44, minHeight: 44 }}
+                  style={{ minHeight: 32 }}
                   aria-label="사람 초대 링크 생성"
                   disabled={publicAccessBusy || (!publicAccessRunning && !canControlIngress)}
                   onClick={() => requestPublicAction({ kind: "human", options: currentHumanOptions })}

@@ -28,12 +28,12 @@ describe("membershipEnded contract", () => {
 
   it("copies the kicked and exported ended lines", () => {
     expect(membershipEndedCopy("모임방", "kicked")).toEqual({
-      title: "방에서 내보내졌어요",
-      body: "‘모임방’에 다시 참가하려면 방 관리자에게 새 초대를 받아야 해요.",
+      title: "‘모임방’에서 내보내졌어요",
+      body: "다시 참가하려면 방 관리자에게 새 초대를 받아야 해요.",
     });
     expect(membershipEndedCopy("모임방", "exported")).toEqual({
-      title: "방에서 내보내졌어요",
-      body: "‘모임방’에 더 이상 참가할 수 없어요.",
+      title: "‘모임방’에서 내보내졌어요",
+      body: "이 방에는 더 이상 참가할 수 없어요.",
     });
   });
 
@@ -68,8 +68,8 @@ describe("MembershipEndedView", () => {
     const onConfirm = vi.fn();
     const room = { ...createFreshRoom(), label: "모임방" };
     render(<MembershipEndedView room={room} scope="kicked" onConfirm={onConfirm} />);
-    expect(screen.getByRole("heading", { name: "방에서 내보내졌어요" })).toBeTruthy();
-    expect(screen.getByText("‘모임방’에 다시 참가하려면 방 관리자에게 새 초대를 받아야 해요.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "‘모임방’에서 내보내졌어요" })).toBeTruthy();
+    expect(screen.getByText("다시 참가하려면 방 관리자에게 새 초대를 받아야 해요.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "다시 연결" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "확인" }));
     expect(onConfirm).toHaveBeenCalledOnce();
@@ -78,7 +78,7 @@ describe("MembershipEndedView", () => {
   it("shows the exported variant without a retry button", () => {
     const room = { ...createFreshRoom(), label: "모임방" };
     render(<MembershipEndedView room={room} scope="exported" onConfirm={() => undefined} />);
-    expect(screen.getByText("‘모임방’에 더 이상 참가할 수 없어요.")).toBeTruthy();
+    expect(screen.getByText("이 방에는 더 이상 참가할 수 없어요.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "다시 연결" })).toBeNull();
   });
 });

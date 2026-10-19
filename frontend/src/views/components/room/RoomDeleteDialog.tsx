@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { useRoomLifecycle } from "../../../app/useRoomLifecycle";
 
@@ -51,7 +52,10 @@ export default function RoomDeleteDialog({
         onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!controller.busy) onClose(); }}
         onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && !controller.busy) onClose(); }}
       >
-        <h2 id="room-delete-title" className="preserve-words">{controller.pending ? "방 관리 결과" : `‘${target.label}’ 삭제`}</h2>
+        <header className="flex items-center justify-between gap-4">
+          <h2 id="room-delete-title" className="preserve-words">{controller.pending ? "방 관리 결과" : `‘${target.label}’ 삭제`}</h2>
+          <button type="button" className="dc-dialog-close" aria-label="닫기" disabled={controller.busy} onClick={onClose}><X size={24} /></button>
+        </header>
         {deleted ? (
           <p className="preserve-words" role="status">{controller.notice}</p>
         ) : !controller.pending && (
@@ -61,7 +65,7 @@ export default function RoomDeleteDialog({
         )}
         {!deleted && !controller.pending && (
           <label className="dc-room-delete-field">
-            <span>삭제하려면 방 이름을 입력해 주세요</span>
+            <span>방 이름 입력</span>
             <input autoFocus value={confirmationName} disabled={locked} autoComplete="off"
               onChange={(event) => setConfirmationName(event.target.value)} />
           </label>
@@ -81,7 +85,7 @@ export default function RoomDeleteDialog({
           </button>
         )}
         <div className="dc-room-delete-actions">
-          <button type="button" className="dc-room-delete-cancel" style={{ minHeight: 44 }}
+          <button type="button" className="dc-room-delete-cancel" style={{ minHeight: 40, minWidth: 96 }}
             disabled={controller.busy} onClick={onClose}>
             {deleted ? "닫기" : "취소"}
           </button>
@@ -89,7 +93,7 @@ export default function RoomDeleteDialog({
             <button
               type="button"
               className="dc-room-delete-confirm"
-              style={{ minHeight: 44 }}
+              style={{ minHeight: 40, minWidth: 96 }}
               disabled={locked || confirmationName !== target.label}
               onClick={() => {
                 if (!room) return;

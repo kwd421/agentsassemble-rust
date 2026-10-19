@@ -188,7 +188,7 @@ export default function VoteComposerDialog({
             disabled={busy}
             aria-label="투표 만들기 닫기"
           >
-            <X size={18} />
+            <X size={24} />
           </button>
         </header>
 
@@ -295,7 +295,7 @@ export default function VoteComposerDialog({
             <button
               type="button"
               className="dc-agent-create-secondary"
-              style={{ minHeight: 44 }}
+              style={{ minHeight: 40 }}
               onClick={onClose}
               disabled={busy}
             >
@@ -304,7 +304,7 @@ export default function VoteComposerDialog({
             <button
               type="submit"
               className="ops-cta"
-              style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}
+              style={{ padding: "0 16px" }}
               disabled={busy}
             >
               {busy ? "만드는 중…" : "만들기"}

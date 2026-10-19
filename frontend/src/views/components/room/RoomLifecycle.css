@@ -1,5 +1,5 @@
 .dc-room-delete {
-  width: min(440px, calc(100vw - 32px));
+  width: min(480px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
   margin: auto;
@@ -7,20 +7,21 @@
   color: var(--color-text-primary);
   background: var(--color-panel);
   border: 1px solid var(--color-panel-border);
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: 0 24px 70px rgb(0 0 0 / 42%);
 }
 
 .dc-room-delete h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
 }
 
 .dc-room-delete p {
   margin: 12px 0 0;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -36,17 +37,15 @@
 }
 
 .dc-room-delete-field span {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 850;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .dc-room-delete-field input {
   width: 100%;
-  min-height: 42px;
-  padding: 9px 11px;
+  min-height: 40px;
+  padding: 0 12px;
   color: var(--color-text-primary);
   background: var(--color-input);
   border: 1px solid var(--color-panel-border);

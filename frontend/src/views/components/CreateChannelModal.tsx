@@ -59,7 +59,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
   }
   return (
     <dialog ref={dialogRef} className="dc-create-channel-modal" aria-labelledby={titleId}
-      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(440px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", padding: 24, color: "var(--color-text-primary)" }}
+      style={{ position: "fixed", inset: 0, margin: "auto", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", color: "var(--color-text-primary)" }}
       onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
       onClick={(event) => {
         if (event.target !== event.currentTarget || busy) return;
@@ -69,7 +69,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
       <header className="dc-create-channel-head">
         <h2 id={titleId}>{room ? "새 방 만들기" : "텍스트 채널 만들기"}</h2>
         <button type="button" className="dc-dialog-close" disabled={busy} onClick={onClose}
-          aria-label="닫기" style={{ minWidth: 44, minHeight: 44 }}><X size={18} /></button>
+          aria-label="닫기"><X size={24} /></button>
       </header>
       <label className="dc-create-channel-name">
         {room ? "방 이름" : "채널 이름"}
@@ -85,8 +85,8 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
       {[...name.trim()].length > nameLimit && <p role="alert">이름은 {nameLimit}자까지 입력할 수 있어요.</p>}
       {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
       <div className="dc-create-channel-actions">
-        <button type="button" className="dc-agent-create-secondary" disabled={busy} onClick={onClose} style={{ minHeight: 44 }}>취소</button>
-        <button type="button" className="ops-cta" disabled={busy} aria-disabled={!validName || undefined} onClick={() => void submit()} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>
+        <button type="button" className="dc-agent-create-secondary" disabled={busy} onClick={onClose} style={{ minHeight: 40 }}>취소</button>
+        <button type="button" className="ops-cta" disabled={busy} aria-disabled={!validName || undefined} onClick={() => void submit()} style={{ padding: "0 16px" }}>
           {busy ? "만드는 중…" : "만들기"}
         </button>
       </div>

@@ -367,10 +367,10 @@ select.dc-select {
 }
 
 .dc-create-channel-modal {
-  width: min(440px, 92vw);
+  width: min(480px, calc(100vw - 32px));
   display: grid;
   gap: 16px;
-  padding: 20px;
+  padding: 24px;
   border-radius: 10px;
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
@@ -383,8 +383,9 @@ select.dc-select {
 }
 
 .dc-create-channel-head h2 {
-  font-size: 17px;
-  font-weight: 900;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
 }
 
 .dc-create-channel-name {
@@ -407,6 +408,12 @@ select.dc-select {
 
 /* A small dialog closes with a plain X; the ringed ESC button belongs to
    full-page settings only. */
+button.dc-dialog-close {
+  /* Discord's X is a light grey glyph; class-scoped dialog button rules
+     must not turn it white. */
+  color: #b5bac1;
+}
+
 .dc-dialog-close {
   display: grid;
   width: 32px;
@@ -417,8 +424,8 @@ select.dc-select {
   color: var(--color-text-muted);
 }
 
-.dc-dialog-close:hover:not(:disabled),
-.dc-dialog-close:focus-visible {
+button.dc-dialog-close:hover:not(:disabled),
+button.dc-dialog-close:focus-visible {
   color: var(--color-text-primary);
   outline: none;
 }
@@ -427,6 +434,12 @@ select.dc-select {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* Discord dialog buttons: 40 tall, at least 96 wide (the quiet 취소 stays text). */
+.dc-create-channel-actions > button:not(.dc-agent-create-secondary) {
+  min-width: 96px;
+  min-height: 40px;
 }
 
 .dc-leave-room-confirm {
@@ -649,7 +662,9 @@ select.dc-select {
 /* Discord's secondary button. Size defaults live in the components layer so a
    usage's own Tailwind size or padding utilities still win. */
 .ops-button {
-  border: 1px solid rgba(151, 151, 159, 0.2);
+  /* Discord's current secondary button: filled grey (measured #2F2E35 on a
+     #201F24 surface), no outline. */
+  border: 1px solid transparent;
   background: rgba(151, 151, 159, 0.12);
   color: var(--color-text-primary);
   border-radius: 8px;

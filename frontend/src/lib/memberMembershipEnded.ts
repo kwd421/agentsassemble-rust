@@ -19,11 +19,11 @@ export function membershipEndedScopeFromEventType(type: string): MembershipEnded
 }
 
 export function membershipEndedCopy(roomName: string, scope: MembershipEndedScope): { title: string; body: string } {
-  const name = roomName || "방";
+  const title = roomName ? `‘${roomName}’에서 내보내졌어요` : "방에서 내보내졌어요";
   if (scope === "exported") {
-    return { title: "방에서 내보내졌어요", body: `‘${name}’에 더 이상 참가할 수 없어요.` };
+    return { title, body: "이 방에는 더 이상 참가할 수 없어요." };
   }
-  return { title: "방에서 내보내졌어요", body: `‘${name}’에 다시 참가하려면 방 관리자에게 새 초대를 받아야 해요.` };
+  return { title, body: "다시 참가하려면 방 관리자에게 새 초대를 받아야 해요." };
 }
 
 function terminalKey(serverId: string, meetingId: string): string {

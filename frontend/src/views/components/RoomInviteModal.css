@@ -75,7 +75,7 @@ dialog.dc-invite-modal {
 
 .dc-invite-link-field .dc-invite-link-input {
   flex: 1;
-  height: 44px;
+  height: 30px;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -84,8 +84,9 @@ dialog.dc-invite-modal {
 }
 
 .dc-invite-link-field .dc-invite-copy-button {
-  min-width: 76px;
-  border-radius: 6px;
+  min-width: 66px;
+  min-height: 30px;
+  border-radius: 4px;
 }
 
 .dc-invite-summary-row {
