@@ -52,6 +52,12 @@
     "Roboto Mono", monospace;
 }
 
+/* Native checks and radios take the brand color instead of the OS white. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-accent);
+}
+
 * {
   box-sizing: border-box;
   scrollbar-color: #1a1a1e transparent;

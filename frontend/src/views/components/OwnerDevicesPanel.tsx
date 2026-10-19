@@ -54,15 +54,12 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
   };
   return <div className="owner-devices">
     <div className="owner-devices-heading">
-      <p className="dc-user-settings-lead">이 서버에 연결된 기기를 확인하고 연결을 해제할 수 있어요.</p>
+      <p className="dc-user-settings-lead">이 서버에 연결된 기기예요. 쓰지 않는 기기는 연결을 해제할 수 있어요.</p>
       <button className="owner-devices-refresh" type="button" aria-label="기기 목록 새로고침" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} /></button>
     </div>
-    <p className="owner-devices-caption">{identity.centralSession
-      ? "같은 계정으로 연결한 세션과 그 세션에서 연결한 기기가 표시돼요."
-      : "서버 컴퓨터의 앱은 원격 연결을 모두 관리할 수 있어요. 서버 컴퓨터의 앱 자체는 해제되지 않아요."}</p>
     {error && <p role="alert" className="owner-devices-error">{error}</p>}
-    {!sessions && busy && <p role="status">기기를 불러오는 중이에요.</p>}
-    {sessions?.length === 0 && <p>연결된 기기가 없어요.</p>}
+    {!sessions && busy && <p role="status" className="owner-devices-caption">기기를 불러오는 중이에요.</p>}
+    {sessions?.length === 0 && <p className="owner-devices-caption">연결된 기기가 없어요.</p>}
     <ul className="owner-devices-list">
       {sessions?.map(session => {
         const os = ({ macos: "macOS", windows: "Windows", linux: "Linux", ios: "iOS", android: "Android" } as Record<string, string>)[session.os.toLowerCase()] || session.os;
@@ -72,10 +69,10 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
         return <li key={session.session_id}>
           <span className="owner-device-icon" aria-hidden><Icon size={26} /></span>
           <div className="owner-device-info">
-            <div className="owner-device-name"><strong>{name}</strong>{session.current && <span className="owner-device-current">이 기기</span>}</div>
-            <p>{os || "OS 정보 없음"} · {session.last_connected_at === null ? "마지막 접속 시각 확인 불가" : <>마지막 접속 <time dateTime={new Date(session.last_connected_at * 1000).toISOString()}>{new Date(session.last_connected_at * 1000).toLocaleString("ko-KR")}</time></>}</p>
-            {session.kind === "pairing" && <p>기기 연결로 입장 · 현재 연결 상태 확인 불가</p>}
-            {session.connected === false && <p>연결 종료 · 발급한 기기 연결은 유지 중</p>}
+            <div className="owner-device-name"><strong>{name}</strong>{session.current && <span className="owner-device-current">이 기기</span>}{session.kind === "host" && <span className="owner-device-tag">서버 컴퓨터</span>}</div>
+            <p>{[os, session.kind === "pairing" ? "연결 링크로 연결한 기기" : ""].filter(Boolean).join(" · ")}
+              {session.last_connected_at !== null && <>{os || session.kind === "pairing" ? " · " : ""}마지막 접속 <time dateTime={new Date(session.last_connected_at * 1000).toISOString()}>{new Date(session.last_connected_at * 1000).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}</time></>}</p>
+            {session.connected === false && <p>지금은 접속해 있지 않아요.</p>}
           </div>
           {session.revocable && <button type="button" className="owner-device-revoke" disabled={busy} aria-label={`${name} 연결 해제`}
             onClick={() => setSelection({ request: { scope: "session", session_id: session.session_id }, name, current: session.current })}>연결 해제</button>}
@@ -100,8 +97,8 @@ function RevokeConfirmation({ selection, busy, error, onCancel, onConfirm }: {
   }, []);
   return <dialog ref={dialog} className="owner-device-confirm" aria-label="기기 연결 해제 확인" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
     <h3>{selection.name} 연결을 해제할까요?</h3>
-    <p>{selection.request.scope === "all" ? "목록에 표시된 모든 원격 연결과 여기서 발급한 접속권이" : "이 기기와 여기서 발급한 접속권의 연결이"} 즉시 종료돼요.{selection.current && " 현재 사용 중인 연결도 종료돼요."} 다시 접속하려면 새 입장 확인이 필요해요.</p>
+    <p>{selection.request.scope === "all" ? "서버 컴퓨터를 뺀 모든 기기의 연결이" : "이 기기의 연결이"} 바로 끊겨요.{selection.current && " 지금 쓰는 이 기기도 끊겨요."} 다시 쓰려면 새로 연결해야 해요.</p>
     {error && <p role="alert" className="owner-devices-error">{error}</p>}
-    <div><button ref={cancel} type="button" disabled={busy} onClick={onCancel}>취소</button><button type="button" disabled={busy} onClick={onConfirm}>{busy ? "해제 중" : "연결 해제"}</button></div>
+    <div><button ref={cancel} type="button" disabled={busy} onClick={onCancel}>취소</button><button type="button" disabled={busy} onClick={onConfirm}>{busy ? "해제하는 중…" : "연결 해제"}</button></div>
   </dialog>;
 }
