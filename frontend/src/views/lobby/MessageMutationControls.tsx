@@ -148,7 +148,7 @@ export default function MessageMutationControls({
               </div>
               <button
                 type="button"
-                className="dc-settings-close"
+                className="dc-dialog-close"
                 aria-label="닫기"
                 disabled={busy}
                 onClick={() => setMutation(null)}

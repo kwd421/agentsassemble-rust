@@ -18,7 +18,7 @@ describe("LeaveRoomDialog", () => {
 
     expect(
       screen.getByText(
-        "내가 소유한 에이전트도 모두 함께 나가며, 실행 중인 Agent Session은 종료돼요."
+        "내 에이전트도 함께 나가고, 실행 중인 에이전트는 멈춰요."
       )
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "방 나가기" }));

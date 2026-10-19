@@ -56,13 +56,12 @@ export default function RoomDeleteDialog({
           <p className="preserve-words" role="status">{controller.notice}</p>
         ) : !controller.pending && (
           <p className="preserve-words">
-            정말 <strong>{target.label}</strong>을(를) 삭제할까요? 이 방의 대화와 첨부 파일, 에이전트 설정이 모두
-            사라지고 <strong>되돌릴 수 없어요.</strong>
+            이 방의 대화와 첨부 파일, 에이전트 설정이 모두 사라지고 <strong>되돌릴 수 없어요.</strong>
           </p>
         )}
         {!deleted && !controller.pending && (
           <label className="dc-room-delete-field">
-            <span>방 이름 입력</span>
+            <span>삭제하려면 방 이름을 입력해 주세요</span>
             <input autoFocus value={confirmationName} disabled={locked} autoComplete="off"
               onChange={(event) => setConfirmationName(event.target.value)} />
           </label>

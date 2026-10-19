@@ -68,13 +68,13 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
       }}>
       <header className="dc-create-channel-head">
         <h2 id={titleId}>{room ? "새 방 만들기" : "텍스트 채널 만들기"}</h2>
-        <button type="button" className="dc-settings-close" disabled={busy} onClick={onClose}
+        <button type="button" className="dc-dialog-close" disabled={busy} onClick={onClose}
           aria-label="닫기" style={{ minWidth: 44, minHeight: 44 }}><X size={18} /></button>
       </header>
       <label className="dc-create-channel-name">
         {room ? "방 이름" : "채널 이름"}
         <input ref={inputRef} className="ops-input" autoFocus value={name} maxLength={nameLimit * 2}
-          disabled={busy} placeholder={room ? "새 방" : "구현방"} style={{ minHeight: 44 }}
+          disabled={busy} placeholder={room ? "새 방" : "새 채널"}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.nativeEvent.isComposing) {
@@ -85,9 +85,9 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
       {[...name.trim()].length > nameLimit && <p role="alert">이름은 {nameLimit}자까지 입력할 수 있어요.</p>}
       {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
       <div className="dc-create-channel-actions">
-        <button type="button" className="ops-button" disabled={busy} onClick={onClose} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>취소</button>
+        <button type="button" className="dc-agent-create-secondary" disabled={busy} onClick={onClose} style={{ minHeight: 44 }}>취소</button>
         <button type="button" className="ops-cta" disabled={busy} aria-disabled={!validName || undefined} onClick={() => void submit()} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>
-          {busy ? "만드는 중..." : "만들기"}
+          {busy ? "만드는 중…" : "만들기"}
         </button>
       </div>
     </dialog>

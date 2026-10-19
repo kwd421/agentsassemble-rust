@@ -393,9 +393,35 @@ select.dc-select {
   font-weight: 800;
 }
 
-/* Dialog text fields keep the 12px inner inset used by the settings inputs. */
-.dc-create-channel-name .ops-input {
+/* Every text field in a small dialog has one height and one inner inset. */
+.dc-create-channel-modal .ops-input {
+  min-height: 40px;
   padding: 0 12px;
+  font-weight: 400;
+}
+
+.dc-create-channel-modal input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+}
+
+/* A small dialog closes with a plain X; the ringed ESC button belongs to
+   full-page settings only. */
+.dc-dialog-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+}
+
+.dc-dialog-close:hover:not(:disabled),
+.dc-dialog-close:focus-visible {
+  color: var(--color-text-primary);
+  outline: none;
 }
 
 .dc-create-channel-actions {

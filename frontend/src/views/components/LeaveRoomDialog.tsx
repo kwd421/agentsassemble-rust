@@ -54,10 +54,10 @@ export default function LeaveRoomDialog({
       onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}
     >
         <header className="dc-create-channel-head">
-          <h2 id={titleId}>{roomLabel}{pairedDevice ? " 기기 연결을 해제할까요?" : " 서버에서 나갈까요?"}</h2>
+          <h2 id={titleId} className="preserve-words">‘{roomLabel}’{pairedDevice ? " 기기 연결을 해제할까요?" : "에서 나갈까요?"}</h2>
           <button
             type="button"
-            className="dc-settings-close"
+            className="dc-dialog-close"
             onClick={onClose}
             disabled={busy}
             aria-label="방 나가기 취소"
@@ -69,10 +69,10 @@ export default function LeaveRoomDialog({
 
         <div className="grid gap-2 text-[14px] leading-6 text-text-muted">
           <p className="preserve-words">
-            {pairedDevice ? "이 기기에서 다시 연결하려면 서버 컴퓨터의 앱의 새 기기 연결 링크가 필요해요." : "나간 뒤 다시 들어오려면 유효한 초대 링크가 필요해요."}
+            {pairedDevice ? "이 기기를 다시 연결하려면 서버 컴퓨터에서 새 연결 링크를 받아야 해요." : "나간 뒤 다시 들어오려면 새 초대 링크가 필요해요."}
           </p>
           <p className="preserve-words font-bold text-text-primary">
-            {pairedDevice ? "이 기기의 방 접속만 끝나요. 호스트와 에이전트는 계속 참여해요." : "내가 소유한 에이전트도 모두 함께 나가며, 실행 중인 Agent Session은 종료돼요."}
+            {pairedDevice ? "이 기기의 방 접속만 끝나요. 방 주인과 에이전트는 계속 참여해요." : "내 에이전트도 함께 나가고, 실행 중인 에이전트는 멈춰요."}
           </p>
           <p className="preserve-words">
             기존 대화 기록은 서버에 남아요.
@@ -98,13 +98,13 @@ export default function LeaveRoomDialog({
           </button>
           <button
             type="button"
-            className="dc-agent-create-primary"
+            className="dc-agent-create-primary dc-leave-room-confirm"
             style={{ minHeight: 44 }}
             onClick={() => void confirmLeave()}
             disabled={busy}
           >
             <LogOut size={16} />
-            {busy ? "나가는 중..." : pairedDevice ? "연결 해제" : "방 나가기"}
+            {busy ? "나가는 중…" : pairedDevice ? "연결 해제" : "방 나가기"}
           </button>
         </div>
     </dialog>

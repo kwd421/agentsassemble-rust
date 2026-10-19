@@ -183,7 +183,7 @@ export default function VoteComposerDialog({
           <h2 id={titleId}>투표 만들기</h2>
           <button
             type="button"
-            className="dc-settings-close"
+            className="dc-dialog-close"
             onClick={onClose}
             disabled={busy}
             aria-label="투표 만들기 닫기"
@@ -277,8 +277,8 @@ export default function VoteComposerDialog({
               className="text-[12px] font-medium text-text-muted"
             >
               {noDeadline
-                ? "투표를 만든 사람이나 방 관리자/호스트가 직접 종료할 때까지 열려요."
-                : "설정한 시간이 지나면 서버가 새 투표를 받지 않아요."}
+                ? "투표를 만든 사람이나 방 관리자가 끝낼 때까지 열려 있어요."
+                : "정한 시간이 지나면 투표가 마감돼요."}
             </span>
           </div>
 
@@ -294,7 +294,8 @@ export default function VoteComposerDialog({
           <div className="dc-create-channel-actions">
             <button
               type="button"
-              className="ops-button min-w-[58px] px-3 py-2"
+              className="dc-agent-create-secondary"
+              style={{ minHeight: 44 }}
               onClick={onClose}
               disabled={busy}
             >
@@ -302,10 +303,11 @@ export default function VoteComposerDialog({
             </button>
             <button
               type="submit"
-              className="ops-cta min-w-[58px] px-3 py-2"
+              className="ops-cta"
+              style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}
               disabled={busy}
             >
-              {busy ? "저장 중…" : "만들기"}
+              {busy ? "만드는 중…" : "만들기"}
             </button>
           </div>
         </form>
