@@ -4238,3 +4238,35 @@ Entry points: `frontend/src/api/room.ts`, `frontend/src/lib/roomGuestPosting.ts`
 Verification: `roomPreferences.test.ts` covers the remote transport routing
 and the dead-binding fail-closed; `roomGuestPosting.test.ts` and
 `messageAttachmentReadScheduler.test.ts` cover the no-authority fail-closed.
+
+### Member host channel custody: one live channel, registered admission (2026-10-19)
+
+Required user flow: app start → anchors drive attach (central unconfirmed) →
+fresh admission auto re-selects the open room → one hour later the room session
+lapses by SESSION_TTL while the host channel stays live. The open room must heal
+once automatically over the live admission (free channel-bound select, zero
+central) instead of parking on the disconnected view with the reconnect button;
+every joined background room heals likewise on the same live channel. If the
+transport really is dead, the existing per-host reconnect path runs (re-attach
+plus select), never a silent park.
+
+Authority and entry points: `frontend/src/app/useMemberHosts.ts` owns the
+per-host admission registry. A completing attach never replaces a live
+(transport-active) admission with an admit-only duplicate — the host reaps an
+admit-only channel 30 s after open, and the duplicate would spend a grant only
+to clobber the live admission and later orphan the registry. A reconnect or
+explicit retry never drops the registry entry while the host workspace transport
+is live — it reconciles on the live channel with zero central instead. A hung
+select never deletes a live-transport entry. The open-room session-loss heal
+(`frontend/src/app/useMemberRoomAutoReselect.ts`) and the background-room heal
+(`frontend/src/app/useMemberRoomLive.ts`) keep resolving the registered
+admission and are unchanged.
+
+Verification: `frontend/src/app/useMemberSessionExpiryOrphan.test.tsx` drives
+the real owners: startup anchors → exactly one channel + one grant; explicit
+reconnect on the live room keeps the live admission registered with no new
+grant; 60-minute TTL expiry then heals the open room once free with zero
+central; the background-room heal likewise; a republish while live closes the
+redundant channel instead of clobbering the registry. The reconnect-registry
+assertions fail on the pre-fix registry (drop → adopt with an empty map,
+`admissionFor` null at expiry, heal `skipped:"no-admission"`).
