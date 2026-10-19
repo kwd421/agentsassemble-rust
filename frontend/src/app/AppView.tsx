@@ -504,6 +504,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : channel === "lobby" ? (
             <LobbyView
               activeRoom={activeRoom}
+              channelName={visibleChannels.find((item) => item.id === "lobby")?.label ?? "general"}
               roomUid={activeRoom.roomUid ?? ""}
               agents={scopedAgents}
               messageAttachmentReadOwner={messageAttachmentReadOwner}
@@ -641,6 +642,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             <RoomConnectionPanel
               room={activeRoom}
               disconnected={activeRoomDisconnected}
+              loading={!canonicalRoom.room}
               agents={scopedAgents}
               members={activeRoomMembers}
               viewerParticipantId={activeRoomSession?.agentId || "operator-local"}

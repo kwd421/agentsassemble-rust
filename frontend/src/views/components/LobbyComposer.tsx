@@ -102,6 +102,7 @@ export default function LobbyComposer({
   submitMessage,
   mentionables = [],
   disabledReason,
+  channelName = "general",
   roomSessionToken = "",
   postingMode = "host",
   onGuestSessionExpired,
@@ -115,6 +116,7 @@ export default function LobbyComposer({
   submitMessage?: (message: string) => Promise<LobbyEvent[]>;
   mentionables?: Mentionable[];
   disabledReason?: string;
+  channelName?: string;
   roomSessionToken?: string;
   postingMode?: RoomPostingMode;
   onGuestSessionExpired?: () => void;
@@ -632,7 +634,7 @@ export default function LobbyComposer({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           className="dc-composer-input"
-          placeholder={disabledReason || "#general에 메시지 보내기"}
+          placeholder={disabledReason || `#${channelName}에 메시지 보내기`}
           disabled={busy || disabled}
           mentionables={mentionables}
           ariaLabel="채팅 입력"

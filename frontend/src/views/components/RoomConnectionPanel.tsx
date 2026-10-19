@@ -19,6 +19,7 @@ type RoomSummary = {
 type RoomConnectionPanelProps = {
   room: RoomSummary;
   disconnected?: boolean;
+  loading?: boolean;
   agents: LiveAgent[];
   members: RoomMember[];
   viewerParticipantId?: string;
@@ -58,6 +59,7 @@ function mutedChannelCount(
 export default function RoomConnectionPanel({
   room,
   disconnected = false,
+  loading = false,
   agents,
   members,
   viewerParticipantId = "operator-local",
@@ -100,6 +102,7 @@ export default function RoomConnectionPanel({
         roomId={room.id}
         roomName={room.label}
         disconnected={disconnected}
+        loading={loading}
         onRoleChange={onRoleChange}
         canEditRoles={Boolean(capabilities["room.manage"])}
         onParticipantRemove={capabilities["room.manage"] ? onParticipantRemove : undefined}

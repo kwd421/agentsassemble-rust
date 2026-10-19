@@ -64,6 +64,7 @@ import { userFacingError } from "../lib/apiErrors";
 
 export default function LobbyView({
   activeRoom,
+  channelName = "general",
   roomUid = "",
   agents,
   messageAttachmentReadOwner,
@@ -105,6 +106,8 @@ export default function LobbyView({
   onSearchTargetHandled,
   onOpenCrossChannelSearchResult,
 }: {
+  /** The lobby's display name as the room names it (the rail shows the same). */
+  channelName?: string;
   activeRoom: RoomDockItem;
   roomUid?: string;
   agents: LiveAgent[];
@@ -472,7 +475,7 @@ export default function LobbyView({
     <div className="flex h-full min-h-0 flex-col">
       <ChannelHeader
         icon={<Hash size={20} />}
-        title="general"
+        title={channelName}
         subtitle="사람과 에이전트가 함께 보는 기본 채널"
         searchLabel={searchLabel}
         membersOpen={membersOpen}
@@ -555,10 +558,10 @@ export default function LobbyView({
               {appearance?.iconImage ? "" : <Hash size={26} />}
             </span>
             <h2 className="mt-3 text-[28px] font-black leading-tight text-text-primary preserve-words">
-              #general에 오신 것을 환영해요
+              #{channelName}에 오신 것을 환영합니다
             </h2>
             <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-text-muted preserve-words">
-              {lobbyRows.length === 0 ? "첫 메시지를 남겨 보세요." : "#general 채널의 시작이에요."}
+              {lobbyRows.length === 0 ? "첫 메시지를 남겨 보세요." : `#${channelName} 채널의 시작이에요.`}
             </p>
           </section>
         )}
@@ -741,6 +744,7 @@ export default function LobbyView({
           </div>
         )}
         <LobbyComposer
+          channelName={channelName}
           meetingId={activeRoom.meetingId}
           replyTo={replyId ? replySource(replyId) : undefined}
           onCancelReply={() => setReplyTarget({ scope: replyScope, id: "" })}
