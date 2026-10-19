@@ -13,9 +13,6 @@ const types: Record<FriendParticipantType, string> = {
   subscription_ai: "구독 에이전트", api: "API 키", local: "내 컴퓨터", remote: "외부 AI", human: "사람", unknown: "기타",
 };
 const icons = { human: UserRound, subscription_ai: Bot, api: Cloud, local: Cpu, remote: Wifi, unknown: Users };
-const inputStyle = { width: "100%", minHeight: 44, padding: "8px 12px", boxSizing: "border-box" as const };
-const selectStyle = { ...inputStyle, appearance: "none" as const, cursor: "pointer" };
-const buttonStyle = { minHeight: 44, minWidth: 44, padding: "0 12px" };
 
 function newFriend(): SaveFriend {
   return { friend_id: crypto.randomUUID(), expected_revision: 0, details: {
@@ -88,9 +85,9 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
     {deleting && <FriendDialog title="친구를 삭제할까요?" busy={directory.busy} onCancel={() => setDeleting(null)}>
       <p style={{ margin: 0, overflowWrap: "anywhere" }}>{deleting.details.display_name}을 친구 목록에서 삭제해요. 방 참여와 대화 기록은 유지돼요.</p>
       {directory.error && <p role="alert">{directory.error}</p>}
-      <div style={{ display: "flex", justifyContent: "end", gap: 12 }}>
-        <button type="button" className="ops-button" style={buttonStyle} disabled={directory.busy} autoFocus onClick={() => setDeleting(null)}>취소</button>
-        <button type="button" className="dc-member-session-button" data-variant="danger" style={buttonStyle} disabled={directory.busy} onClick={async () => { if (await directory.remove(deleting.friend_id)) setDeleting(null); }}>삭제</button>
+      <div className="dc-create-channel-actions">
+        <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={directory.busy} autoFocus onClick={() => setDeleting(null)}>취소</button>
+        <button type="button" className="dc-member-session-button" data-variant="danger" style={{ minHeight: 40, minWidth: 96 }} disabled={directory.busy} onClick={async () => { if (await directory.remove(deleting.friend_id)) setDeleting(null); }}>삭제</button>
       </div>
     </FriendDialog>}
   </section>;
@@ -163,18 +160,27 @@ function FriendEditor({ initial, busy, error, onCancel, onSave }: {
   const [draft, setDraft] = useState(initial);
   const changed = initial.expected_revision === 0 || JSON.stringify(draft.details) !== JSON.stringify(initial.details);
   const update = (field: "display_name" | "handle" | "provider_kind", value: string) => setDraft((current) => ({ ...current, details: { ...current.details, [field]: value } }));
+  // A provider only means something for an AI friend, and is picked from the
+  // known products instead of typed as a raw kind id.
+  const isHuman = draft.details.participant_type === "human";
+  const providerOptions = Object.entries(PROVIDER_BRANDS).map(([key, brand]) => ({ value: key, label: brand.productName }));
+  const currentProvider = draft.details.provider_kind;
   return <FriendDialog title={initial.expected_revision === 0 ? "친구 추가" : "친구 편집"} busy={busy} onCancel={onCancel}>
-    <form style={{ display: "grid", gap: 20 }} onSubmit={(event) => { event.preventDefault(); if (!busy && changed && draft.details.display_name.trim()) void onSave(draft); }}>
-      <label>이름<input className="ops-input" style={inputStyle} autoFocus required maxLength={120} value={draft.details.display_name} disabled={busy} onChange={(event) => update("display_name", event.target.value)} /></label>
-      <label>종류<select className="ops-input dc-select" style={selectStyle} value={draft.details.participant_type} disabled={busy} onChange={(event) => setDraft((current) => ({ ...current, details: { ...current.details, participant_type: event.target.value as FriendParticipantType } }))}>
+    <form style={{ display: "grid", gap: 16 }} onSubmit={(event) => { event.preventDefault(); if (!busy && changed && draft.details.display_name.trim()) void onSave(draft); }}>
+      <label className="dc-create-channel-name">이름<input className="ops-input" autoFocus required maxLength={120} value={draft.details.display_name} disabled={busy} onChange={(event) => update("display_name", event.target.value)} /></label>
+      <label className="dc-create-channel-name">종류<select className="ops-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={draft.details.participant_type} disabled={busy} onChange={(event) => setDraft((current) => ({ ...current, details: { ...current.details, participant_type: event.target.value as FriendParticipantType } }))}>
         {Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
-      <label>핸들 (선택)<input className="ops-input" style={inputStyle} maxLength={120} value={draft.details.handle} disabled={busy} onChange={(event) => update("handle", event.target.value)} /></label>
-      <label>제공자 (선택)<input autoCorrect="off" autoCapitalize="none" spellCheck={false} className="ops-input" style={inputStyle} maxLength={256} value={draft.details.provider_kind} disabled={busy} onChange={(event) => update("provider_kind", event.target.value)} /></label>
-      {error && <p role="alert">{error}</p>}
-      <div style={{ display: "flex", justifyContent: "end", gap: 12 }}>
-        <button type="button" className="ops-button" style={buttonStyle} disabled={busy} onClick={onCancel}>취소</button>
-        <button type="submit" className="dc-agent-create-primary" style={buttonStyle} disabled={busy || !changed || !draft.details.display_name.trim()}>{busy ? "저장 중…" : "저장"}</button>
+      <label className="dc-create-channel-name">사용자명 (선택)<input className="ops-input" maxLength={120} value={draft.details.handle} disabled={busy} onChange={(event) => update("handle", event.target.value)} /></label>
+      {!isHuman && <label className="dc-create-channel-name">제공자 (선택)<select className="ops-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={currentProvider} disabled={busy} onChange={(event) => update("provider_kind", event.target.value)}>
+        <option value="">선택 안 함</option>
+        {providerOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {currentProvider && !providerOptions.some((option) => option.value === currentProvider) && <option value={currentProvider}>{providerName(currentProvider) || "기타"}</option>}
+      </select></label>}
+      {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
+      <div className="dc-create-channel-actions">
+        <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={busy} onClick={onCancel}>취소</button>
+        <button type="submit" className="ops-cta" style={{ padding: "0 16px" }} disabled={busy || !changed || !draft.details.display_name.trim()}>{busy ? "저장 중…" : "저장"}</button>
       </div>
     </form>
   </FriendDialog>;
@@ -189,8 +195,13 @@ function FriendDialog({ title, busy, onCancel, children }: { title: string; busy
     return () => { dialog?.close(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
   }, [opener]);
   return <div className="dc-modal-backdrop" role="presentation"><dialog ref={ref} className="dc-create-channel-modal" aria-label={title}
-    style={{ width: "min(440px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", margin: "auto", padding: 24, overflowY: "auto", color: "var(--color-text-primary)", border: "1px solid var(--color-panel-border)" }}
+    style={{ maxHeight: "calc(100dvh - 32px)", margin: "auto", overflowY: "auto", color: "var(--color-text-primary)", border: "1px solid var(--color-panel-border)" }}
     onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }} onClick={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-    <section style={{ display: "grid", gap: 20 }}><h2 style={{ margin: 0 }}>{title}</h2>{children}</section>
+    <section style={{ display: "grid", gap: 16 }}>
+      <header className="dc-create-channel-head"><h2>{title}</h2>
+        <button type="button" className="dc-dialog-close" aria-label="닫기" disabled={busy} onClick={onCancel}><X size={24} /></button>
+      </header>
+      {children}
+    </section>
   </dialog></div>;
 }
