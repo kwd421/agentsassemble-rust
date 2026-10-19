@@ -37,8 +37,8 @@ afterEach(cleanup);
 it.each(["new", "recover"])("%s guest stays in the invitation and requires code acknowledgement before consent", async (path) => {
   render(<StrictMode><MemberJoinPanel secureEntry={entry} /></StrictMode>);
   fireEvent.click(await screen.findByRole("button", { name: path === "new" ? "게스트로 계속" : "입력하기" }));
-  fireEvent.change(screen.getByLabelText(path === "new" ? "표시 이름" : "게스트 복구 코드"), { target: { value: path === "new" ? "Guest identity" : "OLD-CODE" } });
-  fireEvent.click(screen.getByRole("button", { name: path === "new" ? "게스트 만들기" : "같은 게스트로 로그인" }));
+  fireEvent.change(screen.getByLabelText(path === "new" ? "표시 이름" : "복구 코드"), { target: { value: path === "new" ? "Guest identity" : "OLD-CODE" } });
+  fireEvent.click(screen.getByRole("button", { name: path === "new" ? "게스트 만들기" : "이 게스트로 계속" }));
   const next = await screen.findByRole("button", { name: "계속" });
   expect((next as HTMLButtonElement).disabled).toBe(true);
   expect(screen.queryByRole("button", { name: "참가하기" })).toBeNull();
@@ -57,12 +57,12 @@ it("failed recovery preserves input and invitation for explicit retry without ad
   central.recover.mockRejectedValueOnce(new Error("invalid proof"));
   render(<MemberJoinPanel secureEntry={entry} />);
   fireEvent.click(await screen.findByRole("button", { name: "입력하기" }));
-  fireEvent.change(screen.getByLabelText("게스트 복구 코드"), { target: { value: "OLD-CODE" } });
-  fireEvent.click(screen.getByRole("button", { name: "같은 게스트로 로그인" }));
+  fireEvent.change(screen.getByLabelText("복구 코드"), { target: { value: "OLD-CODE" } });
+  fireEvent.click(screen.getByRole("button", { name: "이 게스트로 계속" }));
   await screen.findByRole("alert");
-  expect((screen.getByLabelText("게스트 복구 코드") as HTMLInputElement).value).toBe("OLD-CODE");
+  expect((screen.getByLabelText("복구 코드") as HTMLInputElement).value).toBe("OLD-CODE");
   expect(central.session).toBeNull(); expect(central.open).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "같은 게스트로 로그인" }));
+  fireEvent.click(screen.getByRole("button", { name: "이 게스트로 계속" }));
   await screen.findByRole("checkbox");
   expect(screen.queryByRole("button", { name: "참가하기" })).toBeNull();
 });

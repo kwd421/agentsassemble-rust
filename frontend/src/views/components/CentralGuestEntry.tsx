@@ -81,15 +81,15 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </p>
     </div>}
         {screen === "guest" && (
-          <section className="grid gap-3 rounded-lg bg-[#24242a] p-4">
+          <section className="dc-startup-form">
             <button
               type="button"
-              className="flex w-fit items-center gap-1 text-[11px] font-black text-text-muted"
+              className="dc-startup-back"
               onClick={() => setScreen("choice")}
             >
-              <ArrowLeft size={14} /> 뒤로
+              <ArrowLeft size={16} /> 뒤로
             </button>
-            <label className="grid gap-1.5 text-[11px] font-black text-text-secondary">
+            <label className="dc-startup-field">
               표시 이름
               <input
                 autoFocus
@@ -97,7 +97,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 maxLength={80}
                 value={displayName}
                 placeholder="다른 참가자에게 보일 이름"
-                className="min-h-10 rounded-md border border-transparent bg-[#202024] px-3 text-[13px] font-semibold text-text-primary outline-none focus:border-[#5865f2]"
+                className="dc-startup-input"
                 onChange={(event) => setDisplayName(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void createGuest();
@@ -106,7 +106,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </label>
             <button
               type="button"
-              className="flex min-h-10 items-center justify-center gap-2 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50"
+              className="dc-startup-primary"
               disabled={!displayName.trim() || busy}
               onClick={() => void createGuest()}
             >
@@ -121,23 +121,23 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
         )}
 
         {screen === "recover" && (
-          <section className="grid gap-3 rounded-lg bg-[#24242a] p-4">
+          <section className="dc-startup-form">
             <button
               type="button"
-              className="flex w-fit items-center gap-1 text-[11px] font-black text-text-muted"
+              className="dc-startup-back"
               onClick={() => setScreen("choice")}
             >
-              <ArrowLeft size={14} /> 뒤로
+              <ArrowLeft size={16} /> 뒤로
             </button>
-            <label className="grid gap-1.5 text-[11px] font-black text-text-secondary">
-              게스트 복구 코드
+            <label className="dc-startup-field">
+              복구 코드
               <input
                 autoFocus
                 autoComplete="one-time-code"
                 spellCheck={false}
                 value={recoveryInput}
                 placeholder="XXXX-XXXX-…"
-                className="min-h-10 rounded-md bg-[#202024] px-3 font-mono text-[13px] text-text-primary outline-none"
+                className="dc-startup-input font-mono"
                 onChange={(event) =>
                   setRecoveryInput(event.currentTarget.value.toUpperCase())
                 }
@@ -145,7 +145,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </label>
             <button
               type="button"
-              className="flex min-h-10 items-center justify-center gap-2 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50"
+              className="dc-startup-primary"
               disabled={!recoveryInput.trim() || busy}
               onClick={() => void recoverGuest()}
             >
@@ -154,33 +154,33 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
               ) : (
                 <KeyRound size={16} />
               )}{" "}
-              {busy ? "복구 중…" : "같은 게스트로 로그인"}
+              {busy ? "확인하는 중…" : "이 게스트로 계속"}
             </button>
           </section>
         )}
 
         {screen === "recovery-code" && (
-          <section className="grid gap-4 rounded-lg bg-[#24242a] p-4">
-            <label className="grid gap-2 text-[11px] font-black text-text-secondary">
+          <section className="dc-startup-form">
+            <label className="dc-startup-field">
               새 복구 코드
               <input
                 readOnly
                 value={issuedRecoveryCode}
                 onFocus={(event) => event.currentTarget.select()}
-                className="min-h-12 rounded-md bg-[#202024] px-3 font-mono text-[13px] font-black tracking-wide text-text-primary outline-none"
+                className="dc-startup-input font-mono tracking-wide"
               />
             </label>
             <button
               type="button"
-              className="flex min-h-10 items-center justify-center gap-2 rounded-md bg-[#323237] px-4 text-[12px] font-black text-text-primary"
+              className="dc-startup-secondary"
               onClick={() => void copyRecoveryCode()}
             >
               {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "복사됨" : "복구 코드 복사"}
             </button>
-            <p className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]">
-              이 코드를 잃으면 다른 기기에서 이 게스트 신원을 복구할 수 없어요. 비밀번호 관리자나 안전한 오프라인 장소에 보관하세요. 복구 직후에는 이전 코드가 폐기돼요.
+            <p className="dc-startup-warning">
+              이 코드를 잃어버리면 다른 기기에서 이 게스트로 다시 들어올 수 없어요. 비밀번호 관리자처럼 안전한 곳에 보관해 주세요. 코드를 한 번 쓰면 새 코드로 바뀌어요.
             </p>
-            <label className="flex items-start gap-2 text-[12px] font-bold leading-5 text-text-secondary">
+            <label className="flex items-start gap-2 text-[14px] leading-5 text-text-secondary">
               <input
                 type="checkbox"
                 className="mt-1"
@@ -191,7 +191,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </label>
             <button
               type="button"
-              className="flex min-h-10 items-center justify-center gap-2 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50"
+              className="dc-startup-primary"
               disabled={!savedRecoveryCode || busy}
               onClick={() => void continueAfterRecoveryCode()}
             >
