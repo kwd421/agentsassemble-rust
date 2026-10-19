@@ -16,7 +16,10 @@ use tokio::{sync::Mutex, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use agentsassemble_persistence::SqliteStore;
+
 use crate::{
+    central::{directory::CentralDirectory, host_identity::CentralHostIdentity},
     ingress_trust::{
         PeerAddr, TrustedIngressOrigin, is_non_public_origin_host, normalized_host, single_header,
         single_optional_header,
@@ -78,6 +81,16 @@ struct ManualPublicIngress {
 struct ManagedPublicIngress {
     projection: Arc<RwLock<ManagedProjection>>,
     controller: ManagedController,
+    named: Arc<RwLock<Option<NamedTunnelContext>>>,
+}
+
+/// Fixed-address provision inputs. Cloned per generation; the token itself
+/// lives in persistence and never enters this struct.
+#[derive(Clone)]
+pub(crate) struct NamedTunnelContext {
+    pub(crate) store: SqliteStore,
+    pub(crate) directory: CentralDirectory,
+    pub(crate) identity: CentralHostIdentity,
 }
 
 struct ManagedController {
@@ -209,6 +222,7 @@ impl PublicIngress {
                         local_url,
                         cloudflared,
                         stable_entry,
+                        named: None,
                     },
                     lifecycle: Mutex::new(ManagedLifecycle {
                         closed: false,
@@ -216,6 +230,7 @@ impl PublicIngress {
                         active: None,
                     }),
                 },
+                named: Arc::new(RwLock::new(None)),
             })),
             Arc::default(),
             Arc::default(),
@@ -316,6 +331,7 @@ impl PublicIngress {
             lifecycle.active = Some(start_generation(
                 &ingress.controller.config,
                 &ingress.projection,
+                ingress.named.read().clone(),
             ));
         }
         Ok(ingress.status())
@@ -463,6 +479,24 @@ impl PublicIngress {
         };
         Ok(ingress)
     }
+
+    /// Attaches the fixed-address provision inputs after the central
+    /// directory is configured. Without it every open uses today's quick
+    /// tunnel; with it a stored token for the live epoch runs named.
+    pub(crate) fn bind_named_tunnel_context(
+        &self,
+        store: SqliteStore,
+        directory: CentralDirectory,
+        identity: CentralHostIdentity,
+    ) {
+        if let PublicIngressKind::Managed(ingress) = self.0.as_ref() {
+            *ingress.named.write() = Some(NamedTunnelContext {
+                store,
+                directory,
+                identity,
+            });
+        }
+    }
 }
 
 fn authorization(
@@ -557,6 +591,7 @@ fn stable_target_matches_direct(target: Option<&str>, status: &PublicIngressStat
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct CanonicalPublicOrigin {
     pub(crate) value: String,
     host: String,
@@ -606,6 +641,7 @@ pub(crate) struct ManagedIngressConfig {
     pub(crate) local_url: String,
     pub(crate) cloudflared: Option<PathBuf>,
     pub(crate) stable_entry: StableEntry,
+    pub(crate) named: Option<NamedTunnelContext>,
 }
 
 struct ActiveGeneration {
@@ -617,6 +653,7 @@ struct ActiveGeneration {
 fn start_generation(
     config: &ManagedIngressConfig,
     projection: &Arc<RwLock<ManagedProjection>>,
+    named: Option<NamedTunnelContext>,
 ) -> ActiveGeneration {
     if config.cloudflared.is_none() {
         let generation = projection.write().begin_unavailable();
@@ -625,7 +662,8 @@ fn start_generation(
     let generation = projection.write().begin_start();
     config.stable_entry.begin_generation();
     let cancellation = CancellationToken::new();
-    let task_config = config.clone();
+    let mut task_config = config.clone();
+    task_config.named = named;
     let task_projection = projection.clone();
     let task_cancellation = cancellation.clone();
     let owner = tokio::spawn(async move {
@@ -709,7 +747,7 @@ enum IngressPhase {
 }
 
 pub(crate) struct ManagedProjection {
-    endpoint_changes: tokio::sync::watch::Sender<(u64, String)>,
+    pub(crate) endpoint_changes: tokio::sync::watch::Sender<(u64, String)>,
     generation: u64,
     phase: IngressPhase,
     trust: Option<ManagedTrust>,

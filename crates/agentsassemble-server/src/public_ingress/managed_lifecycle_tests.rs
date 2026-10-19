@@ -304,6 +304,7 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
                     local_url: "http://127.0.0.1:41955".to_owned(),
                     cloudflared: None,
                     stable_entry,
+                    named: None,
                 },
                 lifecycle: Mutex::new(ManagedLifecycle {
                     closed: false,
@@ -311,6 +312,7 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
                     active,
                 }),
             },
+            named: Arc::new(RwLock::new(None)),
         })),
         Arc::default(),
         Arc::default(),

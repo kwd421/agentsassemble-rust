@@ -204,11 +204,11 @@ impl SqliteStore {
         let stale = match (stored, epoch) {
             (_, None) => true,
             (None, Some(_)) => false,
-            (Some(value), Some(epoch)) => serde_json::from_str::<
-                crate::named_tunnel::StoredPayloadForCleanup,
-            >(&value)
-            .map(|payload| payload.registration_epoch != epoch)
-            .unwrap_or(true),
+            (Some(value), Some(epoch)) => {
+                serde_json::from_str::<crate::named_tunnel::StoredPayloadForCleanup>(&value)
+                    .map(|payload| payload.registration_epoch != epoch)
+                    .unwrap_or(true)
+            }
         };
         if stale {
             sqlx::query("DELETE FROM runtime_metadata WHERE key = 'named_tunnel'")

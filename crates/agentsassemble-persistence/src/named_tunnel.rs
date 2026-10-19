@@ -78,7 +78,9 @@ pub fn is_valid_named_tunnel_hostname(value: &str) -> bool {
         return false;
     };
     (hex.len() == 12 || hex.len() == 16)
-        && hex.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn invalid(message: &str) -> PersistenceError {
@@ -88,7 +90,11 @@ fn invalid(message: &str) -> PersistenceError {
     }
 }
 
-fn validate_fields(hostname: &str, tunnel_token: &str, registration_epoch: &str) -> Result<(), PersistenceError> {
+fn validate_fields(
+    hostname: &str,
+    tunnel_token: &str,
+    registration_epoch: &str,
+) -> Result<(), PersistenceError> {
     if !is_valid_named_tunnel_hostname(hostname) {
         return Err(invalid("named tunnel hostname is invalid"));
     }
@@ -100,7 +106,9 @@ fn validate_fields(hostname: &str, tunnel_token: &str, registration_epoch: &str)
     }
     if registration_epoch.is_empty()
         || registration_epoch.len() > MAX_EPOCH_BYTES
-        || registration_epoch.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
+        || registration_epoch
+            .bytes()
+            .any(|byte| byte < 0x20 || byte == 0x7f)
     {
         return Err(invalid("named tunnel registration epoch is invalid"));
     }
@@ -217,9 +225,7 @@ impl SqliteStore {
                 .fetch_optional(&self.pool)
                 .await?;
         match (day, count) {
-            (Some(day), Some(count))
-                if day.parse::<i64>().ok() == Some(today) =>
-            {
+            (Some(day), Some(count)) if day.parse::<i64>().ok() == Some(today) => {
                 Ok(count.parse::<i64>().unwrap_or(0) < MAX_PROVISION_ATTEMPTS_PER_DAY)
             }
             _ => Ok(true),
@@ -271,7 +277,9 @@ mod tests {
 
     #[test]
     fn hostname_shape_accepts_only_derived_fixed_names() {
-        assert!(is_valid_named_tunnel_hostname("h-0123456789ab.agentsassemble.uk"));
+        assert!(is_valid_named_tunnel_hostname(
+            "h-0123456789ab.agentsassemble.uk"
+        ));
         assert!(is_valid_named_tunnel_hostname(
             "h-0123456789abcdef.agentsassemble.uk"
         ));
@@ -295,8 +303,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn roundtrip_keeps_origin_and_redacts_debug()
-    -> Result<(), Box<dyn std::error::Error>> {
+    async fn roundtrip_keeps_origin_and_redacts_debug() -> Result<(), Box<dyn std::error::Error>> {
         let store = SqliteStore::open("sqlite::memory:").await?;
         assert!(store.named_tunnel().await?.is_none());
         let stored = store
@@ -321,15 +328,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invalid_rows_are_absent_and_rejected_on_save()
-    -> Result<(), Box<dyn std::error::Error>> {
+    async fn invalid_rows_are_absent_and_rejected_on_save() -> Result<(), Box<dyn std::error::Error>>
+    {
         let store = SqliteStore::open("sqlite::memory:").await?;
         for (hostname, token, epoch) in [
             ("phish.agentsassemble.uk", "token", "epoch"),
             ("h-0123456789ab.agentsassemble.uk", "", "epoch"),
             ("h-0123456789ab.agentsassemble.uk", "token", ""),
         ] {
-            assert!(store.save_named_tunnel(hostname, token, epoch).await.is_err());
+            assert!(
+                store
+                    .save_named_tunnel(hostname, token, epoch)
+                    .await
+                    .is_err()
+            );
         }
         sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('named_tunnel', '{\"hostname\":\"bad\"}')")
             .execute(&store.pool)
@@ -339,25 +351,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn epoch_change_clears_the_stored_token()
-    -> Result<(), Box<dyn std::error::Error>> {
+    async fn epoch_change_clears_the_stored_token() -> Result<(), Box<dyn std::error::Error>> {
         let store = SqliteStore::open("sqlite::memory:").await?;
         store.set_registration_epoch(Some("epoch-one")).await?;
         store
-            .save_named_tunnel(
-                "h-0123456789ab.agentsassemble.uk",
-                "token-one",
-                "epoch-one",
-            )
+            .save_named_tunnel("h-0123456789ab.agentsassemble.uk", "token-one", "epoch-one")
             .await?;
         store.set_registration_epoch(Some("epoch-two")).await?;
         assert!(store.named_tunnel().await?.is_none());
         store
-            .save_named_tunnel(
-                "h-0123456789ab.agentsassemble.uk",
-                "token-two",
-                "epoch-two",
-            )
+            .save_named_tunnel("h-0123456789ab.agentsassemble.uk", "token-two", "epoch-two")
             .await?;
         // Re-setting the same epoch keeps the token.
         store.set_registration_epoch(Some("epoch-two")).await?;

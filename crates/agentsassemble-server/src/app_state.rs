@@ -249,6 +249,14 @@ impl AppState {
         self.central_directory = crate::central::directory::CentralDirectory::configured(url)?;
         self.central_directory
             .bind_ingress(self.public_ingress.clone());
+        // Fixed-address provisioning reuses this same host identity and store.
+        // Without central there is no provision; with it a stored token for
+        // the live epoch runs named, otherwise one provision attempt decides.
+        self.public_ingress.bind_named_tunnel_context(
+            self.store.clone(),
+            self.central_directory.clone(),
+            self.central_host_identity.clone(),
+        );
         Ok(self)
     }
 

@@ -13,11 +13,12 @@ use tokio_util::{
 };
 
 use crate::{
+    named_tunnel::{TunnelPlan, ensure_named_tunnel},
     public_ingress::{
         CanonicalPublicOrigin, ManagedIngressConfig, ManagedProjection, ManagedReadiness,
         generated_origin_host,
     },
-    public_ingress_process::{spawn_cloudflared, supervise_child},
+    public_ingress_process::{spawn_cloudflared, spawn_cloudflared_named, supervise_child},
 };
 
 const MAX_OUTPUT_LINE_BYTES: usize = 16 * 1024;
@@ -54,6 +55,47 @@ pub(crate) async fn run_generation(
     projection: Arc<RwLock<ManagedProjection>>,
     cancellation: CancellationToken,
 ) -> GenerationOutcome {
+    // One provision attempt at most per open: a stored token for the live
+    // epoch runs named with zero central calls, otherwise a single attempt
+    // decides between a fresh named credential and today's quick tunnel.
+    // Every failure falls back to quick for this run and never blocks.
+    let named = match config.named.as_ref() {
+        Some(context) => {
+            match ensure_named_tunnel(&context.store, &context.directory, &context.identity).await {
+                TunnelPlan::Named(stored) => match CanonicalPublicOrigin::parse(&stored.origin()) {
+                    Ok(origin) => Some((stored, origin)),
+                    Err(_) => {
+                        tracing::warn!(
+                            %generation,
+                            "named tunnel origin is invalid; using quick tunnel"
+                        );
+                        None
+                    }
+                },
+                TunnelPlan::Quick { reason } => {
+                    tracing::info!(
+                        %generation,
+                        reason,
+                        "named tunnel unavailable; using quick tunnel"
+                    );
+                    None
+                }
+            }
+        }
+        None => None,
+    };
+    if let Some((stored, origin)) = named {
+        return run_named_generation(
+            generation,
+            &config,
+            &projection,
+            &cancellation,
+            stored.hostname(),
+            origin,
+            stored.tunnel_token(),
+        )
+        .await;
+    }
     let origin_host = generated_origin_host();
     let Some(cloudflared) = config.cloudflared.as_ref() else {
         return failed_with_stable_cleanup(&config, "cloudflared is not installed").await;
@@ -61,9 +103,87 @@ pub(crate) async fn run_generation(
     let Ok(spawned) = spawn_cloudflared(cloudflared, &config.local_url, &origin_host).await else {
         return failed_with_stable_cleanup(&config, "cloudflared could not be started").await;
     };
+    run_spawned_generation(
+        generation,
+        &config,
+        &projection,
+        &cancellation,
+        spawned,
+        origin_host,
+        None,
+    )
+    .await
+}
+
+/// Runs one named generation with the fixed origin: publishes
+/// `https://<hostname>` once cloudflared reports a registered connection.
+/// A spawn failure falls back to the quick tunnel for this run so external
+/// access never blocks on fixed-address provisioning.
+async fn run_named_generation(
+    generation: u64,
+    config: &ManagedIngressConfig,
+    projection: &Arc<RwLock<ManagedProjection>>,
+    cancellation: &CancellationToken,
+    hostname: &str,
+    origin: CanonicalPublicOrigin,
+    token: &str,
+) -> GenerationOutcome {
+    let Some(cloudflared) = config.cloudflared.as_ref() else {
+        return failed_with_stable_cleanup(config, "cloudflared is not installed").await;
+    };
+    let spawned = match spawn_cloudflared_named(cloudflared, &config.local_url, token).await {
+        Ok(spawned) => spawned,
+        Err(_) => {
+            tracing::warn!(
+                %generation,
+                "named tunnel spawn failed; using quick tunnel"
+            );
+            let origin_host = generated_origin_host();
+            let Ok(spawned) = spawn_cloudflared(cloudflared, &config.local_url, &origin_host).await
+            else {
+                return failed_with_stable_cleanup(config, "cloudflared could not be started")
+                    .await;
+            };
+            return run_spawned_generation(
+                generation,
+                config,
+                projection,
+                cancellation,
+                spawned,
+                origin_host,
+                None,
+            )
+            .await;
+        }
+    };
+    // Without `--http-host-header` the local Host is the public hostname, so
+    // the existing Host-digest admission check gates on it unchanged.
+    run_spawned_generation(
+        generation,
+        config,
+        projection,
+        cancellation,
+        spawned,
+        hostname.to_owned(),
+        Some(origin),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_spawned_generation(
+    generation: u64,
+    config: &ManagedIngressConfig,
+    projection: &Arc<RwLock<ManagedProjection>>,
+    cancellation: &CancellationToken,
+    spawned: crate::public_ingress_process::SpawnedTunnel,
+    origin_host: String,
+    fixed_origin: Option<CanonicalPublicOrigin>,
+) -> GenerationOutcome {
+    let named = fixed_origin.is_some();
     let (output, output_events) = mpsc::channel(OUTPUT_EVENTS);
-    let stdout_owner = spawn_output_reader(spawned.stdout, output.clone());
-    let stderr_owner = spawn_output_reader(spawned.stderr, output);
+    let stdout_owner = spawn_output_reader(spawned.stdout, output.clone(), named);
+    let stderr_owner = spawn_output_reader(spawned.stderr, output, named);
     let child_cancellation = CancellationToken::new();
     let child_token = child_cancellation.clone();
     let child_owner = tokio::spawn(async move {
@@ -78,6 +198,7 @@ pub(crate) async fn run_generation(
         &cancellation,
         child_owner,
         output_events,
+        fixed_origin,
     )
     .await;
     let GenerationObservation {
@@ -131,6 +252,7 @@ async fn observe_generation(
     cancellation: &CancellationToken,
     mut child_owner: JoinHandle<io::Result<ExitStatus>>,
     mut output_events: mpsc::Receiver<OutputEvent>,
+    fixed_origin: Option<CanonicalPublicOrigin>,
 ) -> GenerationObservation {
     let mut child_result = None;
     let mut output_closed = None;
@@ -149,6 +271,12 @@ async fn observe_generation(
             }
             event = output_events.recv() => match event {
                 Some(OutputEvent::Origin(origin)) => {
+                    if fixed_origin.is_some() {
+                        // Named mode publishes only the fixed origin once the
+                        // connector registers; quick-tunnel URLs never appear
+                        // there and are ignored as diagnostics.
+                        continue;
+                    }
                     let target = origin.value.clone();
                     match projection
                         .write()
@@ -173,6 +301,31 @@ async fn observe_generation(
                 Some(OutputEvent::Invalid) => {
                     error = Some("cloudflared output violated its safety limit".to_owned());
                     break;
+                }
+                Some(OutputEvent::NamedReady) => {
+                    let Some(origin) = fixed_origin.clone() else {
+                        continue;
+                    };
+                    let target = origin.value.clone();
+                    match projection
+                        .write()
+                        .ready_managed(generation, origin, origin_host)
+                    {
+                        ManagedReadiness::Unchanged => {}
+                        ManagedReadiness::Changed => {
+                            queue_publication(
+                                stable_entry,
+                                target,
+                                &mut stable_publication,
+                                &mut pending_stable_target,
+                            );
+                        }
+                        ManagedReadiness::Rejected => {
+                            stopped = true;
+                            projection.write().begin_stop(generation);
+                            break;
+                        }
+                    }
                 }
                 None => {
                     output_closed = Some(child_owner.is_finished());
@@ -267,10 +420,15 @@ async fn join_publication(publication: &mut Option<StablePublication>) -> bool {
 
 enum OutputEvent {
     Origin(CanonicalPublicOrigin),
+    NamedReady,
     Invalid,
 }
 
-fn spawn_output_reader<R>(reader: R, events: mpsc::Sender<OutputEvent>) -> JoinHandle<()>
+fn spawn_output_reader<R>(
+    reader: R,
+    events: mpsc::Sender<OutputEvent>,
+    named: bool,
+) -> JoinHandle<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -284,13 +442,27 @@ where
                 let _ = events.send(OutputEvent::Invalid).await;
                 return;
             };
-            if let Some(origin) = trycloudflare_origin(&line)
+            if named {
+                if named_tunnel_ready(&line) && events.send(OutputEvent::NamedReady).await.is_err()
+                {
+                    return;
+                }
+            } else if let Some(origin) = trycloudflare_origin(&line)
                 && events.send(OutputEvent::Origin(origin)).await.is_err()
             {
                 return;
             }
         }
     })
+}
+
+/// Reports whether one cloudflared log line confirms the named connector has
+/// a registered edge connection. Readiness waits for this edge registration
+/// rather than mere process startup, so the fixed origin is only published
+/// once Cloudflare can actually route it.
+pub(crate) fn named_tunnel_ready(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    lower.contains("registered") && lower.contains("connection") && !lower.contains("unregistered")
 }
 
 fn trycloudflare_origin(line: &str) -> Option<CanonicalPublicOrigin> {
@@ -358,7 +530,7 @@ async fn failed_with_stable_cleanup(
 
 #[cfg(test)]
 mod tests {
-    use super::trycloudflare_origin;
+    use super::{named_tunnel_ready, trycloudflare_origin};
 
     #[tokio::test(start_paused = true)]
     async fn failed_stdout_cleanup_still_joins_and_aborts_blocked_stderr() {
@@ -392,5 +564,141 @@ mod tests {
                 "accepted deceptive output: {line}"
             );
         }
+    }
+
+    #[test]
+    fn named_readiness_waits_for_the_registered_connection_line() {
+        for line in [
+            "INF Registered tunnel connection \"a\" connIndex=0",
+            "2026-10-19T00:00:00Z INF Connection 123 registered with Cloudflare",
+            "inf registered tunnel CONNECTION established",
+        ] {
+            assert!(named_tunnel_ready(line), "missed readiness: {line}");
+        }
+        for line in [
+            "INF Visit https://soft-river-7.trycloudflare.com to connect",
+            "INF Unregistered tunnel connection closed",
+            "ERR tunnel connection failed",
+            "hello world",
+            "",
+        ] {
+            assert!(!named_tunnel_ready(line), "false readiness: {line}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn named_generation_publishes_the_fixed_origin_on_registered_connection() {
+        use std::{os::unix::fs::PermissionsExt, time::Duration};
+
+        use agentsassemble_persistence::SqliteStore;
+
+        let store = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("store: {error}"));
+        store
+            .set_registration_epoch(Some("fixed-epoch"))
+            .await
+            .unwrap_or_else(|error| panic!("epoch: {error}"));
+        store
+            .save_named_tunnel(
+                "h-0123456789ab.agentsassemble.uk",
+                "named-test-token",
+                "fixed-epoch",
+            )
+            .await
+            .unwrap_or_else(|error| panic!("save named token: {error}"));
+        let identity = crate::central::host_identity::CentralHostIdentity::from_persistent(
+            &store
+                .host_identity()
+                .await
+                .unwrap_or_else(|error| panic!("identity: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("host identity: {error}"));
+        let context = crate::public_ingress::NamedTunnelContext {
+            store: store.clone(),
+            directory: crate::central::directory::CentralDirectory::disabled(),
+            identity,
+        };
+
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("test directory: {error}"));
+        let executable = directory.path().join("cloudflared");
+        std::fs::write(
+            &executable,
+            r#"#!/bin/sh
+printf '%s\n' "$@" > "$0.args"
+printf '%s' "$TUNNEL_TOKEN" > "$0.token"
+printf '%s\n' 'INF Registered tunnel connection "test" connIndex=0'
+exec /bin/sleep 60
+"#,
+        )
+        .unwrap_or_else(|error| panic!("write fake cloudflared: {error}"));
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
+            .unwrap_or_else(|error| panic!("make fake cloudflared executable: {error}"));
+
+        let stable_entry = crate::stable_entry::StableEntry::new(None, directory.path())
+            .await
+            .unwrap_or_else(|error| panic!("stable entry: {error}"));
+        stable_entry.begin_generation();
+        let config = crate::public_ingress::ManagedIngressConfig {
+            local_url: "http://127.0.0.1:41955".to_owned(),
+            cloudflared: Some(executable.clone()),
+            stable_entry,
+            named: Some(context),
+        };
+        let (projection, generation) =
+            crate::public_ingress::managed_lifecycle_tests::started_projection(
+                "http://127.0.0.1:41955",
+            );
+        let projection = std::sync::Arc::new(parking_lot::RwLock::new(projection));
+        let mut changes = projection.read().endpoint_changes.subscribe();
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        let task_cancellation = cancellation.clone();
+        let task = tokio::spawn(async move {
+            super::run_generation(generation, config, projection, task_cancellation).await
+        });
+        let (ready_generation, origin) = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                changes
+                    .changed()
+                    .await
+                    .unwrap_or_else(|_| panic!("endpoint channel closed"));
+                let (generation, origin) = changes.borrow_and_update().clone();
+                if !origin.is_empty() {
+                    return (generation, origin);
+                }
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("fixed origin was not published"));
+        assert_eq!(ready_generation, generation);
+        assert_eq!(origin, "https://h-0123456789ab.agentsassemble.uk");
+        let arguments = tokio::fs::read_to_string(executable.with_extension("args"))
+            .await
+            .unwrap_or_else(|error| panic!("read fake cloudflared arguments: {error}"));
+        assert!(arguments.contains("--no-autoupdate"));
+        assert!(arguments.contains("run"));
+        assert!(arguments.contains("http://127.0.0.1:41955"));
+        assert!(
+            !arguments.contains("named-test-token"),
+            "tunnel token must never appear in argv"
+        );
+        assert_eq!(
+            tokio::fs::read_to_string(executable.with_extension("token"))
+                .await
+                .unwrap_or_else(|error| panic!("read fake cloudflared token: {error}")),
+            "named-test-token"
+        );
+        cancellation.cancel();
+        let outcome = tokio::time::timeout(Duration::from_secs(20), task)
+            .await
+            .unwrap_or_else(|_| panic!("named generation did not stop"))
+            .unwrap_or_else(|error| panic!("named generation owner failed: {error}"));
+        assert!(
+            !outcome.cleanup_failed,
+            "named generation cleanup failed: {:?}",
+            outcome.error
+        );
     }
 }

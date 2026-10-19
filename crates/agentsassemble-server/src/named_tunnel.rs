@@ -34,11 +34,6 @@ impl ProvisionedTunnel {
     }
 
     #[must_use]
-    pub(crate) fn origin(&self) -> &str {
-        &self.origin
-    }
-
-    #[must_use]
     pub(crate) fn token(&self) -> &str {
         &self.token
     }
@@ -66,9 +61,7 @@ struct ProvisionResponse {
 /// Parses one central provision response with exact keys and consistency:
 /// `origin == "https://" + hostname`, and the hostname matches the derived
 /// fixed shape. Rejects anything else without logging the token.
-pub(crate) fn parse_provision_response(
-    bytes: &[u8],
-) -> Result<ProvisionedTunnel, &'static str> {
+pub(crate) fn parse_provision_response(bytes: &[u8]) -> Result<ProvisionedTunnel, &'static str> {
     if bytes.len() > MAX_RESPONSE_BYTES {
         return Err("provision response is too large");
     }
@@ -80,8 +73,7 @@ pub(crate) fn parse_provision_response(
     if response.origin != format!("https://{}", response.hostname) {
         return Err("provision origin does not match hostname");
     }
-    CanonicalPublicOrigin::parse(&response.origin)
-        .map_err(|_| "provision origin is invalid")?;
+    CanonicalPublicOrigin::parse(&response.origin).map_err(|_| "provision origin is invalid")?;
     if response.tunnel_token.is_empty()
         || response.tunnel_token.len() > MAX_TOKEN_BYTES
         || response
@@ -133,7 +125,11 @@ pub(crate) async fn ensure_named_tunnel(
     let now_secs = chrono::Utc::now().timestamp();
     let live_epoch = match store.registration_epoch().await {
         Ok(epoch) => epoch,
-        Err(_) => return TunnelPlan::Quick { reason: "registration_unavailable" },
+        Err(_) => {
+            return TunnelPlan::Quick {
+                reason: "registration_unavailable",
+            };
+        }
     };
     let Some(live_epoch) = live_epoch else {
         return TunnelPlan::Quick {
@@ -180,18 +176,12 @@ pub(crate) async fn ensure_named_tunnel(
         outcome,
         Err(crate::central::directory::CentralDirectoryError::Disabled)
     ) {
-        let _ = store
-            .record_named_tunnel_provision_attempt(now_secs)
-            .await;
+        let _ = store.record_named_tunnel_provision_attempt(now_secs).await;
     }
     match outcome {
         Ok(bytes) => match parse_provision_response(&bytes) {
             Ok(provisioned) => match store
-                .save_named_tunnel(
-                    provisioned.hostname(),
-                    provisioned.token(),
-                    &live_epoch,
-                )
+                .save_named_tunnel(provisioned.hostname(), provisioned.token(), &live_epoch)
                 .await
             {
                 Ok(stored) => TunnelPlan::Named(stored),
@@ -255,7 +245,10 @@ mod tests {
             "opaque-token",
         ))
         .unwrap_or_else(|error| panic!("valid provision response: {error}"));
-        assert_eq!(ok.origin(), "https://h-0123456789ab.agentsassemble.uk");
+        assert_eq!(
+            format!("https://{}", ok.hostname()),
+            "https://h-0123456789ab.agentsassemble.uk"
+        );
         let rendered = format!("{ok:?}");
         assert!(!rendered.contains("opaque-token"));
         assert!(rendered.contains("[REDACTED]"));
@@ -273,7 +266,12 @@ mod tests {
                 "token",
                 None,
             ),
-            ("phish.agentsassemble.uk", "https://phish.agentsassemble.uk", "token", None),
+            (
+                "phish.agentsassemble.uk",
+                "https://phish.agentsassemble.uk",
+                "token",
+                None,
+            ),
             (
                 "h-0123456789AB.agentsassemble.uk",
                 "https://h-0123456789AB.agentsassemble.uk",
@@ -312,7 +310,10 @@ mod tests {
                 "accepted {hostname} {origin}"
             );
         }
-        assert!(parse_provision_response(b"{\"hostname\":\"h-0123456789ab.agentsassemble.uk\"}").is_err());
+        assert!(
+            parse_provision_response(b"{\"hostname\":\"h-0123456789ab.agentsassemble.uk\"}")
+                .is_err()
+        );
         assert!(parse_provision_response(&vec![b'x'; MAX_RESPONSE_BYTES + 1]).is_err());
     }
 
@@ -396,8 +397,7 @@ mod tests {
                 let (status, body) = (status, body.clone());
                 async move {
                     (
-                        StatusCode::from_u16(status)
-                            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                        StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
                         axum::Json(body),
                     )
                 }
@@ -421,29 +421,30 @@ mod tests {
         let TunnelPlan::Named(stored) = plan else {
             panic!("stored token must win without provision");
         };
-        assert_eq!(
-            stored.origin(),
-            "https://h-0123456789ab.agentsassemble.uk"
-        );
+        assert_eq!(stored.origin(), "https://h-0123456789ab.agentsassemble.uk");
         assert_eq!(
             hits.load(std::sync::atomic::Ordering::SeqCst),
             0,
             "restart must send zero provision calls"
         );
         cancellation.cancel();
-        server.await.unwrap_or_else(|error| panic!("join fake central: {error}"));
+        server
+            .await
+            .unwrap_or_else(|error| panic!("join fake central: {error}"));
     }
 
     #[tokio::test]
     async fn provision_success_stores_the_fixed_origin() {
-        let (directory, store, identity, hits, cancellation, server) = test_directory(
-            provision_router(200, serde_json::json!({
-                "hostname": "h-abcdef0123456789.agentsassemble.uk",
-                "origin": "https://h-abcdef0123456789.agentsassemble.uk",
-                "tunnel_token": "fresh-token",
-            })),
-        )
-        .await;
+        let (directory, store, identity, hits, cancellation, server) =
+            test_directory(provision_router(
+                200,
+                serde_json::json!({
+                    "hostname": "h-abcdef0123456789.agentsassemble.uk",
+                    "origin": "https://h-abcdef0123456789.agentsassemble.uk",
+                    "tunnel_token": "fresh-token",
+                }),
+            ))
+            .await;
         let plan = ensure_named_tunnel(&store, &directory, &identity).await;
         let TunnelPlan::Named(stored) = plan else {
             panic!("successful provision must run named");
@@ -466,7 +467,9 @@ mod tests {
         assert!(matches!(plan, TunnelPlan::Named(_)));
         assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
         cancellation.cancel();
-        server.await.unwrap_or_else(|error| panic!("join fake central: {error}"));
+        server
+            .await
+            .unwrap_or_else(|error| panic!("join fake central: {error}"));
     }
 
     #[tokio::test]
@@ -487,7 +490,11 @@ mod tests {
                 serde_json::json!({"error": {"code": "actor_quota_exhausted"}}),
                 1,
             ),
-            (400, serde_json::json!({"error": {"code": "bad_request"}}), 1),
+            (
+                400,
+                serde_json::json!({"error": {"code": "bad_request"}}),
+                1,
+            ),
             (404, serde_json::json!({"error": {"code": "not_found"}}), 1),
             (500, serde_json::json!({"error": {"code": "internal"}}), 1),
             (
@@ -528,10 +535,12 @@ mod tests {
 
     #[tokio::test]
     async fn quota_park_and_daily_budget_skip_the_network() {
-        let (directory, store, identity, hits, cancellation, server) = test_directory(
-            provision_router(429, serde_json::json!({"error": {"code": "actor_quota_exhausted"}})),
-        )
-        .await;
+        let (directory, store, identity, hits, cancellation, server) =
+            test_directory(provision_router(
+                429,
+                serde_json::json!({"error": {"code": "actor_quota_exhausted"}}),
+            ))
+            .await;
         let plan = ensure_named_tunnel(&store, &directory, &identity).await;
         assert!(matches!(plan, TunnelPlan::Quick { .. }));
         assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
@@ -545,7 +554,9 @@ mod tests {
         ));
         assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
         cancellation.cancel();
-        server.await.unwrap_or_else(|error| panic!("join fake central: {error}"));
+        server
+            .await
+            .unwrap_or_else(|error| panic!("join fake central: {error}"));
     }
 
     #[tokio::test]
