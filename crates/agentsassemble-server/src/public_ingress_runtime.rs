@@ -24,6 +24,14 @@ use crate::{
 const MAX_OUTPUT_LINE_BYTES: usize = 16 * 1024;
 const OUTPUT_EVENTS: usize = 8;
 const READER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+// A stored named token can go stale while the host is offline (central
+// reclaims the hostname or the owner revokes the tunnel). The connector
+// then never logs a registered connection, so a named run must not wait
+// forever: without readiness in this bound it falls back to quick.
+#[cfg(not(test))]
+const NAMED_READY_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(test)]
+const NAMED_READY_TIMEOUT: Duration = Duration::from_millis(500);
 
 pub(crate) struct GenerationOutcome {
     pub(crate) error: Option<String>,
@@ -47,6 +55,7 @@ struct GenerationObservation {
     error: Option<String>,
     stopped: bool,
     publication_cleanup_failed: bool,
+    named_fallback: Option<&'static str>,
 }
 
 pub(crate) async fn run_generation(
@@ -113,12 +122,15 @@ pub(crate) async fn run_generation(
         None,
     )
     .await
+    .0
 }
 
 /// Runs one named generation with the fixed origin: publishes
 /// `https://<hostname>` once cloudflared reports a registered connection.
-/// A spawn failure falls back to the quick tunnel for this run so external
-/// access never blocks on fixed-address provisioning.
+/// A spawn failure, a bounded not-ready wait, a pre-ready exit, or a clear
+/// connector auth failure falls back to the quick tunnel in the same run so
+/// external access never blocks on a stale credential. The stale credential
+/// is cleared before the quick fallback so the next open re-provisions.
 async fn run_named_generation(
     generation: u64,
     config: &ManagedIngressConfig,
@@ -138,27 +150,12 @@ async fn run_named_generation(
                 %generation,
                 "named tunnel spawn failed; using quick tunnel"
             );
-            let origin_host = generated_origin_host();
-            let Ok(spawned) = spawn_cloudflared(cloudflared, &config.local_url, &origin_host).await
-            else {
-                return failed_with_stable_cleanup(config, "cloudflared could not be started")
-                    .await;
-            };
-            return run_spawned_generation(
-                generation,
-                config,
-                projection,
-                cancellation,
-                spawned,
-                origin_host,
-                None,
-            )
-            .await;
+            return run_quick_generation(generation, config, projection, cancellation).await;
         }
     };
     // Without `--http-host-header` the local Host is the public hostname, so
     // the existing Host-digest admission check gates on it unchanged.
-    run_spawned_generation(
+    let (outcome, fallback) = run_spawned_generation(
         generation,
         config,
         projection,
@@ -167,7 +164,45 @@ async fn run_named_generation(
         hostname.to_owned(),
         Some(origin),
     )
+    .await;
+    let Some(reason) = fallback else {
+        return outcome;
+    };
+    if let Some(context) = config.named.as_ref() {
+        let _ = context.store.clear_named_tunnel().await;
+    }
+    tracing::warn!(
+        %generation,
+        reason,
+        "named tunnel not usable; using quick tunnel"
+    );
+    run_quick_generation(generation, config, projection, cancellation).await
+}
+
+async fn run_quick_generation(
+    generation: u64,
+    config: &ManagedIngressConfig,
+    projection: &Arc<RwLock<ManagedProjection>>,
+    cancellation: &CancellationToken,
+) -> GenerationOutcome {
+    let Some(cloudflared) = config.cloudflared.as_ref() else {
+        return failed_with_stable_cleanup(config, "cloudflared is not installed").await;
+    };
+    let origin_host = generated_origin_host();
+    let Ok(spawned) = spawn_cloudflared(cloudflared, &config.local_url, &origin_host).await else {
+        return failed_with_stable_cleanup(config, "cloudflared could not be started").await;
+    };
+    run_spawned_generation(
+        generation,
+        config,
+        projection,
+        cancellation,
+        spawned,
+        origin_host,
+        None,
+    )
     .await
+    .0
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -179,7 +214,7 @@ async fn run_spawned_generation(
     spawned: crate::public_ingress_process::SpawnedTunnel,
     origin_host: String,
     fixed_origin: Option<CanonicalPublicOrigin>,
-) -> GenerationOutcome {
+) -> (GenerationOutcome, Option<&'static str>) {
     let named = fixed_origin.is_some();
     let (output, output_events) = mpsc::channel(OUTPUT_EVENTS);
     let stdout_owner = spawn_output_reader(spawned.stdout, output.clone(), named);
@@ -209,6 +244,7 @@ async fn run_spawned_generation(
         mut error,
         stopped,
         mut publication_cleanup_failed,
+        named_fallback,
     } = observation;
     projection.write().revoke(generation);
     if let Some(publication) = stable_publication.as_ref() {
@@ -238,10 +274,13 @@ async fn run_spawned_generation(
     } else if cleanup_failed && error.is_none() {
         error = Some("managed public ingress cleanup failed".to_owned());
     }
-    GenerationOutcome {
-        error,
-        cleanup_failed,
-    }
+    (
+        GenerationOutcome {
+            error,
+            cleanup_failed,
+        },
+        named_fallback,
+    )
 }
 
 async fn observe_generation(
@@ -261,6 +300,9 @@ async fn observe_generation(
     let mut stable_publication = None;
     let mut pending_stable_target = None;
     let mut publication_cleanup_failed = false;
+    let mut named_fallback: Option<&'static str> = None;
+    let mut named_ready = false;
+    let named_deadline = tokio::time::Instant::now() + NAMED_READY_TIMEOUT;
     loop {
         tokio::select! {
             biased;
@@ -299,6 +341,10 @@ async fn observe_generation(
                     }
                 }
                 Some(OutputEvent::Invalid) => {
+                    if fixed_origin.is_some() && !named_ready {
+                        named_fallback = Some("named_output_invalid");
+                        break;
+                    }
                     error = Some("cloudflared output violated its safety limit".to_owned());
                     break;
                 }
@@ -306,6 +352,7 @@ async fn observe_generation(
                     let Some(origin) = fixed_origin.clone() else {
                         continue;
                     };
+                    named_ready = true;
                     let target = origin.value.clone();
                     match projection
                         .write()
@@ -327,14 +374,34 @@ async fn observe_generation(
                         }
                     }
                 }
+                Some(OutputEvent::NamedAuthFailure) => {
+                    if fixed_origin.is_some() && !named_ready {
+                        named_fallback = Some("named_auth_failed");
+                        break;
+                    }
+                }
                 None => {
+                    if fixed_origin.is_some() && !named_ready {
+                        named_fallback = Some("named_exited_before_ready");
+                        output_closed = Some(child_owner.is_finished());
+                        break;
+                    }
                     output_closed = Some(child_owner.is_finished());
                     break;
                 }
             },
             result = &mut child_owner => {
+                if fixed_origin.is_some() && !named_ready {
+                    child_result = Some(result);
+                    named_fallback = Some("named_exited_before_ready");
+                    break;
+                }
                 error = Some(child_failure(&result));
                 child_result = Some(result);
+                break;
+            }
+            () = tokio::time::sleep_until(named_deadline), if fixed_origin.is_some() && !named_ready => {
+                named_fallback = Some("named_ready_timeout");
                 break;
             }
             result = wait_for_publication(&mut stable_publication), if stable_publication.is_some() => {
@@ -360,6 +427,7 @@ async fn observe_generation(
         error,
         stopped,
         publication_cleanup_failed,
+        named_fallback,
     }
 }
 
@@ -421,6 +489,7 @@ async fn join_publication(publication: &mut Option<StablePublication>) -> bool {
 enum OutputEvent {
     Origin(CanonicalPublicOrigin),
     NamedReady,
+    NamedAuthFailure,
     Invalid,
 }
 
@@ -443,7 +512,12 @@ where
                 return;
             };
             if named {
-                if named_tunnel_ready(&line) && events.send(OutputEvent::NamedReady).await.is_err()
+                if named_tunnel_auth_failure(&line) {
+                    if events.send(OutputEvent::NamedAuthFailure).await.is_err() {
+                        return;
+                    }
+                } else if named_tunnel_ready(&line)
+                    && events.send(OutputEvent::NamedReady).await.is_err()
                 {
                     return;
                 }
@@ -463,6 +537,24 @@ where
 pub(crate) fn named_tunnel_ready(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     lower.contains("registered") && lower.contains("connection") && !lower.contains("unregistered")
+}
+
+/// Reports whether one cloudflared log line is a clear credential failure
+/// (revoked token, deleted tunnel) rather than a transient network blip.
+/// Only these lines trigger an immediate named-to-quick fallback; ordinary
+/// dial/timeout/reset lines keep waiting for readiness until the bound.
+pub(crate) fn named_tunnel_auth_failure(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    lower.contains("unauthorized")
+        || lower.contains("unauthorised")
+        || (lower.contains("invalid") && lower.contains("tunnel"))
+        || (lower.contains("invalid") && lower.contains("token"))
+        || (lower.contains("authentication") && lower.contains("fail"))
+        || (lower.contains("failed") && lower.contains("authenticat"))
+        || (lower.contains("tunnel") && lower.contains("not found"))
+        || lower.contains("unknown tunnel")
+        || lower.contains("tunnel-not-found")
+        || (lower.contains("no such") && lower.contains("tunnel"))
 }
 
 fn trycloudflare_origin(line: &str) -> Option<CanonicalPublicOrigin> {
@@ -530,7 +622,7 @@ async fn failed_with_stable_cleanup(
 
 #[cfg(test)]
 mod tests {
-    use super::{named_tunnel_ready, trycloudflare_origin};
+    use super::{named_tunnel_auth_failure, named_tunnel_ready, trycloudflare_origin};
 
     #[tokio::test(start_paused = true)]
     async fn failed_stdout_cleanup_still_joins_and_aborts_blocked_stderr() {
@@ -701,4 +793,38 @@ exec /bin/sleep 60
             outcome.error
         );
     }
+
+    #[test]
+    fn named_auth_failure_detects_only_credential_errors() {
+        for line in [
+            "ERR Unauthorized: invalid tunnel token",
+            "ERR failed to authenticate tunnel: unauthorized",
+            "ERR Tunnel \"abc\" not found",
+            "ERR unknown tunnel id",
+            "ERR Invalid tunnel token",
+            "ERR authentication failed for tunnel",
+        ] {
+            assert!(
+                named_tunnel_auth_failure(line),
+                "missed auth failure: {line}"
+            );
+        }
+        for line in [
+            "INF Registered tunnel connection \"a\" connIndex=0",
+            "ERR tunnel connection failed: dial tcp: i/o timeout",
+            "ERR failed to connect: connection reset by peer",
+            "INF Retrying connection in 5s",
+            "hello world",
+            "",
+        ] {
+            assert!(
+                !named_tunnel_auth_failure(line),
+                "false auth failure: {line}"
+            );
+        }
+    }
 }
+
+#[cfg(test)]
+#[path = "public_ingress_runtime_tests.rs"]
+mod fallback_tests;
