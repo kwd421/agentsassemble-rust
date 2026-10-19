@@ -56,7 +56,7 @@ export default function CentralAccountSettings({ disabled, showEntryLink = true 
     </section>
     <section className="dc-guest-recovery-settings dc-account-block" aria-label="계정 탈퇴">
       <h4>계정 탈퇴</h4>
-      <p className="dc-account-block-lead">모든 기기에서 로그아웃되고 이 계정으로 다시 들어올 수 없어요. 되돌릴 수 없어요.</p>
+      <p className="dc-account-block-lead">모든 기기에서 로그아웃되고, 이 계정으로 다시 들어올 수 없으며 되돌릴 수도 없어요.</p>
       <AccountDeletionSettings disabled={disabled || busy} />
     </section>
   </>;

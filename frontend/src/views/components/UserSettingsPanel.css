@@ -64,6 +64,7 @@ dialog.dc-user-settings-dialog {
   display: flex;
   min-height: 36px;
   align-items: center;
+  gap: 12px;
   border-radius: 8px;
   padding: 0 12px;
   color: var(--color-text-muted);
@@ -187,8 +188,20 @@ dialog.dc-user-settings-dialog {
 }
 
 .dc-user-settings-grid input[type="color"] {
-  height: 34px;
-  padding: 3px;
+  width: 64px;
+  height: 40px;
+  padding: 4px;
+  cursor: pointer;
+  appearance: none;
+}
+
+.dc-user-settings-grid input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.dc-user-settings-grid input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 6px;
 }
 
 .dc-user-settings-grid input:focus,
@@ -396,16 +409,16 @@ dialog.dc-user-settings-dialog {
 }
 
 .dc-user-settings-preview-card .dc-profile-banner {
-  height: 72px;
+  height: 98px;
 }
 
 .dc-user-settings-preview-avatar {
   position: absolute;
-  top: 36px;
+  top: 54px;
   left: 14px;
   display: grid;
-  width: 72px;
-  height: 72px;
+  width: 88px;
+  height: 88px;
   place-items: center;
   border: 6px solid #202024;
   border-radius: 50%;
@@ -413,25 +426,27 @@ dialog.dc-user-settings-dialog {
   background-position: center;
   background-size: cover;
   color: #fff;
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 700;
 }
 
+/* Discord popout proportions: ~300×105 banner, 80px avatar (+ ring), name 20/700,
+   handle 14. */
 .dc-user-settings-preview-body {
   display: grid;
   gap: 2px;
-  padding: 44px 16px 16px;
+  padding: 52px 16px 16px;
 }
 
 .dc-user-settings-preview-body strong {
   color: var(--color-text-primary);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
 }
 
 .dc-user-settings-preview-body small {
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .dc-user-settings-preview-body p {
@@ -504,10 +519,13 @@ dialog.dc-user-settings-dialog {
 .dc-user-settings-section .dc-guest-recovery-settings > .dc-account-block-action,
 .dc-account-block-action {
   display: inline-flex;
-  min-height: 36px;
+  min-width: 100px;
+  min-height: 40px;
   align-items: center;
+  justify-content: center;
   padding: 0 16px;
   font-size: 14px;
+  font-weight: 500;
 }
 
 /* The signed-in account as one row: who, how, and the way out. */
@@ -588,4 +606,9 @@ dialog.dc-user-settings-dialog {
     min-height: 44px;
     min-width: 44px;
   }
+}
+
+/* Same heading-to-first-field distance as 계정 정보 (8px + the 20px grid gap). */
+.dc-user-settings-section .dc-user-settings-page-heading {
+  margin-bottom: 28px;
 }

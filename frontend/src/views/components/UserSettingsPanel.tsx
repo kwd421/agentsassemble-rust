@@ -1,6 +1,6 @@
 import { useResourceImage } from "./ResourceImage";
 import { useEffect, useRef, type RefObject } from "react";
-import { X, Camera } from "lucide-react";
+import { X, Camera, UserRound, Palette, KeyRound, MonitorSmartphone, type LucideIcon } from "lucide-react";
 
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
@@ -18,11 +18,12 @@ export type UserSettingsSection = "account" | "profile" | "recovery" | "devices"
 const USER_SETTINGS_SECTIONS: Array<{
   id: UserSettingsSection;
   label: string;
+  icon: LucideIcon;
 }> = [
-  { id: "account", label: "계정" },
-  { id: "profile", label: "프로필" },
-  { id: "recovery", label: "복구" },
-  { id: "devices", label: "기기" },
+  { id: "account", label: "계정", icon: UserRound },
+  { id: "profile", label: "프로필", icon: Palette },
+  { id: "recovery", label: "복구", icon: KeyRound },
+  { id: "devices", label: "기기", icon: MonitorSmartphone },
 ];
 
 export default function UserSettingsPanel({
@@ -101,6 +102,7 @@ export default function UserSettingsPanel({
               aria-current={shownSection === section.id ? "page" : undefined}
               onClick={() => onSectionChange(section.id)}
             >
+              <section.icon size={20} aria-hidden />
               <span>{section.label}</span>
             </button>
           ))}
@@ -132,7 +134,7 @@ export default function UserSettingsPanel({
                   />
                 </label>
                 <label>
-                  핸들
+                  사용자명
                   <input
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.handle}
@@ -176,6 +178,7 @@ export default function UserSettingsPanel({
               {!serverAuthorityAvailable && (
                 <p className="dc-user-settings-lead">내 서버가 있는 컴퓨터에서 프로필을 바꿀 수 있어요.</p>
               )}
+              <h4 className="dc-user-settings-page-heading">프로필</h4>
               <div className="dc-user-settings-profile-layout">
               <div className="dc-user-settings-grid">
                 <div className="dc-user-settings-avatar-field">
@@ -239,7 +242,7 @@ export default function UserSettingsPanel({
                       })
                     }
                   >
-                    <option value="default">기본</option>
+                    <option value="default">기본 색상</option>
                     <option value="forest">그린</option>
                     <option value="midnight">미드나잇</option>
                     <option value="ember">엠버</option>

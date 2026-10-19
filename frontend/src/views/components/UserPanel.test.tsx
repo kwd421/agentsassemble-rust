@@ -583,7 +583,7 @@ describe("UserPanel", () => {
       // no handle field (a central account has no handle), while the
       // signed-in account's own display name is shown.
       const dialog = within(view.container).getByRole("dialog", { name: "사용자 설정" });
-      expect(within(dialog).queryByText("핸들")).toBeNull();
+      expect(within(dialog).queryByText("사용자명")).toBeNull();
       expect(within(dialog).queryByDisplayValue("seinel.")).toBeNull();
       expect(within(dialog).getAllByText("B계정").length).toBeGreaterThan(0);
     } finally {
