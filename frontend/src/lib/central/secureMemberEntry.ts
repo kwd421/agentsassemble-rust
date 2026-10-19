@@ -181,7 +181,13 @@ export class SecureMemberAdmission {
     const answer = parseMemberResumeAnswer(
       await this.post(
         "/api/member-connect/resume",
-        { ...tuple, purpose: MEMBER_RESUME_PURPOSE, signature },
+        {
+          ...tuple,
+          // The device's own resume key selects the row the host verifies.
+          resume_public_key: key.publicKey,
+          purpose: MEMBER_RESUME_PURPOSE,
+          signature,
+        },
         signal,
       ),
     );

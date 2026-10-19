@@ -21,6 +21,10 @@ pub(crate) const RESUME_PURPOSE: &str = "resume";
 const RESUME_NONCE_TTL: chrono::Duration = chrono::Duration::seconds(300);
 
 /// The exact bytes both sides sign over a resume attempt.
+///
+/// `client_public_key` is the ephemeral key of the channel the request
+/// arrived on, so the signature is bound to that channel; the device's own
+/// resume public key travels beside it and selects the stored row.
 pub(crate) fn resume_transcript(
     server_id: &str,
     registration_epoch: &str,
@@ -122,6 +126,7 @@ struct ResumeRequest {
     host_key_fingerprint: String,
     browser_credential_fingerprint: String,
     client_public_key: String,
+    resume_public_key: String,
     channel_id: String,
     purpose: String,
     nonce: String,
@@ -270,7 +275,7 @@ pub(crate) async fn resume(
     {
         return Err(invalid_resume());
     }
-    let public_key = decode_public_key(&body.client_public_key)?;
+    let public_key = decode_public_key(&body.resume_public_key)?;
     let nonce: [u8; 32] = decode_fixed(&body.nonce, 32)?.try_into().map_err(|_| invalid_resume())?;
     let signature = decode_fixed(&body.signature, 64)?;
     let epoch = state

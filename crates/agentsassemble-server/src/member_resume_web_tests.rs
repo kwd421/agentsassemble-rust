@@ -194,7 +194,7 @@ async fn fixture() -> Fixture {
         &rng,
     )
     .unwrap_or_else(|error| panic!("load resume key: {error:?}"));
-    let client_public_key = base64(key_pair.public_key().as_ref());
+    let client_public_key = base64(&[7_u8; 65]);
     let hello = crate::central::host_identity::SecureClientHello {
         protocol: "secure_admission_v1".into(),
         server_id: "resume-server".into(),
@@ -288,6 +288,7 @@ impl Fixture {
             "host_key_fingerprint": self.state.central_host_identity.fingerprint(),
             "browser_credential_fingerprint": browser_fingerprint,
             "client_public_key": hello.client_public_key,
+            "resume_public_key": base64(&self.public_key()),
             "channel_id": self.secure.binding().channel_id,
             "purpose": "resume",
             "nonce": nonce,
@@ -408,8 +409,38 @@ async fn a_signature_never_works_on_another_channel_origin_or_generation() {
 }
 
 #[tokio::test]
-async fn an_unknown_or_expired_key_never_opens_the_direct_path() {
+async fn the_channel_key_never_stands_in_for_the_stored_resume_key() {
     let fixture = fixture().await;
+    store_resume_key(&fixture).await;
+    let nonce = fixture.nonce().await;
+    let mut body = fixture.signed_body(&nonce);
+    // The ephemeral key of the channel is not the device's resume key.
+    body["resume_public_key"] = json!(fixture.secure.hello().client_public_key);
+    assert!(
+        super::resume(
+            axum::extract::State(fixture.state.clone()),
+            fixture.request(body),
+        )
+        .await
+        .is_err(),
+        "the channel key must not select the stored resume key"
+    );
+    // A key this host never stored is refused as well.
+    let mut unknown = fixture.signed_body(&fixture.nonce().await);
+    unknown["resume_public_key"] = json!(base64(&[3_u8; 65]));
+    assert!(
+        super::resume(
+            axum::extract::State(fixture.state.clone()),
+            fixture.request(unknown),
+        )
+        .await
+        .is_err(),
+        "an unknown public key must be refused"
+    );
+}
+
+#[tokio::test]
+async fn an_unknown_or_expired_key_never_opens_the_direct_path() {    let fixture = fixture().await;
     let nonce = fixture.nonce().await;
     // No key was issued for this browser credential.
     let refused = super::resume(

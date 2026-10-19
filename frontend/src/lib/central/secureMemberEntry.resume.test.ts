@@ -129,6 +129,9 @@ it("keeps the resume key on the host after a central admission and resumes with 
   expect(attempt?.body.host_key_fingerprint).toBe("fingerprint");
   expect(attempt?.body.client_public_key).toBe(hello.client_public_key);
   expect(attempt?.body.channel_id).toBe(hello.channel_id);
+  // The device's own resume key travels beside the channel binding: it selects
+  // the stored row the host verifies.
+  expect(attempt?.body.resume_public_key).toBe("public-key");
   // The signature covers the client-built tuple and nothing else.
   const signature = String(attempt?.body.signature);
   const bytes = Uint8Array.from(atob(signature.replace(/-/g, "+").replace(/_/g, "/")), (character) =>
