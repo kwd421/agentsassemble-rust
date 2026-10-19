@@ -16,6 +16,7 @@ import {
   Plus,
   UserPlus,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 import { CHANNEL_SECTIONS, DeferredViewFallback } from "./appModel";
@@ -144,6 +145,7 @@ export default function AppView({ controller }: { controller: AppController }) {
   // here (web, or someone else's computer) still finds the entry and learns
   // where the list is.
   const friendsEntryVisible = canManageFriends || Boolean(controller.centralDirectory?.person);
+  const friendsScreenOpen = friendsOpen && friendsEntryVisible;
   // This computer's server belongs to its registered owner. A mismatch is
   // a quiet one-line entry offering an explicit action, never a gate. It is
   // decided only from registration identity (this host's server id vs the
@@ -468,6 +470,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             <FriendsView authority={friendAuthority} userArea={userArea} onClose={() => setFriendsOpen(false)} />
           ) : friendsOpen && friendsEntryVisible ? (
             <section className="dc-disconnected-room" aria-labelledby="friends-unavailable-title">
+              <div className="dc-disconnected-room-icon" aria-hidden><Users size={30} /></div>
               <h1 id="friends-unavailable-title">친구 목록을 쓸 수 없어요</h1>
               <p className="dc-disconnected-room-description">내 컴퓨터에서 앱을 열면 친구를 볼 수 있어요.</p>
               <button type="button" className="ops-button min-h-11 px-4" onClick={() => setFriendsOpen(false)}>대화로 돌아가기</button>
@@ -568,7 +571,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         </Suspense>
       </main>
 
-      {hasRoom && mobileRoomInfoOpen && !friendsVisible && (
+      {hasRoom && mobileRoomInfoOpen && !friendsScreenOpen && (
         <MobileRoomInfoPanel
 
           room={activeRoom}
@@ -615,7 +618,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         }} />}
 
       {/* Right panel */}
-      {roomInfoOpen && !friendsVisible && (
+      {roomInfoOpen && !friendsScreenOpen && (
         <aside
           className="dc-members hidden shrink-0 xl:flex xl:flex-col"
           aria-label="방 연결 정보"
@@ -659,7 +662,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           </section>
         </aside>
       )}
-      {sideChatOpen && !friendsVisible && <aside className="dc-members shrink-0" aria-label="사이드챗 패널" style={{ marginTop: persistentRail ? 48 : 0, "--dc-members-width": `${rightPanel.width}px` } as CSSProperties}>
+      {sideChatOpen && !friendsScreenOpen && <aside className="dc-members shrink-0" aria-label="사이드챗 패널" style={{ marginTop: persistentRail ? 48 : 0, "--dc-members-width": `${rightPanel.width}px` } as CSSProperties}>
         <SideChatDock open onOpenChange={setSideChatOpen}
           chat={controller.sideChat} socket={roomSocket} canPost={canPostHumanMessage} mentionables={scopedMentionables} />
       </aside>}

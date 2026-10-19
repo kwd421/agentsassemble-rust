@@ -48,6 +48,10 @@
   line-height: 1.65;
 }
 
+.dc-disconnected-room-description + button {
+  margin-top: 20px;
+}
+
 .dc-disconnected-room code {
   display: block;
   margin-top: 18px;
