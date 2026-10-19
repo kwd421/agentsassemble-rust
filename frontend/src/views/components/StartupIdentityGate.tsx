@@ -133,7 +133,7 @@ export default function StartupIdentityGate({
     : "";
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("저장된 사용자 확인 중");
+  const [status, setStatus] = useState("앱을 준비하는 중이에요");
   const [error, setError] = useState<ReactNode>("");
   const googleAbortController = useRef<AbortController | null>(null);
   const bootstrapRequestId = useRef(createSecureRequestId());
@@ -147,7 +147,7 @@ export default function StartupIdentityGate({
 
   async function enterApplication(expectedDesktopAuthority?: DesktopBootstrapGrant) {
     setChecking(true);
-    setStatus("로컬 엔진과 방 목록을 준비하는 중");
+    setStatus("앱을 준비하는 중이에요");
     const desktopAuthority =
       expectedDesktopAuthority || (await requestDesktopBootstrapStatus());
     if (desktopAuthority.phase !== "complete") {
@@ -390,7 +390,7 @@ export default function StartupIdentityGate({
         return;
       }
       try {
-        setStatus("로그인 정보와 방 목록을 확인하는 중");
+        setStatus("로그인 정보를 확인하는 중이에요");
         const central = await refreshCentral();
         if (!active) return;
         if (!central.person) {
@@ -426,7 +426,7 @@ export default function StartupIdentityGate({
     setError("");
     try {
       if (webEntry) {
-        setStatus("Google 로그인 화면을 여는 중");
+        setStatus("Google 로그인 창을 여는 중이에요");
         await startCentralWebGoogle(controller.signal);
         return;
       }
@@ -535,7 +535,7 @@ export default function StartupIdentityGate({
   );
 
   return (
-    <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
+    <div className="fixed inset-0 z-[400] grid place-items-center content-center overflow-y-auto bg-[#101114] p-5">
       {centralUnavailable && <ConnectionBanner message={centralDailyQuotaNotice(directory?.person?.person_id ?? "") ?? (directory?.status === "error" ? "로그인 정보를 확인하지 못했어요. 다시 시도해 주세요."
         : directory?.error ? "로그인 서버에 연결하지 못했고 저장된 목록을 읽지 못했어요. 서버 목록을 다시 확인해 주세요."
         : webEntry ? "로그인 서버에 연결하지 못했어요. 연결을 다시 확인하고 있어요." : "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요.")} />}
@@ -560,14 +560,12 @@ export default function StartupIdentityGate({
               ? "복구 코드를 보관하세요"
               : screen === "servers"
                 ? hostingState === "retired" ? "이 컴퓨터는 더 이상 이 계정의 서버가 아니에요" : ownerConflict ? "남길 서버를 선택해 주세요" : ownedServer ? `이 계정의 서버는 ‘${ownedServer.alias}’예요` : "서버 목록"
-                : "먼저 로그인해 주세요"}
+                : "AgentsAssemble에 오신 걸 환영해요"}
           </h1>
           <p className="text-[13px] font-semibold leading-5 text-text-muted empty:hidden">
             {screen === "recovery-code"
               ? "다른 기기에서 이 게스트 계정을 되찾을 때 필요해요."
-              : screen === "servers"
-                ? ""
-              : "대화는 방을 여는 컴퓨터에만 저장돼요."}
+              : ""}
           </p>
         </header>
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}
@@ -639,8 +637,8 @@ export default function StartupIdentityGate({
             {screen === "choice" && loadCentralSession() && <button type="button" className="ops-button mt-2 block" disabled={busy} onClick={() => void refreshServers()}>다시 확인</button>}
           </div>
         )}
-        {!centralPerson && screen === "choice" && !accountSettingsOpen && <button type="button" className="mx-auto min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>계정 탈퇴</button>}
       </main>
+      {!centralPerson && screen === "choice" && !accountSettingsOpen && <button type="button" className="mt-4 min-h-11 w-fit justify-self-center text-[12px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>계정 탈퇴</button>}
     </div>
   );
 }

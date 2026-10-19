@@ -446,8 +446,18 @@
 .dc-member-avatar {
   width: 32px;
   height: 32px;
+  overflow: hidden;
   border-radius: 50%;
   background: #474851;
+}
+
+/* A profile photo fills the round avatar instead of spilling out square. */
+.dc-member-avatar > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .dc-member[data-role="human"] .dc-member-avatar {
