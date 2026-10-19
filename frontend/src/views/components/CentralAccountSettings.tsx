@@ -1,5 +1,7 @@
 import ServerBackupCard from "./ServerBackupCard";
 import AccountDeletionSettings from "./AccountDeletionSettings";
+import ParticipantAvatarContent from "./ParticipantAvatarContent";
+import { loadDeletionReceipt } from "../../lib/central/accountDeletion";
 import { useEffect, useRef, useState } from "react";
 import { CENTRAL_SESSION_CLEARED_EVENT, CENTRAL_SESSION_CHANGED_EVENT, centralAccountEntryUrl, centralIdentityConfigured, loadCentralSession, logoutCentral } from "../../lib/central/identity";
 import { userFacingError } from "../../lib/apiErrors";
@@ -27,20 +29,35 @@ export default function CentralAccountSettings({ disabled, showEntryLink = true 
   }
 
   if (!centralIdentityConfigured()) return null;
-  if (!session) return <section className="dc-guest-recovery-settings" aria-label="앱 계정">
+  // Signed out: only a kept deletion receipt has anything to show (its progress).
+  const retainedReceipt = (() => { try { return Boolean(loadDeletionReceipt()); } catch { return true; } })();
+  if (!session) return <section className="dc-guest-recovery-settings dc-account-block" aria-label="앱 계정">
     <h4>앱 계정</h4>
-    <p>로그인하면 계정과 내 서버를 확인할 수 있어요.</p>
-    {showEntryLink && <a className="min-h-11 w-fit text-[13px] text-text-muted hover:underline" href={`${centralAccountEntryUrl()}?account=settings`} target="_blank" rel="noopener noreferrer">계정 설정</a>}
-    <AccountDeletionSettings disabled={disabled || busy} />
+    <p className="dc-account-block-lead">로그인하면 계정과 내 서버를 확인할 수 있어요.</p>
+    {showEntryLink && <a className="ops-button dc-account-block-action" href={`${centralAccountEntryUrl()}?account=settings`} target="_blank" rel="noopener noreferrer">계정 설정 열기</a>}
+    {retainedReceipt && <AccountDeletionSettings disabled={disabled} label="탈퇴 진행 상황" />}
   </section>;
-  return <section className="dc-guest-recovery-settings" style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid var(--color-panel-border)" }} aria-label="앱 계정" aria-busy={busy}>
-    <h4>{session?.person.identity_kind === "google" ? "Google 계정" : session ? "게스트 계정" : "앱 계정"}</h4>
-    {session && <p>로그인한 계정: <strong>{session.person.display_name}</strong></p>}
-    <button type="button" className="ops-button" style={{ minHeight: 44, width: "fit-content", fontSize: 13, padding: "0 16px" }} disabled={disabled || busy} onClick={() => void logout()}>
-      {busy ? "로그아웃 중…" : "로그아웃"}
-    </button>
-    <ServerBackupCard disabled={disabled || busy} />
-    <AccountDeletionSettings disabled={disabled || busy} />
-    {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
-  </section>;
+  const person = session.person;
+  return <>
+    <section className="dc-guest-recovery-settings dc-account-block" aria-label="앱 계정" aria-busy={busy}>
+      <h4>{person.identity_kind === "google" ? "Google 계정" : "게스트 계정"}</h4>
+      <div className="dc-account-card">
+        <span className="dc-member-avatar" aria-hidden>{person.avatar_url ? <img src={person.avatar_url} alt="" referrerPolicy="no-referrer" /> : <ParticipantAvatarContent participantType="human" displayName={person.display_name} size={40} />}</span>
+        <span className="dc-account-card-text">
+          <strong className="preserve-words">{person.display_name}</strong>
+          <small>{person.identity_kind === "google" ? "Google로 로그인했어요" : "게스트로 로그인했어요"}</small>
+        </span>
+        <button type="button" className="ops-button dc-account-block-action" disabled={disabled || busy} onClick={() => void logout()}>
+          {busy ? "로그아웃 중…" : "로그아웃"}
+        </button>
+      </div>
+      {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
+      <ServerBackupCard disabled={disabled || busy} />
+    </section>
+    <section className="dc-guest-recovery-settings dc-account-block" aria-label="계정 탈퇴">
+      <h4>계정 탈퇴</h4>
+      <p className="dc-account-block-lead">모든 기기에서 로그아웃되고 이 계정으로 다시 들어올 수 없어요. 되돌릴 수 없어요.</p>
+      <AccountDeletionSettings disabled={disabled || busy} />
+    </section>
+  </>;
 }

@@ -477,3 +477,88 @@ dialog.dc-user-settings-dialog {
 .dc-user-settings-update p:empty {
   display: none;
 }
+
+/* Account blocks: each is its own titled section below the profile fields. */
+.dc-user-settings-section .dc-account-block {
+  margin-top: 24px;
+  border-top: 1px solid var(--color-panel-border);
+  padding-top: 24px;
+}
+
+.dc-account-block-lead {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.dc-user-settings-section .dc-guest-recovery-settings > .dc-account-block-action,
+.dc-account-block-action {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+/* The signed-in account as one row: who, how, and the way out. */
+.dc-account-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 8px;
+  background: var(--color-server-rail);
+  padding: 12px 16px;
+}
+
+.dc-account-card .dc-member-avatar {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.dc-account-card-text {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 2px;
+}
+
+.dc-account-card-text strong {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dc-account-card-text small {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.dc-account-card .dc-account-block-action {
+  flex-shrink: 0;
+}
+
+/* Destructive entry: outlined red, filled on hover, as Discord's delete button. */
+.dc-account-delete-button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 36px;
+  align-items: center;
+  border: 1px solid var(--color-danger);
+  border-radius: 8px;
+  padding: 0 16px;
+  color: var(--color-danger);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dc-account-delete-button:hover:not(:disabled),
+.dc-account-delete-button:focus-visible {
+  background: var(--color-danger);
+  color: #fff;
+  outline: none;
+}
+
+.dc-account-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

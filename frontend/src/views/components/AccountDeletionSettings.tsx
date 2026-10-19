@@ -10,12 +10,12 @@ import LocalAccountDataChoice from "./LocalAccountDataChoice";
 import GoogleGLogo from "./GoogleGLogo";
 import { userFacingError } from "../../lib/apiErrors";
 
-export default function AccountDeletionSettings({ disabled }: { disabled: boolean }) {
+export default function AccountDeletionSettings({ disabled, label = "계정 탈퇴" }: { disabled: boolean; label?: string }) {
   const open = useContext(AccountDeletionContext);
-  return <button type="button" className="min-h-11 w-fit text-[13px] text-danger hover:underline disabled:opacity-50" disabled={disabled} onClick={() => {
+  return <button type="button" className="dc-account-delete-button" disabled={disabled} onClick={() => {
     if (!open) throw new Error("계정 탈퇴 화면을 열지 못했어요.");
     open();
-  }}>계정 탈퇴</button>;
+  }}>{label}</button>;
 }
 export function AccountDeletionFlow({ disabled, onClose, onDeleted }: { disabled: boolean; onClose?: () => void; onDeleted?: () => void }) {
   const operation = useRef<AccountDeletion | null>(null);
