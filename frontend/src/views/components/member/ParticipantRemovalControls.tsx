@@ -87,7 +87,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
   if (!showMenuTrigger) return actions;
   return <details ref={menuRef} open={menuOpen} className="relative" onClick={(event) => event.stopPropagation()}
     onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Escape" && !busy && !confirmAction) setMenuOpen(false); }}>
-    <summary className="dc-modal-close" style={{ width: 44, height: 44 }} aria-label={`${displayName} 관리 메뉴`} onClick={(event) => {
+    <summary className="dc-modal-close" aria-label={`${displayName} 관리 메뉴`} onClick={(event) => {
       event.preventDefault(); if (busy) return;
       const rect = event.currentTarget.getBoundingClientRect();
       setMenuPosition({ top: Math.max(16, Math.min(rect.bottom, window.innerHeight - 180)), left: Math.max(16, Math.min(rect.right - 240, window.innerWidth - 256)) });

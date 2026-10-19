@@ -266,10 +266,10 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
           초기화
         </button>
         <span className="flex-1" />
-        <button type="button" className="ops-button" onClick={onCancel}>
+        <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} onClick={onCancel}>
           취소
         </button>
-        <button type="button" className="ops-cta min-h-11 px-4" disabled={!natural} onClick={cropImage}>
+        <button type="button" className="ops-cta min-h-10 min-w-[96px] px-4" disabled={!natural} onClick={cropImage}>
           적용
         </button>
       </div>

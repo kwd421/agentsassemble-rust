@@ -8,6 +8,7 @@
   }
 }
 
+/* Same plain grey X as .dc-dialog-close: no filled box on hover or focus. */
 .dc-modal-close {
   display: grid;
   height: 32px;
@@ -15,12 +16,11 @@
   flex-shrink: 0;
   place-items: center;
   border-radius: 4px;
-  color: var(--color-text-muted);
+  color: #b5bac1;
 }
 
 .dc-modal-close:hover,
 .dc-modal-close:focus-visible {
-  background: var(--color-sidebar-hover);
   color: var(--color-text-primary);
   outline: none;
 }
