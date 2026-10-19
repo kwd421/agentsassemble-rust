@@ -252,7 +252,7 @@ describe("StartupIdentityGate", () => {
       await userEvent.click(await screen.findByRole("button", { name: "Google로 계속" }));
     } else {
       if (entry === "guest") {
-        await userEvent.click(await screen.findByRole("button", { name: "새 게스트로 계속" }));
+        await userEvent.click(await screen.findByRole("button", { name: "게스트로 계속" }));
         await userEvent.type(screen.getByRole("textbox", { name: "표시 이름" }), "Guest");
         await userEvent.click(screen.getByRole("button", { name: "게스트 만들기" }));
       } else if (entry === "recover") {

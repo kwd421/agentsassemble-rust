@@ -36,7 +36,7 @@ afterEach(cleanup);
 
 it.each(["new", "recover"])("%s guest stays in the invitation and requires code acknowledgement before consent", async (path) => {
   render(<StrictMode><MemberJoinPanel secureEntry={entry} /></StrictMode>);
-  fireEvent.click(await screen.findByRole("button", { name: path === "new" ? "새 게스트로 계속" : "복구 코드로 계속" }));
+  fireEvent.click(await screen.findByRole("button", { name: path === "new" ? "게스트로 계속" : "복구 코드로 계속" }));
   fireEvent.change(screen.getByLabelText(path === "new" ? "표시 이름" : "게스트 복구 코드"), { target: { value: path === "new" ? "Guest identity" : "OLD-CODE" } });
   fireEvent.click(screen.getByRole("button", { name: path === "new" ? "게스트 만들기" : "같은 게스트로 로그인" }));
   const next = await screen.findByRole("button", { name: "계속" });

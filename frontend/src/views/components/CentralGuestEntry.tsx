@@ -49,7 +49,9 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
   }
   return <>
     {error && <p role="alert">{error}</p>}
-    {screen === "choice" && <div className="grid gap-3">
+    {/* Sits right under the Google button: the card's 20px gap minus 12px leaves
+        the 8px Discord puts between sign-in buttons. */}
+    {screen === "choice" && <div className="-mt-3 grid gap-3">
             <button
               type="button"
               className="dc-google-signin w-full"
@@ -59,7 +61,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 setScreen("guest");
               }}
             >
-              <UserRound size={18} aria-hidden /> 새 게스트로 계속
+              <UserRound size={18} aria-hidden /> 게스트로 계속
             </button>
             <button
               type="button"
