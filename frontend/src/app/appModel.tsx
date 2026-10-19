@@ -47,7 +47,7 @@ export function DeferredViewFallback() {
 }
 
 export const CHANNELS: ChannelConfig[] = [
-  { id: "lobby", label: "general", icon: Hash },
+  { id: "lobby", label: "일반", icon: Hash },
 ];
 
 export const CHANNEL_SECTIONS: Array<{

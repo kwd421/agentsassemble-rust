@@ -64,7 +64,7 @@ import { userFacingError } from "../lib/apiErrors";
 
 export default function LobbyView({
   activeRoom,
-  channelName = "general",
+  channelName = "일반",
   roomUid = "",
   agents,
   messageAttachmentReadOwner,

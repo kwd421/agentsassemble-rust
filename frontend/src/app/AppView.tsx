@@ -513,7 +513,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : channel === "lobby" ? (
             <LobbyView
               activeRoom={activeRoom}
-              channelName={visibleChannels.find((item) => item.id === "lobby")?.label ?? "general"}
+              channelName={visibleChannels.find((item) => item.id === "lobby")?.label ?? "일반"}
               roomUid={activeRoom.roomUid ?? ""}
               agents={scopedAgents}
               messageAttachmentReadOwner={messageAttachmentReadOwner}

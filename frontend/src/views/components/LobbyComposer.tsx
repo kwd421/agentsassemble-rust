@@ -102,7 +102,7 @@ export default function LobbyComposer({
   submitMessage,
   mentionables = [],
   disabledReason,
-  channelName = "general",
+  channelName = "일반",
   roomSessionToken = "",
   postingMode = "host",
   onGuestSessionExpired,
