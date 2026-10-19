@@ -12,7 +12,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { LucideIcon } from "lucide-react";
-import { AtSign, FileText, Paperclip, Plus, Send, Smile, Sparkles, Trash2, X } from "lucide-react";
+import { AtSign, CirclePlus, FileText, Paperclip, Plus, Send, Smile, Sparkles, Trash2, X } from "lucide-react";
 import type { LobbyEvent } from "../../api";
 import { useRoomSocket } from "../../RoomSocketContext";
 import { RoomSocketSayError } from "../../roomSocketClient";
@@ -627,6 +627,12 @@ export default function LobbyComposer({
             onSelect={selectCommand}
           />
         )}
+        {/* Discord puts upload at the left edge of the box as a circled +. */}
+        <button type="button" onClick={composerTools[0].run} disabled={composerTools[0].disabled}
+          className="dc-composer-button dc-composer-wide-tool dc-composer-attach"
+          aria-label={composerTools[0].label} title={composerTools[0].title}>
+          <CirclePlus size={22} />
+        </button>
         <MentionInput
           inputRef={inputRef}
           value={message}
@@ -673,7 +679,7 @@ export default function LobbyComposer({
           <ComposerCommandMenu actions listId={toolsListId} activeIndex={activeToolIndex} onActiveIndexChange={setActiveToolIndex}
             commands={composerTools} onSelect={item => { setToolsOpen(false); toolsButtonRef.current?.focus(); item.run(); }} />
         </div>}
-        {composerTools.map(tool => {
+        {composerTools.filter(tool => tool.id !== "attachment").map(tool => {
           const Icon = tool.icon;
           return <button key={tool.id} type="button" onClick={tool.run} disabled={tool.disabled}
             className="dc-composer-button dc-composer-wide-tool"

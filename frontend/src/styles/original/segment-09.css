@@ -350,7 +350,9 @@
 .dc-composer-bar {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(5, 36px);
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-columns: 36px;
+  grid-auto-flow: column;
   min-height: 56px;
   align-items: center;
   gap: 2px;
@@ -358,6 +360,16 @@
   border-radius: 8px;
   background: var(--color-panel-soft);
   padding: 0 8px 0 16px;
+}
+
+/* With Discord's upload (+) at the left edge: +, the input, then the tools. */
+.dc-composer-bar:has(> .dc-composer-attach) {
+  grid-template-columns: 36px minmax(0, 1fr);
+  padding-left: 8px;
+}
+
+.dc-composer-bar:has(> .dc-composer-attach) .dc-composer-input {
+  padding-left: 8px;
 }
 
 .dc-composer-input {

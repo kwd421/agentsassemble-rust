@@ -81,8 +81,14 @@
 }
 
 @media (max-width: 900px) {
-  .dc-composer-bar:has(.dc-composer-tools-toggle) {
+  .dc-composer-bar:has(.dc-composer-tools-toggle),
+  .dc-composer-bar:has(.dc-composer-tools-toggle):has(> .dc-composer-attach) {
     grid-template-columns: minmax(0, 1fr) 44px 44px;
+    padding-left: 16px;
+  }
+
+  .dc-composer-bar:has(> .dc-composer-attach) .dc-composer-input {
+    padding-left: 0;
   }
 
   .dc-composer-bar .dc-composer-wide-tool {
