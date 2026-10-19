@@ -10,6 +10,7 @@ import { installRemoteWorkspace, bindRemoteSession, remoteWorkspaceFor } from ".
 import { SECURE_PROTOCOL, type SecureTarget } from "../remote/secureCrypto";
 import { loadCentralSession, signedRequest, type CentralSession } from "./identity";
 import { parseMemberChallenge } from "./memberConnect";
+import { publishMemberFreshConsentAdmission } from "./memberFreshConsent";
 import { responseError } from "../../api/http";
 
 import type { SecureMemberEntry } from "../remote/remoteWorkspace";
@@ -196,6 +197,10 @@ export class SecureMemberAdmission {
     bindRemoteSession(member.sessionToken, this.transport, member.serverSurface.server_id);
     this.adopted = true;
     installRemoteWorkspace({ transport: this.transport, owner: null, member, deviceToken: this.deviceToken, clientId: this.clientId });
+    // A successful new-invite join is fresh consent for this server: the
+    // member host owner lifts its epoch/key refusal and registers this live
+    // admission, so the session-loss heal selects on it without central.
+    publishMemberFreshConsentAdmission(payload.server_id, this);
     return payload;
   }
 }

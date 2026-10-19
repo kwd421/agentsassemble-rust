@@ -5,6 +5,7 @@ import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, remo
 import { memberHostLiveLossFastDelay, memberHostOfflineBudgetExhausted, memberHostOfflineParkMs, memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, noteMemberHostOfflinePreview, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { noteMemberHostExternalReselectAttach } from "../lib/central/memberRoomAutoReselectBudget";
 import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
+import { MEMBER_FRESH_CONSENT_EVENT, type MemberFreshConsentDetail } from "../lib/central/memberFreshConsent";
 import { remoteWorkspaceFor, closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
 import { ApiError, userFacingError } from "../lib/apiErrors";
 import type { SecureMemberAdmission } from "../lib/central/secureMemberEntry";
@@ -104,10 +105,13 @@ export function useMemberHosts({
 }) {
   const [snapshots, setSnapshots] = useState<MemberHostSnapshot[]>([]);
   const [anchorRevision, setAnchorRevision] = useState(0);
+  const [freshConsentRevision, setFreshConsentRevision] = useState(0);
   const flights = useRef(new Map<string, AbortController>());
   const admissions = useRef(new Map<string, SecureMemberAdmission>());
   const attempted = useRef(new Map<string, string>());
   const refused = useRef(new Set<string>());
+  // Live admissions from a successful new-invite re-join (fresh consent).
+  const pendingFreshConsent = useRef(new Map<string, SecureMemberAdmission>());
   // Per-host automatic reconnect: bounded doubling backoff with jitter,
   // driven only by that host's own channel close, attach failure, or
   // explicit retry. No global loop, no central polling; each attempt
@@ -437,6 +441,7 @@ export function useMemberHosts({
   useEffect(() => {
     refused.current.clear();
     attempted.current.clear();
+    pendingFreshConsent.current.clear();
     setSnapshots((current) => (current.length === 0 ? current : []));
     return () => {
       for (const timer of reconnectTimers.current.values()) window.clearTimeout(timer);
@@ -461,6 +466,18 @@ export function useMemberHosts({
     const changed = () => setAnchorRevision((revision) => revision + 1);
     window.addEventListener(MEMBER_ANCHORS_CHANGED_EVENT, changed);
     return () => window.removeEventListener(MEMBER_ANCHORS_CHANGED_EVENT, changed);
+  }, []);
+
+  useEffect(() => {
+    const onFresh = (event: Event) => {
+      const detail = (event as CustomEvent<MemberFreshConsentDetail>).detail;
+      const admission = detail?.admission as SecureMemberAdmission | undefined;
+      if (!detail?.serverId || !admission?.transport?.active) return;
+      pendingFreshConsent.current.set(detail.serverId, admission);
+      setFreshConsentRevision((revision) => revision + 1);
+    };
+    window.addEventListener(MEMBER_FRESH_CONSENT_EVENT, onFresh);
+    return () => window.removeEventListener(MEMBER_FRESH_CONSENT_EVENT, onFresh);
   }, []);
 
   const reconcile = useCallback(() => {
@@ -530,6 +547,43 @@ export function useMemberHosts({
         setPhase(server.server_id, "disconnected", anchor?.rooms ?? null, origin, null);
         continue;
       }
+      // Fresh re-join published its live admission: lift refusal, register it.
+      const pendingFresh = pendingFreshConsent.current.get(server.server_id);
+      if (pendingFresh) {
+        pendingFreshConsent.current.delete(server.server_id);
+        if (pendingFresh.transport?.active === true) {
+          refused.current.delete(server.server_id);
+          const previous = admissions.current.get(server.server_id);
+          if (previous && previous !== pendingFresh) {
+            admissions.current.delete(server.server_id);
+            detachMemberHost(previous);
+          }
+          flights.current.get(server.server_id)?.abort();
+          flights.current.delete(server.server_id);
+          clearReconnectTimer(server.server_id);
+          reconnectAttempts.current.delete(server.server_id);
+          reconnectCauses.current.delete(server.server_id);
+          reconnectRetryAfter.current.delete(server.server_id);
+          admissions.current.set(server.server_id, pendingFresh);
+          const freshAdmission = pendingFresh, freshId = server.server_id;
+          try {
+            freshAdmission.transport.onClose(() => {
+              if (admissions.current.get(freshId) !== freshAdmission) return;
+              setPhase(freshId, "disconnected");
+              liveLossFastPending.current.add(freshId);
+              scheduleReconnect(freshId);
+            });
+          } catch { /* best-effort */ }
+          attempted.current.set(server.server_id, tupleKey(tuple));
+          const helloOrigin = (pendingFresh.transport as { hello?: { origin?: string } }).hello?.origin || "";
+          const freshOrigin = helloOrigin || anchor?.endpoint_origin || tuple.origin || "";
+          setPhase(server.server_id, "connected", anchor?.rooms ?? null, freshOrigin, null);
+          continue;
+        }
+      }
+      // Matching anchor lifts refusal before the park below.
+      if (anchor?.registration_epoch === epoch &&
+        (tuple.fingerprint === "" || anchor.host_key_fingerprint === tuple.fingerprint)) refused.current.delete(server.server_id);
       // No anchor but a live membership on a never-refused host: a fresh
       // device (first join happened elsewhere on the same account) attaches
       // silently. A recorded identity refusal still blocks this path so an
@@ -639,6 +693,13 @@ export function useMemberHosts({
         // through to a fresh attach below so the anchor follows the
         // directory's current origin (the origin actually attached next).
         if (!tuple.origin || !workspaceOrigin || workspaceOrigin === tuple.origin) {
+          // Adopting a live workspace must not keep a dead registry entry.
+          const registered = admissions.current.get(server.server_id);
+          if (registered && registered.transport !== liveWorkspace.transport &&
+              registered.transport?.active !== true) {
+            admissions.current.delete(server.server_id);
+            detachMemberHost(registered);
+          }
           const adoptedId = server.server_id;
           const actualOrigin = workspaceOrigin || anchor.endpoint_origin;
           if (anchor.endpoint_origin !== actualOrigin && actualOrigin) {
@@ -666,7 +727,7 @@ export function useMemberHosts({
       return;
     }
     reconcile();
-  }, [directory, anchorRevision, personId, sessionToken, reconcile]);
+  }, [directory, anchorRevision, freshConsentRevision, personId, sessionToken, reconcile]);
 
   // Timer-driven reattach: a real signal (channel close, attach failure)
   // already recorded the cause and grew the counter, so this preserves the
