@@ -313,16 +313,19 @@ button:disabled,
   font-weight: 900;
 }
 
+/* One menu standard (rail, channel, member): 32px rows, 14px medium text,
+   grey hover — the same values as the member menu. */
 .dc-context-menu button {
   display: flex;
   width: 100%;
+  min-height: 32px;
   align-items: center;
-  gap: 10px;
-  padding: 8px;
+  gap: 8px;
+  padding: 6px 8px;
   border-radius: 4px;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 500;
   text-align: left;
   transition:
     background-color 120ms ease,
@@ -331,8 +334,8 @@ button:disabled,
 
 .dc-context-menu button:hover,
 .dc-context-menu button:focus-visible {
-  background: var(--color-accent);
-  color: #fff;
+  background: var(--color-sidebar-hover);
+  color: var(--color-text-primary);
   outline: none;
 }
 

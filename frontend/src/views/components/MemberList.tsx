@@ -365,7 +365,6 @@ export default function MemberList({
                     role="menuitemradio"
                     aria-checked={memberMenu.entry.role === option.id}
                     className="dc-member-context-menu-item"
-                    style={{ minHeight: 44 }}
                     onClick={() => {
                       const entry = memberMenu.entry;
                       setMemberMenu(null);
@@ -385,7 +384,6 @@ export default function MemberList({
                 type="button"
                 role="menuitem"
                 className="dc-member-context-menu-item"
-                style={{ minHeight: 44 }}
                 disabled={muteBusy}
                 onClick={() => void handleToggleMute(memberMenu.entry)}
               >

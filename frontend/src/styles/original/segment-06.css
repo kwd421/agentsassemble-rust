@@ -534,10 +534,10 @@
 .dc-member-context-menu {
   position: fixed;
   z-index: 61;
-  min-width: 168px;
+  min-width: 188px;
   max-width: 240px;
   padding: 6px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--color-panel-border);
   background: var(--color-panel);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
@@ -558,13 +558,14 @@
 .dc-member-context-menu-item {
   display: flex;
   width: 100%;
+  min-height: 32px;
   align-items: center;
   gap: 8px;
-  border-radius: 6px;
-  padding: 8px 8px;
+  border-radius: 4px;
+  padding: 6px 8px;
   color: var(--color-text-primary);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 500;
   text-align: left;
   transition: background 0.12s ease;
 }

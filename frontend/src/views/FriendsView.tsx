@@ -150,8 +150,8 @@ function FriendRow({ friend, busy, selected, onSelect, onEdit, onDelete }: { fri
       style={{ position: "fixed", margin: 0, width: 208, maxWidth: "calc(100vw - 32px)", padding: 8, boxSizing: "border-box", color: "var(--color-text-primary)", border: "1px solid var(--color-panel-border)" }}
       onClick={(event) => { if (event.target === event.currentTarget) menu.current?.close(); }}>
       <div style={{ display: "grid", gap: 4 }}>
-        <button type="button" className="dc-member-context-menu-item" style={buttonStyle} disabled={busy} onClick={() => select(onEdit)}>편집</button>
-        <button type="button" className="dc-member-context-menu-item" data-variant="danger" style={buttonStyle} disabled={busy} onClick={() => select(onDelete)}>삭제</button>
+        <button type="button" className="dc-member-context-menu-item" disabled={busy} onClick={() => select(onEdit)}>편집</button>
+        <button type="button" className="dc-member-context-menu-item" data-variant="danger" disabled={busy} onClick={() => select(onDelete)}>삭제</button>
       </div>
     </dialog>
   </article>;
