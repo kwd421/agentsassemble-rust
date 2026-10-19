@@ -125,6 +125,15 @@ describe("member invite screen", () => {
       expect.objectContaining({ challenge_id: "fresh" }), grant.grant_token, expect.any(String), "client", "browser-credential"));
   });
 
+  it("treats an expired invite as final: clear title, message under it, no retry", async () => {
+    mocks.join.mockRejectedValueOnce(new ApiError(410, "internal", "token_expired"));
+    render(<MemberJoinPanel host={host()} />);
+    await agree();
+    expect((await screen.findByRole("alert")).textContent).toContain("초대가 만료됐어요. 새 초대를 받아 주세요.");
+    expect(screen.getByRole("heading", { name: "참가하지 못했어요" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "다시 시도" })).toBeNull();
+  });
+
   it.each([{ endpoint_origin: "https://changed.test" }, { endpoint_generation: 8 }])("refuses a changed consent target %j", async (change) => {
     mocks.issue.mockResolvedValue({ ...grant, ...change });
     render(<MemberJoinPanel host={host()} />); await agree();

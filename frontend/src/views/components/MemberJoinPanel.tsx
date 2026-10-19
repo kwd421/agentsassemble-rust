@@ -31,6 +31,17 @@ type Consent = {
   account: string; sessionToken: string;
 };
 
+// Refusals a fresh attempt cannot fix (the invite itself is gone or invalid),
+// so the panel offers no 다시 시도. Membership-ended and idempotency refusals
+// keep the retry: it starts over with a fresh challenge, and the manager may
+// have re-admitted the person in the meantime.
+const TERMINAL_JOIN_MESSAGES = new Set([
+  "참가자 정보를 확인하지 못했어요. 방 관리자에게 문의해 주세요.",
+  "초대나 방을 사용할 수 없어요. 방 관리자에게 문의해 주세요.",
+  "초대가 만료됐어요. 새 초대를 받아 주세요.",
+  "취소된 초대예요. 새 초대를 받아 주세요.",
+]);
+
 function failureMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const messages: Record<string, string> = {
@@ -261,12 +272,13 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
     }
   }
 
-  return <GuestJoinProfilePanel displayName="" busy={busy} status={error || status}
-    title={rooms.length ? "참가 중인 방을 선택해 주세요" : consent && !error ? title : "로그인하고 참가"}
+  const terminalError = Boolean(error) && TERMINAL_JOIN_MESSAGES.has(error);
+  return <GuestJoinProfilePanel displayName="" busy={busy} status={error ? "" : status} error={error}
+    title={error ? "참가하지 못했어요" : rooms.length ? "참가 중인 방을 선택해 주세요" : consent ? title : "로그인하고 참가"}
     identityLabel={consent && !error ? roomName : undefined}
     serverLabel={consent && !error && !reconnect ? `${consent.target.label}에서 열린 방` : undefined}
     titleContent={consent && !error && !reconnect ? <>{roomName ? <>‘<strong>{roomName}</strong>’에 참가할까요?</> : title}</> : undefined}
-    retryMode={error && !(secureEntry && !loadCentralSession()) ? "join" : undefined} onJoin={retry}
+    retryMode={error && !terminalError && !(secureEntry && !loadCentralSession()) ? "join" : undefined} onJoin={retry}
     onDisplayNameChange={() => {}} onAvatarImageChange={() => {}}>
     <section aria-label="방 참가" className="grid gap-3 text-text-primary">
       {rooms.map(room => <button key={room.room_id} className="dc-guest-join-button" disabled={busy} onClick={() => void run(() => selectRoom(room.room_id))}>{room.name || "이름 없는 방"}</button>)}

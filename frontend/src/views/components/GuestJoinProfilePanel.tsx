@@ -17,6 +17,8 @@ type GuestJoinProfilePanelProps = {
   displayName: string;
   avatarImage?: string;
   status?: string;
+  /** A refusal or failure shown right under the title, where it is read first. */
+  error?: string;
   busy?: boolean;
   pairing?: boolean;
   pairingState?: OperatorPairingState;
@@ -38,6 +40,7 @@ export default function GuestJoinProfilePanel({
   displayName,
   avatarImage,
   status = "",
+  error = "",
   busy = false,
   pairing = false,
   pairingState = "idle",
@@ -89,6 +92,7 @@ export default function GuestJoinProfilePanel({
           <span className="dc-join-identity-icon" aria-hidden="true">{(identityLabel || roomLabel || "").slice(0, 1).toUpperCase()}</span>}
         <h1>{titleContent || heading}</h1>
         {serverLabel && <p className="dc-join-server-label">{serverLabel}</p>}
+        {error && <p role="alert" className="dc-join-error preserve-words">{error}</p>}
         {!children && !pairing && !retryMode && (
           <div className="dc-guest-avatar-row">
             <label className="dc-guest-avatar" data-has-image={Boolean(avatarImage)}>

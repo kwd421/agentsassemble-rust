@@ -398,3 +398,11 @@
 .dc-guest-join-card h1 { word-break: keep-all; text-wrap: balance; }
 .dc-guest-join-card h1:has(strong) { font-weight: 500; }
 .dc-guest-join-card h1 strong { font-weight: 900; }
+
+.dc-join-error {
+  margin: 0;
+  color: #f23f43;
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
+}
