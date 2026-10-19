@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Check, ChevronDown, ChevronRight, Pause, Play, Search, Volume2, VolumeX } from "lucide-react";
 import type {
@@ -120,6 +120,18 @@ export default function MemberList({
     () => buildMemberOwnerGroups(entries, query),
     [entries, query]
   );
+  // Discord's member list is split into 온라인 / 오프라인 sections; a person's
+  // agents stay under that person, and the section follows the person (or,
+  // for an ownerless group, any active agent).
+  const memberSections = useMemo(() => {
+    const online = ownerGroups.filter((group) => group.person ? group.person.active : group.agents.some((agent) => agent.active));
+    const offline = ownerGroups.filter((group) => !online.includes(group));
+    const count = (groups: typeof ownerGroups) => groups.reduce((total, group) => total + (group.person ? 1 : 0) + group.agents.length, 0);
+    return [
+      { label: "온라인", groups: online, count: count(online) },
+      { label: "오프라인", groups: offline, count: count(offline) },
+    ];
+  }, [ownerGroups]);
 
   const roleMenuAvailable = Boolean(canEditRoles && onRoleChange);
 
@@ -237,7 +249,10 @@ export default function MemberList({
             {disconnected ? "연결되면 멤버가 보여요." : loading ? "멤버를 불러오는 중이에요." : `${roomName}에는 아직 멤버가 없어요.`}
           </p>
         )}
-        {ownerGroups.map((group) => {
+        {memberSections.map((section) => section.groups.length > 0 && (
+          <Fragment key={section.label}>
+            <h3 className="dc-member-section-head">{section.label} — {section.count}</h3>
+            {section.groups.map((group) => {
           const collapseId = `owner:${group.id}`;
           const collapsed = Boolean(collapsedGroups[collapseId]);
           const ToggleIcon = collapsed ? ChevronRight : ChevronDown;
@@ -312,6 +327,8 @@ export default function MemberList({
             </section>
           );
         })}
+          </Fragment>
+        ))}
         {contextBadges.length > 0 && (
           <details className="dc-member-context mt-3 px-2" aria-label="참가자 맥락 요약">
             <summary className="cursor-pointer list-none text-[11px] font-bold text-text-muted hover:text-text-secondary">
