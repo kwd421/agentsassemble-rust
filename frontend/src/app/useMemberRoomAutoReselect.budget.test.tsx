@@ -73,6 +73,9 @@ describe("memberRoomAutoReselectBudget", () => {
 describe("useMemberRoomAutoReselect bounded loop (fake timers)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    // The budget resets at UTC midnight; start early in a UTC day so the
+    // simulated hours never cross into the next window.
+    vi.setSystemTime(new Date("2026-10-20T00:30:00Z"));
     resetMemberRoomAutoReselectBudgetForTests();
     resetMembershipEndedTerminalForTests();
   });
@@ -160,7 +163,7 @@ describe("useMemberRoomAutoReselect bounded loop (fake timers)", () => {
       });
     }
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(6 * 60_60_000);
+      await vi.advanceTimersByTimeAsync(6 * 60 * 60_000);
     });
     expect(harness.selectRoom.mock.calls.length).toBeLessThanOrEqual(
       MEMBER_ROOM_AUTO_RESELECT_DAILY_CAP,
@@ -326,6 +329,9 @@ describe("useMemberRoomAutoReselect bounded loop (fake timers)", () => {
 describe("useMemberRoomLive background budget (fake timers)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    // The budget resets at UTC midnight; start early in a UTC day so the
+    // simulated hours never cross into the next window.
+    vi.setSystemTime(new Date("2026-10-20T00:30:00Z"));
     resetMemberRoomAutoReselectBudgetForTests();
     resetMembershipEndedTerminalForTests();
   });
@@ -412,7 +418,7 @@ describe("useMemberRoomLive background budget (fake timers)", () => {
       }],
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(6 * 60_60_000);
+      await vi.advanceTimersByTimeAsync(6 * 60 * 60_000);
     });
     expect(selectBackgroundRoom.mock.calls.length).toBe(parkedCalls);
   });
