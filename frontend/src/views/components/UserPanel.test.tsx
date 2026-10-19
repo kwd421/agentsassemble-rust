@@ -578,7 +578,7 @@ describe("UserPanel", () => {
       expect(within(view.container).getByRole("button", { name: /B계정 계정 설정 열기/ })).toBeTruthy();
       fireEvent.click(within(view.container).getByRole("button", { name: "사용자 설정" }));
       expect(await within(view.container).findByRole("button", { name: "로그아웃" })).toBeTruthy();
-      expect(within(view.container).getByText("이 컴퓨터의 서버 프로필은 서버를 등록한 뒤 바꿀 수 있어요. 계정 로그아웃은 아래에서 할 수 있어요.")).toBeTruthy();
+      expect(within(view.container).queryByText(/서버를 등록한 뒤/)).toBeNull();
       // The foreign local operator's identity never appears as B's own:
       // no handle field (a central account has no handle), while the
       // signed-in account's own display name is shown.

@@ -16,12 +16,11 @@ export default function AppUpdateCheck() {
       setError(typeof reason === "string" ? reason : "업데이트를 확인하지 못했어요. 다시 시도해 주세요.");
     } finally { setPending(false); }
   }
-  return <div className="mt-4">
-    <button type="button" className="ops-button px-3 py-2 text-sm" style={{ minHeight: 44 }}
-      disabled={pending} onClick={() => void check()}>
+  return <div className="dc-user-settings-update">
+    <button type="button" disabled={pending} onClick={() => void check()}>
       {pending ? "확인하는 중…" : "업데이트 확인"}
     </button>
-    <p role="status" className="mt-2 text-sm">{result}</p>
-    {error && <p role="alert" className="mt-2 text-sm">{error}</p>}
+    <p role="status">{result}</p>
+    {error && <p role="alert">{error}</p>}
   </div>;
 }

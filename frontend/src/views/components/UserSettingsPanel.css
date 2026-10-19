@@ -438,3 +438,42 @@ dialog.dc-user-settings-dialog {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* App-level action under the section list: same look as a nav row. */
+.dc-user-settings-update {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-panel-border);
+}
+
+.dc-user-settings-update button {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--color-text-muted);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.dc-user-settings-update button:hover:not(:disabled),
+.dc-user-settings-update button:focus-visible {
+  background: rgba(78, 80, 88, 0.3);
+  color: var(--color-text-secondary);
+  outline: none;
+}
+
+.dc-user-settings-update p {
+  margin: 0;
+  padding: 0 10px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.dc-user-settings-update p:empty {
+  display: none;
+}

@@ -114,10 +114,6 @@ export default function UserSettingsPanel({
         <section className="dc-user-settings-section">
           {settingsSection === "account" && (
             <>
-              <p className="dc-user-settings-lead">이 서버에서 사용할 이름과 표시 상태를 바꿔요.</p>
-              {!serverAuthorityAvailable && (
-                <p className="dc-user-settings-lead">이 컴퓨터의 서버 프로필은 서버를 등록한 뒤 바꿀 수 있어요. 계정 로그아웃은 아래에서 할 수 있어요.</p>
-              )}
               {/* A non-owner never sees the local operator's profile as their
                   own: the signed-in central account is shown below (with its
                   own display name), so the local display name/handle/status
@@ -177,9 +173,8 @@ export default function UserSettingsPanel({
 
           {settingsSection === "profile" && (
             <>
-              <p className="dc-user-settings-lead">프로필 카드의 사진, 배너와 상태 문구를 바꿔요.</p>
               {!serverAuthorityAvailable && (
-                <p className="dc-user-settings-lead">이 컴퓨터의 서버 프로필은 서버를 등록한 뒤 바꿀 수 있어요.</p>
+                <p className="dc-user-settings-lead">내 서버가 있는 컴퓨터에서 프로필을 바꿀 수 있어요.</p>
               )}
               <div className="dc-user-settings-profile-layout">
               <div className="dc-user-settings-grid">
