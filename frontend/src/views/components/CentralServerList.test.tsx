@@ -207,8 +207,8 @@ it("selects a keeper then confirms irreversible retirement with status and last 
   await userEvent.click(screen.getByRole("radio", { name: /집 Mac/ }));
   await userEvent.click(screen.getByRole("button", { name: "이 서버 남기기" }));
   expect(resolveCentralServerDuplicates).not.toHaveBeenCalled();
-  expect(screen.getByText(/은퇴는 되돌릴 수 없어요/)).toBeTruthy();
-  await userEvent.click(screen.getByRole("button", { name: "나머지 서버 은퇴" }));
+  expect(screen.getByText(/되돌릴 수 없어요/)).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "나머지 서버에서 빼기" }));
   expect(resolveCentralServerDuplicates).toHaveBeenCalledWith(conflict, "keeper", undefined);
   expect(refresh).toHaveBeenCalledOnce();
 });
@@ -220,7 +220,7 @@ it("uses the central keeper after a conflicting choice and preserves the failure
   render(<CentralServerList servers={[]} liveServers={[]} conflict={locked} busy={false} onOpen={vi.fn()} onRefresh={refresh} />);
   expect((screen.getByRole("radio", { name: /노트북/ }) as HTMLInputElement).disabled).toBe(true);
   await userEvent.click(screen.getByRole("button", { name: "이 서버 남기기" }));
-  await userEvent.click(screen.getByRole("button", { name: "나머지 서버 은퇴" }));
+  await userEvent.click(screen.getByRole("button", { name: "나머지 서버에서 빼기" }));
   expect(await screen.findByRole("alert")).toBeTruthy();
   expect(refresh).toHaveBeenCalledOnce();
 });
@@ -233,9 +233,9 @@ it("does not retarget a confirmation when another device chooses a different kee
   await userEvent.click(screen.getByRole("button", { name: "이 서버 남기기" }));
   const changed = { ...conflict, resolution: { keeper_server_id: "loser", keeper_registration_epoch: "epoch-b", revision: "other-device" } };
   view.rerender(<CentralServerList {...props} conflict={changed} />);
-  expect(screen.getByText("‘집 Mac’ 서버를 남기고 나머지 서버를 은퇴할까요?")).toBeTruthy();
+  expect(screen.getByText("‘집 Mac’만 내 서버로 남길까요?")).toBeTruthy();
   vi.mocked(resolveCentralServerDuplicates).mockRejectedValue(new Error("다른 기기에서 서버를 선택했어요."));
-  await userEvent.click(screen.getByRole("button", { name: "나머지 서버 은퇴" }));
+  await userEvent.click(screen.getByRole("button", { name: "나머지 서버에서 빼기" }));
   expect(resolveCentralServerDuplicates).toHaveBeenCalledWith(changed, "keeper", undefined);
   expect(await screen.findByRole("alert")).toBeTruthy();
 });
@@ -247,7 +247,7 @@ it("retries pending local retirement after the conflict list has disappeared", a
   const refresh = vi.fn().mockResolvedValue(undefined);
   const view = render(<CentralServerList deviceToken="device" servers={[host]} liveServers={[host]} busy={false} onOpen={vi.fn()} onRefresh={refresh} />);
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-  expect(screen.getByRole("alert").textContent).toContain("이 컴퓨터의 은퇴를 다시 확인하고 있어요.");
+  expect(screen.getByRole("alert").textContent).toContain("이 컴퓨터를 서버에서 빼는 중이에요. 다시 확인하고 있어요.");
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(retryPendingLocalDemotion).toHaveBeenCalledTimes(2);
   expect(resolveCentralServerDuplicates).not.toHaveBeenCalled();

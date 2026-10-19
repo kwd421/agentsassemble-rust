@@ -95,7 +95,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         if (!stopped) { setError(""); await onRefresh(); }
       } catch (reason) {
         if (!stopped) {
-          setError(userFacingError(reason, "이 컴퓨터의 은퇴를 다시 확인하고 있어요."));
+          setError(userFacingError(reason, "이 컴퓨터를 서버에서 빼는 중이에요. 다시 확인하고 있어요."));
           timer = setTimeout(() => void retry(), 1000);
         }
       }
@@ -151,7 +151,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
       {namePreview(editingName.trim(), server?.server_id || localHost?.server_id)}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2">
-          <button type="submit" className="ops-cta min-h-11 px-4" disabled={busy || saving || !editingName.trim() || editingName.trim().length > 80}>이름 저장</button>
+          <button type="submit" className="ops-cta min-h-10 px-4" disabled={busy || saving || !editingName.trim() || editingName.trim().length > 80}>이름 저장</button>
           <button type="button" className="ops-button" disabled={saving} onClick={() => { setEditingId(null); setError(""); }}>취소</button>
         </div>
         {defaultName && (editingName.trim() !== defaultName || (server ? server.name_is_default === false : Boolean(localName))) && <button type="button" className="dc-server-row-text-button" disabled={busy || saving}
@@ -177,10 +177,10 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
     };
     return <section className="dc-server-list" aria-label="중복 서버 정리" aria-busy={saving}>
       {confirmed ? <>
-        <p>‘{confirmed.name}’ 서버를 남기고 나머지 서버를 은퇴할까요?</p>
-        <p>은퇴는 되돌릴 수 없어요. 은퇴한 컴퓨터는 이 계정에 기기로만 연결할 수 있어요. 방과 대화 기록은 해당 컴퓨터에 남아요.</p>
-        <button autoFocus className="ops-button min-h-11" disabled={saving} onClick={() => setConfirmKeeper("")}>취소</button>
-        <button className="ops-button min-h-11 text-red-300" disabled={busy || saving} onClick={() => void resolve()}>나머지 서버 은퇴</button>
+        <p>‘{confirmed.name}’만 내 서버로 남길까요?</p>
+        <p>나머지 컴퓨터는 더 이상 내 서버가 아니고, 이 계정에 기기로만 연결할 수 있어요. 되돌릴 수 없어요. 방과 대화 기록은 그 컴퓨터에 그대로 남아요.</p>
+        <button autoFocus className="ops-button min-h-10" disabled={saving} onClick={() => setConfirmKeeper("")}>취소</button>
+        <button className="dc-account-delete-button" disabled={busy || saving} onClick={() => void resolve()}>나머지 서버에서 빼기</button>
       </> : <>
         <fieldset disabled={busy || saving}>
           <legend>이 계정에서 사용할 서버 하나를 선택해 주세요.</legend>
@@ -189,7 +189,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
             <span className="dc-server-row-copy"><strong>{server.name}</strong><span>{server.online ? "연결 가능" : "연결 끊김"} · 마지막 접속: {server.last_seen_at === null ? "기록 없음" : new Date(server.last_seen_at * 1000).toLocaleString("ko-KR")}</span></span>
           </label>)}
         </fieldset>
-        <button className="ops-cta min-h-11" disabled={!selected || busy || saving} onClick={() => setConfirmKeeper(selected?.server_id || "")}>이 서버 남기기</button>
+        <button className="ops-cta min-h-10" disabled={!selected || busy || saving} onClick={() => setConfirmKeeper(selected?.server_id || "")}>이 서버 남기기</button>
       </>}
       {error && <p role="alert">{error}</p>}
     </section>;
