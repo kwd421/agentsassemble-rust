@@ -9,7 +9,7 @@ dialog.dc-user-settings-dialog {
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-columns: 254px minmax(0, 1fr);
 }
 
 .dc-user-settings-sidebar {
@@ -18,8 +18,8 @@ dialog.dc-user-settings-dialog {
   align-content: start;
   gap: 12px;
   overflow-y: auto;
-  padding: 24px 12px;
-  background: #202024;
+  padding: 16px;
+  background: var(--color-sidebar);
 }
 
 .dc-user-settings-me {
@@ -62,12 +62,13 @@ dialog.dc-user-settings-dialog {
 
 .dc-user-settings-nav button {
   display: flex;
+  min-height: 36px;
   align-items: center;
-  border-radius: 6px;
-  padding: 0 10px;
+  border-radius: 8px;
+  padding: 0 12px;
   color: var(--color-text-muted);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 500;
   text-align: left;
 }
 
@@ -92,29 +93,38 @@ dialog.dc-user-settings-dialog {
 
 .dc-user-settings-main-head {
   display: flex;
+  min-height: 48px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 20px 8px 32px;
+  border-bottom: 1px solid var(--color-panel-separator);
+  padding: 0 8px 0 16px;
 }
 
+/* Discord: a small page title in a 48px bar; the content carries the headings. */
 .dc-user-settings-main-head h2 {
   color: var(--color-text-primary);
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .dc-user-settings-section {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 32px 32px;
+  padding: 40px 32px;
   scrollbar-gutter: stable;
+}
+
+/* Content is one centered column, as Discord's settings (≈696px). */
+.dc-user-settings-section > * {
+  max-width: 696px;
+  margin-inline: auto;
 }
 
 .dc-user-settings-section p {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -124,8 +134,7 @@ dialog.dc-user-settings-dialog {
 
 .dc-user-settings-grid {
   display: grid;
-  max-width: 560px;
-  gap: 16px;
+  gap: 20px;
 }
 
 .dc-user-settings-avatar-preview {
@@ -145,20 +154,21 @@ dialog.dc-user-settings-dialog {
 .dc-user-settings-grid label {
   display: grid;
   gap: 8px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 700;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .dc-user-settings-grid input,
 .dc-user-settings-grid select {
   min-width: 0;
+  min-height: 40px;
   border: 1px solid var(--color-panel-border);
   border-radius: 8px;
   background: var(--color-server-rail);
-  padding: 10px 12px;
+  padding: 0 12px;
   color: var(--color-text-primary);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 400;
   outline: none;
 }
@@ -281,7 +291,7 @@ dialog.dc-user-settings-dialog {
 .dc-user-settings-section h4 {
   margin-bottom: 8px;
   color: var(--color-text-primary);
-  font-size: 16px;
+  font-size: 24px;
   font-weight: 700;
 }
 
@@ -302,9 +312,9 @@ dialog.dc-user-settings-dialog {
 }
 
 .dc-user-settings-field-label {
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 700;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .dc-user-settings-avatar-field {
@@ -562,4 +572,20 @@ dialog.dc-user-settings-dialog {
 .dc-account-delete-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.dc-user-settings-close {
+  width: 32px;
+  height: 32px;
+}
+
+/* Touch screens keep 44px targets. */
+@media (pointer: coarse) {
+  .dc-user-settings-nav button,
+  .dc-user-settings-grid input,
+  .dc-user-settings-grid select,
+  .dc-user-settings-close {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }

@@ -76,7 +76,7 @@ export default function UserSettingsPanel({
   const activeSectionLabel = sections.find((section) => section.id === shownSection)?.label || "계정";
   return (
     <dialog ref={dialogRef} className="dc-profile-settings-modal dc-user-settings-dialog" aria-label="사용자 설정"
-      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(980px, calc(100vw - 32px))", height: "min(760px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)", padding: 0, color: "var(--color-text-primary)" }}
+      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(1200px, calc(100vw - 80px))", height: "min(900px, calc(100dvh - 80px))", maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100dvh - 32px)", padding: 0, color: "var(--color-text-primary)" }}
       onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
       onCancel={(event) => { event.preventDefault(); if (!saving) onClose(); }}
       onClick={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
@@ -96,7 +96,6 @@ export default function UserSettingsPanel({
           {sections.map((section) => (
             <button
               key={section.id}
-              style={{ minWidth: 44, minHeight: 44 }}
               disabled={saving}
               type="button"
               aria-current={shownSection === section.id ? "page" : undefined}
@@ -111,7 +110,7 @@ export default function UserSettingsPanel({
       <div className="dc-user-settings-main">
         <header className="dc-user-settings-main-head">
           <h2>{activeSectionLabel}</h2>
-          <button type="button" className="dc-profile-settings-close" style={{ minWidth: 44, minHeight: 44 }} disabled={saving} aria-label="사용자 설정 닫기" onClick={onClose}><X size={18} /></button>
+          <button type="button" className="dc-dialog-close dc-user-settings-close" disabled={saving} aria-label="사용자 설정 닫기" onClick={onClose}><X size={24} /></button>
         </header>
         <section className="dc-user-settings-section">
           {shownSection === "account" && (
@@ -122,10 +121,10 @@ export default function UserSettingsPanel({
                   fields stay hidden here. */}
               {serverAuthorityAvailable && (
               <div className="dc-user-settings-grid">
+                <h4>계정 정보</h4>
                 <label>
                   표시 이름
                   <input
-                    style={{ minHeight: 44 }}
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.displayName}
                     onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value })}
@@ -135,7 +134,6 @@ export default function UserSettingsPanel({
                 <label>
                   핸들
                   <input
-                    style={{ minHeight: 44 }}
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.handle}
                     onChange={(event) => onDraftChange({ ...draft, handle: event.target.value })}
@@ -145,7 +143,7 @@ export default function UserSettingsPanel({
                 <label>
                   상태
                   <select
-                    style={{ minHeight: 44, appearance: "none" }}
+                    style={{ appearance: "none" }}
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.status}
                     onChange={(event) =>
@@ -222,7 +220,6 @@ export default function UserSettingsPanel({
                 <label>
                   사용자 지정 상태
                   <input
-                    style={{ minHeight: 44 }}
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.customStatus}
                     onChange={(event) => onDraftChange({ ...draft, customStatus: event.target.value })}
@@ -232,7 +229,7 @@ export default function UserSettingsPanel({
                 <label>
                   배너
                   <select
-                    style={{ minHeight: 44, appearance: "none" }}
+                    style={{ appearance: "none" }}
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.bannerPreset}
                     onChange={(event) =>
@@ -252,7 +249,6 @@ export default function UserSettingsPanel({
                 <label>
                   사진 대신 보일 글자
                   <input
-                    style={{ minHeight: 44 }}
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.avatarLabel}
                     onChange={(event) => onDraftChange({ ...draft, avatarLabel: event.target.value })}
@@ -262,7 +258,6 @@ export default function UserSettingsPanel({
                 <label>
                   포인트 색상
                   <input
-                    style={{ minHeight: 44 }}
                     disabled={saving || !serverAuthorityAvailable}
                     type="color"
                     value={draft.accentColor}
