@@ -52,18 +52,18 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
     {screen === "choice" && <div className="grid gap-3">
             <button
               type="button"
-              className="flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#202024] px-4 text-[14px] font-black text-text-primary"
+              className="dc-google-signin w-full"
               disabled={busy}
               onClick={() => {
                 setError("");
                 setScreen("guest");
               }}
             >
-              <UserRound size={17} /> 새 게스트로 계속
+              <UserRound size={18} aria-hidden /> 새 게스트로 계속
             </button>
             <button
               type="button"
-              className="min-h-10 text-[12px] font-black text-[#aeb4ff]"
+              className="min-h-10 text-[13px] font-medium text-[#aeb4ff] hover:underline"
               disabled={busy}
               onClick={() => {
                 setError("");

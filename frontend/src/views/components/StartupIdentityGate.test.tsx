@@ -597,7 +597,7 @@ it("offers default keep and explicit local data choice after account-deleted hos
   expect(centralMocks.register).not.toHaveBeenCalled(); expect(centralMocks.openServer).not.toHaveBeenCalled();
 });
 
-it("exposes account deletion from signed-out native startup without a profile chip", async () => {
+it("keeps signed-out native startup free of account removal and profile chips", async () => {
   centralMocks.configured = true;
   desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
   desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
@@ -605,8 +605,8 @@ it("exposes account deletion from signed-out native startup without a profile ch
   render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
   await screen.findByRole("button", { name: "Google로 계속" });
   expect(screen.queryByRole("button", { name: "계정 설정" })).toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: "계정 탈퇴" }));
-  expect(screen.getByRole("button", { name: "계정 탈퇴" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "계정 탈퇴" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "탈퇴 진행 상황" })).toBeNull();
   expect(centralMocks.bootstrap).not.toHaveBeenCalled();
   expect(centralMocks.register).not.toHaveBeenCalled();
   expect(centralMocks.create).not.toHaveBeenCalled();

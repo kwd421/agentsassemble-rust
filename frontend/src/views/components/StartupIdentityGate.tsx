@@ -1,4 +1,5 @@
 import AppUpdateIndicator from "./AppUpdateIndicator";
+import { loadDeletionReceipt } from "../../lib/central/accountDeletion";
 import CentralGuestEntry, { type CentralGuestScreen } from "./CentralGuestEntry";
 import ServerRestoreCard from "./ServerRestoreCard";
 import LocalAccountDataChoice from "./LocalAccountDataChoice";
@@ -131,6 +132,9 @@ export default function StartupIdentityGate({
   const ownedRemoteDetail = ownedRemoteReason
     ? `이 컴퓨터 서버 ID: ${localHost?.server_id ? `${localHost.server_id.slice(0, 8)}…` : "없음"}\n계정 서버 ID: ${ownedServer?.server_id.slice(0, 8)}…${hostingState === "device" || accountDeviceOnly ? "\n기기로 등록됨" : ""}`
     : "";
+  // Only someone who deleted their account on this device needs the signed-out
+  // way back to the deletion status (and restore window).
+  const retainedDeletionReceipt = Boolean(loadDeletionReceipt());
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("앱을 준비하는 중이에요");
@@ -638,7 +642,7 @@ export default function StartupIdentityGate({
           </div>
         )}
       </main>
-      {!centralPerson && screen === "choice" && !accountSettingsOpen && <button type="button" className="mt-4 min-h-11 w-fit justify-self-center text-[12px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>계정 탈퇴</button>}
+      {!centralPerson && screen === "choice" && !accountSettingsOpen && retainedDeletionReceipt && <button type="button" className="mt-4 min-h-11 w-fit justify-self-center text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>탈퇴 진행 상황</button>}
     </div>
   );
 }
