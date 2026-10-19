@@ -103,7 +103,7 @@ export default function RoomSettingsModal({
   onRetrySettings: () => void;
   onRetryAppearance: () => void;
 }) {
-  const [uploadStatus, setUploadStatus] = useState("");
+  const [uploadStatus, setUploadStatus] = useState<{ banner: string; icon: string }>({ banner: "", icon: "" });
   const [appearanceCrop, setAppearanceCrop] = useState<{ file: File; slot: "banner" | "icon" } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -153,18 +153,20 @@ export default function RoomSettingsModal({
     if (file) setAppearanceCrop({ file, slot });
   }
 
-  // The latest upload owns the status line; an earlier one finishing late never
-  // overwrites it, and a finished upload leaves no line (the image shows itself).
-  const uploadSeq = useRef(0);
+  // Each image slot keeps its own line: a later upload of the same slot replaces
+  // the earlier one's outcome, a finished upload leaves no line (the image shows
+  // itself), and an upload that did not apply always says so.
+  const uploadSeq = useRef({ banner: 0, icon: 0 });
   async function uploadAppearance(file: File, slot: "banner" | "icon") {
-    const seq = ++uploadSeq.current;
+    const seq = ++uploadSeq.current[slot];
     const name = slot === "banner" ? "배너 이미지를" : "방 아이콘을";
-    setUploadStatus(`${name} 올리는 중이에요…`);
+    const failed = `${name} 올리지 못했어요.`;
+    const set = (text: string) => { if (seq === uploadSeq.current[slot]) setUploadStatus((current) => ({ ...current, [slot]: text })); };
+    set(`${name} 올리는 중이에요…`);
     try {
-      await onAppearanceUpload(file, slot);
-      if (seq === uploadSeq.current) setUploadStatus("");
+      set(await onAppearanceUpload(file, slot) ? "" : failed);
     } catch (error) {
-      if (seq === uploadSeq.current) setUploadStatus(userFacingError(error, `${name} 올리지 못했어요.`));
+      set(userFacingError(error, failed));
     }
   }
 
@@ -420,7 +422,7 @@ export default function RoomSettingsModal({
                 />
               </label>
             </div>
-            {uploadStatus && <p className="dc-upload-status preserve-words">{uploadStatus}</p>}
+            {[uploadStatus.banner, uploadStatus.icon].filter(Boolean).map((line) => <p key={line} className="dc-upload-status preserve-words">{line}</p>)}
             {appearanceAssetError && (
               <div className="mt-3 flex items-center justify-between gap-3 text-[13px] text-red-400" role="alert">
                 <span className="preserve-words">{appearanceAssetError}</span>

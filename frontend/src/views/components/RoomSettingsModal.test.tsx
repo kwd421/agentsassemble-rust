@@ -187,6 +187,19 @@ describe("RoomSettingsModal conversation mode", () => {
     expect(screen.queryByText("배너 이미지를 올리는 중이에요…")).toBeNull();
   });
 
+  it("keeps a banner that did not apply visible after a later icon upload succeeds", async () => {
+    const banner = deferred<boolean>();
+    const onAppearanceUpload = vi.fn().mockReturnValueOnce(banner.promise).mockResolvedValueOnce(true);
+    renderSettings("ordered", vi.fn(), "ready", vi.fn(), vi.fn(), vi.fn().mockResolvedValue(undefined), vi.fn(), onAppearanceUpload);
+    await userEvent.upload(screen.getByLabelText("배너 이미지"), new File(["b"], "b.png", { type: "image/png" }));
+    await userEvent.click(screen.getByRole("button", { name: "적용" }));
+    await userEvent.upload(screen.getByLabelText("방 아이콘"), new File(["i"], "i.png", { type: "image/png" }));
+    await userEvent.click(screen.getByRole("button", { name: "적용" }));
+    await waitFor(() => expect(screen.queryByText("방 아이콘을 올리는 중이에요…")).toBeNull());
+    banner.resolve(false);
+    expect(await screen.findByText("배너 이미지를 올리지 못했어요.")).toBeTruthy();
+  });
+
   it("lets the user activate ambient discussion from the room settings UI", async () => {
     const { onConversationModeChange } = renderSettings("ordered");
 
