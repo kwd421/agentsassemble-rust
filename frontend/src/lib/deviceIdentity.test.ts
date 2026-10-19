@@ -66,7 +66,7 @@ describe("browser admission credential", () => {
   it("fails closed when WebCrypto is unavailable", () => {
     vi.stubGlobal("crypto", {});
 
-    expect(() => getOrCreateBrowserCredential()).toThrow(/영구 저장/);
+    expect(() => getOrCreateBrowserCredential()).toThrow(/저장할 수 없어요/);
     expect(window.localStorage.getItem(BROWSER_CREDENTIAL_STORAGE_KEY)).toBeNull();
   });
 
@@ -77,7 +77,7 @@ describe("browser admission credential", () => {
     });
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => undefined);
 
-    expect(() => getOrCreateBrowserCredential()).toThrow(/영구 저장/);
+    expect(() => getOrCreateBrowserCredential()).toThrow(/저장할 수 없어요/);
     expect(window.localStorage.getItem(BROWSER_CREDENTIAL_STORAGE_KEY)).toBeNull();
   });
 });
@@ -120,7 +120,7 @@ describe("admission client id", () => {
     );
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => undefined);
 
-    expect(() => getOrCreateClientId()).toThrow(/영구 저장/);
+    expect(() => getOrCreateClientId()).toThrow(/저장할 수 없어요/);
     expect(window.localStorage.getItem(CLIENT_ID_STORAGE_KEY)).toBeNull();
   });
 });

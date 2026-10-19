@@ -282,5 +282,16 @@ it.each([true, false])("keeps startup diagnostics off the screen on desktop=%s",
   render(<StartupIdentityBoundary>{() => <main>room</main>}</StartupIdentityBoundary>);
   expect(screen.getByRole("heading").textContent).toBe("앱을 시작하지 못했어요.");
   expect(screen.getByRole("alert").textContent).not.toContain("/Users/");
-  expect(screen.queryByText("이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없어요.")).toBeNull();
+  // The plain fallback replaces internal text; the person still gets a cause.
+  expect(screen.getByRole("alert").textContent).toContain("저장소 접근을 허용한 뒤 다시 열어 주세요.");
+});
+
+it("tells the person to clear damaged site data when the stored credential is corrupt", () => {
+  boundaryMocks.desktop = false;
+  boundaryMocks.session = { expiresAt: null };
+  deviceMocks.getOrCreateBrowserCredential.mockImplementation(() => {
+    throw new Error("이 브라우저에 저장된 앱 데이터가 손상됐어요. 이 사이트의 데이터를 지운 뒤 다시 열어 주세요.");
+  });
+  render(<StartupIdentityBoundary>{() => <main>room</main>}</StartupIdentityBoundary>);
+  expect(screen.getByRole("alert").textContent).toContain("이 사이트의 데이터를 지운 뒤 다시 열어 주세요.");
 });

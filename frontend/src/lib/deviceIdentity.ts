@@ -7,13 +7,13 @@ const GUEST_PROFILE_STORAGE_KEY = "agentsassemble.guestProfile.v1";
 const BROWSER_CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 const BROWSER_CREDENTIAL_UNAVAILABLE =
-  "이 브라우저에서 안전한 입장 자격 증명을 영구 저장할 수 없습니다.";
+  "이 브라우저에 앱 데이터를 저장할 수 없어요. 저장소 접근을 허용한 뒤 다시 열어 주세요.";
 const BROWSER_CREDENTIAL_INVALID =
-  "저장된 입장 자격 증명이 손상되었습니다. 브라우저 사이트 데이터를 확인해 주세요.";
+  "이 브라우저에 저장된 앱 데이터가 손상됐어요. 이 사이트의 데이터를 지운 뒤 다시 열어 주세요.";
 const CLIENT_ID_UNAVAILABLE =
-  "이 브라우저에서 입장 요청 식별자를 영구 저장할 수 없습니다.";
+  "이 브라우저에 앱 데이터를 저장할 수 없어요. 저장소 접근을 허용한 뒤 다시 열어 주세요.";
 const CLIENT_ID_INVALID =
-  "저장된 입장 요청 식별자가 손상되었습니다. 브라우저 사이트 데이터를 확인해 주세요.";
+  "이 브라우저에 저장된 앱 데이터가 손상됐어요. 이 사이트의 데이터를 지운 뒤 다시 열어 주세요.";
 
 export type RememberedGuestProfile = {
   displayName: string;

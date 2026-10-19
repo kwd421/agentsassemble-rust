@@ -76,7 +76,7 @@ export default function StartupIdentityBoundary({
         deviceToken: "",
         clientId: "",
         error:
-          userFacingError(error, "이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없어요."),
+          userFacingError(error, "이 브라우저에 앱 데이터를 저장할 수 없어요. 저장소 접근을 허용한 뒤 다시 열어 주세요."),
       };
     }
   });
@@ -152,8 +152,10 @@ export default function StartupIdentityBoundary({
           <h1 className="text-2xl font-black text-text-primary">
             앱을 시작하지 못했어요.
           </h1>
+          {/* The cause decides the fix (allow storage vs clear damaged data), so the
+              product sentence is shown; internal text falls back to the plain line. */}
           <p role="alert" className="dc-startup-error">
-            브라우저의 저장소 접근을 허용한 뒤 다시 열어 주세요.
+            {userFacingError(browserIdentity.error, "브라우저의 저장소 접근을 허용한 뒤 다시 열어 주세요.")}
           </p>
         </main>
       </div>
