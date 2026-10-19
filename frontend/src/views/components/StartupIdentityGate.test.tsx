@@ -256,7 +256,7 @@ describe("StartupIdentityGate", () => {
         await userEvent.type(screen.getByRole("textbox", { name: "표시 이름" }), "Guest");
         await userEvent.click(screen.getByRole("button", { name: "게스트 만들기" }));
       } else if (entry === "recover") {
-        await userEvent.click(await screen.findByRole("button", { name: "이미 복구 코드가 있어요" }));
+        await userEvent.click(await screen.findByRole("button", { name: "복구 코드로 계속" }));
         await userEvent.type(screen.getByRole("textbox", { name: "게스트 복구 코드" }), "OLD-CODE");
         await userEvent.click(screen.getByRole("button", { name: "같은 게스트로 로그인" }));
       }

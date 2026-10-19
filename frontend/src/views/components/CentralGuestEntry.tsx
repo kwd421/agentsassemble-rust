@@ -70,7 +70,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 setScreen("recover");
               }}
             >
-              이미 복구 코드가 있어요
+              복구 코드로 계속
             </button>
     </div>}
         {screen === "guest" && (

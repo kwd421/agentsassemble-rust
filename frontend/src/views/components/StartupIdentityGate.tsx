@@ -558,13 +558,13 @@ export default function StartupIdentityGate({
           <button type="button" className="ops-button min-h-11 justify-self-start" disabled={busy} onClick={() => setAccountSettingsOpen(false)}>← 돌아가기</button>
           <CentralAccountSettings disabled={busy} showEntryLink={false} />
         </> : <>
-        <header className="grid gap-2">
+        <header className={screen === "choice" && !centralPerson ? "grid gap-2 text-center" : "grid gap-2"}>
           <h1 className="text-2xl font-black text-text-primary">
             {screen === "recovery-code"
               ? "복구 코드를 보관하세요"
               : screen === "servers"
                 ? hostingState === "retired" ? "이 컴퓨터는 더 이상 이 계정의 서버가 아니에요" : ownerConflict ? "남길 서버를 선택해 주세요" : ownedServer ? `이 계정의 서버는 ‘${ownedServer.alias}’예요` : "서버 목록"
-                : "AgentsAssemble에 오신 걸 환영해요"}
+                : "AgentsAssemble에 오신 것을 환영합니다"}
           </h1>
           <p className="text-[13px] font-semibold leading-5 text-text-muted empty:hidden">
             {screen === "recovery-code"

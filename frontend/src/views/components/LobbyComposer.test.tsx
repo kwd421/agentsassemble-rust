@@ -272,7 +272,7 @@ describe("LobbyComposer", () => {
     render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoingFake({ limit: 8 })} />);
 
     pick(...Array.from({ length: 9 }, (_, index) => new File(["x"], `${index}.txt`, { type: "text/plain" })));
-    fireEvent.click(await screen.findByRole("button", { name: "알겠어요", hidden: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "확인", hidden: true }));
     expect(screen.queryByText("0.txt")).toBeNull();
   });
 

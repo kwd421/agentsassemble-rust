@@ -275,7 +275,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
         <p className="text-sm text-text-muted">참가하면 이 방에 내 이름과 프로필이 보여요.</p>
         <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>{reconnect ? "다시 연결" : "참가하기"}</button>
       </>}
-      {consent && !error && isHiddenServer(consent.request.server_id) && <button type="button" className="dc-join-cancel" disabled={busy} onClick={() => void confirm(true)}>목록에 다시 표시하고 참가</button>}
+      {consent && !error && isHiddenServer(consent.request.server_id) && <button type="button" className="dc-join-cancel" disabled={busy} onClick={() => void confirm(true)}>다시 표시하고 참가하기</button>}
       {!host && !busy && (!error || (secureEntry && !loadCentralSession())) && !consent && rooms.length === 0 && guestScreen === "choice" && <button type="button" className="dc-google-signin w-full"
         onClick={() => void run(async () => {
           loginAbort.current = new AbortController();

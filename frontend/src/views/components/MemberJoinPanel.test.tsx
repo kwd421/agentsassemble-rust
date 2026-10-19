@@ -59,7 +59,7 @@ describe("member invite screen", () => {
     expect(screen.getByText("참가하면 이 방에 내 이름과 프로필이 보여요.")).toBeTruthy();
     expect(screen.queryByText(/중앙|입장 프로필|\(server\)/)).toBeNull();
     expect(screen.queryByText("https://host.test")).toBeNull();
-    expect(screen.queryByRole("button", { name: "목록에 다시 표시하고 참가" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "다시 표시하고 참가하기" })).toBeNull();
     expect(mocks.issue).not.toHaveBeenCalled(); expect(mocks.join).not.toHaveBeenCalled();
     await agree(); await waitFor(() => expect(props.onComplete).toHaveBeenCalledOnce());
     expect(mocks.challenge).toHaveBeenCalledOnce(); expect(mocks.issue).toHaveBeenCalledOnce();
@@ -234,8 +234,8 @@ it("unhides on explicit consent before issuing a fresh grant and auto-selects a 
   mocks.connectChallenge.mockResolvedValue(challenge);mocks.preview.mockResolvedValue(target);
   mocks.rooms.mockResolvedValue([{room_id:"only",name:"채팅방"}]);mocks.select.mockResolvedValue({server_id:"server"});
   render(<MemberJoinPanel host={props} />);
-  expect(await screen.findByRole("button",{name:"목록에 다시 표시하고 참가"})).toBeTruthy();
-  fireEvent.click(screen.getByRole("button",{name:"목록에 다시 표시하고 참가"}));
+  expect(await screen.findByRole("button",{name:"다시 표시하고 참가하기"})).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"다시 표시하고 참가하기"}));
   await waitFor(()=>expect(props.onComplete).toHaveBeenCalledOnce());
   expect(mocks.unhide.mock.invocationCallOrder[0]).toBeLessThan(mocks.issue.mock.invocationCallOrder[0]);
   expect(mocks.select).toHaveBeenCalledWith(expect.anything(),"only","client","browser-credential");

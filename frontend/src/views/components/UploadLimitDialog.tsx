@@ -27,7 +27,7 @@ export default function UploadLimitDialog({ limit, onClose }: { limit: number; o
       <h2 id={titleId}>파일이 너무 많아요</h2>
       <p>한 번에 {limit}개까지 올릴 수 있어요.</p>
       <button autoFocus type="button" className="dc-accent-button" onClick={onClose}>
-        알겠어요
+        확인
       </button>
     </dialog>
   );

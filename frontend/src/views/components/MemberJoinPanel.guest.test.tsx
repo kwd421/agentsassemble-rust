@@ -36,7 +36,7 @@ afterEach(cleanup);
 
 it.each(["new", "recover"])("%s guest stays in the invitation and requires code acknowledgement before consent", async (path) => {
   render(<StrictMode><MemberJoinPanel secureEntry={entry} /></StrictMode>);
-  fireEvent.click(await screen.findByRole("button", { name: path === "new" ? "새 게스트로 계속" : "이미 복구 코드가 있어요" }));
+  fireEvent.click(await screen.findByRole("button", { name: path === "new" ? "새 게스트로 계속" : "복구 코드로 계속" }));
   fireEvent.change(screen.getByLabelText(path === "new" ? "표시 이름" : "게스트 복구 코드"), { target: { value: path === "new" ? "Guest identity" : "OLD-CODE" } });
   fireEvent.click(screen.getByRole("button", { name: path === "new" ? "게스트 만들기" : "같은 게스트로 로그인" }));
   const next = await screen.findByRole("button", { name: "계속" });
@@ -47,7 +47,7 @@ it.each(["new", "recover"])("%s guest stays in the invitation and requires code 
   await screen.findByRole("button", { name: "참가하기" });
   expect(screen.getByText("Guest identity 계정으로 참가")).toBeTruthy();
   expect(screen.queryByText("https://invited.example")).toBeNull();
-  expect(screen.queryByRole("button", { name: "목록에 다시 표시하고 참가" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "다시 표시하고 참가하기" })).toBeNull();
   expect(central.pending).toBe("");
   expect(central.open).not.toHaveBeenCalled();
   expect(JSON.stringify([localStorage, sessionStorage])).not.toContain(entry.inviteToken);
@@ -56,7 +56,7 @@ it.each(["new", "recover"])("%s guest stays in the invitation and requires code 
 it("failed recovery preserves input and invitation for explicit retry without admission", async () => {
   central.recover.mockRejectedValueOnce(new Error("invalid proof"));
   render(<MemberJoinPanel secureEntry={entry} />);
-  fireEvent.click(await screen.findByRole("button", { name: "이미 복구 코드가 있어요" }));
+  fireEvent.click(await screen.findByRole("button", { name: "복구 코드로 계속" }));
   fireEvent.change(screen.getByLabelText("게스트 복구 코드"), { target: { value: "OLD-CODE" } });
   fireEvent.click(screen.getByRole("button", { name: "같은 게스트로 로그인" }));
   await screen.findByRole("alert");
