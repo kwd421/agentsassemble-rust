@@ -216,11 +216,11 @@ export default function AppView({ controller }: { controller: AppController }) {
           className="flex min-h-11 items-center justify-center gap-3 px-4 py-2 text-[12px] text-text-muted"
           data-testid="own-server-mismatch"
         >
-          <span>이 컴퓨터의 서버가 계정에 등록된 서버와 달라요.</span>
-          <button
+          <span>{ownedOnline && liveOwned ? "내 서버는 다른 컴퓨터에서 실행 중이에요." : "내 서버가 있는 컴퓨터가 꺼져 있어요."}</span>
+          {ownedOnline && liveOwned && <button
             type="button"
             className="ops-button min-h-9 px-3"
-            disabled={ownServerBusy || !ownedOnline || !liveOwned}
+            disabled={ownServerBusy}
             onClick={() => {
               if (!liveOwned || ownServerBusy) return;
               setOwnServerBusy(true);
@@ -232,8 +232,8 @@ export default function AppView({ controller }: { controller: AppController }) {
                 .finally(() => setOwnServerBusy(false));
             }}
           >
-            이 기기로 연결
-          </button>
+            {ownServerBusy ? "여는 중…" : "원격으로 열기"}
+          </button>}
           {ownServerError && <span role="alert">{ownServerError}</span>}
         </div>
       )}
