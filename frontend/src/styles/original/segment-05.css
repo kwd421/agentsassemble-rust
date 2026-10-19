@@ -467,16 +467,29 @@
 
 .dc-head-popover-title {
   color: var(--color-text-primary);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   line-height: 20px;
 }
 
 .dc-head-popover-copy {
   margin-top: 4px;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 18px;
+}
+
+/* Pins and search read like Discord's pinned/search panels: a wide panel
+   with room for message previews, and an empty state that sits centered. */
+.dc-head-popover[data-panel="pins"],
+.dc-head-popover[data-panel="search"] {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.dc-head-popover[data-panel="pins"] > .dc-head-popover-copy:only-of-type {
+  margin-top: 0;
+  padding: 32px 0 16px;
+  text-align: center;
 }
 
 .dc-head-popover-actions {
