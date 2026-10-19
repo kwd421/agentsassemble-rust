@@ -235,7 +235,9 @@ impl CentralDirectory {
 
     /// One host-signed fixed-address provision call. Uses exactly the existing
     /// host request signing as the endpoint PUT route; the caller decides the
-    /// quick-tunnel fallback on every error.
+    /// quick-tunnel fallback on every error. The provision route accepts 200
+    /// (and, defensively, 201) and uses a 30 s total timeout so a slow
+    /// Cloudflare create is not aborted by the host.
     pub(crate) async fn provision_named_tunnel(
         &self,
         store: &SqliteStore,
@@ -387,13 +389,17 @@ async fn send_signed(
     {
         body["registration_epoch"] = epoch.into();
     }
+    // Only the named-tunnel provision route gets the longer Cloudflare-create
+    // budget and the defensive 201 acceptance; every other signed route keeps
+    // the existing 8 s client timeout and 200-only success.
+    let is_provision_route = path.contains("/named-tunnel/provision");
     let body = serde_json::to_vec(&body).map_err(|_| CentralDirectoryError::InvalidResponse)?;
     let signature = identity.sign_host_request(method.as_str(), path, &body)?;
     let endpoint = inner
         .base_url
         .join(path)
         .map_err(|_| CentralDirectoryError::InvalidUrl)?;
-    let response = inner
+    let mut request = inner
         .client
         .request(method, endpoint)
         .header("content-type", "application/json")
@@ -401,12 +407,19 @@ async fn send_signed(
         .header("x-aa-host-nonce", signature.nonce)
         .header("x-aa-host-signature", signature.signature)
         .header("user-agent", "AgentsAssemble/central-directory-host-v1")
-        .body(body)
+        .body(body);
+    if is_provision_route {
+        request = request.timeout(Duration::from_secs(30));
+    }
+    let response = request
         .send()
         .await
         .map_err(CentralDirectoryError::Request)?;
     let status = response.status();
-    if status != StatusCode::OK && status != StatusCode::GONE {
+    let success = status == StatusCode::OK
+        || (is_provision_route && status == StatusCode::CREATED)
+        || status == StatusCode::GONE;
+    if !success {
         if status == StatusCode::TOO_MANY_REQUESTS {
             return Err(map_rate_limit(inner, response).await);
         }

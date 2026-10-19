@@ -24,7 +24,7 @@ use crate::{
 const MAX_OUTPUT_LINE_BYTES: usize = 16 * 1024;
 const OUTPUT_EVENTS: usize = 8;
 const READER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-// A stored named token can go stale while the host is offline (central
+// A stored named credential can go stale while the host is offline (central
 // reclaims the hostname or the owner revokes the tunnel). The connector
 // then never logs a registered connection, so a named run must not wait
 // forever: without readiness in this bound it falls back to quick.
@@ -64,7 +64,7 @@ pub(crate) async fn run_generation(
     projection: Arc<RwLock<ManagedProjection>>,
     cancellation: CancellationToken,
 ) -> GenerationOutcome {
-    // One provision attempt at most per open: a stored token for the live
+    // One provision attempt at most per open: a stored credential for the live
     // epoch runs named with zero central calls, otherwise a single attempt
     // decides between a fresh named credential and today's quick tunnel.
     // Every failure falls back to quick for this run and never blocks.
@@ -101,7 +101,8 @@ pub(crate) async fn run_generation(
             &cancellation,
             stored.hostname(),
             origin,
-            stored.tunnel_token(),
+            stored.tunnel_id(),
+            stored.credentials(),
         )
         .await;
     }
@@ -127,10 +128,11 @@ pub(crate) async fn run_generation(
 
 /// Runs one named generation with the fixed origin: publishes
 /// `https://<hostname>` once cloudflared reports a registered connection.
-/// A spawn failure, a bounded not-ready wait, a pre-ready exit, or a clear
-/// connector auth failure falls back to the quick tunnel in the same run so
-/// external access never blocks on a stale credential. The stale credential
-/// is cleared before the quick fallback so the next open re-provisions.
+/// A spawn failure, a bounded not-ready wait, a pre-ready or post-ready
+/// connector auth failure, or a pre-ready or post-ready exit falls back to
+/// the quick tunnel in the same run so external access never blocks on a
+/// stale credential. The stale credential is cleared before the quick
+/// fallback so the next open re-provisions.
 async fn run_named_generation(
     generation: u64,
     config: &ManagedIngressConfig,
@@ -138,12 +140,15 @@ async fn run_named_generation(
     cancellation: &CancellationToken,
     hostname: &str,
     origin: CanonicalPublicOrigin,
-    token: &str,
+    tunnel_id: &str,
+    credentials: &str,
 ) -> GenerationOutcome {
     let Some(cloudflared) = config.cloudflared.as_ref() else {
         return failed_with_stable_cleanup(config, "cloudflared is not installed").await;
     };
-    let spawned = match spawn_cloudflared_named(cloudflared, &config.local_url, token).await {
+    let spawned =
+        match spawn_cloudflared_named(cloudflared, &config.local_url, tunnel_id, credentials).await
+        {
         Ok(spawned) => spawned,
         Err(_) => {
             tracing::warn!(
@@ -375,14 +380,28 @@ async fn observe_generation(
                     }
                 }
                 Some(OutputEvent::NamedAuthFailure) => {
-                    if fixed_origin.is_some() && !named_ready {
-                        named_fallback = Some("named_auth_failed");
+                    if fixed_origin.is_some() {
+                        // Both pre-ready and post-ready credential failures
+                        // fall back: a revoked tunnel or deleted hostname can
+                        // surface after the first registered connection.
+                        named_fallback = Some(if named_ready {
+                            "named_auth_failed_after_ready"
+                        } else {
+                            "named_auth_failed"
+                        });
                         break;
                     }
                 }
                 None => {
-                    if fixed_origin.is_some() && !named_ready {
-                        named_fallback = Some("named_exited_before_ready");
+                    if fixed_origin.is_some() {
+                        // Both pre-ready and post-ready exits fall back so a
+                        // dead connector never leaves the fixed origin
+                        // published without a live edge.
+                        named_fallback = Some(if named_ready {
+                            "named_exited_after_ready"
+                        } else {
+                            "named_exited_before_ready"
+                        });
                         output_closed = Some(child_owner.is_finished());
                         break;
                     }
@@ -391,9 +410,13 @@ async fn observe_generation(
                 }
             },
             result = &mut child_owner => {
-                if fixed_origin.is_some() && !named_ready {
+                if fixed_origin.is_some() {
                     child_result = Some(result);
-                    named_fallback = Some("named_exited_before_ready");
+                    named_fallback = Some(if named_ready {
+                        "named_exited_after_ready"
+                    } else {
+                        "named_exited_before_ready"
+                    });
                     break;
                 }
                 error = Some(child_failure(&result));
@@ -685,6 +708,9 @@ mod tests {
 
         use agentsassemble_persistence::SqliteStore;
 
+        const TUNNEL_ID: &str = "named-test-tunnel-id";
+        const CREDENTIALS: &str = r#"{"AccountTag":"account-tag","TunnelID":"named-test-tunnel-id","TunnelSecret":"named-test-secret"}"#;
+
         let store = SqliteStore::open("sqlite::memory:")
             .await
             .unwrap_or_else(|error| panic!("store: {error}"));
@@ -695,11 +721,12 @@ mod tests {
         store
             .save_named_tunnel(
                 "h-0123456789ab.agentsassemble.uk",
-                "named-test-token",
+                TUNNEL_ID,
+                CREDENTIALS,
                 "fixed-epoch",
             )
             .await
-            .unwrap_or_else(|error| panic!("save named token: {error}"));
+            .unwrap_or_else(|error| panic!("save named credential: {error}"));
         let identity = crate::central::host_identity::CentralHostIdentity::from_persistent(
             &store
                 .host_identity()
@@ -720,7 +747,8 @@ mod tests {
             &executable,
             r#"#!/bin/sh
 printf '%s\n' "$@" > "$0.args"
-printf '%s' "$TUNNEL_TOKEN" > "$0.token"
+printf '%s' "$TUNNEL_CRED_CONTENTS" > "$0.credentials"
+printf '%s' "${TUNNEL_TOKEN-unset}" > "$0.token"
 printf '%s\n' 'INF Registered tunnel connection "test" connIndex=0'
 exec /bin/sleep 60
 "#,
@@ -772,15 +800,26 @@ exec /bin/sleep 60
         assert!(arguments.contains("--no-autoupdate"));
         assert!(arguments.contains("run"));
         assert!(arguments.contains("http://127.0.0.1:41955"));
+        assert!(arguments.contains(TUNNEL_ID));
         assert!(
-            !arguments.contains("named-test-token"),
-            "tunnel token must never appear in argv"
+            !arguments.contains("named-test-secret"),
+            "tunnel credentials must never appear in argv"
+        );
+        assert!(
+            !arguments.contains("--token"),
+            "tunnel credentials must travel via TUNNEL_CRED_CONTENTS, not --token"
+        );
+        assert_eq!(
+            tokio::fs::read_to_string(executable.with_extension("credentials"))
+                .await
+                .unwrap_or_else(|error| panic!("read fake cloudflared credentials: {error}")),
+            CREDENTIALS
         );
         assert_eq!(
             tokio::fs::read_to_string(executable.with_extension("token"))
                 .await
                 .unwrap_or_else(|error| panic!("read fake cloudflared token: {error}")),
-            "named-test-token"
+            "unset"
         );
         cancellation.cancel();
         let outcome = tokio::time::timeout(Duration::from_secs(20), task)
@@ -797,12 +836,13 @@ exec /bin/sleep 60
     #[test]
     fn named_auth_failure_detects_only_credential_errors() {
         for line in [
-            "ERR Unauthorized: invalid tunnel token",
+            "ERR Unauthorized: invalid tunnel credentials",
             "ERR failed to authenticate tunnel: unauthorized",
             "ERR Tunnel \"abc\" not found",
             "ERR unknown tunnel id",
-            "ERR Invalid tunnel token",
+            "ERR Invalid tunnel credentials",
             "ERR authentication failed for tunnel",
+            "ERR tunnel-not-found",
         ] {
             assert!(
                 named_tunnel_auth_failure(line),

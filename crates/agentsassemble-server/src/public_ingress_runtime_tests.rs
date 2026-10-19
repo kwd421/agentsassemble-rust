@@ -1,8 +1,20 @@
 //! Stale-credential fallback tests: a named connector that never registers,
-//! one that fails closed with an auth line, and one that registers late but
-//! inside the bound. The token itself never enters assertions or logs.
+//! one that fails closed with an auth line, one that registers late but
+//! inside the bound, and one that registers then fails with an auth line.
+//! The credentials themselves never enter assertions or logs.
 
 use super::{NAMED_READY_TIMEOUT, run_generation};
+
+const FALLBACK_TUNNEL_ID: &str = "fallback-tunnel-id";
+
+fn fallback_credentials() -> String {
+    serde_json::json!({
+        "AccountTag": "account-tag",
+        "TunnelID": FALLBACK_TUNNEL_ID,
+        "TunnelSecret": "fallback-secret",
+    })
+    .to_string()
+}
 
 #[cfg(unix)]
 async fn named_fallback_fixture(
@@ -26,11 +38,12 @@ async fn named_fallback_fixture(
     store
         .save_named_tunnel(
             "h-0123456789ab.agentsassemble.uk",
-            "stale-test-token",
+            FALLBACK_TUNNEL_ID,
+            &fallback_credentials(),
             "fallback-epoch",
         )
         .await
-        .unwrap_or_else(|error| panic!("save named token: {error}"));
+        .unwrap_or_else(|error| panic!("save named credential: {error}"));
     let identity = crate::central::host_identity::CentralHostIdentity::from_persistent(
         &store
             .host_identity()
@@ -91,7 +104,7 @@ async fn wait_for_origin(
 
 #[cfg(unix)]
 #[tokio::test]
-async fn stale_named_token_falls_back_to_quick_after_the_bound() {
+async fn stale_named_credential_falls_back_to_quick_after_the_bound() {
     use std::time::Duration;
 
     let (store, config, projection, generation, _directory) = named_fallback_fixture(
@@ -122,7 +135,7 @@ exec /bin/sleep 60
             .await
             .unwrap_or_else(|error| panic!("read stored: {error}"))
             .is_none(),
-        "stale token must be cleared before the quick fallback"
+        "stale credential must be cleared before the quick fallback"
     );
     cancellation.cancel();
     let outcome = tokio::time::timeout(Duration::from_secs(20), task)
@@ -146,7 +159,7 @@ async fn named_auth_error_falls_back_to_quick_immediately() {
 printf '%s\n' "$@" > "$0.args"
 for a in "$@"; do
   if [ "$a" = "run" ]; then
-    printf '%s\n' 'ERR Unauthorized: invalid tunnel token'
+    printf '%s\n' 'ERR Unauthorized: invalid tunnel credentials'
     exit 1
   fi
 done
@@ -175,7 +188,7 @@ exec /bin/sleep 60
             .await
             .unwrap_or_else(|error| panic!("read stored: {error}"))
             .is_none(),
-        "revoked token must be cleared before the quick fallback"
+        "revoked credential must be cleared before the quick fallback"
     );
     cancellation.cancel();
     let outcome = tokio::time::timeout(Duration::from_secs(20), task)
@@ -234,6 +247,76 @@ exec /bin/sleep 60
     assert!(
         !outcome.cleanup_failed,
         "named generation cleanup failed: {:?}",
+        outcome.error
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn post_ready_auth_failure_falls_back_to_quick_and_clears() {
+    use std::time::Duration;
+
+    let (store, config, projection, generation, _directory) = named_fallback_fixture(
+        r#"#!/bin/sh
+printf '%s\n' "$@" > "$0.args"
+for a in "$@"; do
+  if [ "$a" = "run" ]; then
+    printf '%s\n' 'INF Registered tunnel connection "test" connIndex=0'
+    /bin/sleep 0.2
+    printf '%s\n' 'ERR Unauthorized: invalid tunnel credentials' >&2
+    exit 1
+  fi
+done
+printf '%s\n' 'INF Visit https://quick-fallback-7.trycloudflare.com to connect'
+exec /bin/sleep 60
+"#,
+    )
+    .await;
+    let cancellation = tokio_util::sync::CancellationToken::new();
+    let task_cancellation = cancellation.clone();
+    let task_projection = projection.clone();
+    let mut changes = projection.read().endpoint_changes.subscribe();
+    let task = tokio::spawn(async move {
+        run_generation(generation, config, task_projection, task_cancellation).await
+    });
+    // The fixed origin is published first, then the post-ready auth failure
+    // must replace it with the quick origin through the same endpoint path.
+    let mut saw_fixed = false;
+    let mut saw_quick = false;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            changes
+                .changed()
+                .await
+                .unwrap_or_else(|_| panic!("endpoint channel closed"));
+            let (_, origin) = changes.borrow_and_update().clone();
+            if origin == "https://h-0123456789ab.agentsassemble.uk" {
+                saw_fixed = true;
+            } else if saw_fixed && origin == "https://quick-fallback-7.trycloudflare.com" {
+                saw_quick = true;
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("post-ready fallback did not re-publish quick origin"));
+    assert!(saw_fixed && saw_quick);
+    assert!(
+        store
+            .named_tunnel()
+            .await
+            .unwrap_or_else(|error| panic!("read stored: {error}"))
+            .is_none(),
+        "post-ready revoked credential must be cleared before the quick fallback"
+    );
+    cancellation.cancel();
+    let outcome = tokio::time::timeout(Duration::from_secs(20), task)
+        .await
+        .unwrap_or_else(|_| panic!("fallback generation did not stop"))
+        .unwrap_or_else(|error| panic!("fallback generation owner failed: {error}"));
+    assert!(
+        !outcome.cleanup_failed,
+        "fallback generation cleanup failed: {:?}",
         outcome.error
     );
 }

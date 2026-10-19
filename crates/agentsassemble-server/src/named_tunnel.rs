@@ -2,10 +2,10 @@
 //!
 //! Central owns the Cloudflare API; the host only triggers one host-signed
 //! `POST /v1/servers/:id/named-tunnel/provision` per external-access open
-//! when no stored token for the live epoch exists, then runs the named
+//! when no stored credential for the live epoch exists, then runs the named
 //! connector. Every failure falls back to today's quick tunnel for that run
-//! and never blocks external access. The tunnel token never enters logs; the
-//! parsed credential redacts it in `Debug`.
+//! and never blocks external access. The credentials JSON never enters logs or
+//! argv; the parsed credential redacts it in `Debug`.
 
 use agentsassemble_persistence::{SqliteStore, StoredNamedTunnel};
 use serde::Deserialize;
@@ -17,14 +17,17 @@ use crate::{
 };
 
 const MAX_RESPONSE_BYTES: usize = 16 * 1024;
-const MAX_TOKEN_BYTES: usize = 8192;
+const MAX_CREDENTIALS_BYTES: usize = 8192;
+const MAX_TUNNEL_ID_BYTES: usize = 128;
 
-/// A successfully parsed provision response. The token is redacted in `Debug`.
+/// A successfully provisioned fixed-address credential. The credentials JSON
+/// is redacted in `Debug`.
 #[derive(Clone)]
 pub(crate) struct ProvisionedTunnel {
     hostname: String,
     origin: String,
-    token: String,
+    tunnel_id: String,
+    credentials: String,
 }
 
 impl ProvisionedTunnel {
@@ -34,8 +37,18 @@ impl ProvisionedTunnel {
     }
 
     #[must_use]
-    pub(crate) fn token(&self) -> &str {
-        &self.token
+    pub(crate) fn origin(&self) -> &str {
+        &self.origin
+    }
+
+    #[must_use]
+    pub(crate) fn tunnel_id(&self) -> &str {
+        &self.tunnel_id
+    }
+
+    #[must_use]
+    pub(crate) fn credentials(&self) -> &str {
+        &self.credentials
     }
 }
 
@@ -45,22 +58,36 @@ impl std::fmt::Debug for ProvisionedTunnel {
             .debug_struct("ProvisionedTunnel")
             .field("hostname", &self.hostname)
             .field("origin", &self.origin)
-            .field("token", &"[REDACTED]")
+            .field("tunnel_id", &self.tunnel_id)
+            .field("credentials", &"[REDACTED]")
             .finish()
     }
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ProvisionCredentials {
+    #[serde(rename = "AccountTag")]
+    account_tag: String,
+    #[serde(rename = "TunnelID")]
+    tunnel_id: String,
+    #[serde(rename = "TunnelSecret")]
+    tunnel_secret: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ProvisionResponse {
+    credentials: ProvisionCredentials,
+    tunnel_id: String,
     hostname: String,
     origin: String,
-    tunnel_token: String,
 }
 
 /// Parses one central provision response with exact keys and consistency:
-/// `origin == "https://" + hostname`, and the hostname matches the derived
-/// fixed shape. Rejects anything else without logging the token.
+/// `origin == "https://" + hostname`, `credentials.TunnelID == tunnel_id`,
+/// and the hostname matches the derived fixed shape. Rejects anything else
+/// without logging the credentials.
 pub(crate) fn parse_provision_response(bytes: &[u8]) -> Result<ProvisionedTunnel, &'static str> {
     if bytes.len() > MAX_RESPONSE_BYTES {
         return Err("provision response is too large");
@@ -74,20 +101,48 @@ pub(crate) fn parse_provision_response(bytes: &[u8]) -> Result<ProvisionedTunnel
         return Err("provision origin does not match hostname");
     }
     CanonicalPublicOrigin::parse(&response.origin).map_err(|_| "provision origin is invalid")?;
-    if response.tunnel_token.is_empty()
-        || response.tunnel_token.len() > MAX_TOKEN_BYTES
-        || response
-            .tunnel_token
-            .bytes()
-            .any(|byte| byte < 0x20 || byte == 0x7f)
-    {
-        return Err("provision token is invalid");
+    validate_tunnel_id(&response.tunnel_id)?;
+    validate_credential_field(&response.credentials.account_tag)?;
+    validate_credential_field(&response.credentials.tunnel_id)?;
+    validate_credential_field(&response.credentials.tunnel_secret)?;
+    if response.credentials.tunnel_id != response.tunnel_id {
+        return Err("provision tunnel id does not match credentials");
+    }
+    let credentials = serde_json::to_string(&serde_json::json!({
+        "AccountTag": response.credentials.account_tag,
+        "TunnelID": response.credentials.tunnel_id,
+        "TunnelSecret": response.credentials.tunnel_secret,
+    }))
+    .map_err(|_| "provision response is invalid")?;
+    if credentials.len() > MAX_CREDENTIALS_BYTES {
+        return Err("provision credentials are invalid");
     }
     Ok(ProvisionedTunnel {
         hostname: response.hostname,
         origin: response.origin,
-        token: response.tunnel_token,
+        tunnel_id: response.tunnel_id,
+        credentials,
     })
+}
+
+fn validate_tunnel_id(value: &str) -> Result<(), &'static str> {
+    if value.is_empty()
+        || value.len() > MAX_TUNNEL_ID_BYTES
+        || value.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
+    {
+        return Err("provision tunnel id is invalid");
+    }
+    Ok(())
+}
+
+fn validate_credential_field(value: &str) -> Result<(), &'static str> {
+    if value.is_empty()
+        || value.len() > MAX_CREDENTIALS_BYTES
+        || value.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
+    {
+        return Err("provision credentials are invalid");
+    }
+    Ok(())
 }
 
 /// Stable idempotency key per `(server_id, registration_epoch)` so retries
@@ -113,7 +168,7 @@ pub(crate) enum TunnelPlan {
     Quick { reason: &'static str },
 }
 
-/// Resolves the tunnel mode for one external-access open: a stored token for
+/// Resolves the tunnel mode for one external-access open: a stored credential for
 /// the live epoch wins with zero central calls; otherwise exactly one
 /// provision attempt (bounded by the daily budget and the existing quota
 /// park) decides between a fresh named credential and the quick fallback.
@@ -181,12 +236,17 @@ pub(crate) async fn ensure_named_tunnel(
     match outcome {
         Ok(bytes) => match parse_provision_response(&bytes) {
             Ok(provisioned) => match store
-                .save_named_tunnel(provisioned.hostname(), provisioned.token(), &live_epoch)
+                .save_named_tunnel(
+                    provisioned.hostname(),
+                    provisioned.tunnel_id(),
+                    provisioned.credentials(),
+                    &live_epoch,
+                )
                 .await
             {
                 Ok(stored) => TunnelPlan::Named(stored),
                 Err(_) => TunnelPlan::Quick {
-                    reason: "token_store_failed",
+                    reason: "credential_store_failed",
                 },
             },
             Err(_) => TunnelPlan::Quick {
@@ -227,14 +287,31 @@ pub(crate) async fn ensure_named_tunnel(
 mod tests {
     use super::*;
 
-    fn response(hostname: &str, origin: &str, token: &str) -> Vec<u8> {
-        serde_json::json!({
+    fn response(hostname: &str, origin: &str, tunnel_id: &str) -> Vec<u8> {
+        provision_body(hostname, origin, tunnel_id, tunnel_id, None).to_string().into_bytes()
+    }
+
+    fn provision_body(
+        hostname: &str,
+        origin: &str,
+        tunnel_id: &str,
+        credentials_tunnel_id: &str,
+        extra: Option<(&str, serde_json::Value)>,
+    ) -> serde_json::Value {
+        let mut value = serde_json::json!({
+            "credentials": {
+                "AccountTag": "account-tag",
+                "TunnelID": credentials_tunnel_id,
+                "TunnelSecret": "tunnel-secret",
+            },
+            "tunnel_id": tunnel_id,
             "hostname": hostname,
             "origin": origin,
-            "tunnel_token": token,
-        })
-        .to_string()
-        .into_bytes()
+        });
+        if let Some((key, val)) = extra {
+            value[key] = val;
+        }
+        value
     }
 
     #[test]
@@ -242,72 +319,89 @@ mod tests {
         let ok = parse_provision_response(&response(
             "h-0123456789ab.agentsassemble.uk",
             "https://h-0123456789ab.agentsassemble.uk",
-            "opaque-token",
+            "tunnel-id-one",
         ))
         .unwrap_or_else(|error| panic!("valid provision response: {error}"));
         assert_eq!(
             format!("https://{}", ok.hostname()),
             "https://h-0123456789ab.agentsassemble.uk"
         );
+        assert_eq!(ok.tunnel_id(), "tunnel-id-one");
+        assert_eq!(ok.origin(), "https://h-0123456789ab.agentsassemble.uk");
+        let credentials: serde_json::Value = serde_json::from_str(ok.credentials())
+            .unwrap_or_else(|error| panic!("stored credentials JSON: {error}"));
+        assert_eq!(credentials["TunnelID"], "tunnel-id-one");
+        assert_eq!(credentials["AccountTag"], "account-tag");
         let rendered = format!("{ok:?}");
-        assert!(!rendered.contains("opaque-token"));
+        assert!(!rendered.contains("tunnel-secret"));
+        assert!(!rendered.contains(ok.credentials()));
         assert!(rendered.contains("[REDACTED]"));
         parse_provision_response(&response(
             "h-0123456789abcdef.agentsassemble.uk",
             "https://h-0123456789abcdef.agentsassemble.uk",
-            "opaque-token",
+            "tunnel-id-two",
         ))
         .unwrap_or_else(|error| panic!("16-hex hostname: {error}"));
 
-        for (hostname, origin, token, extra) in [
-            (
+        for value in [
+            provision_body(
                 "h-0123456789ab.agentsassemble.uk",
                 "https://other.agentsassemble.uk",
-                "token",
+                "tunnel-id-one",
+                "tunnel-id-one",
                 None,
             ),
-            (
+            provision_body(
                 "phish.agentsassemble.uk",
                 "https://phish.agentsassemble.uk",
-                "token",
+                "tunnel-id-one",
+                "tunnel-id-one",
                 None,
             ),
-            (
+            provision_body(
                 "h-0123456789AB.agentsassemble.uk",
                 "https://h-0123456789AB.agentsassemble.uk",
-                "token",
+                "tunnel-id-one",
+                "tunnel-id-one",
                 None,
             ),
-            (
+            provision_body(
+                "h-0123456789ab.agentsassemble.uk",
+                "https://h-0123456789ab.agentsassemble.uk/",
+                "tunnel-id-one",
+                "tunnel-id-one",
+                None,
+            ),
+            provision_body(
+                "h-0123456789ab.agentsassemble.uk",
+                "https://h-0123456789ab.agentsassemble.uk",
+                "tunnel-id-one",
+                "other-tunnel-id",
+                None,
+            ),
+            provision_body(
+                "h-0123456789ab.agentsassemble.uk",
+                "https://h-0123456789ab.agentsassemble.uk",
+                "tunnel-id-one",
+                "tunnel-id-one",
+                Some(("unexpected", serde_json::json!("1"))),
+            ),
+            provision_body(
                 "h-0123456789ab.agentsassemble.uk",
                 "https://h-0123456789ab.agentsassemble.uk",
                 "",
+                "",
                 None,
             ),
-            (
-                "h-0123456789ab.agentsassemble.uk",
-                "https://h-0123456789ab.agentsassemble.uk/",
-                "token",
-                None,
-            ),
-            (
-                "h-0123456789ab.agentsassemble.uk",
-                "https://h-0123456789ab.agentsassemble.uk",
-                "token",
-                Some(("unexpected", "1")),
-            ),
+            serde_json::json!({
+                "hostname": "h-0123456789ab.agentsassemble.uk",
+                "origin": "https://h-0123456789ab.agentsassemble.uk",
+                "tunnel_token": "legacy-token",
+            }),
         ] {
-            let mut value = serde_json::json!({
-                "hostname": hostname,
-                "origin": origin,
-                "tunnel_token": token,
-            });
-            if let Some((key, val)) = extra {
-                value[key] = serde_json::json!(val);
-            }
             assert!(
                 parse_provision_response(value.to_string().as_bytes()).is_err(),
-                "accepted {hostname} {origin}"
+                "accepted {value}"
             );
         }
         assert!(
@@ -405,21 +499,44 @@ mod tests {
         )
     }
 
+    fn valid_provision_body(hostname: &str, tunnel_id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "credentials": {
+                "AccountTag": "account-tag",
+                "TunnelID": tunnel_id,
+                "TunnelSecret": "fresh-secret",
+            },
+            "tunnel_id": tunnel_id,
+            "hostname": hostname,
+            "origin": format!("https://{hostname}"),
+        })
+    }
+
+    fn test_credentials(tunnel_id: &str) -> String {
+        serde_json::json!({
+            "AccountTag": "account-tag",
+            "TunnelID": tunnel_id,
+            "TunnelSecret": format!("secret-for-{tunnel_id}"),
+        })
+        .to_string()
+    }
+
     #[tokio::test]
-    async fn stored_token_reuses_with_zero_provision_calls() {
+    async fn stored_credential_reuses_with_zero_provision_calls() {
         let (directory, store, identity, hits, cancellation, server) =
             test_directory(provision_router(200, serde_json::json!({}))).await;
         store
             .save_named_tunnel(
                 "h-0123456789ab.agentsassemble.uk",
-                "stored-token",
+                "stored-tunnel-id",
+                &test_credentials("stored-tunnel-id"),
                 "tunnel-epoch",
             )
             .await
-            .unwrap_or_else(|error| panic!("save stored token: {error}"));
+            .unwrap_or_else(|error| panic!("save stored credential: {error}"));
         let plan = ensure_named_tunnel(&store, &directory, &identity).await;
         let TunnelPlan::Named(stored) = plan else {
-            panic!("stored token must win without provision");
+            panic!("stored credential must win without provision");
         };
         assert_eq!(stored.origin(), "https://h-0123456789ab.agentsassemble.uk");
         assert_eq!(
@@ -438,11 +555,7 @@ mod tests {
         let (directory, store, identity, hits, cancellation, server) =
             test_directory(provision_router(
                 200,
-                serde_json::json!({
-                    "hostname": "h-abcdef0123456789.agentsassemble.uk",
-                    "origin": "https://h-abcdef0123456789.agentsassemble.uk",
-                    "tunnel_token": "fresh-token",
-                }),
+                valid_provision_body("h-abcdef0123456789.agentsassemble.uk", "tunnel-id-one"),
             ))
             .await;
         let plan = ensure_named_tunnel(&store, &directory, &identity).await;
@@ -453,6 +566,7 @@ mod tests {
             stored.origin(),
             "https://h-abcdef0123456789.agentsassemble.uk"
         );
+        assert_eq!(stored.tunnel_id(), "tunnel-id-one");
         assert_eq!(
             store
                 .named_tunnel()
@@ -462,9 +576,29 @@ mod tests {
             Some("https://h-abcdef0123456789.agentsassemble.uk".to_owned())
         );
         assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
-        // Second open reuses the stored token without another call.
+        // Second open reuses the stored credential without another call.
         let plan = ensure_named_tunnel(&store, &directory, &identity).await;
         assert!(matches!(plan, TunnelPlan::Named(_)));
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+        cancellation.cancel();
+        server
+            .await
+            .unwrap_or_else(|error| panic!("join fake central: {error}"));
+    }
+
+    #[tokio::test]
+    async fn provision_created_is_accepted_defensively() {
+        let (directory, store, identity, hits, cancellation, server) =
+            test_directory(provision_router(
+                201,
+                valid_provision_body("h-0123456789ab.agentsassemble.uk", "tunnel-id-201"),
+            ))
+            .await;
+        let plan = ensure_named_tunnel(&store, &directory, &identity).await;
+        let TunnelPlan::Named(stored) = plan else {
+            panic!("201 provision must run named");
+        };
+        assert_eq!(stored.tunnel_id(), "tunnel-id-201");
         assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
         cancellation.cancel();
         server
@@ -500,9 +634,14 @@ mod tests {
             (
                 200,
                 serde_json::json!({
+                    "credentials": {
+                        "AccountTag": "account-tag",
+                        "TunnelID": "tunnel-id-one",
+                        "TunnelSecret": "secret",
+                    },
+                    "tunnel_id": "other-tunnel-id",
                     "hostname": "h-0123456789ab.agentsassemble.uk",
-                    "origin": "https://mismatch.agentsassemble.uk",
-                    "tunnel_token": "token",
+                    "origin": "https://h-0123456789ab.agentsassemble.uk",
                 }),
                 1,
             ),

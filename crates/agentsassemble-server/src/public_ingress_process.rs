@@ -48,27 +48,38 @@ pub(crate) async fn spawn_cloudflared(
     spawn_piped(command, config_root).await
 }
 
-/// Spawns cloudflared in named-tunnel mode for one fixed hostname.
+/// Spawns cloudflared in locally-managed named-tunnel mode for one fixed hostname.
 ///
-/// The token travels in the child's `TUNNEL_TOKEN` environment variable (the
-/// documented env alias for `tunnel run --token`, keeping it out of process
-/// listings) and never appears in argv. The fixed origin is the current
-/// ingress origin; the caller's `origin_host` gate stays the public hostname.
+/// The credentials JSON travels only in the child's `TUNNEL_CRED_CONTENTS`
+/// environment variable (the documented env alias for the bundled cloudflared
+/// `2026.5.2` `--credentials-contents` flag) and never appears in argv.
+/// `TUNNEL_TOKEN` is never set. The fixed origin is the current ingress
+/// origin; the caller's `origin_host` gate stays the public hostname.
 pub(crate) async fn spawn_cloudflared_named(
     executable: &Path,
     local_url: &str,
-    token: &str,
+    tunnel_id: &str,
+    credentials_contents: &str,
 ) -> io::Result<SpawnedTunnel> {
     let config_root = tempfile::tempdir()?;
     let mut command = owned_command(executable);
     command
         .command_mut()
-        .args(["tunnel", "--no-autoupdate", "run", "--url", local_url])
+        .args([
+            "tunnel",
+            "--no-autoupdate",
+            "run",
+            "--url",
+            local_url,
+            tunnel_id,
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     inherit_environment(&mut command, &NETWORK_ENVIRONMENT);
-    command.command_mut().env("TUNNEL_TOKEN", token);
+    command
+        .command_mut()
+        .env("TUNNEL_CRED_CONTENTS", credentials_contents);
     spawn_piped(command, config_root).await
 }
 
@@ -133,8 +144,12 @@ fn request_graceful_stop(child: &mut dyn ChildWrapper) -> io::Result<()> {
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
+    const TEST_TUNNEL_ID: &str = "test-tunnel-id";
+    const TEST_CREDENTIALS: &str =
+        r#"{"AccountTag":"account-tag","TunnelID":"test-tunnel-id","TunnelSecret":"test-secret"}"#;
+
     #[tokio::test]
-    async fn named_spawn_passes_the_token_via_environment_not_argv() {
+    async fn named_spawn_passes_the_credentials_via_environment_not_argv() {
         let directory =
             tempfile::tempdir().unwrap_or_else(|error| panic!("test directory: {error}"));
         let executable = directory.path().join("cloudflared");
@@ -144,7 +159,8 @@ mod tests {
             &executable,
             r#"#!/bin/sh
 printf '%s\n' "$@" > "$0.args"
-printf '%s' "$TUNNEL_TOKEN" > "$0.token"
+printf '%s' "$TUNNEL_CRED_CONTENTS" > "$0.credentials"
+printf '%s' "${TUNNEL_TOKEN-unset}" > "$0.token"
 exec /bin/sleep 60
 "#,
         )
@@ -154,7 +170,8 @@ exec /bin/sleep 60
         let mut spawned = super::spawn_cloudflared_named(
             &executable,
             "http://127.0.0.1:41955",
-            "secret-tunnel-token",
+            TEST_TUNNEL_ID,
+            TEST_CREDENTIALS,
         )
         .await
         .unwrap_or_else(|error| panic!("spawn named tunnel: {error}"));
@@ -170,30 +187,43 @@ exec /bin/sleep 60
         })
         .await
         .unwrap_or_else(|_| panic!("fake cloudflared arguments timed out"));
-        let token = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let credentials = tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {
-                if let Ok(token) =
-                    tokio::fs::read_to_string(executable.with_extension("token")).await
+                if let Ok(credentials) =
+                    tokio::fs::read_to_string(executable.with_extension("credentials")).await
                 {
-                    return token;
+                    return credentials;
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("fake cloudflared token timed out"));
+        .unwrap_or_else(|_| panic!("fake cloudflared credentials timed out"));
         assert!(arguments.contains("--no-autoupdate"));
         assert!(arguments.contains("run"));
         assert!(arguments.contains("http://127.0.0.1:41955"));
+        assert!(arguments.contains(TEST_TUNNEL_ID));
         assert!(
-            !arguments.contains("secret-tunnel-token"),
-            "tunnel token must never appear in argv"
+            !arguments.contains("test-secret"),
+            "tunnel credentials must never appear in argv"
+        );
+        assert!(
+            !arguments.contains("TUNNEL_CRED_CONTENTS"),
+            "credentials travel via env value, not argv flag text"
         );
         assert!(
             !arguments.contains("--token"),
-            "tunnel token must travel via TUNNEL_TOKEN, not --token"
+            "tunnel credentials must travel via TUNNEL_CRED_CONTENTS, not --token"
         );
-        assert_eq!(token, "secret-tunnel-token");
+        assert!(
+            !arguments.contains("TUNNEL_TOKEN"),
+            "TUNNEL_TOKEN must never be used for locally-managed tunnels"
+        );
+        assert_eq!(credentials, TEST_CREDENTIALS);
+        let token = tokio::fs::read_to_string(executable.with_extension("token"))
+            .await
+            .unwrap_or_else(|error| panic!("read fake cloudflared token: {error}"));
+        assert_eq!(token, "unset", "TUNNEL_TOKEN must not be set");
         let stop = tokio_util::sync::CancellationToken::new();
         stop.cancel();
         let _ = tokio::time::timeout(
