@@ -20,6 +20,16 @@ pub(crate) fn started_projection(local_url: &str) -> (ManagedProjection, u64) {
     (projection, generation)
 }
 
+/// Test-only view of the one managed trust decision, so a runtime test can
+/// prove which Host the running generation actually trusts.
+pub(crate) fn managed_trust_authorizes(
+    projection: &ManagedProjection,
+    headers: &HeaderMap,
+    exposure: RouteExposure,
+) -> bool {
+    projection.authorize(headers, exposure).is_some()
+}
+
 #[test]
 fn running_reconnect_replaces_origin_but_stopping_and_terminal_cannot() {
     let mut projection = ManagedProjection::new("http://127.0.0.1:41955", true);
@@ -150,6 +160,52 @@ fn identity_authorization_keeps_the_origin_from_its_trust_snapshot() {
         panic!("identity exposure must carry its verified origin");
     };
     assert_eq!(snapshot.as_str(), "https://first.trycloudflare.com");
+}
+
+#[test]
+fn named_origin_trust_requires_the_generated_host_and_the_public_forwarded_authority() {
+    // The named path serves one fixed public hostname, but the local request
+    // Host is the per-run generated secret and the public hostname arrives as
+    // the forwarded authority. The public hostname alone is never a Host the
+    // local socket trusts.
+    let mut projection = ManagedProjection::new("http://127.0.0.1:41955", true);
+    let generation = projection.begin_start();
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://h-0123456789ab.agentsassemble.uk"),
+            "aas-0123456789abcdef0123456789abcdef.origin.invalid",
+        ),
+        ManagedReadiness::Changed
+    ));
+    let mut trusted = HeaderMap::new();
+    trusted.insert(
+        header::HOST,
+        HeaderValue::from_static("aas-0123456789abcdef0123456789abcdef.origin.invalid"),
+    );
+    trusted.insert(
+        "x-forwarded-host",
+        HeaderValue::from_static("h-0123456789ab.agentsassemble.uk"),
+    );
+    trusted.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+    assert!(
+        projection
+            .authorize(&trusted, RouteExposure::SameOriginPublic)
+            .is_some(),
+        "the generated Host with the public forwarded authority must be trusted"
+    );
+    let mut forged = HeaderMap::new();
+    forged.insert(
+        header::HOST,
+        HeaderValue::from_static("h-0123456789ab.agentsassemble.uk"),
+    );
+    forged.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+    assert!(
+        projection
+            .authorize(&forged, RouteExposure::SameOriginPublic)
+            .is_none(),
+        "the public hostname alone must never be trusted"
+    );
 }
 
 #[test]

@@ -53,11 +53,14 @@ pub(crate) async fn spawn_cloudflared(
 /// The credentials JSON travels only in the child's `TUNNEL_CRED_CONTENTS`
 /// environment variable (the documented env alias for the bundled cloudflared
 /// `2026.5.2` `--credentials-contents` flag) and never appears in argv.
-/// `TUNNEL_TOKEN` is never set. The fixed origin is the current ingress
-/// origin; the caller's `origin_host` gate stays the public hostname.
+/// `TUNNEL_TOKEN` is never set. The request Host is rewritten to the same
+/// per-run generated `origin_host` secret the quick path uses, so the ingress
+/// trust decision is identical for both paths and the public hostname never
+/// reaches the local socket as a Host.
 pub(crate) async fn spawn_cloudflared_named(
     executable: &Path,
     local_url: &str,
+    origin_host: &str,
     tunnel_id: &str,
     credentials_contents: &str,
 ) -> io::Result<SpawnedTunnel> {
@@ -71,6 +74,8 @@ pub(crate) async fn spawn_cloudflared_named(
             "run",
             "--url",
             local_url,
+            "--http-host-header",
+            origin_host,
             tunnel_id,
         ])
         .stdin(Stdio::null())
@@ -147,6 +152,7 @@ mod tests {
     const TEST_TUNNEL_ID: &str = "test-tunnel-id";
     const TEST_CREDENTIALS: &str =
         r#"{"AccountTag":"account-tag","TunnelID":"test-tunnel-id","TunnelSecret":"test-secret"}"#;
+    const TEST_ORIGIN_HOST: &str = "aas-0123456789abcdef0123456789abcdef.origin.invalid";
 
     #[tokio::test]
     async fn named_spawn_passes_the_credentials_via_environment_not_argv() {
@@ -170,6 +176,7 @@ exec /bin/sleep 60
         let mut spawned = super::spawn_cloudflared_named(
             &executable,
             "http://127.0.0.1:41955",
+            TEST_ORIGIN_HOST,
             TEST_TUNNEL_ID,
             TEST_CREDENTIALS,
         )
@@ -203,6 +210,18 @@ exec /bin/sleep 60
         assert!(arguments.contains("run"));
         assert!(arguments.contains("http://127.0.0.1:41955"));
         assert!(arguments.contains(TEST_TUNNEL_ID));
+        assert!(
+            arguments.contains("--http-host-header"),
+            "the named connector must rewrite the request Host like the quick path"
+        );
+        assert!(
+            arguments.contains(TEST_ORIGIN_HOST),
+            "the rewritten Host must be the generated origin secret"
+        );
+        assert!(
+            !arguments.contains("agentsassemble.uk"),
+            "the public hostname must never be the local request Host"
+        );
         assert!(
             !arguments.contains("test-secret"),
             "tunnel credentials must never appear in argv"

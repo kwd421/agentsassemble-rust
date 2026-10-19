@@ -99,7 +99,6 @@ pub(crate) async fn run_generation(
             &config,
             &projection,
             &cancellation,
-            stored.hostname(),
             origin,
             stored.tunnel_id(),
             stored.credentials(),
@@ -138,7 +137,6 @@ async fn run_named_generation(
     config: &ManagedIngressConfig,
     projection: &Arc<RwLock<ManagedProjection>>,
     cancellation: &CancellationToken,
-    hostname: &str,
     origin: CanonicalPublicOrigin,
     tunnel_id: &str,
     credentials: &str,
@@ -146,9 +144,20 @@ async fn run_named_generation(
     let Some(cloudflared) = config.cloudflared.as_ref() else {
         return failed_with_stable_cleanup(config, "cloudflared is not installed").await;
     };
-    let spawned =
-        match spawn_cloudflared_named(cloudflared, &config.local_url, tunnel_id, credentials).await
-        {
+    // The named path uses the same per-run generated origin Host as the quick
+    // path: cloudflared rewrites the request Host to that secret and forwards
+    // the public hostname, so the ingress trust decision is identical for both
+    // and no local process can reach the loopback port with the public Host.
+    let origin_host = generated_origin_host();
+    let spawned = match spawn_cloudflared_named(
+        cloudflared,
+        &config.local_url,
+        &origin_host,
+        tunnel_id,
+        credentials,
+    )
+    .await
+    {
         Ok(spawned) => spawned,
         Err(_) => {
             tracing::warn!(
@@ -158,15 +167,13 @@ async fn run_named_generation(
             return run_quick_generation(generation, config, projection, cancellation).await;
         }
     };
-    // Without `--http-host-header` the local Host is the public hostname, so
-    // the existing Host-digest admission check gates on it unchanged.
     let (outcome, fallback) = run_spawned_generation(
         generation,
         config,
         projection,
         cancellation,
         spawned,
-        hostname.to_owned(),
+        origin_host,
         Some(origin),
     )
     .await;
@@ -701,6 +708,45 @@ mod tests {
         }
     }
 
+    /// Reads the rewritten request Host from one recorded cloudflared argv.
+    #[cfg(unix)]
+    fn named_host_header(arguments: &str) -> String {
+        let mut lines = arguments.lines();
+        while let Some(line) = lines.next() {
+            if line == "--http-host-header" {
+                return lines
+                    .next()
+                    .unwrap_or_else(|| panic!("missing --http-host-header value"))
+                    .to_owned();
+            }
+        }
+        panic!("the named spawn did not set --http-host-header");
+    }
+
+    /// Builds one managed request: the local Host, the forwarded public
+    /// authority when the edge supplied one, and the forwarded scheme.
+    #[cfg(unix)]
+    fn named_request_headers(host: &str, forwarded_host: Option<&str>) -> axum::http::HeaderMap {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            axum::http::header::HOST,
+            axum::http::HeaderValue::try_from(host)
+                .unwrap_or_else(|error| panic!("request Host: {error}")),
+        );
+        if let Some(forwarded) = forwarded_host {
+            headers.insert(
+                "x-forwarded-host",
+                axum::http::HeaderValue::try_from(forwarded)
+                    .unwrap_or_else(|error| panic!("forwarded host: {error}")),
+            );
+        }
+        headers.insert(
+            "x-forwarded-proto",
+            axum::http::HeaderValue::from_static("https"),
+        );
+        headers
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn named_generation_publishes_the_fixed_origin_on_registered_connection() {
@@ -708,8 +754,14 @@ mod tests {
 
         use agentsassemble_persistence::SqliteStore;
 
+        use crate::{
+            product_surface::RouteExposure,
+            public_ingress::managed_lifecycle_tests::managed_trust_authorizes,
+        };
+
         const TUNNEL_ID: &str = "named-test-tunnel-id";
         const CREDENTIALS: &str = r#"{"AccountTag":"account-tag","TunnelID":"named-test-tunnel-id","TunnelSecret":"named-test-secret"}"#;
+        const PUBLIC_HOSTNAME: &str = "h-0123456789ab.agentsassemble.uk";
 
         let store = SqliteStore::open("sqlite::memory:")
             .await
@@ -719,12 +771,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("epoch: {error}"));
         store
-            .save_named_tunnel(
-                "h-0123456789ab.agentsassemble.uk",
-                TUNNEL_ID,
-                CREDENTIALS,
-                "fixed-epoch",
-            )
+            .save_named_tunnel(PUBLIC_HOSTNAME, TUNNEL_ID, CREDENTIALS, "fixed-epoch")
             .await
             .unwrap_or_else(|error| panic!("save named credential: {error}"));
         let identity = crate::central::host_identity::CentralHostIdentity::from_persistent(
@@ -775,8 +822,9 @@ exec /bin/sleep 60
         let mut changes = projection.read().endpoint_changes.subscribe();
         let cancellation = tokio_util::sync::CancellationToken::new();
         let task_cancellation = cancellation.clone();
+        let task_projection = projection.clone();
         let task = tokio::spawn(async move {
-            super::run_generation(generation, config, projection, task_cancellation).await
+            super::run_generation(generation, config, task_projection, task_cancellation).await
         });
         let (ready_generation, origin) = tokio::time::timeout(Duration::from_secs(10), async {
             loop {
@@ -793,7 +841,7 @@ exec /bin/sleep 60
         .await
         .unwrap_or_else(|_| panic!("fixed origin was not published"));
         assert_eq!(ready_generation, generation);
-        assert_eq!(origin, "https://h-0123456789ab.agentsassemble.uk");
+        assert_eq!(origin, format!("https://{PUBLIC_HOSTNAME}"));
         let arguments = tokio::fs::read_to_string(executable.with_extension("args"))
             .await
             .unwrap_or_else(|error| panic!("read fake cloudflared arguments: {error}"));
@@ -808,6 +856,31 @@ exec /bin/sleep 60
         assert!(
             !arguments.contains("--token"),
             "tunnel credentials must travel via TUNNEL_CRED_CONTENTS, not --token"
+        );
+        // The named path must rewrite the request Host exactly like the quick
+        // path, and the running generation must trust that generated secret.
+        let origin_host = named_host_header(&arguments);
+        assert!(
+            origin_host.ends_with(".origin.invalid"),
+            "the named connector must rewrite the request Host to the generated secret"
+        );
+        assert!(
+            !origin_host.contains("agentsassemble.uk"),
+            "the public hostname must never become the local request Host"
+        );
+        let trusted = named_request_headers(&origin_host, Some(PUBLIC_HOSTNAME));
+        assert!(
+            managed_trust_authorizes(
+                &projection.read(),
+                &trusted,
+                RouteExposure::SameOriginPublic
+            ),
+            "the running named generation must trust its own generated Host"
+        );
+        let forged = named_request_headers(PUBLIC_HOSTNAME, None);
+        assert!(
+            !managed_trust_authorizes(&projection.read(), &forged, RouteExposure::SameOriginPublic),
+            "the public hostname alone must never be trusted"
         );
         assert_eq!(
             tokio::fs::read_to_string(executable.with_extension("credentials"))

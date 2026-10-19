@@ -4382,12 +4382,18 @@ Current behavior this design relies on (verified in this worktree + central):
   `host_key_file.rs:48-74`), bound to the live epoch. NEVER
   logs the credentials (redact like the manual proxy secret), never puts them in
   argv, never sends them to members or central again after issue.
-- With a stored credential, host runs `cloudflared tunnel --no-autoupdate run --url http://127.0.0.1:<port> <tunnel_id>`
+- With a stored credential, host runs `cloudflared tunnel --no-autoupdate run --url http://127.0.0.1:<port> --http-host-header <origin_host> <tunnel_id>`
   (locally-managed named mode) instead of `tunnel --url ...`, with the credentials JSON ONLY in the child env `TUNNEL_CRED_CONTENTS`
   (verified present in bundled cloudflared 2026.5.2); never set `TUNNEL_TOKEN`, never put credentials in argv;
   the published origin is the fixed `https://<hostname>` once cloudflared reports a registered connection
   (no stdout parsing for the origin; keep the stdout reader for readiness/diagnostics). The endpoint event path is unchanged
   (`event_publisher.rs:331-354`), so generation/epoch semantics stay intact.
+- The named connector rewrites the request Host to the SAME per-run generated
+  `origin_host` secret the quick path uses, so the managed ingress trust
+  decision is identical for both paths: the local request carries the secret
+  Host plus the public hostname as forwarded authority, and the public hostname
+  alone is never a trusted local Host. The published origin stays the fixed
+  `https://<hostname>`.
 - Host accepts 200 (and, defensively, 201) as success for this route only in the signed sender, and raises this route's total timeout to 30 s.
 - Readiness hardening: keep the not-ready bound and auth-failure fallback, AND after the registered-connection line keep watching for
   auth/unauthorized/tunnel-not-found lines and process exit: if they happen, stop publishing the fixed origin, clear the credential and fall back to quick
