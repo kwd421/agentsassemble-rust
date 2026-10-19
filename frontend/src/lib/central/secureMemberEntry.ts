@@ -11,6 +11,16 @@ import { SECURE_PROTOCOL, type SecureTarget } from "../remote/secureCrypto";
 import { loadCentralSession, signedRequest, type CentralSession } from "./identity";
 import { parseMemberChallenge } from "./memberConnect";
 import { noteMemberJoinConsent } from "./memberJoinHandoff";
+import {
+  MEMBER_RESUME_PURPOSE,
+  browserCredentialFingerprint,
+  memberResumeTranscript,
+  parseMemberResumeAnswer,
+  parseMemberResumeNonce,
+  signMemberResume,
+  type MemberResumeTuple,
+} from "./memberResume";
+import { loadMemberResumeKey, loadOrCreateMemberResumeKey } from "./memberResumeKey";
 import { responseError } from "../../api/http";
 
 import type { SecureMemberEntry } from "../remote/remoteWorkspace";
@@ -46,6 +56,8 @@ export class SecureMemberAdmission {
   private challengeExpiresAt = 0;
   private roomSelectReuse = false;
   private roomSelectChannelBound = false;
+  /** A resumed admission selects on its own channel: the challenge stays usable. */
+  private channelBoundSelect = false;
   /** A select on this live channel stays free past the 300s window (no central grant). */
   get channelBoundSelectFree(): boolean {
     return this.roomSelectChannelBound && this.transport.active;
@@ -106,8 +118,77 @@ export class SecureMemberAdmission {
     const { challenge, rooms } = await this.freshConnectChallenge(signal);
     this.challengeId = challenge.challenge_id;
     this.challengeExpiresAt = challenge.expires_at;
+    // The central admission proved this device: the host may now hold its
+    // resume key, so the next reconnect needs no central grant. A host
+    // without that route simply keeps the central path.
+    await this.issueResumeKey(signal);
     if (!rooms.length) throw new Error("참가 중인 방을 확인하지 못했어요.");
     return rooms;
+  }
+  /**
+   * Stores this device's resume key on the host. The host owns the expiry
+   * and the identity: the client only contributes its public key.
+   */
+  private async issueResumeKey(signal?: AbortSignal): Promise<void> {
+    const personId = this.session?.person?.person_id || "";
+    if (!personId) return;
+    let key;
+    try {
+      key = await loadOrCreateMemberResumeKey(
+        personId,
+        this.entry.server_id,
+        this.entry.registration_epoch,
+      );
+    } catch {
+      return;
+    }
+    try {
+      await this.post("/api/member-connect/resume-key", { client_public_key: key.publicKey }, signal);
+    } catch {
+      // An old host has no resume route: the central path stays the fallback.
+    }
+  }
+  /**
+   * Re-proves this device with its resume key and lists its joined rooms.
+   * The signature is built and sent only after the handshake verified the
+   * pinned host key, and no central request is spent.
+   */
+  async resumeDirect(signal?: AbortSignal): Promise<{ room_id: string; name: string }[]> {
+    const personId = this.session?.person?.person_id || "";
+    if (!personId) throw new Error("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
+    const key = await loadMemberResumeKey(
+      personId,
+      this.entry.server_id,
+      this.entry.registration_epoch,
+    );
+    if (!key) throw new Error("이 기기는 아직 재연결 자격 증명이 없어요.");
+    const hello = this.transport.hello;
+    const nonce = parseMemberResumeNonce(
+      await this.post("/api/member-connect/resume-nonce", {}, signal),
+    );
+    const tuple: MemberResumeTuple = {
+      server_id: hello.server_id,
+      registration_epoch: hello.registration_epoch,
+      origin: hello.origin,
+      generation: hello.generation,
+      host_key_fingerprint: this.target.host_key_fingerprint,
+      browser_credential_fingerprint: await browserCredentialFingerprint(this.deviceToken),
+      client_public_key: hello.client_public_key,
+      channel_id: hello.channel_id,
+      nonce: nonce.nonce,
+    };
+    const signature = await signMemberResume(key.privateKey, memberResumeTranscript(tuple));
+    const answer = parseMemberResumeAnswer(
+      await this.post(
+        "/api/member-connect/resume",
+        { ...tuple, purpose: MEMBER_RESUME_PURPOSE, signature },
+        signal,
+      ),
+    );
+    this.challengeId = answer.challenge_id;
+    this.challengeExpiresAt = answer.challenge_expires_at;
+    this.channelBoundSelect = true;
+    return answer.rooms;
   }
   async select(roomId: string, signal?: AbortSignal): Promise<RoomInviteJoinResponse> {
     // A select that reused the live admission/challenge stays on the same
@@ -127,7 +208,7 @@ export class SecureMemberAdmission {
     ) {
       return await this.selectWithChallenge(this.challengeId, roomId, signal);
     }
-    const payload = await this.post("/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId }, signal);
+    const payload = await this.post(this.channelBoundSelect ? "/api/member-connect/select?room_select_channel_bound=1" : "/api/member-connect/select", { challenge_id: this.challengeId, room_id: roomId, client_id: this.clientId }, signal);
     return this.install(payload, payload.request_id, roomId);
   }
   private async connectGrant(challenge: { challenge_id: string; challenge_hash: string }, signal?: AbortSignal): Promise<string> {
