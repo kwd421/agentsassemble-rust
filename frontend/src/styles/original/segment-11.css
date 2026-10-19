@@ -91,12 +91,9 @@
   letter-spacing: 0;
 }
 
+/* Discord lists settings rows on the page itself, split by hairlines. */
 .dc-channel-settings-list {
   display: grid;
-  overflow: hidden;
-  border: 1px solid var(--color-panel-border);
-  border-radius: 8px;
-  background: var(--color-panel);
 }
 
 .dc-channel-settings-row {
@@ -104,7 +101,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(132px, 180px);
   align-items: center;
   gap: 12px !important;
-  padding: 12px;
+  padding: 12px 0;
 }
 
 .dc-channel-settings-row + .dc-channel-settings-row {
@@ -496,8 +493,8 @@ button.dc-dialog-close:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 40px;
+  padding: 0 16px;
   font-size: 14px;
 }
 
@@ -829,4 +826,19 @@ button.dc-dialog-close:focus-visible {
 .dc-tooltip[data-placement="bottom"]::after {
   top: -6px;
   transform: translateX(-50%) rotate(225deg);
+}
+
+/* Discord's small BETA pill beside a title. */
+.dc-beta-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  border-radius: 4px;
+  background: var(--color-accent);
+  padding: 0 6px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  vertical-align: 2px;
 }

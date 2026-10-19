@@ -70,8 +70,8 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
           <span className="owner-device-icon" aria-hidden><Icon size={26} /></span>
           <div className="owner-device-info">
             <div className="owner-device-name"><strong>{name}</strong>{session.current && <span className="owner-device-current">이 기기</span>}{session.kind === "host" && <span className="owner-device-tag">서버 컴퓨터</span>}</div>
-            <p>{[os, session.kind === "pairing" ? "연결 링크로 연결한 기기" : ""].filter(Boolean).join(" · ")}
-              {session.last_connected_at !== null && <>{os || session.kind === "pairing" ? " · " : ""}마지막 접속 <time dateTime={new Date(session.last_connected_at * 1000).toISOString()}>{new Date(session.last_connected_at * 1000).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}</time></>}</p>
+            <p>{[os, session.kind === "pairing" ? "링크로 연결한 기기" : ""].filter(Boolean).join(" · ")}
+              {session.last_connected_at !== null && <>{os || session.kind === "pairing" ? " · " : ""}마지막 접속 <time dateTime={new Date(session.last_connected_at * 1000).toISOString()} title={new Date(session.last_connected_at * 1000).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}>{relativeTimeLabel(session.last_connected_at * 1000)}</time></>}</p>
             {session.connected === false && <p>지금은 접속해 있지 않아요.</p>}
           </div>
           {session.revocable && <button type="button" className="owner-device-revoke" disabled={busy} aria-label={`${name} 연결 해제`}
@@ -83,6 +83,18 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
       onClick={() => setSelection({ request: { scope: "all" }, name: "모든 기기", current: Boolean(identity.centralSession) })}>모든 기기 연결 해제</button>
     {selection && <RevokeConfirmation selection={selection} busy={busy} error={error} onCancel={() => setSelection(null)} onConfirm={() => void confirm()} />}
   </div>;
+}
+
+// Discord shows recency, not a timestamp: 방금 / N분 전 / N시간 전 / N일 전, then the date.
+function relativeTimeLabel(ms: number, now = Date.now()): string {
+  const minutes = Math.floor(Math.max(0, now - ms) / 60_000);
+  if (minutes < 1) return "방금";
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}일 전`;
+  return new Date(ms).toLocaleDateString("ko-KR", { dateStyle: "medium" });
 }
 
 function RevokeConfirmation({ selection, busy, error, onCancel, onConfirm }: {

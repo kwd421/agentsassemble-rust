@@ -291,7 +291,7 @@ export default function RoomSettingsModal({
                     onChange={() => onConversationModeChange("ambient")}
                   />
                   <span className="preserve-words">
-                    <strong>자유 토론 (실험적)</strong>
+                    <strong>자유 토론 <span className="dc-beta-badge">베타</span></strong>
                     <small>새 메시지가 오면 연결된 에이전트가 모두 방을 보고, 말할지 각자 정해요.</small>
                   </span>
                 </label>

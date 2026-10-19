@@ -22,8 +22,8 @@
   box-shadow: 0 28px 120px rgba(0, 0, 0, 0.58);
 }
 
+/* No divider line: the nav/body color change is the edge, as in Discord. */
 .dc-settings-nav {
-  border-right: 1px solid var(--color-panel-separator);
   background: var(--color-sidebar);
   padding: 16px;
 }
