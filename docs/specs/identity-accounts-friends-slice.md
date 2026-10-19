@@ -4538,3 +4538,136 @@ Acceptance tests for the implementation slice:
   probe with NO central preview when the host is already up (stage-2 headroom:
   same origin means the probe path actually fires); overflow (cap reached or API
   down) still opens external access over a quick tunnel.
+
+### Central-free member reconnect (2026-10-17, implemented 2026-10-20)
+
+Owner decision (2026-10-17): a member reconnect to an already-joined
+friend host should go straight to the stored host address and ask central
+only when that fails (address changed), instead of spending two signed
+central calls (`member-preview` then `member-connect-grants`) on every
+reconnect (Wi-Fi blip, sleep/wake). The member anchor already pins
+`server_id`, `registration_epoch`, host key fingerprint and the last
+endpoint origin (`frontend/src/lib/central/memberAnchors.ts:8-17`).
+
+The host-issued member resume key is implemented. The 2026-10-17 design
+was reviewed for security before the implementation; where the review
+contradicted the design, the review decided. The binding shape:
+
+- **Client key.** A WebCrypto ECDSA P-256 key generated with
+  `extractable: false` and `["sign"]`. The private half is never
+  exported, never written to `localStorage`, never written by
+  `deviceIdentity.ts` and never stored in the member anchor; it lives as
+  a `CryptoKey` in IndexedDB keyed by `person_id` + `server_id` +
+  `registration_epoch` (`frontend/src/lib/central/memberResumeKey.ts`).
+  The records are deleted in `clearCentralSession` and in `saveSession`
+  when `person_id` changes, and the in-memory handle is dropped on
+  `CENTRAL_SESSION_CLEARED_EVENT` in every tab. The central device key
+  stays unused for this protocol.
+- **Host row.** A new table `member_resume_keys` (schema 97, `Ephemeral`
+  in `backup_policy`) with `issuer`, `person_id`, `registration_epoch`,
+  `browser_credential_fingerprint`, the 65-byte resume public key,
+  `issued_at` and `expires_at`; unique on `(issuer, person_id,
+  browser_credential_fingerprint)`. The per-person cap is a new count of
+  eight that deletes the oldest resume row only; `member_sessions::
+  replace_devices` is not reused. The `"96"` allowlists in
+  `central_member_removal.rs`, `member_projection.rs`, `member_schema.rs`
+  and `central_identity_bindings.rs` accept 97 in the same migration, and
+  the archive catalog carries the table so a restore never carries a key.
+- **Issuance.** `POST /api/member-connect/resume-key` on the same channel,
+  only after `ConnectRedeemed`. The person, issuer, epoch and projection
+  come from the redeemed `MemberAdmission` and the stored projection
+  anchor, never from the client; `expires_at` is `now +
+  human_room_session_ttl` (one hour) and the host chooses it. The public
+  key is replaced for that browser fingerprint.
+- **Direct attempt.** The normal `member_connect` handshake to the anchor
+  origin and generation; the signature is built and sent only after
+  `finish()` verified the pinned host key. `POST /api/member-connect/
+  resume` carries a signature over the CLIENT-BUILT tuple
+  `AA-MEMBER-RESUME-1`, `server_id`, `registration_epoch`, `origin`,
+  `generation`, host key fingerprint, browser-credential fingerprint,
+  `client_public_key`, `channel_id`, purpose `resume` and the 32-byte
+  nonce the host issued for this channel binding
+  (`POST /api/member-connect/resume-nonce`, single use). The host checks
+  the stored key, the live `runtime_metadata` epoch, the channel binding,
+  the browser credential and `now < expires_at`, consumes the nonce once,
+  then runs the unchanged `member_connect_rooms` /
+  `select_member_connect_room`. A direct success never extends
+  `expires_at`.
+- **Revocation.** The person's resume rows are deleted in the same
+  transaction as the `central_member_removals` insert
+  (`central_member_removal.rs`, `account_deleted_host.rs`) and in
+  `set_registration_epoch` (`host_identity.rs`). Kick and leave keep
+  using the joined-row check; there is no second flag.
+- **Version skew.** No central capability bit, no `ServerHello` field and
+  no change to the existing request bodies (`deny_unknown_fields` stays).
+  Old hosts 404 the new routes after a normal handshake, so no signature
+  is ever sent to them, and old clients never call the new routes. The
+  fallback origin comes from the central preview, never from a resume
+  answer.
+
+What the security review changed against the 2026-10-17 design:
+
+- The private key never enters the extractable browser-credential store.
+  The design put it next to the shared bearer, so the next person on that
+  browser could sign as the previous one; the review replaced the store
+  with a non-extractable `CryptoKey` and made the account switch and the
+  sign-out delete it.
+- The capability rule is gone. The design needed a central
+  `member_resume_protocol` bit, which either spends the central call the
+  feature removes or trusts a stale advertisement; the review replaced it
+  with the 404 of a route an old host does not have, so a downgraded host
+  can never receive a signature.
+- The signed tuple gained its domain separator, `server_id`, the host key
+  fingerprint and the browser-credential fingerprint, so a signature
+  captured for one host or one credential cannot be replayed on another.
+- The direct path reads the stored projection anchor instead of a
+  client-supplied projection id, so a direct list or select never resets
+  the person's `acked_revision`.
+- The expiry is host-chosen and a direct success never moves it; the
+  per-person cap is its own count instead of the room session device cap.
+- The direct path runs the unchanged membership owners
+  (`member_connect_rooms`, `select_member_connect_room`) instead of a
+  parallel membership check.
+
+Residual risk, disclosed: an account that central has already disabled
+but whose deletion redeem never reached this host keeps its resume key
+until that key expires (one hour). A live kick still fails immediately
+through the joined-row check.
+
+Entry points:
+`crates/agentsassemble-persistence/src/member_resume.rs` (the row, the
+cap and the revocation helpers), `crates/agentsassemble-server/src/
+member_resume_web.rs` (the three routes and the nonce store),
+`frontend/src/lib/central/memberResumeKey.ts` (the client key),
+`frontend/src/lib/central/memberResume.ts` (the signed tuple and the
+answers), `frontend/src/lib/central/secureMemberEntry.ts` (the issuance
+after a central admission and the direct attempt),
+`frontend/src/lib/central/memberAutoAttach.ts` (the direct-first attach
+with one central fallback), `frontend/src/lib/central/identity.ts` (the
+account switch and sign-out cleanup).
+
+Acceptance for this slice:
+- The export of the resume private key fails; after `clearCentralSession`
+  and after a `saveSession` for another `person_id` the key is gone, and
+  a second device that knows only the public key can never sign.
+- A resume signature is refused on another channel, origin, generation,
+  browser credential, host key fingerprint or purpose, and a second use
+  of the same nonce is refused. The signed bytes are the client-built
+  tuple, never a host-supplied blob.
+- The stored projection and `acked_revision` stay unchanged across a
+  direct list and select; a kick or a leave refuses the direct select
+  with `MemberMembershipEnded`; the account-deletion insert makes
+  `person_is_live` false and deletes the resume row in the same
+  transaction; a successful resume leaves `expires_at` unchanged.
+- `set_registration_epoch` deletes the resume rows and the named-tunnel
+  token; a client hello with the old epoch receives no `ServerHello` and
+  sends no signature; a preview with a new fingerprint or epoch still
+  surfaces `MemberAnchorMismatchError` and keeps the anchor.
+- An old host completes the `member_connect` handshake and answers the
+  resume route with 404; an old client keeps the current redeem and
+  select bodies; schema 97 is refused by a binary whose current schema
+  version is 96; the backup export classifies the table `Ephemeral` and a
+  restored database holds no resume row.
+- A direct success performs no fetch to the central origin; a generation
+  bump spends one preview and one grant and the next blip on the updated
+  anchor spends none.
