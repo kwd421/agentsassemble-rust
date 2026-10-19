@@ -2,6 +2,7 @@ import { nativeGoogleAuthorization } from "./nativeGoogleAuthorization";
 import { finishGoogleVerification } from "./googleRegistration";
 import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
 import { clearMemberAnchors } from "./memberAnchors";
+import { clearMemberJoinHandoffs } from "./memberJoinHandoff";
 import { clearRoomDockItems } from "../roomDockPersistence";
 import { bindMembershipEndedPerson, clearAllMembershipEndedTerminals } from "../memberMembershipEnded";
 import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
@@ -251,7 +252,7 @@ export function saveSession(
       ? { pending_account_switch: true } : {}),
   };
   if (previous?.person.person_id !== result.person.person_id) {
-    if (previous?.person.person_id) clearMemberAnchors(previous.person.person_id);
+    if (previous?.person.person_id) { clearMemberAnchors(previous.person.person_id); clearMemberJoinHandoffs(previous.person.person_id); }
     clearCentralDirectoryCache();
     clearRoomDockItems();
     clearAllMembershipEndedTerminals();
@@ -325,9 +326,7 @@ export function clearCentralSession(): void {
   // would recurse back here.
   try {
     const parsed = JSON.parse(localStorage.getItem(SESSION_KEY) || "null") as { person?: { person_id?: unknown } } | null;
-    if (typeof parsed?.person?.person_id === "string" && parsed.person.person_id) {
-      clearMemberAnchors(parsed.person.person_id);
-    }
+    if (typeof parsed?.person?.person_id === "string" && parsed.person.person_id) { clearMemberAnchors(parsed.person.person_id); clearMemberJoinHandoffs(parsed.person.person_id); }
   } catch { /* anchor clearing stays best-effort */ }
   if (!centralSessionLoggedOut()) {
     localStorage.setItem(SESSION_KEY, "logged-out");

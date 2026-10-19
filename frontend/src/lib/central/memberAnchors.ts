@@ -5,12 +5,15 @@ import { strictRecord, assertExactKeys, requiredString } from "../strictJsonCont
 // bearers, grants, browser credentials and private keys must never enter this
 // store; exact-keys validation below rejects any such field outright.
 export type MemberAnchorRoom = { room_id: string; name: string };
-export type MemberHostAnchor = {
+/** The host identity an anchor pins: server, registration epoch, host key. */
+export type MemberHostIdentity = {
   server_id: string;
   registration_epoch: string;
   host_key_fingerprint: string;
   endpoint_origin: string;
   endpoint_generation: number;
+};
+export type MemberHostAnchor = MemberHostIdentity & {
   rooms: MemberAnchorRoom[];
   hidden: boolean;
   updated_at: number;
@@ -141,6 +144,33 @@ export function removeMemberAnchor(personId: string, serverId: string): void {
     return;
   }
   writeAnchors(personId, next);
+}
+
+/**
+ * Fresh consent names the host incarnation the person just accepted: the
+ * anchor follows it (the previous epoch's identity is stale) while the known
+ * rooms and the hide state stay. Display cache only — a rejected write is
+ * reported to the caller, never to the person who already joined.
+ */
+export function saveConsentedMemberAnchor(
+  personId: string,
+  identity: MemberHostIdentity,
+  joinedRooms: MemberAnchorRoom[] = [],
+): void {
+  if (!personId) return;
+  const previous = loadMemberAnchor(personId, identity.server_id);
+  const rooms: MemberAnchorRoom[] = [];
+  for (const room of [...joinedRooms, ...(previous?.rooms ?? [])]) {
+    if (rooms.length >= ROOM_LIMIT) break;
+    if (rooms.some((entry) => entry.room_id === room.room_id)) continue;
+    rooms.push(room);
+  }
+  saveMemberAnchor(personId, {
+    ...identity,
+    rooms,
+    hidden: previous?.hidden ?? false,
+    updated_at: Date.now(),
+  });
 }
 
 export function removeMemberAnchorRoom(personId: string, serverId: string, roomId: string): void {

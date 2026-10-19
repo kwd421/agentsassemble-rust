@@ -4271,8 +4271,55 @@ redundant channel instead of clobbering the registry. The reconnect-registry
 assertions fail on the pre-fix registry (drop → adopt with an empty map,
 `admissionFor` null at expiry, heal `skipped:"no-admission"`).
 
-## Debug-only room session TTL override (test use, absent from release)
+### Epoch-rotated host heals after the fresh invite re-join (2026-10-20)
 
+Real-app failure: a friend's host rotates its registration epoch (restore or
+re-register, new host key). The member's registry refuses the host (the
+stored anchor's epoch no longer matches the directory) and drops the dead
+admission, so the host shows disconnected with the re-join reason. The member
+then accepts a NEW invite for that host and joins again (fresh consent), but
+the hourly session-loss heal for that room still parks until the member taps
+the room or presses 다시 연결.
+
+Required user flow: the new invite join completes with the person's explicit
+consent → the account's anchor follows the consented epoch and host key →
+the member host registry takes the joined live admission over on its own
+(without a tap, without 다시 연결 and without any central call beyond the
+join itself) → the epoch/host-key refusal for that server is lifted → the
+dead old-epoch registry entry that shadowed the live admission is dropped →
+the session-loss heal selects on the registered admission and the room heals.
+The refusal may only be lifted by an explicit new invite join that the person
+accepted for that exact server_id and new epoch/host key: an ordinary room
+select on a cached bearer, another server, another person, a mismatched
+epoch, an expired consent and an already-spent consent change nothing. A host
+that rotates its epoch and is never re-joined stays refused.
+
+Authority and entry points: `frontend/src/lib/central/secureMemberEntry.ts`
+owns the invite join (`SecureMemberAdmission.admit` invite branch) and is the
+only place that records a consent. `frontend/src/lib/central/memberJoinHandoff.ts`
+owns the per-person join handoff: one durable record per person and server
+naming the consented incarnation plus the live admission (memory only), spent
+once, expired after minutes and cleared with the other per-person member state
+on sign-out and account switch. `frontend/src/lib/central/memberAnchors.ts`
+owns the anchor the consent refreshes. `frontend/src/app/useMemberHosts.ts`
+(the registry owner) consumes a handoff whose person, server, epoch and host
+key match the incarnation the directory currently lists, and only then lifts
+the refusal and registers that admission. The session-loss heal
+(`frontend/src/app/useMemberRoomAutoReselect.ts`) and the background-room heal
+(`frontend/src/app/useMemberRoomLive.ts`) keep resolving the registered
+admission and are unchanged.
+
+Verification: `frontend/src/app/useMemberJoinHandoff.test.tsx` drives the real
+owners: the invite re-join after the epoch change heals the open room with no
+tap and no new central call; an ordinary room select after the refusal does
+not lift it; a handoff for another server or another person does not; the
+re-join before the directory catches up still heals once the directory names
+the consented epoch; the epoch change without a re-join stays refused and
+never heals. `frontend/src/lib/central/memberJoinHandoff.test.ts` covers the
+store (single use, expiry, per person and server) and the join path itself
+(an invite join consents, an ordinary select does not).
+
+## Debug-only room session TTL override (test use, absent from release)
 Debug builds shorten newly minted human room sessions via `AGENTSASSEMBLE_DEBUG_ROOM_SESSION_TTL_SECS` (clamped to 60..3600 s, invalid values ignored; default stays 1 h). The host server process reads it once at startup in `prepare_runtime_storage`, threads the value into the store's mint path, and logs one `debug room session TTL override: N s` line in debug builds only. Release builds contain no code that reads this variable and always use the constant.
 
 ### Fixed host addresses under agentsassemble.uk (2026-10-19, design — not implemented)

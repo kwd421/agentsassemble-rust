@@ -12,8 +12,12 @@ it("clears only the signed-out account's member anchors", async () => {
   vi.resetModules();
   const { clearCentralSession, saveSession } = await import("./identity");
   const { saveMemberAnchor, loadMemberAnchors } = await import("./memberAnchors");
+  const { recordMemberJoinHandoff, takeMemberJoinHandoff } = await import("./memberJoinHandoff");
+  const consent = { registration_epoch: "epoch", host_key_fingerprint: "fingerprint" };
   saveMemberAnchor("person-a", anchorFor("server-a"));
   saveMemberAnchor("person-b", anchorFor("server-b"));
+  recordMemberJoinHandoff("person-a", { ...consent, server_id: "server-a" }, {});
+  recordMemberJoinHandoff("person-b", { ...consent, server_id: "server-b" }, {});
   localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({
     token: "fixture-session", expires_at: 9_999_999_999, device_id: "device",
     person: { person_id: "person-a", identity_kind: "google", display_name: "A" },
@@ -21,6 +25,9 @@ it("clears only the signed-out account's member anchors", async () => {
   clearCentralSession();
   expect(loadMemberAnchors("person-a")).toEqual([]);
   expect(loadMemberAnchors("person-b")).toHaveLength(1);
+  // The pending join consent of the signed-out account dies with it.
+  expect(takeMemberJoinHandoff("person-a", "server-a", consent)).toBeNull();
+  expect(takeMemberJoinHandoff("person-b", "server-b", consent)).not.toBeNull();
   localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({
     token: "other-session", expires_at: 9_999_999_999, device_id: "device",
     person: { person_id: "person-b", identity_kind: "google", display_name: "B" },
@@ -30,6 +37,7 @@ it("clears only the signed-out account's member anchors", async () => {
     person: { person_id: "person-c", identity_kind: "google", display_name: "C" },
   });
   expect(loadMemberAnchors("person-b")).toEqual([]);
+  expect(takeMemberJoinHandoff("person-b", "server-b", consent)).toBeNull();
 });
 
 it("clears the local session even when the server revoke cannot be sent, without retrying it", async () => {

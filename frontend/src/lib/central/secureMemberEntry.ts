@@ -10,6 +10,7 @@ import { installRemoteWorkspace, bindRemoteSession, remoteWorkspaceFor } from ".
 import { SECURE_PROTOCOL, type SecureTarget } from "../remote/secureCrypto";
 import { loadCentralSession, signedRequest, type CentralSession } from "./identity";
 import { parseMemberChallenge } from "./memberConnect";
+import { noteMemberJoinConsent } from "./memberJoinHandoff";
 import { responseError } from "../../api/http";
 
 import type { SecureMemberEntry } from "../remote/remoteWorkspace";
@@ -51,15 +52,17 @@ export class SecureMemberAdmission {
   }
   private session: CentralSession;
   private entry: SecureMemberEntry;
+  /** The incarnation central pinned for this admission (epoch, key, origin). */
+  private target: SecureTarget;
   private adopted = false;
-  private constructor(transport: RemoteTransport, session: CentralSession, entry: SecureMemberEntry) {
-    this.transport = transport; this.session = session; this.entry = entry;
+  private constructor(transport: RemoteTransport, session: CentralSession, entry: SecureMemberEntry, target: SecureTarget) {
+    this.transport = transport; this.session = session; this.entry = entry; this.target = target;
     this.deviceToken = getOrCreateBrowserCredential({ server_id: entry.server_id, registration_epoch: entry.registration_epoch });
   }
   static async open(entry: SecureMemberEntry, target: SecureTarget, sessionToken: string, signal: AbortSignal) {
     const session = loadCentralSession(); if (!session || session.token !== sessionToken) throw new Error("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
     if(target.server_id!==entry.server_id || (!entry.inviteToken && target.registration_epoch!==entry.registration_epoch))throw new Error("입장할 서버를 확인하지 못했어요.");
-    return new SecureMemberAdmission(await RemoteTransport.connect(target, entry.inviteToken ? "member_admission" : "member_connect", signal), session, {...entry,registration_epoch:target.registration_epoch});
+    return new SecureMemberAdmission(await RemoteTransport.connect(target, entry.inviteToken ? "member_admission" : "member_connect", signal), session, {...entry,registration_epoch:target.registration_epoch}, target);
   }
   close() { if (!this.adopted) this.transport.close(); }
   private async post(path: string, body: object, signal?: AbortSignal) {
@@ -85,7 +88,20 @@ export class SecureMemberAdmission {
       if (!("room_id" in preflight)) throw new Error("초대를 사용할 수 없어요. 새 초대를 받아 주세요.");
       const requestId = createSecureRequestId();
       const payload = await this.post("/api/room-invite/member-join", { invite_token: invite, challenge_id: this.challengeId, grant_token: grant.grant_token, request_id: requestId, client_id: this.clientId });
-      this.install(payload, requestId, preflight.room_id); return null;
+      this.install(payload, requestId, preflight.room_id);
+      // This join is the person's explicit consent for this host
+      // incarnation: the anchor follows the epoch and host key central pinned
+      // for it, and the member host registry may take over this live
+      // admission (and lift the epoch/host-key refusal it recorded) through
+      // the join handoff. Nothing else creates a handoff.
+      noteMemberJoinConsent(this.session.person.person_id, {
+        server_id: this.entry.server_id,
+        registration_epoch: this.entry.registration_epoch,
+        host_key_fingerprint: this.target.host_key_fingerprint,
+        endpoint_origin: this.target.origin,
+        endpoint_generation: this.target.generation,
+      }, this, [{ room_id: payload.meeting_id, name: payload.room_label }]);
+      return null;
     }
     const { challenge, rooms } = await this.freshConnectChallenge(signal);
     this.challengeId = challenge.challenge_id;

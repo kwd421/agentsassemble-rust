@@ -16844,3 +16844,35 @@ do not send virtual HTTP's forbidden Content-Length header. Gates are unchanged.
 Packaged UI pixels, Windows native saving and a throttled 50 MiB slow-link run
 remain unverified. AI, persona/avatar limits, usage-report work and existing
 untracked .agents/ and scripts/__pycache__/ were left alone; nothing was pushed.
+
+## Member host epoch rotation: the fresh invite re-join heals without a tap (2026-10-20)
+
+A friend's host that rotates its registration epoch (restore/re-register, new
+host key) made the member's registry refuse the host and drop the dead
+admission. After the member accepted a NEW invite for that host and joined
+again (fresh consent), the hourly session-loss heal still parked until the
+member tapped the room or pressed 다시 연결.
+
+The refusal is now lifted only by that explicit consent, and only for the
+incarnation it names. `frontend/src/lib/central/secureMemberEntry.ts` records
+it in the invite-join branch of `SecureMemberAdmission.admit` (the only place
+an ordinary room select never reaches): the account's anchor follows the
+consented epoch and host key, and a per-person join handoff
+(`frontend/src/lib/central/memberJoinHandoff.ts`) carries the live admission
+and the consented incarnation. The handoff is durable (the registry often
+mounts after the join page replaced the app), single-use, expires after ten
+minutes and is cleared with the other per-person member state on sign-out and
+account switch. `frontend/src/app/useMemberHosts.ts` consumes a handoff whose
+person, server, registration epoch and host key match the incarnation the
+directory currently lists, and only then lifts the refusal, registers that
+admission and drops the dead old-epoch entry shadowing it. Another server,
+another person, a mismatched epoch, an expired or already-spent consent and an
+ordinary select change nothing; a host that rotates and is never re-joined
+stays refused.
+
+Verified: the new tests fail on the pre-fix code (the refusal stays and the
+heal parks) and pass after it. `cd frontend && npx tsc --noEmit -p .`,
+`npx vitest run --maxWorkers=4` (269 files, 1780 tests) and root
+`make architecture-check` pass. The packaged app was not exercised against a
+real rotating friend host, so the end-to-end appearance of the rotated host in
+the rail remains unverified.

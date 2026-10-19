@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "../lib/central/memberAutoAttach";
 import { MEMBER_ANCHORS_CHANGED_EVENT, loadMemberAnchor, loadMemberAnchors, removeMemberAnchor, removeMemberAnchorRoom, saveMemberAnchor } from "../lib/central/memberAnchors";
+import { takeMemberJoinHandoff } from "../lib/central/memberJoinHandoff";
 import { memberHostLiveLossFastDelay, memberHostOfflineBudgetExhausted, memberHostOfflineParkMs, memberHostReconnectCause, memberHostReconnectDelay, memberHostRetryAfterMs, noteMemberHostOfflinePreview, type MemberHostReconnectCause } from "../lib/central/memberRoomLive";
 import { noteMemberHostExternalReselectAttach } from "../lib/central/memberRoomAutoReselectBudget";
 import { centralDailyQuotaNotice, centralDailyQuotaWaitMs } from "../lib/central/centralRequestGovernor";
@@ -528,6 +529,49 @@ export function useMemberHosts({
       if (tuple.mode && tuple.mode !== "event_secure_v1") {
         attempted.current.set(server.server_id, tupleKey(tuple));
         setPhase(server.server_id, "disconnected", anchor?.rooms ?? null, origin, null);
+        continue;
+      }
+      // A fresh invite join with explicit consent hands its live admission to
+      // this registry. Only a handoff naming this exact person, server,
+      // registration epoch and host key may lift the identity refusal: an
+      // ordinary room select on a cached bearer never records one.
+      const consented = takeMemberJoinHandoff(activePerson, server.server_id, {
+        registration_epoch: epoch,
+        host_key_fingerprint: tuple.fingerprint,
+      });
+      if (consented) {
+        const live = consented.admission as SecureMemberAdmission | undefined;
+        if (live?.transport?.active) {
+          refused.current.delete(server.server_id);
+          // The dead old-epoch entry shadowed the consented channel: drop it
+          // so the registry serves the live admission the join produced.
+          const stale = admissions.current.get(server.server_id);
+          if (stale && stale !== live) {
+            admissions.current.delete(server.server_id);
+            detachMemberHost(stale);
+          }
+          admissions.current.set(server.server_id, live);
+          clearReconnectTimer(server.server_id);
+          reconnectAttempts.current.delete(server.server_id);
+          reconnectCauses.current.delete(server.server_id);
+          reconnectRetryAfter.current.delete(server.server_id);
+          attempted.current.set(server.server_id, tupleKey(tuple));
+          // The open room follows the new channel like any fresh admission.
+          noteMemberHostExternalReselectAttach(activePerson, server.server_id);
+          const consentedId = server.server_id;
+          const consentedToken = identityRef.current.sessionToken;
+          try {
+            live.transport.onClose(() => {
+              if (identityRef.current.sessionToken !== consentedToken) return;
+              if (admissions.current.get(consentedId) !== live) return;
+              setPhase(consentedId, "disconnected");
+              liveLossFastPending.current.add(consentedId);
+              scheduleReconnect(consentedId);
+            });
+          } catch { /* the close listener is best-effort */ }
+          const consentedOrigin = (live.transport as { hello?: { origin?: string } }).hello?.origin || origin;
+          setPhase(server.server_id, "connected", anchor?.rooms ?? null, consentedOrigin, null);
+        }
         continue;
       }
       // No anchor but a live membership on a never-refused host: a fresh
