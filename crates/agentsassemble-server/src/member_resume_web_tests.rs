@@ -440,6 +440,35 @@ async fn the_channel_key_never_stands_in_for_the_stored_resume_key() {
 }
 
 #[tokio::test]
+async fn a_stale_incarnation_never_opens_the_direct_path() {
+    let fixture = fixture().await;
+    store_resume_key(&fixture).await;
+    let nonce = fixture.nonce().await;
+    let mut body = fixture.signed_body(&nonce);
+    // The stored anchor belongs to another registration epoch.
+    body["registration_epoch"] = json!("old-epoch");
+    assert!(
+        super::resume(
+            axum::extract::State(fixture.state.clone()),
+            fixture.request(body),
+        )
+        .await
+        .is_err(),
+        "a stale incarnation must be refused"
+    );
+    // The live epoch of the row is the only one that opens the path.
+    let nonce = fixture.nonce().await;
+    assert!(
+        super::resume(
+            axum::extract::State(fixture.state.clone()),
+            fixture.request(fixture.signed_body(&nonce)),
+        )
+        .await
+        .is_ok()
+    );
+}
+
+#[tokio::test]
 async fn an_unknown_or_expired_key_never_opens_the_direct_path() {    let fixture = fixture().await;
     let nonce = fixture.nonce().await;
     // No key was issued for this browser credential.

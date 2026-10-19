@@ -204,10 +204,45 @@ async fn kick_refuses_the_direct_select_while_another_room_still_lists() -> Test
     let (store, now) = fixture().await;
     store.set_registration_epoch(Some(EPOCH)).await?;
     admitted_member(&store, now).await?;
+    // A second joined room on the same key stays listable.
+    store
+        .create_room_for_local_operator(
+            &uuid::Uuid::new_v4().to_string(),
+            "second",
+            "Second",
+        )
+        .await?;
+    sqlx::query("INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'second', 'second-guest', 'Second Guest', 'read_write', 1, 0, ?, 0, ?, ?)")
+        .bind(hex::encode(&[6_u8; 32][..8]))
+        .bind([6_u8; 32].as_slice())
+        .bind([7_u8; 32].as_slice())
+        .bind((now + Duration::days(1)).timestamp_micros())
+        .bind(agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
+        .bind((now - Duration::minutes(1)).timestamp_micros())
+        .execute(&store.pool)
+        .await?;
+    let second = crate::PreparedHumanAdmission::prepare(
+        crate::HumanInviteCredentialEvidence::JoinCode {
+            fingerprint: [7_u8; 32],
+        },
+        [4_u8; 32],
+        &crate::HumanAdmissionInput {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            meeting_id_assertion: String::new(),
+            display_name: "Member".into(),
+            participant_type: "human".into(),
+            owner_display_name: String::new(),
+            client_id: "second-client".into(),
+            avatar_image_url: String::new(),
+        },
+    )?
+    .with_member(member());
+    store.admit_human(&second, now).await?;
     let key = public_key(13);
     issue(&store, PERSON, &[5; 32], &key, now).await?;
     let admission = direct_admission(&store, &[5; 32], &key, now).await?;
-    sqlx::query("UPDATE participants SET participant_json=json_set(participant_json,'$.status','kicked')")
+    assert_eq!(store.member_connect_rooms(&admission, now).await?.len(), 2);
+    sqlx::query("UPDATE participants SET participant_json=json_set(participant_json,'$.status','kicked') WHERE room_id='general'")
         .execute(&store.pool)
         .await?;
     let request_id = uuid::Uuid::new_v4().to_string();
@@ -217,7 +252,10 @@ async fn kick_refuses_the_direct_select_while_another_room_still_lists() -> Test
             .await?,
         HumanAdmissionDecision::Rejected(HumanAdmissionRejection::MemberMembershipEnded)
     ));
-    assert!(store.member_connect_rooms(&admission, now).await?.is_empty());
+    // The kicked room leaves the list; the other joined room stays.
+    let rooms = store.member_connect_rooms(&admission, now).await?;
+    assert_eq!(rooms.len(), 1);
+    assert_eq!(rooms[0].room_id, "second");
     Ok(())
 }
 

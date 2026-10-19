@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { attachMemberHost } from "./memberAutoAttach";
 import { loadMemberAnchor, saveMemberAnchor } from "./memberAnchors";
+import { memberHostOfflineBudgetExhausted, resetMemberHostOfflineBudgetForTests } from "./memberRoomLive";
 
 const rooms = [{ room_id: "general", name: "일반" }];
 const server = { server_id: "server", registration_epoch: "epoch" };
@@ -32,6 +33,7 @@ describe("the central-free member reconnect", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
+    resetMemberHostOfflineBudgetForTests();
   });
 
   it("reaches the joined host with the resume key and spends no central request", async () => {
@@ -57,6 +59,8 @@ describe("the central-free member reconnect", () => {
     expect(admit).not.toHaveBeenCalled();
     expect(preview).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
+    // The daily preview budget of the host does not move either.
+    expect(memberHostOfflineBudgetExhausted("person", "server")).toBe(false);
     expect(loadMemberAnchor("person", "server")).toMatchObject({
       endpoint_origin: "https://host.test",
       endpoint_generation: 3,

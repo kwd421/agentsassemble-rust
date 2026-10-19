@@ -127,4 +127,24 @@ describe("the cleared session drops the resume keys", () => {
       expect(await load("person-a", "server", "epoch")).toBeNull();
     });
   });
+
+  it("deletes the keys of an expired session", async () => {
+    const { loadOrCreateMemberResumeKey: create } = await import("./memberResumeKey");
+    await create("person-a", "server", "epoch");
+    window.localStorage.setItem(
+      "agentsassemble.centralSession.v1",
+      JSON.stringify({
+        token: "fixture-session",
+        expires_at: 1,
+        device_id: "fixture-device",
+        person: { person_id: "person-a", display_name: "Name", identity_kind: "guest" },
+      }),
+    );
+    const { loadCentralSession } = await import("./identity");
+    expect(loadCentralSession()).toBeNull();
+    await vi.waitFor(async () => {
+      const { loadMemberResumeKey: load } = await import("./memberResumeKey");
+      expect(await load("person-a", "server", "epoch")).toBeNull();
+    });
+  });
 });
