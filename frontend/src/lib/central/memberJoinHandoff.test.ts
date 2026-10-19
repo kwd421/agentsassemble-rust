@@ -254,3 +254,9 @@ describe("the invite join path", () => {
     vi.restoreAllMocks();
   });
 });
+
+it("never consumes a consent when the caller cannot name the host key", () => {
+  recordMemberJoinHandoff("person-k", { server_id: "server-k", registration_epoch: "epoch-2", host_key_fingerprint: "fp-2" }, { live: true });
+  expect(takeMemberJoinHandoff("person-k", "server-k", { registration_epoch: "epoch-2", host_key_fingerprint: "" })).toBeNull();
+  expect(takeMemberJoinHandoff("person-k", "server-k", { registration_epoch: "epoch-2", host_key_fingerprint: "fp-2" })).not.toBeNull();
+});

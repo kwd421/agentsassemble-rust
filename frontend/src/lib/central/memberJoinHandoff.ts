@@ -177,7 +177,8 @@ export function takeMemberJoinHandoff(
   const handoff = live.find((entry) => entry.server_id === serverId);
   if (!handoff) return null;
   if (handoff.registration_epoch !== expected.registration_epoch) return null;
-  if (expected.host_key_fingerprint && handoff.host_key_fingerprint !== expected.host_key_fingerprint) return null;
+  // The host key must match exactly: an unknown key never consumes a consent.
+  if (!expected.host_key_fingerprint || handoff.host_key_fingerprint !== expected.host_key_fingerprint) return null;
   const admission = admissions.get(admissionKey(personId, serverId, handoff.registration_epoch));
   if (admission === undefined) return null;
   // Single use: the consent is spent, and the record never serves a second
