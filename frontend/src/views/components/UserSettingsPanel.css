@@ -427,7 +427,8 @@ dialog.dc-user-settings-dialog {
 .dc-user-settings-preview-body p {
   margin-top: 10px;
   border-radius: 8px;
-  background: #202024;
+  /* The status bubble must read against the card, not vanish into it. */
+  background: var(--color-server-rail);
   padding: 8px 10px;
   color: var(--color-text-secondary);
   font-size: 13px;

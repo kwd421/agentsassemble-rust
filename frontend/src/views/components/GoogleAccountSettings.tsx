@@ -112,23 +112,25 @@ export default function GoogleAccountSettings({ identity }: { identity: UserProf
   }
 
   return (
-    <section className="dc-guest-recovery-settings" style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid var(--color-panel-border)", minWidth: 0 }} aria-label="Google 계정 연결" aria-busy={busy}>
+    <section className="dc-guest-recovery-settings dc-account-block" style={{ minWidth: 0 }} aria-label="Google 계정 연결" aria-busy={busy}>
       <h4>Google 계정</h4>
-      <p>연결한 계정으로 다른 기기에서도 이 서버의 신원을 이어갈 수 있어요.</p>
-      {!status && !error && <p role="status">계정 상태를 불러오고 있어요.</p>}
-      {status?.account && <>
-        <strong>Google 계정이 연결됐어요.</strong>
-        <p>연결을 해제해도 프로필과 방 참여는 유지돼요.</p>
-        <button type="button" className="ops-button" style={{ minHeight: 44 }} disabled={busy} onClick={() => void disconnect()}>
+      <p className="dc-account-block-lead">Google 계정을 연결하면 다른 기기에서도 이 서버의 내 프로필을 이어서 쓸 수 있어요.</p>
+      {!status && !error && <p role="status" className="dc-account-block-lead">계정 상태를 불러오는 중이에요.</p>}
+      {status?.account && <div className="dc-account-card">
+        <span className="dc-account-card-text">
+          <strong>Google 계정이 연결됐어요.</strong>
+          <small>연결을 해제해도 프로필과 방 참여는 유지돼요.</small>
+        </span>
+        <button type="button" className="ops-button dc-account-block-action" disabled={busy} onClick={() => void disconnect()}>
           {busy ? "해제 중…" : "연결 해제"}
         </button>
-      </>}
-      {status && !status.account && desktop && <p>앱의 Google 로그인은 시작 화면의 계정에서 관리해요.</p>}
+      </div>}
+      {status && !status.account && desktop && <p className="dc-account-block-lead">앱의 Google 로그인은 시작 화면에서 관리해요.</p>}
       {status && !status.account && !desktop && (!status.google.enabled
-        ? <p>이 서버에는 Google 로그인이 설정되지 않았어요.</p>
+        ? <p className="dc-account-block-lead">이 서버는 Google 로그인을 쓰지 않아요.</p>
         : <>
           {!challenge && <button type="button" className="dc-agent-create-primary" style={{ minHeight: 44 }} disabled={busy} onClick={() => void prepare()}>
-            {busy ? "로그인 준비 중…" : "Google 로그인 준비"}
+            {busy ? "준비하는 중…" : "Google 계정 연결"}
           </button>}
           {challenge && <GoogleButton challenge={challenge} onCredential={acceptCredential} onError={reportGoogleError} />}
         </>)}

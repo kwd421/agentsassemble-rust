@@ -70,8 +70,10 @@ export default function UserSettingsPanel({
     draft.avatarImage,
     displayResourceBase
   )).url;
-  const activeSectionLabel =
-    sections.find((section) => section.id === settingsSection)?.label || "사용자 설정";
+  // A section that stopped being available (authority or session changed while
+  // open) falls back to 계정 instead of an empty page.
+  const shownSection: UserSettingsSection = sections.some((section) => section.id === settingsSection) ? settingsSection : "account";
+  const activeSectionLabel = sections.find((section) => section.id === shownSection)?.label || "계정";
   return (
     <dialog ref={dialogRef} className="dc-profile-settings-modal dc-user-settings-dialog" aria-label="사용자 설정"
       style={{ position: "fixed", inset: 0, margin: "auto", width: "min(980px, calc(100vw - 32px))", height: "min(760px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)", padding: 0, color: "var(--color-text-primary)" }}
@@ -97,7 +99,7 @@ export default function UserSettingsPanel({
               style={{ minWidth: 44, minHeight: 44 }}
               disabled={saving}
               type="button"
-              aria-current={settingsSection === section.id ? "page" : undefined}
+              aria-current={shownSection === section.id ? "page" : undefined}
               onClick={() => onSectionChange(section.id)}
             >
               <span>{section.label}</span>
@@ -112,7 +114,7 @@ export default function UserSettingsPanel({
           <button type="button" className="dc-profile-settings-close" style={{ minWidth: 44, minHeight: 44 }} disabled={saving} aria-label="사용자 설정 닫기" onClick={onClose}><X size={18} /></button>
         </header>
         <section className="dc-user-settings-section">
-          {settingsSection === "account" && (
+          {shownSection === "account" && (
             <>
               {/* A non-owner never sees the local operator's profile as their
                   own: the signed-in central account is shown below (with its
@@ -171,7 +173,7 @@ export default function UserSettingsPanel({
             </>
           )}
 
-          {settingsSection === "profile" && (
+          {shownSection === "profile" && (
             <>
               {!serverAuthorityAvailable && (
                 <p className="dc-user-settings-lead">내 서버가 있는 컴퓨터에서 프로필을 바꿀 수 있어요.</p>
@@ -291,14 +293,14 @@ export default function UserSettingsPanel({
             </>
           )}
 
-          {settingsSection === "recovery" && profileIdentity?.sessionToken && (
+          {shownSection === "recovery" && profileIdentity?.sessionToken && (
             <GuestRecoverySettings identity={profileIdentity} />
           )}
-          {settingsSection === "devices" && canManageDevices && <OwnerDevicesPanel identity={profileIdentity ?? {}} />}
+          {shownSection === "devices" && canManageDevices && <OwnerDevicesPanel identity={profileIdentity ?? {}} />}
         </section>
         {profileError && <p className="dc-user-settings-error" role="alert" style={{ position: "relative", inset: "auto", padding: "12px 32px", whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }}>{profileError}</p>}
         {/* Discord's save bar: it appears only once there is something to save. */}
-        {serverAuthorityAvailable && settingsSection !== "recovery" && (changed || saving) && (
+        {serverAuthorityAvailable && shownSection !== "recovery" && (changed || saving) && (
           <div className="dc-user-settings-savebar" role="region" aria-label="저장하지 않은 변경 사항">
             <span className="dc-user-settings-savebar-text">저장하지 않은 변경 사항이 있어요.</span>
             <button type="button" onClick={onReset} style={{ minWidth: 44, minHeight: 44 }} disabled={saving || !changed}>
