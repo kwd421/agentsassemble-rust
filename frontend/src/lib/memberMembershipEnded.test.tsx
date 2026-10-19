@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MembershipEndedView from "../views/components/MembershipEndedView";
 import { presenceStatusLabel } from "../lib/presenceStatus";
 import {
+  bindMembershipEndedPerson,
   isMembershipEndedError,
   isMembershipEndedTerminal,
   markMembershipEndedTerminal,
@@ -34,6 +35,18 @@ describe("membershipEnded contract", () => {
       title: "방에서 내보내졌어요",
       body: "‘모임방’에 더 이상 참가할 수 없어요.",
     });
+  });
+
+  it("keeps an ended room with the person it ended for, even after a switch in another tab", () => {
+    let person = "person-a";
+    bindMembershipEndedPerson(() => person);
+    markMembershipEndedTerminal("s", "m");
+    expect(isMembershipEndedTerminal("s", "m")).toBe(true);
+    person = "person-b";
+    expect(isMembershipEndedTerminal("s", "m")).toBe(false);
+    person = "person-a";
+    expect(isMembershipEndedTerminal("s", "m")).toBe(true);
+    bindMembershipEndedPerson(() => "");
   });
 
   it("marks terminal rooms per host room until reset", () => {

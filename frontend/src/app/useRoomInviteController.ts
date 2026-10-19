@@ -452,9 +452,11 @@ export function useRoomInviteController({
     if (!localOperatorEligible && !remote) {
       throw new Error("현재 방의 초대 관리 권한을 확인할 수 없어요.");
     }
+    // Resolve the room's manager first: a room this computer does not manage
+    // (a friend's room) must never open this computer's public access.
+    const authority = resolveManagerRoomAuthority(room.id);
     const generation = beginIngressOperation();
     await requirePublicInviteReady(generation, startTunnelIfNeeded);
-    const authority = resolveManagerRoomAuthority(room.id);
     assertManagerOperation(generation, room.id, authority);
     let custody: ManagedHumanInviteCustody;
     try {
@@ -579,8 +581,8 @@ export function useRoomInviteController({
     setPairingCreating(true);
     const generation = beginIngressOperation();
     try {
-      const ready = await requirePublicInviteReady(generation);
       const authority = resolveManagerRoomAuthority(room.id);
+      const ready = await requirePublicInviteReady(generation);
       assertManagerOperation(generation, room.id, authority);
       const custody = await createOperatorPairing(authority,
         () => assertManagerOperation(generation, room.id, authority), remote);

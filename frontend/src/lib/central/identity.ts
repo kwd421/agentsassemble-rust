@@ -3,7 +3,7 @@ import { finishGoogleVerification } from "./googleRegistration";
 import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
 import { clearMemberAnchors } from "./memberAnchors";
 import { clearRoomDockItems } from "../roomDockPersistence";
-import { clearAllMembershipEndedTerminals } from "../memberMembershipEnded";
+import { bindMembershipEndedPerson, clearAllMembershipEndedTerminals } from "../memberMembershipEnded";
 import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
@@ -310,6 +310,15 @@ export function loadCentralSession(): CentralSession | null {
     return null;
   }
 }
+
+// Ended rooms are remembered per signed-in person (see memberMembershipEnded).
+bindMembershipEndedPerson(() => {
+  try {
+    return (JSON.parse(localStorage.getItem(SESSION_KEY) || "null") as CentralSession | null)?.person?.person_id ?? "";
+  } catch {
+    return "";
+  }
+});
 
 export function clearCentralSession(): void {
   // Read the raw record: loadCentralSession clears expired sessions, which

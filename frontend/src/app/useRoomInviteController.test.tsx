@@ -236,6 +236,24 @@ describe("useRoomInviteController", () => {
     hook.unmount();
   });
 
+  it("never opens this computer's public access for a room it does not manage", async () => {
+    apiMocks.fetchPublicInviteStatus.mockResolvedValue(stoppedStatus);
+    const hook = renderInviteController();
+    act(() => hook.result.current.open("friend-room"));
+    await waitFor(() => expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalled());
+    await act(async () => {
+      await hook.result.current.generateSecureInvite(
+        { ...room, id: "friend-room", roomOrigin: "remote_server" },
+        "room",
+        { maxUses: 1, ttlSeconds: 86400, displayName: "" },
+        true
+      ).catch(() => undefined);
+    });
+    expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+    expect(apiMocks.createManagedHumanInvite).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
   it("retains a post-dispatch accepted invite as revoke-only when its operation is superseded", async () => {
     const accepted = deferred<ManagedHumanInviteCustody>();
     apiMocks.createManagedHumanInvite.mockReturnValue(accepted.promise);

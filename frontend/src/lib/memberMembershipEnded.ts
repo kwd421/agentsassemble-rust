@@ -30,20 +30,28 @@ function terminalKey(serverId: string, meetingId: string): string {
   return `${serverId}\0${meetingId}`;
 }
 
-const terminalRooms = new Map<string, MembershipEndedScope>();
+// Each ended room belongs to the person signed in when it ended. The current
+// person is read from the shared session store, so a person switched in
+// another tab never inherits this tab's ended rooms.
+const terminalRooms = new Map<string, { scope: MembershipEndedScope; person: string }>();
+let currentPerson: () => string = () => "";
+
+export function bindMembershipEndedPerson(source: () => string): void {
+  currentPerson = source;
+}
 
 export function markMembershipEndedTerminal(serverId: string, meetingId: string, scope: MembershipEndedScope = "kicked"): void {
-  if (serverId && meetingId) terminalRooms.set(terminalKey(serverId, meetingId), scope);
+  if (serverId && meetingId) terminalRooms.set(terminalKey(serverId, meetingId), { scope, person: currentPerson() });
 }
 
 export function isMembershipEndedTerminal(serverId: string, meetingId: string): boolean {
-  if (!serverId || !meetingId) return false;
-  return terminalRooms.has(terminalKey(serverId, meetingId));
+  return membershipEndedTerminalScope(serverId, meetingId) !== null;
 }
 
 export function membershipEndedTerminalScope(serverId: string, meetingId: string): MembershipEndedScope | null {
   if (!serverId || !meetingId) return null;
-  return terminalRooms.get(terminalKey(serverId, meetingId)) ?? null;
+  const entry = terminalRooms.get(terminalKey(serverId, meetingId));
+  return entry && entry.person === currentPerson() ? entry.scope : null;
 }
 
 /** The person re-joined this room (e.g. a new invite): it is no longer ended for them. */

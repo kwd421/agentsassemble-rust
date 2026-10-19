@@ -102,12 +102,15 @@ export default function AppView({ controller }: { controller: AppController }) {
     currentChannelScope.current = channelScope;
     return () => { currentChannelScope.current = ""; };
   }, [channelScope]);
-  const canManageFriends = roomLifecycle.enabled || Boolean(ownerProfileSession) || Boolean(guestSession?.centralOwner && admittedSessionToken && !guestExpired);
+  // The local operator surface is open to anyone at this desktop; only the
+  // registered owner of this computer's server may use it as their own.
+  const ownsThisComputer = roomLifecycle.enabled && controller.localOwnedByAccount;
+  const canManageFriends = ownsThisComputer || Boolean(ownerProfileSession) || Boolean(guestSession?.centralOwner && admittedSessionToken && !guestExpired);
   // Saved friends live on the person's own server: this computer's server when
   // they own it, their own server over the owner session, or the web owner
   // session. Never a friend's room authority (that host has no such list).
   const friendAuthority = ownerProfileSession ? { kind: "server_owner" as const, credential: ownerProfileSession, deviceToken }
-    : roomLifecycle.enabled ? { kind: "local" as const }
+    : ownsThisComputer ? { kind: "local" as const }
     : guestSession?.centralOwner && admittedSessionToken && !guestExpired ? roomHttpAuthority
     : null;
   const canCreateChannel = canManageActiveRoom && canonicalRoom.connectionState === "connected";
@@ -481,7 +484,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             <section className="dc-disconnected-room" aria-labelledby="friends-unavailable-title">
               <div className="dc-disconnected-room-icon" aria-hidden><Users size={30} /></div>
               <h1 id="friends-unavailable-title">친구 목록을 쓸 수 없어요</h1>
-              <p className="dc-disconnected-room-description">내 컴퓨터에서 앱을 열면 친구를 볼 수 있어요.</p>
+              <p className="dc-disconnected-room-description">{controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 다시 연결되면 친구를 볼 수 있어요." : "내 컴퓨터에서 앱을 열면 친구를 볼 수 있어요."}</p>
               <button type="button" className="ops-button min-h-11 px-4" onClick={() => setFriendsOpen(false)}>대화로 돌아가기</button>
             </section>
           ) : guestExpired && !ownerProfileSession ? (
@@ -491,7 +494,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 44, marginTop: 20 }} onClick={exitGuestSurface}>접속 화면 나가기</button>
             </section>
           ) : adminOpen ? (
-            <AdminPanel onClose={() => setAdminOpen(false)} ownsLocalServer={roomLifecycle.enabled} />
+            <AdminPanel onClose={() => setAdminOpen(false)} ownsLocalServer={ownsThisComputer} />
           ) : activeRoomSelectError?.membershipEnded ? (
             <MembershipEndedView key={activeRoom.id} room={activeRoom} scope={activeRoomSelectError.membershipEnded} onConfirm={controller.acknowledgeMembershipEnded} />
           ) : activeRoomDisconnected || activeRoomSelectError ? (

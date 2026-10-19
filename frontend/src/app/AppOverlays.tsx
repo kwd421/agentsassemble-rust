@@ -80,6 +80,7 @@ export default function AppOverlays({ controller, companionInvites, friendAuthor
             friendAuthority={friendAuthority}
             canControlIngress={roomInvite.canControlIngress && inviteModalRoom.roomOrigin !== "remote_server"}
             showHosting={inviteModalRoom.roomOrigin !== "remote_server"}
+            canCreateLink={inviteModalRoom.roomOrigin !== "remote_server" || Boolean(guestSession?.centralOwner)}
             humanInvites={roomInvite.humanInvites}
             connectorInvites={roomInvite.connectorInvites}
             attendeeInvites={roomInvite.attendeeInvites}

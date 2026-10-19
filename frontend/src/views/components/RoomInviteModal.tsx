@@ -55,6 +55,7 @@ export default function RoomInviteModal({
   friendAuthority,
   canControlIngress = true,
   showHosting = true,
+  canCreateLink = true,
   humanInvites = [],
   connectorInvites,
   attendeeInvites,
@@ -84,6 +85,8 @@ export default function RoomInviteModal({
   canControlIngress?: boolean;
   /** False for a friend's room: this computer's external access has nothing to do with it. */
   showHosting?: boolean;
+  /** False in a room this computer neither hosts nor manages as its owner (a friend's room). */
+  canCreateLink?: boolean;
   humanInvites?: readonly HumanInvitePresentation[];
   connectorInvites?: ConnectorInviteControls;
   attendeeInvites?: AttendeeInviteControls;
@@ -179,7 +182,7 @@ export default function RoomInviteModal({
     const action = pendingPublicAction;
     setPendingPublicAction(null);
     if (!action) return;
-    onGenerateSecureInvite(action.options, true);
+    onGenerateSecureInvite(action.options, canControlIngress);
   }
 
   return (
@@ -242,6 +245,7 @@ export default function RoomInviteModal({
           aria-labelledby={tabs.length > 1 ? `invite-tab-${tab}` : "room-invite-title"}
         >
           {tab === "people" && <section className="dc-invite-people" aria-label="사람 초대">
+            {!canCreateLink ? <p className="dc-invite-lead">초대 링크는 방 주인만 만들 수 있어요.</p> : <>
             {friendAuthority !== null && <SavedFriendInvitePicker directory={friendsDirectory} onSelect={setFriendDisplayName} />}
             <p className="dc-invite-lead">초대받은 사람은 브라우저에서 이 링크로 참가해요.</p>
             <div className="dc-invite-link-field">
@@ -269,7 +273,7 @@ export default function RoomInviteModal({
                   className="dc-invite-copy-button"
                   style={{ minWidth: 44, minHeight: 44 }}
                   aria-label="사람 초대 링크 생성"
-                  disabled={publicAccessBusy}
+                  disabled={publicAccessBusy || (!publicAccessRunning && !canControlIngress)}
                   onClick={() => requestPublicAction({ kind: "human", options: currentHumanOptions })}
                 >
                   링크 만들기
@@ -321,6 +325,7 @@ export default function RoomInviteModal({
                 </label>
               </div>
             )}
+            </>}
             {humanInvites.length > 0 && (
               <div className="dc-invite-issued" aria-label="발급한 사람 초대">
                 <span className="dc-invite-issued-title">만든 링크</span>

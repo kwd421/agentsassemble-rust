@@ -35,6 +35,7 @@ function renderInviteModal({
   copyStatus,
   quotaParkedUntil = null,
   friendRoom = false,
+  remoteOwner = false,
 }: {
   lastError?: string;
   publicAccess?: boolean;
@@ -48,6 +49,7 @@ function renderInviteModal({
   copyStatus?: string;
   quotaParkedUntil?: number | null;
   friendRoom?: boolean;
+  remoteOwner?: boolean;
 } = {}) {
   const retry = vi.fn();
   const onGenerateSecureInvite = vi.fn();
@@ -88,8 +90,9 @@ function renderInviteModal({
       onStopTunnel={onStopTunnel}
       copyStatus={copyStatus}
       quotaParkedUntil={quotaParkedUntil}
-      canControlIngress={!friendRoom}
-      showHosting={!friendRoom}
+      canControlIngress={!friendRoom && !remoteOwner}
+      showHosting={!friendRoom && !remoteOwner}
+      canCreateLink={!friendRoom}
       friendAuthority={friendRoom ? null : undefined}
     />
   );
@@ -107,11 +110,21 @@ describe("RoomInviteModal", () => {
     renderInviteModal({ publicAccess: false, friendRoom: true });
     expect(screen.queryByRole("button", { name: "외부 접속 열기" })).toBeNull();
     expect(screen.queryByRole("radio", { name: "내 기기" })).toBeNull();
-    expect(screen.getByRole("textbox", { name: "사람 초대 링크" }).getAttribute("placeholder")).toBe("서버 주인이 외부 접속을 열면 링크를 만들 수 있어요");
+    expect(screen.getByText("초대 링크는 방 주인만 만들 수 있어요.")).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "사람 초대 링크" })).toBeNull();
     // No own friends list here: nothing is fetched, no picker or error shows.
     expect(friendsApi.list).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "다시 읽기" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("waits for the host's own external access when it cannot open it from here", () => {
+    const { onGenerateSecureInvite } = renderInviteModal({ publicAccess: false, remoteOwner: true });
+    expect(screen.getByRole("textbox", { name: "사람 초대 링크" }).getAttribute("placeholder")).toBe("서버 주인이 외부 접속을 열면 링크를 만들 수 있어요");
+    const create = screen.getByRole("button", { name: "사람 초대 링크 생성" }) as HTMLButtonElement;
+    expect(create.disabled).toBe(true);
+    fireEvent.click(create);
+    expect(onGenerateSecureInvite).not.toHaveBeenCalled();
   });
 
   it("does not expose the removed client-only preview entrance", () => {
