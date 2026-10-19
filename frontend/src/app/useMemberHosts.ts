@@ -595,6 +595,14 @@ export function useMemberHosts({
       // with the re-join reason until fresh consent overwrites it.
       if (anchor && (anchor.registration_epoch !== epoch ||
           (tuple.fingerprint !== "" && anchor.host_key_fingerprint !== tuple.fingerprint))) {
+        // Identity changed (epoch or host key): the old admission's channel
+        // is dead to the host, so detach it and drop it from the registry —
+        // otherwise a later reconnect keeps selecting (or the TTL heal keeps
+        // resolving admissionFor) on the stale entry instead of the live
+        // workspace the re-join installs.
+        const stale = admissions.current.get(server.server_id);
+        admissions.current.delete(server.server_id);
+        detachMemberHost(stale);
         refused.current.add(server.server_id);
         attempted.current.set(server.server_id, tupleKey(tuple));
         setPhase(server.server_id, "disconnected", anchor.rooms ?? null, origin,
@@ -673,15 +681,21 @@ export function useMemberHosts({
     const anchor = activePerson ? loadMemberAnchor(activePerson, serverId) : null;
     const epoch = server?.registration_epoch || anchor?.registration_epoch || "";
     if (!epoch) return;
-    // A live workspace channel already serves this host (the open room and
-    // its sessions are bound to it): dropping the registry entry here would
-    // orphan the live admission (admissionFor null while the room stays live,
-    // so the session-expiry heal parks with no-admission), and a fresh attach
-    // would only mint a redundant admit-only channel the host reaps 30 s
-    // later. Reconcile only; the adopt path keeps the host connected on its
-    // live channel with zero central. A dead channel still falls through to a
-    // fresh attach below.
-    if (remoteWorkspaceFor(serverId)?.transport.active) {
+    // A live workspace channel only pins the registry entry when the registry
+    // admission IS that workspace transport (same object): the open room and
+    // its sessions are bound to it, so dropping the entry would orphan the
+    // live admission (admissionFor null while the room stays live, and the
+    // session-expiry heal parks with no-admission), and a fresh attach would
+    // only mint a redundant admit-only channel the host reaps 30 s later.
+    // Reconcile only; the adopt path keeps the host connected on its live
+    // channel with zero central. A dead channel still falls through to a
+    // fresh attach below. When the registry disagrees with the live workspace
+    // (a dead epoch-1 entry while the re-join installed epoch-2), the early
+    // return must not fire either: the entry is dropped below and a fresh
+    // attach re-registers a live admission so the heal can select on it.
+    const liveWorkspace = remoteWorkspaceFor(serverId);
+    const registered = admissions.current.get(serverId);
+    if (liveWorkspace?.transport.active === true && registered?.transport === liveWorkspace.transport) {
       clearReconnectTimer(serverId);
       reconcile();
       return;
@@ -692,6 +706,18 @@ export function useMemberHosts({
     clearReconnectTimer(serverId);
     dropHost(serverId);
     if (server) {
+      // Epoch-change custody: the registry held a dead admission while a
+      // different workspace (the re-join) went live. Reconcile alone only
+      // adopts rooms and leaves admissionFor empty, so the TTL heal would
+      // park on a dead entry. Attach fresh to re-register a live admission
+      // (explicit retry already lifted the refusal gate above when listed).
+      if (liveWorkspace?.transport.active === true &&
+          (!registered || registered.transport?.active !== true) &&
+          !refused.current.has(serverId)) {
+        void attach(serverId, epoch,
+          anchor?.endpoint_origin || liveWorkspace.transport.hello.origin || "");
+        return;
+      }
       reconcile();
       return;
     }
@@ -842,18 +868,26 @@ export function useMemberHosts({
     } catch (error) {
       const expired = timedOut();
       if (expired) {
-        // The transport is suspect (hung or dead): mark the host
-        // disconnected with its last-known rooms, then park on the per-host
-        // backoff instead of reconciling immediately into another attach. A
-        // live-transport registry entry is never deleted here: the open room
-        // still selects over that channel once the hang clears, and the
-        // session-expiry heal needs it registered.
+        // The select timed out: the channel is wedged even when the transport
+        // still reports active, so it must be replaced. Close the stored
+        // admission (closing its transport) and delete the registry entry
+        // before scheduling the reconnect below — otherwise reattachHost
+        // early-returns on the wedged channel and the reconnect never
+        // attaches a fresh one. The open room re-selects over the fresh
+        // channel (and the session-expiry heal with it); 다시 연결 and room
+        // taps do the same. The live-entry protection stays only on the
+        // non-timeout paths (duplicate attach suppression, reattach on a
+        // healthy live channel).
         flights.current.get(serverId)?.abort();
         flights.current.delete(serverId);
         const stored = admissions.current.get(serverId);
-        if (stored && !stored.transport?.active) {
-          stored.close();
-          admissions.current.delete(serverId);
+        admissions.current.delete(serverId);
+        if (stored) {
+          try {
+            stored.transport.close();
+          } catch {
+            // Transport close is best-effort; the entry is already dropped.
+          }
         }
         setPhase(serverId, "disconnected");
         reconnectCauses.current.set(serverId, "transient");

@@ -11,6 +11,39 @@ import { memberAdmissionFreeSelect } from "../lib/central/secureMemberEntry";
 import { memberAdmissionServerFor } from "./remoteRoomAuthority";
 
 /**
+ * A cached background join payload is only reusable while its own bearer is
+ * still alive. A clock-expired (or nearly expired) bearer must never be
+ * re-installed: the install succeeds locally while the socket 401s, so the
+ * loss heals "for free" without a real select and the hourly heal never
+ * happens. Bearers from sessions that already failed authorization (kick/ban
+ * revoke while inside the TTL) are poisoned the same way. Both cases fall
+ * through to a fresh host select, where the host rechecks join/kick/ban and
+ * mints a new bearer.
+ */
+const CACHED_JOIN_EXPIRY_MARGIN_MS = 60_000;
+const authFailedSessionTokens = new Set<string>();
+
+export function noteMemberRoomSessionAuthFailed(sessionToken: string): void {
+  if (sessionToken) authFailedSessionTokens.add(sessionToken);
+}
+
+export function resetMemberRoomSessionAuthFailedForTests(): void {
+  authFailedSessionTokens.clear();
+}
+
+export function isUsableCachedJoinPayload(payload: unknown, now: number = Date.now()): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const candidate = payload as { expires_at?: unknown; session_token?: unknown };
+  if (typeof candidate.session_token === "string" && authFailedSessionTokens.has(candidate.session_token)) {
+    return false;
+  }
+  if (typeof candidate.expires_at !== "string") return false;
+  const expiresAt = Date.parse(candidate.expires_at);
+  if (Number.isNaN(expiresAt)) return false;
+  return expiresAt - now > CACHED_JOIN_EXPIRY_MARGIN_MS;
+}
+
+/**
  * Open room follows its host across a restart: when the member host
  * re-attaches on a fresh admission (new origin/channel) the previously
  * selected room session is bound to the dead channel and the new host
@@ -119,7 +152,11 @@ export function useMemberRoomAutoReselect({
         const live = liveSessionFor(memberServerId, activeRoom.meetingId) as {
           meeting_id?: string;
         } | null;
-        if (live) {
+        // A revoked or clock-expired cached bearer must never be re-installed
+        // here either: fall through to the fresh select below, which spends
+        // no budget on a channel-bound host and lets the host recheck
+        // join/kick/ban.
+        if (live && isUsableCachedJoinPayload(live)) {
           try {
             if (await acceptSession(live)) {
               (setSelectError as (update: (current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null) => void)(
@@ -162,6 +199,12 @@ export function useMemberRoomAutoReselect({
   // when the channel is usable.
   const sessionLossKey = useRef("");
   const hadLiveSession = useRef(false);
+  // Timestamp (Date.now) of the last automatic free heal per room. A free
+  // heal that mints a bearer which dies almost immediately (kick, ban, or a
+  // wedged channel) must not heal again automatically: without this the heal
+  // re-selects on every loss edge and spins without spending budget on a
+  // channel-bound host. No timers: the next loss edge compares timestamps.
+  const lastFreeHealAt = useRef(new Map<string, number>());
   useEffect(() => {
     if (activeRoom.roomOrigin !== "remote_server" || !activeRoom.serverId) return;
     const memberServerId = memberAdmissionServerFor(activeRoom, ownerServerId, hasAnchor);
@@ -199,38 +242,42 @@ export function useMemberRoomAutoReselect({
     else if (!free) {
       const claim = tryClaimMemberRoomAutoReselectRetry(accountId, memberServerId, activeRoom.meetingId);
       if (!claim.allowed) skipped = `retry-budget-${claim.reason}`;
+    } else {
+      // A free heal less than 60 s after the previous automatic heal of the
+      // same room means the healed bearer died almost immediately: park with
+      // the stop line instead of healing again. The user taps 다시 연결.
+      const lastHeal = lastFreeHealAt.current.get(lossKey) ?? 0;
+      if (Date.now() - lastHeal < 60_000) skipped = "healed-recently";
     }
     if (import.meta.env.DEV) console.debug("[member-select] session loss observed", {
       roomId: activeRoom.id, meetingId: activeRoom.meetingId, serverId: memberServerId,
       free, healed: skipped === null, ...(skipped ? { skipped } : {}),
     });
     if (skipped) {
-      if (skipped === "retry-budget-exhausted") {
+      if (skipped === "retry-budget-exhausted" || skipped === "healed-recently") {
         (setSelectError as (error: { roomId: string; message: string }) => void)(
           { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+      }
+      if (skipped === "healed-recently") {
+        // Park this loss permanently: a new live session re-arms the next
+        // loss, but time passing alone never retries it.
+        hadLiveSession.current = false;
       }
       return;
     }
     // Consume this loss before the async attempt so a refused room never
     // retries on the same loss; a new live session re-arms the next loss.
     hadLiveSession.current = false;
+    if (free) lastFreeHealAt.current.set(lossKey, Date.now());
     flight.current = true;
     void (async () => {
       try {
-        const live = liveSessionFor(memberServerId, activeRoom.meetingId) as {
-          meeting_id?: string;
-        } | null;
-        if (live) {
-          try {
-            if (await acceptSession(live)) {
-              (setSelectError as (update: (current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null) => void)(
-                (current) => (current?.roomId === activeRoom.id ? null : current));
-              return;
-            }
-          } catch {
-            // Fall through to a fresh select on the live admission.
-          }
-        }
+        // The session-loss heal ALWAYS does a fresh host select: the host
+        // rechecks join/kick/ban and mints a new bearer. A cached background
+        // payload is never re-installed here — a revoked (kick/ban) bearer
+        // would 401 and re-arm the loss into an uncapped spin on a
+        // channel-bound host, and a clock-expired payload would "heal"
+        // without a real select so the hourly heal never happens.
         const payload = await selectRoom(memberServerId, activeRoom.meetingId);
         if (!await acceptSession(payload)) {
           (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
@@ -239,6 +286,20 @@ export function useMemberRoomAutoReselect({
             (current) => (current?.roomId === activeRoom.id ? null : current));
         }
       } catch {
+        // A refused fresh select means the host revoked this member
+        // (kick/ban): poison the cached bearer so a later tap never
+        // re-installs it either — the tap falls through to its own fresh
+        // select and surfaces the refusal inline instead of 401-spinning.
+        try {
+          const stale = liveSessionFor(memberServerId, activeRoom.meetingId) as {
+            session_token?: unknown;
+          } | null;
+          if (stale && typeof stale.session_token === "string") {
+            noteMemberRoomSessionAuthFailed(stale.session_token);
+          }
+        } catch {
+          // Cache poisoning is best-effort; the stop line below already parks.
+        }
         (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
       } finally {
         flight.current = false;
@@ -252,8 +313,9 @@ export function useMemberRoomAutoReselect({
 }
 
 /**
- * Manual rail tap for a member room: prefers a live background session,
- * otherwise selects once through the host admission. Records the short
+ * Manual rail tap for a member room: prefers a live usable background
+ * session (fresh bearer, never authorization-failed), otherwise selects once
+ * through the host admission. Records the short
  * Korean inline failure instead of silence or an alert; the caller marks
  * the consumed admission so the automatic re-select stays bounded.
  */
@@ -270,7 +332,9 @@ export async function selectMemberRoomOnDemand({ roomId, meetingId, memberServer
   try {
     const live = liveSessionFor(memberServerId, meetingId);
     let opened = false;
-    if (live) {
+    // A revoked or clock-expired cached bearer must never be re-installed:
+    // fall through to the fresh select below so the host rechecks membership.
+    if (isUsableCachedJoinPayload(live)) {
       try {
         opened = await acceptSession(live);
       } catch {

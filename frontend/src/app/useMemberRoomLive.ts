@@ -11,6 +11,7 @@ import {
   projectMemberRoomBadge,
   type MemberRoomLiveBadge,
 } from "../lib/central/memberRoomLive";
+import { noteMemberRoomSessionAuthFailed } from "./useMemberRoomAutoReselect";
 import { tryClaimMemberRoomAutoReselect, tryClaimMemberRoomAutoReselectRetry } from "../lib/central/memberRoomAutoReselectBudget";
 import type { MemberHostSnapshot } from "./useMemberHosts";
 
@@ -301,9 +302,12 @@ export function useMemberRoomLive({
                   ? String((error as { category: unknown }).category)
                   : "";
                 if (category !== "authorization_failed") return;
-                // The room session is dead (revoked/expired): drop it and
-                // re-select once through a fresh admission cycle. A
+                // The room session is dead (revoked/expired): poison its bearer
+                // so a later tap or heal never re-installs it, then drop it
+                // and re-select once through a fresh admission cycle. A
                 // persistently dead session parks instead of spinning.
+                const dead = live.session;
+                if (dead) noteMemberRoomSessionAuthFailed(dead.session_token);
                 live.session = null;
                 live.socket?.close();
                 live.socket = null;

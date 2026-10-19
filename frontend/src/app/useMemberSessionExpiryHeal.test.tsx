@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useCentralDirectory } from "./useCentralDirectory";
 import { useMemberHosts } from "./useMemberHosts";
 import { useMemberRoomLive } from "./useMemberRoomLive";
-import { useMemberRoomAutoReselect } from "./useMemberRoomAutoReselect";
+import { useMemberRoomAutoReselect, selectMemberRoomOnDemand } from "./useMemberRoomAutoReselect";
+import { resetMemberRoomSessionAuthFailedForTests } from "./useMemberRoomAutoReselect";
 import { useCanonicalRoom } from "../useCanonicalRoom";
 import { NO_SURFACE_STREAMS } from "./remoteRoomAuthority";
 import type { RoomSocketHandlers } from "../roomSocketTypes";
@@ -25,6 +26,7 @@ import {
   MEMBER_ROOM_AUTO_RESELECT_DAILY_CAP,
   MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE,
   memberRoomAutoReselectCount,
+  noteMemberHostExternalReselectAttach,
   resetMemberRoomAutoReselectBudgetForTests,
 } from "../lib/central/memberRoomAutoReselectBudget";
 import { resetMemberHostOfflineBudgetForTests } from "../lib/central/memberRoomLive";
@@ -618,6 +620,311 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
       await vi.advanceTimersByTimeAsync(600_000);
     });
     expect(selectCalls(options).length).toBe(parkedSelects);
+    env.unmount();
+  });
+});
+
+describe("session-loss heal never reinstalls a cached bearer (real hooks)", () => {
+  beforeEach(() => {
+    cleanup();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    closeRemoteWorkspace();
+    vi.clearAllMocks();
+    bootstrap.mockReset();
+    grantStub.mockReset();
+    challenges.clear();
+    resetCentralRequestGovernorForTests();
+    resetMemberHostOfflineBudgetForTests();
+    resetMemberRoomAutoReselectBudgetForTests();
+    resetMemberRoomSessionAuthFailedForTests();
+    bootstrap.mockImplementation(async () => ({
+      person: { person_id: ACCOUNT, display_name: "나", identity_kind: "google" },
+      servers: [
+        {
+          server_id: SERVER,
+          registration_epoch: EPOCH,
+          relation: "member" as const,
+          alias: "친구",
+          host_key_fingerprint: "fingerprint",
+          host_public_key_jwk: {},
+          endpoint: {
+            origin: ORIGIN,
+            generation: 3,
+            status: "published" as const,
+            mode: "event_secure_v1" as const,
+            protocol: "secure_admission_v1",
+          },
+        },
+      ],
+      server_time: 1,
+    }));
+    grantStub.mockImplementation(
+      async (_session: unknown, path: string, _method: string, body?: Record<string, unknown>) => {
+        if (String(path).includes("member-preview")) {
+          return {
+            server_id: SERVER,
+            label: "친구",
+            endpoint_origin: ORIGIN,
+            endpoint_generation: 3,
+            protocol: "secure_admission_v1",
+            mode: "event_secure_v1",
+            registration_epoch: EPOCH,
+            host_key_fingerprint: "fingerprint",
+            host_public_key_jwk: {},
+          };
+        }
+        return grantFromBody(body ?? {});
+      }
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    resetMemberRoomAutoReselectBudgetForTests();
+    resetMemberRoomSessionAuthFailedForTests();
+  });
+
+  // Same owner stack as setupHeal, but the member host's rooms all stay in the
+  // background (no foreground canonical socket): the open room ROOM_A is armed
+  // by the automatic first select, while useMemberRoomLive keeps a background
+  // join payload cached for ROOM_A. acceptSession installs unconditionally,
+  // exactly like the real acceptMemberSession (no expiry check): any cached
+  // reinstall lands, so the test fails if the heal ever touches the cache.
+  async function setupCachedHeal(options: FakeHostOptions) {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const transport = fakeTransport(options);
+    vi.spyOn(RemoteTransport, "connect").mockResolvedValue(transport as never);
+    const backgroundOpen = vi.fn(() => ({ close: vi.fn() }));
+    const acceptCalls: { session_token?: unknown }[] = [];
+    const hook = renderHook(() => {
+      const [session, setSession] = useState<RoomGuestSession | null>(null);
+      const [selectError, setSelectErrorState] = useState<{
+        roomId: string;
+        message: string;
+      } | null>(null);
+      const [clock, setClock] = useState(0);
+      void clock;
+      const central = useCentralDirectory(true);
+      const hosts = useMemberHosts({
+        personId: central.directory?.person?.person_id ?? ACCOUNT,
+        sessionToken: "token",
+        directory: central.directory,
+      });
+      const admittedSessionToken =
+        session && !roomGuestSessionExpired(session) ? session.sessionToken : "";
+      const guestExpired = false;
+      const live = useMemberRoomLive({
+        snapshots: hosts.snapshots,
+        admissionFor: hosts.admissionFor,
+        activeServerId: "",
+        activeMeetingId: "",
+        accountId: ACCOUNT,
+        openSocket: backgroundOpen as never,
+      });
+      const accept = async (payload: { session_token?: unknown }) => {
+        acceptCalls.push(payload as { session_token?: unknown });
+        const next = { ...roomGuestSessionFromJoinPayload("", payload as never), centralMember: true as const };
+        setSession(next);
+        return true;
+      };
+      useMemberRoomAutoReselect({
+        activeRoom: railRoomA as never,
+        ownerServerId: undefined,
+        accountId: ACCOUNT,
+        hasAnchor: hosts.hasAnchor,
+        isRefused: hosts.isRefused,
+        snapshots: hosts.snapshots,
+        admissionFor: hosts.admissionFor,
+        guestSession: session as never,
+        guestExpired,
+        admittedSessionToken,
+        liveSessionFor: live.liveSessionFor,
+        selectRoom: hosts.selectRoom,
+        acceptSession: accept as never,
+        setSelectError: ((update: unknown) => {
+          if (typeof update === "function") {
+            setSelectErrorState((current) =>
+              (update as (c: typeof current) => typeof current)(current)
+            );
+          } else {
+            setSelectErrorState(update as typeof selectError);
+          }
+        }) as never,
+      });
+      return {
+        hosts,
+        live,
+        accept,
+        session,
+        selectError,
+        touch: () => setClock((value) => value + 1),
+        killSession: () => {
+          setSession(null);
+          setClock((value) => value + 1);
+        },
+      };
+    });
+    const { result, unmount } = hook;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await waitFor(() => expect(result.current.hosts.snapshots[0]?.phase).toBe("connected"));
+    // The foreground auto-select and the background subscription share one
+    // automatic claim per host generation: release a second generation so the
+    // background select cannot starve the foreground (or vice versa), then
+    // wait until the background join payload for the room is cached.
+    await act(async () => {
+      noteMemberHostExternalReselectAttach(ACCOUNT, SERVER);
+      result.current.touch();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await waitFor(() => expect(result.current.live.liveSessionFor(SERVER, ROOM_A)).not.toBeNull());
+    const cached = result.current.live.liveSessionFor(SERVER, ROOM_A) as {
+      session_token?: string;
+    } | null;
+    // Arm the loss detector with a fresh select (a plain post installs the
+    // workspace on the registry admission's transport, exactly like the real
+    // first open; the background cache stays behind as the stale payload).
+    // Manual selects bypass the automatic budget.
+    if (!result.current.session) {
+      await act(async () => {
+        const payload = await result.current.hosts.selectRoom(SERVER, ROOM_A);
+        await result.current.accept(payload);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+    }
+    await waitFor(() => expect(result.current.session?.meetingId).toBe(ROOM_A));
+    acceptCalls.length = 0;
+    return { options, result, unmount, acceptCalls, cachedToken: cached?.session_token };
+  }
+
+  it("(a) kicked member with a background-cached payload: heal does a fresh select, host refuses, no reinstall, no spin", async () => {
+    const options: FakeHostOptions = { calls: [], kickedRooms: new Set() };
+    const env = await setupCachedHeal(options);
+    expect(env.cachedToken).toBeTruthy();
+    options.kickedRooms.add(ROOM_A);
+    const baseSelects = selectCalls(options).length;
+    env.acceptCalls.length = 0;
+
+    // The kick 401s the foreground bearer: the joined session drops while the
+    // cached background payload stays behind.
+    await act(async () => {
+      env.result.current.killSession();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // The heal must select fresh (not reinstall the revoked cached bearer):
+    // the host refuses, so the room parks with the stop line.
+    await waitFor(() => expect(selectCalls(options).length).toBeGreaterThan(baseSelects));
+    await waitFor(() => expect(env.result.current.selectError).not.toBeNull());
+    expect(env.result.current.selectError).toEqual({
+      roomId: "rail-a",
+      message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE,
+    });
+    expect(env.result.current.session).toBeNull();
+    expect(env.acceptCalls.filter((call) => call.session_token === env.cachedToken)).toEqual([]);
+    // No second attempt and no spin: the count stays parked.
+    const parkedSelects = selectCalls(options).length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300_000);
+    });
+    expect(selectCalls(options).length).toBe(parkedSelects);
+
+    // The refusal poisoned the cached bearer: a later tap also skips it and
+    // selects fresh (refused again inline) instead of reinstalling the 401.
+    env.acceptCalls.length = 0;
+    let tapError: unknown = null;
+    await act(async () => {
+      await selectMemberRoomOnDemand({
+        roomId: "rail-a",
+        meetingId: ROOM_A,
+        memberServerId: SERVER,
+        liveSessionFor: env.result.current.live.liveSessionFor,
+        selectRoom: env.result.current.hosts.selectRoom,
+        acceptSession: env.result.current.accept as never,
+        setSelectError: ((update: unknown) => {
+          tapError = typeof update === "function" ? (update as (c: unknown) => unknown)(null) : update;
+        }) as never,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(selectCalls(options).length).toBeGreaterThan(parkedSelects);
+    expect(env.acceptCalls.filter((call) => call.session_token === env.cachedToken)).toEqual([]);
+    expect(env.result.current.session).toBeNull();
+    expect(tapError).not.toBeNull();
+    env.unmount();
+  });
+
+  it("(b) background-cached clock-expired payload at TTL: heal performs exactly one fresh free select", async () => {
+    const options: FakeHostOptions = { calls: [], kickedRooms: new Set() };
+    const env = await setupCachedHeal(options);
+    expect(env.cachedToken).toBeTruthy();
+    const baseSelects = selectCalls(options).length;
+    const baseGrants = grantCalls().length;
+    env.acceptCalls.length = 0;
+
+    // SESSION_TTL passes: the bearer lapses by the clock while the cached
+    // background payload shares its expiry.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_601_000);
+      env.result.current.touch();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // Exactly one fresh channel-bound select — the expired cached bearer is
+    // never reinstalled — and the room is live again with no stop line.
+    await waitFor(() => expect(selectCalls(options).length).toBe(baseSelects + 1));
+    expect(env.acceptCalls.filter((call) => call.session_token === env.cachedToken)).toEqual([]);
+    await waitFor(() =>
+      expect(
+        env.result.current.session &&
+          !roomGuestSessionExpired(env.result.current.session) &&
+          (env.result.current.session.sessionToken as string) !== env.cachedToken
+      ).toBe(true)
+    );
+    expect(env.result.current.selectError).toBeNull();
+    expect(grantCalls().length).toBe(baseGrants);
+    env.unmount();
+  });
+
+  it("(c) free heal whose new bearer dies within 60s is not healed again automatically", async () => {
+    const options: FakeHostOptions = { calls: [], kickedRooms: new Set() };
+    const env = await setupCachedHeal(options);
+    const baseSelects = selectCalls(options).length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_601_000);
+      env.result.current.touch();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await waitFor(() => expect(selectCalls(options).length).toBe(baseSelects + 1));
+    await waitFor(() =>
+      expect(
+        env.result.current.session && !roomGuestSessionExpired(env.result.current.session)
+      ).toBe(true)
+    );
+    const healedSelects = selectCalls(options).length;
+
+    // The fresh bearer dies almost immediately (10 s later): the next loss
+    // parks with the stop line instead of healing again automatically.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+      env.result.current.killSession();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await waitFor(() => expect(env.result.current.selectError).not.toBeNull());
+    expect(env.result.current.selectError).toEqual({
+      roomId: "rail-a",
+      message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE,
+    });
+    expect(env.result.current.session).toBeNull();
+    expect(selectCalls(options).length).toBe(healedSelects);
+    // Stays parked: time passing alone never retries it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300_000);
+    });
+    expect(selectCalls(options).length).toBe(healedSelects);
     env.unmount();
   });
 });

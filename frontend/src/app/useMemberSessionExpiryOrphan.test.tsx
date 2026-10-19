@@ -568,3 +568,207 @@ describe("member host channel custody through session expiry", () => {
     env.unmount();
   });
 });
+
+const EPOCH2 = "epoch-orphan-2";
+
+function connectedDirectoryEpoch2(): CentralDirectoryState {
+  const directory = connectedDirectory(ORIGIN_NEXT) as unknown as {
+    live: { servers: Record<string, unknown>[] } | null;
+  };
+  if (directory.live) {
+    directory.live = {
+      ...directory.live,
+      servers: directory.live.servers.map((server) => ({
+        ...server,
+        registration_epoch: EPOCH2,
+      })),
+    };
+  }
+  return directory as unknown as CentralDirectoryState;
+}
+
+describe("channel custody repairs (timeout wedge and epoch change)", () => {
+  beforeEach(() => {
+    cleanup();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    closeRemoteWorkspace();
+    vi.clearAllMocks();
+    backgroundOpen.mockReset();
+    backgroundOpen.mockImplementation(() => ({ close: vi.fn() }));
+    attach.mockReset();
+    sessionCounter = 0;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    resetCentralRequestGovernorForTests();
+    resetMemberHostOfflineBudgetForTests();
+    resetMemberRoomAutoReselectBudgetForTests();
+    saveMemberAnchor(ACCOUNT, anchorFor(ORIGIN));
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    resetMemberRoomAutoReselectBudgetForTests();
+  });
+
+  it("(d) select timeout on an active-but-wedged transport: the registry entry is replaced by a fresh attach", async () => {
+    const wedged = fakeAdmission();
+    const fresh = fakeAdmission();
+    fresh.transport.hello = { origin: ORIGIN, server_id: SERVER };
+    attach.mockImplementationOnce(async () => {
+      saveMemberAnchor(ACCOUNT, anchorFor(ORIGIN));
+      return {
+        admission: wedged,
+        rooms: [{ room_id: ROOM_A, name: ROOM_A }],
+        anchor: anchorFor(ORIGIN),
+      };
+    });
+    attach.mockImplementation(async () => {
+      saveMemberAnchor(ACCOUNT, anchorFor(ORIGIN));
+      return {
+        admission: fresh,
+        rooms: [{ room_id: ROOM_A, name: ROOM_A }],
+        anchor: anchorFor(ORIGIN),
+      };
+    });
+    const env = setupHarness();
+    await waitFor(() => expect(env.result.current.hosts.snapshots[0]?.phase).toBe("connected"));
+    await act(async () => {
+      env.result.current.setDirectory(connectedDirectory());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await waitFor(() => expect(env.result.current.session?.meetingId).toBe(ROOM_A));
+    expect(env.result.current.hosts.admissionFor(SERVER)).toBe(wedged);
+    expect(remoteWorkspaceFor(SERVER)?.transport).toBe(wedged.transport);
+    // The open select wedges: it never answers (the real multiplexed fetch
+    // rejects on abort, so the fake rejects the same way). The 30 s select
+    // deadline still fires and the registry entry must be replaced.
+    const wedgedSelect = wedged.select as unknown as ReturnType<typeof vi.fn>;
+    wedgedSelect.mockImplementation(
+      (_roomId: string, signal?: AbortSignal) =>
+        new Promise<Record<string, unknown>>((_resolve, reject) => {
+          if (signal?.aborted) {
+            reject(signal.reason instanceof Error ? signal.reason : new Error("aborted"));
+            return;
+          }
+          signal?.addEventListener(
+            "abort",
+            () => reject(signal.reason instanceof Error ? signal.reason : new Error("aborted")),
+            { once: true }
+          );
+        })
+    );
+    await act(async () => {
+      await env.result.current.expireSessions();
+    });
+    // The hung select trips the deadline, the stored admission is closed and
+    // dropped, and the scheduled reconnect attaches a fresh channel.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    expect(attach).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    expect(wedged.transport.active).toBe(false);
+    expect(env.result.current.hosts.snapshots[0]?.phase).toBe("connected");
+    expect(env.result.current.hosts.admissionFor(SERVER)).toBe(fresh);
+    expect(fresh.transport.active).toBe(true);
+    env.unmount();
+  });
+
+  it("(e) epoch-change refusal then re-join: admissionFor follows the live epoch-2 workspace and the TTL heal selects on it", async () => {
+    const epoch1 = fakeAdmission();
+    const epoch2 = fakeAdmission();
+    epoch2.transport.hello = { origin: ORIGIN_NEXT, server_id: SERVER };
+    attach.mockImplementationOnce(async () => {
+      saveMemberAnchor(ACCOUNT, anchorFor(ORIGIN));
+      return {
+        admission: epoch1,
+        rooms: [{ room_id: ROOM_A, name: ROOM_A }],
+        anchor: anchorFor(ORIGIN),
+      };
+    });
+    attach.mockImplementation(async () => {
+      saveMemberAnchor(ACCOUNT, { ...anchorFor(ORIGIN_NEXT), registration_epoch: EPOCH2 });
+      return {
+        admission: epoch2,
+        rooms: [{ room_id: ROOM_A, name: ROOM_A }],
+        anchor: { ...anchorFor(ORIGIN_NEXT), registration_epoch: EPOCH2 },
+      };
+    });
+    const env = setupHarness();
+    await waitFor(() => expect(env.result.current.hosts.snapshots[0]?.phase).toBe("connected"));
+    await act(async () => {
+      env.result.current.setDirectory(connectedDirectory());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // Fresh admission auto re-selects the open room onto the live channel.
+    await waitFor(() => expect(env.result.current.session?.meetingId).toBe(ROOM_A));
+    expect(env.result.current.hosts.admissionFor(SERVER)).toBe(epoch1);
+
+    // The host rotates its epoch: the old admission is refused, detached and
+    // dropped from the registry instead of pinning the heal.
+    await act(async () => {
+      env.result.current.setDirectory(connectedDirectoryEpoch2());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await waitFor(() => expect(env.result.current.hosts.isRefused(SERVER)).toBe(true));
+    expect(env.result.current.hosts.admissionFor(SERVER)).toBeNull();
+
+    // Re-joining through a new invite installs the epoch-2 workspace on a
+    // different transport; the stale epoch-1 transport is closed by it.
+    const member = {
+      ...roomGuestSessionFromJoinPayload("", joinFor(ROOM_A) as never),
+      centralMember: true as const,
+    };
+    const epoch2Transport = {
+      hello: { origin: ORIGIN_NEXT, server_id: SERVER },
+      active: true,
+      onClose: vi.fn(() => () => undefined),
+      close: vi.fn(function (this: { active: boolean }) {
+        this.active = false;
+      }),
+    };
+    installRemoteWorkspace({
+      transport: epoch2Transport as never,
+      owner: null,
+      member: member as never,
+      deviceToken: "device",
+      clientId: "client",
+    });
+    expect(epoch1.transport.active).toBe(false);
+    saveMemberAnchor(ACCOUNT, { ...anchorFor(ORIGIN_NEXT), registration_epoch: EPOCH2 });
+
+    // 다시 연결 must not early-return on the live-but-unregistered workspace:
+    // it re-attaches so admissionFor matches a live admission again.
+    await act(async () => {
+      env.result.current.hosts.retryHost(SERVER);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await waitFor(() => expect(attach).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(env.result.current.hosts.admissionFor(SERVER)).toBe(epoch2));
+    expect(epoch2.transport.active).toBe(true);
+
+    // The TTL heal then selects on the live registry admission, not the dead
+    // epoch-1 entry: exactly one select, fresh bearer, no stop line.
+    const selectsBefore = epoch2.selects.length;
+    await act(async () => {
+      await env.result.current.expireSessions();
+    });
+    await waitFor(() => expect(epoch2.selects.length).toBe(selectsBefore + 1));
+    await waitFor(() =>
+      expect(
+        env.result.current.session &&
+          !roomGuestSessionExpired(env.result.current.session)
+      ).toBe(true)
+    );
+    expect(env.result.current.selectError).toBeNull();
+    env.unmount();
+  });
+});
