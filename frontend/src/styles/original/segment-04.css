@@ -54,16 +54,9 @@
   transition: background-color 120ms ease;
 }
 
-.dc-sidebar-resizer::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 3px;
-  width: 1px;
-  content: "";
-  background: var(--color-panel-separator);
-}
-
+/* No resting line: as in Discord, the sidebar/chat color change is the edge, so
+   the user panel and composer sit 8px from it on each side. The accent shows
+   only while hovering or resizing. */
 .dc-sidebar-resizer:hover::after,
 .dc-sidebar-resizer:focus-visible::after,
 body[data-sidebar-resizing="true"] .dc-sidebar-resizer::after {

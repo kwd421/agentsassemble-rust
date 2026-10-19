@@ -631,7 +631,7 @@ export default function UserPanel({
                       <span className={`dc-profile-menu-dot ${option.id}`} aria-hidden />
                       <span>
                         <strong>{option.label}</strong>
-                        <small>{option.helper}</small>
+                        {option.helper && <small>{option.helper}</small>}
                       </span>
                     </button>
                   ))}

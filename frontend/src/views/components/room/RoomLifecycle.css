@@ -54,6 +54,11 @@
   font: inherit;
 }
 
+.dc-room-delete-field input:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
 .dc-room-delete-note {
   margin-top: 10px;
   font-size: 12px;
