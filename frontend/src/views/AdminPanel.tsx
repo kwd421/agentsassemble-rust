@@ -5,7 +5,9 @@ import { fetchLocalResources, type LocalResourceStatus } from "../api/localResou
 
 const REFRESH_MS = 2000;
 
-export default function AdminPanel({ onClose }: { onClose: () => void }) {
+// `ownsLocalServer` is false when another account owns this computer's server:
+// machine usage stays visible, but that owner's rooms and the restart control do not.
+export default function AdminPanel({ onClose, ownsLocalServer = true }: { onClose: () => void; ownsLocalServer?: boolean }) {
   const [resources, setResources] = useState<LocalResourceStatus | null>(null);
   const [error, setError] = useState(false);
   // Like a task manager: keep reading while the page is open, and stop when it closes.
@@ -67,7 +69,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             </table>
             <p className="mt-2 text-[12px] text-text-muted">다른 앱에서 실행한 같은 도구도 함께 보여요.</p>
           </section>}
-          {resources && <section className="dc-computer-card" aria-label="저장 공간">
+          {resources && ownsLocalServer && <section className="dc-computer-card" aria-label="저장 공간">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="dc-computer-heading">저장 공간</h2>
               <span className="text-[12px] text-text-muted">올린 파일 기준</span>
@@ -85,7 +87,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               <tfoot><tr><td>합계</td><td>{resources.attachment_storage.total.files}개</td><td>{memory(resources.attachment_storage.total.bytes)}</td></tr></tfoot>
             </table>
           </section>}
-          <RuntimeRestartPanel />
+          {ownsLocalServer && <RuntimeRestartPanel />}
         </div>
       </div>
     </section>

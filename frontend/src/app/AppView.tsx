@@ -485,7 +485,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 44, marginTop: 20 }} onClick={exitGuestSurface}>접속 화면 나가기</button>
             </section>
           ) : adminOpen ? (
-            <AdminPanel onClose={() => setAdminOpen(false)} />
+            <AdminPanel onClose={() => setAdminOpen(false)} ownsLocalServer={roomLifecycle.enabled} />
           ) : activeRoomSelectError?.membershipEnded ? (
             <MembershipEndedView key={activeRoom.id} room={activeRoom} scope={activeRoomSelectError.membershipEnded} onConfirm={controller.acknowledgeMembershipEnded} />
           ) : activeRoomDisconnected || activeRoomSelectError ? (

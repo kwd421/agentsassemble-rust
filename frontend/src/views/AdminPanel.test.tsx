@@ -75,3 +75,17 @@ it("lists stored files per room, largest first, with the parts and the total the
   expect(rows[2]).toContain("1.0 MB");
   expect(table.querySelector("tfoot")?.textContent).toContain("43.0 MB");
 });
+
+it("never shows another owner's rooms or the restart control to a person who does not own this computer's server", async () => {
+  vi.mocked(fetchLocalResources).mockResolvedValue({
+    observed_at: "2026-10-12T00:00:00Z", cpu_sample_seconds: 1, cpu_count: 8, total_memory_bytes: null, available_memory_bytes: null,
+    load_average: null, matching_process_count: 0, processes: [],
+    attachment_storage: { rooms: [{ room_id: "a", label: "주인의 방", files: 1, bytes: 2_000_000 }],
+      other: { files: 0, bytes: 0 }, total: { files: 1, bytes: 2_000_000 } },
+  });
+  render(<AdminPanel onClose={() => {}} ownsLocalServer={false} />);
+  await screen.findByRole("region", { name: "앱과 관련 도구" });
+  expect(screen.queryByRole("table", { name: "방별 저장 공간" })).toBeNull();
+  expect(screen.queryByText("주인의 방")).toBeNull();
+  expect(screen.queryByRole("button", { name: "서버 재시작" })).toBeNull();
+});
