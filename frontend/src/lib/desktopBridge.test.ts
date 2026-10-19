@@ -97,7 +97,7 @@ describe("desktop exact-purpose HTTP bridge", () => {
     const catalog = { status: "ready", catalog_revision: "fixture", providers: [] };
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(catalog), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(refreshLocalProviderCatalog("codex", false)).rejects.toThrow("이 PC의 앱");
+    await expect(refreshLocalProviderCatalog("codex", false)).rejects.toThrow("이 컴퓨터의 앱");
     expect(fetchMock).not.toHaveBeenCalled();
     const invoke = vi.fn()
       .mockResolvedValueOnce({ revision: PRODUCT_SURFACE_REVISION, digest: "2".repeat(64), commands: hostCommands })

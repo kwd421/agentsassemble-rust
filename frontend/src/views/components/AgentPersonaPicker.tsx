@@ -112,7 +112,7 @@ export default function AgentPersonaPicker({
       <div className="dc-persona-picker-head">
         <div>
           <strong>봇카드 · Risu 모듈</strong>
-          <span>API/Local 모델의 캐릭터와 세계관에 적용돼요.</span>
+          <span>API 키 모델과 내 컴퓨터 모델의 캐릭터와 세계관에 적용돼요.</span>
         </div>
         <label className="dc-persona-import" data-disabled={disabled || importing}>
           <Upload size={15} aria-hidden="true" />

@@ -123,7 +123,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
   const installing = phase === "installing";
   const command = offer && (phase === "confirming" || installing) ? <div className="dc-setup-term"
     data-running={installing ? "true" : undefined}>
-    <pre className="dc-setup-command" aria-label="이 PC에서 실행할 명령">{shellCommandText(offer.command)}</pre>
+    <pre className="dc-setup-command" aria-label="이 컴퓨터에서 실행할 명령">{shellCommandText(offer.command)}</pre>
     {!installing && <button type="button" className="dc-setup-copy" onClick={() => void copyCommand()}
       aria-label={copied ? "명령 복사됨" : "명령 복사"}>
       {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
@@ -149,7 +149,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
           onClick={() => void install()}>설치</button>
       </>}>
       <p className="dc-setup-text" role="status"><strong>아래 명령을 실행해요</strong>
-        <span className="dc-setup-muted">확인하면 이 PC에서 바로 설치해요</span></p>
+        <span className="dc-setup-muted">확인하면 이 컴퓨터에서 바로 설치해요</span></p>
     </ProviderSetupCard>;
   }
 
@@ -165,7 +165,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
     </> : <button type="button" className="dc-setup-button" data-variant="primary"
       onClick={() => void openHelp()}>설치 안내 열기<ExternalLink size={13} aria-hidden="true" /></button>}>
     <p className="dc-setup-text" role="status"><strong>{title} 없음</strong>
-      <span className="dc-setup-muted">{installable ? "이 PC에서 찾지 못했어요"
+      <span className="dc-setup-muted">{installable ? "이 컴퓨터에서 찾지 못했어요"
         : "공식 안내대로 설치한 뒤 다시 확인해 주세요"}</span></p>
     {error && <p className="dc-setup-error" role="alert">{error}</p>}
   </ProviderSetupCard>;

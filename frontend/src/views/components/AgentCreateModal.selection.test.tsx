@@ -52,7 +52,7 @@ it("keeps an unavailable provider selectable for local setup without permitting 
     .map((item) => item.getAttribute("aria-label"))).toEqual(["OpenCode", "Codex"]);
   expect(screen.getByRole("listitem", { name: "Codex" }).getAttribute("data-unavailable")).toBe("true");
   await userEvent.click(screen.getByRole("listitem", { name: /Codex/ }));
-  const setup = screen.getByRole("link", { name: "이 PC에서 Codex 설정 열기" });
+  const setup = screen.getByRole("link", { name: "이 컴퓨터에서 Codex 설정 열기" });
   expect(setup.getAttribute("href")).toBe("agentsassemble://provider-setup/codex");
   expect((screen.getByRole("button", { name: "추가" }) as HTMLButtonElement).disabled).toBe(true);
   expect(onCreate).not.toHaveBeenCalled();

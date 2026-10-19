@@ -842,3 +842,13 @@ button.dc-dialog-close:focus-visible {
   line-height: 16px;
   vertical-align: 2px;
 }
+
+/* Discord's dark-theme text link. */
+.dc-text-link {
+  color: #00a8fc;
+  font-size: 14px;
+}
+
+.dc-text-link:hover {
+  text-decoration: underline;
+}

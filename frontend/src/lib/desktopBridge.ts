@@ -274,14 +274,14 @@ export async function requestDesktopHostDeviceInfo(): Promise<HostInstallationIn
 
 export async function openProviderSetupHelp(providerId: string): Promise<void> {
   const tauri = tauriInternals();
-  if (!tauri) throw new Error("이 PC의 앱에서 설치·업데이트 안내를 열어 주세요.");
+  if (!tauri) throw new Error("이 컴퓨터의 앱에서 설치·업데이트 안내를 열어 주세요.");
   requireDesktopHostCommand("open_provider_setup_help");
   await tauri.invoke("open_provider_setup_help", { providerId });
 }
 
 export async function requestDesktopProviderDiscovery(providerId: string, force: boolean): Promise<number> {
   const tauri = tauriInternals();
-  if (!tauri) throw new Error("이 PC의 앱에서 모델 목록을 확인해 주세요.");
+  if (!tauri) throw new Error("이 컴퓨터의 앱에서 모델 목록을 확인해 주세요.");
   requireDesktopHostCommand("runtime_provider_discovery");
   const generation = await tauri.invoke<unknown>("runtime_provider_discovery", { providerId, force });
   if (!Number.isSafeInteger(generation) || Number(generation) < 0) {

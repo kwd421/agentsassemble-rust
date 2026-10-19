@@ -25,11 +25,11 @@ it("replaces stale readiness after an installed update with failed discovery and
   render(<ProviderSetupPanel providerId="codex" />);
   fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
   await screen.findByText("모델 목록을 확인하지 못했어요.");
-  expect(screen.queryByText("이 PC에서 사용할 준비가 됐어요.")).toBeNull();
+  expect(screen.queryByText("이 컴퓨터에서 사용할 준비가 됐어요.")).toBeNull();
   expect(screen.getByRole("alert").textContent).toContain("업데이트했지만");
   expect(refreshLocalProviderCatalog).toHaveBeenLastCalledWith("codex", false, undefined);
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "설정 후 상태 다시 확인" })));
-  await screen.findByText("이 PC에서 사용할 준비가 됐어요.");
+  await screen.findByText("이 컴퓨터에서 사용할 준비가 됐어요.");
   expect(refreshLocalProviderCatalog).toHaveBeenLastCalledWith("codex", true, undefined);
   expect(providerUpdateOperation).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole("alert")).toBeNull();
@@ -43,7 +43,7 @@ it("rereads readiness after confirmed update success", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
   await waitFor(() => expect(refreshLocalProviderCatalog).toHaveBeenCalledTimes(2));
   await screen.findByText("업데이트했어요 · 2.0.0");
-  await screen.findByText("이 PC에서 사용할 준비가 됐어요.");
+  await screen.findByText("이 컴퓨터에서 사용할 준비가 됐어요.");
 });
 
 it("recovers an uncertain install through check and unlocks parent catalog refresh", async () => {
@@ -63,7 +63,7 @@ it("recovers an uncertain install through check and unlocks parent catalog refre
   await screen.findByText(/설치가 끝났는지 상태를 다시 확인해 주세요/);
   expect((screen.getByRole("button", { name: "설정 후 상태 다시 확인" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
-  await screen.findByText("이 PC에서 사용할 준비가 됐어요.");
+  await screen.findByText("이 컴퓨터에서 사용할 준비가 됐어요.");
   await waitFor(() => expect((screen.getByRole("button", { name: "설정 후 상태 다시 확인" }) as HTMLButtonElement).disabled).toBe(false));
   expect(refreshLocalProviderCatalog).toHaveBeenCalledTimes(2);
   expect(providerInstallOperation).toHaveBeenLastCalledWith("codex");

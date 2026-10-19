@@ -23,7 +23,7 @@ it("runs nothing until the user reads the exact command and confirms that versio
 
   expect(providerInstallOperation).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
-  expect((await screen.findByLabelText("이 PC에서 실행할 명령")).textContent)
+  expect((await screen.findByLabelText("이 컴퓨터에서 실행할 명령")).textContent)
     .toBe('npm install --global --prefix "C:\\npm dir" @anthropic-ai/claude-code@2.1.271');
   expect(providerInstallOperation).toHaveBeenCalledExactlyOnceWith("claude");
   expect(installed).not.toHaveBeenCalled();

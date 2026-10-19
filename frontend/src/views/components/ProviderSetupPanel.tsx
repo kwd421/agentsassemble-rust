@@ -41,11 +41,11 @@ export default function ProviderSetupPanel({ providerId }: { providerId: string 
   return <main style={{ padding: 24, maxWidth: 560, margin: "0 auto", display: "grid", gap: 20 }}>
     <header>
       <h1 className="text-2xl font-black text-text-primary">{destination.display_name} 설정</h1>
-      <p className="dc-agent-hint preserve-words">이 PC에 설치된 제공자의 로그인과 설치·업데이트를 관리해요.</p>
+      <p className="dc-agent-hint preserve-words">이 컴퓨터에 설치된 제공자의 로그인과 설치·업데이트를 관리해요.</p>
     </header>
-    <section aria-label="이 PC의 제공자 상태">
+    <section aria-label="이 컴퓨터의 제공자 상태">
       <p role="status">{updating ? "제공자 업데이트 상태를 확인하고 있어요." : busy ? "상태를 확인하고 있어요."
-        : error ? "현재 실행 가능한 상태를 확인하지 못했어요." : provider?.startable ? "이 PC에서 사용할 준비가 됐어요."
+        : error ? "현재 실행 가능한 상태를 확인하지 못했어요." : provider?.startable ? "이 컴퓨터에서 사용할 준비가 됐어요."
         : provider?.discovery_error_code === "authentication_required" ? "로그인이 필요해요."
         : provider && ["command_missing", "bridge_runtime_missing"].includes(provider.discovery_error_code || "")
           ? providerUnavailableText(provider)
