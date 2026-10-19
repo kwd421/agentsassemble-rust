@@ -38,6 +38,7 @@ export default function ProviderCredentialField({
             />
             <button
               type="button"
+              style={{ minWidth: 96 }}
               disabled={!value.trim() || busy}
               onClick={onSave}
             >

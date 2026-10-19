@@ -202,14 +202,14 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         <div className="dc-server-row-copy">
           <strong className="break-all">{localName || localDefaultName || "프로필 이름 확인 중"}</strong>
           <span className="dc-server-row-meta">
-            <span className="dc-server-row-dot" aria-hidden />이 기기 · <span aria-label="서버 컴퓨터 운영체제">{OS_LABELS[localHost.host_os as keyof typeof OS_LABELS]}</span>
+            <span className="dc-server-row-dot" aria-hidden />이 컴퓨터 · <span aria-label="서버 컴퓨터 운영체제">{OS_LABELS[localHost.host_os as keyof typeof OS_LABELS]}</span>
           </span>
           {editingId === "local" && nameEditor(localDefaultName)}
         </div>
         {editingId !== "local" && <div className="dc-server-row-actions">
           <button type="button" className="dc-server-row-icon-button" aria-label={`${localName || localDefaultName} 이름 변경`} title="이름 변경" disabled={busy || saving || !localDefaultName}
             onClick={() => { setEditingId("local"); setName(localName || localDefaultName); setError(""); }}><Pencil size={16} /></button>
-          <button type="button" className={localChecking ? "ops-button dc-server-row-open" : "ops-cta dc-server-row-open"} aria-label="이 기기 서버 열기" disabled={busy || saving || localChecking || !localDefaultName} onClick={() => void onOpenLocal(localName)}>{localChecking ? "확인 중" : "열기"}</button>
+          <button type="button" className={localChecking ? "ops-button dc-server-row-open" : "ops-cta dc-server-row-open"} aria-label="이 컴퓨터 서버 열기" disabled={busy || saving || localChecking || !localDefaultName} onClick={() => void onOpenLocal(localName)}>{localChecking ? "확인 중" : "열기"}</button>
         </div>}
       </div>}
     {servers.map((server) => {
@@ -232,7 +232,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
           <strong className="break-all">{name}</strong>
           <span className="dc-server-row-meta">
             <span className="dc-server-row-dot" aria-hidden />
-            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : (state === "local" || state === "checking") ? "이 기기" : state === "online" ? "연결 가능" : "연결 끊김"}
+            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : (state === "local" || state === "checking") ? "이 컴퓨터" : state === "online" ? "연결 가능" : "연결 끊김"}
             {server.relation !== "member" && <> · <span aria-label="서버 컴퓨터 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span></>}
           </span>
           {editingId === server.server_id && nameEditor(server.default_name, server)}

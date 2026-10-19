@@ -534,7 +534,7 @@ button:disabled,
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 20px 14px;
+  padding: 20px 24px 16px;
   border-bottom: 1px solid var(--color-panel-separator);
 }
 
@@ -582,7 +582,7 @@ button:disabled,
   gap: 18px;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding: 18px 20px 32px;
+  padding: 20px 24px 32px;
   scroll-padding-bottom: 32px;
 }
 

@@ -33,8 +33,8 @@ it("matches the local installation by ID, opens it explicitly and keeps rename",
   }
   render(<Harness />);
   expect((screen.getByRole("button", { name: "Mac Studio 서버 열기" }) as HTMLButtonElement).disabled).toBe(false);
-  expect(screen.getByText(/이 기기/, { selector: ".dc-server-row-meta" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "이 기기 서버 열기" })).toBeNull();
+  expect(screen.getByText(/이 컴퓨터/, { selector: ".dc-server-row-meta" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "이 컴퓨터 서버 열기" })).toBeNull();
   expect(openLocal).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Mac Studio 서버 열기" }));
   expect(openLocal).toHaveBeenCalledOnce();
@@ -115,12 +115,12 @@ it("keeps this-device closed while the central answer is still checking", () => 
   const local = { server_id: "local-only", host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner" } as const;
   const { rerender } = render(<CentralServerList servers={[]} liveServers={[]} centralUnavailable busy={false} localChecking
     localHost={local} onOpenLocal={async () => {}} onOpen={async () => {}} onRefresh={async () => {}} />);
-  const checking = screen.getByRole("button", { name: "이 기기 서버 열기" });
+  const checking = screen.getByRole("button", { name: "이 컴퓨터 서버 열기" });
   expect(checking).toHaveProperty("disabled", true);
   expect(checking.closest(".dc-server-row")?.getAttribute("data-state")).toBe("checking");
   rerender(<CentralServerList servers={[]} liveServers={[]} centralUnavailable busy={false}
     localHost={local} onOpenLocal={async () => {}} onOpen={async () => {}} onRefresh={async () => {}} />);
-  expect(screen.getByRole("button", { name: "이 기기 서버 열기" })).toHaveProperty("disabled", false);
+  expect(screen.getByRole("button", { name: "이 컴퓨터 서버 열기" })).toHaveProperty("disabled", false);
 });
 
 it("does not expose full or shortened server IDs in the saved server list", () => {
@@ -142,16 +142,16 @@ it("edits the first host name before opening and can return to the profile defau
   expect(document.body.textContent).not.toContain("Private hostname");
   expect(screen.queryByText(/초대받은 사람/)).toBeNull();
   await user.click(screen.getByRole("button", { name: /이름 변경/ }));
-  expect(screen.queryByRole("button", { name: "이 기기 서버 열기" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "이 컴퓨터 서버 열기" })).toBeNull();
   expect(screen.queryByRole("button", { name: "기본 이름으로 되돌리기" })).toBeNull();
   await user.clear(screen.getByRole("textbox", { name: "서버 이름" }));
   await user.type(screen.getByRole("textbox", { name: "서버 이름" }), "작업용 컴퓨터");
   await user.click(screen.getByRole("button", { name: "이름 저장" }));
-  await user.click(screen.getByRole("button", { name: "이 기기 서버 열기" }));
+  await user.click(screen.getByRole("button", { name: "이 컴퓨터 서버 열기" }));
   expect(opened).toEqual(["작업용 컴퓨터"]);
   await user.click(screen.getByRole("button", { name: /이름 변경/ }));
   await user.click(screen.getByRole("button", { name: "기본 이름으로 되돌리기" }));
-  await user.click(screen.getByRole("button", { name: "이 기기 서버 열기" }));
+  await user.click(screen.getByRole("button", { name: "이 컴퓨터 서버 열기" }));
   expect(opened).toEqual(["작업용 컴퓨터", undefined]);
   expect(document.body.textContent).toContain("Edited Profile의 MacBook Air");
 });

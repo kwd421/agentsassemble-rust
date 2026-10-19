@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal } from "lucide-react";
+import { Ban, MoreHorizontal, UserMinus } from "lucide-react";
 import { userFacingError } from "../../../lib/apiErrors";
 
 export type ParticipantRemovalAction = (participantId: string, action: "kick" | "export") => Promise<void>;
@@ -59,11 +59,13 @@ export default function ParticipantRemovalControls({ participantId, displayName,
       <button type="button" className="dc-member-context-menu-item" data-variant="danger" disabled={busy}
         aria-label={`${displayName} 내보내기`} title="방에서 내보내요. 나중에 다시 참가시킬 수 있어요."
         onClick={(event) => { actionTriggerRef.current = event.currentTarget; setConfirmAction("kick"); }}>
+        <UserMinus size={16} aria-hidden />
         내보내기
       </button>
       <button type="button" className="dc-member-context-menu-item" data-variant="danger" disabled={busy}
         aria-label={`${displayName} 영구 퇴장`} title="다시 들어올 수 없게 참가를 끝내요. 대화 기록은 남아요."
         onClick={(event) => { actionTriggerRef.current = event.currentTarget; setConfirmAction("export"); }}>
+        <Ban size={16} aria-hidden />
         영구 퇴장
       </button>
       {confirmAction && createPortal(

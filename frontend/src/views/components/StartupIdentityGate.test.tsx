@@ -135,7 +135,7 @@ describe("StartupIdentityGate", () => {
     const onComplete = vi.fn();
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
     // Until the central retry confirms the outage, this device stays checking and closed.
-    const checking = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
+    const checking = await screen.findByRole("button", { name: /이 컴퓨터 서버 열기/ });
     expect(checking).toHaveProperty("disabled", true);
     await vi.waitFor(() => expect(checking).toHaveProperty("disabled", false), { timeout: 8000 });
     await userEvent.click(checking);
@@ -176,7 +176,7 @@ describe("StartupIdentityGate", () => {
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
     const onComplete = vi.fn();
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-    const host = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
+    const host = await screen.findByRole("button", { name: /이 컴퓨터 서버 열기/ });
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
     expect(centralMocks.register).not.toHaveBeenCalled();
     await userEvent.click(host);
@@ -223,7 +223,7 @@ describe("StartupIdentityGate", () => {
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
 
     const remoteButton = await screen.findByRole("button", { name: "이 기기로 연결" });
-    expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /이 컴퓨터 서버 열기/ })).toBeNull();
     expect(screen.getByRole("alert").textContent).not.toContain("local database is unreadable");
     expect(onComplete).not.toHaveBeenCalled();
     expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
@@ -441,7 +441,7 @@ it("requires login after authentication rejection even with an existing local ho
   const onComplete = vi.fn();
   render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
   await screen.findByRole("button", { name: "Google로 계속" });
-  expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /이 컴퓨터 서버 열기/ })).toBeNull();
   expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
   expect(onComplete).not.toHaveBeenCalled();
 });
@@ -516,7 +516,7 @@ it("changes a registration race's server_exists into device connection", async (
   centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [], server_time: 1 });
   const complete = vi.fn();
   render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
-  const open = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
+  const open = await screen.findByRole("button", { name: /이 컴퓨터 서버 열기/ });
   centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [oneServer], server_time: 1 });
   centralMocks.hostingState.mockResolvedValue(null);
   await userEvent.click(open);
@@ -561,7 +561,7 @@ it("states device-only guidance after the owned registration is refused", async 
   centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [], server_time: 1 });
   const complete = vi.fn();
   render(<StartupIdentityGate deviceToken="device" onComplete={complete} />);
-  const open = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
+  const open = await screen.findByRole("button", { name: /이 컴퓨터 서버 열기/ });
   centralMocks.bootstrap.mockResolvedValue({ person: centralMocks.session!.person, servers: [{ ...oneServer, endpoint: null }], server_time: 1 });
   centralMocks.hostingState.mockResolvedValue(null);
   await userEvent.click(open);
@@ -584,7 +584,7 @@ it("shows the duplicate screen when bootstrap removes owner entries from the rai
   expect(await screen.findByRole("heading", { name: "남길 서버를 선택해 주세요" })).toBeTruthy();
   expect(screen.getAllByRole("radio")).toHaveLength(2);
   expect(screen.queryByText(/아직 내 서버가 없어요/)).toBeNull();
-  expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /이 컴퓨터 서버 열기/ })).toBeNull();
   expect(centralMocks.register).not.toHaveBeenCalled();
 });
 

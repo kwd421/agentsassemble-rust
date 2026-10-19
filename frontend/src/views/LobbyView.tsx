@@ -528,9 +528,11 @@ export default function LobbyView({
       <div
         ref={scrollRef}
         onScroll={handleLobbyScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto pb-6 pt-4 chat-scroll"
+        className="relative flex min-h-0 flex-1 flex-col overflow-y-auto pb-6 pt-4 chat-scroll"
         style={{ overflowAnchor: "none" }}
       >
+        {/* Discord anchors a short history to the bottom, next to the composer. */}
+        <div aria-hidden className="mt-auto" />
         {historyLoadError && (
           <div
             role="alert"
@@ -558,7 +560,7 @@ export default function LobbyView({
               {appearance?.iconImage ? "" : <Hash size={26} />}
             </span>
             <h2 className="mt-3 text-[28px] font-black leading-tight text-text-primary preserve-words">
-              #{channelName}에 오신 것을 환영합니다
+              #{channelName}에 오신 것을 환영합니다!
             </h2>
             <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-text-muted preserve-words">
               {lobbyRows.length === 0 ? "첫 메시지를 남겨 보세요." : `#${channelName} 채널의 시작이에요.`}
