@@ -16,6 +16,8 @@ use std::collections::HashMap;
 pub(super) mod connect;
 #[path = "member_removal_web.rs"]
 pub(super) mod removal;
+#[path = "member_resume_web.rs"]
+pub(crate) mod resume;
 
 const CHALLENGE_LIMIT: usize = 1024;
 const CHALLENGE_TTL: Duration = Duration::seconds(300);
@@ -155,6 +157,36 @@ impl MemberChallenges {
         }
         challenge.redeeming = true;
         Ok(challenge.clone())
+    }
+
+    /// The admitted member of the connect challenge redeemed on this exact
+    /// secure channel. A challenge redeemed on another channel never matches,
+    /// so a resume key is only ever issued for the channel that proved it.
+    pub(super) async fn redeemed_connect_member(
+        &self,
+        binding: &agentsassemble_persistence::SecureSessionBinding,
+    ) -> Option<MemberAdmission> {
+        let records: Vec<_> = {
+            let entries = self.0.lock();
+            entries
+                .values()
+                .filter_map(|entry| {
+                    let ChallengePurpose::Connect(record) = &entry.purpose else {
+                        return None;
+                    };
+                    if entry.secure.as_ref() != Some(binding) {
+                        return None;
+                    }
+                    Some(record.clone())
+                })
+                .collect()
+        };
+        for record in records {
+            if let Some(member) = record.lock().await.member().cloned() {
+                return Some(member);
+            }
+        }
+        None
     }
 }
 

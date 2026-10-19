@@ -75,6 +75,28 @@ pub(super) enum ConnectState {
     },
 }
 
+impl ConnectState {
+    /// The redeemed connect state of one admitted member on one channel.
+    pub(super) fn redeemed(
+        member: MemberAdmission,
+        rooms: Vec<MemberConnectRoom>,
+    ) -> Self {
+        Self::ConnectRedeemed {
+            member: Box::new(member),
+            rooms,
+            selected: HashMap::new(),
+        }
+    }
+
+    /// The admitted member of a redeemed connect challenge.
+    pub(super) fn member(&self) -> Option<&MemberAdmission> {
+        match self {
+            Self::ConnectRedeemed { member, .. } => Some(member.as_ref()),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ChallengeRequest {}
