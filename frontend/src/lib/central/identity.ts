@@ -3,6 +3,7 @@ import { finishGoogleVerification } from "./googleRegistration";
 import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
 import { clearMemberAnchors } from "./memberAnchors";
 import { clearMemberJoinHandoffs } from "./memberJoinHandoff";
+import { clearMemberResumeKeys } from "./memberResumeKey";
 import { clearRoomDockItems } from "../roomDockPersistence";
 import { bindMembershipEndedPerson, clearAllMembershipEndedTerminals } from "../memberMembershipEnded";
 import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
@@ -19,8 +20,8 @@ import { encodeBase64Url } from "../base64Url";
 import { type HostOs, type HostRegistrationEnvelope, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./registrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
-export const CENTRAL_SESSION_CHANGED_EVENT = "agentsassemble:central-session-changed";
-export const CENTRAL_SESSION_CLEARED_EVENT = "agentsassemble:central-session-cleared";
+import { CENTRAL_SESSION_CHANGED_EVENT, CENTRAL_SESSION_CLEARED_EVENT } from "./centralSessionEvents";
+export { CENTRAL_SESSION_CHANGED_EVENT, CENTRAL_SESSION_CLEARED_EVENT };
 const SERVERS_KEY = "agentsassemble.centralServers.v1";
 const PENDING_RECOVERY_KEY = "agentsassemble.pendingRecoveryCode.v1";
 const DB_NAME = "agentsassemble-central-identity-v1";
@@ -252,7 +253,7 @@ export function saveSession(
       ? { pending_account_switch: true } : {}),
   };
   if (previous?.person.person_id !== result.person.person_id) {
-    if (previous?.person.person_id) { clearMemberAnchors(previous.person.person_id); clearMemberJoinHandoffs(previous.person.person_id); }
+    if (previous?.person.person_id) { clearMemberAnchors(previous.person.person_id); clearMemberJoinHandoffs(previous.person.person_id); void clearMemberResumeKeys(previous.person.person_id); }
     clearCentralDirectoryCache();
     clearRoomDockItems();
     clearAllMembershipEndedTerminals();
@@ -326,7 +327,7 @@ export function clearCentralSession(): void {
   // would recurse back here.
   try {
     const parsed = JSON.parse(localStorage.getItem(SESSION_KEY) || "null") as { person?: { person_id?: unknown } } | null;
-    if (typeof parsed?.person?.person_id === "string" && parsed.person.person_id) { clearMemberAnchors(parsed.person.person_id); clearMemberJoinHandoffs(parsed.person.person_id); }
+    if (typeof parsed?.person?.person_id === "string" && parsed.person.person_id) { clearMemberAnchors(parsed.person.person_id); clearMemberJoinHandoffs(parsed.person.person_id); void clearMemberResumeKeys(parsed.person.person_id); }
   } catch { /* anchor clearing stays best-effort */ }
   if (!centralSessionLoggedOut()) {
     localStorage.setItem(SESSION_KEY, "logged-out");
