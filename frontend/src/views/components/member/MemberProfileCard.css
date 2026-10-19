@@ -1,0 +1,95 @@
+/* Someone else's profile popout: the own-profile popout's banner, avatar ring and
+   surface, without the editing controls. */
+.dc-member-profile-card {
+  position: fixed;
+  z-index: 180;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #202024;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.dc-member-profile-banner {
+  height: 96px;
+  background: var(--color-accent);
+}
+
+.dc-member-profile-avatar {
+  position: absolute;
+  top: 56px;
+  left: 16px;
+  display: grid;
+  width: 86px;
+  height: 86px;
+  place-items: center;
+  overflow: visible;
+  border: 6px solid #202024;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.dc-member-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.dc-member-profile-avatar i {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 24px;
+  height: 24px;
+  border: 5px solid #202024;
+  border-radius: 50%;
+  background: #80848e;
+}
+
+.dc-member-profile-avatar i[data-active="true"] {
+  background: var(--color-online);
+}
+
+.dc-member-profile-body {
+  padding: 52px 16px 16px;
+}
+
+.dc-member-profile-body h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+}
+
+.dc-member-profile-status {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.dc-member-profile-body dl {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+  border-radius: 8px;
+  background: #2b2b30;
+  padding: 12px;
+}
+
+.dc-member-profile-body dt {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dc-member-profile-body dd {
+  margin: 4px 0 0;
+  color: var(--color-text-primary);
+  font-size: 14px;
+}

@@ -16,7 +16,7 @@ import type { MemberEntry } from "./memberTypes";
 
 export type MemberRowProps = {
   entry: MemberEntry;
-  onOpenDetails: (entry: MemberEntry) => void;
+  onOpenDetails: (entry: MemberEntry, anchor: DOMRect) => void;
   onContextMenu: (entry: MemberEntry, event: ReactMouseEvent<HTMLElement>) => void;
   canEditRoles: boolean;
   canManageParticipant?: boolean;
@@ -28,7 +28,9 @@ export default function MemberRow({
   onContextMenu,
   canEditRoles, canManageParticipant,
 }: MemberRowProps) {
-  const canOpenDetails = Boolean(entry.agent || entry.agentSession);
+  // Agents open their detail window; people open a profile card, as in Discord.
+  const canOpenDetails = Boolean(entry.agent || entry.agentSession || entry.member);
+  const rowRef = useRef<HTMLDivElement>(null);
   const Icon = entry.icon;
   const executionLocation = executionLocationLabel(entry.agentSession);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -46,7 +48,7 @@ export default function MemberRow({
   const manageable = Boolean(canManageParticipant && (canEditRoles || (!entry.owner && entry.meetingId)));
 
   function openDetails() {
-    if (canOpenDetails) onOpenDetails(entry);
+    if (canOpenDetails && rowRef.current) onOpenDetails(entry, rowRef.current.getBoundingClientRect());
   }
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
@@ -72,6 +74,7 @@ export default function MemberRow({
 
   return (
     <div
+      ref={rowRef}
       className={canOpenDetails ? "dc-member group cursor-pointer" : "dc-member group"}
       tabIndex={manageable && !canOpenDetails ? 0 : undefined}
       data-role={entry.role}

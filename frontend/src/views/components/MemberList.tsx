@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Check, ChevronDown, ChevronRight, Pause, Play, Search, Volume2, VolumeX } from "lucide-react";
 import type {
@@ -13,6 +13,7 @@ import type {
 } from "./AgentSessionDetails";
 import { agentSessionCanPause, agentSessionCanResume } from "./AgentSessionDetails";
 import MemberDetailModal from "./member/MemberDetailModal";
+import MemberProfileCard from "./member/MemberProfileCard";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import MemberRow from "./member/MemberRow";
 import { ROLE_OPTIONS } from "./member/memberHelpers";
@@ -88,6 +89,7 @@ export default function MemberList({
 }) {
   const [localQuery, setLocalQuery] = useState("");
   const [detailEntryId, setDetailEntryId] = useState("");
+  const [profileCard, setProfileCard] = useState<{ entryId: string; anchor: DOMRect } | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [memberMenu, setMemberMenu] = useState<{ x: number; y: number; entry: MemberEntry } | null>(null);
   const [muteBusy, setMuteBusy] = useState(false);
@@ -112,6 +114,8 @@ export default function MemberList({
     displayResourceBase,
     agentSessions,
   });
+  const profileCardEntry = profileCard ? entries.find((entry) => entry.id === profileCard.entryId) || null : null;
+  const closeProfileCard = useCallback(() => setProfileCard(null), []);
   const detailEntry = useMemo(
     () => entries.find((entry) => entry.id === detailEntryId) || null,
     [detailEntryId, entries]
@@ -211,8 +215,9 @@ export default function MemberList({
     }
   }
 
-  function openMemberDetails(entry: MemberEntry) {
-    setDetailEntryId(entry.id);
+  function openMemberDetails(entry: MemberEntry, anchor: DOMRect) {
+    if (entry.agent || entry.agentSession) setDetailEntryId(entry.id);
+    else setProfileCard({ entryId: entry.id, anchor });
   }
 
   return (
@@ -338,6 +343,10 @@ export default function MemberList({
           </details>
         )}
       </div>
+      {profileCardEntry && profileCard && (
+        <MemberProfileCard entry={profileCardEntry} anchor={profileCard.anchor} isHost={canEditRoles}
+          onClose={closeProfileCard} />
+      )}
       {detailEntry && (
         <MemberDetailModal
           entry={detailEntry}

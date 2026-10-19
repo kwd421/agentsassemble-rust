@@ -49,6 +49,17 @@ describe("MemberList component wiring", () => {
     for (const label of ["Guest", "게스트", "YOU"]) expect(screen.queryByText(label)).toBeNull();
   });
 
+  it("opens a person's profile card from their name and closes it with Escape", () => {
+    render(<MemberList agents={[]} members={[participantFixture(), participantFixture({ participant_id: "central-member", display_name: "Hihi", created_at: "2026-06-11T03:00:00Z" })]}
+      viewerParticipantId="operator-local" canEditRoles roomId="general" roomName="General" />);
+    fireEvent.click(screen.getByRole("button", { name: "Hihi 프로필 보기" }));
+    const card = screen.getByRole("dialog", { name: "Hihi 프로필" });
+    expect(within(card).getByText("참가한 날")).toBeTruthy();
+    expect(within(card).getByText("2026년 6월 11일")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Hihi 프로필" })).toBeNull();
+  });
+
   it("opens only moderation from the row's context menu, without an overflow button", () => {
     render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onParticipantRemove={vi.fn()} />);
     expect(screen.queryByLabelText("Agent One 관리 메뉴")).toBeNull();
