@@ -81,3 +81,12 @@ it("waits for the daily reset without a retry button that cannot work", () => {
   expect(screen.getByText("오늘 연결 한도를 다 썼어요. 오전 9:00에 자동으로 다시 연결돼요.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "다시 연결" })).toBeNull();
 });
+it("keeps the waiting title and no retry while connecting or waiting for the reset", () => {
+  const base = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const };
+  const [connecting] = projectRoomConnections([base], null, false, [{ serverId: "host", state: "connecting" }]);
+  const { unmount } = render(<DisconnectedRoomView room={connecting} onRetry={async () => {}} />);
+  expect(screen.queryByRole("button", { name: "다시 연결" })).toBeNull();
+  unmount();
+  render(<DisconnectedRoomView room={connecting} autoReconnectAt="오전 9:00" onRetry={async () => {}} />);
+  expect(screen.getByRole("heading", { name: `‘${connecting.label}’에 연결할 수 없어요` })).toBeTruthy();
+});

@@ -19,7 +19,8 @@ export default function DisconnectedRoomView({ room, reason, hostDisplayName, au
     catch { setError("아직 연결하지 못했어요. 잠시 후 다시 시도해 주세요."); }
     finally { setBusy(false); }
   }
-  const title = room.connectionState === "connecting" ? `‘${room.label}’에 연결하는 중이에요` : `‘${room.label}’에 연결할 수 없어요`;
+  const connecting = room.connectionState === "connecting" && !autoReconnectAt;
+  const title = connecting ? `‘${room.label}’에 연결하는 중이에요` : `‘${room.label}’에 연결할 수 없어요`;
   const description = autoReconnectAt ? `오늘 연결 한도를 다 썼어요. ${autoReconnectAt}에 자동으로 다시 연결돼요.`
     : reason ? reason
     : room.connectionState === "connecting" ? "연결되면 방이 바로 열려요."
@@ -36,7 +37,7 @@ export default function DisconnectedRoomView({ room, reason, hostDisplayName, au
       <p className="dc-disconnected-room-description">
         {description}
       </p>
-      {!autoReconnectAt && <button type="button" className="ops-button min-h-11 px-4" disabled={busy} onClick={() => void retry()}>{busy ? "연결 중…" : "다시 연결"}</button>}
+      {!autoReconnectAt && !connecting && <button type="button" className="ops-button min-h-11 px-4" disabled={busy} onClick={() => void retry()}>{busy ? "연결 중…" : "다시 연결"}</button>}
       {error && <p role="alert">{error}</p>}
     </section>
   );
