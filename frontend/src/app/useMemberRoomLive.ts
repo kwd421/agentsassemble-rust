@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { openRoomSocket, type RoomSocketHandle } from "../roomSocketClient";
 import type { RoomSocketSnapshot } from "../roomSocketTypes";
 import type { RoomEvent } from "../api";
-import type { SecureMemberAdmission } from "../lib/central/secureMemberEntry";
+import { memberAdmissionFreeSelect, type SecureMemberAdmission } from "../lib/central/secureMemberEntry";
 import type { RoomInviteJoinResponse } from "../lib/roomAdmissionContract";
 import {
   MEMBER_ROOM_LIVE_SOCKETS_PER_HOST,
@@ -309,10 +309,16 @@ export function useMemberRoomLive({
                 live.socket = null;
                 live.flow += 1;
                 if (live.reauth < 1 && admissionForRef.current(snapshot.serverId) === liveAdmission &&
-                    liveAdmission.transport.active &&
-                    tryClaimMemberRoomAutoReselectRetry(accountId, snapshot.serverId, live.meetingId).allowed) {
-                  live.reauth += 1;
-                  setTick((value) => value + 1);
+                    liveAdmission.transport.active) {
+                  // A free channel-bound heal spends no budget so hourly
+                  // expiries never park; a paid heal claims one retry grant.
+                  if (memberAdmissionFreeSelect(liveAdmission)) {
+                    live.reauth += 1;
+                    setTick((value) => value + 1);
+                  } else if (tryClaimMemberRoomAutoReselectRetry(accountId, snapshot.serverId, live.meetingId).allowed) {
+                    live.reauth += 1;
+                    setTick((value) => value + 1);
+                  }
                 }
               },
             }, {

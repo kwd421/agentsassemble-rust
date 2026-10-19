@@ -45,6 +45,10 @@ export class SecureMemberAdmission {
   private challengeExpiresAt = 0;
   private roomSelectReuse = false;
   private roomSelectChannelBound = false;
+  /** A select on this live channel stays free past the 300s window (no central grant). */
+  get channelBoundSelectFree(): boolean {
+    return this.roomSelectChannelBound && this.transport.active;
+  }
   private session: CentralSession;
   private entry: SecureMemberEntry;
   private adopted = false;
@@ -194,4 +198,24 @@ export class SecureMemberAdmission {
     installRemoteWorkspace({ transport: this.transport, owner: null, member, deviceToken: this.deviceToken, clientId: this.clientId });
     return payload;
   }
+}
+
+/**
+ * Whether a session-loss re-select through this admission stays free (no
+ * central grant): the host advertises room_select_channel_bound and its
+ * transport is still live. Duck-typed so plain test doubles with the same
+ * shape behave like the real admission; anything else is treated as paid.
+ */
+export function memberAdmissionFreeSelect(admission: unknown): boolean {
+  if (!admission || typeof admission !== "object") return false;
+  const candidate = admission as {
+    transport?: { active?: boolean };
+    channelBoundSelectFree?: unknown;
+    roomSelectChannelBound?: unknown;
+  };
+  if (typeof candidate.channelBoundSelectFree === "boolean") return candidate.channelBoundSelectFree;
+  if (typeof candidate.roomSelectChannelBound === "boolean") {
+    return candidate.roomSelectChannelBound === true && candidate.transport?.active === true;
+  }
+  return false;
 }
