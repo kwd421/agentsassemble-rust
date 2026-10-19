@@ -24,21 +24,12 @@
 .dc-owner-agent-item::before {
   position: absolute;
   top: 0;
-  left: 13px;
-  width: 10px;
+  left: -11px;
+  width: 16px;
   height: 50%;
   border-bottom: 2px solid var(--color-member-spine);
   border-left: 2px solid var(--color-member-spine);
   border-bottom-left-radius: 6px;
-  content: "";
-}
-
-.dc-owner-agent-item:not(:last-child)::after {
-  position: absolute;
-  top: 50%;
-  bottom: 0;
-  left: 13px;
-  border-left: 2px solid var(--color-member-spine);
   content: "";
 }
 
@@ -106,12 +97,12 @@
   position: relative;
 }
 
-/* The connector spine is decoration only: it runs under the header chevron,
-   joins it to the agent rows, and is never interactive. */
+/* The connector spine is decoration only: it runs under the header chevron and
+   stops where the last row's elbow curves in, so each row hangs off one line. */
 .dc-owner-agent-spine {
   position: absolute;
   top: -2px;
-  bottom: 21px;
+  bottom: 27px;
   left: 13px;
   width: 2px;
   border-radius: 2px;
