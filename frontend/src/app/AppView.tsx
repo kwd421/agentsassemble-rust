@@ -505,7 +505,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
               <h1 id="empty-room-title">{noRoomCopy.title}</h1>
-              <p>{noRoomCopy.description}</p>
+              <p className="dc-disconnected-room-description">{noRoomCopy.description}</p>
               <div className="flex flex-wrap gap-3" style={{ justifyContent: "center", marginTop: 20 }}>
                 {canCreateRoom && <button type="button" className="dc-agent-create-primary" onClick={() => setCreateRoomOpen(true)}>새 방 만들기</button>}
               </div>
