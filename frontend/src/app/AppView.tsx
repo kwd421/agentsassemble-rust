@@ -202,8 +202,8 @@ export default function AppView({ controller }: { controller: AppController }) {
   const centralQuotaResetAt = quotaPersonId ? centralDailyQuotaResetAtMs(quotaPersonId) : null;
   // A disconnected friend room explains the spent allowance itself (and
   // reconnects on its own at the reset), so the top banner does not repeat it.
-  const activeRoomWaitsForQuota = centralQuotaResetAt !== null && activeRoomDisconnected &&
-    activeRoom.roomOrigin === "remote_server" && !activeRoomSelectError;
+  const activeRoomWaitsForQuota = centralQuotaResetAt !== null && (activeRoomDisconnected || Boolean(activeRoomSelectError)) &&
+    activeRoom.roomOrigin === "remote_server" && !activeRoomSelectError?.membershipEnded;
   const centralQuotaNotice = quotaPersonId && !activeRoomWaitsForQuota && !quotaNoticeDismissed(quotaPersonId, centralQuotaResetAt)
     ? centralDailyQuotaNotice(quotaPersonId)
     : null;
