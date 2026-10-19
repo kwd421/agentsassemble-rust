@@ -258,6 +258,7 @@ pub use room_runtime::{AttendeeOperation, AttendeeOperationResult};
 
 mod message_upload;
 mod upload_body_budget;
+mod named_tunnel;
 
 mod attachment_download;
 mod download_budget;

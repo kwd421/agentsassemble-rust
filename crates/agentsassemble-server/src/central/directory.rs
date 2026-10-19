@@ -232,6 +232,35 @@ impl CentralDirectory {
         let Some(inner) = self.0 else { return Ok(()) };
         event_publisher::run(inner, store, ingress, identity, cancellation).await
     }
+
+    /// One host-signed fixed-address provision call. Uses exactly the existing
+    /// host request signing as the endpoint PUT route; the caller decides the
+    /// quick-tunnel fallback on every error.
+    pub(crate) async fn provision_named_tunnel(
+        &self,
+        store: &SqliteStore,
+        identity: &CentralHostIdentity,
+        registration_epoch: &str,
+        idempotency_key: &str,
+    ) -> Result<Vec<u8>, CentralDirectoryError> {
+        let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
+        let path = format!(
+            "/v1/servers/{}/named-tunnel/provision",
+            identity.server_id()
+        );
+        send_signed(
+            inner,
+            identity,
+            store,
+            Method::POST,
+            &path,
+            json!({
+                "registration_epoch": registration_epoch,
+                "idempotency_key": idempotency_key,
+            }),
+        )
+        .await
+    }
 }
 
 fn retry_delay(failure_count: u32) -> Duration {
@@ -496,6 +525,9 @@ async fn apply_terminal_response(
         demote_host(store, &ingress, true).await?;
     }
     inner.status.write().registered_origin.clear();
+    // The incarnation is dead, so any stored fixed-address credential for it
+    // must not survive: the next registration provisions afresh.
+    let _ = store.clear_named_tunnel().await;
     Err(terminal)
 }
 
