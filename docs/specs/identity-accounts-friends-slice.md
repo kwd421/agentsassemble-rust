@@ -4274,3 +4274,199 @@ assertions fail on the pre-fix registry (drop → adopt with an empty map,
 ## Debug-only room session TTL override (test use, absent from release)
 
 Debug builds shorten newly minted human room sessions via `AGENTSASSEMBLE_DEBUG_ROOM_SESSION_TTL_SECS` (clamped to 60..3600 s, invalid values ignored; default stays 1 h). The host server process reads it once at startup in `prepare_runtime_storage`, threads the value into the store's mint path, and logs one `debug room session TTL override: N s` line in debug builds only. Release builds contain no code that reads this variable and always use the constant.
+
+### Fixed host addresses under agentsassemble.uk (2026-10-19, design — not implemented)
+
+Stage 1 gives each host that opens external access a FIXED address
+`h-<short stable id>.agentsassemble.uk` via a Cloudflare NAMED tunnel
+provisioned by central. Stage 2 (central-free member reconnect, resume key) is
+out of scope; stage 1 must not block it (stable origin + generation plumbing
+stay the resume anchor).
+
+Current behavior this design relies on (verified in this worktree + central):
+
+- Host spawns a quick tunnel today: `spawn_cloudflared(executable, local_url,
+  origin_host)` runs `tunnel --no-autoupdate --config <tmp> --url <local_url>
+  --http-host-header <origin_host>` (`crates/agentsassemble-server/src/public_ingress_process.rs:23-43`).
+  Managed ingress resolves `which cloudflared` at startup
+  (`crates/agentsassemble-server/src/public_ingress.rs:191-199`); each start
+  spawns `run_generation` (`crates/agentsassemble-server/src/public_ingress_runtime.rs:51-63`).
+- Origin comes from parsing cloudflared stdout for
+  `[a-z0-9-]{1,63}.trycloudflare.com`
+  (`crates/agentsassemble-server/src/public_ingress_runtime.rs:296-319`); the
+  ready origin is fanned out as `endpoint_changes: watch<(generation, origin)>`
+  (`crates/agentsassemble-server/src/public_ingress.rs:245-248`, ready path
+  `764-792`).
+- Open/close is `POST /api/public-invite/tunnel/start|stop`
+  (`crates/agentsassemble-server/src/public_ingress_web.rs:22-28`) driving
+  `start`/`stop` (`crates/agentsassemble-server/src/public_ingress.rs:295-343`).
+  Phase/trust is in-memory; the durable part is the pending endpoint event
+  (`crates/agentsassemble-persistence/src/central_endpoint_event.rs:34-60`).
+- Host publishes `PUT /v1/servers/{id}/endpoint` (online) / `DELETE` (offline)
+  with `{protocol: secure_admission_v1, mode: event_secure_v1,
+  registration_epoch, origin, generation, issued_at}`
+  (`crates/agentsassemble-server/src/central/event_publisher.rs:331-354`,
+  reserved at `112-175`). Central routes are `PUT`/`DELETE /v1/servers/:id/endpoint`
+  (+ `POST .../endpoint/renew`) (`infra/identity-directory/src/index.js:113-139`),
+  validated in `updateEndpoint` (`src/servers.js:256-280`, generation>=1,
+  `issued_at` ±300s) and applied by `eventEndpointMutation` (strict field
+  allowlist, monotonic generation, epoch-gated)
+  (`src/event_endpoint.js:9-35`).
+- Per-host endpoint budget is 16/day enforced by D1 triggers on
+  `endpoint-server:*` / `endpoint-host:*`
+  (`migrations/0018_event_budget_rebalance.sql:141-156`). Tables touched:
+  `server_endpoints` + `live_servers` (`src/event_endpoint.js:19-23`),
+  `rate_limits` (`0018:143-156`), `servers` (`src/servers.js:169-173`).
+- Server lifecycle: create is host-signed `registerServer`
+  (`src/servers.js:27-65`); delete/move today always `409 server_move_unsupported`
+  (`src/servers.js:169-177`); restore rekeys and bumps generation
+  (`src/server_restore.js:81-131`); account deletion drains via the delete route
+  (`src/index.js:199`) and cleanup queue.
+- Worker secrets use `envSecret(env, name)` (>=24 chars, else "must be configured
+  as a Worker secret") (`src/http.js:130-136`), declared in `wrangler.toml:18-24`;
+  cron is `17 */3 * * *` (`wrangler.toml:26-27`), claimed in bounded slots by
+  `cleanup` (`src/cleanup.js:52-81`).
+- Host private key lives in the persistence-owned file/DB
+  (`crates/agentsassemble-persistence/src/host_key_file.rs:48-74`); this is the
+  owner for the new tunnel token below (never the provider OS-keychain path).
+- Members pin identity in anchors (`agentsassemble.memberAnchors.v1:`,
+  `frontend/src/lib/central/memberAnchors.ts:19`, exact-keys parse `43-53`);
+  attach takes origin+generation fresh from central preview
+  (`frontend/src/lib/central/secureMemberEntry.ts:28-37`); the grant is bound to
+  `endpoint_origin`/`endpoint_generation` + channel
+  (`secureMemberEntry.ts:79-83`, `frontend/src/lib/central/memberConnect.ts:69-80`).
+- Unsigned probe `GET <origin>/api/server-info` skips only the preview step; the
+  grant is still spent (`frontend/src/lib/central/memberHostOriginProbe.ts:14-68`,
+  `frontend/src/lib/central/memberAutoAttach.ts:51-105`).
+- Host handshake order today: check `hello.origin == ingress origin` AND epoch
+  AND `current_central_endpoint_generation() == hello.generation`, THEN prove
+  the host key (`crates/agentsassemble-server/src/secure_channel.rs:143-192`).
+  The fixed origin must slot into the first check unchanged.
+
+1. Provisioning (central owns Cloudflare API, host owns trigger):
+- On first external-access open with no stored tunnel token, host sends a new
+  host-signed `POST /v1/servers/{id}/named-tunnel/provision` (same host-signature
+  scheme as `verifyHostRequest`, `src/servers.js:179-...`; body
+  `{registration_epoch, idempotency_key}` where the key is stable per
+  `(server_id, registration_epoch)` so retries are idempotent).
+- Central, using an owner-created API token scoped to exactly `Account
+  Cloudflare Tunnel:Edit` + `Zone agentsassemble.uk DNS:Edit`, creates ONE named
+  tunnel + ONE proxied CNAME `<hostname> -> <tunnel>.cfargotunnel.com` per
+  server, stores `{tunnel_id, hostname, created_at, last_connector_seen_at}` in
+  D1 (new table, e.g. `server_named_tunnels(server_id PK, ...)`), and returns
+  `{hostname, tunnel_token}` once in the response over the existing host-signed
+  channel. Conflict/duplicate (same `server_id`) returns the stored hostname and
+  a FRESH token only after rotating the old one server-side.
+- Hostname is DERIVED from the server identity, never user text (no phishing
+  names): `h-<12 hex of sha256(server_id), lowercase>.agentsassemble.uk`.
+  Deterministic, DNS-safe, collision-checked at insert (on collision extend to
+  16 hex; abort to quick-tunnel fallback if still colliding).
+- Idempotent retries: same idempotency key returns the same hostname; a rotated
+  token invalidates the prior one. Provisioning writes count against a NEW small
+  budget (e.g. 3/server/day + global daily cap, same `rate_limits` trigger style
+  as the 16/day endpoint budget) so a restart storm cannot mint tunnels.
+
+2. Host (token custody + connector):
+- Host stores `tunnel_token` in the existing host secret storage owner
+  (persistence crate, sibling of the host key file, `0600`, `file:line` owner
+  `host_key_file.rs:48-74`), keyed per `(server_id, registration_epoch)`. NEVER
+  logs the token (redact like the manual proxy secret), never sends it to
+  members or central again after issue (central keeps only `tunnel_id`).
+- With a stored token, host runs `cloudflared tunnel run --token <token>`
+  (named mode) instead of `tunnel --url ...`; the published origin is the fixed
+  `https://<hostname>` (no stdout parsing for the origin; keep the stdout reader
+  only for diagnostics). The endpoint event path is unchanged
+  (`event_publisher.rs:331-354`), so generation/epoch semantics stay intact.
+- External-access close/open only stops/starts the connector process; no central
+  call on close/open after provisioning (DELETE endpoint event still sent on
+  explicit close, as today). Restart reuses the stored token: zero central calls
+  on the hot path; if the token file is missing (fresh disk), host re-provisions
+  (idempotent) and otherwise falls back to quick tunnel (below).
+
+3. Lifecycle & limits:
+- Cloudflare caps: ~200 DNS records/zone (free) and ~1,000 tunnels/account bound
+  total fixed addresses. Central enforces an explicit cap (e.g. stop provisioning
+  at 150 hostnames, well under 200) and returns `temporary_capacity_exhausted`
+  so hosts fall back to quick tunnels.
+- Reclaim: `last_connector_seen_at` is updated on each endpoint PUT heartbeat;
+  the existing cleanup slot (`src/cleanup.js:52-81`, cron `wrangler.toml:26-27`)
+  deletes the tunnel + DNS after N days (e.g. 30) without a connector, then
+  clears the D1 row. State lives in the new `server_named_tunnels` table, not in
+  `server_endpoints`.
+- Delete: server deletion / account deletion purges the tunnel + DNS alongside
+  the existing purge (`deleteAccount` route + cleanup queue). No orphaned
+  hostnames.
+- Move/restore: restore (rekey, new epoch, `server_restore.js:81-131`) KEEPS the
+  hostname (derived from stable `server_id`) but ROTATES the token: old connector
+  dies, new host provisions with the new epoch and gets a fresh token for the
+  same hostname. Justification: members anchor `(server_id, epoch, key)` and
+  take origin fresh; keeping the hostname preserves bookmarks/probe hits while
+  epoch rotation still revokes the old host. Move is `409` today, so no transfer
+  case; if move is ever added, the hostname follows `server_id` and the losing
+  host's token is revoked.
+- Overflow/failure fallback: ANY provisioning failure (cap reached, Cloudflare
+  API down, DNS unverified, token lost mid-write) falls back to today's quick
+  tunnel for that session and retries provisioning on the next open with
+  backoff. External access NEVER blocks on fixed-address provisioning.
+
+4. Security:
+- A stolen `tunnel_token` lets an attacker HOST `h-<id>.agentsassemble.uk`
+  (serve arbitrary bytes there). It does NOT let them join members: the secure
+  channel is pinned to the host key, and the handshake order is unchanged —
+  (1) TLS to the fixed origin, (2) `hello.origin/generation/epoch` match
+  (`secure_channel.rs:155-168`), (3) host proves host key
+  (`secure_channel.rs:172-191`), (4) member grant must equal
+  `endpoint_origin/generation` + channel
+  (`secureMemberEntry.ts:79-83`, `memberConnect.ts:69-80`). Without the host
+  private key the attacker fails (3)/(4); members see an identity mismatch, not
+  a silent takeover.
+- Rotation/revocation: central Cloudflare-API `delete tunnel + DNS`, clear D1
+  row, next provision mints a fresh token. Owner-triggered rotation is a central
+  endpoint (host-signed) + cleanup-slot sweep for stale rows.
+- Token never goes to members (preview/probe/grant carry only
+  origin+generation+key, never the token). Worker side: the Cloudflare API token
+  is a Worker secret (`envSecret` pattern, `wrangler.toml:18-24`), used only in
+  central API calls, never echoed in responses/logs. Rate-limit provisioning
+  (per-server 3/day + global cap + existing 16/day endpoint budget) against
+  mint abuse; keep nonce/replay protection on the provision route.
+
+5. Version skew (no flag day):
+- Old hosts keep quick tunnels: central still accepts any valid https origin via
+  the same `updateEndpoint`/`eventEndpointMutation` path; no origin allowlist
+  change.
+- Old clients work unchanged: origin is an opaque `https://` string in
+  anchor/preview/grant/probe comparisons; `h-<id>.agentsassemble.uk` passes the
+  same checks as `*.trycloudflare.com`.
+- No new capability advertisement is REQUIRED for stage 1. Optional later: a UI
+  badge "fixed address" driven by hostname suffix match (client-only display,
+  never authority).
+- Deploy order: central first (new table + provision route + secrets, inert
+  until called), then host (provision-on-open + named run + fallback), then
+  client only if the optional badge ships (no client change needed for
+  correctness).
+
+Owner actions required (owner runs, never committed):
+- In the Cloudflare dashboard for `agentsassemble.uk` (same account as the
+  Worker): confirm the zone is active on Cloudflare; create an API token scoped
+  to exactly `Account — Cloudflare Tunnel:Edit` + `Zone — agentsassemble.uk —
+  DNS:Edit` (no other permissions).
+- `wrangler secret put <NAME>` for the new secrets (names only, values never in
+  repo): the tunnel API token, plus the account/zone identifiers if not already
+  in config. Follow the existing `wrangler.toml:18-24` secret pattern.
+- No DNS pre-creation needed; central creates one CNAME per host on demand.
+
+Acceptance tests for the implementation slice:
+- Unit: hostname derivation is deterministic, lowercase hex, ignores user text;
+  provision retry with the same idempotency key returns the same hostname;
+  generation/epoch checks accept the fixed origin and reject cross-origin hello.
+- Central tests: double-provision yields one row; token rotation invalidates the
+  old token; budget cap returns `temporary_capacity_exhausted`; cleanup sweep
+  deletes tunnel+DNS after N idle days (new table only, endpoint path untouched).
+- Host tests: restart with a stored token sends zero provision calls and
+  publishes the same origin with a bumped generation; missing token falls back
+  to quick tunnel without blocking open.
+- Real-app: host restart keeps the same `h-<id>` origin (member preview shows
+  the same origin, new generation); member reconnect hits the stored origin via
+  probe with NO central preview when the host is already up (stage-2 headroom:
+  same origin means the probe path actually fires); overflow (cap reached or API
+  down) still opens external access over a quick tunnel.
