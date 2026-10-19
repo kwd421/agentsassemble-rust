@@ -58,7 +58,8 @@ describe("member invite screen", () => {
     expect(screen.getByText("Hihi 계정으로 참가")).toBeTruthy();
     expect(screen.getByText("참가하면 이 방에 내 이름과 프로필이 보여요.")).toBeTruthy();
     expect(screen.queryByText(/중앙|입장 프로필|\(server\)/)).toBeNull();
-    expect(screen.getByText("https://host.test")).toBeTruthy();
+    expect(screen.queryByText("https://host.test")).toBeNull();
+    expect(screen.queryByRole("button", { name: "목록에 다시 표시하고 참가" })).toBeNull();
     expect(mocks.issue).not.toHaveBeenCalled(); expect(mocks.join).not.toHaveBeenCalled();
     await agree(); await waitFor(() => expect(props.onComplete).toHaveBeenCalledOnce());
     expect(mocks.challenge).toHaveBeenCalledOnce(); expect(mocks.issue).toHaveBeenCalledOnce();
@@ -223,11 +224,18 @@ it("reconnects through consent and selects only the chosen joined room", async (
   expect(mocks.join).not.toHaveBeenCalled();
 });
 it("unhides on explicit consent before issuing a fresh grant and auto-selects a sole room", async()=>{
+  const { saveMemberAnchor } = await import("../../lib/central/memberAnchors");
+  saveMemberAnchor("person", {
+    server_id: "server", registration_epoch: "epoch", host_key_fingerprint: "fp",
+    endpoint_origin: "https://host.test", endpoint_generation: 7,
+    rooms: [], hidden: true, updated_at: Date.now(),
+  });
   const props={...host(),purpose:"connect" as const,inviteToken:"",meetingId:""};
   mocks.connectChallenge.mockResolvedValue(challenge);mocks.preview.mockResolvedValue(target);
   mocks.rooms.mockResolvedValue([{room_id:"only",name:"채팅방"}]);mocks.select.mockResolvedValue({server_id:"server"});
   render(<MemberJoinPanel host={props} />);
-  fireEvent.click(await screen.findByRole("button",{name:"목록에 다시 표시하고 참가"}));
+  expect(await screen.findByRole("button",{name:"목록에 다시 표시하고 참가"})).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"목록에 다시 표시하고 참가"}));
   await waitFor(()=>expect(props.onComplete).toHaveBeenCalledOnce());
   expect(mocks.unhide.mock.invocationCallOrder[0]).toBeLessThan(mocks.issue.mock.invocationCallOrder[0]);
   expect(mocks.select).toHaveBeenCalledWith(expect.anything(),"only","client","browser-credential");

@@ -1,5 +1,6 @@
 import type { RoomSocketAuth } from "../api/room";
 import type { RoomDockItem } from "../lib/roomDockModel";
+import type { MemberSelectError } from "../lib/memberMembershipEnded";
 import type { RoomGuestSession } from "../lib/roomGuestSession";
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
 import type { RoomStream } from "../types/generated/RoomStream";
@@ -103,14 +104,14 @@ export function applyConfirmedMembershipLost(
     guestExpired: boolean;
     latestRooms: RoomDockItem[];
     activeRoomId: string;
-    memberSelectError: { roomId: string; message: string } | null;
+    memberSelectError: MemberSelectError | null;
   },
   actions: {
     closeHost: (serverId: string) => void;
     unbindHostSessions: (serverId: string) => void;
     clearSession: () => void;
     removeRoom: (roomId: string) => void;
-    setSelectError: (error: { roomId: string; message: string } | null) => void;
+    setSelectError: (error: MemberSelectError | null) => void;
     activateRoom: (roomId: string) => void;
     resetChannel: () => void;
     closeAdmin: () => void;

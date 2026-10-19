@@ -26,7 +26,7 @@ export function presenceStatusLabel(status?: string): string {
   if (status === "stopped") return "중지됨";
   if (status === "disconnected") return "연결 끊김";
   if (status === "left") return "퇴장";
-  if (status === "kicked") return "추방됨";
+  if (status === "kicked") return "내보내짐";
   if (status === "error") return "오류";
   if (status === "offline") return "오프라인";
   return "상태 미정";

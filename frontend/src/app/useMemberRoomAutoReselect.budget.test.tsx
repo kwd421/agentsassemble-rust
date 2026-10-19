@@ -12,6 +12,7 @@ import {
   tryClaimMemberRoomAutoReselect,
 } from "../lib/central/memberRoomAutoReselectBudget";
 import { ApiError } from "../lib/apiErrors";
+import { resetMembershipEndedTerminalForTests } from "../lib/memberMembershipEnded";
 
 const ACCOUNT = "person";
 const SERVER = "friend-server";
@@ -40,6 +41,7 @@ function capacityError(): ApiError {
 describe("memberRoomAutoReselectBudget", () => {
   beforeEach(() => {
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
   });
 
   it("allows one automatic attempt per external re-attach up to a daily cap", () => {
@@ -72,12 +74,14 @@ describe("useMemberRoomAutoReselect bounded loop (fake timers)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
   });
 
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
   });
 
   function setupLoopHarness() {
@@ -323,12 +327,14 @@ describe("useMemberRoomLive background budget (fake timers)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
   });
 
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
   });
 
   it("background re-selects on admission change obey the same daily cap", async () => {

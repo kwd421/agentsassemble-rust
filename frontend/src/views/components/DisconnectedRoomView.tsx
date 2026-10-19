@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ServerOff } from "lucide-react";
 import type { RoomDockItem } from "../../lib/roomDockModel";
 
-export default function DisconnectedRoomView({ room, reason, onRetry }: { room: RoomDockItem; reason?: string | null; onRetry: () => Promise<unknown> }) {
+export default function DisconnectedRoomView({ room, reason, hostDisplayName, onRetry }: { room: RoomDockItem; reason?: string | null; hostDisplayName?: string | null; onRetry: () => Promise<unknown> }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function retry() {
@@ -12,23 +12,24 @@ export default function DisconnectedRoomView({ room, reason, onRetry }: { room: 
     catch { setError("아직 연결하지 못했어요. 잠시 후 다시 시도해 주세요."); }
     finally { setBusy(false); }
   }
+  const title = room.connectionState === "connecting" ? "연결하는 중이에요" : "서버에 연결할 수 없어요";
+  const description = reason ? reason
+    : room.connectionState === "connecting" ? "연결이 확인되면 방을 자동으로 열어요." : room.connectionState === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
+    : room.roomOrigin !== "remote_server" ? "이 기기의 서버 연결이 끊겼어요. 서버가 실행 중인지 확인해 주세요."
+    : hostDisplayName ? `‘${hostDisplayName}’님의 컴퓨터가 꺼져 있거나 인터넷이 끊겼을 수 있어요. 다시 켜지면 자동으로 연결돼요.`
+    : "서버를 연 컴퓨터가 꺼져 있거나 인터넷이 끊겼을 수 있어요. 다시 켜지면 자동으로 연결돼요.";
   return (
     <section className="dc-disconnected-room" aria-labelledby="disconnected-room-title">
       <div className="dc-disconnected-room-icon" aria-hidden>
         <ServerOff size={30} />
       </div>
-      <p className="dc-disconnected-room-kicker">서버 연결 상태</p>
-      <h1 id="disconnected-room-title">{room.connectionState === "connecting" ? "서버에 연결 중이에요" : "연결이 끊긴 방"}</h1>
+      <h1 id="disconnected-room-title">{title}</h1>
       <p className="dc-disconnected-room-name">{room.label}</p>
       <p className="dc-disconnected-room-description">
-        {reason ? reason
-          : room.connectionState === "connecting" ? "연결이 확인되면 방을 자동으로 열어요." : room.connectionState === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
-          : room.roomOrigin !== "remote_server" ? "이 기기의 서버 연결이 끊겼어요. 서버가 실행 중인지 확인해 주세요."
-          : "서버 연결이 끊겨 메시지와 참가자를 불러올 수 없어요."}
+        {description}
       </p>
       <button type="button" className="ops-button min-h-11 px-4" disabled={busy} onClick={() => void retry()}>{busy ? "연결 중…" : "다시 연결"}</button>
       {error && <p role="alert">{error}</p>}
-      {room.serverOrigin && <code>{room.serverOrigin}</code>}
     </section>
   );
 }

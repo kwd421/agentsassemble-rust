@@ -12,6 +12,7 @@ import type { MemberHostAnchor } from "../lib/central/memberAnchors";
 import { roomGuestSessionFromJoinPayload } from "../lib/roomGuestSession";
 import type { RoomAgentSession, RoomMember } from "../api";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
+import { resetMembershipEndedTerminalForTests } from "../lib/memberMembershipEnded";
 
 const hooks = vi.hoisted(() => ({
   directory: null as CentralDirectoryState | null,
@@ -225,6 +226,7 @@ describe("member room selection on an owner local host", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
+    resetMembershipEndedTerminalForTests();
     vi.clearAllMocks();
     hooks.canonicalCalls.length = 0;
     window.localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({

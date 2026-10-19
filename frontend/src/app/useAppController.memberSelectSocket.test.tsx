@@ -11,6 +11,7 @@ import type { RoomInviteJoinResponse } from "../lib/roomAdmissionContract";
 import type { MemberHostAnchor } from "../lib/central/memberAnchors";
 import { roomGuestSessionFromJoinPayload } from "../lib/roomGuestSession";
 import { ApiError } from "../lib/apiErrors";
+import { resetMembershipEndedTerminalForTests } from "../lib/memberMembershipEnded";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 
 const hooks = vi.hoisted(() => ({
@@ -190,6 +191,7 @@ describe("member room socket lifecycle on an owner local host", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
+    resetMembershipEndedTerminalForTests();
     vi.clearAllMocks();
     hooks.opens.length = 0;
     hooks.closes.length = 0;
@@ -292,7 +294,7 @@ describe("member room socket lifecycle on an owner local host", () => {
     expect(hooks.select).toHaveBeenCalledTimes(1);
     expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING);
     expect(result.current.memberSelectError).toEqual({
-      roomId: memberId, message: "방을 열지 못했어요. 다시 시도해 주세요.",
+      roomId: memberId, message: "방을 열지 못했어요. 다시 시도해 주세요.", membershipEnded: "kicked",
     });
     // Neither the own room socket nor a member socket opens for the failed room.
     // Leaving the own room closes its handle (established switch teardown);

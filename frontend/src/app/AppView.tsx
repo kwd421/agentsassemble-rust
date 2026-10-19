@@ -28,6 +28,7 @@ import { RoomSocketProvider } from "../RoomSocketContext";
 import ChannelContextMenu from "../views/components/ChannelContextMenu";
 import RoomConnectionPanel from "../views/components/RoomConnectionPanel";
 import DisconnectedRoomView from "../views/components/DisconnectedRoomView";
+import MembershipEndedView from "../views/components/MembershipEndedView";
 import MobileRoomInfoPanel from "../views/components/MobileRoomInfoPanel";
 import RoomRail, { MOBILE_ROOM_RAIL_WIDTH } from "../views/components/RoomRail";
 import RoomSyncNotice from "../views/components/RoomSyncNotice";
@@ -457,8 +458,12 @@ export default function AppView({ controller }: { controller: AppController }) {
             </section>
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} />
+          ) : activeRoomSelectError?.membershipEnded ? (
+            <MembershipEndedView key={activeRoom.id} room={activeRoom} scope={activeRoomSelectError.membershipEnded} onConfirm={controller.acknowledgeMembershipEnded} />
           ) : activeRoomDisconnected || activeRoomSelectError ? (
-            <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={activeRoomSelectError ?? controller.activeMemberHostDetail} onRetry={activeRoomSelectError || activeRoomNeedsAdmission ? () => selectRoom(activeRoom.id) : () => controller.retryRoomConnection(activeRoom)} />
+            <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={activeRoomSelectError?.message ?? controller.activeMemberHostDetail}
+              hostDisplayName={activeRoom.serverId ? controller.centralDirectory?.live?.servers?.find((server) => server.server_id === activeRoom.serverId)?.alias ?? null : null}
+              onRetry={activeRoomSelectError || activeRoomNeedsAdmission ? () => selectRoom(activeRoom.id) : () => controller.retryRoomConnection(activeRoom)} />
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
               <h1 id="empty-room-title">{noRoomCopy.title}</h1>

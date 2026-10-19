@@ -49,7 +49,7 @@ function describe(request: DelegatedActionRequest): { summary: string; consequen
     return { summary: `${request.target_name} 에이전트를 내보내려고 해요`, consequence: "실행 중이면 멈추고, 되돌릴 수 없어요.", destructive: true };
   }
   if (action.action === "kick_participant") {
-    return { summary: `${request.target_name} 님을 방에서 내보내려고 해요`, consequence: "접속이 바로 끊기고, 되돌릴 수 없어요.", destructive: true };
+    return { summary: `${request.target_name} 님을 방에서 내보내려고 해요`, consequence: "접속이 바로 끊겨요. 새 초대로 다시 참가할 수 있어요.", destructive: true };
   }
   if (action.action === "create_human_invite") {
     const { display_name, invite_scope, max_uses, ttl_seconds } = action.params;

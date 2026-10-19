@@ -46,7 +46,8 @@ it.each(["new", "recover"])("%s guest stays in the invitation and requires code 
   fireEvent.click(screen.getByRole("checkbox")); fireEvent.click(next);
   await screen.findByRole("button", { name: "참가하기" });
   expect(screen.getByText("Guest identity 계정으로 참가")).toBeTruthy();
-  expect(screen.getByText("https://invited.example")).toBeTruthy();
+  expect(screen.queryByText("https://invited.example")).toBeNull();
+  expect(screen.queryByRole("button", { name: "목록에 다시 표시하고 참가" })).toBeNull();
   expect(central.pending).toBe("");
   expect(central.open).not.toHaveBeenCalled();
   expect(JSON.stringify([localStorage, sessionStorage])).not.toContain(entry.inviteToken);

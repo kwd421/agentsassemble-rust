@@ -72,6 +72,21 @@ it("shows the neutral line when the failure reason is unknown", async () => {
   expect(await screen.findByText("#기획 채널을 지우지 못했어요.")).toBeTruthy();
 });
 
+it("states the kick consequence as a re-invitable disconnect", async () => {
+  const command = vi.fn().mockResolvedValue({ result: { confirmation_id: "mine", state: "succeeded", receipt: {} } });
+  const socket = { command } as unknown as RoomSocketHandle;
+  const store = createDelegatedActionProjection();
+  registerDelegatedActionProjection(socket, store);
+  store.replace([{ ...request("me", "mine"),
+    action: { action: "kick_participant", request_id: "r", participant_id: "guest-1" },
+    target_name: "게스트",
+  } as DelegatedActionRequest]);
+  render(<PendingDelegatedActions socket={socket} viewerParticipantId="me" />);
+
+  expect(screen.getByText("게스트 님을 방에서 내보내려고 해요")).toBeTruthy();
+  expect(screen.getByText("접속이 바로 끊겨요. 새 초대로 다시 참가할 수 있어요.")).toBeTruthy();
+});
+
 it("stays quiet when the owner declines", async () => {
   const command = vi.fn().mockResolvedValue({ result: { confirmation_id: "mine", state: "declined", receipt: { status: "rejected", code: "confirmation_declined", retryable: false } } });
   const socket = { command } as unknown as RoomSocketHandle;

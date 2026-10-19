@@ -251,6 +251,16 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
   const reconnect = consent?.request.purpose === "connect";
   const title = reconnect ? `‘${consent.target.label}’에 다시 연결할까요?` : roomName ? `‘${roomName}’에 참가할까요?` : "이 방에 참가할까요?";
 
+  function isHiddenServer(serverId: string): boolean {
+    try {
+      const session = loadCentralSession();
+      if (!session) return false;
+      return loadMemberAnchor(session.person.person_id, serverId)?.hidden === true;
+    } catch {
+      return false;
+    }
+  }
+
   return <GuestJoinProfilePanel displayName="" busy={busy} status={error || status}
     title={rooms.length ? "참가 중인 방을 선택해 주세요" : consent && !error ? title : "로그인하고 참가"}
     identityLabel={consent && !error ? roomName : undefined}
@@ -262,11 +272,10 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
       {rooms.map(room => <button key={room.room_id} className="dc-guest-join-button" disabled={busy} onClick={() => void run(() => selectRoom(room.room_id))}>{room.name || "이름 없는 방"}</button>)}
       {consent && !error && <>
         <p className="text-sm preserve-words">{consent.account} 계정으로 참가</p>
-        <p className="truncate text-xs text-text-muted">{consent.target.endpoint_origin}</p>
         <p className="text-sm text-text-muted">참가하면 이 방에 내 이름과 프로필이 보여요.</p>
         <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>{reconnect ? "다시 연결" : "참가하기"}</button>
       </>}
-      {consent && <button type="button" className="dc-join-cancel" disabled={busy} onClick={() => void confirm(true)}>목록에 다시 표시하고 참가</button>}
+      {consent && !error && isHiddenServer(consent.request.server_id) && <button type="button" className="dc-join-cancel" disabled={busy} onClick={() => void confirm(true)}>목록에 다시 표시하고 참가</button>}
       {!host && !busy && (!error || (secureEntry && !loadCentralSession())) && !consent && rooms.length === 0 && guestScreen === "choice" && <button type="button" className="dc-google-signin w-full"
         onClick={() => void run(async () => {
           loginAbort.current = new AbortController();

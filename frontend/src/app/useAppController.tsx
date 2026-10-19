@@ -79,8 +79,9 @@ import { projectChannelUnread } from "../lib/channelUnread";
 import { closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
 import { useMemberRoomAutoReselect, selectMemberRoomOnDemand } from "./useMemberRoomAutoReselect";
 import { userFacingError } from "../lib/apiErrors";
+import type { MemberSelectError } from "../lib/memberMembershipEnded";
+import { createConfirmedMembershipLostHandler, useMembershipEndedRoom } from "./useMembershipEndedRoom";
 import {  NO_SURFACE_STREAMS,
-  applyConfirmedMembershipLost,
   canonicalRoomAuthFor,
   memberAdmissionServerFor,
   remoteRoomSessionReady,
@@ -137,8 +138,9 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const [activeRoomId, setActiveRoomId] = useState(() => startupRoute.activeRoomId);
   // A failed member select stays visible: the rail selection still moves to
   // the clicked room and the room shows this short Korean message (never an
-  // alert); the next tap retries through a fresh admission.
-  const [memberSelectError, setMemberSelectError] = useState<{ roomId: string; message: string } | null>(null);
+  // alert); the next tap retries through a fresh admission. A kicked room
+  // carries a structured membership-ended reason instead of matched text.
+  const [memberSelectError, setMemberSelectError] = useState<MemberSelectError | null>(null);
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);
   const [channelMenu, setChannelMenu] = useState<ChannelMenuState>(null);
   const [settingsModal, setSettingsModal] = useState<RoomSettingsState>(null);
@@ -236,20 +238,15 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   const { localHostServerId, localOwnedByAccount } = useLocalHostOwnership(directoryRooms, centralDirectory);
   // Confirmed membership loss (kick/ban/revoke): rooms disappear from the
   // rail, their bearer clears, and a stranded selection falls back.
-  const handleConfirmedMembershipLost = useCallback((serverId: string) => {
-    applyConfirmedMembershipLost(serverId,
-      {
-        guestSession, guestExpired, latestRooms: latestRooms.current,
-        activeRoomId, memberSelectError,
-      },
-      {
-        closeHost: closeRemoteWorkspace, unbindHostSessions: unbindRemoteSessionsForServer,
-        clearSession: clearGuestSession, removeRoom,
-        setSelectError: setMemberSelectError, activateRoom: setActiveRoomId,
-        resetChannel: () => setChannel("lobby"), closeAdmin: () => setAdminOpen(false),
-        clearRetainedRoom: () => { retainedActiveRoom.current = null; },
-      });
-  }, [guestSession, guestExpired, clearGuestSession, removeRoom, memberSelectError, activeRoomId]);
+  const handleConfirmedMembershipLost = useCallback(createConfirmedMembershipLostHandler({
+    guestSession, guestExpired, latestRooms: latestRooms.current,
+    activeRoomId, memberSelectError,
+    closeHost: closeRemoteWorkspace, unbindHostSessions: unbindRemoteSessionsForServer,
+    clearSession: clearGuestSession, removeRoom,
+    setSelectError: setMemberSelectError, activateRoom: setActiveRoomId,
+    resetChannel: () => setChannel("lobby"), closeAdmin: () => setAdminOpen(false),
+    clearRetainedRoom: () => { retainedActiveRoom.current = null; },
+  }), [guestSession, guestExpired, clearGuestSession, removeRoom, memberSelectError, activeRoomId]);
   const { rooms: railRooms, memberHosts } = useRailRooms({
     directoryRooms,
     startupHostEnabled,
@@ -297,7 +294,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   // succeeds: without a session the host authority would be this computer's,
   // which must never drive another host's room.
   const activeRoomSelectError = memberSelectError && memberSelectError.roomId === activeRoom.id
-    ? memberSelectError.message : null;
+    ? memberSelectError : null;
   // Joined member rooms stay live in the background: each covered room keeps
   // a lightweight event stream for its rail unread/mention badge. The active
   // room suspends its background stream (the canonical socket owns it).
@@ -552,6 +549,10 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     if (!canAddActiveAI) setAgentCreateOpen(false);
     if (activeGuestLocked && !canManageActiveRoom) setSettingsModal(null);
   }, [canAddActiveAI, canManageActiveRoom, activeGuestLocked]);
+  const { acknowledgeMembershipEnded } = useMembershipEndedRoom({ activeRoom, rooms, guestSession, guestExpired,
+    memberSelectError, setMemberSelectError, removeDirectoryRoom: removeRoom, removeMemberRoom: memberHosts.removeRoom,
+    clearGuestSession, retainedActiveRoom, setActiveRoomId, setChannel, setAdminOpen, setRoomMenu, setChannelMenu,
+    viewerParticipantId: activeGuestSession?.agentId || "operator-local", roomEvents: canonicalRoom.events });
   const saveAgentAvatar = useCallback(async (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => {
     if ((!managerAuthorityCurrent && !(activeGuestLocked && canControlActiveAgents)) || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
       throw new Error("현재 방의 에이전트 프로필 업로드 권위를 사용할 수 없습니다.");
@@ -791,7 +792,8 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   function removeAcknowledgedRoom(roomId: string) {
     const remainingRooms = removeRoom(roomId);
     if (activeRoom.id === roomId) {
-      setActiveRoomId(remainingRooms[0]?.id || "");
+      const fallback = rooms.find((room) => room.id !== roomId) ?? remainingRooms[0];
+      setActiveRoomId(fallback?.id || "");
       setChannel("lobby");
       setAdminOpen(false);
     }
@@ -981,7 +983,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
     saveAgentAvatar: canControlActiveAgents && (managerAuthorityCurrent || activeGuestLocked) ? saveAgentAvatar : undefined,
-    scopedOnlineCount, selectRoom, memberSelectError, sendAgentConfigure, sendAgentProfileUpdate,
+    scopedOnlineCount, selectRoom, memberSelectError, acknowledgeMembershipEnded, sendAgentConfigure, sendAgentProfileUpdate,
     sendAgentControl, sendParticipantMute, sendParticipantRemove, setAdminOpen,
     setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery,
     setGuestRecoveryRequest, setLeaveRoomTargetId,

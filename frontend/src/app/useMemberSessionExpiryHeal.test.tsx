@@ -31,6 +31,7 @@ import {
 } from "../lib/central/memberRoomAutoReselectBudget";
 import { resetMemberHostOfflineBudgetForTests } from "../lib/central/memberRoomLive";
 import { resetCentralRequestGovernorForTests } from "../lib/central/centralRequestGovernor";
+import { resetMembershipEndedTerminalForTests } from "../lib/memberMembershipEnded";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 
 const ACCOUNT = "person";
@@ -268,6 +269,7 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     resetCentralRequestGovernorForTests();
     resetMemberHostOfflineBudgetForTests();
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
     bootstrap.mockImplementation(async () => ({
       person: { person_id: ACCOUNT, display_name: "나", identity_kind: "google" },
       servers: [
@@ -314,6 +316,7 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
   });
 
   // The owner stack, faithfully: the joined session object is RETAINED at TTL
@@ -344,6 +347,7 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
       const [selectError, setSelectErrorState] = useState<{
         roomId: string;
         message: string;
+        membershipEnded?: "kicked" | "exported";
       } | null>(null);
       // Split-brain precondition from the real app: the member host snapshot
       // stops reporting connected while the adopted admission channel stays
@@ -541,6 +545,7 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     expect(env.result.current.selectError).toEqual({
       roomId: "rail-a",
       message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE,
+      membershipEnded: "kicked",
     });
     // The refused select refreshes the host room list once (existing
     // terminal-error path) so the kicked room can leave the rail: at most
@@ -637,6 +642,7 @@ describe("session-loss heal never reinstalls a cached bearer (real hooks)", () =
     resetCentralRequestGovernorForTests();
     resetMemberHostOfflineBudgetForTests();
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
     resetMemberRoomSessionAuthFailedForTests();
     bootstrap.mockImplementation(async () => ({
       person: { person_id: ACCOUNT, display_name: "나", identity_kind: "google" },
@@ -684,6 +690,7 @@ describe("session-loss heal never reinstalls a cached bearer (real hooks)", () =
     vi.useRealTimers();
     vi.restoreAllMocks();
     resetMemberRoomAutoReselectBudgetForTests();
+    resetMembershipEndedTerminalForTests();
     resetMemberRoomSessionAuthFailedForTests();
   });
 
@@ -705,6 +712,7 @@ describe("session-loss heal never reinstalls a cached bearer (real hooks)", () =
       const [selectError, setSelectErrorState] = useState<{
         roomId: string;
         message: string;
+        membershipEnded?: "kicked" | "exported";
       } | null>(null);
       const [clock, setClock] = useState(0);
       void clock;
@@ -817,12 +825,13 @@ describe("session-loss heal never reinstalls a cached bearer (real hooks)", () =
       await vi.advanceTimersByTimeAsync(0);
     });
     // The heal must select fresh (not reinstall the revoked cached bearer):
-    // the host refuses, so the room parks with the stop line.
+    // the host refuses, so the room parks with the ended reason.
     await waitFor(() => expect(selectCalls(options).length).toBeGreaterThan(baseSelects));
     await waitFor(() => expect(env.result.current.selectError).not.toBeNull());
     expect(env.result.current.selectError).toEqual({
       roomId: "rail-a",
       message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE,
+      membershipEnded: "kicked",
     });
     expect(env.result.current.session).toBeNull();
     expect(env.acceptCalls.filter((call) => call.session_token === env.cachedToken)).toEqual([]);

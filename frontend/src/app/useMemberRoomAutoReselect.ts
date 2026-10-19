@@ -7,6 +7,13 @@ import {
   tryClaimMemberRoomAutoReselect,
   tryClaimMemberRoomAutoReselectRetry,
 } from "../lib/central/memberRoomAutoReselectBudget";
+import {
+  isMembershipEndedError,
+  isMembershipEndedTerminal,
+  markMembershipEndedTerminal,
+  membershipEndedTerminalScope,
+  type MemberSelectError,
+} from "../lib/memberMembershipEnded";
 import { memberAdmissionFreeSelect } from "../lib/central/secureMemberEntry";
 import { memberAdmissionServerFor } from "./remoteRoomAuthority";
 
@@ -92,7 +99,7 @@ export function useMemberRoomAutoReselect({
   selectRoom: (serverId: string, meetingId: string) => Promise<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   acceptSession: (payload: any) => Promise<boolean>;
-  setSelectError: (error: { roomId: string; message: string } | null | ((current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null)) => void;
+  setSelectError: (error: MemberSelectError | null | ((current: MemberSelectError | null) => MemberSelectError | null)) => void;
 }) {
   const seen = useRef(new Map<string, unknown>());
   const flight = useRef(false);
@@ -108,6 +115,16 @@ export function useMemberRoomAutoReselect({
     if (activeRoom.roomOrigin !== "remote_server" || !activeRoom.serverId) return;
     const memberServerId = memberAdmissionServerFor(activeRoom, ownerServerId, hasAnchor);
     if (!memberServerId || isRefused(memberServerId)) return;
+    // A kicked room is terminal: never auto re-select it again. The ended
+    // view owns the acknowledgement; the error below only parks it here.
+    if (isMembershipEndedTerminal(memberServerId, activeRoom.meetingId)) {
+      const scope = membershipEndedTerminalScope(memberServerId, activeRoom.meetingId) ?? "kicked";
+      (setSelectError as (update: MemberSelectError | ((current: MemberSelectError | null) => MemberSelectError | null)) => void)(
+        (current) => current?.roomId === activeRoom.id && current.membershipEnded
+          ? current
+          : { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE, membershipEnded: scope });
+      return;
+    }
     const snapshot = snapshots.find((entry) => entry.serverId === memberServerId);
     if (!snapshot || snapshot.phase !== "connected") return;
     const admission = admissionFor(memberServerId);
@@ -137,7 +154,7 @@ export function useMemberRoomAutoReselect({
     seen.current.set(activeKey, admission);
     if (!claim.allowed) {
       if (claim.reason === "exhausted") {
-        (setSelectError as (error: { roomId: string; message: string }) => void)(
+        (setSelectError as (error: MemberSelectError) => void)(
           { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
       }
       return;
@@ -159,7 +176,7 @@ export function useMemberRoomAutoReselect({
         if (live && isUsableCachedJoinPayload(live)) {
           try {
             if (await acceptSession(live)) {
-              (setSelectError as (update: (current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null) => void)(
+              (setSelectError as (update: (current: MemberSelectError | null) => MemberSelectError | null) => void)(
                 (current) => (current?.roomId === activeRoom.id ? null : current));
               return;
             }
@@ -169,13 +186,19 @@ export function useMemberRoomAutoReselect({
         }
         const payload = await selectRoom(memberServerId, activeRoom.meetingId);
         if (!await acceptSession(payload)) {
-          (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+          (setSelectError as (error: MemberSelectError) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
         } else {
-          (setSelectError as (update: (current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null) => void)(
+          (setSelectError as (update: (current: MemberSelectError | null) => MemberSelectError | null) => void)(
             (current) => (current?.roomId === activeRoom.id ? null : current));
         }
-      } catch {
-        (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+      } catch (error) {
+        if (isMembershipEndedError(error)) {
+          markMembershipEndedTerminal(memberServerId, activeRoom.meetingId);
+          (setSelectError as (error: MemberSelectError) => void)(
+            { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE, membershipEnded: "kicked" });
+        } else {
+          (setSelectError as (error: MemberSelectError) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+        }
       } finally {
         flight.current = false;
       }
@@ -224,6 +247,17 @@ export function useMemberRoomAutoReselect({
       return;
     }
     if (!hadLiveSession.current) return;
+    // A kicked room is terminal: park it without another select. The ended
+    // view owns the acknowledgement; time passing alone never retries it.
+    if (isMembershipEndedTerminal(memberServerId, activeRoom.meetingId)) {
+      const scope = membershipEndedTerminalScope(memberServerId, activeRoom.meetingId) ?? "kicked";
+      hadLiveSession.current = false;
+      (setSelectError as (update: MemberSelectError | ((current: MemberSelectError | null) => MemberSelectError | null)) => void)(
+        (current) => current?.roomId === activeRoom.id && current.membershipEnded
+          ? current
+          : { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE, membershipEnded: scope });
+      return;
+    }
     // A session loss on a room that previously held a live session.
     let admission: unknown = null;
     try {
@@ -255,7 +289,7 @@ export function useMemberRoomAutoReselect({
     });
     if (skipped) {
       if (skipped === "retry-budget-exhausted" || skipped === "healed-recently") {
-        (setSelectError as (error: { roomId: string; message: string }) => void)(
+        (setSelectError as (error: MemberSelectError) => void)(
           { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
       }
       if (skipped === "healed-recently") {
@@ -280,16 +314,18 @@ export function useMemberRoomAutoReselect({
         // without a real select so the hourly heal never happens.
         const payload = await selectRoom(memberServerId, activeRoom.meetingId);
         if (!await acceptSession(payload)) {
-          (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+          (setSelectError as (error: MemberSelectError) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
         } else {
-          (setSelectError as (update: (current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null) => void)(
+          (setSelectError as (update: (current: MemberSelectError | null) => MemberSelectError | null) => void)(
             (current) => (current?.roomId === activeRoom.id ? null : current));
         }
-      } catch {
+      } catch (error) {
         // A refused fresh select means the host revoked this member
         // (kick/ban): poison the cached bearer so a later tap never
         // re-installs it either — the tap falls through to its own fresh
         // select and surfaces the refusal inline instead of 401-spinning.
+        // A membership-ended refusal parks the room as terminal: the heal
+        // and the auto re-select never retry it afterwards.
         try {
           const stale = liveSessionFor(memberServerId, activeRoom.meetingId) as {
             session_token?: unknown;
@@ -300,7 +336,14 @@ export function useMemberRoomAutoReselect({
         } catch {
           // Cache poisoning is best-effort; the stop line below already parks.
         }
-        (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+        if (isMembershipEndedError(error)) {
+          markMembershipEndedTerminal(memberServerId, activeRoom.meetingId);
+          hadLiveSession.current = false;
+          (setSelectError as (error: MemberSelectError) => void)(
+            { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE, membershipEnded: "kicked" });
+        } else {
+          (setSelectError as (error: MemberSelectError) => void)({ roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+        }
       } finally {
         flight.current = false;
       }
@@ -327,14 +370,14 @@ export async function selectMemberRoomOnDemand({ roomId, meetingId, memberServer
   selectRoom: (serverId: string, meetingId: string) => Promise<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   acceptSession: (payload: any) => Promise<boolean>;
-  setSelectError: (error: { roomId: string; message: string } | null | ((current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null)) => void;
+  setSelectError: (error: MemberSelectError | null | ((current: MemberSelectError | null) => MemberSelectError | null)) => void;
 }): Promise<void> {
   try {
     const live = liveSessionFor(memberServerId, meetingId);
     let opened = false;
     // A revoked or clock-expired cached bearer must never be re-installed:
     // fall through to the fresh select below so the host rechecks membership.
-    if (isUsableCachedJoinPayload(live)) {
+    if (!isMembershipEndedTerminal(memberServerId, meetingId) && isUsableCachedJoinPayload(live)) {
       try {
         opened = await acceptSession(live);
       } catch {
@@ -342,7 +385,7 @@ export async function selectMemberRoomOnDemand({ roomId, meetingId, memberServer
       }
     }
     if (opened) {
-      (setSelectError as (update: (current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null) => void)(
+      (setSelectError as (update: (current: MemberSelectError | null) => MemberSelectError | null) => void)(
         (current) => (current?.roomId === roomId ? null : current));
     } else {
       const payload = await selectRoom(memberServerId, meetingId);
@@ -350,9 +393,9 @@ export async function selectMemberRoomOnDemand({ roomId, meetingId, memberServer
         roomId, meetingId: payload.meeting_id, serverId: payload.server_id,
       });
       if (!await acceptSession(payload)) {
-        (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+        (setSelectError as (error: MemberSelectError) => void)({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
       } else {
-        (setSelectError as (update: (current: { roomId: string; message: string } | null) => { roomId: string; message: string } | null) => void)(
+        (setSelectError as (update: (current: MemberSelectError | null) => MemberSelectError | null) => void)(
           (current) => (current?.roomId === roomId ? null : current));
       }
     }
@@ -361,6 +404,12 @@ export async function selectMemberRoomOnDemand({ roomId, meetingId, memberServer
       roomId, meetingId, serverId: memberServerId,
       message: error instanceof Error ? error.message : String(error),
     });
-    (setSelectError as (error: { roomId: string; message: string }) => void)({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+    if (isMembershipEndedError(error)) {
+      markMembershipEndedTerminal(memberServerId, meetingId);
+      (setSelectError as (error: MemberSelectError) => void)(
+        { roomId, message: "방을 열지 못했어요. 다시 시도해 주세요.", membershipEnded: "kicked" });
+    } else {
+      (setSelectError as (error: MemberSelectError) => void)({ roomId, message: "방을 열지 못했어요. 다시 시도해 주세요." });
+    }
   }
 }
