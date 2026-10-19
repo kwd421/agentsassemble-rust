@@ -18,7 +18,7 @@ it("explains central-unconfirmed remote rooms without hiding saved room identity
   const [offline] = projectRoomConnections([{ ...createFreshRoom(), roomOrigin: "remote_server", connectionState: "disconnected" }], null, true);
   render(<DisconnectedRoomView room={offline} onRetry={async () => {}} />);
   expect(screen.getByText(/로그인 서버에 연결하지 못했어요/)).toBeTruthy();
-  expect(screen.getByText(offline.label)).toBeTruthy();
+  expect(screen.getByRole("heading", { name: `‘${offline.label}’에 연결할 수 없어요` })).toBeTruthy();
 });
 
 it("projects only the admitted server's pending or verified directory and preserves other servers", () => {
@@ -42,7 +42,7 @@ it("keeps a second live host connected while the first host drops", () => {
 it("shows the new titles, no kicker and no raw origin text", () => {
   const [offline] = projectRoomConnections([{ ...createFreshRoom(), roomOrigin: "remote_server", connectionState: "disconnected" }], null, true);
   const { container } = render(<DisconnectedRoomView room={offline} onRetry={async () => {}} />);
-  expect(screen.getByRole("heading", { name: "서버에 연결할 수 없어요" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: `‘${offline.label}’에 연결할 수 없어요` })).toBeTruthy();
   expect(screen.queryByText("서버 연결 상태")).toBeNull();
   expect(container.querySelector("code")).toBeNull();
   expect(container.textContent).not.toContain("https://");
@@ -51,13 +51,13 @@ it("shows the connecting title while the host comes back", () => {
   const base = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const };
   const [connecting] = projectRoomConnections([base], null, false, [{ serverId: "host", state: "connecting" }]);
   render(<DisconnectedRoomView room={connecting} onRetry={async () => {}} />);
-  expect(screen.getByRole("heading", { name: "연결하는 중이에요" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: `‘${connecting.label}’에 연결하는 중이에요` })).toBeTruthy();
 });
 it("names the friend's computer when the host display name is known", () => {
   const base = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const };
   const [offline] = projectRoomConnections([base], null, false, [{ serverId: "host", state: "disconnected" }]);
   render(<DisconnectedRoomView room={offline} hostDisplayName="Hihi" onRetry={async () => {}} />);
-  expect(screen.getByText(/‘Hihi’님의 컴퓨터가 꺼져 있거나/)).toBeTruthy();
+  expect(screen.getByText(/Hihi님의 컴퓨터가 꺼져 있거나/)).toBeTruthy();
 });
 it("explains an unnamed remote server without leaking the origin", () => {
   const base = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const, serverOrigin: "https://friend.test" };
@@ -73,4 +73,11 @@ it("keeps an explicit reason override and the retry button", async () => {
   expect(screen.getByText("참가 서버 정보가 바뀌었어요.")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "다시 연결" }));
   await vi.waitFor(() => expect(retry).toHaveBeenCalledOnce());
+});
+it("waits for the daily reset without a retry button that cannot work", () => {
+  const base = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const };
+  const [offline] = projectRoomConnections([base], null, false, [{ serverId: "host", state: "disconnected" }]);
+  render(<DisconnectedRoomView room={offline} reason="오늘 연결 한도를 다 써서 친구 방은 오전 9:00 이후에 다시 연결돼요." autoReconnectAt="오전 9:00" onRetry={async () => {}} />);
+  expect(screen.getByText("오늘 연결 한도를 다 썼어요. 오전 9:00에 자동으로 다시 연결돼요.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "다시 연결" })).toBeNull();
 });

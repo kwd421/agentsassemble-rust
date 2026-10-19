@@ -37,7 +37,8 @@ import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel"
 import { RIGHT_PANEL_WIDTH_MAX, RIGHT_PANEL_WIDTH_MIN, useRightPanelResize } from "./useRightPanelResize";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 import { filterCollapsedChannels } from "../lib/channelUnread";
-import { centralDailyQuotaNotice } from "../lib/central/centralRequestGovernor";
+import { centralDailyQuotaNotice, centralDailyQuotaResetAtMs, formatCentralQuotaResetLocal } from "../lib/central/centralRequestGovernor";
+import { dismissQuotaNotice, quotaNoticeDismissed } from "../lib/quotaNoticeDismissal";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
 const FriendsView = lazy(() => import("../views/FriendsView"));
@@ -56,6 +57,7 @@ export default function AppView({ controller }: { controller: AppController }) {
   const [createRoomOpen, setCreateRoomOpen] = useState(false);
   const [roomName, setRoomName] = useState("새 방");
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [, setQuotaNoticeRevision] = useState(0);
   const [sideChatScope, setSideChatScope] = useState("");
   const [createChannelScope, setCreateChannelScope] = useState("");
   const [messageAttachmentReadOwner] = useState(
@@ -138,6 +140,10 @@ export default function AppView({ controller }: { controller: AppController }) {
       onToggleSideChat: canOpenSideChat ? () => setSideChatOpen(!sideChatOpen) : undefined };
   }
   const friendsVisible = friendsOpen && canManageFriends;
+  // Friends live on this computer's own server. A signed-in person without one
+  // here (web, or someone else's computer) still finds the entry and learns
+  // where the list is.
+  const friendsEntryVisible = canManageFriends || Boolean(controller.centralDirectory?.person);
   // This computer's server belongs to its registered owner. A mismatch is
   // a quiet one-line entry offering an explicit action, never a gate. It is
   // decided only from registration identity (this host's server id vs the
@@ -190,8 +196,14 @@ export default function AppView({ controller }: { controller: AppController }) {
   const channelNames = visibleChannels.map((item) => item.label);
   // While the daily central allowance is spent, friend rooms reconnect
   // after the local reset time; this computer's rooms keep working.
-  const centralQuotaNotice = controller.centralDirectory?.person?.person_id
-    ? centralDailyQuotaNotice(controller.centralDirectory.person.person_id)
+  const quotaPersonId = controller.centralDirectory?.person?.person_id ?? "";
+  const centralQuotaResetAt = quotaPersonId ? centralDailyQuotaResetAtMs(quotaPersonId) : null;
+  // A disconnected friend room explains the spent allowance itself (and
+  // reconnects on its own at the reset), so the top banner does not repeat it.
+  const activeRoomWaitsForQuota = centralQuotaResetAt !== null && activeRoomDisconnected &&
+    activeRoom.roomOrigin === "remote_server" && !activeRoomSelectError;
+  const centralQuotaNotice = quotaPersonId && !activeRoomWaitsForQuota && !quotaNoticeDismissed(quotaPersonId, centralQuotaResetAt)
+    ? centralDailyQuotaNotice(quotaPersonId)
     : null;
   return (
     <RoomSocketProvider socket={roomSocket}>
@@ -224,6 +236,10 @@ export default function AppView({ controller }: { controller: AppController }) {
         </div>
       )}
       <RoomSyncNotice
+        onDismissConnectionMessage={!roomDirectorySyncIssue && centralQuotaNotice ? () => {
+          dismissQuotaNotice(quotaPersonId, centralQuotaResetAt);
+          setQuotaNoticeRevision((revision) => revision + 1);
+        } : undefined}
         connectionMessage={roomDirectorySyncIssue ? "서버 연결을 확인하고 있어요. 연결이 끊긴 방에서 다시 시도할 수 있어요."
           : centralQuotaNotice ?? (controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
           : controller.serverConnectionError)}
@@ -253,9 +269,9 @@ export default function AppView({ controller }: { controller: AppController }) {
         mobileViewport={mobileViewport}
         inert={mobileViewport && !mobileSidebarOpen}
         onSelectRoom={(roomId) => { setFriendsOpen(false); selectRoom(roomId); }}
-        friendsOpen={friendsOpen && canManageFriends}
+        friendsOpen={friendsOpen && friendsEntryVisible}
         onOpenAdmin={!guestLocked && isDesktopWebview() ? () => { setAdminOpen(true); setFriendsOpen(false); closeMobileSidebar(); setRoomMenu(null); } : undefined}
-        onOpenFriends={canManageFriends ? () => { setAdminOpen(false); setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
+        onOpenFriends={friendsEntryVisible ? () => { setAdminOpen(false); setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onAddRoom={() => setCreateRoomOpen(true)}
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
@@ -450,6 +466,12 @@ export default function AppView({ controller }: { controller: AppController }) {
         <Suspense fallback={<DeferredViewFallback />}>
           {friendsOpen && canManageFriends ? (
             <FriendsView authority={friendAuthority} userArea={userArea} onClose={() => setFriendsOpen(false)} />
+          ) : friendsOpen && friendsEntryVisible ? (
+            <section className="dc-disconnected-room" aria-labelledby="friends-unavailable-title">
+              <h1 id="friends-unavailable-title">친구 목록을 쓸 수 없어요</h1>
+              <p className="dc-disconnected-room-description">내 컴퓨터에서 앱을 열면 친구를 볼 수 있어요.</p>
+              <button type="button" className="ops-button min-h-11 px-4" onClick={() => setFriendsOpen(false)}>대화로 돌아가기</button>
+            </section>
           ) : guestExpired && !ownerProfileSession ? (
             <section className="dc-disconnected-room" role="status" style={{ padding: 24 }}>
               <h1>방 접속이 끝났어요</h1>
@@ -462,6 +484,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             <MembershipEndedView key={activeRoom.id} room={activeRoom} scope={activeRoomSelectError.membershipEnded} onConfirm={controller.acknowledgeMembershipEnded} />
           ) : activeRoomDisconnected || activeRoomSelectError ? (
             <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={activeRoomSelectError?.message ?? controller.activeMemberHostDetail}
+              autoReconnectAt={activeRoomWaitsForQuota && centralQuotaResetAt !== null ? formatCentralQuotaResetLocal(centralQuotaResetAt) : null}
               hostDisplayName={activeRoom.serverId ? controller.centralDirectory?.live?.servers?.find((server) => server.server_id === activeRoom.serverId)?.alias ?? null : null}
               onRetry={activeRoomSelectError || activeRoomNeedsAdmission ? () => selectRoom(activeRoom.id) : () => controller.retryRoomConnection(activeRoom)} />
           ) : !hasRoom ? (
@@ -610,8 +633,8 @@ export default function AppView({ controller }: { controller: AppController }) {
             data-testid="room-info-panel"
           >
             <RoomConnectionPanel
-
               room={activeRoom}
+              disconnected={activeRoomDisconnected}
               agents={scopedAgents}
               members={activeRoomMembers}
               viewerParticipantId={activeRoomSession?.agentId || "operator-local"}

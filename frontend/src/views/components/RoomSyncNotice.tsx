@@ -23,17 +23,18 @@ function noticeMessage(category: string) {
 }
 
 export default function RoomSyncNotice({
-  issue, lifecycle, connectionMessage,
+  issue, lifecycle, connectionMessage, onDismissConnectionMessage,
 }: {
   issue: RoomSyncIssue | null;
   connectionMessage?: string;
+  onDismissConnectionMessage?: () => void;
   lifecycle?: Pick<ReturnType<typeof useRoomLifecycle>, "pending" | "busy" | "notice" | "error" | "retry" | "dismissNotice">;
 }) {
   const operation = lifecycle && (lifecycle.pending || lifecycle.notice || lifecycle.error) ? lifecycle : null;
   const banner = connectionMessage || (issue ? noticeMessage(issue.category) : "");
   if (!banner && !operation) return null;
   return <>
-    {banner && <ConnectionBanner message={banner} />}
+    {banner && <ConnectionBanner message={banner} onDismiss={connectionMessage ? onDismissConnectionMessage : undefined} />}
     {operation && <div
       role="status"
       aria-live="polite"

@@ -30,6 +30,7 @@ export default function MemberList({
   viewerParticipantId = "operator-local",
   displayResourceBase = "",
   roomName,
+  disconnected = false,
   onRoleChange,
   canEditRoles = true,
   onSessionActionComplete,
@@ -54,6 +55,8 @@ export default function MemberList({
   displayResourceBase?: string;
   roomId: string;
   roomName: string;
+  /** The room's server is unreachable, so the member list is unknown rather than empty. */
+  disconnected?: boolean;
   onRoleChange?: (memberId: string, role: RoleId) => void | Promise<void>;
   canEditRoles?: boolean;
   onSessionActionComplete?: () => void;
@@ -228,7 +231,7 @@ export default function MemberList({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3 chat-scroll">
         {agents.length === 0 && members.length === 0 && (
           <p className="mb-2 px-2 text-[13px] text-text-muted preserve-words">
-            {roomName}에는 아직 멤버가 없어요.
+            {disconnected ? "연결되면 멤버가 보여요." : `${roomName}에는 아직 멤버가 없어요.`}
           </p>
         )}
         {ownerGroups.map((group) => {
