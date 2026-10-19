@@ -43,6 +43,11 @@ pub(crate) const TABLES: &[TableDefinition] = &[
         infrastructure: true,
     },
     TableDefinition {
+        name: "member_resume_keys",
+        ddl: crate::member_resume::DDL,
+        infrastructure: true,
+    },
+    TableDefinition {
         name: "central_identity_bindings",
         ddl: crate::central_identity_bindings::TABLE_DDL,
         infrastructure: false,
@@ -524,6 +529,7 @@ pub(crate) const TABLES: &[TableDefinition] = &[
 
 pub(crate) const INDEXES: &[&str] = &[
     crate::central_identity_bindings::USER_INDEX_DDL,
+    crate::member_resume::LOOKUP_INDEX_DDL,
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_requests_pending_session_idx ON provider_requests(room_id,session_id) WHERE state IN ('open','resolving')",
     "CREATE INDEX IF NOT EXISTS room_channel_messages_idx ON room_events(room_id, json_extract(event_json, '$.channel_id'), seq) WHERE json_extract(event_json, '$.type') = 'channel_message_final'",
     "CREATE UNIQUE INDEX IF NOT EXISTS room_delete_pending_idx ON room_delete_results(room_id) WHERE state = 'pending'",

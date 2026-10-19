@@ -75,6 +75,7 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "room_runtime_cleanup"
         | "member_projection_outbox"
         | "member_projection_sender"
+        | "member_resume_keys"
         | "room_message_search_records"
         | "room_message_search_phrase"
         | "room_write_budgets"

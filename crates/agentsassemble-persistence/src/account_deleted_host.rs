@@ -98,6 +98,9 @@ impl SqliteStore {
             .transpose()?;
         sqlx::query("INSERT INTO central_member_removals(issuer,person_id,user_id,participant_id,request_id,phase,schema_revision) VALUES (?,?,?,?,'central-account-deleted-host-response','owner_sessions',87) ON CONFLICT(issuer,person_id) DO NOTHING")
             .bind(issuer).bind(person).bind(user).bind(actor).execute(&mut *tx).await?;
+        // The deleted account loses its direct reconnect credential with the
+        // fence, before the anonymization page finishes.
+        crate::member_resume::delete_for_person(&mut tx, issuer, person).await?;
         sqlx::query("INSERT INTO runtime_metadata(key,value) VALUES ('hosting_restriction','account_deleted') ON CONFLICT(key) DO UPDATE SET value='account_deleted' WHERE value='account_deleted'")
             .execute(&mut *tx).await?;
         tx.commit().await?;

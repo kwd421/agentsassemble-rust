@@ -192,6 +192,10 @@ impl SqliteStore {
         }
         sqlx::query("UPDATE member_projection_outbox SET parked=2 WHERE registration_epoch != COALESCE(?, '')")
             .bind(epoch).execute(&mut *tx).await?;
+        // Resume keys are incarnation-scoped: a new registration epoch retires
+        // every key the previous incarnation issued, exactly like the
+        // projection anchor it belongs to.
+        crate::member_resume::delete_outside_epoch(&mut tx, epoch).await?;
         // A fixed-address tunnel token is bound to its exact registration
         // epoch. Any epoch change (including clearing) revokes it locally so
         // the next open provisions a fresh token instead of serving the old

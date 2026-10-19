@@ -193,6 +193,8 @@ mod member_admission;
 mod member_connect;
 pub use member_connect::MemberConnectRoom;
 mod member_projection;
+mod member_resume;
+pub use member_resume::{MemberResumeKey, MemberResumeKeyIssue};
 mod member_schema;
 pub use member_projection::MemberProjection;
 mod member_sessions;

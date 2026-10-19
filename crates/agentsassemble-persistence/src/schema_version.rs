@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 96;
+pub const CURRENT_SCHEMA_VERSION: i64 = 97;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -15,6 +15,12 @@ pub(crate) const V74_OWNER_SESSIONS_DDL: &str = "CREATE TABLE central_owner_sess
     session_expires_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
     renew_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1))) STRICT";
 
+/// The schema versions one binary accepts. A database written by a newer
+/// binary is refused instead of being read as if it were older.
+pub(crate) fn schema_version_supported(found: i64, maximum: i64) -> bool {
+    (70..=maximum).contains(&found)
+}
+
 pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let stored = sqlx::query("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
         .fetch_optional(pool)
@@ -26,7 +32,7 @@ pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), Per
         .ok()
         .filter(|version| *version >= 1)
         .ok_or_else(|| PersistenceError::InvalidSchemaVersion(stored.clone()))?;
-    if !(70..=CURRENT_SCHEMA_VERSION).contains(&found)
+    if !schema_version_supported(found, CURRENT_SCHEMA_VERSION)
         && found != crate::central_identity_bindings::MEMBER_SCHEMA_VERSION
     {
         return Err(PersistenceError::SchemaVersionMismatch {
@@ -259,6 +265,11 @@ async fn upgrade_member_schema(pool: &SqlitePool, version: &str) -> Result<(), P
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
+    }
+    if current.parse::<i64>().is_ok_and(|v| v < 97) {
+        // v97 adds the host-owned member resume keys. The table is empty on
+        // upgrade: every row is re-issued by a fresh central admission.
+        crate::member_resume::upgrade(pool).await?;
     }
     Ok(())
 }
@@ -796,5 +807,18 @@ mod tests {
             Err(PersistenceError::SchemaVersionMismatch { found, required })
                 if found == 69 && required == CURRENT_SCHEMA_VERSION
         ));
+    }
+
+    #[test]
+    fn a_newer_schema_is_refused_by_an_older_binary() {
+        // The current binary owns schema 97 and reads it.
+        assert!(super::schema_version_supported(97, 97));
+        // A binary whose current schema version is 96 refuses that database
+        // instead of reading a table it does not know.
+        assert!(
+            !super::schema_version_supported(97, 96),
+            "an older binary must refuse a newer schema"
+        );
+        assert!(!super::schema_version_supported(98, 97));
     }
 }

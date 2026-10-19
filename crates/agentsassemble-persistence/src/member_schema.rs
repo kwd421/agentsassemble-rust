@@ -42,6 +42,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             | "94"
             | "95"
             | "96"
+            | "97"
     ) {
         return Ok(());
     }
@@ -131,6 +132,9 @@ pub(crate) async fn restore_v80_fixture(store: &crate::SqliteStore) -> Result<()
         .execute(&mut *tx)
         .await?;
     sqlx::query("DROP TABLE central_identity_bindings")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DROP TABLE member_resume_keys")
         .execute(&mut *tx)
         .await?;
     for index in crate::schema::INDEXES

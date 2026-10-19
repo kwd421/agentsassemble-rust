@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::Row;
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct MemberConnectRoom {
     pub room_id: String,
     pub name: String,
