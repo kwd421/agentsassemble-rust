@@ -179,7 +179,7 @@ button:disabled,
   content: "";
   position: absolute;
   left: -16px;
-  height: 36px;
+  height: 40px;
   width: 4px;
   border-radius: 0 4px 4px 0;
   background: #f2f3f5;
@@ -190,7 +190,7 @@ button:disabled,
   content: "";
   position: absolute;
   left: -16px;
-  height: 36px;
+  height: 40px;
   width: 4px;
   border-radius: 0 4px 4px 0;
   background: #f2f3f5;
@@ -200,7 +200,7 @@ button:disabled,
   content: "";
   position: absolute;
   left: -16px;
-  height: 18px;
+  height: 20px;
   width: 4px;
   border-radius: 0 4px 4px 0;
   background: #f2f3f5;

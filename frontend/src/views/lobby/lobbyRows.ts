@@ -17,16 +17,11 @@ function dateKey(iso: string): string {
 function dateDividerLabel(iso: string): string {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return "";
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (dateKey(iso) === dateKey(today.toISOString())) return "오늘";
-  if (dateKey(iso) === dateKey(yesterday.toISOString())) return "어제";
+  // Discord's divider is always the absolute date, never 오늘/어제 or a weekday.
   return parsed.toLocaleDateString("ko-KR", {
     year: "numeric",
     month: "long",
     day: "numeric",
-    weekday: "long",
   });
 }
 

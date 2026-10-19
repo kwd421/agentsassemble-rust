@@ -8,7 +8,7 @@
   width: var(--dc-members-width, 300px);
   max-width: 60%;
   min-width: 0;
-  border-left: 1px solid var(--color-panel-separator);
+  /* Discord: the member list shares the chat color with no dividing line. */
   background: var(--color-chat-bg);
 }
 
@@ -92,8 +92,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 10px 8px;
-  border-bottom: 1px solid var(--color-panel-separator);
+  /* Same 8px inset as the member rows; no rule under it (Discord draws none). */
+  padding: 12px 8px 0;
 }
 
 .dc-room-agent-add-row .dc-agent-add-entry {

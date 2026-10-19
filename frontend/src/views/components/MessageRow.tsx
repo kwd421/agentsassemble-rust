@@ -3,12 +3,18 @@ import type { ReactNode } from "react";
 import { CornerUpLeft, Pin, Zap } from "lucide-react";
 import ParticipantAvatarContent from "./ParticipantAvatarContent";
 
-export function messageTimeLabel(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "--:--";
-  }
+// Discord's header timestamp: 오전 9:35 today, 어제 오후 11:11 yesterday, and
+// 2026. 8. 21. 오후 11:11 for anything older (no zero-padded hour).
+export function messageTimeLabel(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const time = date.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+  const day = (value: Date) => `${value.getFullYear()}-${value.getMonth()}-${value.getDate()}`;
+  if (day(date) === day(now)) return time;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (day(date) === day(yesterday)) return `어제 ${time}`;
+  return `${date.toLocaleDateString("ko-KR", { year: "numeric", month: "numeric", day: "numeric" })} ${time}`;
 }
 
 export function MessageAvatar({ avatarImage, providerKind, participantType, avatarLabel, displayName, show = true, system = false }: {

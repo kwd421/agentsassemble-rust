@@ -250,6 +250,10 @@ export default function ChannelHeader({
           <Search size={20} />
         </button>
         <AppUpdateIndicator />
+        {/* Discord's order: threads (our side chat), notifications, pins, members. */}
+        {headerActions?.onToggleSideChat && <button type="button" className="dc-head-icon"
+          aria-label="사이드챗 열기" data-tip="사이드챗" aria-pressed={headerActions.sideChatOpen}
+          onClick={headerActions.onToggleSideChat}><MessageSquare size={20} /></button>}
         <button
           type="button"
           className="dc-head-icon"
@@ -263,7 +267,6 @@ export default function ChannelHeader({
           type="button"
           className="dc-head-icon"
           aria-label="고정 메시지" data-tip="고정 메시지"
-          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 44, minHeight: 44 }}
           aria-pressed={activePanel === "pins"}
           onClick={() => {
             if (activePanel !== "pins") headerActions?.onOpenPins?.();
@@ -272,18 +275,13 @@ export default function ChannelHeader({
         >
           <Pin size={20} />
         </button>
-        {headerActions?.onToggleSideChat && <button type="button" className="dc-head-icon"
-          aria-label="사이드챗 열기" data-tip="사이드챗" aria-pressed={headerActions.sideChatOpen}
-          onClick={headerActions.onToggleSideChat}><MessageSquare size={20} /></button>}
         {onToggleMembers && (
           <button
             type="button"
             onClick={openMemberSurface}
             aria-label="멤버 목록 토글" data-tip="멤버 목록"
             aria-pressed={membersOpen}
-            className={`dc-head-icon ${
-              membersOpen ? "text-text-primary" : "text-text-muted"
-            }`}
+            className="dc-head-icon"
           >
             <Users size={20} />
           </button>
