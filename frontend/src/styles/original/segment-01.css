@@ -30,6 +30,12 @@
   /* Icons and labels that are controls at rest: a step brighter than muted text. */
   --color-interactive: #9fa0a6;
   --color-accent: #5865f2;
+  /* Referenced by component styles; were undefined, which silently dropped
+     whole background declarations. Values match the measured input and
+     selected-row colors used elsewhere. */
+  --color-input: #121214;
+  --color-brand: #5865f2;
+  --color-channel-selected: #2c2c30;
   --color-accent-hover: #4752c4;
   --color-accent-soft: #404bb5;
   --color-online: #23a55a;
