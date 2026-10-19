@@ -399,7 +399,6 @@
 
 .dc-agent-runtime-settings .dc-provider-control-toggle {
   height: 36px;
-  background: var(--color-panel-soft);
 }
 
 .dc-agent-field select option,

@@ -55,8 +55,8 @@ describe("MemberList component wiring", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: "Agent One 프로필 보기" }), { clientX: 40, clientY: 40 });
     expect(screen.getByRole("menu")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Agent One 내보내기" }));
-    expect(screen.getByRole("button", { name: "내보내기" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Agent One 추방하기" }));
+    expect(screen.getByRole("button", { name: "추방하기" })).toBeTruthy();
   });
 
   it("closes the row's context menu on Escape while focus stays on the row", () => {
@@ -131,7 +131,7 @@ describe("MemberList component wiring", () => {
     );
 
     fireEvent.contextMenu(screen.getByText("Agent One"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "뮤트" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "음소거" }));
 
     await waitFor(() => expect(onParticipantMute).toHaveBeenCalledWith("agent-1", true));
   });
@@ -150,7 +150,7 @@ describe("MemberList component wiring", () => {
     fireEvent.contextMenu(screen.getByText("Agent One"));
 
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: "내보내기" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "추방하기" })).toBeNull();
   });
 
   it("pauses and resumes every eligible agent of an owner from the group header", async () => {

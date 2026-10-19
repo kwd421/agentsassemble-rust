@@ -81,11 +81,11 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .dc-server-row-open {
-  min-width: 64px;
+  min-width: 96px;
   min-height: 40px;
   padding: 0 16px;
   font-size: 14px;
@@ -93,8 +93,8 @@
 
 .dc-server-row-icon-button {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   place-items: center;
   border-radius: 8px;
   color: var(--color-text-muted);
@@ -166,4 +166,11 @@
 
 .dc-server-name-preview {
   word-break: keep-all;
+}
+
+/* Discord reveals row tools on hover; touch screens keep them visible. */
+@media (hover: hover) {
+  .dc-server-row:not(:hover):not(:focus-within) .dc-server-row-icon-button {
+    opacity: 0;
+  }
 }

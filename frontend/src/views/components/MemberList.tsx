@@ -161,7 +161,7 @@ export default function MemberList({
       await onParticipantMute(entry.id, !entry.muted);
       onSessionActionComplete?.();
     } catch (error) {
-      window.alert(userFacingError(error, "뮤트를 변경하지 못했어요."));
+      window.alert(userFacingError(error, "음소거를 변경하지 못했어요."));
     } finally {
       setMuteBusy(false);
       setMemberMenu(null);
@@ -405,7 +405,7 @@ export default function MemberList({
                 onClick={() => void handleToggleMute(memberMenu.entry)}
               >
                 {memberMenu.entry.muted ? <Volume2 size={14} /> : <VolumeX size={14} />}
-                {memberMenu.entry.muted ? "뮤트 해제" : "뮤트"}
+                {memberMenu.entry.muted ? "음소거 해제" : "음소거"}
               </button>
             )}
             {canModerateEntry(memberMenu.entry) && onParticipantRemove && <ParticipantRemovalControls

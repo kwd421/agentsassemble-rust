@@ -160,15 +160,15 @@ select.dc-select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-/* Each choice is its own row card; the chosen one carries the accent. */
+/* Discord's radio group: borderless rows, the chosen one only gets a lighter fill. */
 .dc-radio-stack label {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid var(--color-panel-border);
+  border: 0;
   border-radius: 8px;
   background: var(--color-panel);
-  padding: 10px 14px;
+  padding: 10px 12px;
   color: var(--color-text-normal);
   font-size: 15px;
   font-weight: 500;
@@ -178,12 +178,11 @@ select.dc-select {
 }
 
 .dc-radio-stack label:hover {
-  border-color: #474851;
+  background: #2c2c31;
 }
 
 .dc-radio-stack label:has(input:checked) {
-  border-color: var(--color-accent);
-  background: rgba(88, 101, 242, 0.1);
+  background: #35353c;
 }
 
 .dc-radio-stack label:has(input:disabled) {
@@ -217,11 +216,16 @@ select.dc-select {
   border-color: var(--color-accent);
 }
 
-.dc-radio-stack input[type="radio"]:checked::before {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+/* Measured: a filled brand circle with a white centre dot. */
+.dc-radio-stack input[type="radio"]:checked {
   background: var(--color-accent);
+}
+
+.dc-radio-stack input[type="radio"]:checked::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
   content: "";
 }
 

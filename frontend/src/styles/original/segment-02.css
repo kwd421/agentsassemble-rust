@@ -130,12 +130,12 @@
   width: fit-content;
   align-items: center;
   gap: 4px;
-  color: var(--color-text-muted);
+  color: #00a8fc;
   font-size: 14px;
 }
 
-.dc-startup-back:hover {
-  color: var(--color-text-primary);
+.dc-startup-back:hover:not(:disabled) {
+  text-decoration: underline;
 }
 
 /* Discord's sign-in form labels: 12px bold over a 40px field. */
@@ -299,16 +299,17 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  height: 38px;
+  height: 40px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: var(--color-panel-soft);
-  padding: 0 10px 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 0;
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   text-align: left;
 }
 
@@ -318,7 +319,7 @@
 }
 
 .dc-provider-control-toggle:hover:not(:disabled) {
-  background: #2c2c30;
+  background: transparent;
 }
 
 .dc-provider-control-toggle:disabled {
@@ -329,8 +330,8 @@
 .dc-provider-control-switch {
   position: relative;
   flex: 0 0 auto;
-  width: 32px;
-  height: 18px;
+  width: 40px;
+  height: 24px;
   border-radius: 999px;
   background: #4b4d54;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
@@ -341,8 +342,8 @@
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 12px;
-  height: 12px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
@@ -354,5 +355,5 @@
 }
 
 .dc-provider-control-toggle[data-on="true"] .dc-provider-control-switch i {
-  transform: translateX(14px);
+  transform: translateX(16px);
 }

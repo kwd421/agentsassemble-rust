@@ -590,12 +590,7 @@ export default function AgentCreateModal({
               <i />
             </span>
             <span className="dc-agent-launch-text">
-              <strong>{startNow ? "추가하고 바로 실행" : "목록에만 추가"}</strong>
-              <em>
-                {startNow
-                  ? ""
-                  : "나중에 카드에서 켜요."}
-              </em>
+              <strong>바로 실행</strong>
             </span>
           </button>
           <div className="dc-agent-footer-actions">

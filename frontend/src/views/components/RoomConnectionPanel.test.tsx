@@ -185,12 +185,9 @@ function openAgentDetails() {
 async function chooseProviderControl(label: string, option: string): Promise<void> {
   const toggle = screen.queryByRole("switch", { name: label });
   if (toggle) {
-    if (!toggle.textContent?.includes(option)) {
-      await userEvent.click(toggle);
-    }
-    if (!toggle.textContent?.includes(option)) {
-      await userEvent.click(toggle);
-    }
+    const wantOn = option !== "기본";
+    if ((toggle.getAttribute("aria-checked") === "true") !== wantOn) await userEvent.click(toggle);
+    if ((toggle.getAttribute("aria-checked") === "true") !== wantOn) await userEvent.click(toggle);
     return;
   }
   await userEvent.click(screen.getByRole("combobox", { name: label }));
@@ -198,7 +195,12 @@ async function chooseProviderControl(label: string, option: string): Promise<voi
 }
 
 function expectProviderControlValue(label: string, option: string): void {
-  expect(screen.getByLabelText(label).textContent).toContain(option);
+  const control = screen.getByLabelText(label);
+  if (control.getAttribute("role") === "switch" && option !== "선택 필요") {
+    expect(control.getAttribute("aria-checked")).toBe(String(option !== "기본"));
+    return;
+  }
+  expect(control.textContent).toContain(option);
 }
 
 describe("RoomConnectionPanel", () => {
