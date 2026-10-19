@@ -5,8 +5,22 @@ import { useCentralDirectory } from "./useCentralDirectory";
 import { useMemberHosts } from "./useMemberHosts";
 import { useMemberRoomLive } from "./useMemberRoomLive";
 import { useMemberRoomAutoReselect } from "./useMemberRoomAutoReselect";
+import { useCanonicalRoom } from "../useCanonicalRoom";
+import { NO_SURFACE_STREAMS } from "./remoteRoomAuthority";
+import type { RoomSocketHandlers } from "../roomSocketTypes";
 import { RemoteTransport } from "../lib/remote/remoteTransport";
 import { closeRemoteWorkspace } from "../lib/remote/remoteWorkspace";
+import {
+  roomGuestSessionExpired,
+  roomGuestSessionFromJoinPayload,
+  type RoomGuestSession,
+} from "../lib/roomGuestSession";
+import {
+  canonicalRoomAuthFor,
+  remoteRoomSessionReady,
+  serverProductSurfaceFor,
+} from "./remoteRoomAuthority";
+import { ApiError } from "../lib/apiErrors";
 import {
   MEMBER_ROOM_AUTO_RESELECT_DAILY_CAP,
   MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE,
@@ -98,11 +112,14 @@ function grantFromBody(body: Record<string, unknown>) {
   };
 }
 
+// Sessions minted by the fake host carry a REAL one-hour expiry, exactly like
+// SESSION_TTL on the server: the bearer lapses by the clock while the host
+// session row and the secure channel stay live.
 const joinFor = (roomId: string, requestId: string) => ({
   server_id: SERVER,
   authority_lineage_id: "22222222-2222-4222-8222-222222222222",
   server_product_surface: TEST_SERVER_PRODUCT_SURFACE,
-  session_token: `session-${roomId}`,
+  session_token: `session-${roomId}-${requestId}`,
   agent_id: "member-1",
   display_name: "Member",
   meeting_id: roomId,
@@ -111,7 +128,7 @@ const joinFor = (roomId: string, requestId: string) => ({
   client_type: "browser",
   provider_kind: "manual",
   connection_kind: "native_remote_room_client",
-  expires_at: "2099-01-01T00:00:00Z",
+  expires_at: new Date(Date.now() + 3_600_000).toISOString(),
   room_label: roomId,
   room_topic: "",
   room_created_at: "2026-07-10T00:00:00Z",
@@ -213,11 +230,28 @@ function selectCalls(options: FakeHostOptions) {
   return options.calls.filter((call) => call.path.startsWith("/api/member-connect/select"));
 }
 
-type SocketHandlers = { onError?: (error: unknown) => void };
+const railRoomA = {
+  id: "rail-a",
+  label: "friend",
+  meetingId: ROOM_A,
+  serverId: SERVER,
+  roomOrigin: "remote_server" as const,
+  connectionState: "connected" as const,
+  topic: "",
+  shortLabel: "F",
+  icon: (() => null) as never,
+  createdAt: "",
+  tone: "fresh" as const,
+};
 
-function socketHandlers(openSocket: { mock: { calls: unknown[][] } }): SocketHandlers[] {
-  return openSocket.mock.calls.map((args) => args[2] as SocketHandlers);
-}
+type HealEnv = {
+  options: FakeHostOptions;
+  result: { current: { session: RoomGuestSession | null; roomId: string; selectError: { roomId: string; message: string } | null } };
+  unmount: () => void;
+  foregroundHandlers: RoomSocketHandlers[];
+  degradeSnapshots: () => Promise<void>;
+  expireByTtl: () => Promise<void>;
+};
 
 describe("foreground session-loss heal on a live channel (real hooks)", () => {
   beforeEach(() => {
@@ -280,62 +314,107 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     resetMemberRoomAutoReselectBudgetForTests();
   });
 
-  async function setupHeal(options: FakeHostOptions) {
+  // The owner stack, faithfully: the joined session object is RETAINED at TTL
+  // and only the admitted bearer lapses by the clock (useRoomAdmission derives
+  // admittedSessionToken from roomGuestSessionExpired; guestExpired stays
+  // false because expireGuestSession never runs). The foreground socket is the
+  // real useCanonicalRoom: at SESSION_TTL the server drops the connection with
+  // NO error frame (wait_for_session_expiry returns), and the reconnect ticket
+  // then 401s while the bearer is already lapsed, so the owner's onUnauthorized
+  // (wired only while a token is admitted) is unset and nothing expires the
+  // admission. The room view (roomId "") is derived exactly like
+  // useAppController (operationally disconnected -> no room/auth/surface).
+  async function setupHeal(options: FakeHostOptions): Promise<HealEnv> {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     const transport = fakeTransport(options);
     vi.spyOn(RemoteTransport, "connect").mockResolvedValue(transport as never);
-    const openSocket = vi.fn(() => ({ close: vi.fn() }));
+    const foregroundHandlers: RoomSocketHandlers[] = [];
+    const foregroundOpen = vi.fn((_auth: unknown, _streams: unknown, handlers: RoomSocketHandlers) => {
+      foregroundHandlers.push(handlers);
+      // The socket establishes asynchronously like a real transport.
+      Promise.resolve().then(() => handlers.onOpen?.());
+      return { close: vi.fn(), resync: vi.fn(), ready: () => true };
+    });
+    const backgroundOpen = vi.fn(() => ({ close: vi.fn() }));
     const { result, unmount } = renderHook(() => {
-      const [guestSession, setGuestSession] = useState<{
-        meetingId: string;
-        serverSurface: { server_id: string };
-      } | null>(null);
-      const [admittedSessionToken, setAdmittedSessionToken] = useState("");
-      const [guestExpired, setGuestExpired] = useState(false);
+      const [session, setSession] = useState<RoomGuestSession | null>(null);
       const [selectError, setSelectErrorState] = useState<{
         roomId: string;
         message: string;
       } | null>(null);
+      // Split-brain precondition from the real app: the member host snapshot
+      // stops reporting connected while the adopted admission channel stays
+      // live. The rail/socket owner then tears down with the session still
+      // valid (hasAuth:false, hasSurface:true) and the phase-gated heal parks.
+      const [degraded, setDegraded] = useState(false);
       const central = useCentralDirectory(true);
       const hosts = useMemberHosts({
         personId: central.directory?.person?.person_id ?? ACCOUNT,
         sessionToken: "token",
         directory: central.directory,
       });
+      const snapshots = degraded ? [] : hosts.snapshots;
+      const admittedSessionToken =
+        session && !roomGuestSessionExpired(session) ? session.sessionToken : "";
+      const guestExpired = false;
+      const activeRoomSession =
+        session && admittedSessionToken && session.meetingId === ROOM_A &&
+        session.serverSurface.server_id === SERVER
+          ? session
+          : null;
+      const sessionReady = remoteRoomSessionReady(railRoomA, {
+        guestLocked: Boolean(session),
+        sessionToken: admittedSessionToken,
+        session: activeRoomSession,
+        expired: guestExpired,
+      });
+      const serverSurface = serverProductSurfaceFor(
+        sessionReady, activeRoomSession, session, true, null);
+      const operationallyDisconnected = !sessionReady;
+      const roomId = operationallyDisconnected ? "" : ROOM_A;
+      const auth = serverSurface
+        ? canonicalRoomAuthFor(
+            railRoomA,
+            { operational: operationallyDisconnected, selectError: Boolean(selectError), guestLocked: Boolean(session) },
+            admittedSessionToken,
+            "device",
+          )
+        : undefined;
+      const canonical = useCanonicalRoom({
+        roomId,
+        auth,
+        streams: serverSurface?.websocket_streams ?? NO_SURFACE_STREAMS,
+        serverSurface: serverSurface ?? null,
+        viewerParticipantId: session?.agentId || "operator-local",
+        openSocket: foregroundOpen as never,
+      });
+      void canonical.connectionState;
       const live = useMemberRoomLive({
-        snapshots: hosts.snapshots,
+        snapshots,
         admissionFor: hosts.admissionFor,
         activeServerId: SERVER,
         activeMeetingId: ROOM_A,
         accountId: ACCOUNT,
-        openSocket: openSocket as never,
+        openSocket: backgroundOpen as never,
       });
       useMemberRoomAutoReselect({
-        activeRoom: {
-          id: "rail-a",
-          meetingId: ROOM_A,
-          serverId: SERVER,
-          roomOrigin: "remote_server",
-        } as never,
+        activeRoom: railRoomA as never,
         ownerServerId: undefined,
         accountId: ACCOUNT,
         hasAnchor: hosts.hasAnchor,
         isRefused: hosts.isRefused,
-        snapshots: hosts.snapshots,
+        snapshots,
         admissionFor: hosts.admissionFor,
-        guestSession: guestSession as never,
+        guestSession: session as never,
         guestExpired,
         admittedSessionToken,
         liveSessionFor: live.liveSessionFor,
         selectRoom: hosts.selectRoom,
-        acceptSession: (async (payload: { meeting_id: string; session_token: string }) => {
-          setGuestSession({
-            meetingId: payload.meeting_id,
-            serverSurface: { server_id: SERVER },
-          });
-          setAdmittedSessionToken(payload.session_token);
-          setGuestExpired(false);
+        acceptSession: (async (payload: never) => {
+          const next = { ...roomGuestSessionFromJoinPayload("", payload as never), centralMember: true };
+          if (roomGuestSessionExpired(next)) return false;
+          setSession(next);
           return true;
         }) as never,
         setSelectError: ((update: unknown) => {
@@ -349,21 +428,11 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
         }) as never,
       });
       return {
-        central,
         hosts,
-        live,
-        openSocket,
-        guestSession,
-        guestExpired,
-        admittedSessionToken,
+        session,
+        roomId,
         selectError,
-        expireForeground: () => {
-          // SESSION_TTL expiry as the app observes it: the bearer is gone
-          // and the admission reports the session expired.
-          setGuestSession(null);
-          setAdmittedSessionToken("");
-          setGuestExpired(true);
-        },
+        degrade: () => setDegraded(true),
       };
     });
     await act(async () => {
@@ -373,25 +442,62 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     await waitFor(() => expect(selectCalls(options).length).toBeGreaterThanOrEqual(2));
     // The foreground open completes through the same heal path: a live
     // session is now armed for the next loss.
-    await waitFor(() => expect(result.current.guestSession?.meetingId).toBe(ROOM_A));
-    return { result, unmount, transport, openSocket };
+    await waitFor(() => expect(result.current.session?.meetingId).toBe(ROOM_A));
+    await waitFor(() => expect(result.current.roomId).toBe(ROOM_A));
+    return {
+      options,
+      result: result as HealEnv["result"],
+      unmount,
+      foregroundHandlers,
+      degradeSnapshots: async () => {
+        await act(async () => {
+          result.current.degrade();
+          await vi.advanceTimersByTimeAsync(0);
+        });
+      },
+      expireByTtl: async () => {
+        // SESSION_TTL passes: the bearer lapses by the clock (the component
+        // re-renders only when the socket below drops, as in the app).
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3_601_000);
+        });
+        // The server drops the room connection with no frame; the owner
+        // re-renders, the bearer is gone, and the room shows disconnected.
+        await act(async () => {
+          foregroundHandlers[foregroundHandlers.length - 1]?.onClose?.();
+          await vi.advanceTimersByTimeAsync(0);
+        });
+        // The reconnect ticket 401s on the lapsed bearer. The owner wires
+        // onUnauthorized only while a token is admitted, so it is unset and
+        // the admission stays joined (session retained, not expired).
+        await act(async () => {
+          foregroundHandlers[foregroundHandlers.length - 1]?.onError?.(
+            new ApiError(401, "denied", "authorization_failed")
+          );
+          await vi.advanceTimersByTimeAsync(0);
+        });
+      },
+    };
   }
 
-  it("(1) foreground session expiry on a live channel-bound admission heals once with zero central", async () => {
+  it("(1) real TTL expiry with a stale host snapshot heals once over the live channel with zero central", async () => {
     const options: FakeHostOptions = { calls: [], kickedRooms: new Set() };
-    const { result, unmount } = await setupHeal(options);
+    const env = await setupHeal(options);
+    await env.degradeSnapshots();
     const baseGrants = grantCalls().length;
     const baseSelects = selectCalls(options).length;
     expect(baseGrants).toBeGreaterThan(0);
 
-    await act(async () => {
-      result.current.expireForeground();
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await env.expireByTtl();
+    // The loss heals with exactly one automatic channel-bound select,
+    // spending no budget (the disconnected roomId "" only flashes between
+    // the socket close and the select landing, too fast to assert here).
     await waitFor(() => expect(selectCalls(options).length).toBe(baseSelects + 1));
-    await waitFor(() => expect(result.current.guestSession?.meetingId).toBe(ROOM_A));
-    expect(result.current.guestExpired).toBe(false);
-    expect(result.current.selectError).toBeNull();
+    await waitFor(() => expect(env.result.current.roomId).toBe(ROOM_A));
+    await waitFor(() => expect(
+      env.result.current.session && !roomGuestSessionExpired(env.result.current.session)
+    ).toBe(true));
+    expect(env.result.current.selectError).toBeNull();
     expect(grantCalls().length).toBe(baseGrants);
     // No second attempt on the same loss: the count stays parked.
     const parkedSelects = selectCalls(options).length;
@@ -400,27 +506,40 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     });
     expect(selectCalls(options).length).toBe(parkedSelects);
     expect(grantCalls().length).toBe(baseGrants);
-    unmount();
+    env.unmount();
   });
 
-  it("(2) a refused re-select (kicked) never retries and parks with the stop line", async () => {
+  it("(2) real TTL expiry with a connected snapshot heals over the live channel", async () => {
     const options: FakeHostOptions = { calls: [], kickedRooms: new Set() };
-    const { result, unmount } = await setupHeal(options);
+    const env = await setupHeal(options);
+    const baseGrants = grantCalls().length;
+    const baseSelects = selectCalls(options).length;
+
+    await env.expireByTtl();
+    await waitFor(() => expect(selectCalls(options).length).toBe(baseSelects + 1));
+    await waitFor(() => expect(
+      env.result.current.session && !roomGuestSessionExpired(env.result.current.session)
+    ).toBe(true));
+    expect(env.result.current.selectError).toBeNull();
+    expect(grantCalls().length).toBe(baseGrants);
+    env.unmount();
+  });
+
+  it("(3) a refused re-select (kicked) never retries and parks with the stop line", async () => {
+    const options: FakeHostOptions = { calls: [], kickedRooms: new Set() };
+    const env = await setupHeal(options);
+    await env.degradeSnapshots();
     const baseGrants = grantCalls().length;
     const baseSelects = selectCalls(options).length;
     options.kickedRooms.add(ROOM_A);
 
-    await act(async () => {
-      result.current.expireForeground();
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await env.expireByTtl();
     await waitFor(() => expect(selectCalls(options).length).toBe(baseSelects + 1));
-    await waitFor(() => expect(result.current.selectError).not.toBeNull());
-    expect(result.current.selectError).toEqual({
+    await waitFor(() => expect(env.result.current.selectError).not.toBeNull());
+    expect(env.result.current.selectError).toEqual({
       roomId: "rail-a",
       message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE,
     });
-    expect(result.current.guestSession).toBeNull();
     // The refused select refreshes the host room list once (existing
     // terminal-error path) so the kicked room can leave the rail: at most
     // that single refresh grant, never a retry storm.
@@ -435,31 +554,23 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     expect(selectCalls(options).length).toBe(parkedSelects);
     expect(grantCalls().length).toBe(grantsAfterRefusal);
     expect(memberRoomAutoReselectCount(ACCOUNT, SERVER, ROOM_A)).toBe(parkedBudget);
-    unmount();
+    env.unmount();
   });
 
-  it("(3) 24 hourly expiries on a live channel-bound admission all heal with zero central and no cap", async () => {
+  it("(4) 24 hourly expiries on a live channel-bound admission all heal with zero central and no cap", async () => {
     const options: FakeHostOptions = { calls: [], kickedRooms: new Set() };
-    const { result, openSocket, unmount } = await setupHeal(options);
+    const env = await setupHeal(options);
+    await env.degradeSnapshots();
     const baseGrants = grantCalls().length;
     for (let hour = 0; hour < 24; hour += 1) {
       const before = selectCalls(options).length;
-      await act(async () => {
-        result.current.expireForeground();
-        for (const handlers of socketHandlers(openSocket)) {
-          handlers.onError?.(Object.assign(new Error("denied"), { category: "authorization_failed" }));
-        }
-        await vi.advanceTimersByTimeAsync(0);
-      });
-      // Foreground heals with one channel-bound select; the background room
-      // heals with its own free select.
-      await waitFor(() => expect(selectCalls(options).length).toBeGreaterThan(before));
-      await waitFor(() => expect(result.current.guestSession?.meetingId).toBe(ROOM_A));
-      expect(result.current.selectError).toBeNull();
-      // Simulate the hour passing with the live channel intact.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3_600_000);
-      });
+      await env.expireByTtl();
+      // Each hourly loss heals with exactly one free channel-bound select.
+      await waitFor(() => expect(selectCalls(options).length).toBe(before + 1));
+      await waitFor(() => expect(
+        env.result.current.session && !roomGuestSessionExpired(env.result.current.session)
+      ).toBe(true));
+      expect(env.result.current.selectError).toBeNull();
     }
     expect(grantCalls().length).toBe(baseGrants);
     expect(memberRoomAutoReselectCount(ACCOUNT, SERVER, ROOM_A)).toBeLessThan(
@@ -468,12 +579,13 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     expect(memberRoomAutoReselectCount(ACCOUNT, SERVER, ROOM_B)).toBeLessThan(
       MEMBER_ROOM_AUTO_RESELECT_DAILY_CAP
     );
-    unmount();
+    env.unmount();
   });
 
-  it("(4) paid retries on an old host stay within the daily cap", async () => {
+  it("(5) paid retries on an old host stay within the daily cap", async () => {
     const options: FakeHostOptions = { calls: [], kickedRooms: new Set(), oldHost: true };
-    const { result, unmount } = await setupHeal(options);
+    const env = await setupHeal(options);
+    await env.degradeSnapshots();
     // Move past the 300s reuse window so every heal needs a fresh grant.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(301_000);
@@ -481,18 +593,17 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
     const baseGrants = grantCalls().length;
     let heals = 0;
     for (let attempt = 0; attempt < 8; attempt += 1) {
-      await act(async () => {
-        result.current.expireForeground();
-        await vi.advanceTimersByTimeAsync(0);
-      });
+      await env.expireByTtl();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1_000);
       });
-      if (result.current.guestSession?.meetingId === ROOM_A && result.current.selectError === null) {
+      if (env.result.current.session &&
+          !roomGuestSessionExpired(env.result.current.session) &&
+          env.result.current.selectError === null) {
         heals += 1;
       }
       // After the cap parks, the room stays on the disconnected stop line.
-      if (result.current.selectError !== null) break;
+      if (env.result.current.selectError !== null) break;
     }
     expect(heals).toBeLessThanOrEqual(MEMBER_ROOM_AUTO_RESELECT_DAILY_CAP);
     expect(memberRoomAutoReselectCount(ACCOUNT, SERVER, ROOM_A)).toBeLessThanOrEqual(
@@ -507,6 +618,6 @@ describe("foreground session-loss heal on a live channel (real hooks)", () => {
       await vi.advanceTimersByTimeAsync(600_000);
     });
     expect(selectCalls(options).length).toBe(parkedSelects);
-    unmount();
+    env.unmount();
   });
 });

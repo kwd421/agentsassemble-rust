@@ -155,24 +155,17 @@ export function useMemberRoomAutoReselect({
   // budget; a paid one claims one retry grant. A refused re-select parks
   // with the stop line and never retries until a new live session dies or
   // the user taps again. No timers or polling.
+  // Host liveness comes from the admission transport itself, never from the
+  // member host snapshot phase: the snapshot can report disconnected (or go
+  // missing) while the adopted channel stays live, and the manual reconnect
+  // still selects fine over it. Gating on the phase parks the heal exactly
+  // when the channel is usable.
   const sessionLossKey = useRef("");
   const hadLiveSession = useRef(false);
   useEffect(() => {
     if (activeRoom.roomOrigin !== "remote_server" || !activeRoom.serverId) return;
     const memberServerId = memberAdmissionServerFor(activeRoom, ownerServerId, hasAnchor);
-    if (!memberServerId || isRefused(memberServerId)) return;
-    const snapshot = snapshots.find((entry) => entry.serverId === memberServerId);
-    if (!snapshot || snapshot.phase !== "connected") return;
-    let admission: unknown = null;
-    try {
-      admission = admissionFor(memberServerId);
-    } catch {
-      return;
-    }
-    if (!admission) return;
-    const transportActive =
-      (admission as { transport?: { active?: boolean } })?.transport?.active === true;
-    if (!transportActive) return;
+    if (!memberServerId) return;
     const lossKey = `${memberServerId}\0${activeRoom.meetingId}`;
     const sessionReadyForRoom = Boolean(
       guestSession && !guestExpired && admittedSessionToken &&
@@ -188,24 +181,39 @@ export function useMemberRoomAutoReselect({
       return;
     }
     if (!hadLiveSession.current) return;
-    if (flight.current) return;
+    // A session loss on a room that previously held a live session.
+    let admission: unknown = null;
+    try {
+      admission = admissionFor(memberServerId);
+    } catch {
+      admission = null;
+    }
+    const transportActive =
+      (admission as { transport?: { active?: boolean } })?.transport?.active === true;
+    const free = memberAdmissionFreeSelect(admission);
+    let skipped: string | null = null;
+    if (isRefused(memberServerId)) skipped = "refused";
+    else if (!admission) skipped = "no-admission";
+    else if (!transportActive) skipped = "transport-inactive";
+    else if (flight.current) skipped = "in-flight";
+    else if (!free) {
+      const claim = tryClaimMemberRoomAutoReselectRetry(accountId, memberServerId, activeRoom.meetingId);
+      if (!claim.allowed) skipped = `retry-budget-${claim.reason}`;
+    }
+    if (import.meta.env.DEV) console.debug("[member-select] session loss observed", {
+      roomId: activeRoom.id, meetingId: activeRoom.meetingId, serverId: memberServerId,
+      free, healed: skipped === null, ...(skipped ? { skipped } : {}),
+    });
+    if (skipped) {
+      if (skipped === "retry-budget-exhausted") {
+        (setSelectError as (error: { roomId: string; message: string }) => void)(
+          { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
+      }
+      return;
+    }
     // Consume this loss before the async attempt so a refused room never
     // retries on the same loss; a new live session re-arms the next loss.
     hadLiveSession.current = false;
-    const free = memberAdmissionFreeSelect(admission);
-    if (!free) {
-      const claim = tryClaimMemberRoomAutoReselectRetry(accountId, memberServerId, activeRoom.meetingId);
-      if (!claim.allowed) {
-        if (claim.reason === "exhausted") {
-          (setSelectError as (error: { roomId: string; message: string }) => void)(
-            { roomId: activeRoom.id, message: MEMBER_ROOM_AUTO_RESELECT_STOP_MESSAGE });
-        }
-        return;
-      }
-    }
-    if (import.meta.env.DEV) console.debug("[member-select] auto re-select open room on session loss", {
-      roomId: activeRoom.id, meetingId: activeRoom.meetingId, serverId: memberServerId, free,
-    });
     flight.current = true;
     void (async () => {
       try {
@@ -236,7 +244,7 @@ export function useMemberRoomAutoReselect({
         flight.current = false;
       }
     })();
-  }, [activeRoom, ownerServerId, accountId, hasAnchor, isRefused, snapshots, admissionFor,
+  }, [activeRoom, ownerServerId, accountId, hasAnchor, isRefused, admissionFor,
     guestSession, guestExpired, admittedSessionToken, liveSessionFor,
     selectRoom, acceptSession, setSelectError]);
 
