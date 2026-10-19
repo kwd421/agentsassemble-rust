@@ -272,9 +272,22 @@ export function useMemberHosts({
     try {
       const attached = await attachMemberHost({ server_id: serverId, registration_epoch: epoch },
         activeToken, activePerson, controller.signal);
-      const current = identityRef.current;
-      if (controller.signal.aborted || current.personId !== activePerson || current.sessionToken !== activeToken) {
+      // An aborted (StrictMode cleanup, identity flap, timed-out select)
+      // flight must never land: it closes its admission instead of spending
+      // another central request or clobbering a newer flight. Late completion
+      // also never deletes a newer flight's bookkeeping.
+      const ownFlight = flights.current.get(serverId) === controller;
+      if (controller.signal.aborted || !ownFlight ||
+          identityRef.current.personId !== activePerson ||
+          identityRef.current.sessionToken !== activeToken) {
         detachMemberHost(attached.admission);
+        if (ownFlight) flights.current.delete(serverId);
+        return;
+      }
+      const current = identityRef.current;
+      if (current.personId !== activePerson || current.sessionToken !== activeToken) {
+        detachMemberHost(attached.admission);
+        if (flights.current.get(serverId) === controller) flights.current.delete(serverId);
         return;
       }
       // While central is unconfirmed its membership list cannot confirm a
@@ -285,10 +298,14 @@ export function useMemberHosts({
       if (live && !live.some((server) => server.server_id === serverId && server.relation === "member")) {
         // Confirmed loss mid-attach: the just-saved anchor goes too, or the
         // next retry would re-attach from it as if nothing happened.
-        flights.current.delete(serverId);
+        if (flights.current.get(serverId) === controller) flights.current.delete(serverId);
         detachMemberHost(attached.admission);
         if (activePerson) removeMemberAnchor(activePerson, serverId);
         cleanupConfirmedLoss(serverId);
+        return;
+      }
+      if (flights.current.get(serverId) !== controller) {
+        detachMemberHost(attached.admission);
         return;
       }
       flights.current.delete(serverId);
@@ -374,8 +391,10 @@ export function useMemberHosts({
       }
       setPhase(serverId, "connected", attached.rooms, attached.anchor.endpoint_origin, null);
     } catch (error) {
-      flights.current.delete(serverId);
+      const ownFlight = flights.current.get(serverId) === controller;
+      if (ownFlight) flights.current.delete(serverId);
       if (controller.signal.aborted) return;
+      if (!ownFlight) return;
       if (identityRef.current.personId !== activePerson || identityRef.current.sessionToken !== activeToken) return;
       if (error instanceof MemberAnchorMismatchError) {
         // Identity changed (epoch or host key): keep the known rooms

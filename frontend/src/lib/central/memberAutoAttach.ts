@@ -71,8 +71,12 @@ export async function attachMemberHost(
       host_public_key_jwk: probeHit.host_public_key_jwk,
     };
     try {
+      signal.throwIfAborted();
       const admission = await deps.open(entry, directTarget as never, sessionToken, signal);
       try {
+        // The connect grant below spends central: an aborted flight never
+        // reaches it.
+        signal.throwIfAborted();
         const rooms = await admission.admit(signal);
         if (!rooms) throw new Error("참가 중인 방을 확인하지 못했어요.");
         const anchor: MemberHostAnchor = {
@@ -101,13 +105,22 @@ export async function attachMemberHost(
   }
   // The select deadline owns this signal: a hung central preview aborts with
   // the select instead of stranding the rail selection forever.
+  // An already-aborted flight never spends central: StrictMode remount (or an
+  // identity flap) aborts the first flight while its attach still runs.
+  signal.throwIfAborted();
   const preview = await deps.preview(entry, signal);
+  // The preview itself already spent central; an abort while it was in
+  // flight still stops the transport open and the connect grant below.
+  signal.throwIfAborted();
   const target = preview.target;
   if (stored && stored.host_key_fingerprint !== target.host_key_fingerprint) {
     throw new MemberAnchorMismatchError();
   }
   const admission = await deps.open(entry, target, sessionToken, signal);
   try {
+    // The connect grant inside admit spends central: an aborted flight never
+    // reaches it.
+    signal.throwIfAborted();
     const rooms = await admission.admit(signal);
     if (!rooms) throw new Error("참가 중인 방을 확인하지 못했어요.");
     const anchor: MemberHostAnchor = {
