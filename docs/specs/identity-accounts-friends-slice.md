@@ -4592,7 +4592,9 @@ contradicted the design, the review decided. The binding shape:
   the browser credential and `now < expires_at`, consumes the nonce once,
   then runs the unchanged `member_connect_rooms` /
   `select_member_connect_room`. A direct success never extends
-  `expires_at`.
+  `expires_at`. The tuple's `client_public_key` is the ephemeral key of
+  the channel the request arrived on; the device's own resume public key
+  travels beside it and selects the stored row the host verifies.
 - **Revocation.** The person's resume rows are deleted in the same
   transaction as the `central_member_removals` insert
   (`central_member_removal.rs`, `account_deleted_host.rs`) and in
