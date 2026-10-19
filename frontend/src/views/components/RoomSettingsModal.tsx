@@ -197,12 +197,12 @@ export default function RoomSettingsModal({
           display: "flex", justifyContent: "space-between", overflowX: "auto", padding: "12px 16px",
         } : undefined}>
           {!mobileViewport && <p className="dc-settings-nav-label preserve-words">{room.label}</p>}
-          <a href="#settings-overview" aria-current={sectionInView === "settings-overview" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>개요</a>
-          <a href="#settings-appearance" aria-current={sectionInView === "settings-appearance" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>외형</a>
-          <a href="#settings-notify" aria-current={sectionInView === "settings-notify" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>알림</a>
-          <a href="#settings-channels" aria-current={sectionInView === "settings-channels" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널 알림</a>
-          {storageSettings && <a href="#settings-storage" aria-current={sectionInView === "settings-storage" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>저장 공간</a>}
-          <a href="#settings-invite" aria-current={sectionInView === "settings-invite" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>초대</a>
+          <a href="#settings-overview" aria-current={sectionInView === "settings-overview" || undefined}>개요</a>
+          <a href="#settings-appearance" aria-current={sectionInView === "settings-appearance" || undefined}>외형</a>
+          <a href="#settings-notify" aria-current={sectionInView === "settings-notify" || undefined}>알림</a>
+          <a href="#settings-channels" aria-current={sectionInView === "settings-channels" || undefined}>채널 알림</a>
+          {storageSettings && <a href="#settings-storage" aria-current={sectionInView === "settings-storage" || undefined}>저장 공간</a>}
+          <a href="#settings-invite" aria-current={sectionInView === "settings-invite" || undefined}>초대</a>
           {lifecycleController && !mobileViewport && <span className="dc-settings-nav-separator" aria-hidden />}
           {lifecycleController && (
             <button type="button" className="dc-settings-nav-danger" onClick={() => setDeleteOpen(true)}>
@@ -212,13 +212,10 @@ export default function RoomSettingsModal({
           )}
         </aside>
         <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <header className="dc-settings-titlebar" style={{ flexShrink: 0, padding: mobileViewport ? "20px 24px 0" : "54px 56px 0" }}>
-            <div>
-              <h2 id="room-settings-title">방 설정</h2>
-            </div>
-            <button type="button" className="dc-settings-close" style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }} autoFocus onClick={onClose} aria-label="방 설정 닫기">
-              <X size={18} />
-              <span>ESC</span>
+          <header className="dc-settings-titlebar">
+            <h2 id="room-settings-title">방 설정</h2>
+            <button type="button" className="dc-dialog-close dc-settings-titlebar-close" autoFocus onClick={onClose} aria-label="방 설정 닫기">
+              <X size={24} />
             </button>
           </header>
           <div ref={bodyRef} className="dc-settings-body chat-scroll" onScroll={(event) => {
@@ -229,7 +226,7 @@ export default function RoomSettingsModal({
             const current = sections.filter((section) => section.getBoundingClientRect().top <= line).pop() || sections[0];
             const atEnd = body.scrollTop + body.clientHeight >= body.scrollHeight - 2;
             setSectionInView((atEnd ? sections[sections.length - 1] : current)?.id || "settings-overview");
-          }} style={{ padding: mobileViewport ? "0 24px 32px" : "0 56px 72px" }}>
+          }} style={mobileViewport ? { padding: "24px 24px 32px" } : undefined}>
           <section id="settings-overview" className="dc-settings-section">
             <h3>개요</h3>
             <label>
@@ -377,6 +374,7 @@ export default function RoomSettingsModal({
                 <p className="text-[12px] text-text-muted preserve-words">{room.topic}</p>
               </div>
             </div>
+            <div className="dc-settings-field">
             <p className="dc-settings-field-label">배너 색상</p>
             <div className="dc-preset-grid">
               {(["default", "forest", "midnight", "ember"] as RoomAppearance["bannerPreset"][]).map(
@@ -398,7 +396,11 @@ export default function RoomSettingsModal({
                 )
               )}
             </div>
+            </div>
             <div className="dc-upload-row">
+              <div className="dc-settings-field">
+              <p className="dc-settings-field-label">이미지</p>
+              <div className="flex flex-wrap gap-2">
               <label className="dc-upload-button">
                 <ImageIcon size={15} />
                 배너 이미지
@@ -409,8 +411,10 @@ export default function RoomSettingsModal({
                 방 아이콘
                 <input type="file" accept="image/*" onChange={(event) => pickAppearanceFile(event, "icon")} />
               </label>
-              <label className="min-w-0 flex-1">
-                아이콘 글자
+              </div>
+              </div>
+              <label className="dc-settings-field min-w-0 flex-1">
+                <span className="dc-settings-field-label">아이콘 글자</span>
                 <RoomSettingTextInput
                   value={appearance.iconLabel || room.shortLabel}
                   placeholder={roomInitials(room.label)}

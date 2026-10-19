@@ -11,9 +11,9 @@
 
 .dc-settings-modal {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  width: min(1040px, calc(100vw - 64px));
-  height: min(760px, calc(100vh - 64px));
+  grid-template-columns: 254px minmax(0, 1fr);
+  width: min(1200px, calc(100vw - 80px));
+  height: min(900px, calc(100vh - 80px));
   margin: auto;
   overflow: hidden;
   border: 1px solid var(--color-panel-border);
@@ -25,7 +25,7 @@
 .dc-settings-nav {
   border-right: 1px solid var(--color-panel-separator);
   background: var(--color-sidebar);
-  padding: 56px 8px 24px;
+  padding: 16px;
 }
 
 .dc-settings-nav-label {
@@ -37,7 +37,10 @@
 }
 
 .dc-settings-nav a {
-  display: block;
+  display: flex;
+  min-height: 36px;
+  flex-shrink: 0;
+  align-items: center;
   margin: 1px 0;
   border-radius: 8px;
   padding: 0 10px;
@@ -62,21 +65,25 @@
 .dc-settings-body {
   min-height: 0;
   overflow-y: auto;
-  padding: 54px 56px 72px;
+  padding: 40px 32px 72px;
 }
 
+/* Measured Discord settings: 48px bar, small page title, plain X, hairline. */
 .dc-settings-titlebar {
   display: flex;
-  align-items: flex-start;
+  min-height: 48px;
+  flex-shrink: 0;
+  align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
+  border-bottom: 1px solid var(--color-panel-separator);
+  padding: 0 8px 0 16px;
 }
 
 .dc-settings-titlebar h2 {
   color: var(--color-text-primary);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 24px;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .dc-settings-titlebar p,
@@ -109,10 +116,10 @@
 }
 
 .dc-settings-section {
-  margin-top: 24px;
   display: grid;
-  gap: 16px;
-  max-width: 720px;
+  gap: 20px;
+  max-width: 696px;
+  margin-inline: auto;
 }
 
 /* Each later section starts under a hairline, so the long page reads as separate groups. */
@@ -124,9 +131,9 @@
 
 .dc-settings-section h3 {
   color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 30px;
 }
 
 .dc-settings-section label {
@@ -136,4 +143,26 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.dc-settings-titlebar-close {
+  width: 32px;
+  height: 32px;
+}
+
+/* Field labels read like Discord's: 16px semibold in the primary color.
+   (Radio-card labels are nested and keep their own style.) */
+.dc-settings-section > label {
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+@media (pointer: coarse) {
+  .dc-settings-nav a,
+  .dc-settings-titlebar-close {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }

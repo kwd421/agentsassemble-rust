@@ -65,7 +65,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 10px;
+  gap: 16px;
 }
 
 .dc-upload-button {
@@ -440,14 +440,13 @@ select.dc-select {
 
 .dc-settings-field {
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 
 .dc-settings-field-label {
-  color: var(--color-text-secondary);
-  font-size: 12px;
+  color: var(--color-text-primary);
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 /* Radio rows with descriptive captions wrap, not center-clip, the long text. */
