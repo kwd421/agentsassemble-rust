@@ -153,25 +153,18 @@ export default function RoomSettingsModal({
     if (file) setAppearanceCrop({ file, slot });
   }
 
-  async function uploadBanner(file: File) {
-    setUploadStatus("배너 업로드 중...");
+  // The latest upload owns the status line; an earlier one finishing late never
+  // overwrites it, and a finished upload leaves no line (the image shows itself).
+  const uploadSeq = useRef(0);
+  async function uploadAppearance(file: File, slot: "banner" | "icon") {
+    const seq = ++uploadSeq.current;
+    const name = slot === "banner" ? "배너 이미지를" : "방 아이콘을";
+    setUploadStatus(`${name} 올리는 중이에요…`);
     try {
-      if (await onAppearanceUpload(file, "banner")) {
-        setUploadStatus("배너 이미지 저장됨");
-      }
+      await onAppearanceUpload(file, slot);
+      if (seq === uploadSeq.current) setUploadStatus("");
     } catch (error) {
-      setUploadStatus(userFacingError(error, "배너 업로드 실패"));
-    }
-  }
-
-  async function uploadIcon(file: File) {
-    setUploadStatus("아이콘 업로드 중...");
-    try {
-      if (await onAppearanceUpload(file, "icon")) {
-        setUploadStatus("채팅방 아이콘 저장됨");
-      }
-    } catch (error) {
-      setUploadStatus(userFacingError(error, "아이콘 업로드 실패"));
+      if (seq === uploadSeq.current) setUploadStatus(userFacingError(error, `${name} 올리지 못했어요.`));
     }
   }
 
@@ -204,9 +197,9 @@ export default function RoomSettingsModal({
           {!mobileViewport && <p className="dc-settings-nav-label preserve-words">{room.label}</p>}
           <a href="#settings-overview" aria-current={sectionInView === "settings-overview" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>개요</a>
           <a href="#settings-appearance" aria-current={sectionInView === "settings-appearance" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>외형</a>
-          <a href="#settings-channels" aria-current={sectionInView === "settings-channels" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널</a>
-          {storageSettings && <a href="#settings-storage" aria-current={sectionInView === "settings-storage" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>저장 공간</a>}
           <a href="#settings-notify" aria-current={sectionInView === "settings-notify" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>알림</a>
+          <a href="#settings-channels" aria-current={sectionInView === "settings-channels" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널 알림</a>
+          {storageSettings && <a href="#settings-storage" aria-current={sectionInView === "settings-storage" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>저장 공간</a>}
           <a href="#settings-invite" aria-current={sectionInView === "settings-invite" || undefined} style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>초대</a>
           {lifecycleController && !mobileViewport && <span className="dc-settings-nav-separator" aria-hidden />}
           {lifecycleController && (
@@ -411,7 +404,7 @@ export default function RoomSettingsModal({
               </label>
               <label className="dc-upload-button">
                 <ImageIcon size={15} />
-                채팅방 아이콘
+                방 아이콘
                 <input type="file" accept="image/*" onChange={(event) => pickAppearanceFile(event, "icon")} />
               </label>
               <label className="min-w-0 flex-1">
@@ -438,8 +431,43 @@ export default function RoomSettingsModal({
             )}
           </section>
 
+          <section id="settings-notify" className="dc-settings-section">
+            <h3>알림</h3>
+            {preferenceSettingsMessage && (
+              <p
+                className="mb-3 text-[13px] text-text-muted preserve-words"
+                role={preferenceStatus === "error" || preferenceStatus === "stale" ? "alert" : "status"}
+                title={preferenceError || undefined}
+              >
+                {preferenceSettingsMessage}
+              </p>
+            )}
+            <div className="dc-radio-stack">
+              {[
+                ["all", "모든 메시지"],
+                ["mentions", "@멘션만"],
+                ["mute", "알림 끔"],
+              ].map(([value, label]) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name="room-notifications"
+                    checked={appearance.notifications === value}
+                    disabled={!preferenceSettingsReady}
+                    onChange={() =>
+                      void onAppearanceChange({
+                        notifications: value as RoomAppearance["notifications"],
+                      }).catch(() => undefined)
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </section>
+
           <section id="settings-channels" className="dc-settings-section">
-            <h3>채널 설정</h3>
+            <h3>채널 알림</h3>
             {preferenceSettingsMessage && (
               <div
                 className="mb-3 flex items-center justify-between gap-3 text-[13px] text-text-muted"
@@ -459,12 +487,7 @@ export default function RoomSettingsModal({
                 const setting = channelSettings[channel.id] || { notifications: "default" };
                 return (
                   <label key={channel.id} className="dc-channel-settings-row">
-                    <span>
-                      <strong className="preserve-words">#{channel.label}</strong>
-                      <small className="preserve-words">
-                        {setting.lastReadAt ? "읽음 위치가 저장됐어요." : "아직 읽음 기록이 없어요."}
-                      </small>
-                    </span>
+                    <strong className="preserve-words">#{channel.label}</strong>
                     <select
                       value={setting.notifications}
                       disabled={!preferenceSettingsReady}
@@ -512,41 +535,6 @@ export default function RoomSettingsModal({
             </div>
           </section>}
 
-          <section id="settings-notify" className="dc-settings-section">
-            <h3>알림</h3>
-            {preferenceSettingsMessage && (
-              <p
-                className="mb-3 text-[13px] text-text-muted preserve-words"
-                role={preferenceStatus === "error" || preferenceStatus === "stale" ? "alert" : "status"}
-                title={preferenceError || undefined}
-              >
-                {preferenceSettingsMessage}
-              </p>
-            )}
-            <div className="dc-radio-stack">
-              {[
-                ["all", "모든 메시지"],
-                ["mentions", "@멘션만"],
-                ["mute", "알림 끔"],
-              ].map(([value, label]) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name="room-notifications"
-                    checked={appearance.notifications === value}
-                    disabled={!preferenceSettingsReady}
-                    onChange={() =>
-                      void onAppearanceChange({
-                        notifications: value as RoomAppearance["notifications"],
-                      }).catch(() => undefined)
-                    }
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </section>
-
           <section id="settings-invite" className="dc-settings-section">
             <h3>초대</h3>
             <p className="dc-settings-field-label">초대 링크로 들어온 사람은</p>
@@ -589,14 +577,14 @@ export default function RoomSettingsModal({
         </div>
         {appearanceCrop && (
           <ImageCropDialog
-            title={appearanceCrop.slot === "banner" ? "배너 이미지 편집" : "채팅방 아이콘 편집"}
+            title={appearanceCrop.slot === "banner" ? "배너 이미지 편집" : "방 아이콘 편집"}
             file={appearanceCrop.file}
             shape={appearanceCrop.slot === "banner" ? "banner" : "square"}
             onCancel={() => setAppearanceCrop(null)}
             onApply={(file) => {
               const slot = appearanceCrop.slot;
               setAppearanceCrop(null);
-              void (slot === "banner" ? uploadBanner(file) : uploadIcon(file));
+              void uploadAppearance(file, slot);
             }}
           />
         )}

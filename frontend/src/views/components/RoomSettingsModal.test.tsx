@@ -1,4 +1,4 @@
-import { fireEvent, cleanup, render, screen, within } from "@testing-library/react";
+import { fireEvent, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Radio } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -135,7 +135,8 @@ describe("RoomSettingsModal conversation mode", () => {
 
     expect(onAppearanceUpload).toHaveBeenCalledWith(file, "banner");
     expect(onAppearanceChange).not.toHaveBeenCalled();
-    expect(await screen.findByText("배너 이미지 저장됨")).toBeTruthy();
+    // Success shows the new banner itself; no success line stays behind.
+    await waitFor(() => expect(screen.queryByText("배너 이미지를 올리는 중이에요…")).toBeNull());
   });
 
   it("sends an explicit empty banner reference when a preset clears the image", async () => {
@@ -179,11 +180,11 @@ describe("RoomSettingsModal conversation mode", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "적용" }));
     second.resolve(true);
-    expect(await screen.findByText("배너 이미지 저장됨")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("배너 이미지를 올리는 중이에요…")).toBeNull());
     first.resolve(false);
     await Promise.resolve();
 
-    expect(screen.getByText("배너 이미지 저장됨")).toBeTruthy();
+    expect(screen.queryByText("배너 이미지를 올리는 중이에요…")).toBeNull();
   });
 
   it("lets the user activate ambient discussion from the room settings UI", async () => {
@@ -270,8 +271,7 @@ describe("RoomSettingsModal conversation mode", () => {
     );
 
     expect(screen.queryByText(/seq:5/)).toBeNull();
-    expect(screen.getByText("읽음 위치가 저장됐어요.")).toBeTruthy();
-    const section = screen.getByRole("heading", { name: "채널 설정" }).closest("section");
+    const section = screen.getByRole("heading", { name: "채널 알림" }).closest("section");
     if (!section) throw new Error("Channel settings section was not rendered");
     const channelControls = within(section).getAllByRole("combobox");
     expect(channelControls).toHaveLength(2);

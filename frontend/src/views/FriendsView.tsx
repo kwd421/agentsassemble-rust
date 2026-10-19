@@ -155,7 +155,7 @@ function FriendEditor({ initial, busy, error, onCancel, onSave }: {
   return <FriendDialog title={initial.expected_revision === 0 ? "친구 추가" : "친구 편집"} busy={busy} onCancel={onCancel}>
     <form style={{ display: "grid", gap: 20 }} onSubmit={(event) => { event.preventDefault(); if (!busy && changed && draft.details.display_name.trim()) void onSave(draft); }}>
       <label>이름<input className="ops-input" style={inputStyle} autoFocus required maxLength={120} value={draft.details.display_name} disabled={busy} onChange={(event) => update("display_name", event.target.value)} /></label>
-      <label>종류<select className="ops-input" style={selectStyle} value={draft.details.participant_type} disabled={busy} onChange={(event) => setDraft((current) => ({ ...current, details: { ...current.details, participant_type: event.target.value as FriendParticipantType } }))}>
+      <label>종류<select className="ops-input dc-select" style={selectStyle} value={draft.details.participant_type} disabled={busy} onChange={(event) => setDraft((current) => ({ ...current, details: { ...current.details, participant_type: event.target.value as FriendParticipantType } }))}>
         {Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>핸들 (선택)<input className="ops-input" style={inputStyle} maxLength={120} value={draft.details.handle} disabled={busy} onChange={(event) => update("handle", event.target.value)} /></label>
