@@ -243,8 +243,11 @@ export default function AppView({ controller }: { controller: AppController }) {
           setQuotaNoticeRevision((revision) => revision + 1);
         } : undefined}
         connectionMessage={roomDirectorySyncIssue ? "서버 연결을 확인하고 있어요."
-          : centralQuotaNotice ?? (controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
-          : controller.serverConnectionError)}
+          // While the daily allowance is spent, central is unconfirmed only
+          // because this app stopped asking: never blame the login server.
+          : centralQuotaResetAt !== null ? centralQuotaNotice ?? undefined
+          : controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
+          : controller.serverConnectionError}
         issue={canonicalRoom.syncIssue || roomDirectorySyncIssue}
         lifecycle={roomLifecycle.enabled ? roomLifecycle : undefined}
       />
