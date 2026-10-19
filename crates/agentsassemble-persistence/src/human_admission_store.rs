@@ -21,6 +21,45 @@ use crate::{
 };
 
 pub(crate) const SESSION_TTL: Duration = Duration::hours(1);
+
+/// Debug-only override for newly minted human room sessions.
+/// Read once at startup by the host server process; never in hot paths.
+pub const DEBUG_ROOM_SESSION_TTL_ENV: &str = "AGENTSASSEMBLE_DEBUG_ROOM_SESSION_TTL_SECS";
+/// Smallest accepted debug override (60 s).
+pub const DEBUG_ROOM_SESSION_TTL_MIN_SECS: i64 = 60;
+/// Largest accepted debug override (3_600 s = the 1 h default).
+pub const DEBUG_ROOM_SESSION_TTL_MAX_SECS: i64 = 3600;
+
+#[must_use]
+pub fn default_room_session_ttl() -> Duration {
+    SESSION_TTL
+}
+
+#[cfg(debug_assertions)]
+#[must_use]
+pub fn debug_room_session_ttl_override() -> Option<Duration> {
+    parse_debug_room_session_ttl(std::env::var(DEBUG_ROOM_SESSION_TTL_ENV).ok()?.as_str())
+}
+
+#[cfg(not(debug_assertions))]
+#[must_use]
+pub fn debug_room_session_ttl_override() -> Option<Duration> {
+    None
+}
+
+#[must_use]
+pub fn resolve_room_session_ttl() -> Duration {
+    debug_room_session_ttl_override().unwrap_or(SESSION_TTL)
+}
+
+fn parse_debug_room_session_ttl(raw: &str) -> Option<Duration> {
+    let secs: i64 = raw.trim().parse().ok()?;
+    if !(DEBUG_ROOM_SESSION_TTL_MIN_SECS..=DEBUG_ROOM_SESSION_TTL_MAX_SECS).contains(&secs) {
+        return None;
+    }
+    Some(Duration::seconds(secs))
+}
+
 const MAX_PUBLIC_SESSIONS: i64 = 448;
 const MAX_PUBLIC_ROOM_SESSIONS: i64 = 112;
 
@@ -233,7 +272,7 @@ async fn commit_new_admission(
         events.push(append_participant_joined(tx, &participant, now).await?);
     }
     let expires_at = now
-        .checked_add_signed(SESSION_TTL)
+        .checked_add_signed(store.human_room_session_ttl())
         .ok_or_else(|| invalid_state("Human session expiry overflowed."))?;
     let result = admission_result(
         tx,
@@ -243,6 +282,7 @@ async fn commit_new_admission(
         &identity.participant_id,
         &identity.profile,
         expires_at,
+        store.human_room_session_ttl(),
     )
     .await?;
     let key = store.host_key.session_hmac_key();
@@ -542,6 +582,7 @@ pub(crate) async fn admission_result(
     participant_id: &str,
     profile: &UserProfile,
     expires_at: DateTime<Utc>,
+    session_ttl: Duration,
 ) -> Result<HumanAdmissionResult, PersistenceError> {
     let settings_json =
         sqlx::query_scalar::<_, String>("SELECT settings_json FROM rooms WHERE room_id = ?")
@@ -570,11 +611,21 @@ pub(crate) async fn admission_result(
         room_label: settings.label,
         room_topic: settings.topic,
         room_created_at: room.created_at,
-        guide: human_usage_guide(&invite.room_id, participant_id, &profile.display_name),
+        guide: human_usage_guide(
+            &invite.room_id,
+            participant_id,
+            &profile.display_name,
+            session_ttl,
+        ),
     })
 }
 
-fn human_usage_guide(room_id: &str, participant_id: &str, display_name: &str) -> Value {
+fn human_usage_guide(
+    room_id: &str,
+    participant_id: &str,
+    display_name: &str,
+    session_ttl: Duration,
+) -> Value {
     json!({
         "welcome": format!(
             "You joined room '{room_id}' as '{display_name}' ({participant_id}). Your identity is enforced by the room session."
@@ -586,7 +637,7 @@ fn human_usage_guide(room_id: &str, participant_id: &str, display_name: &str) ->
         ],
         "etiquette": [],
         "session": {
-            "expires_in_seconds": SESSION_TTL.num_seconds(),
+            "expires_in_seconds": session_ttl.num_seconds(),
             "rejoin": "This session cannot be renewed after it expires; ask the host for a new invite link."
         }
     })
@@ -619,6 +670,66 @@ fn invalid_state(message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
         code: "invalid_state".into(),
         message: message.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod debug_ttl_tests {
+    use super::*;
+
+    #[test]
+    fn default_room_session_ttl_is_one_hour() {
+        assert_eq!(default_room_session_ttl(), Duration::hours(1));
+        assert_eq!(default_room_session_ttl().num_seconds(), 3_600);
+    }
+
+    #[test]
+    fn debug_ttl_parsing_clamps_to_sane_range() {
+        assert_eq!(
+            parse_debug_room_session_ttl("60"),
+            Some(Duration::seconds(60))
+        );
+        assert_eq!(
+            parse_debug_room_session_ttl("3600"),
+            Some(Duration::seconds(3_600))
+        );
+        assert_eq!(parse_debug_room_session_ttl("59"), None);
+        assert_eq!(parse_debug_room_session_ttl("3601"), None);
+        assert_eq!(parse_debug_room_session_ttl(""), None);
+        assert_eq!(parse_debug_room_session_ttl("not-a-number"), None);
+        assert_eq!(
+            parse_debug_room_session_ttl(" 120 "),
+            Some(Duration::seconds(120))
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn debug_override_applies_only_in_debug_builds() {
+        // The debug-only reader maps a valid clamped value to a TTL override;
+        // release builds contain no reader (they always use the default).
+        assert_eq!(
+            parse_debug_room_session_ttl("120"),
+            Some(Duration::seconds(120))
+        );
+        assert_eq!(parse_debug_room_session_ttl("10"), None);
+        // Read-only check: without the variable the resolver stays default.
+        // (Mutating process env is forbidden, so valid-value wiring is covered
+        // by the parse assertions above plus the startup owner below.)
+        if std::env::var(DEBUG_ROOM_SESSION_TTL_ENV).is_err() {
+            assert_eq!(resolve_room_session_ttl(), default_room_session_ttl());
+            assert_eq!(debug_room_session_ttl_override(), None);
+        }
+    }
+
+    #[tokio::test]
+    async fn fresh_store_defaults_to_one_hour() {
+        let store = crate::SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("open debug ttl fixture: {error}"));
+        assert_eq!(store.human_room_session_ttl(), Duration::hours(1));
+        let store = store.with_human_room_session_ttl(Duration::seconds(120));
+        assert_eq!(store.human_room_session_ttl(), Duration::seconds(120));
     }
 }
 

@@ -231,6 +231,14 @@ async fn prepare_runtime_storage(
             .with_context(|| format!("secure database directory {}", parent.display()))?;
     }
     let store = SqliteStore::open_path(&args.database).await?;
+    #[cfg(debug_assertions)]
+    let store = {
+        let ttl = agentsassemble_persistence::resolve_room_session_ttl();
+        if ttl != agentsassemble_persistence::default_room_session_ttl() {
+            tracing::info!("debug room session TTL override: {} s", ttl.num_seconds());
+        }
+        store.with_human_room_session_ttl(ttl)
+    };
     let database_path = args
         .database
         .canonicalize()

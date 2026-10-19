@@ -130,6 +130,22 @@ pub struct SqliteStore {
     pub(crate) preview_generations: Arc<crate::message_attachment_previews::Generations>,
     pub(crate) created: bool,
     pub(crate) directory_changes: tokio::sync::watch::Sender<()>,
+    pub(crate) human_room_session_ttl: chrono::Duration,
+}
+
+impl SqliteStore {
+    /// Newly minted human room session TTL configured once at startup.
+    #[must_use]
+    pub fn human_room_session_ttl(&self) -> chrono::Duration {
+        self.human_room_session_ttl
+    }
+
+    /// Overrides the TTL for newly minted human room sessions (debug-only knob).
+    #[must_use]
+    pub fn with_human_room_session_ttl(mut self, ttl: chrono::Duration) -> Self {
+        self.human_room_session_ttl = ttl;
+        self
+    }
 }
 
 impl SqliteStore {

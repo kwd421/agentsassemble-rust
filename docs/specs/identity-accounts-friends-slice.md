@@ -4270,3 +4270,7 @@ central; the background-room heal likewise; a republish while live closes the
 redundant channel instead of clobbering the registry. The reconnect-registry
 assertions fail on the pre-fix registry (drop → adopt with an empty map,
 `admissionFor` null at expiry, heal `skipped:"no-admission"`).
+
+## Debug-only room session TTL override (test use, absent from release)
+
+Debug builds shorten newly minted human room sessions via `AGENTSASSEMBLE_DEBUG_ROOM_SESSION_TTL_SECS` (clamped to 60..3600 s, invalid values ignored; default stays 1 h). The host server process reads it once at startup in `prepare_runtime_storage`, threads the value into the store's mint path, and logs one `debug room session TTL override: N s` line in debug builds only. Release builds contain no code that reads this variable and always use the constant.

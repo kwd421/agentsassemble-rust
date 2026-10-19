@@ -117,6 +117,10 @@ mod guest_identity_recovery;
 mod human_admission;
 mod human_admission_identity;
 mod human_admission_store;
+pub use human_admission_store::{
+    DEBUG_ROOM_SESSION_TTL_ENV, DEBUG_ROOM_SESSION_TTL_MAX_SECS, DEBUG_ROOM_SESSION_TTL_MIN_SECS,
+    debug_room_session_ttl_override, default_room_session_ttl, resolve_room_session_ttl,
+};
 mod session_bearer;
 pub use session_bearer::{
     ATTENDEE_INVITE_PREFIX, ATTENDEE_SESSION_PREFIX, CONNECTOR_INVITE_PREFIX,

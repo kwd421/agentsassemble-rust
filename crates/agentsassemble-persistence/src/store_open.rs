@@ -68,6 +68,7 @@ impl SqliteStore {
             preview_generations: Arc::default(),
             created: fresh,
             directory_changes: tokio::sync::watch::channel(()).0,
+            human_room_session_ttl: crate::human_admission_store::default_room_session_ttl(),
         }
     }
 

@@ -2,8 +2,8 @@ use crate::{
     HumanAdmissionCommit, HumanAdmissionDecision, HumanAdmissionRejection as Rejection,
     PersistenceError, PreparedHumanAdmission, SqliteStore,
     human_admission_store::{
-        SESSION_TTL, admission_result, append_participant_joined, capacity_reached,
-        invite_scope_storage, join_participant,
+        admission_result, append_participant_joined, capacity_reached, invite_scope_storage,
+        join_participant,
     },
     human_invite_preflight::{load_invite_and_room, require_credential_binding},
     member_projection::anchor,
@@ -117,9 +117,19 @@ pub(crate) async fn admit(
             .bind(&binding).bind(&member.issuer).bind(&member.person_id).bind(user).bind(now.timestamp_micros()).execute(&mut **tx).await?;
     }
     let (joined, is_joined) = join_participant(tx, &invite, participant, profile, now).await?;
-    let expires = now + SESSION_TTL;
-    let mut result =
-        admission_result(tx, request, &invite, &room, participant, profile, expires).await?;
+    let session_ttl = store.human_room_session_ttl();
+    let expires = now + session_ttl;
+    let mut result = admission_result(
+        tx,
+        request,
+        &invite,
+        &room,
+        participant,
+        profile,
+        expires,
+        session_ttl,
+    )
+    .await?;
     result.stable_identity = true;
     let result_json = serde_json::to_string(&result)?;
     let admission_id = Uuid::new_v4().to_string();
@@ -301,7 +311,7 @@ pub(crate) async fn mint_session(
         serde_json::from_str(row.try_get("result_json")?)?;
     result.request_id = request_id.to_owned();
     result.client_id = client_id.to_owned();
-    result.expires_at = now + SESSION_TTL;
+    result.expires_at = now + store.human_room_session_ttl();
     let issued = derive_session_bearer(store.host_key.session_hmac_key(), &key, HumanAdmission);
     sqlx::query("INSERT INTO human_room_sessions(admission_key, key_kind, member_admission_id, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, result_json, admitted_at, expires_at, member_challenge, member_challenge_expires_at, member_last_used_at, state) SELECT ?, (SELECT key_kind FROM room_invites WHERE invite_id = member_admissions.invite_id), admission_id, ?, invite_id, input_hash, ?, room_id, user_id, participant_id, 'browser', invite_scope, ?, ?, ?, ?, ?, ?, ?, 'active' FROM member_admissions WHERE admission_id = ?")
         .bind(key.as_slice()).bind(&result.request_id).bind(issued.fingerprint.as_slice())

@@ -10,7 +10,7 @@ use crate::{
         bind_account_device, load_account_user, rejected, require_public_account_user,
         revalidate_account_identity,
     },
-    human_admission_store::{SESSION_TTL, capacity_reached, replace_live_sessions},
+    human_admission_store::{capacity_reached, replace_live_sessions},
     human_session_authority::{
         ResolvedHumanSession, fixed_session_fingerprint, resolve_human_session,
     },
@@ -250,7 +250,7 @@ async fn recover(
         client_id: client_id.into(),
         joined_at: now,
         expires_at: now
-            .checked_add_signed(SESSION_TTL)
+            .checked_add_signed(store.human_room_session_ttl())
             .ok_or_else(|| rejected("invalid_state", "Recovery expiry overflowed."))?,
         room_label: settings.label,
         room_topic: settings.topic,
