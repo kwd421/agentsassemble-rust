@@ -46,6 +46,16 @@ export function membershipEndedTerminalScope(serverId: string, meetingId: string
   return terminalRooms.get(terminalKey(serverId, meetingId)) ?? null;
 }
 
+/** The person re-joined this room (e.g. a new invite): it is no longer ended for them. */
+export function clearMembershipEndedTerminal(serverId: string, meetingId: string): void {
+  if (serverId && meetingId) terminalRooms.delete(terminalKey(serverId, meetingId));
+}
+
+/** Ended rooms belong to the signed-in person: a different person (or sign-out) starts clean. */
+export function clearAllMembershipEndedTerminals(): void {
+  terminalRooms.clear();
+}
+
 export function resetMembershipEndedTerminalForTests(): void {
   terminalRooms.clear();
 }

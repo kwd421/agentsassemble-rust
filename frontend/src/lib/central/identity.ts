@@ -3,6 +3,7 @@ import { finishGoogleVerification } from "./googleRegistration";
 import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
 import { clearMemberAnchors } from "./memberAnchors";
 import { clearRoomDockItems } from "../roomDockPersistence";
+import { clearAllMembershipEndedTerminals } from "../memberMembershipEnded";
 import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
 import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 import { exactCentralServerOrigin } from "./ownerConnect";
@@ -253,6 +254,7 @@ export function saveSession(
     if (previous?.person.person_id) clearMemberAnchors(previous.person.person_id);
     clearCentralDirectoryCache();
     clearRoomDockItems();
+    clearAllMembershipEndedTerminals();
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   window.dispatchEvent(new Event(CENTRAL_SESSION_CHANGED_EVENT));
@@ -325,6 +327,7 @@ export function clearCentralSession(): void {
   localStorage.removeItem(SERVERS_KEY);
   clearCentralDirectoryCache();
   clearRoomDockItems();
+  clearAllMembershipEndedTerminals();
   window.dispatchEvent(new Event(CENTRAL_SESSION_CLEARED_EVENT));
 }
 

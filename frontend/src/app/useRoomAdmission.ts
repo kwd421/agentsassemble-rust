@@ -1,4 +1,5 @@
 import { requireSessionHostOrigin } from "../lib/remote/remoteWorkspace";
+import { clearMembershipEndedTerminal } from "../lib/memberMembershipEnded";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   joinRoomInvite,
@@ -361,7 +362,11 @@ export function useRoomAdmission({
 
   const acceptMemberSession = useCallback(async (payload: RoomInviteJoinResponse) => {
     const attempt = beginAdmissionAttempt();
-    return applyJoinedSession({...roomGuestSessionFromJoinPayload(guestJoinToken, payload), centralMember:true}, "invite", attempt.isCurrent);
+    const accepted = await applyJoinedSession({...roomGuestSessionFromJoinPayload(guestJoinToken, payload), centralMember:true}, "invite", attempt.isCurrent);
+    // A host that admitted this person again (new invite, re-join) ends any
+    // earlier kicked/ended state remembered for that room.
+    if (accepted) clearMembershipEndedTerminal(payload.server_id, payload.meeting_id);
+    return accepted;
   }, [applyJoinedSession, beginAdmissionAttempt, guestJoinToken, memberReturn]);
 
   const acceptRecoveredSession = useCallback(

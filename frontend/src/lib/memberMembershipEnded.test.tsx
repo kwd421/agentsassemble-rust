@@ -118,3 +118,17 @@ describe("selectMemberRoomOnDemand membership-ended refusal", () => {
     expect(second).toBeNull();
   });
 });
+
+describe("ended rooms belong to the signed-in person", () => {
+  it("forgets every ended room on sign-out and one room on re-admission", async () => {
+    const ended = await import("./memberMembershipEnded");
+    const { clearCentralSession } = await import("./central/identity");
+    ended.markMembershipEndedTerminal("server-s", "room-m");
+    ended.markMembershipEndedTerminal("server-s", "room-n");
+    ended.clearMembershipEndedTerminal("server-s", "room-m");
+    expect(ended.isMembershipEndedTerminal("server-s", "room-m")).toBe(false);
+    expect(ended.isMembershipEndedTerminal("server-s", "room-n")).toBe(true);
+    clearCentralSession();
+    expect(ended.isMembershipEndedTerminal("server-s", "room-n")).toBe(false);
+  });
+});
