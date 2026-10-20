@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { isProviderUnavailable } from "../../lib/providerCatalogGroups";
-import { Plus, Search, Star } from "../../ui/icons";
+import { Search, Star } from "../../ui/icons";
 import ProviderLogo from "./ProviderLogo";
 import { RUN_MODE_LABEL, vendorEntries, vendorForProvider, type RunMode, type VendorEntry } from "./providerVendors";
 
-// One "+" card instead of a wall of tiles: it opens a short searchable list that
-// can be narrowed by how an AI runs (구독 / API / 로컬), with starred favourites
-// on top; the chosen AI's card then offers its run modes. A provider that is not
-// installed stays selectable; the setup below the card offers to install it and
-// then signs in.
+// The add-agent dialog's first step is a short searchable list instead of a wall
+// of tiles. It can be narrowed by how an AI runs (구독 / API / 로컬), with starred
+// favourites on top. The settings step shows the chosen AI as a card offering its
+// run modes. A provider that is not installed stays selectable; the setup below
+// the card offers to install it and then signs in.
 const FAVOURITES_KEY = "agentsassemble.aiPicker.favourites.v1";
 
 // Favourites are a per-viewer convenience: unreadable storage just means none.
@@ -29,16 +29,16 @@ function appNames(entry: VendorEntry): string[] {
   return [...new Set(entry.modes.map(({ provider }) => provider.display_name))].filter((name) => name && name !== entry.name);
 }
 
-export default function ProviderPicker({ providers, selectedId, onSelect, remoteCatalog = false, disabled = false }: {
+export default function ProviderPicker({ providers, selectedId, onSelect, view, remoteCatalog = false, disabled = false }: {
   providers: NativeCliProviderAvailability[];
   selectedId: string;
+  view: "list" | "card";
   onSelect: (provider: NativeCliProviderAvailability) => void;
   remoteCatalog?: boolean;
   disabled?: boolean;
 }) {
   const entries = useMemo(() => vendorEntries(providers), [providers]);
   const selected = vendorForProvider(entries, selectedId);
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [modeFilter, setModeFilter] = useState<RunMode | null>(null);
   const [favourites, setFavourites] = useState(loadFavourites);
@@ -60,16 +60,10 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
     const candidates = modeFilter ? entry.modes.filter(({ mode }) => mode === modeFilter) : entry.modes;
     const ready = candidates.find(({ provider }) => remoteCatalog || !isProviderUnavailable(provider)) ?? candidates[0];
     onSelect(ready.provider);
-    setOpen(false);
     setQuery("");
   }
 
-  if (open || !selected) {
-    if (!open) {
-      return <button type="button" className="dc-provider-add-card" disabled={disabled} onClick={() => setOpen(true)}>
-        <Plus size={20} aria-hidden />AI 고르기
-      </button>;
-    }
+  if (view === "list" || !selected) {
     // One list: starred first, then ready apps, then ones that still need installing.
     const rank = (entry: VendorEntry) => (favourites.includes(entry.id) ? 0 : 2) + (missing(entry) ? 1 : 0);
     const ordered = [...matches].sort((a, b) => rank(a) - rank(b));
@@ -77,8 +71,7 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
       <label className="dc-provider-search">
         <Search size={16} aria-hidden />
         <input autoFocus type="search" value={query} placeholder="AI 검색" aria-label="AI 검색"
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); setQuery(""); } }} />
+          onChange={(event) => setQuery(event.target.value)} />
       </label>
       {availableModes.length > 1 && <div className="dc-provider-filters" role="radiogroup" aria-label="실행 방식으로 거르기">
         {[null, ...availableModes].map((mode) => <button key={mode ?? "all"} type="button" role="radio"
@@ -119,6 +112,5 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
         {RUN_MODE_LABEL[mode]}
       </button>)}
     </span>}
-    <button type="button" className="dc-provider-change" disabled={disabled} onClick={() => setOpen(true)}>바꾸기</button>
   </section>;
 }

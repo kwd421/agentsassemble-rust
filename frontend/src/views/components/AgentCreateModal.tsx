@@ -1,6 +1,6 @@
 import { reasoningEffortLabel } from "../../lib/agentLabels";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Play, Plus, X } from "../../ui/icons";
+import { ArrowLeft, Play, Plus, X } from "../../ui/icons";
 import {
   deleteProviderCredential,
   fetchProviderCredentialStatus,
@@ -104,6 +104,10 @@ export default function AgentCreateModal({
   const wasOpen = useRef(false);
   const pendingInitialSettings = useRef("");
   const selectedProvider = providers.find((provider) => provider.id === providerId);
+  // Two steps: the AI list, then that AI's settings sliding in from the right.
+  const [picking, setPicking] = useState(true);
+  const [slide, setSlide] = useState<"forward" | "back" | null>(null);
+  const showPicker = picking || !selectedProvider;
   const agentPlatformProvider = selectedProvider?.provider_kind === "agent_platform_api";
   const agentPlatformSettings =
     agentPlatformProvider && agentPlatformProject.trim() && agentPlatformLocation.trim()
@@ -185,6 +189,8 @@ export default function AgentCreateModal({
         setDisplayName(initialSelection!.displayName);
         setDisplayNameEdited(true);
       } else if (current) applyProvider(current);
+      setPicking(!initial);
+      setSlide(null);
       setStatus("");
       wasOpen.current = true;
       return;
@@ -393,14 +399,20 @@ export default function AgentCreateModal({
     <div className="dc-modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
         className="dc-agent-create-modal"
-        data-provider-selected={Boolean(selectedProvider)}
+        data-provider-selected={!showPicker}
         role="dialog"
         aria-modal="true"
         aria-label="에이전트 추가"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="dc-agent-create-head">
-          <div>
+          {!showPicker && (
+            <button type="button" className="dc-agent-create-back" aria-label="AI 다시 고르기" title="AI 다시 고르기"
+              onClick={() => { setPicking(true); setSlide("back"); }}>
+              <ArrowLeft size={18} />
+            </button>
+          )}
+          <div className="dc-agent-create-title">
             <p className={`dc-agent-create-kicker preserve-words${roomLabelMuted ? " dc-agent-host-address" : ""}`}>{roomLabel}</p>
             <h2>에이전트 추가</h2>
           </div>
@@ -421,10 +433,22 @@ export default function AgentCreateModal({
           </div>
         </header>
 
-        <div className="dc-agent-create-body">
+        {showPicker ? (
+        <div className="dc-agent-create-body" key="pick" data-slide={slide === "back" ? "back" : undefined}>
           {locationChoice}
           {!selectedProvider && statusMessage && <p className="dc-agent-create-note">{statusMessage}</p>}
-          <ProviderPicker providers={providers} selectedId={providerId}
+          <ProviderPicker providers={providers} selectedId={providerId} view="list"
+            onSelect={(provider) => {
+              // Picking the same AI again keeps what was already set for it.
+              if (provider.id !== providerId) applyProvider(provider);
+              setStatus("");
+              setPicking(false);
+              setSlide("forward");
+            }} />
+        </div>
+        ) : (
+        <div className="dc-agent-create-body" key="settings" data-slide={slide === "forward" ? "forward" : undefined}>
+          <ProviderPicker providers={providers} selectedId={providerId} view="card"
             onSelect={(provider) => { applyProvider(provider); setStatus(""); }} />
 
           {localProviderActions && !existingSessionId && selectedProvider?.login_supported &&
@@ -610,8 +634,9 @@ export default function AgentCreateModal({
             <p className="dc-agent-create-status preserve-words">{statusMessage}</p>
           )}
         </div>
+        )}
 
-        <footer className="dc-agent-create-footer">
+        {!showPicker && <footer className="dc-agent-create-footer">
           <button
             type="button"
             className="dc-agent-launch-toggle"
@@ -643,7 +668,7 @@ export default function AgentCreateModal({
               {busy ? "처리 중..." : startNow ? "추가하고 실행" : "추가"}
             </button>
           </div>
-        </footer>
+        </footer>}
       </section>
     </div>
   );

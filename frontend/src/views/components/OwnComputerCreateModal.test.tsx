@@ -45,6 +45,7 @@ it.each([60_000, 600_000])("preserves the draft and admission with %i ms left, s
   expect(screen.getByRole("link", { name: "실행 상태 열기" })).toBeTruthy();
   expect(createCompanionAttendeeInvite).toHaveBeenCalledTimes(1);
   expect(vi.mocked(createCompanionAttendeeInvite).mock.calls[0][1]).toEqual({ request_id: expect.any(String), provider: "codex", display_name: "My own AI" });
+  fireEvent.click(screen.getByRole("button", { name: "AI 다시 고르기" }));
   fireEvent.click(screen.getByRole("button", { name: "서버 컴퓨터" }));
   expect(onHost).toHaveBeenCalledTimes(1);
 });

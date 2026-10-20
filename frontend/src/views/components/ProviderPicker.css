@@ -1,25 +1,5 @@
-/* Add-agent AI picker: a "+" card, a searchable list, then the chosen AI's card. */
-.dc-provider-add-card {
-  display: flex;
-  width: 100%;
-  min-height: 64px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px dashed rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.dc-provider-add-card:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.32);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--color-text-primary);
-}
-
-/* A compact dropdown under the + card, not a full-height list. */
+/* Add-agent AI picker: a searchable list, then the chosen AI's card. */
+/* A compact list, not a full-height one. */
 .dc-provider-picker {
   display: grid;
   gap: 8px;
@@ -139,18 +119,6 @@
   color: var(--color-text-primary);
 }
 
-.dc-provider-change {
-  min-height: 32px;
-  border-radius: 6px;
-  padding: 0 12px;
-  color: #00a8fc;
-  font-size: 14px;
-}
-
-.dc-provider-change:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
 .dc-provider-filters {
   display: flex;
   gap: 4px;
@@ -202,4 +170,38 @@
 .dc-provider-star[aria-pressed="true"] {
   color: #f0b232;
   opacity: 1;
+}
+
+/* Two-step add-agent dialog: the settings step slides in from the right and
+   the AI list slides back in from the left. */
+.dc-agent-create-head .dc-agent-create-back {
+  flex: 0 0 auto;
+  margin: -4px -4px 0 -8px;
+}
+
+.dc-agent-create-head .dc-agent-create-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dc-agent-create-body[data-slide="forward"] {
+  animation: dc-agent-step-forward 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dc-agent-create-body[data-slide="back"] {
+  animation: dc-agent-step-back 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes dc-agent-step-forward {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+
+@keyframes dc-agent-step-back {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-agent-create-body[data-slide] { animation: none; }
 }

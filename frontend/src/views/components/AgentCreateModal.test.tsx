@@ -295,8 +295,9 @@ describe("AgentCreateModal", () => {
 
     expect(screen.getByText("선택한 AI가 현재 목록에 없어요.")).toBeTruthy();
     // The vanished choice is not swapped for another one: the picker asks again.
-    expect(screen.getByRole("button", { name: "AI 고르기" })).toBeTruthy();
-    expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("searchbox", { name: "AI 검색" })).toBeTruthy();
+    // Nothing can be added from the list step.
+    expect(document.querySelector(".dc-agent-create-primary")).toBeNull();
   });
 
   it("invalidates a selected model removed by a catalog refresh", async () => {
@@ -576,7 +577,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
     expect(within(screen.getByRole("list", { name: "AI 목록" })).getByRole("listitem", { name: "DeepSeek" })).toBeTruthy();
     expect(screen.queryByLabelText("API 키")).toBeNull();
 
@@ -609,7 +609,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
     expect(screen.getByRole("listitem", { name: "Ollama" })).toBeTruthy();
     expect(screen.getByRole("listitem", { name: "LM Studio" })).toBeTruthy();
     pickAi("Ollama");
@@ -689,6 +688,8 @@ describe("AgentCreateModal", () => {
       />
     );
 
+    // Reopening starts from the AI list; the same AI comes back without its unsaved key.
+    pickAi("DeepSeek");
     expect((await screen.findByLabelText("API 키") as HTMLInputElement).value).toBe("");
   });
 

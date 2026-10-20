@@ -77,9 +77,9 @@ export function expectProviderControlValue(label: string, option: string): void 
   expect(control.textContent).toContain(option);
 }
 
-/** Opens the AI picker when needed and chooses the row whose name matches. */
+/** Goes back to the AI list when the settings step is showing and chooses the row whose name matches. */
 export function pickAi(name: string | RegExp): void {
-  const opener = screen.queryByRole("button", { name: "AI 고르기" }) ?? screen.queryByRole("button", { name: "바꾸기" });
+  const opener = screen.queryByRole("button", { name: "AI 다시 고르기" });
   if (opener) fireEvent.click(opener);
   fireEvent.click(screen.getByRole("listitem", { name: typeof name === "string" ? new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) : name }));
 }

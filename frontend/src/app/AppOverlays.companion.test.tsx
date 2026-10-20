@@ -31,20 +31,24 @@ it("offers remote owners both computers without claiming remote discovery is loc
   expect(screen.getByRole("radiogroup", { name: "어디서 실행할까요?" })).toBeTruthy();
   expect(screen.getByText("집 Mac")).toBeTruthy();
   // Remote discovery is not local availability: the remote catalog never says "설치 필요".
-  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
   expect(screen.getByRole("listitem", { name: /Codex/ }).textContent).not.toContain("설치 필요");
   expect(screen.queryByRole("combobox")).toBeNull();
   expect(screen.queryByText("목록에만 추가")).toBeNull();
-  expect(screen.getByRole("button", { name: "이 컴퓨터에서 계속" }).closest("footer")).toBeTruthy();
-  expect(screen.queryByRole("combobox", { name: "모델" })).toBeNull();
   fireEvent.click(screen.getByRole("radio", { name: "서버 컴퓨터" }));
   expect(screen.queryByRole("combobox", { name: "AI 종류" })).toBeNull();
   fireEvent.click(screen.getByRole("radio", { name: "이 컴퓨터" }));
-  expect(screen.getByRole("button", { name: "AI 고르기" })).toBeTruthy();
+  expect(screen.getByRole("searchbox", { name: "AI 검색" })).toBeTruthy();
+});
+it("continues a picked this-computer AI from the dialog footer", () => {
+  render(<AppOverlays controller={controller(true)} companionInvites={{ ...controls, provider: "codex" }} />);
+  expect(screen.getByRole("button", { name: "이 컴퓨터에서 계속" }).closest("footer")).toBeTruthy();
+  expect(screen.queryByRole("combobox", { name: "모델" })).toBeNull();
+  // Where it runs is chosen on the list step, before the AI.
+  fireEvent.click(screen.getByRole("button", { name: "AI 다시 고르기" }));
+  expect(screen.getByRole("radiogroup", { name: "어디서 실행할까요?" })).toBeTruthy();
 });
 it("lets writable members add only on this computer without server agent control", () => {
   render(<AppOverlays controller={controller(false)} companionInvites={controls} />);
-  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
   expect(screen.getByRole("listitem", { name: /Codex/ })).toBeTruthy();
   expect(screen.queryByRole("radio")).toBeNull();
 });
@@ -59,9 +63,11 @@ it("preserves local server creation and hides creation when neither authority is
 it("uses the unknown server caption instead of the page hostname and exposes pending handoff", () => {
   const owner = controller(true);
   owner.centralDirectory = null;
-  render(<AppOverlays controller={owner} companionInvites={{ ...controls, creating: true }} />);
+  const view = render(<AppOverlays controller={owner} companionInvites={controls} />);
   expect(screen.getByText("방을 연 컴퓨터")).toBeTruthy();
   expect(screen.queryByText(window.location.host)).toBeNull();
+  view.unmount();
+  render(<AppOverlays controller={owner} companionInvites={{ ...controls, provider: "codex", creating: true }} />);
   expect(screen.getByRole("button", { name: "여는 중…" })).toHaveProperty("disabled", true);
   expect(screen.queryByText("AI 추가")).toBeNull();
 });

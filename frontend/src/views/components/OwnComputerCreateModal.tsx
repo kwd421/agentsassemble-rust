@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isDesktopWebview } from "../../lib/desktopBridge";
-import { X } from "../../ui/icons";
+import { ArrowLeft, X } from "../../ui/icons";
 import type { CompanionInviteControls } from "../../app/useCompanionInvites";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import ProviderPicker from "./ProviderPicker";
@@ -10,6 +10,11 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
   onClose: () => void; locationChoice?: ReactNode;
 }) {
   const selectedProvider = providers.find((provider) => provider.id === controls.provider);
+  // Same two steps as the server-agent dialog: the AI list, then its settings sliding in.
+  // A preserved draft reopens on its settings.
+  const [picking, setPicking] = useState(() => !selectedProvider);
+  const [slide, setSlide] = useState<"forward" | "back" | null>(null);
+  const showPicker = picking || !selectedProvider;
   const [displayNameEdited, setDisplayNameEdited] = useState(Boolean(controls.displayName));
   const [copiedKey, setCopiedKey] = useState("");
   const copiedTimer = useRef<number | undefined>(undefined);
@@ -25,13 +30,23 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
   return <div className="dc-modal-backdrop" role="presentation" onMouseDown={onClose}>
     <dialog ref={dialogRef} style={{ margin: "auto", color: "var(--color-text-primary)" }}
       onCancel={(event) => { event.preventDefault(); onClose(); }} className="dc-agent-create-modal" role="dialog" aria-modal="true" aria-label="에이전트 추가"
-      onMouseDown={(event) => event.stopPropagation()}>
-      <header className="dc-agent-create-head"><div><p className="dc-agent-create-kicker preserve-words">{roomLabel}</p>
+      data-provider-selected={!showPicker} onMouseDown={(event) => event.stopPropagation()}>
+      <header className="dc-agent-create-head">
+        {!showPicker && <button type="button" className="dc-agent-create-back" aria-label="AI 다시 고르기" title="AI 다시 고르기"
+          disabled={controls.creating} onClick={() => { setPicking(true); setSlide("back"); }}><ArrowLeft size={18} /></button>}
+        <div className="dc-agent-create-title"><p className="dc-agent-create-kicker preserve-words">{roomLabel}</p>
         <h2>에이전트 추가</h2></div><button type="button" onClick={onClose} aria-label="닫기"><X size={18} /></button></header>
-      <div className="dc-agent-create-body">
+      {showPicker ? <div className="dc-agent-create-body" key="pick" data-slide={slide === "back" ? "back" : undefined}>
         {locationChoice}
         <p className="dc-agent-hint preserve-words">모델과 작업 폴더는 이 컴퓨터에 뜨는 창에서 골라요. 내가 방을 나가면 이 AI도 함께 나가요.</p>
-        <ProviderPicker providers={providers} selectedId={controls.provider} remoteCatalog disabled={controls.creating}
+        <ProviderPicker providers={providers} selectedId={controls.provider} view="list" remoteCatalog disabled={controls.creating}
+          onSelect={(provider) => {
+            controls.setProvider(provider.id);
+            if (!displayNameEdited) controls.setDisplayName(provider.display_name);
+            setPicking(false); setSlide("forward");
+          }} />
+      </div> : <div className="dc-agent-create-body" key="settings" data-slide={slide === "forward" ? "forward" : undefined}>
+        <ProviderPicker providers={providers} selectedId={controls.provider} view="card" remoteCatalog disabled={controls.creating}
           onSelect={(provider) => { controls.setProvider(provider.id); if (!displayNameEdited) controls.setDisplayName(provider.display_name); }} />
         {selectedProvider && <section className="dc-agent-section">
           <p className="dc-agent-section-title">기본 정보</p>
@@ -53,8 +68,8 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
             });
           }}>{copiedKey === invite.key ? "복사됨" : "참가 안내 복사"}</button>
         </div>)}
-      </div>
-      <footer className="dc-agent-create-footer">
+      </div>}
+      {!showPicker && <footer className="dc-agent-create-footer">
         <div className="dc-agent-footer-actions">
           <button type="button" className="dc-agent-create-secondary" onClick={onClose}>취소</button>
           <button type="button" className="dc-agent-create-primary"
@@ -63,7 +78,7 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
             {controls.creating ? "여는 중…" : "이 컴퓨터에서 계속"}
           </button>
         </div>
-      </footer>
+      </footer>}
     </dialog>
   </div>;
 }

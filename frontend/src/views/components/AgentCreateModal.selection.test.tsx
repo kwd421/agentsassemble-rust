@@ -32,7 +32,7 @@ describe("AgentCreateModal provider selection", () => {
     expect(screen.queryByLabelText("표시 이름")).toBeNull();
     expect(screen.getByRole("dialog").getAttribute("data-provider-selected")).toBe("false");
     const hint = screen.getByText("사용할 AI를 골라 주세요.");
-    expect(hint.compareDocumentPosition(screen.getByRole("button", { name: "AI 고르기" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(hint.compareDocumentPosition(screen.getByRole("searchbox", { name: "AI 검색" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     pickAi("Codex");
     expect(screen.getByLabelText("표시 이름")).toBeTruthy();
     expect(screen.getByRole("dialog").getAttribute("data-provider-selected")).toBe("true");
@@ -45,7 +45,6 @@ it("keeps an unavailable provider selectable for local setup without permitting 
     providers={[{ ...codexProvider(), available: false, startable: false, discovery_status: "failed",
       discovery_error_code: "command_missing", discovery_error: "CLI가 설치되지 않았어요." }, openCodeProvider(), deepSeekProvider(), lmStudioProvider()]}
     onClose={() => undefined} onCreate={onCreate} />);
-  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
   // One list, ready apps first and the missing one after.
   expect(within(screen.getByRole("list", { name: "AI 목록" })).getAllByRole("listitem").map((item) => item.getAttribute("aria-label")))
     .toEqual(["DeepSeek", "LM Studio", "OpenCode", "ChatGPT Codex"]);
@@ -65,7 +64,6 @@ it("does not call a still-loading app missing, and marks it once discovery says 
   }));
   const { rerender } = render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
     providers={providers} onClose={() => undefined} onCreate={vi.fn()} />);
-  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
   const row = (name: RegExp) => screen.getByRole("listitem", { name });
   expect(row(/ChatGPT/).textContent).not.toContain("설치 필요");
   expect(row(/Claude/).textContent).not.toContain("설치 필요");
