@@ -47,8 +47,19 @@ async fn check_native_permissions(
     let creation: serde_json::Value = serde_json::from_slice(&std::fs::read(
         directory.path().join("session-request.json"),
     )?)?;
+    let mcp: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.path().join("mcp-request.json"))?)?;
+    assert_eq!(mcp["config"]["type"], "remote");
+    assert_eq!(mcp["config"]["disabled"], false);
+    assert_eq!(mcp["config"]["timeout"]["startup"], 10_000);
+    assert!(
+        mcp["config"]["headers"]["Authorization"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("Bearer "))
+    );
+    assert_eq!(creation["agent"], "build");
     assert_eq!(
-        creation["permission"][0]["action"],
+        creation["permissions"][0]["effect"],
         match mode {
             "meeting_read_only" => "deny",
             "full_access" => "allow",
@@ -56,12 +67,12 @@ async fn check_native_permissions(
         }
     );
     assert_eq!(
-        creation["permission"][1],
-        json!({"permission":"read", "pattern":"*", "action":"allow"})
+        creation["permissions"][1],
+        json!({"action":"read", "resource":"*", "effect":"allow"})
     );
     let mut active = active_session(&session, &started, "room-turn-1");
     assert_eq!(
-        creation["permission"][5]["action"],
+        creation["permissions"][5]["effect"],
         if mode == "full_access" {
             "allow"
         } else {
@@ -114,7 +125,7 @@ async fn check_native_permissions(
         assert_eq!(turn.await??.provider_turn_id, "assistant-1");
         let reply: serde_json::Value =
             serde_json::from_slice(&std::fs::read(directory.path().join("native-reply.json"))?)?;
-        assert_eq!(reply, json!({"reply": "once"}));
+        assert_eq!(reply, json!({"decision": "once"}));
         assert_eq!(
             std::fs::read_to_string(directory.path().join("room-instructions.txt"))?,
             instructions.unwrap_or_default()
@@ -122,8 +133,7 @@ async fn check_native_permissions(
         let message: serde_json::Value = serde_json::from_slice(&std::fs::read(
             directory.path().join("prompt-request.json"),
         )?)?;
-        assert_eq!(message["agent"], "build");
-        assert_eq!(message["parts"][0]["text"], "Ask");
+        assert_eq!(message["text"], "Ask");
         assert!(!directory.path().join("opencode.json").exists());
     }
     let refreshes = std::fs::read_to_string(directory.path().join("agent-refreshes.jsonl"))?;

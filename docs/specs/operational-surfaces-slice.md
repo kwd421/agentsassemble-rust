@@ -1440,6 +1440,58 @@ unchanged: their model ids, controls and validation stay strict. The add-agent
 settings step offers "하네스" (기본/OpenCode) only for Gemini and DeepSeek while
 OpenCode is present in the catalog, and sends it as `execution_harness`.
 
+### OpenCode 2 local API contract (2026-10-20)
+
+OpenCode 2.0.32 prints `opencode v<version>` (1.x printed the bare version) and moved
+its authenticated JSON API under `/api`. A launch first waits for the exact bound
+ready line, then probes `/api/info` once. A JSON response with a `version` string
+selects the v2 shape; otherwise `/global/health` with `healthy: true` selects v1.
+Neither probe succeeding is `provider_startup_timeout`; there is no per-request
+fallback between shapes.
+
+The server still accepts Basic auth, but v2 only accepts username `opencode` with
+the per-launch `OPENCODE_SERVER_PASSWORD` value, so the driver uses that username for
+both versions. All requests keep the verified IPv4 loopback connection and the
+existing `directory` query.
+
+| Operation | OpenCode 1 | OpenCode 2 |
+| --- | --- | --- |
+| readiness | `GET /global/health` → `{"healthy":true}` | `GET /api/info` → `{"version":"2.0.32",...}` |
+| create session | `POST /session` body `{title,model,permission:[{permission,pattern,action}]}` → `{id}` | `POST /api/session` body `{title,agent:"build",model,permissions:[{action,resource,effect}]}` → `{data:{id}}` |
+| get session | `GET /session/{id}` | `GET /api/session/{id}` |
+| prompt | `POST /session/{id}/message` body `{model,agent,variant?,parts:[{type:"text",text}]}` | `POST /api/session/{id}/prompt` body `{text}` → `{data:Session.Inbox.User}` |
+| events | `GET /event`, `{type,properties}` | `GET /api/event`, `{id,created,type,data}` |
+| interrupt | `POST /session/{id}/abort` → `true` | `POST /api/session/{id}/interrupt` → `{interrupted:boolean}` |
+| permission reply | `POST /permission/{id}/reply` `{reply:"once"\|"reject"}` | `POST /api/session/{sessionID}/permission/{id}/reply` `{decision:"once"\|"always"\|"reject"}` |
+| question/form reply | `POST /question/{id}/reply` `{answers:[...]}` | `form.created` → `POST /api/session/{sessionID}/form/{formID}/reply` `{answer:{key:value}}` |
+| register MCP | `POST /mcp` `{name,config:{type:"remote",url,enabled:true,headers,timeout:number}}` | `PUT /api/experimental/mcp/{name}` `{config:{type:"remote",url,disabled:false,headers,timeout:{startup:number}}}`, then poll `GET /api/mcp` until `data[].status.status` is `connected` |
+| reload instructions | `POST /instance/dispose` → `true` | `POST /api/location/reload` → `204` |
+
+v2 turn identity comes from events, not the prompt response. `session.inbox.delivered`
+carries `data.inboxID` (the user message id); `session.step.started` carries
+`data.assistantMessageID` and `data.model` (`{providerID,id}`); `session.text.ended`
+and `session.message.content.updated` carry the final text; and
+`session.execution.succeeded|failed|interrupted` carries `data.sessionID` and, on
+failure, `data.error`. The prompt response `data.id` must equal the delivered inbox
+id, the observed model must equal the selected model, and the final assistant text is
+returned with the last assistant message id. The existing v1 `message.updated` and
+`session.status` shapes remain handled for 1.x.
+
+Model discovery follows the same release line: v1 keeps `opencode models --refresh
+--verbose`; v2 runs `opencode api --standalone model.list`, whose `data[]` entries
+expose `id`, `providerID`, `enabled` and `cost[]`. The free/paid rule is unchanged:
+only namespace `opencode` with zero input and output cost is `free`; `opencode-go`
+subscription models remain `paid`. A failed v2 catalog reports the same Korean
+user-facing discovery failure as other providers instead of English probe text.
+
+Verified against the locally installed `opencode` 2.0.32 with an isolated XDG config:
+`serve --hostname 127.0.0.1 --port` ready line, `/api/info`, `/openapi.json` request
+and response schemas, `/api/session` create bodies, `/api/event` envelopes,
+`/api/mcp` status objects, `/api/experimental/mcp/{name}` PUT, `/api/location/reload`,
+`opencode --version`, and `opencode api --standalone model.list`. No model turn was
+started during contract verification; a real turn's event ordering remains the
+app-level confirmation.
+
 API-provider failure codes (2026-10-20, owner real-app check): an HTTP 503 or 529 from
 an OpenAI-compatible provider is `provider_api_busy` (the service is shedding load),
 distinct from other unsuccessful statuses (`provider_api_unavailable`). A failed room
