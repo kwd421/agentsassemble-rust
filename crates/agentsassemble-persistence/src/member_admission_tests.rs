@@ -1,5 +1,6 @@
 use crate::{
     HumanAdmissionDecision, HumanAdmissionRejection, MemberAdmission, PreparedHumanAdmission,
+    SqliteStore,
     human_admission_store::tests::{admitted, fixture, insert_invite, prepared_with_avatar},
 };
 use chrono::{Duration, Utc};
@@ -17,10 +18,28 @@ fn member_with_profile(
     request_name: &str,
     avatar_image_url: &str,
 ) -> PreparedHumanAdmission {
+    member_request(
+        join,
+        browser,
+        &uuid::Uuid::new_v4().to_string(),
+        name,
+        request_name,
+        avatar_image_url,
+    )
+}
+
+fn member_request(
+    join: u8,
+    browser: u8,
+    request_id: &str,
+    name: &str,
+    request_name: &str,
+    avatar_image_url: &str,
+) -> PreparedHumanAdmission {
     prepared_with_avatar(
         [join; 32],
         [browser; 32],
-        &uuid::Uuid::new_v4().to_string(),
+        request_id,
         request_name,
         avatar_image_url,
     )
@@ -33,6 +52,62 @@ fn member_with_profile(
         registration_epoch: "epoch".into(),
         challenge_fingerprint: Sha256::digest(uuid::Uuid::new_v4().as_bytes()).into(),
         challenge_expires_at: Utc::now() + Duration::minutes(5),
+    })
+}
+
+const AVATAR_ONE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==";
+const AVATAR_TWO: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==";
+
+#[derive(Debug, PartialEq)]
+struct JoinState {
+    profile: agentsassemble_domain::UserProfile,
+    participant: agentsassemble_domain::Participant,
+    avatar_rows: Vec<(String, String)>,
+    updated_events: i64,
+}
+
+async fn join_state(
+    store: &SqliteStore,
+    participant_id: &str,
+) -> Result<JoinState, Box<dyn std::error::Error>> {
+    let user_id = sqlx::query_scalar::<_, String>(
+        "SELECT user_id FROM user_profiles WHERE participant_id = ?",
+    )
+    .bind(participant_id)
+    .fetch_one(&store.pool)
+    .await?;
+    let profile: agentsassemble_domain::UserProfile = serde_json::from_str(
+        &sqlx::query_scalar::<_, String>(
+            "SELECT profile_json FROM user_profiles WHERE user_id = ?",
+        )
+        .bind(&user_id)
+        .fetch_one(&store.pool)
+        .await?,
+    )?;
+    let participant: agentsassemble_domain::Participant = serde_json::from_str(
+        &sqlx::query_scalar::<_, String>(
+            "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
+        )
+        .bind(participant_id)
+        .fetch_one(&store.pool)
+        .await?,
+    )?;
+    let avatar_rows = sqlx::query_as::<_, (String, String)>(
+        "SELECT attachment_id, state FROM profile_avatar_assets WHERE owner_user_id = ? ORDER BY attachment_id",
+    )
+    .bind(&user_id)
+    .fetch_all(&store.pool)
+    .await?;
+    let updated_events = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM room_events WHERE json_extract(event_json, '$.type') = 'participant_updated'",
+    )
+    .fetch_one(&store.pool)
+    .await?;
+    Ok(JoinState {
+        profile,
+        participant,
+        avatar_rows,
+        updated_events,
     })
 }
 
@@ -137,6 +212,169 @@ async fn member_join_profile_updates_the_reentry_result_and_room_participant() -
     let exact = admitted(store.admit_human(&request, now).await?);
     assert!(exact.deduplicated());
     assert_eq!(exact.result().display_name, "Room Name");
+    Ok(())
+}
+
+#[tokio::test]
+async fn capacity_rejected_rejoin_keeps_join_profile_avatar_and_participant() -> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 200, now).await;
+    let first = admitted(
+        store
+            .admit_human(
+                &member_with_profile(2, 3, "Central Name", "", AVATAR_ONE),
+                now,
+            )
+            .await?,
+    );
+    let participant_id = first.result().agent_id.clone();
+    assert!(!first.result().avatar_image_url.is_empty());
+    for index in 0..111 {
+        let mut request = member(2, 3, "Other member");
+        request.member.as_mut().ok_or("member")?.person_id = format!("other-{index}");
+        admitted(store.admit_human(&request, now).await?);
+    }
+    let before = join_state(&store, &participant_id).await?;
+
+    let decision = store
+        .admit_human(
+            &member_with_profile(2, 4, "Central Name", "Changed", AVATAR_TWO),
+            now,
+        )
+        .await?;
+    assert!(matches!(
+        decision,
+        HumanAdmissionDecision::Rejected(HumanAdmissionRejection::CapacityReached)
+    ));
+    assert_eq!(join_state(&store, &participant_id).await?, before);
+    assert_eq!(before.updated_events, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn conflict_rejected_rejoin_keeps_join_profile_avatar_and_participant() -> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
+    let first = admitted(
+        store
+            .admit_human(
+                &member_with_profile(2, 3, "Central Name", "", AVATAR_ONE),
+                now,
+            )
+            .await?,
+    );
+    let participant_id = first.result().agent_id.clone();
+    insert_invite(&store, [5; 32], [6; 32], "other", 10, now).await;
+    sqlx::query(
+        "UPDATE room_invites SET invite_scope = 'read_only' WHERE base_participant_id = 'other'",
+    )
+    .execute(&store.pool)
+    .await?;
+    let before = join_state(&store, &participant_id).await?;
+
+    let decision = store
+        .admit_human(
+            &member_with_profile(6, 4, "Central Name", "Changed", AVATAR_TWO),
+            now,
+        )
+        .await?;
+    assert!(matches!(
+        decision,
+        HumanAdmissionDecision::Rejected(HumanAdmissionRejection::IdempotencyConflict)
+    ));
+    assert_eq!(join_state(&store, &participant_id).await?, before);
+    assert_eq!(before.updated_events, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn unavailable_session_rejected_rejoin_keeps_join_profile_avatar_and_participant()
+-> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let first = admitted(
+        store
+            .admit_human(
+                &member_request(2, 3, &request_id, "Central Name", "", AVATAR_ONE),
+                now,
+            )
+            .await?,
+    );
+    let participant_id = first.result().agent_id.clone();
+    sqlx::query("UPDATE human_room_sessions SET state = 'ended'")
+        .execute(&store.pool)
+        .await?;
+    let before = join_state(&store, &participant_id).await?;
+
+    let decision = store
+        .admit_human(
+            &member_request(2, 3, &request_id, "Central Name", "Changed", AVATAR_TWO),
+            now,
+        )
+        .await?;
+    assert!(matches!(
+        decision,
+        HumanAdmissionDecision::Rejected(HumanAdmissionRejection::SessionUnavailable)
+    ));
+    assert_eq!(join_state(&store, &participant_id).await?, before);
+    assert_eq!(before.updated_events, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn admitted_rejoin_replaces_join_profile_avatar_and_participant() -> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
+    let first = admitted(
+        store
+            .admit_human(
+                &member_with_profile(2, 3, "Central Name", "", AVATAR_ONE),
+                now,
+            )
+            .await?,
+    );
+    let participant_id = first.result().agent_id.clone();
+    let before = join_state(&store, &participant_id).await?;
+    assert_eq!(before.avatar_rows.len(), 1);
+
+    let next = admitted(
+        store
+            .admit_human(
+                &member_with_profile(2, 4, "Central Name", "Room Name", AVATAR_TWO),
+                now,
+            )
+            .await?,
+    );
+    assert_eq!(next.result().display_name, "Room Name");
+    assert_ne!(
+        next.result().avatar_image_url,
+        first.result().avatar_image_url
+    );
+    assert!(
+        next.events()
+            .iter()
+            .any(|event| event.event_type == "participant_updated")
+    );
+    let after = join_state(&store, &participant_id).await?;
+    assert_eq!(after.profile.display_name, "Room Name");
+    assert_eq!(
+        after.profile.avatar_image_url,
+        next.result().avatar_image_url
+    );
+    assert_eq!(after.participant.display_name, "Room Name");
+    assert_eq!(
+        after.participant.avatar_image_url,
+        next.result().avatar_image_url
+    );
+    assert_eq!(after.avatar_rows.len(), 1);
+    assert_eq!(after.avatar_rows[0].1, "current");
+    assert_ne!(after.avatar_rows[0].0, before.avatar_rows[0].0);
+    assert!(after.updated_events >= 1);
     Ok(())
 }
 

@@ -105,6 +105,11 @@ pub(crate) async fn admit(
             .await?;
     if let Some(row) = previous {
         anchor(tx, &binding, member, false).await?;
+        // A refused re-entry still commits this transaction for its product rejection, so the
+        // submitted profile and its room projections must stay outside that committed set.
+        sqlx::query("SAVEPOINT member_reentry_profile")
+            .execute(&mut **tx)
+            .await?;
         let identity = crate::human_admission_identity::persist_identity(
             tx,
             identity,
@@ -114,7 +119,21 @@ pub(crate) async fn admit(
             now,
         )
         .await?;
-        return reenter(store, tx, request, &invite, input_hash, row, identity, now).await;
+        let decision = reenter(store, tx, request, &invite, input_hash, row, identity, now).await?;
+        let admitted = matches!(&decision, HumanAdmissionDecision::Admitted(_));
+        sqlx::query(if admitted {
+            "RELEASE SAVEPOINT member_reentry_profile"
+        } else {
+            "ROLLBACK TO SAVEPOINT member_reentry_profile"
+        })
+        .execute(&mut **tx)
+        .await?;
+        if !admitted {
+            sqlx::query("RELEASE SAVEPOINT member_reentry_profile")
+                .execute(&mut **tx)
+                .await?;
+        }
+        return Ok(decision);
     }
     if invite.use_count >= invite.effective_use_limit() {
         return Ok(denied(Rejection::InviteUseLimitReached));

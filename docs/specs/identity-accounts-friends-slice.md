@@ -1505,6 +1505,12 @@ Request (only `POST /api/room-invite/member-join`; all levels keep
   size, type, bytes, or dimensions are 400 `member_profile_avatar_invalid`.
   Storage quota keeps its existing 429 `attachment_quota_reached`. A rejected
   profile commits no profile, avatar, participant, or binding row.
+- A join that ends in any product rejection after redemption keeps the rule
+  above for the whole request: the submitted profile is applied in the same
+  transaction only for an admitted join. Capacity, idempotency-conflict,
+  unavailable-session, and every other refusal leave the stored display name,
+  avatar URL and avatar row, room participant row, and `participant_updated`
+  events exactly as if no profile had been sent.
 - On the join admission transaction, after central redemption and the existing
   invite/room/membership checks, provided fields update the member's host-local
   `user_profiles.display_name` and `avatar_image_url` and project to the
