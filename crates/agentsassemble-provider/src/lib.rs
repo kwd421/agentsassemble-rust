@@ -62,6 +62,7 @@ mod opencode_sse;
 mod opencode_startup;
 mod opencode_usage;
 mod opencode_usage_auth;
+mod opencode_version;
 mod openrouter;
 mod process;
 mod profile;

@@ -3,7 +3,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     FilesystemFailure, MAX_PROVIDER_BYTES, MAX_PROVIDER_OPTIONS, ProbeFailure, await_filesystem,
-    discover_custom_api, failed_provider, opencode_models, ready_provider,
+    discover_custom_api, failed_provider, opencode_models, opencode_models_v2, ready_provider,
 };
 
 #[cfg(unix)]
@@ -348,6 +348,46 @@ fn opencode_free_pricing_uses_native_costs_not_a_model_list() {
     );
     assert!(opencode_models("opencode/unknown\n{}").is_err());
     assert!(opencode_models("opencode/unknown\n{broken").is_err());
+}
+
+#[test]
+fn opencode_v2_catalog_reads_the_local_api_model_shapes() {
+    let models = opencode_models_v2(
+        r#"{"location":{"directory":"/tmp"},"data":[
+            {"id":"big-pickle","providerID":"opencode","cost":[{"input":0,"output":0}],"enabled":true},
+            {"id":"paid","providerID":"opencode","cost":[{"input":1,"output":0}],"enabled":true},
+            {"id":"subscription","providerID":"opencode-go","cost":[{"input":0,"output":0}],"enabled":true},
+            {"id":"retired","providerID":"opencode","cost":[{"input":0,"output":0}],"enabled":false},
+            {"id":"foreign","providerID":"openai","cost":[{"input":0,"output":0}],"enabled":true}
+        ]}"#,
+    )
+    .unwrap_or_else(|error| panic!("OpenCode 2 catalog: {error:?}"));
+    let pricing = |value: &str| {
+        models
+            .iter()
+            .find(|model| model.value == value)
+            .unwrap_or_else(|| panic!("missing model {value}"))
+            .metadata["pricing"]
+            .clone()
+    };
+    assert_eq!(models.len(), 3);
+    assert_eq!(pricing("opencode/big-pickle"), serde_json::json!("free"));
+    assert_eq!(pricing("opencode/paid"), serde_json::json!("paid"));
+    // The Go subscription reports zero cost but is not a free model.
+    assert_eq!(
+        pricing("opencode-go/subscription"),
+        serde_json::json!("paid")
+    );
+    for malformed in [
+        "not-json",
+        r#"{"data":[{"id":"missing-cost","providerID":"opencode","enabled":true}]}"#,
+        r#"{"data":[{"id":"big-pickle","providerID":"opencode","cost":[]}]}"#,
+    ] {
+        assert!(matches!(
+            opencode_models_v2(malformed),
+            Err(ProbeFailure::Malformed)
+        ));
+    }
 }
 
 #[test]

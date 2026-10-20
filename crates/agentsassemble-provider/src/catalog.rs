@@ -174,19 +174,37 @@ pub(crate) async fn discover_opencode(
         };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
-    // Native --refresh updates OpenCode's own model cache when discovery is requested.
-    let output = match Box::pin(probe(
-        &executable,
-        &["models", "--refresh", "--verbose"],
-        cancellation,
-        &[],
-    ))
-    .await
-    {
+    let version = match opencode_version(&executable, cancellation).await {
+        Ok(version) => version,
+        Err(error) => return failed_provider(provider, error),
+    };
+    // OpenCode 2 removed the verbose model listing; its local API still exposes
+    // every model with cost. OpenCode 1 keeps the native verbose catalog.
+    let output = match if version.major >= 2 {
+        Box::pin(probe(
+            &executable,
+            &["api", "--standalone", "model.list"],
+            cancellation,
+            &[],
+        ))
+        .await
+    } else {
+        Box::pin(probe(
+            &executable,
+            &["models", "--refresh", "--verbose"],
+            cancellation,
+            &[],
+        ))
+        .await
+    } {
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };
-    let models = match opencode_models(&output) {
+    let models = match if version.major >= 2 {
+        opencode_models_v2(&output)
+    } else {
+        opencode_models(&output)
+    } {
         Ok(models) => models,
         Err(error) => return failed_provider(provider, error),
     };
@@ -428,7 +446,7 @@ pub(crate) fn failed_provider(
         ),
         ProbeFailure::Failed => (
             "model_discovery_failed",
-            "provider model discovery failed",
+            "제공자의 모델 목록을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.",
             true,
         ),
         ProbeFailure::Cancelled => (
@@ -546,6 +564,44 @@ fn title_case(value: &str) -> String {
 
 fn nonempty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
+}
+
+async fn opencode_version(
+    executable: &str,
+    cancellation: &CancellationToken,
+) -> Result<semver::Version, ProbeFailure> {
+    let output = probe(executable, &["--version"], cancellation, &[]).await?;
+    crate::opencode_version::parse(&output).ok_or(ProbeFailure::Malformed)
+}
+
+fn opencode_models_v2(output: &str) -> Result<Vec<ProviderControlOption>, ProbeFailure> {
+    let payload = serde_json::from_str::<OpenCodeModelsV2>(output.trim())
+        .map_err(|_| ProbeFailure::Malformed)?;
+    let mut models = BTreeMap::new();
+    for native in payload.data {
+        if !native.enabled {
+            continue;
+        }
+        let model = format!("{}/{}", native.provider_id, native.id);
+        if !valid_opencode_model(&model) {
+            continue;
+        }
+        let cost = native.cost.first().ok_or(ProbeFailure::Malformed)?;
+        let mut entry = option(&model, &model);
+        // The Go namespace is a paid subscription; its native catalog reports zero
+        // cost, so only the free `opencode` namespace may be priced as free.
+        let free = model
+            .split_once('/')
+            .is_some_and(|(namespace, _)| namespace == "opencode")
+            && cost.input == 0.0
+            && cost.output == 0.0;
+        entry.metadata.insert(
+            "pricing".to_owned(),
+            json!(if free { "free" } else { "paid" }),
+        );
+        models.insert(model, entry);
+    }
+    Ok(models.into_values().collect())
 }
 
 fn opencode_models(output: &str) -> Result<Vec<ProviderControlOption>, ProbeFailure> {
@@ -707,6 +763,34 @@ pub(crate) fn catalog_revision(
     }
     let encoded = serde_json::to_vec(&authority)?;
     Ok(format!("provider-catalog-v1-{:x}", Sha256::digest(encoded)))
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenCodeModelsV2 {
+    #[serde(default)]
+    data: Vec<OpenCodeModelV2>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenCodeModelV2 {
+    #[serde(default)]
+    id: String,
+    #[serde(default, rename = "providerID")]
+    provider_id: String,
+    #[serde(default = "enabled_by_default")]
+    enabled: bool,
+    #[serde(default)]
+    cost: Vec<OpenCodeCostV2>,
+}
+
+const fn enabled_by_default() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenCodeCostV2 {
+    input: f64,
+    output: f64,
 }
 
 #[derive(Debug, Deserialize)]

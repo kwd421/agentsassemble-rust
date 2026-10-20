@@ -15,7 +15,7 @@ type Error = ProviderUpdateError;
 pub(crate) struct ProviderUpdateSpec {
     pub(crate) bundled_codex: bool,
     pub(crate) source: ReleaseSource,
-    pub(crate) version_prefix: &'static str,
+    pub(crate) version_prefixes: &'static [&'static str],
     pub(crate) version_suffix: &'static str,
     pub(crate) updater: UpdateMethod,
 }
@@ -37,7 +37,7 @@ pub(crate) const CODEX: ProviderUpdateSpec = ProviderUpdateSpec {
         field: "version",
         tag_prefix: "",
     },
-    version_prefix: "codex-cli ",
+    version_prefixes: &["codex-cli "],
     version_suffix: "",
     updater: UpdateMethod::GlobalNpm {
         package: "@openai/codex",
@@ -52,7 +52,7 @@ pub(crate) const CLAUDE: ProviderUpdateSpec = ProviderUpdateSpec {
         field: "version",
         tag_prefix: "",
     },
-    version_prefix: "",
+    version_prefixes: &[""],
     version_suffix: " (Claude Code)",
     updater: UpdateMethod::Native {
         arguments: &["update"],
@@ -66,7 +66,7 @@ pub(crate) const OPENCODE: ProviderUpdateSpec = ProviderUpdateSpec {
         field: "tag_name",
         tag_prefix: "v",
     },
-    version_prefix: "",
+    version_prefixes: &["opencode v", ""],
     version_suffix: "",
     updater: UpdateMethod::Native {
         arguments: &["upgrade"],
@@ -76,7 +76,7 @@ pub(crate) const OPENCODE: ProviderUpdateSpec = ProviderUpdateSpec {
 pub(crate) const CURSOR: ProviderUpdateSpec = ProviderUpdateSpec {
     bundled_codex: false,
     source: ReleaseSource::Cursor,
-    version_prefix: "",
+    version_prefixes: &[""],
     version_suffix: "",
     updater: UpdateMethod::Native {
         arguments: &["update"],
@@ -86,7 +86,7 @@ pub(crate) const CURSOR: ProviderUpdateSpec = ProviderUpdateSpec {
 pub(crate) const GROK: ProviderUpdateSpec = ProviderUpdateSpec {
     bundled_codex: false,
     source: ReleaseSource::Grok,
-    version_prefix: "",
+    version_prefixes: &[""],
     version_suffix: "",
     updater: UpdateMethod::Native {
         arguments: &["update", "--version"],
@@ -124,9 +124,10 @@ impl ProviderUpdateSpec {
             let text = probe(executable, &["--version"], cancellation, &[])
                 .await
                 .map_err(Error::from)?;
-            let current = text
-                .trim()
-                .strip_prefix(self.version_prefix)
+            let current = self
+                .version_prefixes
+                .iter()
+                .find_map(|prefix| text.trim().strip_prefix(prefix))
                 .and_then(|s| s.strip_suffix(self.version_suffix))
                 .ok_or(Error::InvalidResponse)?
                 .to_owned();
