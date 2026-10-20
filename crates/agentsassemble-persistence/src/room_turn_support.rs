@@ -511,6 +511,16 @@ pub(super) fn public_error_code(value: &str) -> &'static str {
         "room_observation_unconfirmed" => "room_observation_unconfirmed",
         "room_portal_publication_missing" => "room_portal_publication_missing",
         "provider_protocol_invalid" | "provider_protocol_mismatch" => "provider_protocol_invalid",
+        // Fixed API-provider outcomes the room can explain in its own words.
+        "provider_api_busy" => "provider_api_busy",
+        "provider_api_unavailable" => "provider_api_unavailable",
+        "provider_rate_limited" => "provider_rate_limited",
+        "provider_context_limit" => "provider_context_limit",
+        "provider_credential_rejected" => "provider_credential_rejected",
+        "provider_output_truncated" => "provider_output_truncated",
+        "provider_room_action_missing" => "provider_room_action_missing",
+        "provider_room_read_missing" => "provider_room_read_missing",
+        "provider_tool_round_limit" => "provider_tool_round_limit",
         _ => "provider_turn_failed",
     }
 }
@@ -523,5 +533,32 @@ pub(crate) fn rejected(code: &'static str, message: impl Into<String>) -> Persis
     PersistenceError::CommandRejected {
         code: code.into(),
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+mod public_error_code_tests {
+    use super::public_error_code;
+
+    #[test]
+    fn explainable_api_outcomes_keep_their_code_and_others_collapse() {
+        for code in [
+            "provider_api_busy",
+            "provider_api_unavailable",
+            "provider_rate_limited",
+            "provider_context_limit",
+            "provider_credential_rejected",
+            "provider_output_truncated",
+            "provider_room_action_missing",
+            "provider_room_read_missing",
+            "provider_tool_round_limit",
+        ] {
+            assert_eq!(public_error_code(code), code);
+        }
+        assert_eq!(
+            public_error_code("provider_session_mismatch"),
+            "provider_turn_failed"
+        );
+        assert_eq!(public_error_code("anything else"), "provider_turn_failed");
     }
 }

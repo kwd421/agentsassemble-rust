@@ -24,6 +24,8 @@ pub(crate) enum OpenAiStreamError {
     CredentialRejected,
     #[error("the provider rate-limited the request")]
     RateLimited,
+    #[error("the provider is temporarily overloaded")]
+    Overloaded,
     #[error("the provider returned an unsuccessful HTTP status")]
     Http,
     #[error("the provider request did not complete")]
@@ -169,6 +171,10 @@ pub(crate) async fn send_chat_completion(
             return Err(OpenAiStreamError::CredentialRejected);
         }
         StatusCode::TOO_MANY_REQUESTS => return Err(OpenAiStreamError::RateLimited),
+        // 503 (and 529 used by some gateways) is the service shedding load, not a bad request.
+        status if status == StatusCode::SERVICE_UNAVAILABLE || status.as_u16() == 529 => {
+            return Err(OpenAiStreamError::Overloaded);
+        }
         _ => return Err(OpenAiStreamError::Http),
     }
     let content_type = response
@@ -433,7 +439,7 @@ mod tests {
     use futures_util::stream;
     use serde_json::json;
 
-    use super::{OpenAiStreamError, decode_events};
+    use super::{OpenAiStreamError, decode_events, send_chat_completion};
 
     fn event(value: &serde_json::Value) -> String {
         format!("data: {value}\n\n")
@@ -632,5 +638,48 @@ mod tests {
             .err()
             .unwrap_or_else(|| panic!("truncated stream must fail"));
         assert_eq!(error, OpenAiStreamError::InvalidResponse);
+    }
+
+    // Google answers 503 when a model is shedding load; that is "busy", not a failed request.
+    #[tokio::test]
+    async fn overloaded_status_is_distinct_from_other_http_failures() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for (status, expected) in [
+            ("503 Service Unavailable", "Overloaded"),
+            ("529 Site Overloaded", "Overloaded"),
+            ("500 Internal Server Error", "Http"),
+        ] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .unwrap_or_else(|error| panic!("bind: {error}"));
+            let address = listener
+                .local_addr()
+                .unwrap_or_else(|error| panic!("address: {error}"));
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = listener
+                    .accept()
+                    .await
+                    .unwrap_or_else(|error| panic!("accept: {error}"));
+                let mut buffer = [0_u8; 4096];
+                let _ = socket.read(&mut buffer).await;
+                let reply =
+                    format!("HTTP/1.1 {status}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+            let request = reqwest::Client::new().post(format!("http://{address}/chat/completions"));
+            let error = send_chat_completion(request, b"{}".to_vec())
+                .await
+                .err()
+                .unwrap_or_else(|| panic!("{status} must fail"));
+            let actual = match error {
+                OpenAiStreamError::Overloaded => "Overloaded",
+                OpenAiStreamError::Http => "Http",
+                _ => "other",
+            };
+            assert_eq!(actual, expected, "{status}");
+            server
+                .await
+                .unwrap_or_else(|error| panic!("server: {error}"));
+        }
     }
 }

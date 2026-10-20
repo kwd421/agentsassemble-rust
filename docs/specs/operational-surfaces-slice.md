@@ -1400,6 +1400,18 @@ without tools omit it. The add-agent credential section
 asks for API 키, 프로젝트 ID and 지역 (default `global`). Credential values never enter
 errors, events or logs.
 
+API-provider failure codes (2026-10-20, owner real-app check): an HTTP 503 or 529 from
+an OpenAI-compatible provider is `provider_api_busy` (the service is shedding load),
+distinct from other unsuccessful statuses (`provider_api_unavailable`). A failed room
+turn keeps these fixed codes visible to the room instead of collapsing them into
+`provider_turn_failed`: `provider_api_busy`, `provider_api_unavailable`,
+`provider_rate_limited`, `provider_context_limit`, `provider_credential_rejected`,
+`provider_output_truncated`, `provider_room_action_missing`,
+`provider_room_read_missing` and `provider_tool_round_limit`. The agent details show
+each as one Korean line with no English provider text. Room rules tell an agent how
+mentions of it look (`<@ID>`) and that participant IDs are for addressing only, so it
+does not state its own ID in messages.
+
 Freebuff and app-managed Antigravity remain excluded by user scope. External
 Antigravity's Room Connector admission is independent of this account matrix.
 Whole-frontend verification found four failures from old fixed test-surface digests

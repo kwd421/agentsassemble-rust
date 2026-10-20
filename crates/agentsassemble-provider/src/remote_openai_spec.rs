@@ -161,6 +161,10 @@ impl RemoteOpenAiSpec {
             OpenAiStreamError::RateLimited => {
                 provider_error("provider_rate_limited", self.errors.rate_limited)
             }
+            OpenAiStreamError::Overloaded => provider_error(
+                "provider_api_busy",
+                "The AI service is temporarily overloaded.",
+            ),
             OpenAiStreamError::ResponseTooLarge | OpenAiStreamError::InvalidResponse => {
                 provider_error("provider_protocol_invalid", self.errors.invalid_response)
             }

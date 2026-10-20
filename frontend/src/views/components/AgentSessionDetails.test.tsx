@@ -152,6 +152,17 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(container.textContent).not.toContain("The OpenCode turn timed out.");
   });
 
+  it.each([
+    ["provider_api_busy", "The AI service is temporarily overloaded.", "AI 서비스가 지금 붐벼요. 잠시 후 다시 시도해 주세요."],
+    ["provider_room_action_missing", "Agent Platform ended without the required room action.", "AI가 방에 답을 남기지 않고 끝냈어요. 다시 요청해 주세요."],
+  ])("renders %s as one Korean line without English", (code, raw, korean) => {
+    const session = agentSessionFixture({ provider_kind: "agent_platform_api", runtime_status: "error",
+      last_error_code: code, last_error: raw, recovery_required: true });
+    const { container } = render(<AgentSessionDetails session={session} />);
+    expect(screen.getByText(`오류 원인 · ${korean}`)).toBeTruthy();
+    expect(container.textContent).not.toContain(raw);
+  });
+
   it.each([undefined, false, true])("requires advertised interrupt support (%s)", async (support) => {
     const onControl = vi.fn().mockResolvedValue(undefined);
     const session = agentSessionFixture({ runtime_status: "busy", enabled: true });

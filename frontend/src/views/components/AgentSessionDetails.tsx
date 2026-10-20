@@ -100,6 +100,27 @@ function sessionErrorInfo(session: RoomAgentSession): { summary: string; detail:
   if (session.last_error_code === "provider_rate_limited") {
     return { summary: "AI 서비스에 요청이 너무 많아요. 잠시 후 다시 시도해 주세요.", detail: "" };
   }
+  if (session.last_error_code === "provider_api_busy") {
+    return { summary: "AI 서비스가 지금 붐벼요. 잠시 후 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_api_unavailable") {
+    return { summary: "AI 서비스에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_context_limit") {
+    return { summary: "AI에게 보낼 대화 내용이 너무 커요. 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_credential_rejected") {
+    return { summary: "AI 서비스가 API 키를 거절했어요. 키를 다시 확인해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_room_action_missing") {
+    return { summary: "AI가 방에 답을 남기지 않고 끝냈어요. 다시 요청해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_room_read_missing") {
+    return { summary: "AI가 방 내용을 읽지 않고 끝냈어요. 다시 요청해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "provider_tool_round_limit") {
+    return { summary: "AI가 도구를 너무 여러 번 써서 멈췄어요. 다시 요청해 주세요.", detail: "" };
+  }
   if (session.last_error_code === "provider_turn_timeout") {
     return { summary: "AI 응답 시간이 초과됐어요. 다시 시도해 주세요.", detail: "" };
   }
