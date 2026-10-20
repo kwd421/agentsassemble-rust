@@ -801,15 +801,22 @@ fn launch_grok<'a>(
 
 fn launch_deepseek<'a>(
     factory: &'a ProductionDriverFactory,
-    _session: &'a DurableAgentSession,
-    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
+    session: &'a DurableAgentSession,
+    #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
-        factory
+        let credential = factory
             .credentials
             .secret(ProviderCredentialId::DeepSeek)
             .await
             .map_err(|error| DriverLaunchError::safe(deepseek::credential_error(error)))?;
+        if session.public.execution_harness == crate::opencode_harness::NAME {
+            #[cfg(unix)]
+            return crate::opencode_harness::launch(factory, session, runtime_lease, &credential)
+                .await;
+            #[cfg(not(unix))]
+            return crate::opencode_harness::launch(factory, session, &credential).await;
+        }
         let driver = deepseek::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
@@ -833,15 +840,22 @@ fn launch_cerebras<'a>(
 
 fn launch_gemini<'a>(
     factory: &'a ProductionDriverFactory,
-    _session: &'a DurableAgentSession,
-    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
+    session: &'a DurableAgentSession,
+    #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
-        factory
+        let credential = factory
             .credentials
             .secret(ProviderCredentialId::Gemini)
             .await
             .map_err(|error| DriverLaunchError::safe(gemini::credential_error(error)))?;
+        if session.public.execution_harness == crate::opencode_harness::NAME {
+            #[cfg(unix)]
+            return crate::opencode_harness::launch(factory, session, runtime_lease, &credential)
+                .await;
+            #[cfg(not(unix))]
+            return crate::opencode_harness::launch(factory, session, &credential).await;
+        }
         let driver = gemini::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })

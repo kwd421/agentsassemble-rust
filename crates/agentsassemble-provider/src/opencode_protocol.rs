@@ -2,7 +2,8 @@ use agentsassemble_domain::DurableAgentSession;
 use serde_json::{Map, Value};
 
 use crate::{
-    loopback_http::LoopbackHttpError, opencode_sse::OpenCodeEventError, runtime::DriverError,
+    loopback_http::LoopbackHttpError, opencode_harness, opencode_sse::OpenCodeEventError,
+    runtime::DriverError,
 };
 
 pub(crate) const fn turn_in_progress() -> DriverError {
@@ -92,36 +93,53 @@ fn exact_alias<const N: usize>(values: [Option<&Value>; N]) -> Result<Option<&st
 }
 
 pub(crate) fn validate_profile(session: &DurableAgentSession) -> Result<(), DriverError> {
-    let _ = provider_id(&session.public.model)?;
-    let _ = model_id(&session.public.model)?;
-    if !matches!(session.public.variant.as_str(), "" | "high" | "max")
+    let harness = is_harness(session);
+    let model = session_model(session)?;
+    let _ = model_parts(&model, harness)?;
+    let controls_are_valid = if harness {
+        session.public.variant.is_empty()
+            && session.public.reasoning_effort.is_empty()
+            && session.public.service_tier.is_empty()
+    } else {
+        matches!(session.public.variant.as_str(), "" | "high" | "max")
+            && session.public.reasoning_effort.is_empty()
+            && session.public.service_tier.is_empty()
+    };
+    if !controls_are_valid
         || !matches!(
             session.public.permission_mode.as_str(),
             "meeting_read_only" | "workspace_write" | "full_access"
         )
-        || !session.public.reasoning_effort.is_empty()
-        || !session.public.service_tier.is_empty()
     {
         return Err(profile_error());
     }
     Ok(())
 }
 
-pub(crate) fn provider_id(model: &str) -> Result<&str, DriverError> {
-    let (provider, _) = split_model(model)?;
-    Ok(provider)
+pub(crate) fn is_harness(session: &DurableAgentSession) -> bool {
+    session.public.execution_harness == opencode_harness::NAME
 }
 
-pub(crate) fn model_id(model: &str) -> Result<&str, DriverError> {
-    let (_, model) = split_model(model)?;
-    Ok(model)
+/// The OpenCode model id for this session. API-harness sessions use the mapped
+/// provider id; every real OpenCode session keeps its stored model.
+pub(crate) fn session_model(session: &DurableAgentSession) -> Result<String, DriverError> {
+    if !is_harness(session) {
+        return Ok(session.public.model.clone());
+    }
+    opencode_harness::driver_model(&session.public.provider_kind, &session.public.model)
+        .ok_or_else(profile_error)
 }
 
-fn split_model(model: &str) -> Result<(&str, &str), DriverError> {
+pub(crate) fn model_parts(model: &str, harness: bool) -> Result<(&str, &str), DriverError> {
     let Some((provider, model_id)) = model.split_once('/') else {
         return Err(profile_error());
     };
-    if !matches!(provider, "opencode" | "opencode-go")
+    let provider_is_allowed = if harness {
+        matches!(provider, "google" | "deepseek")
+    } else {
+        matches!(provider, "opencode" | "opencode-go")
+    };
+    if !provider_is_allowed
         || model_id.is_empty()
         || model.len() > 128
         || !model
@@ -346,7 +364,7 @@ pub(crate) const fn protocol_error() -> DriverError {
 mod tests {
     use serde_json::json;
 
-    use super::{assistant_message, clean_session_id, split_model};
+    use super::{assistant_message, clean_session_id, model_parts};
 
     #[test]
     fn provider_messages_are_korean_bounded_and_redacted() {
@@ -395,11 +413,17 @@ mod tests {
     #[test]
     fn model_and_session_ids_are_strict_path_components() {
         assert_eq!(
-            split_model("opencode/hy3-free"),
+            model_parts("opencode/hy3-free", false),
             Ok(("opencode", "hy3-free"))
         );
-        assert!(split_model("other/hy3-free").is_err());
-        assert!(split_model("opencode/hy3\nfree").is_err());
+        assert!(model_parts("other/hy3-free", false).is_err());
+        assert!(model_parts("opencode/hy3\nfree", false).is_err());
+        assert_eq!(
+            model_parts("google/gemini-3.1-flash-lite", true),
+            Ok(("google", "gemini-3.1-flash-lite"))
+        );
+        assert!(model_parts("google/gemini-3.1-flash-lite", false).is_err());
+        assert!(model_parts("opencode/hy3-free", true).is_err());
         assert_eq!(clean_session_id("ses_123"), Some("ses_123".to_owned()));
         assert_eq!(clean_session_id("../ses"), None);
     }

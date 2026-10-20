@@ -23,10 +23,10 @@ use crate::{
     loopback_http::{JsonResponse, LoopbackHttp, VerifiedLoopbackConnection},
     opencode_protocol::{
         assistant_message, clean_session_id, config_error, executable_error, http_driver_error,
-        model_id, model_mismatch, profile_error, protocol_error, provider_id,
+        is_harness, model_mismatch, model_parts, profile_error, protocol_error,
         provider_request_error, provider_response_error, runtime_exited, session_mismatch,
-        session_missing, session_path, session_unconfirmed, startup_error, turn_empty,
-        turn_in_progress, turn_mismatch, turn_transport_error, validate_profile,
+        session_missing, session_model, session_path, session_unconfirmed, startup_error,
+        turn_empty, turn_in_progress, turn_mismatch, turn_transport_error, validate_profile,
     },
     opencode_sse::OpenCodeTurnEvents,
     opencode_startup::{reserve_loopback_port, server_password},
@@ -64,6 +64,7 @@ pub(crate) struct OpenCodeDriver {
     http: LoopbackHttp,
     room_portal: RoomPortal,
     config_root: tempfile::TempDir,
+    _private_workspace: Option<PrivateWorkspace>,
     session_instructions: Option<String>,
     attached_session_id: Option<String>,
     attached_reused: bool,
@@ -81,24 +82,51 @@ impl OpenCodeDriver {
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, runtime_lease, guardian).await
+        Self::spawn_inner(session, runtime_lease, guardian, Vec::new()).await
+    }
+
+    /// Starts OpenCode for an API provider, adding one credential pair to the
+    /// isolated child environment.
+    #[cfg(unix)]
+    pub(crate) async fn spawn_harness(
+        session: &DurableAgentSession,
+        runtime_lease: &HeldRuntimeLease,
+        guardian: &GuardianLaunch,
+        environment: Vec<(String, String)>,
+    ) -> Result<Self, DriverLaunchError> {
+        Self::spawn_inner(session, runtime_lease, guardian, environment).await
     }
 
     #[cfg(not(unix))]
     pub(crate) async fn spawn(session: &DurableAgentSession) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session).await
+        Self::spawn_inner(session, Vec::new()).await
+    }
+
+    #[cfg(not(unix))]
+    pub(crate) async fn spawn_harness(
+        session: &DurableAgentSession,
+        environment: Vec<(String, String)>,
+    ) -> Result<Self, DriverLaunchError> {
+        Self::spawn_inner(session, environment).await
     }
 
     async fn spawn_inner(
         session: &DurableAgentSession,
         #[cfg(unix)] runtime_lease: &HeldRuntimeLease,
         #[cfg(unix)] guardian: &GuardianLaunch,
+        harness_environment: Vec<(String, String)>,
     ) -> Result<Self, DriverLaunchError> {
         validate_profile(session)?;
-        let workspace = Path::new(&session.workspace);
+        let private_workspace = private_workspace(session)?;
+        let workspace_path = private_workspace.as_ref().map_or_else(
+            || std::path::PathBuf::from(&session.workspace),
+            |root| root.path.clone(),
+        );
+        let workspace = workspace_path.as_path();
         let config_root = isolated_config_root()?;
         let server_password = server_password();
-        let environment = isolated_environment(config_root.path(), &server_password)?;
+        let mut environment = isolated_environment(config_root.path(), &server_password)?;
+        environment.extend(harness_environment);
         let port = reserve_loopback_port().await?;
         let endpoint = format!("http://127.0.0.1:{port}/");
         let ready_line = format!("server listening on http://127.0.0.1:{port}");
@@ -159,6 +187,7 @@ impl OpenCodeDriver {
             http,
             room_portal,
             config_root,
+            _private_workspace: private_workspace,
             session_instructions: None,
             attached_session_id: None,
             attached_reused: false,
@@ -308,9 +337,11 @@ impl OpenCodeDriver {
             "full_access" => "allow",
             _ => "ask",
         };
+        let model = session_model(session)?;
+        let (provider, model_id) = model_parts(&model, is_harness(session))?;
         let mut model = json!({
-            "id": model_id(&session.public.model)?,
-            "providerID": provider_id(&session.public.model)?,
+            "id": model_id,
+            "providerID": provider,
         });
         if !session.public.variant.is_empty() {
             model["variant"] = json!(session.public.variant);
@@ -426,10 +457,12 @@ impl OpenCodeDriver {
             .await
             .map_err(http_driver_error)?;
         let path = format!("{}/message", session_path(&attached)?);
+        let model = session_model(session)?;
+        let (provider, model_id) = model_parts(&model, is_harness(session))?;
         let mut payload = json!({
             "model": {
-                "providerID": provider_id(&session.public.model)?,
-                "modelID": model_id(&session.public.model)?,
+                "providerID": provider,
+                "modelID": model_id,
             },
             "agent": "build",
             "parts": [{"type": "text", "text": request.input}],
@@ -486,8 +519,8 @@ impl OpenCodeDriver {
         if !events.assistant_message.is_empty() && message.id != events.assistant_message {
             return Err(turn_mismatch());
         }
-        if message.observed_model != session.public.model
-            || events.observed_model != session.public.model
+        if message.observed_model != session_model(session)?
+            || events.observed_model != session_model(session)?
             || message.observed_model != events.observed_model
         {
             return Err(model_mismatch());
@@ -578,7 +611,7 @@ impl OpenCodeDriver {
 
 // OpenCode 2 refuses the old `--pure` flag and upper-case log levels; purity is
 // kept by OPENCODE_PURE and the isolated config, and logs stay in OpenCode's file.
-fn server_arguments(port: u16) -> Vec<String> {
+pub(crate) fn server_arguments(port: u16) -> Vec<String> {
     vec![
         "serve".to_owned(),
         "--hostname".to_owned(),
@@ -606,6 +639,41 @@ fn isolated_config_root() -> Result<tempfile::TempDir, DriverLaunchError> {
         }
     }
     Ok(root)
+}
+
+struct PrivateWorkspace {
+    path: std::path::PathBuf,
+    // The driver owns this directory; dropping it removes the folder.
+    _root: tempfile::TempDir,
+}
+
+fn private_workspace(
+    session: &DurableAgentSession,
+) -> Result<Option<PrivateWorkspace>, DriverLaunchError> {
+    if !session.workspace.is_empty() {
+        return Ok(None);
+    }
+    // Only the OpenCode harness may run without an owner-selected workspace.
+    if session.public.execution_harness != crate::opencode_harness::NAME {
+        return Err(DriverLaunchError::safe(profile_error()));
+    }
+    let root = tempfile::Builder::new()
+        .prefix("agentsassemble-opencode-workspace-")
+        .tempdir()
+        .map_err(|_| DriverLaunchError::safe(config_error()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+            .map_err(|_| DriverLaunchError::safe(config_error()))?;
+    }
+    let path =
+        std::fs::canonicalize(root.path()).map_err(|_| DriverLaunchError::safe(config_error()))?;
+    if !path.is_dir() {
+        return Err(DriverLaunchError::safe(config_error()));
+    }
+    Ok(Some(PrivateWorkspace { path, _root: root }))
 }
 
 fn isolated_environment(

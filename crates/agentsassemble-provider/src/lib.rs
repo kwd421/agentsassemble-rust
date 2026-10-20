@@ -54,6 +54,7 @@ mod managed_bridge;
 mod ollama;
 mod openai_stream;
 mod opencode;
+mod opencode_harness;
 #[cfg(not(unix))]
 mod opencode_process;
 mod opencode_protocol;

@@ -3,7 +3,7 @@ use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession
 use crate::{
     filesystem::{canonical_workspace, runtime_executable_identity},
     profile::runtime_profile_key_with_output,
-    registration::provider_registration_by_profile,
+    registration::{provider_registration_by_id, provider_registration_by_profile},
     runtime::DriverError,
 };
 
@@ -74,16 +74,24 @@ pub(crate) async fn revalidate_runtime_authority(
             "The provider workspace authority is inconsistent.",
         ));
     }
-    if registration.executable_required {
-        let executable =
-            runtime_executable_identity(&session.public.provider_kind, session.executable.clone())
-                .await
-                .map_err(|_| {
-                    DriverError::new(
-                        "executable_authority_changed",
-                        "The provider executable authority could not be revalidated.",
-                    )
-                })?;
+    let executable_registration =
+        if session.public.execution_harness == crate::opencode_harness::NAME {
+            provider_registration_by_id("opencode").unwrap_or(registration)
+        } else {
+            registration
+        };
+    if executable_registration.executable_required {
+        let executable = runtime_executable_identity(
+            &executable_registration.provider_kind,
+            session.executable.clone(),
+        )
+        .await
+        .map_err(|_| {
+            DriverError::new(
+                "executable_authority_changed",
+                "The provider executable authority could not be revalidated.",
+            )
+        })?;
         if executable != session.executable_identity {
             return Err(DriverError::new(
                 "executable_authority_changed",

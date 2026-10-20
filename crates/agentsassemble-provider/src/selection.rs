@@ -1,17 +1,17 @@
-use std::path::Path;
-
 use agentsassemble_domain::{AgentSessionDraft, ProviderCatalog};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::filesystem::{FilesystemFailure, canonical_workspace, runtime_executable_identity};
+use crate::filesystem::canonical_workspace;
 use crate::registration::provider_registration_by_id;
 use crate::selection_input::SelectionInput;
 
 #[path = "selection_controls.rs"]
 mod controls;
+#[path = "selection_harness.rs"]
+mod harness;
 use controls::{selected_u32, selected_value, validate_model_relation, validate_runtime_variant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,44 +99,47 @@ impl ProviderSelection {
                     && registration.configuration_authority.custom_model() == provider.custom_model
             })
             .ok_or_else(|| unsupported(&provider.id))?;
-        let executable_identity = if registration.executable_required {
-            if !Path::new(&provider.executable).is_absolute() {
-                return Err(ProviderSelectionError::new(
-                    "catalog_inconsistent",
-                    "Provider executable authority is not absolute.",
-                ));
-            }
-            let identity =
-                runtime_executable_identity(&provider.provider_kind, provider.executable.clone())
-                    .await
-                    .map_err(executable_validation_error)?;
-            if identity != provider.executable_identity {
-                return Err(ProviderSelectionError::new(
-                    "catalog_changed",
-                    "Provider executable identity changed; refresh discovery.",
-                ));
-            }
-            identity
-        } else if provider.executable.is_empty() && provider.executable_identity.is_empty() {
-            String::new()
-        } else {
-            return Err(ProviderSelectionError::new(
-                "catalog_inconsistent",
-                "Provider executable authority is inconsistent.",
-            ));
-        };
+        let reserved = harness::resolve(
+            provider,
+            registration.executable_required,
+            input.execution_harness.as_deref(),
+            catalog,
+        )
+        .await?;
+        let execution_harness = reserved.name;
+        let executable = reserved.executable;
+        let executable_identity = reserved.executable_identity;
         let model = if registration.configuration_authority.custom_model() {
             required_custom_model(input.model)?
         } else {
             selected_value(provider, "model", input.model)?
         };
-        let reasoning_effort =
-            selected_value(provider, "reasoning_effort", input.reasoning_effort)?;
-        validate_model_relation(provider, &model, "reasoning_efforts", &reasoning_effort)?;
-        let service_tier = selected_value(provider, "service_tier", input.service_tier)?;
-        validate_model_relation(provider, &model, "service_tiers", &service_tier)?;
-        validate_runtime_variant(provider, &model, &reasoning_effort, &service_tier)?;
-        let variant = selected_value(provider, "variant", input.variant)?;
+        let opencode_harness = execution_harness == crate::opencode_harness::NAME;
+        let reasoning_effort = selected_value(
+            provider,
+            "reasoning_effort",
+            harness_control(input.reasoning_effort, opencode_harness),
+        )?;
+        let service_tier = selected_value(
+            provider,
+            "service_tier",
+            harness_control(input.service_tier, opencode_harness),
+        )?;
+        let variant = selected_value(
+            provider,
+            "variant",
+            harness_control(input.variant, opencode_harness),
+        )?;
+        let (reasoning_effort, service_tier, variant) = if opencode_harness {
+            // OpenCode cannot carry these provider controls; they are stored empty
+            // after the catalog still classifies the requested value.
+            (String::new(), String::new(), String::new())
+        } else {
+            validate_model_relation(provider, &model, "reasoning_efforts", &reasoning_effort)?;
+            validate_model_relation(provider, &model, "service_tiers", &service_tier)?;
+            validate_runtime_variant(provider, &model, &reasoning_effort, &service_tier)?;
+            (reasoning_effort, service_tier, variant)
+        };
         let permission_mode = selected_value(provider, "permission_mode", input.permission_mode)?;
         if permission_mode == "full_access"
             && payload.get("full_access_acknowledged") != Some(&Value::Bool(true))
@@ -147,15 +150,6 @@ impl ProviderSelection {
             ));
         }
         controls::validate_model_permission(provider, &model, &permission_mode)?;
-        let execution_harness = input
-            .execution_harness
-            .unwrap_or_else(|| "builtin".to_owned());
-        if execution_harness != "builtin" {
-            return Err(ProviderSelectionError::new(
-                "unsupported_control",
-                "Alternate execution harnesses are not available in this runtime slice.",
-            ));
-        }
         let max_output_tokens =
             selected_u32(provider, "max_output_tokens", input.max_output_tokens)?;
         if input
@@ -203,8 +197,7 @@ impl ProviderSelection {
             }
         };
         let workspace_required = registration.workspace_required
-            || matches!(permission_mode.as_str(), "workspace_write" | "full_access")
-            || execution_harness != "builtin";
+            || matches!(permission_mode.as_str(), "workspace_write" | "full_access");
         let (workspace, workspace_identity) = if workspace_required {
             canonical_workspace(input.workspace)
                 .await
@@ -229,7 +222,7 @@ impl ProviderSelection {
             provider_kind: provider.provider_kind.clone(),
             runtime_kind: provider.runtime_kind.clone(),
             connection_kind: registration.connection_kind.to_owned(),
-            executable: provider.executable.clone(),
+            executable,
             executable_identity,
             workspace,
             workspace_identity,
@@ -312,6 +305,14 @@ impl From<ProviderSelection> for AgentSessionDraft {
     }
 }
 
+fn harness_control(value: Option<String>, opencode_harness: bool) -> Option<String> {
+    if opencode_harness {
+        value.filter(|value| !value.is_empty())
+    } else {
+        value
+    }
+}
+
 fn required_custom_model(requested: Option<String>) -> Result<String, ProviderSelectionError> {
     requested.filter(|model| !model.is_empty()).ok_or_else(|| {
         ProviderSelectionError::new("unsupported_model", "Custom API model ID is required.")
@@ -337,14 +338,6 @@ fn invalid_workspace() -> ProviderSelectionError {
         "invalid_workspace",
         "An existing workspace directory is required.",
     )
-}
-
-fn executable_validation_error(failure: FilesystemFailure) -> ProviderSelectionError {
-    let message = match failure {
-        FilesystemFailure::Timeout => "Provider executable validation timed out.",
-        FilesystemFailure::Failed => "Provider executable authority could not be reopened.",
-    };
-    ProviderSelectionError::new("catalog_inconsistent", message)
 }
 
 #[cfg(test)]
