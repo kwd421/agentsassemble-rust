@@ -183,7 +183,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             <label className="flex items-start gap-2 text-[14px] leading-5 text-text-secondary">
               <input
                 type="checkbox"
-                className="mt-1"
+                className="dc-checkbox mt-1"
                 checked={savedRecoveryCode}
                 onChange={(event) => setSavedRecoveryCode(event.currentTarget.checked)}
               />

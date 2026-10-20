@@ -10,7 +10,7 @@ export default function SavedFriendInvitePicker({ onSelect, directory }: { onSel
   return <section className="dc-invite-options" style={{ gridTemplateColumns: "1fr" }}>
     {people.length > 0 && <label>
       <span>받는 사람</span>
-      <select style={{ minHeight: 44, maxWidth: "100%", appearance: "none" }} disabled={directory.busy || !directory.loaded}
+      <select className="dc-select" style={{ minHeight: 44, maxWidth: "100%" }} disabled={directory.busy || !directory.loaded}
         value={selectedId} onChange={(event) => {
           const id = event.target.value;
           const friend = people.find((person) => person.friend_id === id);

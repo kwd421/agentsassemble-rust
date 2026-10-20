@@ -299,7 +299,8 @@ export default function RoomInviteModal({
                 <label>
                   <span>초대 가능 인원</span>
                   <select
-                    style={{ minHeight: 44, appearance: "none" }}
+                    className="dc-select"
+                    style={{ minHeight: 44 }}
                     value={humanMaxUses}
                     onChange={(event) => setHumanMaxUses(Number(event.currentTarget.value))}
                   >
@@ -311,7 +312,8 @@ export default function RoomInviteModal({
                 <label>
                   <span>링크 유효시간</span>
                   <select
-                    style={{ minHeight: 44, appearance: "none" }}
+                    className="dc-select"
+                    style={{ minHeight: 44 }}
                     value={humanTtlSeconds}
                     onChange={(event) => setHumanTtlSeconds(Number(event.currentTarget.value))}
                   >

@@ -85,11 +85,11 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
     <h4>서버 백업</h4>
     {!isDesktopWebview()?<p className={hint}>서버 컴퓨터의 앱에서 저장할 수 있어요.</p>:<>
       <p className={hint}>방, 대화, 첨부파일, 멤버를 파일 하나로 저장해요.</p>
-      <label className={check}><input type="checkbox" checked={encrypted} disabled={disabled||busy||running} onChange={event=>setEncrypted(event.target.checked)}/>비밀번호로 잠그기</label>
+      <label className={check}><input type="checkbox" className="dc-checkbox" checked={encrypted} disabled={disabled||busy||running} onChange={event=>setEncrypted(event.target.checked)}/>비밀번호로 잠그기</label>
       {encrypted?<>
         <label className={label}>비밀번호<input className={field} type={visible?"text":"password"} autoComplete="new-password" value={passphrase} disabled={busy||running} onChange={event=>setPassphrase(event.target.value)}/></label>
         <label className={label}>비밀번호 확인<input className={field} type={visible?"text":"password"} autoComplete="new-password" value={confirm} disabled={busy||running} onChange={event=>setConfirm(event.target.value)}/></label>
-        <label className={check}><input type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/>비밀번호 표시</label>
+        <label className={check}><input type="checkbox" className="dc-checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/>비밀번호 표시</label>
         <p className={mismatch?"text-[12px] text-[#f38b8b]":hint}>{mismatch?"비밀번호가 서로 달라요.":"잊으면 백업을 열 수 없어요."}</p>
       </>:<p className="text-[12px] text-[#f0b232]">잠그지 않으면 이 파일을 가진 누구나 대화를 볼 수 있어요.</p>}
       <div className="flex items-center justify-end gap-2">

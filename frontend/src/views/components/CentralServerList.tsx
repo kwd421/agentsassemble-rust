@@ -185,7 +185,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         <fieldset disabled={busy || saving}>
           <legend>이 계정에서 사용할 서버 하나를 선택해 주세요.</legend>
           {conflict.servers.map(server => <label key={server.server_id} className="dc-server-row">
-            <input type="radio" name="keeper" checked={selected?.server_id === server.server_id} disabled={Boolean(conflict.resolution)} onChange={() => setKeeperId(server.server_id)} />
+            <input type="radio" className="dc-radio" name="keeper" checked={selected?.server_id === server.server_id} disabled={Boolean(conflict.resolution)} onChange={() => setKeeperId(server.server_id)} />
             <span className="dc-server-row-copy"><strong>{server.name}</strong><span>{server.online ? "연결 가능" : "연결 끊김"} · 마지막 접속: {server.last_seen_at === null ? "기록 없음" : new Date(server.last_seen_at * 1000).toLocaleString("ko-KR")}</span></span>
           </label>)}
         </fieldset>

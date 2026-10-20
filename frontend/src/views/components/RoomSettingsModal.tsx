@@ -272,6 +272,7 @@ export default function RoomSettingsModal({
                 <label>
                   <input
                     type="radio"
+                    className="dc-radio"
                     name="conversation-mode"
                     checked={conversationMode === "ordered"}
                     disabled={!routingSettingsReady}
@@ -285,6 +286,7 @@ export default function RoomSettingsModal({
                 <label>
                   <input
                     type="radio"
+                    className="dc-radio"
                     name="conversation-mode"
                     checked={conversationMode === "ambient"}
                     disabled={!routingSettingsReady}
@@ -298,6 +300,7 @@ export default function RoomSettingsModal({
                 <label>
                   <input
                     type="radio"
+                    className="dc-radio"
                     name="conversation-mode"
                     checked={conversationMode === "free_access"}
                     disabled={!routingSettingsReady}
@@ -316,6 +319,7 @@ export default function RoomSettingsModal({
                   <label>
                     <input
                       type="checkbox"
+                      className="dc-checkbox"
                       checked={orderedExcludePreviousSpeaker === true}
                       disabled={!routingSettingsReady}
                       onChange={(event) =>
@@ -336,6 +340,7 @@ export default function RoomSettingsModal({
                 <label>
                   <input
                     type="radio"
+                    className="dc-radio"
                     name="room-tool-mode"
                     checked={toolMode === "chat"}
                     disabled={!routingSettingsReady}
@@ -349,6 +354,7 @@ export default function RoomSettingsModal({
                 <label>
                   <input
                     type="radio"
+                    className="dc-radio"
                     name="room-tool-mode"
                     checked={toolMode === "tabletop"}
                     disabled={!routingSettingsReady}
@@ -457,6 +463,7 @@ export default function RoomSettingsModal({
                 <label key={value}>
                   <input
                     type="radio"
+                    className="dc-radio"
                     name="room-notifications"
                     checked={appearance.notifications === value}
                     disabled={!preferenceSettingsReady}
@@ -495,6 +502,7 @@ export default function RoomSettingsModal({
                   <label key={channel.id} className="dc-channel-settings-row">
                     <strong className="preserve-words">#{channel.label}</strong>
                     <select
+                      className="dc-select dc-select--compact"
                       value={setting.notifications}
                       disabled={!preferenceSettingsReady}
                       onChange={(event) => {
@@ -521,7 +529,7 @@ export default function RoomSettingsModal({
               <p className="dc-settings-field-label">파일 하나 최대 크기</p>
               <div className="dc-radio-stack dc-radio-stack--row">
                 {ROOM_FILE_LIMITS.map((limit) => <label key={limit}>
-                  <input type="radio" name="room-file-limit" checked={storageSettings.attachmentFileLimitBytes === limit}
+                  <input type="radio" className="dc-radio" name="room-file-limit" checked={storageSettings.attachmentFileLimitBytes === limit}
                     disabled={!routingSettingsReady} onChange={() => storageSettings.onChange({ attachmentFileLimitBytes: limit })} />
                   <span className="preserve-words"><strong>{limit / 1024 / 1024}MB</strong></span>
                 </label>)}
@@ -530,7 +538,7 @@ export default function RoomSettingsModal({
             <div className="dc-channel-settings-list">
               <label className="dc-channel-settings-row">
                 <strong>이 방의 저장 공간 한도</strong>
-                <select value={storageSettings.attachmentStorageLimitBytes ?? ""} disabled={!routingSettingsReady}
+                <select className="dc-select dc-select--compact" value={storageSettings.attachmentStorageLimitBytes ?? ""} disabled={!routingSettingsReady}
                   onChange={(event) => storageSettings.onChange({ attachmentStorageLimitBytes: event.target.value === "" ? null : Number(event.target.value) })}>
                   <option value="">제한 없음</option>
                   {ROOM_STORAGE_LIMITS.map((limit) => <option key={limit} value={limit}>
@@ -548,6 +556,7 @@ export default function RoomSettingsModal({
               <label>
                 <input
                   type="radio"
+                  className="dc-radio"
                   name="invite-scope"
                   checked={appearance.inviteScope === "room"}
                   onChange={() => {
@@ -561,6 +570,7 @@ export default function RoomSettingsModal({
               <label>
                 <input
                   type="radio"
+                  className="dc-radio"
                   name="invite-scope"
                   checked={appearance.inviteScope === "read_only"}
                   onChange={() => {

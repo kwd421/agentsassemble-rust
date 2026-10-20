@@ -57,7 +57,7 @@ function ActivitySwitch({
         disabled={disabled}
         onClick={onToggle}
       >
-        <span className="dc-agent-activity-switch" aria-hidden="true">
+        <span className="dc-switch" aria-hidden="true">
           <i />
         </span>
         <span>{valueLabel}</span>

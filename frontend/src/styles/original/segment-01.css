@@ -135,9 +135,134 @@ textarea {
   opacity: 0.55;
 }
 
+/* The one dropdown: the text field's frame with the shared arrow. Compact
+   for dense settings rows. */
+.dc-select {
+  color-scheme: dark;
+  min-width: 0;
+  min-height: 40px;
+  appearance: none;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  background-color: var(--color-server-rail);
+  background-image: var(--dc-select-chevron);
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  padding: 0 36px 0 12px;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.dc-select--compact {
+  min-height: 36px;
+  padding-left: 10px;
+  font-size: 14px;
+}
+
+.dc-select:focus {
+  border-color: var(--color-accent);
+}
+
+.dc-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.dc-select option {
+  background: #121214;
+  color: var(--color-text-primary);
+}
+
+/* The one on/off switch: the track inside a role="switch" control, measured
+   from Discord's 46x24 settings switch. */
+.dc-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 24px;
+  border-radius: 999px;
+  background: #4b4d54;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transition: background 140ms ease;
+}
+
+.dc-switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 140ms ease;
+}
+
+[aria-checked="true"] > .dc-switch {
+  background: var(--color-accent);
+}
+
+[aria-checked="true"] > .dc-switch i {
+  transform: translateX(22px);
+}
+
+/* The one checkbox and radio, measured from Discord: a 20px box (square with
+   6px corners, or a circle) that fills with the brand color when on. */
+.dc-checkbox,
+.dc-radio {
+  display: grid;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  place-content: center;
+  margin: 0;
+  appearance: none;
+  border: 2px solid #5d5e67;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dc-radio {
+  border-radius: 50%;
+}
+
+.dc-checkbox:checked,
+.dc-radio:checked {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.dc-checkbox:checked::before {
+  width: 10px;
+  height: 6px;
+  border-bottom: 2px solid #fff;
+  border-left: 2px solid #fff;
+  content: "";
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.dc-radio:checked::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+}
+
+.dc-checkbox:disabled,
+.dc-radio:disabled {
+  cursor: not-allowed;
+}
+
 /* Touch screens keep 44px targets. */
 @media (pointer: coarse) {
-  .dc-input {
+  .dc-input,
+  .dc-select {
     min-height: 44px;
   }
 }

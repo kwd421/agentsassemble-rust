@@ -266,7 +266,7 @@ export default function VoteComposerDialog({
             <label className="inline-flex items-center gap-2 text-sm font-semibold">
               <input
                 type="checkbox"
-                className="h-5 w-5"
+                className="dc-checkbox"
                 checked={noDeadline}
                 onChange={(event) => setNoDeadline(event.currentTarget.checked)}
                 disabled={busy}

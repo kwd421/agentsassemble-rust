@@ -16,7 +16,7 @@ export default function LocalAccountDataChoice({ disabled }: { disabled: boolean
   return <fieldset aria-busy={busy}><legend>이 컴퓨터의 방 데이터도 지울까요?</legend>
     <p>선택하면 이 컴퓨터의 방·메시지·첨부파일·AI 기록·설정을 지워요. 다른 서버에는 적용하지 않아요.</p>
     <p>서버 키·호스팅 제한과 방 데이터 밖의 로그인 정보·AI 프로그램·파일·설정·로그·그 밖의 파일은 유지돼요.</p>
-    {!done && <><label><input type="checkbox" checked={choice === "wipe"} onChange={event => setChoice(event.currentTarget.checked ? "wipe" : "keep")} disabled={busy} />이 컴퓨터의 방 데이터도 지울까요?</label>
+    {!done && <><label><input type="checkbox" className="dc-checkbox" checked={choice === "wipe"} onChange={event => setChoice(event.currentTarget.checked ? "wipe" : "keep")} disabled={busy} />이 컴퓨터의 방 데이터도 지울까요?</label>
     {choice === "wipe" && <button className="dc-button dc-button--secondary dc-button--lg" disabled={disabled || busy} onClick={() => void wipe()}>이 컴퓨터의 방 데이터 삭제</button>}</>}
     {done && <p role="status">이 컴퓨터의 방 데이터를 삭제했어요. 서버는 중지돼 있어요. 다시 사용하려면 앱을 직접 다시 시작하고 새 계정을 명시적으로 등록해 주세요.</p>}
     {error && <p role="alert">{error}</p>}

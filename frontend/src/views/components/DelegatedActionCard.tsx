@@ -45,7 +45,7 @@ export default function DelegatedActionCard({ delegateName, summary, consequence
         {consequence && <p className="dc-delegated-action-note preserve-words">{consequence}</p>}
         {fullAccess && (
           <label className="dc-delegated-action-ack">
-            <input type="checkbox" checked={acknowledged} disabled={locked} onChange={(event) => setAcknowledged(event.target.checked)} />
+            <input type="checkbox" className="dc-checkbox" checked={acknowledged} disabled={locked} onChange={(event) => setAcknowledged(event.target.checked)} />
             <span>이 컴퓨터 전체에 접근하는 것을 허용해요</span>
           </label>
         )}

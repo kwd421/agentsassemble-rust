@@ -111,31 +111,6 @@
   letter-spacing: 0;
 }
 
-.dc-channel-settings-row select {
-  min-height: 36px;
-  min-width: 0;
-  appearance: none;
-  border: 1px solid var(--color-panel-border);
-  border-radius: 8px;
-  background-color: var(--color-server-rail);
-  background-image: var(--dc-select-chevron);
-  background-position: right 12px center;
-  background-repeat: no-repeat;
-  padding: 0 36px 0 10px;
-  color: var(--color-text-primary);
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-/* A select that dropped the native arrow (appearance: none) draws this one. */
-select.dc-select {
-  background-image: var(--dc-select-chevron);
-  background-position: right 12px center;
-  background-repeat: no-repeat;
-  padding-right: 36px;
-}
-
 .dc-radio-stack {
   display: grid;
   gap: 8px;
@@ -174,58 +149,6 @@ select.dc-select {
 .dc-radio-stack label:has(input:disabled) {
   cursor: not-allowed;
   opacity: 0.6;
-}
-
-.dc-radio-stack input[type="radio"],
-.dc-radio-stack input[type="checkbox"] {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  place-content: center;
-  margin: 0;
-  border: 2px solid #5d5e67;
-  background: transparent;
-  appearance: none;
-  cursor: inherit;
-}
-
-.dc-radio-stack input[type="radio"] {
-  border-radius: 50%;
-}
-
-.dc-radio-stack input[type="checkbox"] {
-  border-radius: 6px;
-}
-
-.dc-radio-stack input:checked {
-  border-color: var(--color-accent);
-}
-
-/* Measured: a filled brand circle with a white centre dot. */
-.dc-radio-stack input[type="radio"]:checked {
-  background: var(--color-accent);
-}
-
-.dc-radio-stack input[type="radio"]:checked::before {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #fff;
-  content: "";
-}
-
-.dc-radio-stack input[type="checkbox"]:checked {
-  background: var(--color-accent);
-}
-
-.dc-radio-stack input[type="checkbox"]:checked::before {
-  width: 10px;
-  height: 6px;
-  border-bottom: 2px solid #fff;
-  border-left: 2px solid #fff;
-  content: "";
-  transform: translateY(-1px) rotate(-45deg);
 }
 
 .dc-radio-stack input:focus-visible {
@@ -377,11 +300,6 @@ select.dc-select {
   font-weight: 800;
 }
 
-.dc-create-channel-modal input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-}
-
 /* A small dialog closes with a plain X; the ringed ESC button belongs to
    full-page settings only. */
 button.dc-dialog-close {
@@ -434,8 +352,7 @@ button.dc-dialog-close:focus-visible {
   align-items: flex-start;
 }
 
-.dc-settings-field .dc-radio-stack input[type="radio"],
-.dc-settings-field .dc-radio-stack input[type="checkbox"] {
+.dc-settings-field .dc-radio-stack :is(.dc-radio, .dc-checkbox) {
   margin-top: 1px;
 }
 

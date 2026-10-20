@@ -429,9 +429,7 @@
   font-weight: 900;
 }
 
-.dc-agent-runtime-settings input,
-.dc-agent-runtime-settings select,
-.dc-agent-runtime-settings .dc-agent-static-control {
+.dc-agent-runtime-settings input {
   color-scheme: dark;
   width: 100%;
   min-width: 0;
@@ -451,12 +449,6 @@
 
 .dc-agent-runtime-settings .dc-provider-control-toggle {
   height: 36px;
-}
-
-.dc-agent-field select option,
-.dc-agent-runtime-settings select option {
-  background: #121214;
-  color: var(--color-text-primary);
 }
 
 .dc-agent-runtime-settings > .dc-button,

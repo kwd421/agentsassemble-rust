@@ -17,7 +17,7 @@ export function AttendeeFriendInviteCard({ controls, disabled, directory }: { co
     <div className="dc-invite-card-copy"><h3 id="attendee-friend-heading">AI 친구 초대</h3>
       <p>저장한 AI 친구에게 참가 안내를 보내 주세요.</p></div>
     {directory.loaded && !friends.length ? <p>친구 화면에서 AI 친구를 저장하면 여기서 초대할 수 있어요.</p> : <div className="dc-invite-options" style={{ gridTemplateColumns: "1fr" }}><label><span>저장된 AI 친구</span>
-      <select style={{ minHeight: 44, maxWidth: "100%", appearance: "none" }} value={selectedId}
+      <select className="dc-select" style={{ minHeight: 44, maxWidth: "100%" }} value={selectedId}
         disabled={directory.busy || controls.creating} onChange={(event) => setSelectedId(event.target.value)}>
         <option value="">친구 선택</option>
         {friends.map((friend) => <option key={friend.friend_id} value={friend.friend_id}>{friend.details.display_name} · {friend.details.provider_kind || "제공자 미설정"}</option>)}

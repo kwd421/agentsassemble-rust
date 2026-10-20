@@ -87,7 +87,7 @@ function RequestForm({ entry, socket, enabled, providerName, providerKind }: { e
     <p>응답 기한: <time dateTime={entry.expires_at}>{new Date(entry.expires_at).toLocaleString("ko-KR")}</time></p>
     <fieldset disabled={locked} style={{ display: "grid", gap: 12, minWidth: 0 }}>
       {request.prompt.response_kind === "option" && request.prompt.options.filter((option) => !(providerKind === "opencode_server" && request.request_kind === "permission" && (option.id === "always" || option.kind === "allow_always"))).map((option) => <label key={option.id} style={{ ...controlStyle, display: "flex", alignItems: "center", gap: 12 }}>
-        <input type="radio" name={request.provider_request_id} required checked={optionId === option.id} onChange={() => setOptionId(option.id)} />
+        <input type="radio" className="dc-radio" name={request.provider_request_id} required checked={optionId === option.id} onChange={() => setOptionId(option.id)} />
         <span>{providerRequestOptionLabel(option)}{option.description && <small style={{ display: "block" }}>{option.description}</small>}</span>
       </label>)}
       {request.prompt.response_kind === "answers" && request.prompt.questions.map((question) => <QuestionInput key={question.id}

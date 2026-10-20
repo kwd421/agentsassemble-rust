@@ -145,7 +145,7 @@ export default function UserSettingsPanel({
                 <label>
                   상태
                   <select
-                    style={{ appearance: "none" }}
+                    className="dc-select"
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.status}
                     onChange={(event) =>
@@ -232,7 +232,7 @@ export default function UserSettingsPanel({
                 <label>
                   배너
                   <select
-                    style={{ appearance: "none" }}
+                    className="dc-select"
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.bannerPreset}
                     onChange={(event) =>

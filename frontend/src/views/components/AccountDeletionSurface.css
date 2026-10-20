@@ -17,14 +17,6 @@ dialog.dc-account-deletion-dialog {
 .dc-account-deletion-dialog h4 { font-size: 20px; font-weight: 700; }
 .dc-account-deletion-dialog h5 { font-weight: 700; }
 .dc-account-deletion-dialog label { display: grid; gap: 6px; }
-.dc-account-deletion-dialog input:not([type="radio"]) {
-  min-height: 40px;
-  padding: 8px 10px;
-  border: 1px solid #5b5e66;
-  border-radius: 6px;
-  background: #121214;
-  color: var(--color-text-primary);
-}
 .dc-account-deletion-dialog ul { display: grid; gap: 8px; }
 .dc-account-deletion-dialog fieldset { display: grid; gap: 10px; }
 .dc-account-deletion-dialog fieldset label { display: flex; gap: 8px; }
@@ -42,4 +34,3 @@ dialog.dc-account-deletion-dialog {
 .dc-account-deletion-flow footer .dc-join-cancel { margin-right: auto; }
 .dc-account-deletion-flow footer button { min-height: 44px; padding: 0 16px; }
 .dc-account-deletion-flow .dc-channel-composer-error { font-size: 13px; margin-top: -12px; }
-.dc-account-deletion-dialog input[type="checkbox"] { min-height: auto; }

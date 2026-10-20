@@ -682,7 +682,7 @@ export default function AgentCreateModal({
             disabled={!selectedProvider?.startable && !startNow}
             onClick={() => setStartNow((value) => !value)}
           >
-            <span className="dc-agent-launch-switch" aria-hidden="true">
+            <span className="dc-switch" aria-hidden="true">
               <i />
             </span>
             <span className="dc-agent-launch-text">

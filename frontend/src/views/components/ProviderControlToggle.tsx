@@ -41,7 +41,7 @@ export default function ProviderControlToggle({
     >
       {/* The text names what the switch turns on; the switch shows whether it is. */}
       <span>{selectedOption ? onOption?.label || selectedOption.label : "선택 필요"}</span>
-      <span className="dc-provider-control-switch" aria-hidden="true">
+      <span className="dc-switch" aria-hidden="true">
         <i />
       </span>
     </button>

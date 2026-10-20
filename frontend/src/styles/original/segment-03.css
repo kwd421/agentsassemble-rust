@@ -5,15 +5,6 @@
   }
 }
 
-.dc-agent-field select:focus {
-  border-color: var(--color-accent);
-}
-
-.dc-agent-field select:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .dc-agent-folder-field {
   display: flex;
   min-width: 0;
@@ -110,35 +101,6 @@
 .dc-agent-launch-toggle:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-}
-
-.dc-agent-launch-switch {
-  position: relative;
-  flex: 0 0 auto;
-  width: 46px;
-  height: 24px;
-  border-radius: 999px;
-  background: #4b4d54;
-  transition: background 140ms ease;
-}
-
-.dc-agent-launch-switch i {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 140ms ease;
-}
-
-.dc-agent-launch-toggle[data-on="true"] .dc-agent-launch-switch {
-  background: var(--color-accent);
-}
-
-.dc-agent-launch-toggle[data-on="true"] .dc-agent-launch-switch i {
-  transform: translateX(22px);
 }
 
 .dc-agent-launch-text {

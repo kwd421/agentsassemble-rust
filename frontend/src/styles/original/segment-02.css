@@ -1,24 +1,3 @@
-
-.dc-agent-field select,
-.dc-agent-field .dc-agent-static-control {
-  color-scheme: dark;
-  min-width: 0;
-  height: 40px;
-  border: 1px solid var(--color-panel-border);
-  border-radius: 8px;
-  background: var(--color-server-rail);
-  padding: 0 12px;
-  color: var(--color-text-primary);
-  font-size: 14px;
-  outline: none;
-  transition: border-color 120ms ease;
-}
-
-.dc-agent-static-control {
-  display: flex;
-  align-items: center;
-}
-
 .dc-agent-select {
   position: relative;
   min-width: 0;
@@ -249,33 +228,3 @@
   opacity: 0.55;
 }
 
-.dc-provider-control-switch {
-  position: relative;
-  flex: 0 0 auto;
-  width: 46px;
-  height: 24px;
-  border-radius: 999px;
-  background: #4b4d54;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-  transition: background 140ms ease;
-}
-
-.dc-provider-control-switch i {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  transition: transform 140ms ease;
-}
-
-.dc-provider-control-toggle[data-on="true"] .dc-provider-control-switch {
-  background: var(--color-accent);
-}
-
-.dc-provider-control-toggle[data-on="true"] .dc-provider-control-switch i {
-  transform: translateX(22px);
-}
