@@ -81,6 +81,15 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
   const [offsetY, setOffsetY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState("");
+  // One crop at a time, and none delivered after the person cancelled or the
+  // cropper went away while the image was still being prepared.
+  const [cropping, setCropping] = useState(false);
+  const croppingRef = useRef(false);
+  const liveRef = useRef(true);
+  useEffect(() => {
+    liveRef.current = true;
+    return () => { liveRef.current = false; };
+  }, []);
   const output = SHAPE_OUTPUT[shape];
   const aspect = output.width / output.height;
 
@@ -181,8 +190,20 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
     setOffsetY(0);
   }
 
+  function finishCropping() {
+    croppingRef.current = false;
+    if (liveRef.current) setCropping(false);
+  }
+
+  function cancel() {
+    liveRef.current = false;
+    onCancel();
+  }
+
   async function cropImage() {
-    if (!objectUrl) return;
+    if (!objectUrl || croppingRef.current) return;
+    croppingRef.current = true;
+    setCropping(true);
     setStatus("이미지 처리 중...");
     try {
       const sourceImage = await loadImage(objectUrl);
@@ -219,11 +240,13 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
       if (shape === "circle") context.restore();
       let completed = false;
       const timeoutId = window.setTimeout(() => {
-        if (!completed) setStatus("이미지 처리 실패");
+        if (!completed && liveRef.current) setStatus("이미지 처리 실패");
       }, 8000);
       canvas.toBlob((blob) => {
         completed = true;
         window.clearTimeout(timeoutId);
+        if (!liveRef.current) return;
+        finishCropping();
         if (!blob) {
           setStatus("이미지 처리 실패");
           return;
@@ -232,7 +255,8 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
         onCropped(new File([blob], `${shape}-${Date.now()}.png`, { type: "image/png" }));
       }, "image/png");
     } catch (error) {
-      setStatus(userFacingError(error, "이미지 처리 실패"));
+      finishCropping();
+      if (liveRef.current) setStatus(userFacingError(error, "이미지 처리 실패"));
     }
   }
 
@@ -268,10 +292,10 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
           초기화
         </button>
         <span className="flex-1" />
-        <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} onClick={onCancel}>
+        <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} onClick={cancel}>
           취소
         </button>
-        <button type="button" className="ops-cta min-h-10 min-w-[96px] px-4" disabled={!natural} onClick={cropImage}>
+        <button type="button" className="ops-cta min-h-10 min-w-[96px] px-4" disabled={!natural || cropping} onClick={() => void cropImage()}>
           적용
         </button>
       </div>

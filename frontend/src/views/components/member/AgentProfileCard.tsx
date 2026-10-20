@@ -20,6 +20,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
   const [name, setName] = useState(session.display_name);
   const [nameFocused, setNameFocused] = useState(false);
   const nameFocusedRef = useRef(false);
@@ -40,7 +41,8 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
   const nameValid = trimmed.length > 0 && Array.from(trimmed).length <= AGENT_PROFILE_NAME_CHARACTER_LIMIT;
 
   async function run(action: (signal: AbortSignal) => Promise<void> | void, failure: string): Promise<boolean> {
-    if (busy) return false;
+    if (inFlightRef.current) return false;
+    inFlightRef.current = true;
     setBusy(true);
     setError("");
     const controller = new AbortController();
@@ -52,6 +54,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
       if (!controller.signal.aborted) setError(userFacingError(reason, failure));
       return false;
     } finally {
+      inFlightRef.current = false;
       if (!controller.signal.aborted) setBusy(false);
       if (uploadRef.current === controller) uploadRef.current = null;
     }
