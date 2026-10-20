@@ -298,7 +298,7 @@ describe("MemberList component wiring", () => {
     expect(modelLine.querySelector("[data-icon]")).toBeNull();
   });
 
-  it("draws the galaxy only around a maximum-reasoning agent's avatar", () => {
+  it("draws the galaxy background only for a maximum-reasoning agent", () => {
     const { container, rerender } = render(
       <MemberList
         agents={[AGENT]}
@@ -307,7 +307,6 @@ describe("MemberList component wiring", () => {
         roomName="Room One"
       />
     );
-    expect(container.querySelectorAll(".galaxy-avatar")).toHaveLength(1);
     expect(container.querySelector(".dc-member")?.getAttribute("data-galaxy")).toBe("true");
 
     rerender(
@@ -318,7 +317,6 @@ describe("MemberList component wiring", () => {
         roomName="Room One"
       />
     );
-    expect(container.querySelector(".galaxy-avatar")).toBeNull();
     expect(container.querySelector(".dc-member")?.hasAttribute("data-galaxy")).toBe(false);
   });
 

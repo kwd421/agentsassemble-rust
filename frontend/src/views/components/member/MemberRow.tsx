@@ -5,7 +5,6 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import { Coins, VolumeX, Zap } from "../../../ui/icons";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ParticipantAvatarContent from "../ParticipantAvatarContent";
-import GalaxyAvatar from "./GalaxyAvatar";
 import {
   isGalaxyAgent,
   isPrimaryActivationPointer,
@@ -113,7 +112,7 @@ export default function MemberRow({
       }}
     >
       <span className="relative shrink-0">
-        {galaxy ? <GalaxyAvatar size={32}>{avatar}</GalaxyAvatar> : avatar}
+        {avatar}
         <span
           className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-chat-bg ${
             statusDotClass(

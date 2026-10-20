@@ -12,21 +12,20 @@ beforeAll(() => {
 });
 afterAll(() => vi.restoreAllMocks());
 
-it("draws the galaxy around a maximum-reasoning agent's profile avatar only", () => {
+it("draws the galaxy background only for a maximum-reasoning agent's profile", () => {
   const { container, rerender } = render(
     <AgentProfileCard session={agentSessionFixture({ reasoning_effort: "ultra" })}>
       {null}
     </AgentProfileCard>
   );
-  expect(container.querySelector(".galaxy-avatar")).toBeTruthy();
-  expect(container.querySelector(".galaxy-avatar")?.textContent).not.toContain("avatar");
+  expect(container.querySelector("header")?.getAttribute("data-galaxy")).toBe("true");
 
   rerender(
     <AgentProfileCard session={agentSessionFixture({ reasoning_effort: "high" })}>
       {null}
     </AgentProfileCard>
   );
-  expect(container.querySelector(".galaxy-avatar")).toBeNull();
+  expect(container.querySelector("header")?.hasAttribute("data-galaxy")).toBe(false);
 });
 
 it("edits the name in place: Enter saves, Escape restores and a failure keeps the draft", async () => {
