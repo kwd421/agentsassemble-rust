@@ -15,6 +15,7 @@ export interface FrontendLiveAgentCreateRequest {
   reasoningEffort?: string;
   serviceTier?: string;
   variant?: string;
+  executionHarness?: "builtin" | "opencode";
   permissionMode?: string;
   fullAccessAcknowledged?: true;
   maxOutputTokens?: number;
@@ -33,6 +34,7 @@ export function agentCreationPayload(request: FrontendLiveAgentCreateRequest) {
     reasoning_effort: request.reasoningEffort || "",
     service_tier: request.serviceTier || "",
     variant: request.variant || "",
+    execution_harness: request.executionHarness || "builtin",
     permission_mode: request.permissionMode || "meeting_read_only",
     ...(request.fullAccessAcknowledged === true ? { full_access_acknowledged: true } : {}),
     max_output_tokens: request.maxOutputTokens || 0,

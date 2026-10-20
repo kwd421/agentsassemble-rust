@@ -93,6 +93,7 @@ export default function AgentCreateModal({
   const [agentPlatformLocation, setAgentPlatformLocation] = useState("global");
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [startNow, setStartNow] = useState(false);
+  const [executionHarness, setExecutionHarness] = useState<"builtin" | "opencode">("builtin");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(() => new Set());
@@ -118,6 +119,12 @@ export default function AgentCreateModal({
     selectedProvider && (selectedProvider.custom_endpoint || agentPlatformProvider)
   );
   const providerGroup = selectedProvider ? providerCatalogGroup(selectedProvider, settings.model) : "";
+  const openCodeHarnessAvailable = Boolean(
+    !existingSessionId &&
+      selectedProvider &&
+      ["gemini_api", "deepseek_api"].includes(selectedProvider.provider_kind) &&
+      providers.some((provider) => provider.id === "opencode")
+  );
   const eligibleStoredSessions = existingSessions.filter((session) =>
     session.room_id === meetingId && !session.external_owned && session.process_ownership === "server" &&
     ["stopped", "error"].includes(session.runtime_status) && !session.enabled &&
@@ -175,6 +182,7 @@ export default function AgentCreateModal({
       setAgentPlatformProject("");
       setAgentPlatformLocation("global");
       setPersonaCardId("");
+      setExecutionHarness("builtin");
       return;
     }
     if (!wasOpen.current) {
@@ -247,6 +255,7 @@ export default function AgentCreateModal({
       provider.provider_kind === "agent_platform_api" ? "global" : ""
     );
     setPersonaCardId("");
+    setExecutionHarness("builtin");
     setStartNow(provider.startable || provider.discovery_status === "loading");
   }
 
@@ -315,6 +324,7 @@ export default function AgentCreateModal({
       reasoningEffort: settings.reasoning_effort || "",
       serviceTier: settings.service_tier || "",
       variant: settings.variant || "",
+      executionHarness,
       permissionMode: settings.permission_mode || "meeting_read_only",
       ...(settings.permission_mode === "full_access" ? { fullAccessAcknowledged: true as const } : {}),
       maxOutputTokens: Number(settings.max_output_tokens || 0),
@@ -535,6 +545,27 @@ export default function AgentCreateModal({
               <p className="dc-agent-section-title">모델 · 실행 설정</p>
 
               <div className="dc-agent-field-grid dc-agent-field-grid--dual">
+                {openCodeHarnessAvailable && (
+                  <div className="dc-agent-field">
+                    <span>하네스</span>
+                    <ProviderControlSelect
+                      label="하네스"
+                      options={[
+                        { value: "builtin", label: "기본" },
+                        { value: "opencode", label: "OpenCode" },
+                      ]}
+                      value={executionHarness}
+                      onChange={(value) =>
+                        setExecutionHarness(value === "opencode" ? "opencode" : "builtin")
+                      }
+                    />
+                    {executionHarness === "opencode" && (
+                      <p className="preserve-words">
+                        OpenCode가 이 API 키로 실행돼요. 파일·명령 도구를 쓸 수 있어요.
+                      </p>
+                    )}
+                  </div>
+                )}
                 {requiresOpenCodeApproval(selectedProvider, settings) && (
                   <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{openCodeFreePermissionHint}</p>
                 )}

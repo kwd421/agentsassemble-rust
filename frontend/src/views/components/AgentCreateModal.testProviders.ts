@@ -107,6 +107,38 @@ export function workPermissionControl() {
   };
 }
 
+export function geminiProvider(): NativeCliProviderAvailability {
+  return {
+    ...deepSeekProvider(),
+    id: "gemini",
+    display_name: "Gemini",
+    provider_kind: "gemini_api",
+    default_model: "gemini-3.1-flash-lite",
+    controls: [
+      {
+        key: "model",
+        label: "모델",
+        kind: "combobox",
+        default_value: "gemini-3.1-flash-lite",
+        options: [
+          { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite" },
+        ],
+      },
+      {
+        key: "service_tier",
+        label: "응답 속도",
+        kind: "select",
+        default_value: "default",
+        options: [
+          { value: "default", label: "기본" },
+          { value: "flex", label: "Flex" },
+        ],
+      },
+      workPermissionControl(),
+    ],
+  };
+}
+
 export function cerebrasProvider(): NativeCliProviderAvailability {
   return {
     ...deepSeekProvider(),
