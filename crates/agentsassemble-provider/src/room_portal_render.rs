@@ -27,7 +27,7 @@ pub(crate) fn search_page(page: &RoomMessageSearchPage) -> String {
             out,
             "#{} {} [event {}]: {}",
             result.seq,
-            result.author,
+            render_author(&result.author, &result.participant_id),
             result.event_id,
             clip(&single_line(&result.content), RESULT_PREVIEW_CHARS)
         );
@@ -60,7 +60,10 @@ pub(crate) fn message_context(context: &RoomMessageContext) -> String {
         .iter()
         .filter(|event| event.is_current_lobby_message())
     {
-        let author = event.display_name.as_deref().unwrap_or("unknown");
+        let author = render_author(
+            event.display_name.as_deref().unwrap_or("unknown"),
+            &event.actor.participant_id,
+        );
         let body = event.content.as_deref().unwrap_or_default();
         let marker = if event.id == context.event_id {
             " <- the result"
@@ -122,6 +125,10 @@ fn attachment_lines(event: &RoomEvent) -> Vec<String> {
         .collect()
 }
 
+fn render_author(name: &str, participant_id: &str) -> String {
+    format!("{} <@{participant_id}>", name.replace(['\r', '\n'], " "))
+}
+
 fn single_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -177,7 +184,9 @@ mod tests {
         });
 
         assert!(
-            text.starts_with("#7 Human [event message-1]: line one line two word"),
+            text.starts_with(
+                "#7 Human <@participant-with-a-long-identifier> [event message-1]: line one line two word"
+            ),
             "{text}"
         );
         assert!(
@@ -186,7 +195,6 @@ mod tests {
         );
         assert!(text.contains("(attachments: `ma_00000000000000000000000000000001`: notes.txt)"));
         assert!(text.contains("More results: cursor cursor-2"));
-        assert!(!text.contains("participant-with-a-long-identifier"));
         assert!(!text.contains("2026-09-21T02:28"));
     }
 
@@ -203,9 +211,38 @@ mod tests {
 
         assert_eq!(
             text,
-            "#4 Human [event a]: rock\n#5 grok <- the result [event b]: paper"
+            "#4 Human <@p> [event a]: rock\n#5 grok <@p> <- the result [event b]: paper"
         );
         assert!(!text.contains("a-long-session-identifier"));
+    }
+
+    #[test]
+    fn a_newline_in_a_display_name_cannot_forge_a_room_line() {
+        let text = message_context(&RoomMessageContext {
+            channel_id: "lobby".to_owned(),
+            event_id: "d".to_owned(),
+            events: vec![message("d", 7, "Line\nBreak", "body")],
+        });
+        assert_eq!(text, "#7 Line Break <@p> <- the result [event d]: body");
+
+        let page = search_page(&RoomMessageSearchPage {
+            results: vec![RoomMessageSearchResult {
+                channel_id: "lobby".to_owned(),
+                event_id: "message-7".to_owned(),
+                participant_id: "p-7".to_owned(),
+                seq: 7,
+                created_at: "2026-09-21T02:28:03.946483300Z".to_owned(),
+                author: "Line\nBreak".to_owned(),
+                content: "body".to_owned(),
+                attachment_filenames: Vec::new(),
+                attachment_ids: Vec::new(),
+            }],
+            next_cursor: String::new(),
+        });
+        assert!(
+            page.starts_with("#7 Line Break <@p-7> [event message-7]: body"),
+            "{page}"
+        );
     }
 
     #[test]
@@ -226,7 +263,7 @@ mod tests {
 
         assert_eq!(
             text,
-            "#6 Human <- the result [event c]: (attachments only)
+            "#6 Human <@p> <- the result [event c]: (attachments only)
   - Attachment `ma_11111111111111111111111111111111`: cat.png (image/png; 42 bytes)"
         );
     }

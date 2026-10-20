@@ -170,6 +170,7 @@ struct RoomRoster {
     agent_ids: Vec<String>,
     handles: Vec<String>,
     names: Vec<(String, String)>,
+    people: Vec<String>,
 }
 
 async fn load_room_roster(
@@ -198,6 +199,13 @@ async fn load_room_roster(
         ));
     }
     let own = load_participant(transaction, &room.room_id, &session.public.participant_id).await?;
+    let people = sqlx::query(
+        "SELECT participant_id, json_extract(participant_json, '$.display_name') AS display_name FROM participants WHERE room_id = ? AND json_extract(participant_json, '$.participant_type') = 'human' AND json_extract(participant_json, '$.status') = 'joined' ORDER BY participant_id LIMIT ?",
+    )
+    .bind(&room.room_id)
+    .bind(i64::try_from(MAX_ROOM_OBSERVATION_AGENT_IDS).unwrap_or(i64::MAX))
+    .fetch_all(&mut **transaction)
+    .await?;
     let mut roster = RoomRoster {
         own_role: own.role,
         agent_ids: Vec::new(),
@@ -206,6 +214,14 @@ async fn load_room_roster(
             session.public.participant_id.clone(),
             session.public.display_name.clone(),
         )],
+        people: people
+            .iter()
+            .map(|row| {
+                let id = row.get::<String, _>("participant_id");
+                let name = row.get::<String, _>("display_name");
+                render_author(&name, &id)
+            })
+            .collect(),
     };
     for row in rows {
         let participant = serde_json::from_str::<agentsassemble_domain::Participant>(
@@ -383,6 +399,11 @@ async fn load_context(
     Ok(selected.into_values().collect())
 }
 
+/// Display names are participant-controlled, so a newline must not forge another line.
+fn render_author(name: &str, participant_id: &str) -> String {
+    format!("{} <@{participant_id}>", name.replace(['\r', '\n'], " "))
+}
+
 fn render_room_view<'a>(
     room: &Room,
     session: &DurableAgentSession,
@@ -407,6 +428,14 @@ fn render_room_view<'a>(
                 roster.handles.join(", ")
             }
         ),
+        format!(
+            "People: {}",
+            if roster.people.is_empty() {
+                "none".to_owned()
+            } else {
+                roster.people.join(", ")
+            }
+        ),
     ];
     let context_floor = if session.public.runtime_kind == "api" {
         session.public.bootstrap_cutoff_seq
@@ -428,10 +457,13 @@ fn render_room_view<'a>(
         lines.push(format!(
             "#{} {} [event {}]: {}",
             event.seq,
-            event
-                .display_name
-                .as_deref()
-                .unwrap_or(&event.actor.participant_id),
+            render_author(
+                event
+                    .display_name
+                    .as_deref()
+                    .unwrap_or(&event.actor.participant_id),
+                &event.actor.participant_id,
+            ),
             event.id,
             if has_visible_text(&event_text) {
                 event_text.as_str()
@@ -494,10 +526,13 @@ async fn load_reply_preview(
         if text.chars().count() > 200 {
             excerpt.push('…');
         }
-        let author = source
-            .display_name
-            .as_deref()
-            .unwrap_or(&source.actor.participant_id);
+        let author = render_author(
+            source
+                .display_name
+                .as_deref()
+                .unwrap_or(&source.actor.participant_id),
+            &source.actor.participant_id,
+        );
         format!(
             "  - Reply to event `{id}` by {author}: {} (read_message_context opens the source).",
             serde_json::to_string(&excerpt)?
@@ -516,10 +551,13 @@ fn render_recent_messages(context: &[RoomEvent]) -> Result<String, PersistenceEr
         if has_visible_text(&message_text) {
             messages.push(format!(
                 "- {}: {message_text}",
-                event
-                    .display_name
-                    .as_deref()
-                    .unwrap_or(&event.actor.participant_id)
+                render_author(
+                    event
+                        .display_name
+                        .as_deref()
+                        .unwrap_or(&event.actor.participant_id),
+                    &event.actor.participant_id,
+                )
             ));
         }
     }

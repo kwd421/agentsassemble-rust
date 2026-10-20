@@ -77,9 +77,10 @@ async fn reply_observation_resolves_old_sources_after_edit_or_delete() {
             assert!(view.contains("source unavailable or deleted"));
             assert!(!view.contains(" by "));
         } else {
+            let source_name = source.outcome.event.display_name.as_deref().unwrap_or("");
             assert!(view.contains(&format!(
-                "by {}:",
-                source.outcome.event.display_name.as_deref().unwrap_or("")
+                "by {source_name} <@{}>:",
+                source.outcome.event.actor.participant_id
             )));
             assert!(view.contains(&format!("{}…", "가".repeat(200))));
             assert!(!view.contains(&"가".repeat(201)));

@@ -139,7 +139,7 @@ async fn search_over_huge_messages_reaches_api_as_previews_instead_of_failing() 
     // and fail the read. Search results are previews now, so the read succeeds and
     // stays small; the cap itself is still exercised by the attachment cases above.
     assert!(
-        result.starts_with("#1 Human [event message-1]: "),
+        result.starts_with("#1 Human <@human> [event message-1]: "),
         "{result}"
     );
     assert_eq!(result.matches('…').count(), 4, "{result}");

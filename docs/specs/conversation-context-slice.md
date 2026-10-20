@@ -220,3 +220,28 @@ and its check, `make architecture-check`, and scoped `git diff --check` passed.
 Affected-crate all-target Clippy remains blocked only by existing `similar_names`
 and `too_many_lines` violations in `restore_job_tests.rs` (273 and 61); unchanged.
 No generated TypeScript changes, live provider calls or packaged UI verification.
+
+## Participant identity and human roster in AI room views (2026-10-20)
+
+Required behaviour: every rendered message author identifies both the current
+display name and the canonical room participant ID, as `Name <@participant_id>`
+(for example `#12 Nel Le <@p-7f3a> [event abc]: hi`). The rule applies to the
+server-built room view, in-flight/pending lines, the reply preview, persona recent
+messages, `read_message_context`, and search results. Two people who share a
+display name remain distinguishable. The room view header keeps its existing
+`Agent handles` line and adds a bounded `People` line listing currently joined
+human participants with the same `Name <@participant_id>` form; left, kicked and
+other non-joined participants are omitted. Display names remain untrusted room
+content: the existing escaping/clipping stays, and CR/LF in a name is replaced
+with a space so it cannot forge another line. Mention parsing and ordered-floor
+routing are unchanged. Attendee room views use the same persistence observation;
+connector and attendee search/context reads already expose the structured event
+actor or `participant_id`, so no separate line format is introduced there.
+
+Owners and affected entry points: `room_turn_context.rs` (`load_room_roster`,
+`render_room_view`, `load_reply_preview`, `render_recent_messages`,
+`bounded_pending_prefix`) and `room_portal_render.rs` (`search_page`,
+`message_context`) with their existing tests. Acceptance: affected persistence,
+provider and server library tests pass, including same-name humans, the People
+line, and a newline-containing display name; `make architecture-check` passes.
+No schema, routing, frontend or provider-call change.

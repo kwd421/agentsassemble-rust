@@ -1,11 +1,155 @@
-use agentsassemble_domain::{ParticipantRole, RoomSettings, public_settings};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, ParticipantRole, RoomSettings,
+    public_settings,
+};
 use serde_json::json;
 
 use super::{
     AGENT_ID, SECOND_AGENT_ID, attached_session, authority, fixture, insert_agent, participant,
     running_authority, save_stored_session, stored_session,
 };
-use crate::{ProviderMessageSearchAuthority, RoomMutationAuthority::TrustedPrincipal};
+use crate::{ProviderMessageSearchAuthority, RoomMutationAuthority::TrustedPrincipal, SqliteStore};
+
+async fn add_human(
+    store: &SqliteStore,
+    id: &str,
+    display_name: &str,
+) -> Result<AuthenticatedPrincipal, Box<dyn std::error::Error>> {
+    let now = chrono::Utc::now();
+    let human = participant(id, display_name, "human", ParticipantRole::Human, now);
+    sqlx::query(
+        "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
+    )
+    .bind("general")
+    .bind(id)
+    .bind(serde_json::to_string(&human)?)
+    .execute(&store.pool)
+    .await?;
+    Ok(AuthenticatedPrincipal {
+        principal_id: format!("{id}-user"),
+        participant_id: id.to_owned(),
+        display_name: display_name.to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: false,
+        capabilities: CapabilitySet::for_principal(
+            ClientKind::Browser,
+            InviteScope::ReadWrite,
+            false,
+        ),
+    })
+}
+
+#[tokio::test]
+async fn people_with_the_same_display_name_render_with_distinct_participant_ids()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, _principal, _directory) = fixture().await;
+    let first = add_human(&store, "human-same-1", "Nel Le").await?;
+    let second = add_human(&store, "human-same-2", "Nel Le").await?;
+    let mut session = stored_session(&store).await;
+    session.public.enabled = false;
+    session.public.status = agentsassemble_domain::AgentSessionStatus::Unavailable;
+    session.public.runtime_status = agentsassemble_domain::AgentRuntimeStatus::Stopped;
+    session.public.provider_session_active = false;
+    save_stored_session(&store, &session).await;
+    store
+        .execute_message_with_turn(
+            &first,
+            "same-name-first",
+            "message.send",
+            &json!({"content": "first note"}),
+        )
+        .await?;
+    store
+        .execute_message_with_turn(
+            &second,
+            "same-name-second",
+            "message.send",
+            &json!({"content": "second note"}),
+        )
+        .await?;
+    let mut session = stored_session(&store).await;
+    session.public.enabled = true;
+    session.public.status = agentsassemble_domain::AgentSessionStatus::Attached;
+    session.public.runtime_status = agentsassemble_domain::AgentRuntimeStatus::Idle;
+    session.public.provider_session_active = true;
+    save_stored_session(&store, &session).await;
+    let assigned = store
+        .execute_message_with_turn(
+            &first,
+            "same-name-ask",
+            "message.send",
+            &json!({"content": "@Terra compare"}),
+        )
+        .await?;
+    let view = &assigned.assignments[0].room_view;
+    assert!(view.contains("Nel Le <@human-same-1> [event "), "{view}");
+    assert!(view.contains("Nel Le <@human-same-2> [event "), "{view}");
+    assert!(view.contains("first note"), "{view}");
+    assert!(view.contains("second note"), "{view}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn room_view_people_line_lists_joined_humans_with_their_participant_ids()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, principal, _directory) = fixture().await;
+    add_human(&store, "human-nel", "Nel Le").await?;
+    add_human(&store, "human-eungae", "응애").await?;
+    add_human(&store, "human-kicked", "Gone").await?;
+    sqlx::query(
+        "UPDATE participants SET participant_json=json_set(participant_json, '$.status', 'kicked') WHERE room_id='general' AND participant_id='human-kicked'",
+    )
+    .execute(&store.pool)
+    .await?;
+    let assigned = store
+        .execute_message_with_turn(
+            &principal,
+            "people-line",
+            "message.send",
+            &json!({"content": "@Terra hello"}),
+        )
+        .await?;
+    let view = &assigned.assignments[0].room_view;
+    let people = view
+        .lines()
+        .find(|line| line.starts_with("People: "))
+        .unwrap_or_else(|| panic!("missing People line: {view}"));
+    assert!(people.contains("Nel Le <@human-nel>"), "{people}");
+    assert!(people.contains("응애 <@human-eungae>"), "{people}");
+    assert!(!people.contains("human-kicked"), "{people}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_newline_in_a_display_name_stays_on_one_line() -> Result<(), Box<dyn std::error::Error>> {
+    let (store, _principal, _directory) = fixture().await;
+    let human = add_human(&store, "human-line-break", "Line\nBreak").await?;
+    let assigned = store
+        .execute_message_with_turn(
+            &human,
+            "line-break",
+            "message.send",
+            &json!({"content": "@Terra hello"}),
+        )
+        .await?;
+    let view = &assigned.assignments[0].room_view;
+    assert!(
+        view.contains("Line Break <@human-line-break> [event "),
+        "{view}"
+    );
+    assert!(!view.contains("Line\nBreak"), "{view}");
+    let people = view
+        .lines()
+        .find(|line| line.starts_with("People: "))
+        .unwrap_or_else(|| panic!("missing People line: {view}"));
+    assert!(
+        people.contains("Line Break <@human-line-break>"),
+        "{people}"
+    );
+    Ok(())
+}
 
 #[tokio::test]
 async fn role_changes_reach_live_status_and_next_api_context_without_authority_changes()
