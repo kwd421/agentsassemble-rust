@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, X } from "../../ui/icons";
 
 import type { LobbyEvent } from "../../api";
 import { MAX_MESSAGE_CHARACTERS } from "../../types/generated/ROOM_MESSAGE_WIRE";

@@ -1,8 +1,8 @@
 import { sessionHostDisplayOrigin } from "./remote/remoteWorkspace";
 import type { ServerConnectionState } from "./serverConnectionState";
 import { memberRoomLiveKey, type MemberRoomLiveBadge } from "./central/memberRoomLive";
-import type { LucideIcon } from "lucide-react";
-import { Bot, Gamepad2, LayoutDashboard, Radio, Sparkles, Users } from "lucide-react";
+import type { AppIcon } from "../ui/icons";
+import { Bot, Gamepad2, LayoutDashboard, Radio, Sparkles, Users } from "../ui/icons";
 import {
   normalizeRoomGlobalSettings,
   type RoomGlobalAppearance,
@@ -32,7 +32,7 @@ export type RoomDockItem = {
   shortLabel: string;
   appearance?: RoomGlobalAppearance;
   inviteScope?: RoomAppearance["inviteScope"];
-  icon: LucideIcon;
+  icon: AppIcon;
   createdAt: string;
   tone: "fresh" | "resident" | "mafia" | "work";
   // Live background state for joined member rooms (projected by
@@ -94,7 +94,7 @@ export function createFreshRoom(now = new Date()): RoomDockItem {
   };
 }
 
-function iconForRoomTone(tone: RoomDockItem["tone"]): LucideIcon {
+function iconForRoomTone(tone: RoomDockItem["tone"]): AppIcon {
   if (tone === "mafia") return Gamepad2;
   if (tone === "work") return LayoutDashboard;
   if (tone === "resident") return Bot;

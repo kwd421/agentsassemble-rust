@@ -1,7 +1,7 @@
 import { createResourceUrl, revokeResourceUrl } from "../../../lib/remote/remoteResources";
 import ResourceImage from "../ResourceImage";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Camera, MoreHorizontal, Pencil, X } from "lucide-react";
+import { Camera, MoreHorizontal, Pencil, X } from "../../../ui/icons";
 import { AGENT_PROFILE_NAME_CHARACTER_LIMIT } from "../../../types/generated/AGENT_PROFILE_WIRE";
 import type { RoomAgentSession } from "../../../api";
 import ImageCropper from "../ImageCropper";

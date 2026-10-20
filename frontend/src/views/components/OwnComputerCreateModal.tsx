@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isDesktopWebview } from "../../lib/desktopBridge";
-import { X } from "lucide-react";
+import { X } from "../../ui/icons";
 import type { CompanionInviteControls } from "../../app/useCompanionInvites";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import ProviderTileGrid from "./ProviderTileGrid";

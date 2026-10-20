@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { Hash } from "lucide-react";
+import { Hash } from "../ui/icons";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomGlobalSettings, RoomSettings } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";

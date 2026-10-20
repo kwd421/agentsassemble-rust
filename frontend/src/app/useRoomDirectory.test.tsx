@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { Sparkles } from "lucide-react";
+import { Sparkles } from "../ui/icons";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import { closeRemoteWorkspace, installRemoteWorkspace } from "../lib/remote/remoteWorkspace";

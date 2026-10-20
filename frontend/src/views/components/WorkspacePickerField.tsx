@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Folder } from "lucide-react";
+import { Folder } from "../../ui/icons";
 import { chooseLocalWorkspace } from "../../api";
 import { userFacingError } from "../../lib/apiErrors";
 

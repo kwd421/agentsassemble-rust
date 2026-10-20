@@ -1,13 +1,13 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { Bot, Code2, Crown, ShieldCheck, User } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Bot, Code2, Crown, ShieldCheck, User } from "../../../ui/icons";
+import type { AppIcon } from "../../../ui/icons";
 import type { LiveAgent, RoomMember } from "../../../api";
 import { isActivePresence, presenceStatusLabel } from "../../../lib/presenceStatus";
 import type { RoleId } from "./memberTypes";
 
 export { agentSessionResumeStatus } from "../../../lib/agentSessionStatus";
 
-export const ROLE_OPTIONS: Array<{ id: RoleId; label: string; icon: LucideIcon }> = [
+export const ROLE_OPTIONS: Array<{ id: RoleId; label: string; icon: AppIcon }> = [
   { id: "human", label: "사람", icon: User },
   { id: "director", label: "진행", icon: Crown },
   { id: "implementer", label: "구현", icon: Code2 },

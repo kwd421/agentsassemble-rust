@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CirclePause, LifeBuoy, Play, RotateCcw, Save, Square, Zap } from "lucide-react";
+import { CirclePause, LifeBuoy, Play, RotateCcw, Save, Square, Zap } from "../../ui/icons";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import {

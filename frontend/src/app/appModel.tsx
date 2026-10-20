@@ -1,4 +1,4 @@
-import { Hash, LoaderCircle, type LucideIcon } from "lucide-react";
+import { Hash, LoaderCircle, type AppIcon } from "../ui/icons";
 import type {
   ChannelNotificationSetting,
   ChannelSettings,
@@ -13,7 +13,7 @@ export type Channel = string;
 export type ChannelConfig = {
   id: Channel;
   label: string;
-  icon: LucideIcon;
+  icon: AppIcon;
 };
 
 export type ChannelMenuState = {

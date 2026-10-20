@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { LogOut, X } from "lucide-react";
+import { LogOut, X } from "../../ui/icons";
 import { userFacingError } from "../../lib/apiErrors";
 
 export default function LeaveRoomDialog({

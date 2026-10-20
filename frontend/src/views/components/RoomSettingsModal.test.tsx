@@ -1,6 +1,6 @@
 import { fireEvent, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Radio } from "lucide-react";
+import { Radio } from "../../ui/icons";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_APPEARANCE } from "../../lib/roomAppearance";

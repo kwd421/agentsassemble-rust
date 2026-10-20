@@ -1,4 +1,4 @@
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "../../ui/icons";
 import { useEffect, useState } from "react";
 import { verifyCentralOwnerHost, type CentralOwnerConnect } from "../../lib/central/ownerConnect";
 import { exchangeCentralOwnerSession, fetchCentralOwnerRooms, type CentralOwnerWorkspace } from "../../lib/central/ownerWorkspace";

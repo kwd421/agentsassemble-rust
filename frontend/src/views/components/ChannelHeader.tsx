@@ -9,7 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { ArrowLeft, Bell, ChevronRight, Pin, Search, Users, MessageSquare } from "lucide-react";
+import { ArrowLeft, Bell, ChevronRight, Pin, Search, Users, MessageSquare } from "../../ui/icons";
 import type { MessagePin } from "../../api/messagePins";
 import ProviderLogo from "./ProviderLogo";
 

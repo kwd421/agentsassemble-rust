@@ -3,7 +3,7 @@ import ResourceImage from "./ResourceImage";
 import type { CentralServerDisplay } from "../../lib/central/directoryCache";
 import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import { useEffect, useRef, useState } from "react";
-import { Camera, Pencil } from "lucide-react";
+import { Camera, Pencil } from "../../ui/icons";
 import { roomInitials } from "../../lib/roomAppearance";
 import {
   fetchCentralServerIcon, hasPendingLocalDemotion, retryPendingLocalDemotion,

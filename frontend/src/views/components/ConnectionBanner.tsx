@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X } from "../../ui/icons";
 
 export default function ConnectionBanner({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
   return (

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { Check, Copy, KeyRound, LoaderCircle } from "lucide-react";
+import { Check, Copy, KeyRound, LoaderCircle } from "../../ui/icons";
 
 import {
   redeemGuestRecoveryCode,

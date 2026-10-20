@@ -1,4 +1,4 @@
-import { Bot, X } from "lucide-react";
+import { Bot, X } from "../../ui/icons";
 import ParticipantAvatarContent from "./ParticipantAvatarContent";
 import ResourceImage from "./ResourceImage";
 

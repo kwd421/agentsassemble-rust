@@ -1,4 +1,4 @@
-import { FileUp, RotateCcw, X } from "lucide-react";
+import { FileUp, RotateCcw, X } from "../../ui/icons";
 
 function megabytes(bytes: number) {
   const value = bytes / (1024 * 1024);

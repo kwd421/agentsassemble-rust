@@ -2,7 +2,7 @@ import ResourceImage from "../ResourceImage";
 import { executionLocationLabel, reasoningEffortLabel } from "../../../lib/agentLabels";
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { VolumeX, Zap } from "lucide-react";
+import { VolumeX, Zap } from "../../../ui/icons";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ParticipantAvatarContent from "../ParticipantAvatarContent";
 import {

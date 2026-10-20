@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Globe, Laptop, Monitor, RefreshCw, Smartphone } from "lucide-react";
+import { Globe, Laptop, Monitor, RefreshCw, Smartphone } from "../../ui/icons";
 import type { UserProfileIdentity } from "../../api";
 import type { OwnerDeviceSession } from "../../types/generated/OwnerDeviceSession";
 import type { RevokeOwnerDevices } from "../../types/generated/RevokeOwnerDevices";

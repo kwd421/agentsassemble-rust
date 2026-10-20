@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldQuestion } from "lucide-react";
+import { ShieldQuestion } from "../../ui/icons";
 
 export type DelegatedActionCardProps = {
   /** The AI that is asking. */

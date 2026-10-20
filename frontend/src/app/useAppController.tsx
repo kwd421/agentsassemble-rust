@@ -2,7 +2,7 @@ import { useCentralDirectory } from "./useCentralDirectory";
 import { useLocalHostOwnership } from "./useLocalHostOwnership";
 import { useServerOpening } from "./useServerOpening";
 import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
-import { Hash } from "lucide-react";
+import { Hash } from "../ui/icons";
 import { isCustomChannelId } from "../lib/customChannelId";
 import { useRoomChannels } from "./useRoomChannels";
 import { useChannelTranscript } from "./useChannelTranscript";

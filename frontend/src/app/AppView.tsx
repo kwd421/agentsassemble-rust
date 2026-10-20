@@ -18,7 +18,7 @@ import {
   UserRound,
   Users,
   X,
-} from "lucide-react";
+} from "../ui/icons";
 import { CHANNEL_SECTIONS, DeferredViewFallback } from "./appModel";
 import type { AppController } from "./useAppController";
 import AppOverlays from "./AppOverlays";

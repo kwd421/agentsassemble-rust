@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Check, CircleAlert, Copy, Download, ExternalLink, LoaderCircle } from "lucide-react";
+import { Check, CircleAlert, Copy, Download, ExternalLink, LoaderCircle } from "../../ui/icons";
 import { ApiError, userFacingError } from "../../lib/apiErrors";
 import { providerInstallOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";

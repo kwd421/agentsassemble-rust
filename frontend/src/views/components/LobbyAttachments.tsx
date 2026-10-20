@@ -2,7 +2,7 @@ import { createResourceUrl, revokeResourceUrl, releaseResourceBlob } from "../..
 import ResourceImage from "./ResourceImage";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FileDown, X } from "lucide-react";
+import { FileDown, X } from "../../ui/icons";
 import type { LobbyAttachmentRef } from "../../api/messageAttachments";
 import { startMessageAttachmentDownload } from "../../lib/messageAttachmentDownload";
 import type { MessageAttachmentReadScheduler } from "../../lib/messageAttachmentReadScheduler";

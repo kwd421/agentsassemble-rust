@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Copy, Link2 } from "lucide-react";
+import { Copy, Link2 } from "../../ui/icons";
 import type { DelegatedInviteAck } from "../../types/generated/DelegatedInviteAck";
 import { humanInviteSummary } from "../../lib/humanInviteSummary";
 

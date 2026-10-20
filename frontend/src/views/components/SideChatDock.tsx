@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AtSign, MessageSquare, Send, Smile, X } from "lucide-react";
+import { AtSign, MessageSquare, Send, Smile, X } from "../../ui/icons";
 import type { useRoomSideChat } from "../../app/useRoomSideChat";
 import type { RoomSocketHandle } from "../../roomSocketTypes";
 import type { Mentionable } from "../../lib/mentionComposerModel";

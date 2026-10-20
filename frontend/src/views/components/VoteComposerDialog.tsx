@@ -6,7 +6,7 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X } from "../../ui/icons";
 import { userFacingError } from "../../lib/apiErrors";
 import {  MAX_VOTE_DURATION_SECONDS,
   MAX_VOTE_OPTIONS,

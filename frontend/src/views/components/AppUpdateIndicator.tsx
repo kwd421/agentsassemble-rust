@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Download } from "lucide-react";
+import { Download } from "../../ui/icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isBundledDesktopWebview } from "../../lib/desktopBridge";

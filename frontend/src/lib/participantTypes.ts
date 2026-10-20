@@ -1,10 +1,10 @@
-import { Bot, User } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Bot, User } from "../ui/icons";
+import type { AppIcon } from "../ui/icons";
 
 export type ParticipantTypeMeta = {
   label: string;
   detail: string;
-  icon: LucideIcon;
+  icon: AppIcon;
   tone: string;
 };
 

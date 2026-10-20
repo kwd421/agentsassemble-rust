@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw } from "../../ui/icons";
 import { refreshLocalProviderCatalog } from "../../api/providerOperations";
 import type { ProviderCatalog } from "../../types/generated/ProviderCatalog";
 import { isDesktopWebview } from "../../lib/desktopBridge";

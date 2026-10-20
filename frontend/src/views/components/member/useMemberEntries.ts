@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Bot, UserCheck } from "lucide-react";
+import { Bot, UserCheck } from "../../../ui/icons";
 import type {
   LiveAgent,
   RoomAgentSession,

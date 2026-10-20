@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bot } from "lucide-react";
+import { Bot } from "../../ui/icons";
 import ProviderLogo from "./ProviderLogo";
 
 // Participant type is identity, independent of the editable room role.

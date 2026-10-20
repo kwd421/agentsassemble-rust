@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ServerOff } from "lucide-react";
+import { ServerOff } from "../../ui/icons";
 import type { RoomDockItem } from "../../lib/roomDockModel";
 
 export default function DisconnectedRoomView({ room, reason, hostDisplayName, autoReconnectAt, onRetry }: {

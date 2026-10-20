@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { AppIcon } from "../../../ui/icons";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../../api";
 import type { ParticipantRole } from "../../../types/generated/ParticipantRole";
 
@@ -28,5 +28,5 @@ export type MemberEntry = {
   active: boolean;
   muted: boolean;
   meetingId: string;
-  icon: LucideIcon;
+  icon: AppIcon;
 };

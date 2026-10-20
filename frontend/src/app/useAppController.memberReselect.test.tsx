@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Hash } from "lucide-react";
+import { Hash } from "../ui/icons";
 import { useAppController } from "./useAppController";
 import type { CentralDirectoryState } from "./useCentralDirectory";
 import { bindRemoteSession, closeRemoteWorkspace, installRemoteWorkspace, remoteSessionTransport, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";

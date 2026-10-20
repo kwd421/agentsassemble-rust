@@ -1,4 +1,4 @@
-import { Bell, BellOff, Check, Settings } from "lucide-react";
+import { Bell, BellOff, Check, Settings } from "../../ui/icons";
 import type { ChannelNotificationSetting, ChannelSettings } from "../../api";
 
 const CHANNEL_NOTIFICATION_OPTIONS: Array<{

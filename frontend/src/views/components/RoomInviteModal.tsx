@@ -6,7 +6,7 @@ import { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import { AttendeeFriendInviteCard, type AttendeeInviteControls } from "./AttendeeFriendInviteCard";
 import { ConnectorInviteCard, type ConnectorInviteControls } from "./ConnectorInviteCard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Copy, Settings, X } from "lucide-react";
+import { Check, Copy, Settings, X } from "../../ui/icons";
 import type { PublicInviteStatus } from "../../api";
 import type {
   HumanInviteOptions,

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { X } from "../../ui/icons";
 import { userFacingError } from "../../lib/apiErrors";
 
 export default function CreateChannelModal({ onClose, onCreate, room = false, initialName = "" }: {

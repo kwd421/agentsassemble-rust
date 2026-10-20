@@ -1,4 +1,4 @@
-import { BarChart3, type LucideIcon } from "lucide-react";
+import { BarChart3, type AppIcon } from "../../ui/icons";
 
 
 export type ComposerCommand = {
@@ -26,7 +26,7 @@ export function matchingComposerCommands(message: string): ComposerCommand[] {
   );
 }
 
-type MenuItem = { id: string; label: string; command?: string; description?: string; icon?: LucideIcon; disabled?: boolean };
+type MenuItem = { id: string; label: string; command?: string; description?: string; icon?: AppIcon; disabled?: boolean };
 
 export default function ComposerCommandMenu<T extends MenuItem>({
   listId,

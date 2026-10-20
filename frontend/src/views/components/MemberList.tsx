@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Check, ChevronDown, ChevronRight, Pause, Play, Search, Volume2, VolumeX } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pause, Play, Search, Volume2, VolumeX } from "../../ui/icons";
 import type {
   LiveAgent,
   RoomAgentSession,

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { Radio } from "lucide-react";
+import { Radio } from "../../ui/icons";
 import RoomRail from "./RoomRail";
 import type { RoomDockItem } from "../../lib/roomDockModel";
 

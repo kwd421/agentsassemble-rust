@@ -1,6 +1,6 @@
 import RuntimeRestartPanel from "./components/RuntimeRestartPanel";
 import { useEffect, useState } from "react";
-import { Activity, X } from "lucide-react";
+import { Activity, X } from "../ui/icons";
 import { fetchLocalResources, type LocalResourceStatus } from "../api/localResources";
 
 const REFRESH_MS = 2000;

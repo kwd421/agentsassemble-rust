@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Save } from "lucide-react";
+import { Save } from "../../ui/icons";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { providerCatalogGroup } from "../../lib/providerCatalogGroups";

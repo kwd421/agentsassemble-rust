@@ -1,6 +1,6 @@
 import ResourceImage from "./ResourceImage";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, FileUser, PackageOpen, Search, Upload } from "lucide-react";
+import { ChevronDown, FileUser, PackageOpen, Search, Upload } from "../../ui/icons";
 import {
   fetchPersonaAssets,
   importPersonaAsset,

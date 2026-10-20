@@ -1,4 +1,4 @@
-import { UserX } from "lucide-react";
+import { UserX } from "../../ui/icons";
 import type { RoomDockItem } from "../../lib/roomDockModel";
 import type { MembershipEndedScope } from "../../lib/memberMembershipEnded";
 import { membershipEndedCopy } from "../../lib/memberMembershipEnded";

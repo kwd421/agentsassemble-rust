@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Copy, KeyRound, LoaderCircle, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, KeyRound, LoaderCircle, UserRound } from "../../ui/icons";
 import { createCentralGuest, recoverCentralGuest, loadPendingCentralRecoveryCode, clearPendingCentralRecoveryCode } from "../../lib/central/identity";
 
 export type CentralGuestScreen = "choice" | "guest" | "recover" | "recovery-code";

@@ -1,4 +1,4 @@
-import { MoreHorizontal, UserRound, Bot, Cloud, Cpu, Wifi, Users, Search, RefreshCw, X } from "lucide-react";
+import { MoreHorizontal, UserRound, Bot, Cloud, Cpu, Wifi, Users, Search, RefreshCw, X } from "../ui/icons";
 import ParticipantAvatarContent from "./components/ParticipantAvatarContent";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFriendsDirectory } from "../app/useFriendsDirectory";

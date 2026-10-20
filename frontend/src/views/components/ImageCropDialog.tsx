@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { X } from "../../ui/icons";
 import ImageCropper, { type ImageCropShape } from "./ImageCropper";
 
 /**

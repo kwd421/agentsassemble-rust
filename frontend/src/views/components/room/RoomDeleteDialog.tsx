@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X } from "../../../ui/icons";
 import { useEffect, useRef, useState } from "react";
 import type { useRoomLifecycle } from "../../../app/useRoomLifecycle";
 

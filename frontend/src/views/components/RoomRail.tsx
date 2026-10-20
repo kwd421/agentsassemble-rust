@@ -1,7 +1,7 @@
 import { CONNECTION_LABELS } from "../../lib/serverConnectionState";
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { Activity, Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
+import { Activity, Check, LogOut, Plus, Settings, UserPlus, Users } from "../../ui/icons";
 import {
   completeRoomAppearance,
   roomAppearanceStyle,

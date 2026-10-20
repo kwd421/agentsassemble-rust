@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, RefreshCw } from "lucide-react";
+import { BarChart3, RefreshCw } from "../../ui/icons";
 import {
   type LobbyEvent,
   type VoteSummary,

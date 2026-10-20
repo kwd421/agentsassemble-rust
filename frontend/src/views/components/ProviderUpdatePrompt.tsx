@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, CircleAlert, ExternalLink, LoaderCircle, RotateCw } from "lucide-react";
+import { ArrowUp, Check, CircleAlert, ExternalLink, LoaderCircle, RotateCw } from "../../ui/icons";
 import { ApiError, userFacingError } from "../../lib/apiErrors";
 import { providerUpdateOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";

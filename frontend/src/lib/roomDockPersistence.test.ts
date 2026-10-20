@@ -1,4 +1,4 @@
-import { Hash } from "lucide-react";
+import { Hash } from "../ui/icons";
 import { beforeEach, describe, expect, it } from "vitest";
 import { persistableRoom, type RoomDockItem } from "./roomDockModel";
 import {

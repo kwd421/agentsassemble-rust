@@ -7,7 +7,7 @@ import {
   Pencil,
   Plus,
   Settings,
-} from "lucide-react";
+} from "../../ui/icons";
 
 import {
   fetchUserProfile,

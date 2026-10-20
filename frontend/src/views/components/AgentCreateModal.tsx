@@ -1,6 +1,6 @@
 import { reasoningEffortLabel } from "../../lib/agentLabels";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Play, Plus, X } from "lucide-react";
+import { Play, Plus, X } from "../../ui/icons";
 import {
   deleteProviderCredential,
   fetchProviderCredentialStatus,

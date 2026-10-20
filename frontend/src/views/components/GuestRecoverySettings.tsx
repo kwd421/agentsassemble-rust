@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { Copy, KeyRound, Link2 } from "lucide-react";
+import { Copy, KeyRound, Link2 } from "../../ui/icons";
 
 import { issueGuestRecoveryCode, type UserProfileIdentity } from "../../api";
 import { userFacingError } from "../../lib/apiErrors";

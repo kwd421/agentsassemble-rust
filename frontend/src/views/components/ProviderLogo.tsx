@@ -1,6 +1,6 @@
 import ResourceImage from "./ResourceImage";
 import type { ReactNode } from "react";
-import { Bot, Braces } from "lucide-react";
+import { Bot, Braces } from "../../ui/icons";
 import {
   providerBrandKey,
   resolveProviderPresentation,

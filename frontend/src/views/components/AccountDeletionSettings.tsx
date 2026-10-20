@@ -1,6 +1,6 @@
 import { AccountDeletionContext } from "./AccountDeletionContext";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { X } from "../../ui/icons";
 import { AccountDeletion, checkDeletionReceipt, clearExpiredDeletionReceipt, loadDeletionReceipt } from "../../lib/central/accountDeletion";
 import { centralDailyQuotaActionNotice } from "../../lib/central/centralRequestGovernor";
 import { confirmDeletionGoogle } from "../../lib/central/accountDeletionGoogle";

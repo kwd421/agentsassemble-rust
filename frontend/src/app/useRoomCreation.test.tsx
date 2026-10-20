@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { Sparkles } from "lucide-react";
+import { Sparkles } from "../ui/icons";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../lib/apiErrors";

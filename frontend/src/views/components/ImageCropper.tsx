@@ -1,7 +1,7 @@
 import { createResourceUrl, revokeResourceUrl } from "../../lib/remote/remoteResources";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon } from "../../ui/icons";
 import { userFacingError } from "../../lib/apiErrors";
 
 export type ImageCropShape = "circle" | "square" | "banner";

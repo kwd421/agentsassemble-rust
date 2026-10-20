@@ -5,7 +5,7 @@ import { participantFixture } from "../../test/participant";
 import type { LobbyEvent } from "../../api";
 import MessageRow from "./MessageRow";
 import MemberRow from "./member/MemberRow";
-import { Bot } from "lucide-react";
+import { Bot } from "../../ui/icons";
 
 afterEach(cleanup);
 it("uses the same saved human label in members and messages despite an agent-like room role", () => {
@@ -19,7 +19,7 @@ it("uses the same saved human label in members and messages despite an agent-lik
   </>);
   expect(container.querySelector(".dc-member-avatar")?.textContent).toBe("ZZ");
   expect(container.querySelector(".dc-message-avatar")?.textContent).toBe("ZZ");
-  expect(container.querySelector(".lucide-bot")).toBeNull();
+  expect(container.querySelector('[data-icon="bot"]')).toBeNull();
 });
 it("retains photo precedence and agent/system icons", () => {
   const { container } = render(<>
@@ -28,6 +28,6 @@ it("retains photo precedence and agent/system icons", () => {
     <MessageRow eventId="s" author="Room" createdAt="" system>system</MessageRow>
   </>);
   expect(container.querySelector("img")?.getAttribute("src")).toBe("/avatar.png");
-  expect(container.querySelector(".lucide-bot")).not.toBeNull();
-  expect(container.querySelector(".lucide-zap")).not.toBeNull();
+  expect(container.querySelector('[data-icon="bot"]')).not.toBeNull();
+  expect(container.querySelector('[data-icon="zap"]')).not.toBeNull();
 });

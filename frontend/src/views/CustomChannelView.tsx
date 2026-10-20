@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Hash, Send } from "lucide-react";
+import { Hash, Send } from "../ui/icons";
 import { useReplyBarScroll } from "./components/useReplyBarScroll";
 import { RoomSocketSayError } from "../roomSocketTypes";
 import type { MessagePinsAuthority, RoomChannel, RoomSearchResult } from "../api";

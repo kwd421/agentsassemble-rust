@@ -11,8 +11,8 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import type { LucideIcon } from "lucide-react";
-import { AtSign, CirclePlus, FileText, Paperclip, Plus, Send, Smile, Sparkles, Trash2, X } from "lucide-react";
+import type { AppIcon } from "../../ui/icons";
+import { AtSign, CirclePlus, FileText, Paperclip, Plus, Send, Smile, Sparkles, Trash2, X } from "../../ui/icons";
 import type { LobbyEvent } from "../../api";
 import { useRoomSocket } from "../../RoomSocketContext";
 import { RoomSocketSayError } from "../../roomSocketClient";
@@ -43,7 +43,7 @@ type ComposerAccessory = {
   title: string;
   notice: string;
   insertText?: string;
-  icon?: LucideIcon;
+  icon?: AppIcon;
 };
 
 type LobbyComposerDraft = {

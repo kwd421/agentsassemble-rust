@@ -1,6 +1,6 @@
 import ResourceImage from "./ResourceImage";
 import { useState, type ReactNode } from "react";
-import { LogIn, RotateCcw } from "lucide-react";
+import { LogIn, RotateCcw } from "../../ui/icons";
 import { fileToBase64 } from "../../api/http";
 import type { OperatorPairingState } from "../../app/useRoomAdmission";
 import ImageCropper from "./ImageCropper";

@@ -5,7 +5,7 @@ import type { RoomAgentSession } from "../api";
 import { useMessagePins } from "./useMessagePins";
 import { anonymousAuthorRevision } from "../lib/participantAnonymization";
 import { useEffect, useMemo, useState } from "react";
-import { Hash } from "lucide-react";
+import { Hash } from "../ui/icons";
 import { useReplyBarScroll } from "./components/useReplyBarScroll";
 import TypingLine from "./components/TypingLine";
 import {

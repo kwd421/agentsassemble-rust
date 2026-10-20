@@ -14,7 +14,7 @@ import {
   Search,
   Terminal,
   Wrench,
-} from "lucide-react";
+} from "../../ui/icons";
 
 import type { LobbyEvent } from "../../api";
 import type { MessageAttachmentReadScheduler } from "../../lib/messageAttachmentReadScheduler";

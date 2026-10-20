@@ -1,7 +1,7 @@
 import { ROOM_FILE_LIMITS, ROOM_STORAGE_LIMITS } from "../../types/generated/ASSET_SAFETY_WIRE";
 import { ROOM_LABEL_LIMIT } from "../../types/generated/ROOM_SETTINGS_WIRE";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Image as ImageIcon, Trash2, UserPlus, X } from "lucide-react";
+import { Image as ImageIcon, Trash2, UserPlus, X } from "../../ui/icons";
 import {
   type ChannelNotificationSetting,
   type ChannelSettings,

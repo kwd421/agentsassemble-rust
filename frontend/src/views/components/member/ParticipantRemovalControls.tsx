@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Ban, MoreHorizontal, UserMinus } from "lucide-react";
+import { Ban, MoreHorizontal, UserMinus } from "../../../ui/icons";
 import { userFacingError } from "../../../lib/apiErrors";
 
 export type ParticipantRemovalAction = (participantId: string, action: "kick" | "export") => Promise<void>;

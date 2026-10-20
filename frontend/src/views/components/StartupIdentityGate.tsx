@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   LoaderCircle,
   RefreshCw,
-} from "lucide-react";
+} from "../../ui/icons";
 import GoogleGLogo from "./GoogleGLogo";
 
 import {

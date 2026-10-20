@@ -1,6 +1,6 @@
 import ResourceImage from "./ResourceImage";
 import type { ReactNode } from "react";
-import { CornerUpLeft, Pin, Zap } from "lucide-react";
+import { CornerUpLeft, Pin, Zap } from "../../ui/icons";
 import ParticipantAvatarContent from "./ParticipantAvatarContent";
 
 // Discord's header timestamp: 오전 9:35 today, 어제 오후 11:11 yesterday, and

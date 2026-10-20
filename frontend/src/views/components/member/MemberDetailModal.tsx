@@ -1,7 +1,7 @@
 import { resolveProviderPresentation } from "../providerBranding";
 import ResourceImage from "../ResourceImage";
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { X } from "../../../ui/icons";
 import AgentProfileCard from "./AgentProfileCard";
 import type { RoomAgentSession } from "../../../api";
 import AgentSessionDetails, {

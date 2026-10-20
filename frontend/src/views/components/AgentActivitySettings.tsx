@@ -1,4 +1,4 @@
-import { Brain } from "lucide-react";
+import { Brain } from "../../ui/icons";
 
 import type { RoomAgentSession } from "../../api";
 

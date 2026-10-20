@@ -1,6 +1,6 @@
 import { useResourceImage } from "./ResourceImage";
 import { useEffect, useRef, type RefObject } from "react";
-import { X, Camera, UserRound, Palette, KeyRound, MonitorSmartphone, type LucideIcon } from "lucide-react";
+import { X, Camera, UserRound, Palette, KeyRound, MonitorSmartphone, type AppIcon } from "../../ui/icons";
 
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
@@ -18,7 +18,7 @@ export type UserSettingsSection = "account" | "profile" | "recovery" | "devices"
 const USER_SETTINGS_SECTIONS: Array<{
   id: UserSettingsSection;
   label: string;
-  icon: LucideIcon;
+  icon: AppIcon;
 }> = [
   { id: "account", label: "계정", icon: UserRound },
   { id: "profile", label: "프로필", icon: Palette },

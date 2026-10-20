@@ -16,8 +16,8 @@ import {
   User,
   UserPlus,
   Users,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+} from "../../ui/icons";
+import type { AppIcon } from "../../ui/icons";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import { executionLocationLabel, providerExecutionLabel } from "../../lib/agentLabels";
 import type { RoomAppearance } from "../../lib/roomAppearance";
@@ -46,7 +46,7 @@ type MobileMemberRow = {
   detail: string;
   active: boolean;
   role: string;
-  icon: LucideIcon;
+  icon: AppIcon;
   avatarImage?: string;
   providerKind?: string;
   app?: boolean;
@@ -61,7 +61,7 @@ type MobileMemberGroup = {
   agents: MobileMemberRow[];
 };
 
-const MOBILE_INFO_TABS: Array<{ id: MobileInfoTab; label: string; icon: LucideIcon }> = [
+const MOBILE_INFO_TABS: Array<{ id: MobileInfoTab; label: string; icon: AppIcon }> = [
   { id: "members", label: "멤버", icon: Users },
   { id: "media", label: "미디어", icon: ImageIcon },
   { id: "pins", label: "고정한 메시지", icon: Pin },

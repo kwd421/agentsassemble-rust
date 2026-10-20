@@ -57,7 +57,7 @@ Theme: "Discord-informed local-first agent room."
 - Status accents: green ready, blue online, amber syncing, red offline, violet
   analysis.
 - Typography: system UI stack, dense UI chrome, readable Korean body copy.
-- Icons: lucide icons where they map to common commands.
+- Icons: solid Phosphor icons (owned by `src/ui/icons.tsx`) where they map to common commands.
 - Motion: small state transitions only, disabled for reduced motion.
 
 ## Layout

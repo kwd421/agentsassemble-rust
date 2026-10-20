@@ -1,5 +1,5 @@
 import { act, cleanup, render, renderHook, waitFor } from "@testing-library/react";
-import { Hash } from "lucide-react";
+import { Hash } from "../../ui/icons";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LobbyEvent } from "../../api";

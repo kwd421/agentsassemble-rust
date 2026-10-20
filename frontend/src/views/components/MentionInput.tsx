@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from "react";
-import { Bot, UserRound } from "lucide-react";
+import { Bot, UserRound } from "../../ui/icons";
 import {
   insertMentionText,
   mentionOptions,

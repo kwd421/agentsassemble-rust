@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { overlayHost } from "../../lib/overlayHost";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Search } from "../../ui/icons";
 
 import type { ProviderControlOption } from "../../roomSocketClient";
 import {

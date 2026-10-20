@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Hash } from "lucide-react";
+import { Hash } from "../ui/icons";
 import type { RoomSettings } from "../api";
 import AppView from "./AppView";
 import { useAppController, type AppController } from "./useAppController";
