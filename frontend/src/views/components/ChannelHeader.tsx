@@ -337,7 +337,7 @@ export default function ChannelHeader({
             )}
             {activePanel === "pins" && (
               <>
-                <p className="dc-head-popover-title">고정 메시지</p>
+                <p className="dc-head-popover-title dc-head-popover-title--icon"><Pin size={20} aria-hidden />고정된 메시지</p>
                 {headerActions?.pinsLoading ? (
                   <p className="dc-head-popover-copy preserve-words">고정 메시지를 불러오는 중이에요.</p>
                 ) : headerActions?.pinsError ? (
@@ -374,7 +374,11 @@ export default function ChannelHeader({
                     ))}
                   </div>
                 ) : (
-                  <p className="dc-head-popover-copy preserve-words">{pinnedSummary}</p>
+                  // Discord keeps the popover tall when empty and centres the note.
+                  <div className="dc-pins-empty">
+                    <Pin size={40} aria-hidden />
+                    <p className="dc-head-popover-copy preserve-words">{pinnedSummary}</p>
+                  </div>
                 )}
               </>
             )}

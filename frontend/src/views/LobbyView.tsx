@@ -24,7 +24,6 @@ import type {
   ChannelHeaderActions,
   ChannelSearchScope,
 } from "./components/ChannelHeader";
-import type { RoomAppearance } from "../lib/roomAppearance";
 import type { RoomPostingMode } from "../lib/roomGuestPosting";
 import { messageAttachmentAuthorityForRoom } from "../lib/roomGuestPosting";
 import type { RoomTypingIndicator } from "../lib/roomTypingIndicators";
@@ -79,7 +78,6 @@ export default function LobbyView({
   headerActions,
   onOpenMobileSidebar,
   onOpenMobileInfo,
-  appearance,
   onGuestSessionExpired,
   roomSessionToken = "",
   roomDeviceToken = "",
@@ -124,7 +122,6 @@ export default function LobbyView({
   headerActions?: ChannelHeaderActions;
   onOpenMobileSidebar?: () => void;
   onOpenMobileInfo?: () => void;
-  appearance?: RoomAppearance;
   onGuestSessionExpired?: () => void;
   roomSessionToken?: string;
   roomDeviceToken?: string;
@@ -554,16 +551,14 @@ export default function LobbyView({
           </p>
         )}
         {loaded && !historyWindowActive && !hasMoreHistory && (
-          // The channel intro marks the true beginning of history, like Discord.
-          <section className="dc-channel-intro px-4 pb-5 pt-2">
-            <span className="dc-channel-intro-icon" data-has-image={Boolean(appearance?.iconImage)}>
-              {appearance?.iconImage ? "" : <Hash size={26} />}
-            </span>
-            <h2 className="mt-3 text-[28px] font-black leading-tight text-text-primary preserve-words">
-              #{channelName}에 오신 것을 환영합니다!
+          // The default channel opens with the room's own welcome, centred like Discord's server welcome.
+          <section className="dc-room-intro px-4 pb-6 pt-2 text-center">
+            <h2 className="text-[32px] font-bold leading-10 text-text-primary preserve-words">
+              <span className="block">{activeRoom.label}에</span>{" "}
+              <span className="block">오신 것을 환영합니다</span>
             </h2>
-            <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-text-muted preserve-words">
-              {lobbyRows.length === 0 ? "첫 메시지를 남겨 보세요." : `#${channelName} 채널의 시작이에요.`}
+            <p className="mt-2 text-[14px] text-text-secondary preserve-words">
+              {lobbyRows.length === 0 ? "이 방이 시작된 곳이에요. 첫 메시지를 남겨 보세요." : "이 방이 시작된 곳이에요."}
             </p>
           </section>
         )}

@@ -168,7 +168,7 @@
 .dc-agent-launch-switch {
   position: relative;
   flex: 0 0 auto;
-  width: 40px;
+  width: 46px;
   height: 24px;
   border-radius: 999px;
   background: #4b4d54;
@@ -191,7 +191,7 @@
 }
 
 .dc-agent-launch-toggle[data-on="true"] .dc-agent-launch-switch i {
-  transform: translateX(16px);
+  transform: translateX(22px);
 }
 
 .dc-agent-launch-text {

@@ -5,7 +5,7 @@
   z-index: auto;
   display: flex;
   flex-direction: column;
-  width: var(--dc-members-width, 300px);
+  width: var(--dc-members-width, 264px);
   max-width: 60%;
   min-width: 0;
   /* Discord: the member list shares the chat color with no dividing line. */

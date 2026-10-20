@@ -535,7 +535,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               headerActions={headerActionsFor("lobby")}
               onOpenMobileSidebar={openMobileSidebar}
               onOpenMobileInfo={openMobileRoomInfo}
-              appearance={activeAppearance}
               onGuestSessionExpired={expireGuestSession}
               typingIndicators={typingIndicators}
               providerRequests={canonicalRoom.providerRequests}

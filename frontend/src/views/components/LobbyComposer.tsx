@@ -12,7 +12,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { AppIcon } from "../../ui/icons";
-import { AtSign, CirclePlus, FileText, Paperclip, Plus, Send, Smile, Sparkles, Trash2, X } from "../../ui/icons";
+import { AtSign, FileText, Paperclip, Plus, Send, Smile, Sparkles, Trash2, X } from "../../ui/icons";
 import type { LobbyEvent } from "../../api";
 import { useRoomSocket } from "../../RoomSocketContext";
 import { RoomSocketSayError } from "../../roomSocketClient";
@@ -627,11 +627,11 @@ export default function LobbyComposer({
             onSelect={selectCommand}
           />
         )}
-        {/* Discord puts upload at the left edge of the box as a circled +. */}
+        {/* Discord puts upload at the left edge of the box as a plain +. */}
         <button type="button" onClick={composerTools[0].run} disabled={composerTools[0].disabled}
           className="dc-composer-button dc-composer-wide-tool dc-composer-attach"
           aria-label={composerTools[0].label} title={composerTools[0].title}>
-          <CirclePlus size={22} />
+          <Plus size={22} />
         </button>
         <MentionInput
           inputRef={inputRef}

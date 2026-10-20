@@ -486,10 +486,25 @@
   width: min(420px, calc(100vw - 32px));
 }
 
-.dc-head-popover[data-panel="pins"] > .dc-head-popover-copy:only-of-type {
-  margin-top: 0;
-  padding: 32px 0 16px;
+.dc-head-popover-title--icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Measured on Discord: an empty pins popover keeps its height and centres an icon and note. */
+.dc-pins-empty {
+  display: grid;
+  min-height: 280px;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: var(--color-text-muted);
   text-align: center;
+}
+
+.dc-pins-empty .dc-head-popover-copy {
+  margin-top: 0;
 }
 
 .dc-head-popover-actions {

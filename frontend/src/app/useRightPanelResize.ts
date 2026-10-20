@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 
 const STORAGE_KEY = "agentsassemble.rightPanel.width.v1";
-export const RIGHT_PANEL_WIDTH_DEFAULT = 300;
+export const RIGHT_PANEL_WIDTH_DEFAULT = 264;
 export const RIGHT_PANEL_WIDTH_MIN = 240;
 export const RIGHT_PANEL_WIDTH_MAX = 480;
 
