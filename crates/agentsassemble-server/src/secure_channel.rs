@@ -152,21 +152,7 @@ async fn handshake(
         return Err(());
     }
     let hello: SecureClientHello = serde_json::from_str(&text).map_err(|_| ())?;
-    if hello.origin != origin
-        || state
-            .store
-            .registration_epoch()
-            .await
-            .map_err(|_| ())?
-            .as_deref()
-            != Some(&hello.registration_epoch)
-        || state
-            .store
-            .current_central_endpoint_generation()
-            .await
-            .map_err(|_| ())?
-            != hello.generation
-    {
+    if !hello_is_live(state, origin, &hello).await {
         return Err(());
     }
     let mut handshake = state
@@ -189,6 +175,26 @@ async fn handshake(
         return Err(());
     }
     Ok(handshake)
+}
+
+/// Whether this host still serves the incarnation the client named. A
+/// hello for another origin, registration epoch or generation is refused
+/// here, before the host answers with a `ServerHello`: such a channel never
+/// exists, so no route of this host ever sees it.
+async fn hello_is_live(state: &AppState, origin: &str, hello: &SecureClientHello) -> bool {
+    if hello.origin != origin {
+        return false;
+    }
+    let Ok(Some(epoch)) = state.store.registration_epoch().await else {
+        return false;
+    };
+    if epoch != hello.registration_epoch {
+        return false;
+    }
+    let Ok(generation) = state.store.current_central_endpoint_generation().await else {
+        return false;
+    };
+    generation == hello.generation
 }
 
 #[path = "secure_writer.rs"]
@@ -356,6 +362,70 @@ fn monitor_lifetime(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agentsassemble_domain::ProviderCatalog;
+    use agentsassemble_persistence::SqliteStore;
+
+    /// A hello of another registration epoch is refused before the host
+    /// answers with a `ServerHello`: such a channel never exists, so the
+    /// resume route is never reached by a stale incarnation.
+    #[tokio::test]
+    async fn a_hello_of_another_registration_epoch_never_gets_a_server_hello() {
+        let store = SqliteStore::open(&format!(
+            "sqlite:file:{}?mode=memory&cache=shared",
+            uuid::Uuid::new_v4()
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("open handshake fixture store: {error:?}"));
+        store
+            .bootstrap_local_authority("2f6d1c40-9b1a-4a0e-9c2d-7f5b3e8a1c90", "Host")
+            .await
+            .unwrap_or_else(|error| panic!("bootstrap handshake fixture: {error:?}"));
+        store
+            .set_registration_epoch(Some("live-epoch"))
+            .await
+            .unwrap_or_else(|error| panic!("set handshake fixture epoch: {error:?}"));
+        let generation = store
+            .next_central_endpoint_generation()
+            .await
+            .unwrap_or_else(|error| panic!("reserve handshake fixture generation: {error:?}"));
+        let state = AppState::local(
+            store,
+            crate::TicketStore::new(std::time::Duration::from_secs(30), 4096),
+            agentsassemble_provider::ProviderCatalogService::fixed(ProviderCatalog::default()),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("build handshake fixture state: {error:?}"));
+        let hello = SecureClientHello {
+            protocol: "secure_admission_v1".into(),
+            server_id: "handshake-server".into(),
+            registration_epoch: "live-epoch".into(),
+            origin: "https://handshake-host.test".into(),
+            generation,
+            purpose: "member_connect".into(),
+            client_nonce: "handshake-nonce".into(),
+            client_public_key: "handshake-key".into(),
+        };
+        assert!(
+            hello_is_live(&state, "https://handshake-host.test", &hello).await,
+            "the live incarnation must be served"
+        );
+        let mut stale = hello.clone();
+        stale.registration_epoch = "old-epoch".into();
+        assert!(
+            !hello_is_live(&state, "https://handshake-host.test", &stale).await,
+            "a hello of another registration epoch must never get a ServerHello"
+        );
+        let mut moved = hello.clone();
+        moved.generation = hello.generation + 1;
+        assert!(
+            !hello_is_live(&state, "https://handshake-host.test", &moved).await,
+            "a hello of another generation must never get a ServerHello"
+        );
+        assert!(
+            !hello_is_live(&state, "https://other-host.test", &hello).await,
+            "a hello of another origin must never get a ServerHello"
+        );
+    }
 
     #[tokio::test]
     async fn control_frames_preserve_application_order_and_close() {

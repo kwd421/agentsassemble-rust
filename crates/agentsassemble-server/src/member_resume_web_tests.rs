@@ -79,6 +79,28 @@ fn base64(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// The raw P1363 signature of any device key.
+fn sign_with(key_pair: &EcdsaKeyPair, message: &[u8]) -> String {
+    let rng = SystemRandom::new();
+    let der = key_pair
+        .sign(&rng, message)
+        .unwrap_or_else(|error| panic!("sign resume transcript: {error:?}"));
+    base64(&raw_signature(der.as_ref()))
+}
+
+/// Another device key: a second person on the same browser credential.
+fn other_key_pair() -> EcdsaKeyPair {
+    let rng = SystemRandom::new();
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &rng)
+        .unwrap_or_else(|error| panic!("generate the other key: {error:?}"));
+    EcdsaKeyPair::from_pkcs8(
+        &ECDSA_P256_SHA256_ASN1_SIGNING,
+        pkcs8.as_ref(),
+        &rng,
+    )
+    .unwrap_or_else(|error| panic!("load the other key: {error:?}"))
+}
+
 async fn fixture() -> Fixture {
     let store = SqliteStore::open(&format!(
         "sqlite:file:{}?mode=memory&cache=shared",
@@ -218,15 +240,6 @@ async fn fixture() -> Fixture {
 }
 
 impl Fixture {
-    fn sign(&self, message: &[u8]) -> String {
-        let rng = SystemRandom::new();
-        let der = self
-            .key_pair
-            .sign(&rng, message)
-            .unwrap_or_else(|error| panic!("sign resume transcript: {error:?}"));
-        base64(&raw_signature(der.as_ref()))
-    }
-
     /// The raw uncompressed public key of the fixture device.
     fn public_key(&self) -> [u8; 65] {
         let mut key = [0u8; 65];
@@ -267,6 +280,12 @@ impl Fixture {
 
     /// The signed resume request a client builds for this channel.
     fn signed_body(&self, nonce: &str) -> Value {
+        self.signed_body_with(&self.key_pair, nonce)
+    }
+
+    /// The same resume request, signed by another device key: the body
+    /// still presents this device's own resume public key.
+    fn signed_body_with(&self, key_pair: &EcdsaKeyPair, nonce: &str) -> Value {
         let hello = self.secure.hello();
         let browser_fingerprint = self.browser_fingerprint();
         let transcript = client_transcript(
@@ -292,7 +311,7 @@ impl Fixture {
             "channel_id": self.secure.binding().channel_id,
             "purpose": "resume",
             "nonce": nonce,
-            "signature": self.sign(&transcript),
+            "signature": sign_with(key_pair, &transcript),
         })
     }
 }
@@ -512,7 +531,10 @@ async fn the_channel_key_never_stands_in_for_the_stored_resume_key() {
 }
 
 #[tokio::test]
-async fn a_stale_incarnation_never_opens_the_direct_path() {
+async fn a_resume_body_of_another_registration_epoch_never_opens_the_direct_path() {
+    // A client hello of another epoch never gets a ServerHello (the secure
+    // channel refuses it), so this route only ever sees the live epoch of
+    // its own channel. The body check below is the second line of defence.
     let fixture = fixture().await;
     store_resume_key(&fixture).await;
     let nonce = fixture.nonce().await;
@@ -576,6 +598,37 @@ async fn an_unknown_or_expired_key_never_opens_the_direct_path() {    let fixtur
         .is_err(),
         "another browser credential must not open this key"
     );
+}
+
+#[tokio::test]
+async fn another_person_cannot_use_this_key_on_the_same_browser_credential() {
+    let fixture = fixture().await;
+    store_resume_key(&fixture).await;
+    // Another person shares this browser credential (the same browser after
+    // an account switch) and holds its own device key.
+    let other = other_key_pair();
+    let nonce = fixture.nonce().await;
+    // The attempt presents this person's stored public key, but the
+    // signature is the other person's own.
+    let body = fixture.signed_body_with(&other, &nonce);
+    let refused = super::resume(
+        axum::extract::State(fixture.state.clone()),
+        fixture.request(body),
+    )
+    .await;
+    assert!(
+        refused.is_err(),
+        "another person must not use this key on the same browser credential"
+    );
+    // The stored row still belongs to this person.
+    let stored = fixture
+        .store
+        .member_resume_key(&fixture.browser, &fixture.public_key())
+        .await
+        .unwrap_or_else(|error| panic!("read the stored key: {error:?}"))
+        .unwrap_or_else(|| panic!("the stored resume key must stay stored"));
+    assert_eq!(stored.issuer, ISSUER);
+    assert_eq!(stored.person_id, PERSON);
 }
 
 #[tokio::test]

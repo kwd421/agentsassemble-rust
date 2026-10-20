@@ -200,7 +200,7 @@ async fn direct_resume_keeps_the_stored_projection_and_acked_revision() -> TestR
 }
 
 #[tokio::test]
-async fn kick_refuses_the_direct_select_while_another_room_still_lists() -> TestResult {
+async fn a_kick_or_a_leave_refuses_the_direct_select_while_another_room_still_lists() -> TestResult {
     let (store, now) = fixture().await;
     store.set_registration_epoch(Some(EPOCH)).await?;
     admitted_member(&store, now).await?;
@@ -256,6 +256,22 @@ async fn kick_refuses_the_direct_select_while_another_room_still_lists() -> Test
     let rooms = store.member_connect_rooms(&admission, now).await?;
     assert_eq!(rooms.len(), 1);
     assert_eq!(rooms[0].room_id, "second");
+    // A leave refuses the direct select exactly like a kick.
+    sqlx::query("UPDATE participants SET participant_json=json_set(participant_json,'$.status','left') WHERE room_id='second'")
+        .execute(&store.pool)
+        .await?;
+    let request_id = uuid::Uuid::new_v4().to_string();
+    assert!(matches!(
+        store
+            .select_member_connect_room(&admission, "second", &[5; 32], &request_id, "client", now)
+            .await?,
+        HumanAdmissionDecision::Rejected(HumanAdmissionRejection::MemberMembershipEnded)
+    ));
+    // The left room leaves the list as well.
+    assert!(
+        store.member_connect_rooms(&admission, now).await?.is_empty(),
+        "a left member keeps no joined room"
+    );
     Ok(())
 }
 
