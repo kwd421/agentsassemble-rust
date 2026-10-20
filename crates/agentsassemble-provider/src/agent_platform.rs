@@ -25,11 +25,13 @@ pub(crate) const PROVIDER_KIND: &str = "agent_platform_api";
 const HOST: &str = "aiplatform.googleapis.com";
 const DEFAULT_MODEL: &str = "google/gemini-2.5-flash-lite";
 /// The model-list endpoint does not accept API keys, so the catalog is fixed.
-const MODELS: [(&str, &str); 4] = [
+const MODELS: [(&str, &str); 6] = [
     ("google/gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite"),
     ("google/gemini-2.5-flash", "Gemini 2.5 Flash"),
     ("google/gemini-2.5-pro", "Gemini 2.5 Pro"),
     ("google/gemini-3-flash-preview", "Gemini 3 Flash Preview"),
+    ("google/gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite"),
+    ("google/gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"),
 ];
 const SERVICE_TIERS: [(&str, &str); 3] = [
     ("default", "기본"),
@@ -445,6 +447,8 @@ mod tests {
                 "google/gemini-2.5-flash",
                 "google/gemini-2.5-pro",
                 "google/gemini-3-flash-preview",
+                "google/gemini-3.1-flash-lite",
+                "google/gemini-3.1-pro-preview",
             ]
         );
         let tiers = provider

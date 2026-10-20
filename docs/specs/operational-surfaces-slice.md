@@ -1379,7 +1379,8 @@ must match `^[a-z][a-z0-9-]{4,28}[a-z0-9]$` or be a project number, and LOCATION
 be `global` or `^[a-z]+-[a-z]+[0-9]+$`; invalid settings are refused before any
 request. LOCATION defaults to `global`. The model-list API rejects API keys, so the
 catalog is fixed: `google/gemini-2.5-flash-lite` (default), `google/gemini-2.5-flash`,
-`google/gemini-2.5-pro` and `google/gemini-3-flash-preview`. The `service_tier`
+`google/gemini-2.5-pro`, `google/gemini-3-flash-preview`, `google/gemini-3.1-flash-lite`
+and `google/gemini-3.1-pro-preview`. The `service_tier`
 control ("응답 속도") exposes `default`/"기본", `flex`/"Flex" and `priority`/"Priority";
 non-default tiers travel in the `X-Vertex-AI-LLM-Shared-Request-Type` request header
 and `default` sends no header. The add-agent credential section asks for API 키,
