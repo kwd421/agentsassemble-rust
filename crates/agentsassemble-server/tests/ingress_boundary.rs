@@ -105,6 +105,9 @@ async fn identity_probe_uses_the_persistent_key_and_exact_local_origin() {
         .unwrap_or_else(|error| panic!("decode server identity: {error}"));
     assert_eq!(info["protocol_version"], 1);
     assert_eq!(info["status"], "ready");
+    // The central directory status carries the daily quota park (unix seconds,
+    // 0 when unparked) so the owner UI can project the reset time. A host
+    // without a central directory is unparked.
     assert_eq!(
         info["central_directory"],
         json!({
@@ -113,6 +116,7 @@ async fn identity_probe_uses_the_persistent_key_and_exact_local_origin() {
             "last_success_at": 0,
             "last_error": "",
             "name_sync_error": "",
+            "quota_parked_until": 0,
         })
     );
 

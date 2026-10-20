@@ -35,6 +35,8 @@ mod invitations;
 mod lifecycle;
 #[path = "central_owner_boundary/lifetimes.rs"]
 mod lifetimes;
+#[path = "central_owner_boundary/runtime.rs"]
+mod runtime;
 #[path = "central_owner_boundary/secure.rs"]
 mod secure;
 use crate::support::room_socket_peer;
@@ -292,27 +294,10 @@ async fn start_fixture() -> Fixture {
         .await
         .unwrap_or_else(|error| panic!("host epoch: {error}"));
     let room_uid = String::new();
-    let runtime_state = AppState::local(
-        store.clone(),
-        // Match the runtime capacity: small stores reserve all grants for private use.
-        TicketStore::new(Duration::from_secs(30), 4096),
-        ProviderCatalogService::fixed(ProviderCatalog::default()),
-    )
-    .await
-    .unwrap_or_else(|error| panic!("host state: {error:?}"))
-    .with_manual_public_ingress(address, ORIGIN, SECRET)
-    .unwrap_or_else(|error| panic!("public ingress: {error:?}"))
-    .with_central_directory(&worker_url)
-    .unwrap_or_else(|error| panic!("central directory: {error:?}"));
+    let runtime_state = runtime::state(store.clone(), address, &worker_url).await;
     let connections = runtime_state.connections.clone();
     let tickets = runtime_state.tickets.clone();
-    let cancel = CancellationToken::new();
-    let owner_cancel = cancel.clone();
-    let host_task = tokio::spawn(async move {
-        serve(listener, runtime_state, owner_cancel, async { Ok(()) })
-            .await
-            .unwrap_or_else(|error| panic!("host serve: {error:?}"));
-    });
+    let (cancel, host_task) = runtime::spawn(listener, runtime_state);
     let client = reqwest::Client::builder()
         .no_proxy()
         .build()
@@ -693,8 +678,12 @@ async fn verify_owner_profile(
     assert_eq!(restored.status(), StatusCode::OK);
 }
 
+/// The central owner routes run on the bound session, and the host's own
+/// endpoint publication contract is checked with them: the live origin is
+/// published once at start, a restart republishes it with a strictly higher
+/// generation, and quitting publishes nothing.
 #[tokio::test]
-async fn central_owner_routes_use_bound_session_and_join_offline_publication() {
+async fn central_owner_routes_use_bound_session_and_republish_once_on_restart() {
     let mut fixture = start_fixture().await;
     let address = fixture.address;
     let online = next_call(&mut fixture.calls).await;
@@ -748,21 +737,7 @@ async fn central_owner_routes_use_bound_session_and_join_offline_publication() {
         fixture.calls.try_recv().is_err(),
         "workspace requests must not redeem entry grants"
     );
-    fixture.cancel.cancel();
-    fixture
-        .host_task
-        .await
-        .unwrap_or_else(|error| panic!("host join: {error:?}"));
-    let offline = next_call(&mut fixture.calls).await;
-    assert_eq!(offline.method, Method::DELETE);
-    let offline_generation = serde_json::from_slice::<Value>(&offline.body)
-        .unwrap_or_else(|error| panic!("offline body: {error:?}"))["generation"]
-        .as_i64()
-        .unwrap_or_else(|| panic!("offline generation"));
-    assert!(offline_generation > generation);
-    verify_signed_call(&offline, &public_key);
-    fixture.worker_task.abort();
-    let _ = fixture.worker_task.await;
+    runtime::verify_publication(fixture, generation, &public_key).await;
 }
 
 fn fixture_worker(worker_state: WorkerState) -> Router {
