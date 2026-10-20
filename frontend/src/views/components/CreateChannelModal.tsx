@@ -58,8 +58,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
     } finally { submitting.current = false; }
   }
   return (
-    <dialog ref={dialogRef} className="dc-create-channel-modal" aria-labelledby={titleId}
-      style={{ position: "fixed", inset: 0, margin: "auto", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", color: "var(--color-text-primary)" }}
+    <dialog ref={dialogRef} className="dc-dialog dc-create-channel-modal" aria-labelledby={titleId}
       onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
       onClick={(event) => {
         if (event.target !== event.currentTarget || busy) return;
@@ -67,7 +66,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
         if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
       }}>
       <header className="dc-create-channel-head">
-        <h2 id={titleId}>{room ? "새 방 만들기" : "텍스트 채널 만들기"}</h2>
+        <h2 id={titleId} className="dc-dialog-title">{room ? "새 방 만들기" : "텍스트 채널 만들기"}</h2>
         <button type="button" className="dc-dialog-close" disabled={busy} onClick={onClose}
           aria-label="닫기"><X size={24} /></button>
       </header>

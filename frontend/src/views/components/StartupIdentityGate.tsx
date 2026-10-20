@@ -610,7 +610,7 @@ export default function StartupIdentityGate({
             {busy && (
               <button
                 type="button"
-                className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary"
+                className="dc-button dc-button--md dc-button--secondary"
                 onClick={() => googleAbortController.current?.abort()}
               >
                 Google 로그인 취소

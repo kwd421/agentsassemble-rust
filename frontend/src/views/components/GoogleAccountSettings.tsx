@@ -170,11 +170,11 @@ function AccountSwitchConfirmation({ busy, onCancel, onConnect }: { busy: boolea
     dialog?.showModal();
     return () => dialog?.close();
   }, []);
-  return <div className="dc-modal-backdrop" role="presentation"><dialog ref={dialogRef} className="dc-create-channel-modal" style={{ width: "min(440px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", margin: "auto", border: "1px solid var(--color-panel-border)", color: "var(--color-text-primary)", padding: 24, overflowY: "auto" }} aria-labelledby="google-account-confirm-title"
+  return <div className="dc-modal-backdrop" role="presentation"><dialog ref={dialogRef} className="dc-dialog" aria-labelledby="google-account-confirm-title"
     onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }}
     onClick={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
     <section style={{ display: "grid", gap: 20 }}>
-      <h3 id="google-account-confirm-title">Google 계정을 연결할까요?</h3>
+      <h3 id="google-account-confirm-title" className="dc-dialog-title">Google 계정을 연결할까요?</h3>
       <p style={{ margin: 0, fontSize: 14, lineHeight: 1.7 }}>이미 이 서버에서 쓰던 계정이면 그 계정으로 전환돼요. 현재 게스트 프로필, 방 참여와 복구 코드는 폐기되며, 다시 참여하려면 새 초대가 필요해요. 이전 대화 기록은 남아요.</p>
       <div className="dc-create-channel-actions" style={{ gap: 12 }}>
         <button type="button" className="dc-button dc-button--secondary dc-button--lg" style={{ minHeight: 44 }} disabled={busy} onClick={onCancel} autoFocus>취소</button>

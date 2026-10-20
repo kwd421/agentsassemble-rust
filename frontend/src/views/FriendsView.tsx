@@ -97,7 +97,7 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
       {directory.error && <p role="alert">{directory.error}</p>}
       <div className="dc-create-channel-actions">
         <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={directory.busy} autoFocus onClick={() => setDeleting(null)}>취소</button>
-        <button type="button" className="dc-button dc-button--md dc-button--danger-soft" style={{ minWidth: 96 }} disabled={directory.busy} onClick={async () => { if (await directory.remove(deleting.friend_id)) setDeleting(null); }}>삭제</button>
+        <button type="button" className="dc-button dc-button--md dc-button--danger" style={{ minWidth: 96 }} disabled={directory.busy} onClick={async () => { if (await directory.remove(deleting.friend_id)) setDeleting(null); }}>삭제</button>
       </div>
     </FriendDialog>}
   </section>;
@@ -213,11 +213,10 @@ function FriendDialog({ title, busy, onCancel, children }: { title: string; busy
     dialog?.showModal();
     return () => { dialog?.close(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
   }, [opener]);
-  return <div className="dc-modal-backdrop" role="presentation"><dialog ref={ref} className="dc-create-channel-modal" aria-label={title}
-    style={{ maxHeight: "calc(100dvh - 32px)", margin: "auto", overflowY: "auto", color: "var(--color-text-primary)", border: "1px solid var(--color-panel-border)" }}
+  return <div className="dc-modal-backdrop" role="presentation"><dialog ref={ref} className="dc-dialog dc-create-channel-modal" aria-label={title}
     onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }} onClick={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
     <section style={{ display: "grid", gap: 16 }}>
-      <header className="dc-create-channel-head"><h2>{title}</h2>
+      <header className="dc-create-channel-head"><h2 className="dc-dialog-title">{title}</h2>
         <button type="button" className="dc-dialog-close" aria-label="닫기" disabled={busy} onClick={onCancel}><X size={24} /></button>
       </header>
       {children}

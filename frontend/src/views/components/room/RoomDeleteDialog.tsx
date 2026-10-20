@@ -46,14 +46,14 @@ export default function RoomDeleteDialog({
     <div className="dc-modal-backdrop" role="presentation" onClick={() => { if (!controller.busy) onClose(); }}>
       <dialog
         ref={dialogRef}
-        className="dc-room-delete"
+        className="dc-dialog dc-room-delete"
         role="alertdialog"
         aria-labelledby="room-delete-title"
         onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!controller.busy) onClose(); }}
         onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && !controller.busy) onClose(); }}
       >
         <header className="flex items-center justify-between gap-4">
-          <h2 id="room-delete-title" className="preserve-words">{controller.pending ? "방 관리 결과" : `‘${target.label}’ 삭제`}</h2>
+          <h2 id="room-delete-title" className="dc-dialog-title preserve-words">{controller.pending ? "방 관리 결과" : `‘${target.label}’ 삭제`}</h2>
           <button type="button" className="dc-dialog-close" aria-label="닫기" disabled={controller.busy} onClick={onClose}><X size={24} /></button>
         </header>
         {deleted ? (
@@ -85,15 +85,15 @@ export default function RoomDeleteDialog({
           </button>
         )}
         <div className="dc-room-delete-actions">
-          <button type="button" className="dc-room-delete-cancel" style={{ minHeight: 40, minWidth: 96 }}
+          <button type="button" className="dc-agent-create-secondary" style={{ minWidth: 96 }}
             disabled={controller.busy} onClick={onClose}>
             {deleted ? "닫기" : "취소"}
           </button>
           {!deleted && !controller.pending && (
             <button
               type="button"
-              className="dc-room-delete-confirm"
-              style={{ minHeight: 40, minWidth: 96 }}
+              className="dc-button dc-button--md dc-button--danger"
+              style={{ minWidth: 96 }}
               disabled={locked || confirmationName !== target.label}
               onClick={() => {
                 if (!room) return;

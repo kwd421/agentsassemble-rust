@@ -683,18 +683,51 @@ button:disabled,
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.58);
+  background: rgba(0, 0, 0, 0.7);
 }
 
-.dc-invite-modal {
-  width: min(820px, calc(100vw - 32px));
-  max-height: min(780px, calc(100vh - 32px));
+/* The one dialog frame, measured from Discord's small dialog: 480 wide,
+   24 padding, 20px bold title. Flush dialogs lay out their own header and
+   body; wide ones hold long flows. */
+.dc-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(480px, calc(100vw - 32px));
+  height: fit-content;
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
   overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: #242429;
-  padding: 28px 28px 22px;
-  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 12px;
+  background: var(--color-panel);
+  padding: 24px;
+  color: var(--color-text-primary);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 42%);
+}
+
+.dc-dialog--flush {
+  padding: 0;
+}
+
+.dc-dialog--wide {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.dc-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* A dialog inside a dimmed wrapper is already dimmed once. */
+.dc-modal-backdrop > .dc-dialog::backdrop {
+  background: transparent;
+}
+
+.dc-dialog-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
 }
 
 .dc-invite-primary-grid {

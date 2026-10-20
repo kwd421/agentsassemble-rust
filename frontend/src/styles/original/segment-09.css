@@ -290,32 +290,13 @@
 }
 
 .dc-upload-limit-dialog {
-  position: fixed;
-  inset: 0;
   display: grid;
-  width: min(480px, calc(100vw - 32px));
   gap: 8px;
-  margin: auto;
-  border: 1px solid var(--color-panel-border);
-  border-radius: 12px;
-  background: var(--color-panel-bg);
-  padding: 24px;
-  color: var(--color-text-primary);
   text-align: left;
 }
 
 .dc-upload-limit-dialog:not([open]) {
   display: none;
-}
-
-.dc-upload-limit-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.7);
-}
-
-.dc-upload-limit-dialog h2 {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 24px;
 }
 
 .dc-upload-limit-dialog p {

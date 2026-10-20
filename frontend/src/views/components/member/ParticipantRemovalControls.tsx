@@ -70,17 +70,17 @@ export default function ParticipantRemovalControls({ participantId, displayName,
       </button>
       {confirmAction && createPortal(
         <div className="dc-modal-backdrop" role="presentation">
-        <dialog ref={dialogRef} className="dc-member-detail-modal fixed inset-0 text-text-primary" style={{ margin: "auto" }}
+        <dialog ref={dialogRef} className="dc-dialog"
           aria-label={confirmAction === "kick" ? "추방하기 확인" : "차단하기 확인"}
           onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) { setConfirmAction(null); setError(""); } }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, lineHeight: "24px" }}>‘{displayName}’{confirmAction === "kick" ? " 추방하기" : " 차단하기"}</h2>
+          <h2 className="dc-dialog-title">‘{displayName}’{confirmAction === "kick" ? " 추방하기" : " 차단하기"}</h2>
           <p className="preserve-words" style={{ margin: "20px 0" }}>{displayName}{confirmAction === "kick"
             ? "의 방 접속과 실행이 끝나요. 대화 기록은 남고, 나중에 다시 초대할 수 있어요."
             : "의 참가가 끝나고 방 접근 권한이 해제돼요. 대화 기록은 남지만, 이 참가자는 다시 들어올 수 없어요."}</p>
           {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
           <div className="dc-create-channel-actions">
             <button type="button" autoFocus className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={busy} onClick={() => { setConfirmAction(null); setError(""); }}>취소</button>
-            <button type="button" className="dc-button dc-button--md dc-button--danger-soft" style={{ minWidth: 96 }} disabled={busy} onClick={() => void remove(confirmAction)}>{busy ? "처리 중…" : confirmAction === "kick" ? "추방하기" : "차단하기"}</button>
+            <button type="button" className="dc-button dc-button--md dc-button--danger" style={{ minWidth: 96 }} disabled={busy} onClick={() => void remove(confirmAction)}>{busy ? "처리 중…" : confirmAction === "kick" ? "추방하기" : "차단하기"}</button>
           </div>
         </dialog></div>, document.body
       )}

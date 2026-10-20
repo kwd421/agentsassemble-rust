@@ -189,15 +189,14 @@ export default function RoomInviteModal({
     <div className="dc-modal-backdrop" role="presentation" onClick={onClose}>
       <dialog
         ref={dialogRef}
-        className="dc-invite-modal"
-        style={{ margin: "auto", maxHeight: "calc(100dvh - 32px)", color: "var(--color-text-primary)" }}
+        className="dc-dialog dc-dialog--flush dc-invite-modal"
         onCancel={(event) => { event.preventDefault(); onClose(); }}
         aria-modal="true"
         aria-labelledby="room-invite-title"
         onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
       >
         <header className="dc-invite-header">
-          <h2 id="room-invite-title" className="preserve-words">
+          <h2 id="room-invite-title" className="dc-dialog-title preserve-words">
             ‘{roomLabel}’에 초대하기
           </h2>
           <button
@@ -500,7 +499,7 @@ export default function RoomInviteModal({
         </footer>}
         {pendingPublicAction && (
           <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>
-              <h3 id="public-access-confirm-title">외부 접속을 열까요?</h3>
+              <h3 id="public-access-confirm-title" className="dc-dialog-title">외부 접속을 열까요?</h3>
               <p>
                 이 컴퓨터의 서버에 임시 공개 주소를 연결한 뒤 사람 초대 링크를 만들어요. 링크를 가진 사람만 참가할 수 있어요.
               </p>
@@ -537,8 +536,7 @@ function PublicAccessConfirmation({ onCancel, children }: { onCancel: () => void
     const dialog = ref.current; dialog?.showModal();
     return () => { dialog?.close(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
   }, [opener]);
-  return <dialog ref={ref} className="dc-invite-confirm" role="alertdialog" aria-labelledby="public-access-confirm-title"
-    style={{ margin: "auto", width: "min(430px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", padding: 24 }}
+  return <dialog ref={ref} className="dc-dialog dc-invite-confirm" role="alertdialog" aria-labelledby="public-access-confirm-title"
     onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onCancel(); }}
     onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onCancel(); }}>{children}</dialog>;
 }

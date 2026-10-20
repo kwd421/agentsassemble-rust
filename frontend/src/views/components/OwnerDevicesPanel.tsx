@@ -107,8 +107,8 @@ function RevokeConfirmation({ selection, busy, error, onCancel, onConfirm }: {
     dialog.current?.showModal(); cancel.current?.focus();
     return () => { dialog.current?.close(); prior?.focus(); };
   }, []);
-  return <dialog ref={dialog} className="owner-device-confirm" aria-label="기기 연결 해제 확인" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <h3>{selection.name} 연결을 해제할까요?</h3>
+  return <dialog ref={dialog} className="dc-dialog owner-device-confirm" aria-label="기기 연결 해제 확인" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <h3 className="dc-dialog-title">{selection.name} 연결을 해제할까요?</h3>
     <p>{selection.request.scope === "all" ? "서버 컴퓨터를 뺀 모든 기기의 연결이" : "이 기기의 연결이"} 바로 끊겨요.{selection.current && " 지금 쓰는 이 기기도 끊겨요."} 다시 쓰려면 새로 연결해야 해요.</p>
     {error && <p role="alert" className="owner-devices-error">{error}</p>}
     <div><button ref={cancel} type="button" className="dc-button dc-button--lg dc-button--secondary" disabled={busy} onClick={onCancel}>취소</button><button type="button" className="dc-button dc-button--lg dc-button--danger" disabled={busy} onClick={onConfirm}>{busy ? "해제하는 중…" : "연결 해제"}</button></div>

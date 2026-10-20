@@ -273,25 +273,14 @@
 }
 
 .dc-create-channel-modal {
-  width: min(480px, calc(100vw - 32px));
   display: grid;
   gap: 16px;
-  padding: 24px;
-  border-radius: 10px;
-  background: var(--color-panel-bg);
-  border: 1px solid var(--color-panel-border);
 }
 
 .dc-create-channel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.dc-create-channel-head h2 {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 24px;
 }
 
 .dc-create-channel-name {

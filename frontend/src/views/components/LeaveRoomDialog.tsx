@@ -47,14 +47,13 @@ export default function LeaveRoomDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="dc-create-channel-modal"
+      className="dc-dialog dc-create-channel-modal"
       aria-labelledby={titleId}
-      style={{ position: "fixed", inset: 0, margin: "auto", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", color: "var(--color-text-primary)" }}
       onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
       onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}
     >
         <header className="dc-create-channel-head">
-          <h2 id={titleId} className="preserve-words">‘{roomLabel}’{pairedDevice ? " 기기 연결을 해제할까요?" : "에서 나갈까요?"}</h2>
+          <h2 id={titleId} className="dc-dialog-title preserve-words">‘{roomLabel}’{pairedDevice ? " 기기 연결을 해제할까요?" : "에서 나갈까요?"}</h2>
           <button
             type="button"
             className="dc-dialog-close"

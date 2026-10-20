@@ -33,14 +33,14 @@ export default function ImageCropDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="dc-image-crop-dialog"
+      className="dc-dialog dc-dialog--flush dc-image-crop-dialog"
       aria-label={title}
       onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
       onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }}
       onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && !busy) onCancel(); }}
     >
       <header className="dc-image-crop-dialog-head">
-        <h2>{title}</h2>
+        <h2 className="dc-dialog-title">{title}</h2>
         <button type="button" className="dc-modal-close"
           aria-label={`${title} 닫기`} disabled={busy} onClick={onCancel}>
           <X size={24} />

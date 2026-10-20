@@ -72,7 +72,7 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
     }
     finally{operation.current=false;setBusy(false);setPassphrase("");setConfirm("");}
   }
-  const primary="min-h-10 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50";
+  const primary="dc-button dc-button--md dc-button--primary";
   const quiet="min-h-10 px-2 text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50";
   const field="dc-input mt-1 w-full";
   const label="grid text-[12px] font-bold text-text-muted";

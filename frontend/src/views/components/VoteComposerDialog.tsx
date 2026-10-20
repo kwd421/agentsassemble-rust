@@ -171,7 +171,7 @@ export default function VoteComposerDialog({
     >
       <section
         ref={dialogRef}
-        className="dc-create-channel-modal max-h-[calc(100vh-48px)] overflow-y-auto"
+        className="dc-dialog dc-create-channel-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -180,7 +180,7 @@ export default function VoteComposerDialog({
         onKeyDown={containFocus}
       >
         <header className="dc-create-channel-head">
-          <h2 id={titleId}>투표 만들기</h2>
+          <h2 id={titleId} className="dc-dialog-title">투표 만들기</h2>
           <button
             type="button"
             className="dc-dialog-close"
