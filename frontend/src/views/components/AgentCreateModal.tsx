@@ -16,6 +16,7 @@ import {
   requiresOpenCodeApproval,
   OPENCODE_FREE_PERMISSION_HINT,
   effectiveProviderControlOptions,
+  harnessIgnoresControl,
   initializeProviderSettings,
   reconcileProviderSettings,
 } from "../../lib/providerControlSettings";
@@ -147,6 +148,7 @@ export default function AgentCreateModal({
   const invalidControl = existingSessionId || !selectedProvider
     ? undefined
     : selectedProvider.controls.find((control) =>
+        !harnessIgnoresControl(executionHarness, control.key) &&
         !effectiveProviderControlOptions(selectedProvider, control, settings).some(
           (option) => option.value === (settings[control.key] ?? "")
         )
@@ -570,9 +572,7 @@ export default function AgentCreateModal({
                   <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{openCodeFreePermissionHint}</p>
                 )}
                 {selectedProvider.controls.length > 0 && displayProviderControls(selectedProvider)
-                  // OpenCode owns the run, so the server clears service_tier:
-                  // the speed control would be a promise the session cannot keep.
-                  .filter((control) => !(executionHarness === "opencode" && control.key === "service_tier"))
+                  .filter((control) => !harnessIgnoresControl(executionHarness, control.key))
                   .map((control) => {
                   const providerSupportsControl = selectedProvider.controls.some(
                     (candidate) => candidate.key === control.key

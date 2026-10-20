@@ -8,6 +8,7 @@ import {
   requiresOpenCodeApproval,
   OPENCODE_FREE_PERMISSION_HINT,
   effectiveProviderControlOptions,
+  harnessIgnoresControl,
   reconcileProviderSettings,
 } from "../../lib/providerControlSettings";
 import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
@@ -246,9 +247,12 @@ export default function AgentSessionDetails({
   const canConfigure =
     serverOwned && !session.enabled && !session.recovery_required &&
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
+  const runtimeControls = (provider?.controls || []).filter(
+    (control) => !harnessIgnoresControl(session.execution_harness, control.key)
+  );
   const runtimeSettingLabels =
-    (provider?.controls || []).map((control) => control.label).join("·") || "실행 설정";
-  const invalidRuntimeControl = provider?.controls.find((control) =>
+    runtimeControls.map((control) => control.label).join("·") || "실행 설정";
+  const invalidRuntimeControl = provider && runtimeControls.find((control) =>
     !effectiveProviderControlOptions(provider, control, settings).some(
       (option) => option.value === (settings[control.key] ?? "")
     )
@@ -429,7 +433,9 @@ export default function AgentSessionDetails({
           {requiresOpenCodeApproval(provider, settings) && (
             <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{OPENCODE_FREE_PERMISSION_HINT}</p>
           )}
-          {displayProviderControls(provider).map((control) => {
+          {displayProviderControls(provider)
+            .filter((control) => !harnessIgnoresControl(session.execution_harness, control.key))
+            .map((control) => {
             const providerSupportsControl = provider.controls.some(
               (candidate) => candidate.key === control.key
             );

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { agentSessionFixture } from "../../test/agentSession";
-import { codexProvider } from "./AgentCreateModal.testProviders";
+import { codexProvider, geminiProvider } from "./AgentCreateModal.testProviders";
 import AgentSessionDetails from "./AgentSessionDetails";
 import { agentSessionUpdatesFromEvents } from "../../lib/canonicalRoomProjection";
 import { publicRoomEventIsValid } from "../../lib/roomSocketValidation";
@@ -218,6 +218,25 @@ describe("AgentSessionDetails diagnostics", () => {
       expect(interrupt).toBeNull();
       expect(onControl).not.toHaveBeenCalled();
     }
+  });
+
+  it("leaves the speed tier out of an OpenCode-harness session's settings", async () => {
+    const onConfigure = vi.fn().mockResolvedValue(undefined);
+    const session = agentSessionFixture({
+      runtime_status: "stopped", enabled: false, provider_kind: "gemini_api",
+      model: "gemini-3.1-flash-lite", service_tier: "", execution_harness: "opencode",
+      permission_mode: "meeting_read_only",
+    });
+    const { rerender } = render(<AgentSessionDetails session={session} provider={geminiProvider()}
+      onConfigure={onConfigure} />);
+    fireEvent.click(screen.getByText("실행 설정"));
+    expect(screen.queryByLabelText("응답 속도")).toBeNull();
+    expect(screen.queryByText(/선택하세요/)).toBeNull();
+    expect(screen.getByText("모델·권한을 함께 저장해요. 변경은 다음 세션 시작부터 적용돼요.")).toBeTruthy();
+
+    rerender(<AgentSessionDetails session={{ ...session, execution_harness: "builtin" }}
+      provider={geminiProvider()} onConfigure={onConfigure} />);
+    expect(screen.getByLabelText("응답 속도")).toBeTruthy();
   });
 
   it("replaces the applied bot card on a stopped API session", async () => {

@@ -25,6 +25,14 @@ export function displayProviderControls(
   return [...standard.slice(0, 3), ...providerSpecific, ...standard.slice(3)];
 }
 
+// OpenCode drives a harness session and the server stores these provider
+// controls empty, so they are neither shown nor required for one.
+const HARNESS_IGNORED_CONTROLS = ["reasoning_effort", "service_tier", "variant"];
+
+export function harnessIgnoresControl(harness: string | undefined, key: string): boolean {
+  return harness === "opencode" && HARNESS_IGNORED_CONTROLS.includes(key);
+}
+
 export function initializeProviderSettings(
   provider: NativeCliProviderAvailability
 ): Record<string, string> {
