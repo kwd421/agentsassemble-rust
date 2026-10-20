@@ -1,6 +1,6 @@
 /* Galaxy for maximum-reasoning agents (Codex Ultra, Claude Code Ultracode).
    Background only: a soft nebula behind the member row and the profile header,
-   with a few sparse stars drifting slowly through it. The avatar is untouched. */
+   with seeded, sparse stars (GalaxySky) drifting slowly through it. The avatar is untouched. */
 
 .dc-member[data-galaxy="true"][data-ultra="true"],
 .dc-member-detail-modal-head[data-galaxy="true"] {
@@ -8,12 +8,6 @@
     radial-gradient(60% 120% at 22% 30%, rgba(139, 92, 246, 0.3), transparent 70%),
     radial-gradient(45% 110% at 78% 80%, rgba(56, 189, 248, 0.12), transparent 70%),
     linear-gradient(90deg, rgba(91, 33, 182, 0.24) 0%, rgba(67, 56, 202, 0.12) 50%, rgba(30, 27, 75, 0.06) 100%);
-  /* One 140px tile with four faint stars; it repeats and drifts left. */
-  --galaxy-stars:
-    radial-gradient(1px 1px at 18px 9px, rgba(255, 255, 255, 0.85), transparent 100%),
-    radial-gradient(1px 1px at 61px 31px, rgba(196, 181, 253, 0.8), transparent 100%),
-    radial-gradient(1.4px 1.4px at 97px 15px, rgba(255, 255, 255, 0.7), transparent 100%),
-    radial-gradient(1px 1px at 124px 36px, rgba(165, 243, 252, 0.75), transparent 100%);
   position: relative;
   isolation: isolate;
 }
@@ -25,9 +19,7 @@
 }
 
 .dc-member[data-galaxy="true"][data-ultra="true"]::before,
-.dc-member[data-galaxy="true"][data-ultra="true"]::after,
-.dc-member-detail-modal-head[data-galaxy="true"]::before,
-.dc-member-detail-modal-head[data-galaxy="true"]::after {
+.dc-member-detail-modal-head[data-galaxy="true"]::before {
   position: absolute;
   inset: 0;
   z-index: -1;
@@ -38,7 +30,7 @@
 
 /* The profile header has no padding of its own; the sky reaches past it. */
 .dc-member-detail-modal-head[data-galaxy="true"]::before,
-.dc-member-detail-modal-head[data-galaxy="true"]::after {
+.dc-member-detail-modal-head[data-galaxy="true"] > .galaxy-sky {
   inset: -10px;
 }
 
@@ -48,12 +40,45 @@
   animation: galaxy-breathe 9s ease-in-out infinite;
 }
 
-.dc-member[data-galaxy="true"][data-ultra="true"]::after,
-.dc-member-detail-modal-head[data-galaxy="true"]::after {
-  background: var(--galaxy-stars);
-  background-size: 140px 100%;
-  background-repeat: repeat;
-  animation: galaxy-drift 26s linear infinite, galaxy-twinkle 5s ease-in-out infinite;
+/* Seeded stars (GalaxySky): a band twice the sky's width drifts left. */
+.galaxy-sky {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.galaxy-sky-band {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  width: 200%;
+  animation: galaxy-drift 40s linear infinite;
+}
+
+.galaxy-sky-copy {
+  position: relative;
+  flex: 0 0 50%;
+}
+
+.galaxy-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 4px 1px rgba(196, 181, 253, 0.85);
+  transform: translate(-50%, -50%);
+  animation: galaxy-twinkle 4s ease-in-out infinite;
+}
+
+/* A few bright four-point stars with a soft halo. */
+.galaxy-star--bright {
+  border-radius: 0;
+  background: radial-gradient(circle, #fff 0 18%, rgba(224, 231, 255, 0.95) 30%, rgba(196, 181, 253, 0) 72%);
+  box-shadow: none;
+  clip-path: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  filter: drop-shadow(0 0 3px rgba(196, 181, 253, 0.9));
 }
 
 .dc-member[data-galaxy="true"][data-ultra="true"]:hover::before,
@@ -62,7 +87,7 @@
 }
 
 @keyframes galaxy-drift {
-  to { background-position: -140px 0; }
+  to { transform: translateX(-50%); }
 }
 
 @keyframes galaxy-breathe {
@@ -71,15 +96,15 @@
 }
 
 @keyframes galaxy-twinkle {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 0.9; }
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dc-member[data-galaxy="true"][data-ultra="true"]::before,
-  .dc-member[data-galaxy="true"][data-ultra="true"]::after,
   .dc-member-detail-modal-head[data-galaxy="true"]::before,
-  .dc-member-detail-modal-head[data-galaxy="true"]::after {
+  .galaxy-sky-band,
+  .galaxy-star {
     animation: none !important;
   }
 }

@@ -6,6 +6,7 @@ import type { RoomAgentSession } from "../../../api";
 import ImageCropDialog from "../ImageCropDialog";
 import ProviderLogo from "../ProviderLogo";
 import { isGalaxyAgent } from "./memberHelpers";
+import GalaxySky from "./GalaxySky";
 import { userFacingError } from "../../../lib/apiErrors";
 
 // Edited in place like the account profile: the photo opens the file picker and then
@@ -86,6 +87,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
 
   return <>
     <header className="dc-member-detail-modal-head" data-galaxy={galaxy || undefined}>
+      {galaxy && <GalaxySky seed={session.session_id} count={16} />}
       <span className="relative">
         {canEditPhoto ? <button type="button" className="dc-member-detail-modal-avatar dc-agent-avatar-edit"
           aria-label="프로필 사진 변경" title="프로필 사진 변경" disabled={busy}

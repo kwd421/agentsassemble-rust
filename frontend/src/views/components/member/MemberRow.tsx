@@ -5,6 +5,7 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import { Coins, VolumeX, Zap } from "../../../ui/icons";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ParticipantAvatarContent from "../ParticipantAvatarContent";
+import GalaxySky from "./GalaxySky";
 import {
   isGalaxyAgent,
   isPrimaryActivationPointer,
@@ -111,6 +112,7 @@ export default function MemberRow({
         openDetails();
       }}
     >
+      {galaxy && <GalaxySky seed={entry.agentSession?.session_id || entry.id} />}
       <span className="relative shrink-0">
         {avatar}
         <span
