@@ -9,6 +9,14 @@ export default defineConfig({
   // production bundle to load from Tauri's non-HTTP application origin.
   base: "./",
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        uishot: "uishot-galaxy.html",
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
