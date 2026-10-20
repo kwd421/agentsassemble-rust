@@ -1,5 +1,5 @@
 import type { ProviderControlOption } from "../../roomSocketClient";
-import { Dollar, Zap, type AppIcon } from "../../ui/icons";
+import { Coins, Zap, type AppIcon } from "../../ui/icons";
 import { providerControlOptionDescription } from "./providerModelOptions";
 
 export default function ProviderControlOptionContent({
@@ -64,7 +64,7 @@ export function providerControlOptionHasDescription(option: ProviderControlOptio
 export function providerControlSpeedIcon(option: ProviderControlOption): AppIcon | undefined {
   const tier = option.value.trim().toLowerCase();
   if (tier === "fast" || tier === "priority") return Zap;
-  if (tier === "flex") return Dollar;
+  if (tier === "flex") return Coins;
   return undefined;
 }
 

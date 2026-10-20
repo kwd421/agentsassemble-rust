@@ -12,10 +12,10 @@ type BrightStar = {
 // The bright stars orbit with the arms. Their staggered timings make a few
 // flare at a time instead of the whole field pulsing together.
 const BRIGHT_STARS: BrightStar[] = [
-  { angle: 24, radius: 0.58, size: 2.6, delay: "-0.4s", duration: "3.2s" },
-  { angle: 138, radius: 0.66, size: 2.2, delay: "-1.6s", duration: "2.6s" },
-  { angle: 232, radius: 0.55, size: 3, delay: "-2.1s", duration: "3.8s" },
-  { angle: 316, radius: 0.69, size: 2.4, delay: "-0.9s", duration: "2.9s" },
+  { angle: 30, radius: 0.58, size: 2.8, delay: "-0.4s", duration: "3.2s" },
+  { angle: 120, radius: 0.65, size: 3, delay: "-1.6s", duration: "2.6s" },
+  { angle: 210, radius: 0.56, size: 2.6, delay: "-2.1s", duration: "3.8s" },
+  { angle: 300, radius: 0.68, size: 3.2, delay: "-0.9s", duration: "2.9s" },
 ];
 
 /**
@@ -33,7 +33,8 @@ export default function GalaxyAvatar({
   className?: string;
 }) {
   const full = size >= 40;
-  const stars = full ? BRIGHT_STARS : BRIGHT_STARS.slice(0, 1);
+  // Four bright stars at even angles keep the glow balanced at both sizes.
+  const stars = BRIGHT_STARS;
   return (
     <span
       className={`galaxy-avatar${className ? ` ${className}` : ""}`}

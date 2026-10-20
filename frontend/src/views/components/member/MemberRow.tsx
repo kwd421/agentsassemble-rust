@@ -2,7 +2,7 @@ import ResourceImage from "../ResourceImage";
 import { executionLocationLabel, reasoningEffortLabel } from "../../../lib/agentLabels";
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { Dollar, VolumeX, Zap } from "../../../ui/icons";
+import { Coins, VolumeX, Zap } from "../../../ui/icons";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ParticipantAvatarContent from "../ParticipantAvatarContent";
 import GalaxyAvatar from "./GalaxyAvatar";
@@ -45,7 +45,7 @@ export default function MemberRow({
   const showDetail = isAgent || !(entry.owner || entry.member?.participant_type === "human");
   // Without a model, an agent's status reads like a Discord activity line instead of a chip.
   const modelText = entry.modelLabel || entry.detail;
-  const SpeedIcon = entry.speed === "flex" ? Dollar : entry.speed ? Zap : undefined;
+  const SpeedIcon = entry.speed === "flex" ? Coins : entry.speed ? Zap : undefined;
   const galaxy = isGalaxyAgent(entry.agentSession);
   // Roles and moderation open from the row's context menu. A row without a profile
   // button still takes focus, so the menu key and Shift+F10 reach it from the keyboard.
@@ -171,11 +171,8 @@ export default function MemberRow({
             <span className="truncate preserve-words">
               {modelText || (isAgent ? entry.statusLabel : "")}
             </span>
-            {entry.reasoningEffort && (
-              <span
-                className="dc-member-effort"
-                data-ultra={entry.ultraMode}
-              >
+            {entry.reasoningEffort && !isUltraEffort(entry.reasoningEffort) && (
+              <span className="dc-member-effort">
                 {reasoningEffortLabel(entry.reasoningEffort)}
               </span>
             )}
@@ -193,6 +190,12 @@ export default function MemberRow({
       </div>
     </div>
   );
+}
+
+// Ultra's galaxy already communicates the tier; the text chip would be a
+// second, redundant badge beside the model line.
+function isUltraEffort(effort: string): boolean {
+  return effort.trim().toLowerCase() === "ultra";
 }
 
 function memberModelAccessibleLabel(entry: MemberEntry): string {

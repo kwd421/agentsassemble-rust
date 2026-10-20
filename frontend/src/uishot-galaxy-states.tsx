@@ -42,6 +42,41 @@ const ULTRA_ENTRY: MemberEntry = {
   icon: Bot,
 };
 
+const FLEX_SESSION = agentSessionFixture({
+  room_id: "uishot-room",
+  session_id: "uishot-flex",
+  participant_id: "uishot-flex-agent",
+  display_name: "클로드 소넷",
+  status: "available",
+  runtime_status: "idle",
+  enabled: true,
+  provider_kind: "opencode",
+  runtime_kind: "opencode",
+  connection_kind: "opencode",
+  execution_harness: "external_cli",
+  model: "Claude Sonnet 4.5",
+  reasoning_effort: "medium",
+  service_tier: "flex",
+});
+
+const FLEX_ENTRY: MemberEntry = {
+  id: FLEX_SESSION.participant_id,
+  agentSession: FLEX_SESSION,
+  displayName: FLEX_SESSION.display_name,
+  detail: "Claude Sonnet 4.5",
+  modelLabel: "Claude Sonnet 4.5",
+  reasoningEffort: "medium",
+  speed: "flex",
+  statusLabel: "대기 중",
+  role: "agent",
+  owner: false,
+  providerKind: FLEX_SESSION.provider_kind,
+  active: true,
+  muted: false,
+  meetingId: FLEX_SESSION.room_id,
+  icon: Bot,
+};
+
 function GalaxyUishot() {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -59,11 +94,18 @@ function GalaxyUishot() {
         style={{ background: "#1e1f22" }}
       >
         <p className="mb-4 text-xs font-bold uppercase tracking-[0.14em] text-[#8b8d96]">
-          멤버 목록 · 32px 아바타 · 상태 점 위
+          멤버 목록 · 32px 아바타 · 15px 이름 · 은하 행 · Flex 코인
         </p>
         <div style={{ width: 280 }}>
           <MemberRow
             entry={ULTRA_ENTRY}
+            onOpenDetails={() => {}}
+            onContextMenu={() => {}}
+            canEditRoles={false}
+            canManageParticipant={false}
+          />
+          <MemberRow
+            entry={FLEX_ENTRY}
             onOpenDetails={() => {}}
             onContextMenu={() => {}}
             canEditRoles={false}
@@ -82,7 +124,7 @@ function GalaxyUishot() {
         <div className="dc-member-detail-modal" style={{ width: 420 }}>
           <AgentProfileCard
             session={ULTRA_SESSION}
-            detail="Gemini 3 Pro · Ultra"
+            detail="Gemini · Gemini 3 Pro"
             onSave={async () => {}}
             onAvatarUpdate={async () => {}}
           >

@@ -261,14 +261,16 @@ describe("MemberList component wiring", () => {
     );
     const memberRow = modelLine.closest(".dc-member");
     expect(modelLine.textContent).toContain("gpt-5.6-sol");
-    expect(modelLine.textContent).toContain("Ultra");
+    // Ultra's galaxy replaces the text badge; the accessible name keeps the tier.
+    expect(modelLine.textContent).not.toContain("Ultra");
+    expect(modelLine.querySelector(".dc-member-effort")).toBeNull();
     expect(memberRow?.getAttribute("data-ultra")).toBe("true");
   });
 
   it.each([
     ["priority", "Priority", "zap"],
     ["fast", "Fast", "zap"],
-    ["flex", "Flex", "dollar"],
+    ["flex", "Flex", "coins"],
   ] as const)("shows the %s speed tier with the right icon and accessible label", (tier, label, icon) => {
     render(
       <MemberList
@@ -280,7 +282,7 @@ describe("MemberList component wiring", () => {
     );
     const modelLine = screen.getByLabelText(`gpt-5.6-sol, ${label}`);
     expect(modelLine.querySelector(`[data-icon="${icon}"]`)).toBeTruthy();
-    expect(modelLine.querySelector(icon === "zap" ? '[data-icon="dollar"]' : '[data-icon="zap"]')).toBeNull();
+    expect(modelLine.querySelector(icon === "zap" ? '[data-icon="coins"]' : '[data-icon="zap"]')).toBeNull();
   });
 
   it("leaves the default speed tier unmarked in the member row", () => {

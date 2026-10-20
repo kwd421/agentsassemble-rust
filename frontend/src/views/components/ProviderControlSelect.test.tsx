@@ -13,7 +13,7 @@ function fastClick(element: HTMLElement) {
 }
 
 describe("ProviderControlSelect", () => {
-  it("marks Fast and Priority with lightning, Flex with a dollar, and the default tier with no icon", async () => {
+  it("marks Fast and Priority with lightning, Flex with a coin stack, and the default tier with no icon", async () => {
     const options = [
       { value: "default", label: "기본" },
       { value: "fast", label: "Fast" },
@@ -31,7 +31,7 @@ describe("ProviderControlSelect", () => {
     );
     const trigger = screen.getByRole("combobox", { name: "응답 속도" });
     expect(trigger.querySelector('[data-icon="zap"]')).toBeNull();
-    expect(trigger.querySelector('[data-icon="dollar"]')).toBeNull();
+    expect(trigger.querySelector('[data-icon="coins"]')).toBeNull();
 
     view.rerender(
       <ProviderControlSelect
@@ -53,14 +53,14 @@ describe("ProviderControlSelect", () => {
         onChange={vi.fn()}
       />
     );
-    expect(trigger.querySelector('[data-icon="dollar"]')).toBeTruthy();
+    expect(trigger.querySelector('[data-icon="coins"]')).toBeTruthy();
 
     await userEvent.click(trigger);
     const listbox = screen.getByRole("listbox", { name: "응답 속도" });
     expect(within(listbox).getByRole("option", { name: "기본" }).querySelector("[data-icon]")).toBeNull();
     expect(within(listbox).getByRole("option", { name: "Fast" }).querySelector('[data-icon="zap"]')).toBeTruthy();
     expect(within(listbox).getByRole("option", { name: "Priority" }).querySelector('[data-icon="zap"]')).toBeTruthy();
-    expect(within(listbox).getByRole("option", { name: "Flex" }).querySelector('[data-icon="dollar"]')).toBeTruthy();
+    expect(within(listbox).getByRole("option", { name: "Flex" }).querySelector('[data-icon="coins"]')).toBeTruthy();
   });
 
   it("answers a fast click while options are still loading instead of ignoring it", () => {

@@ -20,8 +20,10 @@
   overflow: visible;
 }
 
-/* Ultra's animated purple row fill and left inset read as a box around the
-   halo, so a galaxy row keeps the ordinary row surface instead. */
+/* Ultra's animated row fill and left inset read as a box around the halo, so
+   a galaxy row clears them and paints one still nebula instead. Its centre is
+   the avatar centre, so the row and the halo share the same deep-violet glow;
+   a horizontal fade dissolves the right edge. */
 .dc-member[data-galaxy="true"][data-ultra="true"] {
   overflow: visible;
   background: none;
@@ -29,12 +31,72 @@
   animation: none;
 }
 
+.dc-member[data-galaxy="true"][data-ultra="true"]::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 58px 10px, rgba(255, 255, 255, 0.82) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 77px 31px, rgba(196, 181, 253, 0.78) 0 1.1px, transparent 1.9px),
+    radial-gradient(circle at 43px 33px, rgba(255, 255, 255, 0.62) 0 0.8px, transparent 1.5px),
+    radial-gradient(circle at 96px 17px, rgba(255, 255, 255, 0.55) 0 0.9px, transparent 1.6px),
+    radial-gradient(circle at 112px 36px, rgba(165, 243, 252, 0.5) 0 0.8px, transparent 1.5px),
+    radial-gradient(circle at 134px 12px, rgba(255, 255, 255, 0.42) 0 0.8px, transparent 1.5px),
+    radial-gradient(circle at 157px 29px, rgba(196, 181, 253, 0.34) 0 0.7px, transparent 1.4px),
+    radial-gradient(
+      54px 54px at 24px 50%,
+      rgba(96, 58, 196, 0.5) 0%,
+      rgba(73, 44, 158, 0.34) 46%,
+      rgba(51, 31, 112, 0.14) 70%,
+      transparent 100%
+    ),
+    radial-gradient(
+      146px 82px at 24px 50%,
+      rgba(43, 25, 96, 0.58) 0%,
+      rgba(36, 22, 82, 0.3) 46%,
+      rgba(30, 20, 70, 0.1) 68%,
+      transparent 84%
+    );
+  content: "";
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0%,
+    #000 24%,
+    rgba(0, 0, 0, 0.78) 46%,
+    rgba(0, 0, 0, 0.34) 66%,
+    transparent 84%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 0%,
+    #000 24%,
+    rgba(0, 0, 0, 0.78) 46%,
+    rgba(0, 0, 0, 0.34) 66%,
+    transparent 84%
+  );
+}
+
+/* Old Ultra star speckle is replaced by the stars above. */
 .dc-member[data-galaxy="true"][data-ultra="true"]::after {
   content: none;
 }
 
+/* Content stays above the nebula; hover and keyboard focus brighten it without
+   changing its shape. */
+.dc-member[data-galaxy="true"][data-ultra="true"] > * {
+  position: relative;
+  z-index: 1;
+}
+
 .dc-member[data-galaxy="true"][data-ultra="true"]:hover {
   background: var(--color-sidebar-hover);
+}
+
+.dc-member[data-galaxy="true"][data-ultra="true"]:hover::before,
+.dc-member[data-galaxy="true"][data-ultra="true"]:focus-visible::before {
+  filter: brightness(1.16);
 }
 
 .galaxy-avatar-core {
@@ -78,20 +140,20 @@
   background:
     radial-gradient(
       circle at 50% 50%,
-      rgba(2, 4, 12, 0.98) 0 24%,
-      rgba(10, 8, 30, 0.94) 40%,
-      rgba(22, 16, 58, 0.48) 56%,
+      rgba(2, 4, 12, 0.98) 0 22%,
+      rgba(11, 9, 36, 0.94) 38%,
+      rgba(30, 20, 78, 0.48) 55%,
       transparent 72%
     ),
     radial-gradient(
-      circle at 38% 32%,
-      rgba(103, 232, 249, 0.12),
-      transparent 36%
+      circle at 50% 50%,
+      rgba(139, 92, 246, 0.2) 0 36%,
+      transparent 64%
     ),
     radial-gradient(
-      circle at 64% 70%,
-      rgba(139, 92, 246, 0.18),
-      transparent 46%
+      circle at 50% 50%,
+      rgba(103, 232, 249, 0.1) 0 22%,
+      transparent 52%
     );
   filter: blur(2.5px);
   transform: translateZ(0);
@@ -152,16 +214,19 @@
   );
 }
 
+/* Both arms use the same brightness profile and span ~150deg, so the halo
+   stays balanced all the way round instead of pooling in one corner. */
 .galaxy-avatar-arm--a {
   --arm-gradient: conic-gradient(
     from 0deg,
-    transparent 0deg 18deg,
-    rgba(139, 92, 246, 0.08) 26deg,
-    rgba(139, 92, 246, 0.95) 44deg,
-    rgba(139, 92, 246, 0.98) 64deg,
-    rgba(79, 70, 229, 0.9) 84deg,
-    rgba(79, 70, 229, 0.25) 105deg,
-    transparent 122deg 360deg
+    transparent 0deg 6deg,
+    rgba(103, 232, 249, 0.28) 18deg,
+    rgba(139, 92, 246, 0.72) 34deg,
+    rgba(167, 139, 250, 0.96) 58deg,
+    rgba(139, 92, 246, 1) 82deg,
+    rgba(79, 70, 229, 0.72) 108deg,
+    rgba(79, 70, 229, 0.2) 132deg,
+    transparent 154deg 360deg
   );
   animation: galaxy-arm-a 24s linear infinite;
 }
@@ -169,30 +234,31 @@
 .galaxy-avatar-arm--b {
   --arm-gradient: conic-gradient(
     from 180deg,
-    transparent 0deg 12deg,
-    rgba(103, 232, 249, 0.85) 22deg,
-    rgba(139, 92, 246, 0.95) 40deg,
-    rgba(139, 92, 246, 0.85) 62deg,
-    rgba(79, 70, 229, 0.8) 84deg,
-    rgba(79, 70, 229, 0.2) 104deg,
-    transparent 122deg 360deg
+    transparent 0deg 6deg,
+    rgba(103, 232, 249, 0.82) 18deg,
+    rgba(139, 92, 246, 0.76) 34deg,
+    rgba(167, 139, 250, 0.98) 58deg,
+    rgba(139, 92, 246, 0.98) 82deg,
+    rgba(79, 70, 229, 0.68) 108deg,
+    rgba(79, 70, 229, 0.18) 132deg,
+    transparent 154deg 360deg
   );
   animation: galaxy-arm-b 37s linear infinite reverse;
 }
 
 .galaxy-avatar-arm--a::after {
-  transform: rotate(52deg);
+  transform: rotate(42deg);
 }
 
 .galaxy-avatar-arm--b::after {
-  transform: rotate(-48deg);
+  transform: rotate(-42deg);
 }
 
 /* Four repeating star patterns, plus four individually twinkling bright stars
    in the first field. Both fields orbit with the arms at their own speeds. */
 .galaxy-avatar-stars {
   z-index: 2;
-  opacity: 0.95;
+  opacity: 1;
   transform: translateZ(0);
   will-change: transform;
 }
@@ -212,27 +278,23 @@
 
 .galaxy-avatar-stars--a::before {
   background-image:
-    radial-gradient(circle, rgba(255, 255, 255, 0.98) 0 1.15px, transparent 1.75px),
-    radial-gradient(circle, rgba(196, 222, 255, 0.92) 0 0.85px, transparent 1.4px),
-    radial-gradient(circle, rgba(165, 150, 255, 0.78) 0 1.4px, transparent 2.1px),
-    radial-gradient(circle, rgba(255, 255, 255, 0.7) 0 0.65px, transparent 1.05px);
+    radial-gradient(circle, rgba(255, 255, 255, 1) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle, rgba(214, 234, 255, 0.96) 0 0.95px, transparent 1.5px),
+    radial-gradient(circle, rgba(186, 168, 255, 0.9) 0 1.45px, transparent 2.15px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.82) 0 0.75px, transparent 1.15px);
   background-size: 19% 23%, 27% 21%, 33% 31%, 15% 17%;
   background-position: 11% 7%, 63% 31%, 29% 73%, 81% 59%;
-  -webkit-mask-image: conic-gradient(
-    from 0deg,
-    rgba(0, 0, 0, 0.08) 0deg 18deg,
-    rgba(0, 0, 0, 0.35) 28deg,
-    #000 48deg 112deg,
-    rgba(0, 0, 0, 0.35) 138deg,
-    rgba(0, 0, 0, 0.08) 166deg 360deg
+  -webkit-mask-image: radial-gradient(
+    circle,
+    transparent 0 42%,
+    #000 50% 82%,
+    transparent 96%
   );
-  mask-image: conic-gradient(
-    from 0deg,
-    rgba(0, 0, 0, 0.08) 0deg 18deg,
-    rgba(0, 0, 0, 0.35) 28deg,
-    #000 48deg 112deg,
-    rgba(0, 0, 0, 0.35) 138deg,
-    rgba(0, 0, 0, 0.08) 166deg 360deg
+  mask-image: radial-gradient(
+    circle,
+    transparent 0 42%,
+    #000 50% 82%,
+    transparent 96%
   );
 }
 
@@ -243,26 +305,22 @@
 
 .galaxy-avatar-stars--b::before {
   background-image:
-    radial-gradient(circle, rgba(255, 255, 255, 0.88) 0 1.5px, transparent 2.2px),
-    radial-gradient(circle, rgba(103, 232, 249, 0.8) 0 0.9px, transparent 1.5px),
-    radial-gradient(circle, rgba(196, 181, 253, 0.82) 0 1.1px, transparent 1.7px);
+    radial-gradient(circle, rgba(255, 255, 255, 0.94) 0 1.55px, transparent 2.25px),
+    radial-gradient(circle, rgba(125, 238, 252, 0.88) 0 0.95px, transparent 1.55px),
+    radial-gradient(circle, rgba(204, 190, 255, 0.9) 0 1.15px, transparent 1.75px);
   background-size: 23% 29%, 17% 19%, 37% 33%;
   background-position: 43% 13%, 7% 47%, 67% 79%;
-  -webkit-mask-image: conic-gradient(
-    from 180deg,
-    rgba(0, 0, 0, 0.08) 0deg 12deg,
-    rgba(0, 0, 0, 0.38) 22deg,
-    #000 42deg 106deg,
-    rgba(0, 0, 0, 0.38) 132deg,
-    rgba(0, 0, 0, 0.08) 160deg 360deg
+  -webkit-mask-image: radial-gradient(
+    circle,
+    transparent 0 42%,
+    #000 50% 82%,
+    transparent 96%
   );
-  mask-image: conic-gradient(
-    from 180deg,
-    rgba(0, 0, 0, 0.08) 0deg 12deg,
-    rgba(0, 0, 0, 0.38) 22deg,
-    #000 42deg 106deg,
-    rgba(0, 0, 0, 0.38) 132deg,
-    rgba(0, 0, 0, 0.08) 160deg 360deg
+  mask-image: radial-gradient(
+    circle,
+    transparent 0 42%,
+    #000 50% 82%,
+    transparent 96%
   );
 }
 
@@ -278,8 +336,9 @@
   border-radius: 50%;
   background: #fff;
   box-shadow:
-    0 0 3px 1px rgba(255, 255, 255, 0.95),
-    0 0 9px 3px rgba(137, 196, 255, 0.62);
+    0 0 4px 1.5px rgba(255, 255, 255, 0.98),
+    0 0 11px 4px rgba(167, 139, 250, 0.78),
+    0 0 16px 6px rgba(137, 196, 255, 0.32);
   transform: rotate(var(--star-angle, 0deg))
     translateX(calc(var(--galaxy-size) * var(--star-radius, 0.6)));
   animation: galaxy-bright-twinkle var(--star-duration, 3s) ease-in-out
@@ -383,10 +442,18 @@
 }
 
 .galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--a::before {
-  background-size: 39% 43%, 53% 47%, 61% 57%, 31% 37%;
+  background-size: 34% 39%, 43% 41%, 51% 47%, 27% 31%;
 }
 
-.galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--b,
+.galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--b::before {
+  background-size: 37% 43%, 29% 33%, 47% 41%;
+}
+
+/* The compact halo keeps both star fields for a denser ring of stars. */
+.galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--b {
+  animation-duration: 72s;
+}
+
 .galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-meteor {
   display: none;
 }
