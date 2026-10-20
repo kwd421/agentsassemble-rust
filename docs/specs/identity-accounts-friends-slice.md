@@ -4578,7 +4578,12 @@ contradicted the design, the review decided. The binding shape:
   come from the redeemed `MemberAdmission` and the stored projection
   anchor, never from the client; `expires_at` is `now +
   human_room_session_ttl` (one hour) and the host chooses it. The public
-  key is replaced for that browser fingerprint.
+  key is replaced for that browser fingerprint. The redeemed connect state
+  carries the origin of its redemption (`ConnectOrigin::Central` for the
+  central connect redemption, `ConnectOrigin::Resume` for a direct one)
+  and a one-shot `resume_key_issued` flag: a central grant issues its key
+  exactly once, a direct resume never issues or refreshes one, so the
+  direct path can never extend `expires_at`.
 - **Direct attempt.** The normal `member_connect` handshake to the anchor
   origin and generation; the signature is built and sent only after
   `finish()` verified the pinned host key. `POST /api/member-connect/
@@ -4655,7 +4660,14 @@ Acceptance for this slice:
 - A resume signature is refused on another channel, origin, generation,
   browser credential, host key fingerprint or purpose, and a second use
   of the same nonce is refused. The signed bytes are the client-built
-  tuple, never a host-supplied blob.
+  tuple, never a host-supplied blob. Another person on the same browser
+  credential cannot use a stored key: the host verifies the signature with
+  the stored public key, never with the one the request names.
+- A central redemption issues its resume key exactly once: a second
+  `resume-key` request on the same channel is refused and leaves the stored
+  `expires_at` unchanged. A direct resume never issues or refreshes a key:
+  the `resume-key` request after a resume is refused and the stored
+  `expires_at` stays byte-identical.
 - The stored projection and `acked_revision` stay unchanged across a
   direct list and select; a kick or a leave refuses the direct select
   with `MemberMembershipEnded`; the account-deletion insert makes

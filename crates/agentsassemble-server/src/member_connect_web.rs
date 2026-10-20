@@ -65,6 +65,14 @@ pub(crate) fn client_advertises_room_select_channel_bound(query: Option<&str>) -
     })
 }
 
+/// Where a redeemed connect challenge came from: a central grant may issue
+/// the admission's resume key once, a direct resume never may.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ConnectOrigin {
+    Central,
+    Resume,
+}
+
 pub(super) enum ConnectState {
     Issued,
     Failed,
@@ -72,6 +80,9 @@ pub(super) enum ConnectState {
         member: Box<MemberAdmission>,
         rooms: Vec<MemberConnectRoom>,
         selected: HashMap<String, SelectedRoom>,
+        /// Where this redemption came from, and whether its key was issued.
+        origin: ConnectOrigin,
+        resume_key_issued: bool,
     },
 }
 
@@ -80,20 +91,34 @@ impl ConnectState {
     pub(super) fn redeemed(
         member: MemberAdmission,
         rooms: Vec<MemberConnectRoom>,
+        origin: ConnectOrigin,
     ) -> Self {
         Self::ConnectRedeemed {
             member: Box::new(member),
             rooms,
             selected: HashMap::new(),
+            origin,
+            resume_key_issued: false,
         }
     }
 
-    /// The admitted member of a redeemed connect challenge.
-    pub(super) fn member(&self) -> Option<&MemberAdmission> {
-        match self {
-            Self::ConnectRedeemed { member, .. } => Some(member.as_ref()),
-            _ => None,
+    /// Takes the one-shot claim of this redemption's resume key: a central
+    /// grant may issue its key once, a direct resume never may.
+    pub(super) fn claim_resume_key(&mut self) -> Option<MemberAdmission> {
+        let ConnectState::ConnectRedeemed {
+            member,
+            origin,
+            resume_key_issued,
+            ..
+        } = &mut *self
+        else {
+            return None;
+        };
+        if *origin != ConnectOrigin::Central || *resume_key_issued {
+            return None;
         }
+        *resume_key_issued = true;
+        Some((**member).clone())
     }
 }
 
@@ -289,11 +314,7 @@ pub(crate) async fn redeem(
     } else {
         json!({"rooms":rooms})
     };
-    *record = ConnectState::ConnectRedeemed {
-        member: Box::new(member),
-        rooms,
-        selected: HashMap::new(),
-    };
+    *record = ConnectState::redeemed(member, rooms, ConnectOrigin::Central);
     Ok(Json(response))
 }
 
@@ -336,6 +357,7 @@ pub(crate) async fn select(
         member,
         rooms,
         selected,
+        ..
     } = &mut *record
     else {
         return Err(invalid_challenge());
@@ -602,11 +624,11 @@ mod tests {
                 _ => panic!("issued challenge must be a connect challenge"),
             }
         };
-        *record.lock().await = super::ConnectState::ConnectRedeemed {
-            member: Box::new(member),
+        *record.lock().await = super::ConnectState::redeemed(
+            member,
             rooms,
-            selected: std::collections::HashMap::new(),
-        };
+            super::ConnectOrigin::Central,
+        );
         challenge_id
     }
 

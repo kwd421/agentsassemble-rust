@@ -164,7 +164,9 @@ fn decode_public_key(encoded: &str) -> Result<[u8; 65], HumanInviteHttpError> {
 ///
 /// The person, issuer and incarnation come from the redeemed admission on
 /// this channel; the client only contributes its public key. The expiry is
-/// the host's own room session lifetime.
+/// the host's own room session lifetime. Only a central grant redeems a
+/// challenge that may issue a key, and it issues it exactly once: a direct
+/// resume never issues or refreshes a key.
 pub(crate) async fn issue_key(
     State(state): State<AppState>,
     request: Request,
@@ -177,7 +179,7 @@ pub(crate) async fn issue_key(
     let public_key = decode_public_key(&body.client_public_key)?;
     let member = state
         .member_challenges
-        .redeemed_connect_member(secure_client.binding())
+        .claim_connect_resume_key(secure_client.binding())
         .await
         .ok_or_else(invalid_resume)?;
     let epoch = state
@@ -332,8 +334,11 @@ pub(crate) async fn resume(
         ));
     }
     // The room select reuses the unchanged membership owner on this channel.
+    // A direct redemption never issues a resume key of its own.
     let record = Arc::new(tokio::sync::Mutex::new(connect::ConnectState::redeemed(
-        member, rooms.clone(),
+        member,
+        rooms.clone(),
+        connect::ConnectOrigin::Resume,
     )));
     let (challenge_id, expires) = state.member_challenges.issue_for(
         ChallengePurpose::Connect(record),

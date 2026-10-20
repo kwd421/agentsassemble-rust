@@ -536,7 +536,7 @@ async fn the_key_is_issued_only_after_a_central_admission_on_the_same_channel() 
         .await
         .unwrap_or_else(|error| panic!("list resume fixture rooms: {error:?}"));
     let record = std::sync::Arc::new(tokio::sync::Mutex::new(
-        connect::ConnectState::redeemed(member, rooms),
+        connect::ConnectState::redeemed(member, rooms, connect::ConnectOrigin::Central),
     ));
     fixture
         .state
@@ -561,9 +561,81 @@ async fn the_key_is_issued_only_after_a_central_admission_on_the_same_channel() 
         .member_resume_key(&fixture.browser, &fixture.public_key())
         .await
         .unwrap_or_else(|error| panic!("read the issued key: {error:?}"));
+    let stored = stored
+        .unwrap_or_else(|| panic!("the issued resume key must be stored for this browser credential"));
+    // The central redemption issues its key exactly once: a second request on
+    // the same channel is refused and never moves the stored expiry.
+    let again = super::issue_key(
+        axum::extract::State(fixture.state.clone()),
+        fixture.request(json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
+    )
+    .await;
     assert!(
-        stored.is_some(),
-        "the issued resume key must be stored for this browser credential"
+        again.is_err(),
+        "one central redemption must never issue a second resume key"
+    );
+    let after = fixture
+        .store
+        .member_resume_key(&fixture.browser, &fixture.public_key())
+        .await
+        .unwrap_or_else(|error| panic!("read the issued key again: {error:?}"))
+        .unwrap_or_else(|| panic!("the issued resume key must stay stored"));
+    assert_eq!(
+        after.expires_at.timestamp_micros(),
+        stored.expires_at.timestamp_micros(),
+        "a refused key request must not move the stored expiry"
+    );
+}
+
+#[tokio::test]
+async fn a_direct_resume_never_issues_or_refreshes_the_resume_key() {
+    let fixture = fixture().await;
+    store_resume_key(&fixture).await;
+    let before = fixture
+        .store
+        .member_resume_key(&fixture.browser, &fixture.public_key())
+        .await
+        .unwrap_or_else(|error| panic!("read the stored key: {error:?}"))
+        .unwrap_or_else(|| panic!("the stored resume key must exist"));
+    // The direct attempt redeems a connect challenge on this channel.
+    let nonce = fixture.nonce().await;
+    let resumed = super::resume(
+        axum::extract::State(fixture.state.clone()),
+        fixture.request(fixture.signed_body(&nonce)),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("a valid resume must succeed: {error:?}"));
+    assert!(
+        resumed.0["rooms"].as_array().is_some(),
+        "the direct attempt must redeem its own challenge"
+    );
+    // The key request on the same channel is refused: a direct redemption
+    // never issues a key of its own.
+    let refused = super::issue_key(
+        axum::extract::State(fixture.state.clone()),
+        fixture.request(json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
+    )
+    .await;
+    assert!(
+        refused.is_err(),
+        "a direct resume must never issue a resume key"
+    );
+    // The stored key is byte-identical: a direct attempt never moves the
+    // stored expiry forward.
+    let after = fixture
+        .store
+        .member_resume_key(&fixture.browser, &fixture.public_key())
+        .await
+        .unwrap_or_else(|error| panic!("read the stored key again: {error:?}"))
+        .unwrap_or_else(|| panic!("the stored resume key must stay stored"));
+    assert_eq!(
+        after.expires_at.timestamp_micros(),
+        before.expires_at.timestamp_micros(),
+        "a direct resume must not move the stored expiry"
+    );
+    assert_eq!(
+        after.resume_public_key, before.resume_public_key,
+        "a direct resume must not replace the stored key"
     );
 }
 

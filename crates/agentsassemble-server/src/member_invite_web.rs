@@ -160,9 +160,13 @@ impl MemberChallenges {
     }
 
     /// The admitted member of the connect challenge redeemed on this exact
-    /// secure channel. A challenge redeemed on another channel never matches,
-    /// so a resume key is only ever issued for the channel that proved it.
-    pub(super) async fn redeemed_connect_member(
+    /// secure channel, together with the one-shot claim of its resume key.
+    /// A challenge redeemed on another channel never matches, so a resume
+    /// key is only ever issued for the channel that proved it. The claim is
+    /// taken exactly once: a central grant issues its key once, and a direct
+    /// resume never issues one, so a direct attempt never refreshes the
+    /// stored expiry.
+    pub(super) async fn claim_connect_resume_key(
         &self,
         binding: &agentsassemble_persistence::SecureSessionBinding,
     ) -> Option<MemberAdmission> {
@@ -182,7 +186,8 @@ impl MemberChallenges {
                 .collect()
         };
         for record in records {
-            if let Some(member) = record.lock().await.member().cloned() {
+            let mut state = record.lock().await;
+            if let Some(member) = state.claim_resume_key() {
                 return Some(member);
             }
         }
