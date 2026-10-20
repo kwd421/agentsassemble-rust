@@ -18,6 +18,17 @@
   animation: none;
 }
 
+/* The older Ultra row draws a regular dot grid in ::after and lifts every child
+   into the flow; the galaxy replaces both. */
+.dc-member[data-galaxy="true"][data-ultra="true"]::after {
+  content: none;
+}
+
+.dc-member[data-galaxy="true"][data-ultra="true"] > .galaxy-sky {
+  position: absolute;
+  z-index: -1;
+}
+
 .dc-member[data-galaxy="true"][data-ultra="true"]::before,
 .dc-member-detail-modal-head[data-galaxy="true"]::before {
   position: absolute;
