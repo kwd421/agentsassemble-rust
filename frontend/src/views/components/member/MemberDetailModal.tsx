@@ -50,6 +50,9 @@ export default function MemberDetailModal({
     if (!visible) return;
     const dialog = dialogRef.current;
     dialog?.showModal();
+    // Start on the card itself, not its first control: the photo button would
+    // otherwise open in its keyboard-focus state with the edit overlay showing.
+    dialog?.focus();
     return () => dialog?.close();
   }, [visible]);
   if (!visible) return null;
@@ -58,9 +61,18 @@ export default function MemberDetailModal({
 
   return (
     <div className="dc-modal-backdrop" role="presentation">
-      <dialog ref={dialogRef} className="dc-member-detail-modal fixed inset-0 text-text-primary"
+      <dialog ref={dialogRef} tabIndex={-1} className="dc-member-detail-modal fixed inset-0 text-text-primary"
         style={{ margin: "auto" }} aria-modal="true" aria-label={entry.displayName}
-        onCancel={(event) => { event.preventDefault(); onClose(); }}
+        onCancel={(event) => {
+          event.preventDefault();
+          // Escape during IME composition never reaches the field's own handler, so
+          // hand it the Escape first: an edit in progress is discarded, not saved on close.
+          const active = document.activeElement;
+          if (active instanceof HTMLInputElement && event.currentTarget.contains(active)) {
+            active.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          }
+          onClose();
+        }}
         onClick={(event) => {
           // A modal dialog's own backdrop reports the dialog as the click target, so the
           // pointer position decides whether the click landed outside the card.

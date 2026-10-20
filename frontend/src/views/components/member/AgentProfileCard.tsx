@@ -1,6 +1,6 @@
 import ResourceImage from "../ResourceImage";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Camera, X } from "../../../ui/icons";
+import { Pencil, X } from "../../../ui/icons";
 import { AGENT_PROFILE_NAME_CHARACTER_LIMIT } from "../../../types/generated/AGENT_PROFILE_WIRE";
 import type { RoomAgentSession } from "../../../api";
 import ImageCropDialog from "../ImageCropDialog";
@@ -95,7 +95,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
           aria-haspopup={hasPhoto && canEditName ? "menu" : undefined} aria-expanded={hasPhoto && canEditName ? photoMenu : undefined}
           onClick={() => (hasPhoto && canEditName ? setPhotoMenu((open) => !open) : pickPhoto())}>
           {avatarImage ? <ResourceImage className="dc-member-avatar-image" src={avatarImage} alt="" /> : <ProviderLogo providerKind={session.provider_kind} size={48} />}
-          <Camera size={16} className="dc-agent-avatar-edit-badge" aria-hidden />
+          <span className="dc-agent-avatar-edit-icon" aria-hidden><Pencil size={18} /></span>
         </button> : <span className="dc-member-detail-modal-avatar">
           {avatarImage ? <ResourceImage className="dc-member-avatar-image" src={avatarImage} alt="" /> : <ProviderLogo providerKind={session.provider_kind} size={48} />}
         </span>)}
