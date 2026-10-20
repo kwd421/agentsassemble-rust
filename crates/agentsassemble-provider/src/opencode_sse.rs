@@ -490,13 +490,50 @@ mod tests {
     }
 
     #[test]
+    fn v2_tool_steps_publish_only_the_last_assistant_text() {
+        let mut state = EventState::new("session-1", WaitMode::Turn);
+        for event in [
+            json!({"type":"session.inbox.delivered", "data":{"sessionID":"session-1","inboxID":"user-1"}}),
+            json!({"type":"session.step.started", "data":{
+                "sessionID":"session-1","assistantMessageID":"assistant-1",
+                "agent":"build","model":{"providerID":"opencode","id":"fixture"}
+            }}),
+            json!({"type":"session.tool.called", "data":{
+                "sessionID":"session-1","assistantMessageID":"assistant-1",
+                "id":"call-1","input":{"command":"echo hello-tool"},
+                "executed":false
+            }}),
+            json!({"type":"session.step.ended", "data":{
+                "sessionID":"session-1","assistantMessageID":"assistant-1","finish":"tool-calls"
+            }}),
+            json!({"type":"session.step.started", "data":{
+                "sessionID":"session-1","assistantMessageID":"assistant-2",
+                "agent":"build","model":{"providerID":"opencode","id":"fixture"}
+            }}),
+            json!({"type":"session.text.ended", "data":{
+                "sessionID":"session-1","assistantMessageID":"assistant-2","text":"hello-tool"
+            }}),
+        ] {
+            assert_eq!(state.accept(&event), Ok(false), "{event}");
+        }
+        assert_eq!(state.turn.assistant_message, "assistant-2");
+        assert_eq!(state.turn.content, "hello-tool");
+        assert_eq!(
+            state.accept(
+                &json!({"type":"session.execution.succeeded", "data":{"sessionID":"session-1"}})
+            ),
+            Ok(true)
+        );
+    }
+
+    #[test]
     fn v2_failure_keeps_the_provider_error_until_the_terminal_execution() {
         let mut state = EventState::new("session-1", WaitMode::Turn);
         state.turn.request_message = "user-1".into();
         assert_eq!(
             state.accept(&json!({"type":"session.execution.failed", "data":{
                 "sessionID":"session-1",
-                "error":{"message":"provider unavailable"}
+                "error":{"type":"provider.rate-limited","message":"provider unavailable"}
             }})),
             Err(super::OpenCodeEventError::Provider(
                 crate::opencode_protocol::provider_response_error(

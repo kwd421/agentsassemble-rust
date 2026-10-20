@@ -360,13 +360,14 @@ pub(crate) fn provider_response_error(value: &Value) -> DriverError {
         .or_else(|| error.get("message"))
         .and_then(Value::as_str)
         .unwrap_or_default();
+    let normalized = message.to_ascii_lowercase();
     let guidance = if message.contains("OpenCode 1.18.0 or newer is required") {
         Some("OpenCode를 1.18 이상으로 업데이트해 주세요.")
     } else if message.contains("free tier can only be used") {
         Some(
             "OpenCode가 이 실행 방식의 무료 모델 사용을 허용하지 않았어요. OpenCode의 무료 티어 제한을 확인해 주세요.",
         )
-    } else if message.to_ascii_lowercase().contains("rate limit") {
+    } else if normalized.contains("rate limit") || normalized.contains("quota exceeded") {
         Some("OpenCode 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.")
     } else {
         None
@@ -433,6 +434,10 @@ mod tests {
             (
                 "Error from provider (Console): OpenCode's free tier can only be used from within OpenCode",
                 "OpenCode가 이 실행 방식의 무료 모델 사용을 허용하지 않았어요. OpenCode의 무료 티어 제한을 확인해 주세요.",
+            ),
+            (
+                "Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                "OpenCode 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.",
             ),
         ] {
             for envelope in [

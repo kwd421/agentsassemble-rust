@@ -30,9 +30,32 @@ fn server_launch_disables_external_and_project_configuration() {
             .find_map(|(key, value)| (key == name).then_some(value.as_str()))
     };
     assert_eq!(value("OPENCODE_DISABLE_PROJECT_CONFIG"), Some("1"));
-    assert_eq!(value("OPENCODE_PURE"), Some("1"));
     assert_eq!(value("OPENCODE_DISABLE_EXTERNAL_SKILLS"), Some("1"));
+    assert_eq!(value("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"), Some("1"));
+    assert_eq!(value("OPENCODE_DISABLE_FILEWATCHER"), Some("1"));
+    assert_eq!(value("OPENCODE_DISABLE_FFF"), Some("1"));
+    // OpenCode 2 does not recognise this OpenCode 1 switch.
+    assert_eq!(value("OPENCODE_PURE"), None);
+    let expected = |name: &str| {
+        root.path()
+            .join(name)
+            .to_str()
+            .unwrap_or_else(|| panic!("private {name} path"))
+            .to_owned()
+    };
+    assert_eq!(value("HOME"), Some(expected("home").as_str()));
+    assert_eq!(value("TMPDIR"), Some(expected("tmp").as_str()));
     assert_eq!(value("XDG_CONFIG_HOME"), root.path().to_str());
+    assert_eq!(value("OPENCODE_CONFIG_DIR"), root.path().to_str());
+    assert_eq!(value("XDG_STATE_HOME"), Some(expected("state").as_str()));
+    assert_eq!(value("XDG_CACHE_HOME"), Some(expected("cache").as_str()));
+    assert!(
+        value("XDG_DATA_HOME").is_some_and(|data| data != expected("data")),
+        "the owner's OpenCode data authority must survive isolation"
+    );
+    for name in ["home", "tmp", "state", "cache"] {
+        assert!(root.path().join(name).is_dir(), "missing private {name}");
+    }
     assert_eq!(value("OPENCODE_SERVER_USERNAME"), Some("opencode"));
     assert_eq!(value("OPENCODE_SERVER_PASSWORD"), Some(password.as_str()));
     assert_eq!(password.len(), 64);

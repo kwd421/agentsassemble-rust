@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::time::Duration;
 
 use agentsassemble_domain::DurableAgentSession;
 use hyper::StatusCode;
@@ -7,10 +7,13 @@ use process_wrap::tokio::ChildWrapper;
 use serde_json::{Value, json};
 use tokio::{sync::oneshot, task::JoinHandle};
 
+mod isolation;
 mod requests;
 #[path = "opencode/session_creation.rs"]
 mod session_creation;
 mod turn_transport;
+
+use isolation::isolated_environment;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use crate::filesystem::BoundExecutable;
@@ -458,6 +461,10 @@ impl OpenCodeDriver {
                         {"action": "glob", "resource": "*", "effect": "allow"},
                         {"action": "grep", "resource": "*", "effect": "allow"},
                         {"action": "list", "resource": "*", "effect": "allow"},
+                        // OpenCode 2 exposes every tool through the Code Mode `execute`
+                        // wrapper. Denying it also hides the room MCP namespace, while
+                        // nested shell/file tools still follow their own rules.
+                        {"action": "execute", "resource": "*", "effect": "allow"},
                         {"action": "external_directory", "resource": "*", "effect": external},
                         {"action": "agentsassemble_room_*", "resource": "*", "effect": "allow"},
                     ],
@@ -766,8 +773,9 @@ impl OpenCodeDriver {
     }
 }
 
-// OpenCode 2 refuses the old `--pure` flag and upper-case log levels; purity is
-// kept by OPENCODE_PURE and the isolated config, and logs stay in OpenCode's file.
+// OpenCode 2 refuses the old `--pure` flag and upper-case log levels. Purity comes
+// from the private HOME/config roots and disabled project, plugin and skill config;
+// logs stay in the OpenCode data root's log file.
 pub(crate) fn server_arguments(port: u16) -> Vec<String> {
     vec![
         "serve".to_owned(),
@@ -831,47 +839,6 @@ fn private_workspace(
         return Err(DriverLaunchError::safe(config_error()));
     }
     Ok(Some(PrivateWorkspace { path, _root: root }))
-}
-
-fn isolated_environment(
-    root: &Path,
-    server_password: &str,
-) -> Result<Vec<(String, String)>, DriverLaunchError> {
-    let root = root
-        .to_str()
-        .filter(|value| !value.is_empty() && value.len() <= 4096)
-        .ok_or_else(|| DriverLaunchError::safe(config_error()))?
-        .to_owned();
-    Ok(vec![
-        ("XDG_CONFIG_HOME".to_owned(), root.clone()),
-        ("OPENCODE_CONFIG_DIR".to_owned(), root),
-        (
-            "OPENCODE_CONFIG_CONTENT".to_owned(),
-            "{\"plugin\":[],\"mcp\":{}}".to_owned(),
-        ),
-        ("OPENCODE_DISABLE_PROJECT_CONFIG".to_owned(), "1".to_owned()),
-        (
-            "OPENCODE_DISABLE_DEFAULT_PLUGINS".to_owned(),
-            "1".to_owned(),
-        ),
-        (
-            "OPENCODE_DISABLE_EXTERNAL_SKILLS".to_owned(),
-            "1".to_owned(),
-        ),
-        (
-            "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS".to_owned(),
-            "1".to_owned(),
-        ),
-        ("OPENCODE_PURE".to_owned(), "1".to_owned()),
-        (
-            "OPENCODE_SERVER_USERNAME".to_owned(),
-            SERVER_USERNAME.to_owned(),
-        ),
-        (
-            "OPENCODE_SERVER_PASSWORD".to_owned(),
-            server_password.to_owned(),
-        ),
-    ])
 }
 
 impl ProviderDriver for OpenCodeDriver {

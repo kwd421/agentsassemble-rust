@@ -71,8 +71,21 @@ async fn check_native_permissions(
         json!({"action":"read", "resource":"*", "effect":"allow"})
     );
     let mut active = active_session(&session, &started, "room-turn-1");
+    let rule = |action: &str| {
+        creation["permissions"]
+            .as_array()
+            .and_then(|rules| {
+                rules
+                    .iter()
+                    .find(|rule| rule["action"].as_str() == Some(action))
+            })
+            .unwrap_or_else(|| panic!("missing OpenCode 2 permission rule for {action}"))
+    };
+    // The Code Mode wrapper carries every MCP room tool in OpenCode 2.
+    assert_eq!(rule("execute")["effect"], "allow");
+    assert_eq!(rule("agentsassemble_room_*")["effect"], "allow");
     assert_eq!(
-        creation["permissions"][5]["effect"],
+        rule("external_directory")["effect"],
         if mode == "full_access" {
             "allow"
         } else {

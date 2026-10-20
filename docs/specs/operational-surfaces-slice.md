@@ -1467,15 +1467,47 @@ existing `directory` query.
 | register MCP | `POST /mcp` `{name,config:{type:"remote",url,enabled:true,headers,timeout:number}}` | `PUT /api/experimental/mcp/{name}` `{config:{type:"remote",url,disabled:false,headers,timeout:{startup:number}}}`, then poll `GET /api/mcp` until `data[].status.status` is `connected` |
 | reload instructions | `POST /instance/dispose` → `true` | `POST /api/location/reload` → `204` |
 
-v2 turn identity comes from events, not the prompt response. `session.inbox.delivered`
-carries `data.inboxID` (the user message id); `session.step.started` carries
-`data.assistantMessageID` and `data.model` (`{providerID,id}`); `session.text.ended`
-and `session.message.content.updated` carry the final text; and
-`session.execution.succeeded|failed|interrupted` carries `data.sessionID` and, on
-failure, `data.error`. The prompt response `data.id` must equal the delivered inbox
-id, the observed model must equal the selected model, and the final assistant text is
-returned with the last assistant message id. The existing v1 `message.updated` and
+v2 turn identity comes from events, not the prompt response. The observed order for a
+real free-model turn is `server.connected`, `session.inbox.enqueued`,
+`session.execution.started`, `session.instructions.updated`,
+`session.inbox.delivered` (`data.inboxID` is the user message id), then one or more
+`session.step.started`/`session.step.<kind>`/`session.step.ended` rounds, and exactly
+one terminal `session.execution.succeeded|failed|interrupted` for the whole turn.
+Every `session.step.started` carries `data.assistantMessageID` and `data.model`
+(`{providerID,id,variant}`); `session.text.ended` and
+`session.message.content.updated` carry the final text. A tool round emits
+`session.tool.*`, `shell.*` and another `session.step.started` for the next assistant
+message, so only the last step's text is published. A provider failure emits
+`session.execution.failed` with `data.error` shaped `{type,message}` (for example
+`{"type":"provider.no-route","message":"Model unavailable: ..."}` or a Gemini quota
+message); the driver surfaces the Korean rate-limit guidance instead of English
+provider text. The prompt response `data.id` must equal the delivered inbox id, the
+observed model must equal the selected model, and the final assistant text is returned
+with the last assistant message id. The existing v1 `message.updated` and
 `session.status` shapes remain handled for 1.x.
+
+OpenCode 2 exposes every MCP tool through its Code Mode `execute` wrapper. A ruleset
+whose first rule denies `*` also denies `execute`, and the model then sees only
+`glob`, `grep` and `read`; the `agentsassemble_room` namespace is absent, so a
+read-only or workspace-approved room agent cannot read or publish. The v2 session
+rules therefore allow `execute` explicitly and keep nested shell/file tools on the
+session's own permission: read-only still denies shell (a real turn cannot create a
+file), while room MCP `read_discussion`/`publish_message` work. This is the v2 shape
+that differs from v1, where MCP tools were exposed directly.
+
+v2 isolation does not come from `OPENCODE_PURE` or
+`OPENCODE_DISABLE_EXTERNAL_SKILLS`; 2.0.32 ignores both for discovery and watching.
+The launch now gives OpenCode a private `HOME`, `TMPDIR`, `XDG_CONFIG_HOME`,
+`XDG_STATE_HOME` and `XDG_CACHE_HOME` under the launch's private directory, and sets
+`OPENCODE_DISABLE_FILEWATCHER=1` plus `OPENCODE_DISABLE_FFF=1`. `~/.agents/skills`,
+`~/.claude/skills`, the owner's global config and every watcher are therefore gone.
+The owner's OpenCode data root remains the data authority on purpose: it holds the
+interactive login credential, existing sessions, snapshots and the log operators
+read, and config/skill discovery never reads it. Verified with a real free-model
+turn: `opencode debug paths` reports the private home/config/state/cache roots, the
+server log contains zero `watcher subscribe` lines and zero `/Users/seinel/.agents`,
+`/Users/seinel/.claude` or `/Users/seinel/.config` paths, while the turn still emits
+`session.execution.succeeded` and returns its text.
 
 Model discovery follows the same release line: v1 keeps `opencode models --refresh
 --verbose`; v2 runs `opencode api --standalone model.list`, whose `data[]` entries
@@ -1484,13 +1516,20 @@ only namespace `opencode` with zero input and output cost is `free`; `opencode-g
 subscription models remain `paid`. A failed v2 catalog reports the same Korean
 user-facing discovery failure as other providers instead of English probe text.
 
-Verified against the locally installed `opencode` 2.0.32 with an isolated XDG config:
+Verified against the locally installed `opencode` 2.0.32 with isolated roots:
 `serve --hostname 127.0.0.1 --port` ready line, `/api/info`, `/openapi.json` request
 and response schemas, `/api/session` create bodies, `/api/event` envelopes,
 `/api/mcp` status objects, `/api/experimental/mcp/{name}` PUT, `/api/location/reload`,
-`opencode --version`, and `opencode api --standalone model.list`. No model turn was
-started during contract verification; a real turn's event ordering remains the
-app-level confirmation.
+`opencode --version`, and `opencode api --standalone model.list`. Real turns were
+then run through the provider driver against the zero-cost
+`opencode/deepseek-v4.1-flash-free` model:
+`cargo test -p agentsassemble-provider --lib opencode_live -- --ignored --nocapture`.
+Both pass: one completes and publishes `live portal reply` through the room portal;
+the read-only variant cannot execute a shell write. The owner's real-app stall was a
+Gemini free-tier quota response that OpenCode retried for almost three minutes before
+emitting `session.execution.failed`, not a missing prompt: OpenCode does not log
+prompts or session events, so the absence of prompt lines in its log was not evidence
+that the turn had not started.
 
 API-provider failure codes (2026-10-20, owner real-app check): an HTTP 503 or 529 from
 an OpenAI-compatible provider is `provider_api_busy` (the service is shedding load),
