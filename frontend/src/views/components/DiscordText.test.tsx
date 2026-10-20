@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import DiscordText, { KnownChannels, UNKNOWN_MENTION_LABEL } from "./DiscordText";
+import DiscordText, { KnownChannels, plainMentionText, UNKNOWN_MENTION_LABEL } from "./DiscordText";
 
 describe("DiscordText", () => {
   it("colours only channels the room actually has", () => {
@@ -105,5 +105,10 @@ describe("DiscordText", () => {
     expect(
       screen.getByRole("link", { name: "tracking pixel" }).getAttribute("href")
     ).toBe("https://tracker.invalid/pixel.png");
+  });
+
+  it("reads stored mentions as names in one-line previews", () => {
+    expect(plainMentionText("<@connector-7c0c> 안녕! <@gone> 잘 가", { "connector-7c0c": "안티그래비티" }))
+      .toBe(`@안티그래비티 안녕! @${UNKNOWN_MENTION_LABEL} 잘 가`);
   });
 });

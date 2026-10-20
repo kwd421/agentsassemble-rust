@@ -31,6 +31,13 @@ export function KnownChannels({ names, children }: { names: readonly string[]; c
 
 const ROOM_REFERENCE_PATTERN = /(<@[^>\r\n]{1,80}>|@[^\s@#:`*~<>]+|#[^\s@#:`*~<>]+)/gu;
 
+/// One-line plain text (reply previews, titles): stored `<@participant_id>`
+/// mentions read as `@name`, never the raw id.
+export function plainMentionText(text: string, mentionLabels: MentionLabels): string {
+  return text.replace(/<@([^>\r\n]{1,80})>/gu, (_, token: string) =>
+    `@${mentionLabels[token.trim()] || UNKNOWN_MENTION_LABEL}`);
+}
+
 function previewTitleForUrl(url: URL) {
   const hostname = url.hostname.replace(/^www\./i, "");
   const pathPart = url.pathname

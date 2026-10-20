@@ -60,6 +60,7 @@ import {
 import type { MessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 import { isVoteTransitionKind } from "../lib/voteEventKind";
 import { userFacingError } from "../lib/apiErrors";
+import { plainMentionText } from "./components/DiscordText";
 
 export default function LobbyView({
   activeRoom,
@@ -191,7 +192,8 @@ export default function LobbyView({
   useReplyBarScroll(scrollRef, replyId);
   const replySource = (id: string) => {
     const source = visibleEvents.find((event) => (event.record_id || event.id) === id);
-    return { eventId: id, author: source?.name, text: source?.message || source?.vote_question ||
+    const message = source?.message && plainMentionText(source.message, mentionLabels);
+    return { eventId: id, author: source?.name, text: message || source?.vote_question ||
       (source?.attachments?.length ? "첨부파일 메시지" : undefined), deleted: source?.message_deleted,
       avatar: source && { image: source.avatar_image_url, label: source.avatar_label, participantType: source.actor_type,
         providerKind: source.provider_kind || providerKindByParticipant.get(source.actor_id || "") } };
