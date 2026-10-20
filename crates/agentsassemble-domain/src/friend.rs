@@ -23,6 +23,9 @@ pub struct FriendDetails {
     pub participant_type: FriendParticipantType,
     pub provider_kind: String,
     pub connection_kind: String,
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    pub model: String,
     pub agent_id: String,
     pub source_agent_id: String,
     pub last_meeting_id: String,
@@ -41,6 +44,7 @@ impl FriendDetails {
             && [
                 &self.provider_kind,
                 &self.connection_kind,
+                &self.model,
                 &self.agent_id,
                 &self.source_agent_id,
                 &self.last_meeting_id,

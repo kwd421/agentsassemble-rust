@@ -235,6 +235,7 @@ async fn save_friend(
                     participant_type: FriendParticipantType::SubscriptionAi,
                     provider_kind: provider.to_owned(),
                     connection_kind: "external".to_owned(),
+                    model: String::new(),
                     agent_id: String::new(),
                     source_agent_id: String::new(),
                     last_meeting_id: String::new(),

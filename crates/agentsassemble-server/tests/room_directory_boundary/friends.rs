@@ -64,7 +64,9 @@ async fn friends_http_requires_one_use_server_authority_and_returns_committed_ch
     )
     .await;
     assert_eq!(saved["revision"], 1);
-    assert_eq!(saved["details"], draft["details"]);
+    let mut expected = draft["details"].clone();
+    expected["model"] = json!("");
+    assert_eq!(saved["details"], expected);
     draft["details"]["display_name"] = json!("changed without revision");
     response(
         client

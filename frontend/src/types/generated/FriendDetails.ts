@@ -4,4 +4,4 @@ import type { FriendParticipantType } from "./FriendParticipantType.js";
 /**
  * Saved contact metadata never grants admission or establishes live presence.
  */
-export type FriendDetails = { display_name: string, handle: string, participant_type: FriendParticipantType, provider_kind: string, connection_kind: string, agent_id: string, source_agent_id: string, last_meeting_id: string, status: string, source: string, last_seen_at: string | null, };
+export type FriendDetails = { display_name: string, handle: string, participant_type: FriendParticipantType, provider_kind: string, connection_kind: string, model?: string, agent_id: string, source_agent_id: string, last_meeting_id: string, status: string, source: string, last_seen_at: string | null, };

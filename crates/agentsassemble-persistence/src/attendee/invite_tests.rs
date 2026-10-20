@@ -26,6 +26,7 @@ async fn attendee_friend_receipt_preserves_selected_metadata_without_admitting_o
                     participant_type: FriendParticipantType::SubscriptionAi,
                     provider_kind: "codex".to_owned(),
                     connection_kind: "external".to_owned(),
+                    model: String::new(),
                     agent_id: String::new(),
                     source_agent_id: String::new(),
                     last_meeting_id: String::new(),

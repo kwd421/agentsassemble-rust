@@ -2449,8 +2449,10 @@ behind a private HTTP operator ticket and rechecks completed bootstrap inside ea
 storage transaction. Public guests and paired room operators cannot read or edit it.
 
 The persistence owner stores stable UUID contact IDs, revisions, supplied name,
-handle, participant type, provider and connection identity, source agent/room and
-timestamps. Provider text never changes participant type. Creation uses a client
+handle, participant type, provider and connection identity, the provider model name
+(wire field `model`, optional for stored contacts saved before it existed and bounded
+like the other 256-character identity text), source agent/room and timestamps.
+Provider text never changes participant type. Creation uses a client
 UUID retained across retries, while edits require the observed revision. Identical
 replays return the committed contact; a stale differing edit fails visibly. Delete
 is idempotent; it erases contact metadata and retains only the ID to prevent a delayed

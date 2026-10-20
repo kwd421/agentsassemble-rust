@@ -35,6 +35,7 @@ pub async fn fixture() -> Result<
                     participant_type: FriendParticipantType::SubscriptionAi,
                     provider_kind: "codex_live_session".to_owned(),
                     connection_kind: "external".to_owned(),
+                    model: String::new(),
                     agent_id: String::new(),
                     source_agent_id: String::new(),
                     last_meeting_id: String::new(),
