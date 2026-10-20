@@ -29,9 +29,11 @@ export function localRoomServerIds(rooms: RoomDockItem[]): string[] {
  * when this host's registered server id matches one of the signed-in
  * account's owned server ids (the same authority the old chooser used:
  * owned server id vs `host_device_info` server id). It never depends on
- * whether rooms loaded: while unknown (runtime starting, central
- * unconfirmed, device info unavailable) it is not mine, so the signed-in
- * account is shown instead of a foreign local operator.
+ * whether rooms loaded: while unknown (runtime starting, device info
+ * unavailable, no owned entry) it is not mine, so the signed-in account is
+ * shown instead of a foreign local operator. While central is unconfirmed
+ * (offline, daily allowance spent) the owned entries retained from the last
+ * confirmed directory still decide, so this computer's own rooms keep working.
  *
  * Without a signed-in central person (guest/local mode) the local host
  * stays authoritative, preserving existing behaviour.
@@ -41,7 +43,6 @@ export function isLocalOwnedByRegistration(
   directory: CentralDirectoryState | null,
 ): boolean {
   if (!directory?.person) return true;
-  if (directory.status === "central-unconfirmed") return false;
   if (typeof localServerId !== "string" || !localServerId) return false;
   const owned = new Set(ownedServerIds(directory));
   if (owned.size === 0) return false;

@@ -330,6 +330,11 @@ describe("ownership mismatch is registration-only", () => {
     expect(shouldShowOwnServerMismatch(OWN_ID, unconfirmed)).toBe(false);
     expect(shouldShowOwnServerMismatch(FOREIGN_ID, unconfirmed)).toBe(false);
     expect(isLocalOwnedByRegistration(undefined, connected)).toBe(false);
+    // Unconfirmed central (offline, daily allowance spent) keeps the retained
+    // owned entry: this computer's own rooms keep working, a foreign one does not.
+    expect(isLocalOwnedByRegistration(OWN_ID, unconfirmed)).toBe(true);
+    expect(isLocalOwnedByRegistration(FOREIGN_ID, unconfirmed)).toBe(false);
+    expect(isLocalOwnedByRegistration(OWN_ID, { ...unconfirmed, servers: [] })).toBe(false);
     // A proven foreign registration still mismatches once known.
     expect(shouldShowOwnServerMismatch(FOREIGN_ID, connected)).toBe(true);
     expect(isLocalOwnedByRegistration(FOREIGN_ID, connected)).toBe(false);
