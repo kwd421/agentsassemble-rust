@@ -27,6 +27,18 @@
 .dc-member[data-galaxy="true"][data-ultra="true"] > .galaxy-sky {
   position: absolute;
   z-index: -1;
+  /* Stars stay bright around the avatar and the row's end, faint behind text. */
+  -webkit-mask-image: linear-gradient(90deg, #000 0 14%, rgba(0, 0, 0, 0.3) 24%, rgba(0, 0, 0, 0.3) 80%, #000 94%);
+  mask-image: linear-gradient(90deg, #000 0 14%, rgba(0, 0, 0, 0.3) 24%, rgba(0, 0, 0, 0.3) 80%, #000 94%);
+}
+
+.dc-member[data-galaxy="true"][data-ultra="true"] .galaxy-star--bright {
+  scale: 0.7;
+}
+
+.dc-member[data-galaxy="true"][data-ultra="true"] .dc-member-name,
+.dc-member[data-galaxy="true"][data-ultra="true"] .dc-member-model-line {
+  text-shadow: 0 0 4px rgba(10, 8, 30, 0.9), 0 1px 2px rgba(10, 8, 30, 0.8);
 }
 
 .dc-member[data-galaxy="true"][data-ultra="true"]::before,
