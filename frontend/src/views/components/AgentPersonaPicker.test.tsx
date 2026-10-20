@@ -151,7 +151,7 @@ describe("AgentPersonaPicker", () => {
     await userEvent.click(screen.getByRole("button", { name: /Night Guide/ }));
     await waitFor(() => expect(screen.getByText("Weather Module")).toBeTruthy());
     expect(screen.getByRole("radio", { name: /Night Guide/ }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByRole("radio", { name: /적용 안 함/ }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("radio", { name: /사용 안 함/ }).getAttribute("aria-checked")).toBe("false");
     expect(screen.getByText("적용됨")).toBeTruthy();
     expect(screen.getByText(/Risu 모듈 · 로어 4/)).toBeTruthy();
 
@@ -244,7 +244,7 @@ describe("AgentPersonaPicker", () => {
     );
     render(<AgentPersonaPicker value="" onChange={onChange} />);
 
-    await userEvent.click(screen.getByRole("button", { name: /적용 안 함/ }));
+    await userEvent.click(screen.getByRole("button", { name: /사용 안 함/ }));
     await waitFor(() => expect(screen.getByText("Persona 0")).toBeTruthy());
     // Nothing is applied yet, so the list is the 8 shown cards; a "clear"
     // row would only repeat what the closed trigger already says.

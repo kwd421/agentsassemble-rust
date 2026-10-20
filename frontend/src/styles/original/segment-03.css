@@ -140,7 +140,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px 12px 12px;
+  padding: 16px 24px;
   border-top: 1px solid var(--color-panel-separator);
   background: var(--color-panel);
 }
@@ -220,7 +220,7 @@
 .dc-agent-create-secondary,
 .dc-agent-create-primary {
   display: inline-flex;
-  min-height: 38px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
   gap: 7px;
@@ -474,4 +474,12 @@
   background: #323237;
   color: var(--color-text-muted);
   opacity: 0.72;
+}
+
+/* Setup notes are supporting text, not the loudest line in the dialog. */
+.dc-agent-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
 }

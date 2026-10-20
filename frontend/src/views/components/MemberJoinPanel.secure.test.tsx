@@ -66,7 +66,8 @@ describe("secure first-join consent", () => {
   it("offers the current name on an invite join and sends the edited one", async () => {
     render(<MemberJoinPanel secureEntry={{ ...entry, inviteToken: "aaj1.invite" }} onCancel={() => undefined} />);
     const name = await screen.findByRole("textbox", { name: "이름" }) as HTMLInputElement;
-    expect(name.value).toBe("나");
+    // The default name is filled by an effect after the consent renders.
+    await vi.waitFor(() => expect(name.value).toBe("나"));
     fireEvent.change(name, { target: { value: "  방 이름  " } });
     fireEvent.click(screen.getByRole("button", { name: "참가하기" }));
     await vi.waitFor(() => expect(admission.admit).toHaveBeenCalled());

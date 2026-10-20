@@ -617,7 +617,7 @@ describe("AgentCreateModal", () => {
     );
 
     expect(screen.getAllByRole("listitem", { name: "Ollama" })).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: /적용 안 함/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /사용 안 함/ })).toBeNull();
 
     expect(screen.queryByLabelText("API 키")).toBeNull();
     const model = screen.getByRole("combobox", { name: "모델" }) as HTMLButtonElement;
@@ -627,7 +627,7 @@ describe("AgentCreateModal", () => {
     await chooseProviderControl("모델", "Gemma 4 12B · 로컬 모델 Local");
     expect(model.disabled).toBe(false);
     expectProviderControlValue("모델", "로컬 모델");
-    expect(screen.getByRole("button", { name: /적용 안 함/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /사용 안 함/ })).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "추론 강도" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "응답 속도" })).toBeNull();
     expectProviderControlValue("권한", "대화 전용");

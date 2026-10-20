@@ -111,8 +111,8 @@ export default function AgentPersonaPicker({
     <div className="dc-persona-picker">
       <div className="dc-persona-picker-head">
         <div>
-          <strong>봇카드 · Risu 모듈</strong>
-          <span>API 키 모델과 내 컴퓨터 모델의 캐릭터와 세계관에 적용돼요.</span>
+          <strong>캐릭터 카드</strong>
+          <span>API 키·내 컴퓨터 모델에서 캐릭터와 세계관으로 쓰여요.</span>
         </div>
         <label className="dc-persona-import" data-disabled={disabled || importing}>
           <Upload size={15} aria-hidden="true" />
@@ -153,13 +153,13 @@ export default function AgentPersonaPicker({
           )}
         </span>
         <span className="dc-persona-copy">
-          <strong>{selectedItem?.display_name || "적용 안 함"}</strong>
+          <strong>{selectedItem?.display_name || "사용 안 함"}</strong>
           <small>
             {selectedItem
               ? `${selectedItem.asset_kind === "module" ? "Risu 모듈" : "봇카드"}${
                   selectedItem.lorebook_count ? ` · 로어 ${selectedItem.lorebook_count}` : ""
                 }`
-              : "기본 모델 성격 사용"}
+              : "모델 기본 성격 그대로"}
           </small>
         </span>
         <span className="dc-persona-current-action">
@@ -204,8 +204,8 @@ export default function AgentPersonaPicker({
                   >
                     <span className="dc-persona-symbol" data-kind="none">—</span>
                     <span className="dc-persona-copy">
-                      <strong>적용 안 함</strong>
-                      <small>기본 모델 성격 사용</small>
+                      <strong>사용 안 함</strong>
+                      <small>모델 기본 성격 그대로</small>
                     </span>
                   </button>
                 )}
@@ -265,7 +265,7 @@ export default function AgentPersonaPicker({
         </p>
       )}
       <p className="dc-persona-safety preserve-words">
-        실행형 스크립트·정규식·트리거는 보관만 하며 실행하지 않아요.
+        카드에 든 스크립트는 실행하지 않고 보관만 해요.
       </p>
     </div>
   );
