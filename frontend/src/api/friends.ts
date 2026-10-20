@@ -27,7 +27,9 @@ export async function fetchSavedFriends(authority: SavedFriendsAuthority = { kin
 }
 
 export function saveFriend(body: SaveFriend, authority: SavedFriendsAuthority = { kind: "local" }): Promise<SavedFriend> {
-  return request(authority, "POST", body);
+  // An older host refuses unknown keys, so an empty model is left out.
+  const { model, ...details } = body.details;
+  return request(authority, "POST", { ...body, details: model ? { ...details, model } : details });
 }
 
 export function deleteFriend(friendId: string, authority: SavedFriendsAuthority = { kind: "local" }): Promise<{ deleted: boolean }> {

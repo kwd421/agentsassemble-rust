@@ -123,7 +123,8 @@ function FriendProfile({ friend, busy, onEdit }: { friend: SavedFriend; busy: bo
   // Only what a person can read: ids (agent, last room) never reach the screen,
   // and a provider is shown only for an AI that has one.
   const facts = [["종류", friendKind(details.participant_type)], ["마지막 상태", presenceStatusLabel(details.status)],
-    ...(details.participant_type !== "human" && providerName(details.provider_kind) ? [["제공자", providerName(details.provider_kind)]] : [])];
+    ...(details.participant_type !== "human" && providerName(details.provider_kind) ? [["제공자", providerName(details.provider_kind)]] : []),
+    ...(details.participant_type !== "human" && details.model ? [["모델", details.model]] : [])];
   return <article className="dc-friend-profile-card">
     <div className="dc-friend-profile-banner" aria-hidden />
     <div className="dc-friend-profile-body"><FriendAvatar friend={friend} size={64} /><h3>{details.display_name}</h3>
@@ -152,7 +153,7 @@ function FriendRow({ friend, busy, selected, onSelect, onEdit, onDelete }: { fri
   return <article className="dc-friend-row" data-selected={selected}
     onContextMenu={(event) => { event.preventDefault(); openMenu(event.clientX, event.clientY); }}>
     <button type="button" className="dc-friend-main-button" aria-label={`${friend.details.display_name} 프로필 보기`} aria-pressed={selected} onClick={onSelect}><FriendAvatar friend={friend} /><span><strong className="dc-friend-name">{friend.details.display_name}</strong>
-      <span className="dc-friend-detail">{[friendKind(friend.details.participant_type), providerName(friend.details.provider_kind), friend.details.handle].filter(Boolean).join(" · ")}</span>
+      <span className="dc-friend-detail">{[friendKind(friend.details.participant_type), providerName(friend.details.provider_kind), friend.details.model, friend.details.handle].filter(Boolean).join(" · ")}</span>
     </span></button>
     <button ref={trigger} type="button" className="dc-friends-more" disabled={busy}
       aria-label={`${friend.details.display_name} 더보기`} aria-haspopup="dialog"
@@ -173,7 +174,7 @@ function FriendEditor({ initial, busy, error, onCancel, onSave }: {
 }) {
   const [draft, setDraft] = useState(initial);
   const changed = initial.expected_revision === 0 || JSON.stringify(draft.details) !== JSON.stringify(initial.details);
-  const update = (field: "display_name" | "handle" | "provider_kind", value: string) => setDraft((current) => ({ ...current, details: { ...current.details, [field]: value } }));
+  const update = (field: "display_name" | "handle" | "provider_kind" | "model", value: string) => setDraft((current) => ({ ...current, details: { ...current.details, [field]: value } }));
   // A provider only means something for an AI friend, and is picked from the
   // known products instead of typed as a raw kind id.
   const isHuman = draft.details.participant_type === "human";
@@ -194,6 +195,7 @@ function FriendEditor({ initial, busy, error, onCancel, onSave }: {
         {providerOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         {currentProvider && !providerOptions.some((option) => option.value === currentProvider) && <option value={currentProvider}>{providerName(currentProvider) || "기타"}</option>}
       </select></label>}
+      {!isHuman && <label className="dc-create-channel-name">모델 (선택)<input className="ops-input" maxLength={256} value={draft.details.model ?? ""} placeholder="예: deepseek-chat" disabled={busy} onChange={(event) => update("model", event.target.value)} /></label>}
       {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
       <div className="dc-create-channel-actions">
         <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={busy} onClick={onCancel}>취소</button>
