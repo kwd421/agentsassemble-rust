@@ -1,7 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { Bot, Code2, Crown, ShieldCheck, User } from "../../../ui/icons";
 import type { AppIcon } from "../../../ui/icons";
-import type { LiveAgent, RoomMember } from "../../../api";
+import type { LiveAgent, RoomAgentSession, RoomMember } from "../../../api";
 import { isActivePresence, presenceStatusLabel } from "../../../lib/presenceStatus";
 import type { MemberSpeed, RoleId } from "./memberTypes";
 
@@ -30,6 +30,13 @@ export function rowPointerMovedTooFar(start: { x: number; y: number }, event: Re
   const movedX = Math.abs(event.clientX - start.x);
   const movedY = Math.abs(event.clientY - start.y);
   return movedX > ROW_POINTER_MOVE_TOLERANCE || movedY > ROW_POINTER_MOVE_TOLERANCE;
+}
+
+export function isGalaxyAgent(
+  session?: Pick<RoomAgentSession, "reasoning_effort">
+): boolean {
+  // The ultracode flag will join this maximum-reasoning check when it ships.
+  return String(session?.reasoning_effort || "").trim().toLowerCase() === "ultra";
 }
 
 export function memberSpeed(value?: string): MemberSpeed | null {

@@ -10,6 +10,7 @@ import "../views/components/AgentPersonaPicker.css";
 import "../views/components/UserSettingsPanel.css";
 import "../views/components/member/MemberOwnership.css";
 import "../views/components/member/MemberProfileCard.css";
+import "../views/components/member/GalaxyAvatar.css";
 import "../views/components/DisconnectedRoomView.css";
 import "../views/components/RoomInviteModal.css";
 import "../views/components/RoomRail.css";

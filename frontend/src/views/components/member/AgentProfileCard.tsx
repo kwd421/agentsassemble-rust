@@ -5,6 +5,8 @@ import { AGENT_PROFILE_NAME_CHARACTER_LIMIT } from "../../../types/generated/AGE
 import type { RoomAgentSession } from "../../../api";
 import ImageCropDialog from "../ImageCropDialog";
 import ProviderLogo from "../ProviderLogo";
+import GalaxyAvatar from "./GalaxyAvatar";
+import { isGalaxyAgent } from "./memberHelpers";
 import { userFacingError } from "../../../lib/apiErrors";
 
 // Edited in place like the account profile: the photo opens the file picker and then
@@ -37,6 +39,9 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
   const canEditName = Boolean(onSave);
   const canEditPhoto = Boolean(onAvatarUpdate);
   const hasPhoto = Boolean(session.avatar_image_url && avatarImage);
+  const galaxy = isGalaxyAgent(session);
+  const withGalaxy = (avatar: ReactNode) =>
+    galaxy ? <GalaxyAvatar size={48}>{avatar}</GalaxyAvatar> : avatar;
   const trimmed = name.trim();
   const nameValid = trimmed.length > 0 && Array.from(trimmed).length <= AGENT_PROFILE_NAME_CHARACTER_LIMIT;
 
@@ -85,7 +90,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
   return <>
     <header className="dc-member-detail-modal-head">
       <span className="relative">
-        {canEditPhoto ? <button type="button" className="dc-member-detail-modal-avatar dc-agent-avatar-edit"
+        {withGalaxy(canEditPhoto ? <button type="button" className="dc-member-detail-modal-avatar dc-agent-avatar-edit"
           aria-label="프로필 사진 변경" title="프로필 사진 변경" disabled={busy}
           aria-haspopup={hasPhoto && canEditName ? "menu" : undefined} aria-expanded={hasPhoto && canEditName ? photoMenu : undefined}
           onClick={() => (hasPhoto && canEditName ? setPhotoMenu((open) => !open) : pickPhoto())}>
@@ -93,7 +98,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
           <Camera size={16} className="dc-agent-avatar-edit-badge" aria-hidden />
         </button> : <span className="dc-member-detail-modal-avatar">
           {avatarImage ? <ResourceImage className="dc-member-avatar-image" src={avatarImage} alt="" /> : <ProviderLogo providerKind={session.provider_kind} size={48} />}
-        </span>}
+        </span>)}
         {photoMenu && <div className="dc-context-menu" role="menu" style={{ position: "absolute", left: 0, top: "100%", zIndex: 5 }}
           onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setPhotoMenu(false); } }}>
           <button type="button" role="menuitem" autoFocus onClick={pickPhoto}>사진 바꾸기</button>

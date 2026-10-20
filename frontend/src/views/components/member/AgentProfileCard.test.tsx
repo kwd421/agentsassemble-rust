@@ -12,6 +12,23 @@ beforeAll(() => {
 });
 afterAll(() => vi.restoreAllMocks());
 
+it("draws the galaxy around a maximum-reasoning agent's profile avatar only", () => {
+  const { container, rerender } = render(
+    <AgentProfileCard session={agentSessionFixture({ reasoning_effort: "ultra" })}>
+      {null}
+    </AgentProfileCard>
+  );
+  expect(container.querySelector(".galaxy-avatar")).toBeTruthy();
+  expect(container.querySelector(".galaxy-avatar")?.textContent).not.toContain("avatar");
+
+  rerender(
+    <AgentProfileCard session={agentSessionFixture({ reasoning_effort: "high" })}>
+      {null}
+    </AgentProfileCard>
+  );
+  expect(container.querySelector(".galaxy-avatar")).toBeNull();
+});
+
 it("edits the name in place: Enter saves, Escape restores and a failure keeps the draft", async () => {
   const session = agentSessionFixture({ display_name: "Original" });
   const onSave = vi.fn().mockRejectedValueOnce(new Error("Save failed")).mockResolvedValue(undefined);

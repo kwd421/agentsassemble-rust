@@ -296,6 +296,30 @@ describe("MemberList component wiring", () => {
     expect(modelLine.querySelector("[data-icon]")).toBeNull();
   });
 
+  it("draws the galaxy only around a maximum-reasoning agent's avatar", () => {
+    const { container, rerender } = render(
+      <MemberList
+        agents={[AGENT]}
+        agentSessions={[{ ...SESSION, reasoning_effort: "ultra" }]}
+        roomId="room-1"
+        roomName="Room One"
+      />
+    );
+    expect(container.querySelectorAll(".galaxy-avatar")).toHaveLength(1);
+    expect(container.querySelector(".dc-member")?.getAttribute("data-galaxy")).toBe("true");
+
+    rerender(
+      <MemberList
+        agents={[AGENT]}
+        agentSessions={[{ ...SESSION, reasoning_effort: "high" }]}
+        roomId="room-1"
+        roomName="Room One"
+      />
+    );
+    expect(container.querySelector(".galaxy-avatar")).toBeNull();
+    expect(container.querySelector(".dc-member")?.hasAttribute("data-galaxy")).toBe(false);
+  });
+
   it.each([
     ["minimal", "minimal"], ["low", "low"], ["medium", "medium"], ["high", "high"], ["xhigh", "xhigh"],
   ])("shows %s effort as the provider names it in visible and accessible member labels", (effort, label) => {

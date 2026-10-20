@@ -5,7 +5,9 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import { Dollar, VolumeX, Zap } from "../../../ui/icons";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ParticipantAvatarContent from "../ParticipantAvatarContent";
+import GalaxyAvatar from "./GalaxyAvatar";
 import {
+  isGalaxyAgent,
   isPrimaryActivationPointer,
   rowPointerMovedTooFar,
   rowTargetIsInteractive,
@@ -44,6 +46,7 @@ export default function MemberRow({
   // Without a model, an agent's status reads like a Discord activity line instead of a chip.
   const modelText = entry.modelLabel || entry.detail;
   const SpeedIcon = entry.speed === "flex" ? Dollar : entry.speed ? Zap : undefined;
+  const galaxy = isGalaxyAgent(entry.agentSession);
   // Roles and moderation open from the row's context menu. A row without a profile
   // button still takes focus, so the menu key and Shift+F10 reach it from the keyboard.
   const manageable = Boolean(canManageParticipant && (canEditRoles || (!entry.owner && entry.meetingId)));
@@ -73,6 +76,23 @@ export default function MemberRow({
     pointerStartRef.current = null;
   }
 
+  const avatar = (
+    <span className="dc-member-avatar">
+      {entry.avatarImage ? (
+        <ResourceImage className="dc-member-avatar-image" src={entry.avatarImage} alt="" />
+      ) : (
+        <ParticipantAvatarContent
+          participantType={entry.member?.participant_type}
+          displayName={entry.displayName}
+          avatarLabel={entry.member?.avatar_label}
+          providerKind={entry.providerKind}
+          size={32}
+          fallback={<Icon size={15} />}
+        />
+      )}
+    </span>
+  );
+
   return (
     <div
       ref={rowRef}
@@ -81,6 +101,7 @@ export default function MemberRow({
       data-role={entry.role}
       data-active={entry.active}
       data-ultra={entry.ultraMode}
+      data-galaxy={galaxy || undefined}
       data-muted={entry.muted}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
@@ -92,20 +113,7 @@ export default function MemberRow({
       }}
     >
       <span className="relative shrink-0">
-        <span className="dc-member-avatar">
-          {entry.avatarImage ? (
-            <ResourceImage className="dc-member-avatar-image" src={entry.avatarImage} alt="" />
-          ) : (
-            <ParticipantAvatarContent
-              participantType={entry.member?.participant_type}
-              displayName={entry.displayName}
-              avatarLabel={entry.member?.avatar_label}
-              providerKind={entry.providerKind}
-              size={32}
-              fallback={<Icon size={15} />}
-            />
-          )}
-        </span>
+        {galaxy ? <GalaxyAvatar size={32}>{avatar}</GalaxyAvatar> : avatar}
         <span
           className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-chat-bg ${
             statusDotClass(

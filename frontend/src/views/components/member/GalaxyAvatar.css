@@ -1,0 +1,264 @@
+/* A galaxy halo for maximum-reasoning agents. Every animated layer moves with
+   transform/opacity only, so the effect stays off the layout and paint paths.
+   The avatar stays in its own layer above the stars and remains fully legible. */
+.galaxy-avatar {
+  --galaxy-size: 32px;
+  position: relative;
+  display: inline-grid;
+  width: var(--galaxy-size);
+  height: var(--galaxy-size);
+  flex: 0 0 auto;
+  place-items: center;
+  isolation: isolate;
+  overflow: visible;
+  vertical-align: middle;
+}
+
+/* The ultra row background clips itself, but the halo may leave the row. */
+.dc-member[data-galaxy="true"] {
+  overflow: visible;
+}
+
+.galaxy-avatar-core {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.galaxy-avatar-nebula,
+.galaxy-avatar-stars,
+.galaxy-avatar-meteor {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Deep navy core shading under two offset violet clouds: soft, never a ring. */
+.galaxy-avatar-nebula {
+  inset: calc(var(--galaxy-size) * -0.42);
+  z-index: 0;
+  background:
+    radial-gradient(
+      circle at 42% 35%,
+      rgba(126, 91, 255, 0.4) 0%,
+      rgba(63, 45, 165, 0.26) 32%,
+      transparent 62%
+    ),
+    radial-gradient(
+      circle at 68% 72%,
+      rgba(167, 83, 255, 0.32) 0%,
+      rgba(75, 45, 160, 0.22) 36%,
+      transparent 66%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(20, 28, 84, 0.6) 0%,
+      rgba(17, 20, 62, 0.4) 48%,
+      transparent 72%
+    );
+  filter: blur(calc(var(--galaxy-size) * 0.08));
+  opacity: 0.9;
+  transform: translateZ(0);
+  animation: galaxy-nebula-breathe 12s ease-in-out infinite;
+}
+
+/* Four star fields at different scales. The mask keeps the stars in the halo
+   band, and the two layers orbit at different speeds for a spiral drift. */
+.galaxy-avatar-stars {
+  inset: calc(var(--galaxy-size) * -0.3);
+  z-index: 1;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.95) 0 1.1px, transparent 1.5px),
+    radial-gradient(circle, rgba(212, 199, 255, 0.9) 0 0.8px, transparent 1.1px),
+    radial-gradient(circle, rgba(145, 124, 255, 0.8) 0 0.6px, transparent 0.9px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.75) 0 1.4px, transparent 1.8px);
+  background-repeat: repeat;
+  background-size: 37% 41%, 23% 29%, 17% 19%, 61% 53%;
+  background-position: 8% 12%, 61% 33%, 27% 78%, 45% 5%;
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0 46%,
+    #000 53%,
+    #000 81%,
+    transparent 92%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0 46%,
+    #000 53%,
+    #000 81%,
+    transparent 92%
+  );
+  opacity: 0.85;
+  transform: translateZ(0);
+  animation:
+    galaxy-spiral 46s linear infinite,
+    galaxy-twinkle 6.5s ease-in-out -1.7s infinite;
+  will-change: transform, opacity;
+}
+
+.galaxy-avatar-stars--inner {
+  inset: calc(var(--galaxy-size) * -0.14);
+  background-size: 31% 35%, 19% 23%, 13% 17%, 47% 43%;
+  opacity: 0.55;
+  animation:
+    galaxy-spin 31s linear infinite reverse,
+    galaxy-twinkle 4.4s ease-in-out -0.6s infinite;
+}
+
+.galaxy-avatar-meteor {
+  inset: calc(var(--galaxy-size) * -0.5);
+  z-index: 2;
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0 44%,
+    #000 52%,
+    #000 88%,
+    transparent 96%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0 44%,
+    #000 52%,
+    #000 88%,
+    transparent 96%
+  );
+}
+
+.galaxy-avatar-meteor::before {
+  position: absolute;
+  top: 20%;
+  left: -38%;
+  width: 52%;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(184, 162, 255, 0.2) 40%,
+    rgba(255, 255, 255, 0.95)
+  );
+  box-shadow: 0 0 4px rgba(205, 185, 255, 0.9);
+  content: "";
+  opacity: 0;
+  transform: translate3d(0, 0, 0) rotate(28deg) scaleX(0.4);
+  animation: galaxy-meteor 9.5s cubic-bezier(0.22, 0.61, 0.36, 1) 1.5s infinite;
+}
+
+/* 32px member rows: a faint halo with a handful of drifting stars. */
+.galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-nebula {
+  inset: calc(var(--galaxy-size) * -0.3);
+  filter: blur(calc(var(--galaxy-size) * 0.06));
+  opacity: 0.55;
+  animation-duration: 15s;
+}
+
+.galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--outer {
+  inset: calc(var(--galaxy-size) * -0.25);
+  background-size: 69% 73%, 43% 49%, 31% 37%, 101% 97%;
+  opacity: 0.5;
+  animation-duration: 58s, 8s;
+}
+
+.galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--inner,
+.galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-meteor {
+  display: none;
+}
+
+/* Profile avatars get the full nebula, spiral drift and shooting star. */
+.galaxy-avatar[data-galaxy-size="full"] .galaxy-avatar-nebula {
+  inset: calc(var(--galaxy-size) * -0.55);
+  animation-duration: 11s;
+}
+
+.galaxy-avatar[data-galaxy-size="full"] .galaxy-avatar-stars--outer {
+  inset: calc(var(--galaxy-size) * -0.42);
+}
+
+.galaxy-avatar[data-galaxy-size="full"] .galaxy-avatar-stars--inner {
+  inset: calc(var(--galaxy-size) * -0.18);
+}
+
+@keyframes galaxy-nebula-breathe {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.97) translateZ(0);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.03) translateZ(0);
+  }
+}
+
+@keyframes galaxy-spiral {
+  from {
+    transform: rotate(0deg) scale(0.94) translateZ(0);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.05) translateZ(0);
+  }
+  to {
+    transform: rotate(360deg) scale(0.94) translateZ(0);
+  }
+}
+
+@keyframes galaxy-spin {
+  to {
+    transform: rotate(360deg) translateZ(0);
+  }
+}
+
+@keyframes galaxy-twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  42% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes galaxy-meteor {
+  0%,
+  68% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(28deg) scaleX(0.4);
+  }
+  72% {
+    opacity: 0.95;
+  }
+  82% {
+    opacity: 0.95;
+  }
+  88%,
+  100% {
+    opacity: 0;
+    transform: translate3d(
+        calc(var(--galaxy-size) * 1.6),
+        calc(var(--galaxy-size) * 0.9),
+        0
+      )
+      rotate(28deg) scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-avatar-nebula,
+  .galaxy-avatar-stars,
+  .galaxy-avatar-meteor::before {
+    animation: none;
+  }
+
+  .galaxy-avatar-meteor {
+    display: none;
+  }
+}
