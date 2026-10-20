@@ -278,23 +278,11 @@
   opacity: 1;
 }
 
-/* The name is always shown as an edit box so it is clearly editable. */
+/* The name box is the shared field, weighted like the card title. */
 .dc-agent-name-input {
   width: 100%;
-  min-height: 36px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: #1e1f22;
-  padding: 0 10px;
-  color: var(--color-text-primary);
-  font-size: 16px;
   font-weight: 700;
   text-overflow: ellipsis;
-}
-
-.dc-agent-name-input:focus {
-  border-color: var(--color-accent);
-  outline: none;
 }
 
 .dc-member-detail-modal-head p {

@@ -146,7 +146,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
   function nameEditor(defaultName?: string, server?: CentralServerDisplay) {
     return <form className="dc-server-row-edit" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <label className="grid gap-1 text-[13px] text-text-secondary">서버 이름
-        <input autoFocus className="rounded-lg bg-[#121214] px-3 py-2 text-[15px] text-text-primary" value={editingName} maxLength={80} disabled={busy || saving} onChange={(event) => setName(event.target.value)} />
+        <input autoFocus className="dc-input" value={editingName} maxLength={80} disabled={busy || saving} onChange={(event) => setName(event.target.value)} />
       </label>
       {namePreview(editingName.trim(), server?.server_id || localHost?.server_id)}
       <div className="flex flex-wrap items-center gap-2">

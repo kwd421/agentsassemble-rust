@@ -118,8 +118,7 @@ function QuestionInput({ question, values, onChange, group }: {
     </label>)}
     {(question.is_other || !question.options.length) && <label style={{ display: "grid", gap: 8 }}>
       {question.options.length ? "직접 입력" : "답변"}
-      <input type={question.is_secret ? "password" : "text"} autoComplete="off" value={other}
-        style={{ ...controlStyle, width: "100%", minWidth: 0 }} required={!question.options.length}
+      <input className="dc-input w-full" type={question.is_secret ? "password" : "text"} autoComplete="off" value={other} required={!question.options.length}
         onChange={(event) => {
           const selected = question.multiple ? values.filter((value) => labels.includes(value)) : [];
           onChange(event.target.value ? [...selected, event.target.value] : selected);

@@ -66,7 +66,7 @@ export default function RoomDeleteDialog({
         {!deleted && !controller.pending && (
           <label className="dc-room-delete-field">
             <span>방 이름 입력</span>
-            <input autoFocus value={confirmationName} disabled={locked} autoComplete="off"
+            <input className="dc-input" autoFocus value={confirmationName} disabled={locked} autoComplete="off"
               onChange={(event) => setConfirmationName(event.target.value)} />
           </label>
         )}

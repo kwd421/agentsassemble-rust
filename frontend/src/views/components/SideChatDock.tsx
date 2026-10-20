@@ -99,7 +99,7 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
       {chat.error && <button type="button" className="dc-agent-create-secondary" onClick={() => socket?.resync?.()} style={{ minHeight: 44 }}>다시 연결</button>}
       {!canPost && <p style={{ fontSize: 12 }}>이 방에서는 사이드챗을 보기만 할 수 있어요.</p>}
       <div style={{ display: "grid", minHeight: 64, flexShrink: 0, position: "relative" }}>
-      <MentionInput className="ops-input" inputRef={inputRef} value={value} onChange={setValue} disabled={disabled}
+      <MentionInput className="dc-input" inputRef={inputRef} value={value} onChange={setValue} disabled={disabled}
         ariaLabel="비공식 사이드챗 입력" maxLength={MAX_TEXT_CHAT_CHARACTERS * 2} placeholder="사이드챗 메시지" mentionables={mentionables}
         onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
       </div>

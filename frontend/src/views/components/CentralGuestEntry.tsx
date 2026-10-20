@@ -97,7 +97,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 maxLength={80}
                 value={displayName}
                 placeholder="다른 참가자에게 보일 이름"
-                className="dc-startup-input"
+                className="dc-input"
                 onChange={(event) => setDisplayName(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void createGuest();
@@ -137,7 +137,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 spellCheck={false}
                 value={recoveryInput}
                 placeholder="XXXX-XXXX-…"
-                className="dc-startup-input font-mono"
+                className="dc-input font-mono"
                 onChange={(event) =>
                   setRecoveryInput(event.currentTarget.value.toUpperCase())
                 }
@@ -167,7 +167,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 readOnly
                 value={issuedRecoveryCode}
                 onFocus={(event) => event.currentTarget.select()}
-                className="dc-startup-input font-mono tracking-wide"
+                className="dc-input font-mono tracking-wide"
               />
             </label>
             <button

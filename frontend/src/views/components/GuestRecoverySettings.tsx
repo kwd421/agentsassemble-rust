@@ -99,7 +99,7 @@ export default function GuestRecoverySettings({
           <label>
             일회용 복구 코드
             <span>
-              <input style={{ minHeight: 44 }} value={code} readOnly spellCheck={false} />
+              <input className="dc-input font-mono" value={code} readOnly spellCheck={false} />
               <button style={{ minWidth: 44, minHeight: 44 }} type="button" aria-label={copiedLabel === "복구 코드" ? "복구 코드 복사됨" : "복구 코드 복사"} onClick={() => void copy(code, "복구 코드")}>
                 <Copy size={16} />
                 {copiedLabel === "복구 코드" ? "복사됨" : null}

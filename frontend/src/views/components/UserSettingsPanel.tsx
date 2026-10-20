@@ -126,7 +126,7 @@ export default function UserSettingsPanel({
                 <h4>계정 정보</h4>
                 <label>
                   표시 이름
-                  <input
+                  <input className="dc-input"
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.displayName}
                     onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value })}
@@ -135,7 +135,7 @@ export default function UserSettingsPanel({
                 </label>
                 <label>
                   사용자명
-                  <input
+                  <input className="dc-input"
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.handle}
                     onChange={(event) => onDraftChange({ ...draft, handle: event.target.value })}
@@ -222,7 +222,7 @@ export default function UserSettingsPanel({
                 </div>
                 <label>
                   사용자 지정 상태
-                  <input
+                  <input className="dc-input"
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.customStatus}
                     onChange={(event) => onDraftChange({ ...draft, customStatus: event.target.value })}
@@ -251,7 +251,7 @@ export default function UserSettingsPanel({
                 </label>
                 <label>
                   사진 대신 보일 글자
-                  <input
+                  <input className="dc-input"
                     disabled={saving || !serverAuthorityAvailable}
                     value={draft.avatarLabel}
                     onChange={(event) => onDraftChange({ ...draft, avatarLabel: event.target.value })}

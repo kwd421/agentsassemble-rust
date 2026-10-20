@@ -481,7 +481,7 @@ export default function AgentCreateModal({
               <div className="dc-agent-field-grid dc-agent-field-grid--dual">
                 <label className="dc-agent-field">
                   <span>API 주소</span>
-                  <input
+                  <input className="dc-input"
                     type="url"
                     value={customEndpoint}
                     placeholder="https://example.com/v1 또는 …/chat/completions"
@@ -490,7 +490,7 @@ export default function AgentCreateModal({
                 </label>
                 <label className="dc-agent-field">
                   <span>모델 ID</span>
-                  <input
+                  <input className="dc-input"
                     value={customModel}
                     placeholder="사용할 AI의 정확한 모델 ID"
                     onChange={(event) => {
@@ -523,7 +523,7 @@ export default function AgentCreateModal({
                 <div className="dc-agent-field-grid dc-agent-field-grid--dual">
                   <label className="dc-agent-field">
                     <span>프로젝트 ID</span>
-                    <input
+                    <input className="dc-input"
                       value={agentPlatformProject}
                       placeholder="Google Cloud 프로젝트 ID"
                       onChange={(event) => setAgentPlatformProject(event.currentTarget.value)}
@@ -531,7 +531,7 @@ export default function AgentCreateModal({
                   </label>
                   <label className="dc-agent-field">
                     <span>지역</span>
-                    <input
+                    <input className="dc-input"
                       value={agentPlatformLocation}
                       placeholder="global"
                       onChange={(event) => setAgentPlatformLocation(event.currentTarget.value)}
@@ -632,7 +632,7 @@ export default function AgentCreateModal({
               )}
               <label className="dc-agent-field">
                 <span>표시 이름</span>
-                <input
+                <input className="dc-input"
                   disabled={Boolean(existingSessionId)}
                   value={displayName}
                   placeholder="방에 표시될 이름"

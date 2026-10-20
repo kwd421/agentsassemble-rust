@@ -9,7 +9,7 @@ export default function RoomSettingTextInput({ value, normalize, onCommit, place
   placeholder?: string;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  return <input className="ops-input" value={draft ?? value} placeholder={placeholder}
+  return <input className="dc-input" value={draft ?? value} placeholder={placeholder}
     onFocus={() => setDraft(value)}
     onChange={(event) => setDraft(normalize(event.target.value))}
     onBlur={() => {

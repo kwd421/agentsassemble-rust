@@ -73,7 +73,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
       </header>
       <label className="dc-create-channel-name">
         {room ? "방 이름" : "채널 이름"}
-        <input ref={inputRef} className="ops-input" autoFocus value={name} maxLength={nameLimit * 2}
+        <input ref={inputRef} className="dc-input" autoFocus value={name} maxLength={nameLimit * 2}
           disabled={busy} placeholder={room ? "새 방" : "새 채널"}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {

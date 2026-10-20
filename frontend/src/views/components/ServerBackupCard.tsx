@@ -74,7 +74,7 @@ export default function ServerBackupCard({disabled}:{disabled:boolean}) {
   }
   const primary="min-h-10 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50";
   const quiet="min-h-10 px-2 text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50";
-  const field="mt-1 min-h-10 w-full rounded-md border border-white/10 bg-[#121214] px-3 text-[13px] text-text-primary outline-none focus:border-[#5865f2]";
+  const field="dc-input mt-1 w-full";
   const label="grid text-[12px] font-bold text-text-muted";
   const check="flex min-h-8 items-center gap-2 text-[13px] text-text-primary";
   const hint="text-[12px] text-text-muted";

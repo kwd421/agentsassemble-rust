@@ -1,12 +1,4 @@
 
-.dc-settings-section .ops-input {
-  height: 40px;
-  padding: 0 12px;
-  font-size: 15px;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
 .dc-settings-preview {
   display: flex;
   min-height: 104px;
@@ -395,13 +387,6 @@ select.dc-select {
   font-weight: 800;
 }
 
-/* Every text field in a small dialog has one height and one inner inset. */
-.dc-create-channel-modal .ops-input {
-  min-height: 40px;
-  padding: 0 12px;
-  font-weight: 400;
-}
-
 .dc-create-channel-modal input[type="checkbox"] {
   width: 16px;
   height: 16px;
@@ -717,22 +702,6 @@ button.dc-dialog-close:focus-visible {
 
 .ops-cta:hover:not(:disabled) {
   background: var(--color-accent-hover);
-}
-
-.ops-input {
-  border: 1px solid var(--color-panel-border);
-  background: var(--color-server-rail);
-  color: var(--color-text-primary);
-  border-radius: 8px;
-  outline: none;
-}
-
-.ops-input::placeholder {
-  color: var(--color-text-muted);
-}
-
-.ops-input:focus {
-  border-color: var(--color-accent);
 }
 
 .ops-chip {

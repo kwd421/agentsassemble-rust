@@ -182,20 +182,20 @@ function FriendEditor({ initial, busy, error, onCancel, onSave }: {
   const currentProvider = draft.details.provider_kind;
   return <FriendDialog title={initial.expected_revision === 0 ? "친구 추가" : "친구 편집"} busy={busy} onCancel={onCancel}>
     <form style={{ display: "grid", gap: 16 }} onSubmit={(event) => { event.preventDefault(); if (!busy && changed && draft.details.display_name.trim()) void onSave(draft); }}>
-      <label className="dc-create-channel-name">이름<input className="ops-input" autoFocus required maxLength={120} value={draft.details.display_name} disabled={busy} onChange={(event) => update("display_name", event.target.value)} /></label>
-      <label className="dc-create-channel-name">종류<select className="ops-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={groupOf(draft.details.participant_type)} disabled={busy} onChange={(event) => { const group = event.target.value as FriendGroup; setDraft((current) => groupOf(current.details.participant_type) === group ? current : ({ ...current, details: { ...current.details, participant_type: storedType[group] } })); }}>
+      <label className="dc-create-channel-name">이름<input className="dc-input" autoFocus required maxLength={120} value={draft.details.display_name} disabled={busy} onChange={(event) => update("display_name", event.target.value)} /></label>
+      <label className="dc-create-channel-name">종류<select className="dc-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={groupOf(draft.details.participant_type)} disabled={busy} onChange={(event) => { const group = event.target.value as FriendGroup; setDraft((current) => groupOf(current.details.participant_type) === group ? current : ({ ...current, details: { ...current.details, participant_type: storedType[group] } })); }}>
         {(Object.keys(groups) as FriendGroup[]).map((value) => <option key={value} value={value}>{groups[value]}</option>)}
       </select></label>
-      {groupOf(draft.details.participant_type) === "mine" && <label className="dc-create-channel-name">실행 방식<select className="ops-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={draft.details.participant_type} disabled={busy} onChange={(event) => setDraft((current) => ({ ...current, details: { ...current.details, participant_type: event.target.value as FriendParticipantType } }))}>
+      {groupOf(draft.details.participant_type) === "mine" && <label className="dc-create-channel-name">실행 방식<select className="dc-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={draft.details.participant_type} disabled={busy} onChange={(event) => setDraft((current) => ({ ...current, details: { ...current.details, participant_type: event.target.value as FriendParticipantType } }))}>
         {Object.entries(runModes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>}
-      <label className="dc-create-channel-name">사용자명 (선택)<input className="ops-input" maxLength={120} value={draft.details.handle} disabled={busy} onChange={(event) => update("handle", event.target.value)} /></label>
-      {!isHuman && <label className="dc-create-channel-name">제공자 (선택)<select className="ops-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={currentProvider} disabled={busy} onChange={(event) => update("provider_kind", event.target.value)}>
+      <label className="dc-create-channel-name">사용자명 (선택)<input className="dc-input" maxLength={120} value={draft.details.handle} disabled={busy} onChange={(event) => update("handle", event.target.value)} /></label>
+      {!isHuman && <label className="dc-create-channel-name">제공자 (선택)<select className="dc-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={currentProvider} disabled={busy} onChange={(event) => update("provider_kind", event.target.value)}>
         <option value="">선택 안 함</option>
         {providerOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         {currentProvider && !providerOptions.some((option) => option.value === currentProvider) && <option value={currentProvider}>{providerName(currentProvider) || "기타"}</option>}
       </select></label>}
-      {!isHuman && <label className="dc-create-channel-name">모델 (선택)<input className="ops-input" maxLength={256} value={draft.details.model ?? ""} placeholder="예: deepseek-chat" disabled={busy} onChange={(event) => update("model", event.target.value)} /></label>}
+      {!isHuman && <label className="dc-create-channel-name">모델 (선택)<input className="dc-input" maxLength={256} value={draft.details.model ?? ""} placeholder="예: deepseek-chat" disabled={busy} onChange={(event) => update("model", event.target.value)} /></label>}
       {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
       <div className="dc-create-channel-actions">
         <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={busy} onClick={onCancel}>취소</button>

@@ -66,19 +66,6 @@
   object-fit: cover;
 }
 
-/* Same field as the startup sign-in form. */
-.dc-guest-name-field input {
-  min-height: 40px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: #121214;
-  padding: 0 12px;
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 400;
-  outline: none;
-}
-
 .dc-guest-name-field {
   display: grid;
   flex: 1;
@@ -212,18 +199,6 @@
   color: var(--color-text-muted);
   font-size: 11px;
   font-weight: 900;
-}
-
-.dc-guest-recovery-code input,
-.dc-guest-recovery-result input {
-  min-width: 0;
-  border-radius: 6px;
-  background: #121214;
-  padding: 10px;
-  color: var(--color-text-primary);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  letter-spacing: 0.04em;
 }
 
 .dc-guest-recovery-actions,

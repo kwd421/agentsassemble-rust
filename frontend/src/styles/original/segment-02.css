@@ -1,5 +1,4 @@
 
-.dc-agent-field input,
 .dc-agent-field select,
 .dc-agent-field .dc-agent-static-control {
   color-scheme: dark;
@@ -145,22 +144,6 @@
   color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 700;
-}
-
-.dc-startup-input {
-  min-height: 40px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: #121214;
-  padding: 0 12px;
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 400;
-  outline: none;
-}
-
-.dc-startup-input:focus {
-  border-color: var(--color-accent);
 }
 
 .dc-startup-primary {

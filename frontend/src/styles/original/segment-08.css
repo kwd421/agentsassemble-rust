@@ -313,7 +313,6 @@
 }
 
 .dc-mafia-speaker,
-.dc-mafia-input,
 .dc-mafia-select {
   min-width: 0;
   border: 0;
@@ -331,18 +330,7 @@
   font-weight: 800;
 }
 
-.dc-mafia-input {
-  height: 38px;
-  padding: 0 11px;
-  font-size: 14px;
-}
-
-.dc-mafia-input::placeholder {
-  color: var(--color-text-muted);
-}
-
 .dc-mafia-speaker:focus,
-.dc-mafia-input:focus,
 .dc-mafia-select:focus {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 56%, transparent);
 }

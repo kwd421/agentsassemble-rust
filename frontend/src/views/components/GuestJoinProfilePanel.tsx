@@ -114,7 +114,7 @@ export default function GuestJoinProfilePanel({
             </label>
             <label className="dc-guest-name-field">
               이름
-              <input
+              <input className="dc-input"
                 type="text"
                 maxLength={80}
                 value={displayName}

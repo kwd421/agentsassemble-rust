@@ -105,6 +105,43 @@ textarea {
   font: inherit;
 }
 
+/* The one text field. Every single-line input uses it; screens only add
+   layout (width, margins), never their own look. */
+.dc-input {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  background: var(--color-server-rail);
+  padding: 0 12px;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.dc-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.dc-input:focus {
+  border-color: var(--color-accent);
+}
+
+.dc-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Touch screens keep 44px targets. */
+@media (pointer: coarse) {
+  .dc-input {
+    min-height: 44px;
+  }
+}
+
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
 summary,

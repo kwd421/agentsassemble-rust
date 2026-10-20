@@ -31,7 +31,7 @@ export default function ProviderCredentialField({
         <label className="dc-agent-field">
           <span>API 키</span>
           <div className="dc-provider-secret-row">
-            <input
+            <input className="dc-input"
               type="password"
               autoComplete="off"
               value={value}

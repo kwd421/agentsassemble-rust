@@ -519,7 +519,7 @@ export default function StartupIdentityGate({
               maxLength={80}
               value={displayName}
               placeholder="다른 참가자에게 보일 이름"
-              className="dc-startup-input"
+              className="dc-input"
               onChange={(event) => setDisplayName(event.currentTarget.value)}
             />
           </label>

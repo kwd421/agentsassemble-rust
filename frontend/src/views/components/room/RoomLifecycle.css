@@ -44,18 +44,6 @@
 
 .dc-room-delete-field input {
   width: 100%;
-  min-height: 40px;
-  padding: 0 12px;
-  color: var(--color-text-primary);
-  background: var(--color-input);
-  border: 1px solid var(--color-panel-border);
-  border-radius: 8px;
-  font: inherit;
-}
-
-.dc-room-delete-field input:focus {
-  border-color: var(--color-accent);
-  outline: none;
 }
 
 .dc-room-delete-note {

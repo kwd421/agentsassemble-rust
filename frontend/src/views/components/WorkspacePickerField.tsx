@@ -41,7 +41,7 @@ export default function WorkspacePickerField({
       <span>작업 폴더</span>
       <div className="dc-agent-folder-field">
         <Folder size={16} aria-hidden="true" />
-        <input
+        <input className="dc-input"
           aria-label="선택한 작업 폴더"
           value={value}
           placeholder="선택되지 않음"

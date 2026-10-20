@@ -128,7 +128,7 @@ export function AccountDeletionFlow({ disabled, onClose, onDeleted }: { disabled
       {op?.progress && <ul className="dc-account-deletion-servers" aria-label="서버별 탈퇴 정리 결과">{op.progress.map(item => <li key={`${item.server.server_id}:${item.server.registration_epoch}`}>
         <span>{item.server.name}{item.state === "skipped" && item.reason && <small className="text-text-muted block">{item.reason}</small>}</span><span className="dc-member-status-chip" data-state={item.state === "removed" ? "active" : item.state === "skipped" ? "attention" : "idle"}>{({ waiting: "대기", working: "나가는 중", removed: "완료", skipped: "건너뜀" })[item.state]}</span>
       </li>)}</ul>}
-      {session?.person.identity_kind === "guest" && <label className="dc-account-deletion-code">복구 코드<input className="ops-input" type="password" autoComplete="off" value={code} onChange={e => setCode(e.currentTarget.value)} disabled={busy} /></label>}
+      {session?.person.identity_kind === "guest" && <label className="dc-account-deletion-code">복구 코드<input className="dc-input" type="password" autoComplete="off" value={code} onChange={e => setCode(e.currentTarget.value)} disabled={busy} /></label>}
       <footer><button type="button" className="dc-join-cancel" onClick={close}>취소</button>
         <button type="button" className="dc-google-signin" disabled={disabled || busy || (!session && !receiptOnly) || (!receiptOnly && session?.person.identity_kind === "guest" && !code.trim())} onClick={() => void start()}>
           <GoogleGLogo />{busy ? checking ? "확인하는 중…" : "탈퇴하는 중…" : error ? "다시 시도" : session?.person.identity_kind === "guest" ? "복구 코드로 확인하고 탈퇴" : "Google로 확인하고 탈퇴"}

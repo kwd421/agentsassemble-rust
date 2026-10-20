@@ -197,7 +197,7 @@ export default function VoteComposerDialog({
             질문
             <input
               ref={questionInputRef}
-              className="ops-input"
+              className="dc-input"
               value={question}
               maxLength={VOTE_QUESTION_CHARACTER_LIMIT}
               placeholder="어느 길로 갈까요?"
@@ -214,7 +214,7 @@ export default function VoteComposerDialog({
                 className="grid grid-cols-[minmax(0,1fr)_40px] gap-2"
               >
                 <input
-                  className="ops-input h-10 min-h-10"
+                  className="dc-input h-10 min-h-10"
                   value={option}
                   maxLength={VOTE_OPTION_CHARACTER_LIMIT}
                   placeholder={`선택지 ${index + 1}`}
@@ -248,7 +248,7 @@ export default function VoteComposerDialog({
             <label className="dc-create-channel-name">
               투표 기간 (분)
               <input
-                className="ops-input"
+                className="dc-input"
                 type="number"
                 min={MIN_DURATION_MINUTES}
                 max={MAX_DURATION_MINUTES}

@@ -5,16 +5,10 @@
   }
 }
 
-.dc-agent-field input::placeholder {
-  color: var(--color-text-muted);
-}
-
-.dc-agent-field input:focus,
 .dc-agent-field select:focus {
   border-color: var(--color-accent);
 }
 
-.dc-agent-field input:disabled,
 .dc-agent-field select:disabled {
   cursor: not-allowed;
   opacity: 0.55;

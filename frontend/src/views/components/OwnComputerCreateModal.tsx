@@ -51,7 +51,7 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
         {selectedProvider && <section className="dc-agent-section">
           <p className="dc-agent-section-title">기본 정보</p>
           <div className="dc-agent-field-grid"><label className="dc-agent-field"><span>표시 이름</span>
-            <input maxLength={80} value={controls.displayName} disabled={controls.creating}
+            <input className="dc-input" maxLength={80} value={controls.displayName} disabled={controls.creating}
               onChange={(event) => { controls.setDisplayName(event.target.value); setDisplayNameEdited(true); }} />
           </label></div>
         </section>}

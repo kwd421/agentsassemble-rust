@@ -109,7 +109,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
         </div>}
       </span>
       <div className="min-w-0 flex-1">
-        {canEditName ? <input className="dc-agent-name-input preserve-words" aria-label="표시 이름" value={name}
+        {canEditName ? <input className="dc-input dc-agent-name-input preserve-words" aria-label="표시 이름" value={name}
           disabled={busy} autoComplete="off" spellCheck={false}
           onFocus={() => { nameFocusedRef.current = true; setNameFocused(true); }}
           onChange={(event) => setName(event.currentTarget.value)}

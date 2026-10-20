@@ -160,7 +160,6 @@ dialog.dc-user-settings-dialog {
   font-weight: 600;
 }
 
-.dc-user-settings-grid input,
 .dc-user-settings-grid select {
   min-width: 0;
   min-height: 40px;
@@ -172,11 +171,6 @@ dialog.dc-user-settings-dialog {
   font-size: 16px;
   font-weight: 400;
   outline: none;
-}
-
-.dc-user-settings-grid input:hover:not(:disabled),
-.dc-user-settings-grid select:hover:not(:disabled) {
-  border-color: #474851;
 }
 
 /* A select without its arrow reads as a text field. */
@@ -204,7 +198,6 @@ dialog.dc-user-settings-dialog {
   border-radius: 6px;
 }
 
-.dc-user-settings-grid input:focus,
 .dc-user-settings-grid select:focus {
   border-color: var(--profile-accent, var(--color-accent));
 }
@@ -607,7 +600,6 @@ dialog.dc-user-settings-dialog {
 /* Touch screens keep 44px targets. */
 @media (pointer: coarse) {
   .dc-user-settings-nav button,
-  .dc-user-settings-grid input,
   .dc-user-settings-grid select,
   .dc-user-settings-close {
     min-height: 44px;
