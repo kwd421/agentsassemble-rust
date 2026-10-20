@@ -15,7 +15,8 @@ use crate::{
 #[test]
 fn server_launch_disables_external_and_project_configuration() {
     let arguments = server_arguments(43123);
-    assert!(arguments.iter().any(|argument| argument == "--pure"));
+    // OpenCode 2 rejects these flags; purity comes from the environment below.
+    assert!(!arguments.iter().any(|argument| argument == "--pure" || argument == "--log-level"));
 
     let root = tempfile::tempdir()
         .unwrap_or_else(|error| panic!("create OpenCode config fixture: {error}"));
@@ -46,18 +47,20 @@ fn isolated_config_root_is_private_on_the_running_platform() {
 
 #[tokio::test]
 async fn startup_requires_the_exact_bound_child_endpoint() {
-    let expected = "opencode server listening on http://127.0.0.1:43123";
-    let (mut accepted_writer, accepted_reader) = tokio::io::duplex(1024);
-    let (accepted_task, accepted) = observe_startup(accepted_reader, expected.to_owned());
-    accepted_writer
-        .write_all(format!("{expected}\n").as_bytes())
-        .await
-        .unwrap_or_else(|error| panic!("write accepted line: {error}"));
-    drop(accepted_writer);
-    assert_eq!(accepted.await, Ok(true));
-    accepted_task
-        .await
-        .unwrap_or_else(|error| panic!("join accepted output: {error}"));
+    let expected = "server listening on http://127.0.0.1:43123";
+    for printed in [expected.to_owned(), format!("opencode {expected}")] {
+        let (mut accepted_writer, accepted_reader) = tokio::io::duplex(1024);
+        let (accepted_task, accepted) = observe_startup(accepted_reader, expected.to_owned());
+        accepted_writer
+            .write_all(format!("{printed}\n").as_bytes())
+            .await
+            .unwrap_or_else(|error| panic!("write accepted line: {error}"));
+        drop(accepted_writer);
+        assert_eq!(accepted.await, Ok(true), "{printed}");
+        accepted_task
+            .await
+            .unwrap_or_else(|error| panic!("join accepted output: {error}"));
+    }
 
     let (mut rejected_writer, rejected_reader) = tokio::io::duplex(1024);
     let (rejected_task, rejected) = observe_startup(rejected_reader, expected.to_owned());

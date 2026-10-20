@@ -101,7 +101,7 @@ impl OpenCodeDriver {
         let environment = isolated_environment(config_root.path(), &server_password)?;
         let port = reserve_loopback_port().await?;
         let endpoint = format!("http://127.0.0.1:{port}/");
-        let ready_line = format!("opencode server listening on http://127.0.0.1:{port}");
+        let ready_line = format!("server listening on http://127.0.0.1:{port}");
         let arguments = server_arguments(port);
         let executable = bind_executable_with_children(
             session.executable.clone(),
@@ -576,16 +576,15 @@ impl OpenCodeDriver {
     }
 }
 
+// OpenCode 2 refuses the old `--pure` flag and upper-case log levels; purity is
+// kept by OPENCODE_PURE and the isolated config, and logs stay in OpenCode's file.
 fn server_arguments(port: u16) -> Vec<String> {
     vec![
         "serve".to_owned(),
-        "--pure".to_owned(),
         "--hostname".to_owned(),
         "127.0.0.1".to_owned(),
         "--port".to_owned(),
         port.to_string(),
-        "--log-level".to_owned(),
-        "ERROR".to_owned(),
     ]
 }
 

@@ -33,11 +33,18 @@ where
     let task = tokio::spawn(async move {
         let ready = read_startup_line(&mut output)
             .await
-            .is_some_and(|line| line == expected_line.as_bytes());
+            .is_some_and(|line| ready_line_matches(&line, &expected_line));
         let _ = ready_sender.send(ready);
         drain_output(output).await;
     });
     (task, ready_receiver)
+}
+
+/// OpenCode 1 prints "opencode server listening on <url>", OpenCode 2 drops the
+/// leading "opencode "; either names the exact bound endpoint.
+fn ready_line_matches(line: &[u8], expected: &str) -> bool {
+    line == expected.as_bytes()
+        || line.strip_prefix(b"opencode ".as_slice()) == Some(expected.as_bytes())
 }
 
 async fn read_startup_line<R: AsyncRead + Unpin>(output: &mut R) -> Option<Vec<u8>> {
