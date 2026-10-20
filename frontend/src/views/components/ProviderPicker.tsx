@@ -51,19 +51,19 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); setQuery(""); } }} />
       </label>
+      <div className="dc-provider-picker-scroll">
       {matches.length === 0 && <p className="dc-provider-empty">찾는 AI가 없어요.</p>}
       {[false, true].map((router) => list(router).length > 0 && <div key={String(router)} role="list"
         aria-label={router ? "라우터" : "AI"} className="dc-provider-list">
         <p className="dc-provider-list-title">{router ? "라우터" : "AI"}</p>
         {list(router).map((entry) => <button key={entry.id} type="button" role="listitem" className="dc-provider-row"
           disabled={disabled} aria-label={[entry.name, ...appNames(entry)].join(" ")} onClick={() => choose(entry)}>
-          <ProviderLogo providerId={entry.modes[0].provider.id} providerKind={entry.modes[0].provider.provider_kind} size={28} />
+          <ProviderLogo providerId={entry.modes[0].provider.id} providerKind={entry.modes[0].provider.provider_kind} size={20} />
           <span className="dc-provider-row-name">{entry.name}</span>
-          <span className="dc-provider-row-meta">
-            {[...entry.modes.map(({ mode }) => mode && RUN_MODE_LABEL[mode]), ...appNames(entry), missing(entry) && "설치 필요"].filter(Boolean).join(" · ")}
-          </span>
+          {missing(entry) && <span className="dc-provider-row-meta">설치 필요</span>}
         </button>)}
       </div>)}
+      </div>
     </section>;
   }
 

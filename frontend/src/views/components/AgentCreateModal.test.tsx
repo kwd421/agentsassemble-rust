@@ -577,7 +577,7 @@ describe("AgentCreateModal", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
-    expect(within(screen.getByRole("list", { name: "AI" })).getByRole("listitem", { name: "DeepSeek" }).textContent).toContain("API");
+    expect(within(screen.getByRole("list", { name: "AI" })).getByRole("listitem", { name: "DeepSeek" })).toBeTruthy();
     expect(screen.queryByLabelText("API 키")).toBeNull();
 
     pickAi("DeepSeek");
@@ -610,7 +610,7 @@ describe("AgentCreateModal", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
-    expect(screen.getByRole("listitem", { name: "Ollama" }).textContent).toContain("로컬");
+    expect(screen.getByRole("listitem", { name: "Ollama" })).toBeTruthy();
     expect(screen.getByRole("listitem", { name: "LM Studio" })).toBeTruthy();
     pickAi("Ollama");
     expectProviderControlValue("모델", "Nemotron 3 Super");
