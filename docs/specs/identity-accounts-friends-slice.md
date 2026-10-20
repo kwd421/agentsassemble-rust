@@ -4700,3 +4700,6 @@ Acceptance for this slice:
 - A host that answers the resume route with 404 (an old host) makes the
   direct attempt fail and the client fall back to today's central path:
   exactly one central grant, and no resume body ever reaches that host.
+- At key expiry the direct attempt fails and the client falls back to the
+  central path: one central grant, and the host stores the new resume key
+  only after that grant succeeded. A failed grant writes no key.
