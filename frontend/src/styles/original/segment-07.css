@@ -233,6 +233,63 @@
   font-weight: 900;
 }
 
+.dc-agent-avatar-edit {
+  position: relative;
+  overflow: visible;
+  cursor: pointer;
+}
+
+.dc-agent-avatar-edit .dc-member-avatar-image {
+  border-radius: 50%;
+}
+
+.dc-agent-avatar-edit:hover:not(:disabled)::after,
+.dc-agent-avatar-edit:focus-visible::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  content: "";
+}
+
+.dc-agent-avatar-edit-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  z-index: 1;
+  box-sizing: content-box;
+  border: 2px solid #242429;
+  border-radius: 50%;
+  background: #3a3b41;
+  padding: 3px;
+  color: var(--color-text-primary);
+}
+
+/* The name reads as the heading until it is focused, then it is an edit box. */
+.dc-agent-name-input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  padding: 0 6px;
+  margin-left: -7px;
+  color: var(--color-text-primary);
+  font-size: 20px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+}
+
+.dc-agent-name-input:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dc-agent-name-input:focus {
+  border-color: var(--color-brand);
+  background: #1e1f22;
+  outline: none;
+}
+
 .dc-member-detail-modal-head p {
   color: var(--color-text-muted);
   font-size: 13px;
