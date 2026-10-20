@@ -113,7 +113,10 @@ function sessionErrorText(session: RoomAgentSession): { summary: string; detail:
     return { summary: "AI 서비스가 지금 붐벼요. 잠시 후 다시 시도해 주세요.", detail: "" };
   }
   if (session.last_error_code === "provider_api_unavailable") {
-    return { summary: "AI 서비스에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.", detail: "" };
+    // With an HTTP status the service answered and refused; without one it was never reached.
+    return /\(HTTP \d{3}\)/.test(session.last_error || "")
+      ? { summary: "AI 서비스가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.", detail: "" }
+      : { summary: "AI 서비스에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.", detail: "" };
   }
   if (session.last_error_code === "provider_context_limit") {
     return { summary: "AI에게 보낼 대화 내용이 너무 커요. 다시 시도해 주세요.", detail: "" };
