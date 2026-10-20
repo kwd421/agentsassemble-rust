@@ -4694,3 +4694,6 @@ Acceptance for this slice:
 - A direct success performs no fetch to the central origin; a generation
   bump spends one preview and one grant and the next blip on the updated
   anchor spends none.
+- A host that answers the resume route with 404 (an old host) makes the
+  direct attempt fail and the client fall back to today's central path:
+  exactly one central grant, and no resume body ever reaches that host.

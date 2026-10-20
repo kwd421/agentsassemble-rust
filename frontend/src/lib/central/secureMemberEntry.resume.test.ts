@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { SecureMemberAdmission } from "./secureMemberEntry";
 import { memberResumeTranscript } from "./memberResume";
 
@@ -49,6 +49,11 @@ function now() {
   return Math.floor(Date.now() / 1000);
 }
 
+// Every test counts the central grants it spends on its own.
+beforeEach(() => {
+  mocks.signed.mockClear();
+});
+
 async function fixture() {
   const pair = await crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
@@ -86,7 +91,8 @@ async function fixture() {
     }
     return Response.json({});
   });
-  mocks.connect.mockResolvedValue({ close: vi.fn(), hello, fetch: fetchMock, active: true });
+  const transport = { close: vi.fn(), hello, fetch: fetchMock, active: true };
+  mocks.connect.mockResolvedValue(transport);
   mocks.signed.mockResolvedValue({
     grant_token: `aamc1.${"g".repeat(43)}`,
     server_id: "server",
@@ -107,7 +113,7 @@ async function fixture() {
     "live",
     new AbortController().signal,
   );
-  return { admission, posted, pair, fetchMock };
+  return { admission, posted, pair, fetchMock, transport };
 }
 
 it("keeps the resume key on the host after a central admission and resumes with it", async () => {
@@ -157,28 +163,25 @@ it("keeps the resume key on the host after a central admission and resumes with 
   ).toBe(true);
 });
 
-it("keeps the central admission working when the host has no resume route", async () => {
-  const { admission, posted } = await fixture();
-  const transport = mocks.connect.mock.results[0]?.value as {
-    fetch: (path: string, init: RequestInit) => Promise<Response>;
-  };
-  transport.fetch = vi.fn(async (path: string) => {
-    if (path === "/api/member-connect/challenge") {
-      return Response.json({
-        challenge_id: "challenge",
-        challenge_hash: "h".repeat(43),
-        server_id: "server",
-        registration_epoch: "epoch",
-        expires_at: now() + 300,
-      });
-    }
-    if (path.startsWith("/api/member-connect/rooms")) {
-      return Response.json({ rooms: [{ room_id: "general", name: "일반" }] });
-    }
+it("falls back to exactly one central grant when the host has no resume route", async () => {
+  const { admission, transport } = await fixture();
+  const host = transport.fetch;
+  const attempts: string[] = [];
+  transport.fetch = vi.fn(async (path: string, init: RequestInit) => {
+    attempts.push(path);
     // An old host answers the resume route with 404.
-    return new Response("", { status: 404 });
+    if (path === "/api/member-connect/resume-nonce" || path === "/api/member-connect/resume") {
+      return new Response("", { status: 404 });
+    }
+    return host(path, init);
   });
+  // The direct attempt cannot open the path on this host.
+  await expect(admission.resumeDirect()).rejects.toThrow();
+  expect(attempts).toContain("/api/member-connect/resume-nonce");
+  // The client falls back to today's central path, and it spends exactly
+  // one central grant. No resume body ever reaches this host.
   const rooms = await admission.admit();
   expect(rooms).toEqual([{ room_id: "general", name: "일반" }]);
-  expect(posted.length).toBeGreaterThan(0);
+  expect(mocks.signed).toHaveBeenCalledTimes(1);
+  expect(attempts).not.toContain("/api/member-connect/resume");
 });
