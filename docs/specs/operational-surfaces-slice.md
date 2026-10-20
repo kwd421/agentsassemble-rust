@@ -1402,6 +1402,44 @@ without tools omit it. The add-agent credential section
 asks for API 키, 프로젝트 ID and 지역 (default `global`). Credential values never enter
 errors, events or logs.
 
+### OpenCode execution harness for API agents (2026-10-20)
+
+Owner decision: a Gemini or DeepSeek API agent may run inside the existing OpenCode
+CLI instead of the remote OpenAI-compatible driver. `agent.create` and
+`agent.configure` accept `execution_harness` `builtin` (default; an empty value is
+`builtin`) or `opencode`. `opencode` is accepted only when the selected provider is
+`gemini_api` or the existing DeepSeek API provider (`deepseek_api`) and the current
+catalog contains the `opencode` provider (`opencode_server`/`opencode`) as ready and
+startable. Selection then binds that catalog entry's executable and verified
+executable identity exactly like an OpenCode session and refuses a changed identity
+with `catalog_changed`. A missing or unready OpenCode is
+`opencode_harness_unavailable`; every other provider and harness value keeps the
+existing `unsupported_control` refusal. The stored session keeps its own provider
+kind, runtime kind, transport and model, so restart and reconfiguration repeat the
+same selection rules.
+
+Launch reads the credential the owner already saved for that provider (`gemini` or
+`deepseek` in the existing secure store) and starts the existing OpenCode driver.
+Exactly one credential environment pair is added to the isolated child environment:
+`GOOGLE_GENERATIVE_AI_API_KEY` for Gemini and `DEEPSEEK_API_KEY` for DeepSeek. That
+value never enters command arguments, OpenCode configuration files, logs, errors,
+events or AI-visible text; the provider launcher already clears inherited
+credential variables. The stored model is mapped to OpenCode's provider id in one
+owner (`google/<model>`, `deepseek/<model>`) and the mapped id, not the stored id,
+is sent to OpenCode and compared with its observed model. OpenCode cannot carry
+`reasoning_effort`, `service_tier` or `variant`, so selection still validates the
+requested values against the provider catalog but stores them empty for an
+OpenCode-harness session; `validate_profile` refuses a nonempty one.
+
+A session workspace is used when the owner selected one. A conversation-only API
+agent without a workspace gets a private per-session temporary directory owned and
+removed by the OpenCode driver, with the same permission modes the driver already
+applies (room-read-only still denies tool writes; workspace-write and full-access
+follow the existing OpenCode permission mapping). Real OpenCode sessions are
+unchanged: their model ids, controls and validation stay strict. The add-agent
+settings step offers "하네스" (기본/OpenCode) only for Gemini and DeepSeek while
+OpenCode is present in the catalog, and sends it as `execution_harness`.
+
 API-provider failure codes (2026-10-20, owner real-app check): an HTTP 503 or 529 from
 an OpenAI-compatible provider is `provider_api_busy` (the service is shedding load),
 distinct from other unsuccessful statuses (`provider_api_unavailable`). A failed room
