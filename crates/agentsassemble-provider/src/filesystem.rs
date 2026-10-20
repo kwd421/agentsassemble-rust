@@ -634,6 +634,31 @@ fn is_executable_file(path: &Path) -> io::Result<bool> {
     }
 }
 
+/// Keeps a provider state directory owned by this user and closed to others.
+pub(crate) fn secure_private_directory(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+        let metadata = std::fs::symlink_metadata(path)?;
+        if !metadata.is_dir()
+            || metadata.file_type().is_symlink()
+            || metadata.uid() != rustix::process::geteuid().as_raw()
+            || metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err(io::Error::other("provider state directory is not private"));
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let metadata = std::fs::symlink_metadata(path)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(io::Error::other("provider state directory is invalid"));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::{io, sync::Arc, time::Duration};

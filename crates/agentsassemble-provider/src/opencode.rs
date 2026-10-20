@@ -72,7 +72,6 @@ pub(crate) struct OpenCodeDriver {
     config_root: tempfile::TempDir,
     /// Holds an API agent's key outside the OpenCode process for the driver's life.
     _key_broker: Option<KeyBroker>,
-    _private_workspace: Option<PrivateWorkspace>,
     session_instructions: Option<String>,
     attached_session_id: Option<String>,
     attached_reused: bool,
@@ -91,7 +90,7 @@ impl OpenCodeDriver {
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, runtime_lease, guardian, None).await
+        Self::spawn_inner(session, runtime_lease, guardian, None, None).await
     }
 
     /// Starts OpenCode for an API provider. The key stays in the broker; OpenCode
@@ -102,21 +101,30 @@ impl OpenCodeDriver {
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
         broker: KeyBroker,
+        conversation_workspace: Option<std::path::PathBuf>,
     ) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, runtime_lease, guardian, Some(broker)).await
+        Self::spawn_inner(
+            session,
+            runtime_lease,
+            guardian,
+            Some(broker),
+            conversation_workspace,
+        )
+        .await
     }
 
     #[cfg(not(unix))]
     pub(crate) async fn spawn(session: &DurableAgentSession) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, None).await
+        Self::spawn_inner(session, None, None).await
     }
 
     #[cfg(not(unix))]
     pub(crate) async fn spawn_harness(
         session: &DurableAgentSession,
         broker: KeyBroker,
+        conversation_workspace: Option<std::path::PathBuf>,
     ) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, Some(broker)).await
+        Self::spawn_inner(session, Some(broker), conversation_workspace).await
     }
 
     async fn spawn_inner(
@@ -124,13 +132,15 @@ impl OpenCodeDriver {
         #[cfg(unix)] runtime_lease: &HeldRuntimeLease,
         #[cfg(unix)] guardian: &GuardianLaunch,
         key_broker: Option<KeyBroker>,
+        conversation_workspace: Option<std::path::PathBuf>,
     ) -> Result<Self, DriverLaunchError> {
         validate_profile(session)?;
-        let private_workspace = private_workspace(session)?;
-        let workspace_path = private_workspace.as_ref().map_or_else(
-            || std::path::PathBuf::from(&session.workspace),
-            |root| root.path.clone(),
-        );
+        // Only the OpenCode harness may run without an owner-selected workspace.
+        let workspace_path = if session.workspace.is_empty() {
+            conversation_workspace.ok_or_else(|| DriverLaunchError::safe(profile_error()))?
+        } else {
+            std::path::PathBuf::from(&session.workspace)
+        };
         let workspace = workspace_path.as_path();
         let config_root = isolated_config_root()?;
         let server_password = server_password();
@@ -206,7 +216,6 @@ impl OpenCodeDriver {
             room_portal,
             config_root,
             _key_broker: key_broker,
-            _private_workspace: private_workspace,
             session_instructions: None,
             attached_session_id: None,
             attached_reused: false,
@@ -817,41 +826,6 @@ fn isolated_config_root() -> Result<tempfile::TempDir, DriverLaunchError> {
         }
     }
     Ok(root)
-}
-
-struct PrivateWorkspace {
-    path: std::path::PathBuf,
-    // The driver owns this directory; dropping it removes the folder.
-    _root: tempfile::TempDir,
-}
-
-fn private_workspace(
-    session: &DurableAgentSession,
-) -> Result<Option<PrivateWorkspace>, DriverLaunchError> {
-    if !session.workspace.is_empty() {
-        return Ok(None);
-    }
-    // Only the OpenCode harness may run without an owner-selected workspace.
-    if session.public.execution_harness != crate::opencode_harness::NAME {
-        return Err(DriverLaunchError::safe(profile_error()));
-    }
-    let root = tempfile::Builder::new()
-        .prefix("agentsassemble-opencode-workspace-")
-        .tempdir()
-        .map_err(|_| DriverLaunchError::safe(config_error()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
-            .map_err(|_| DriverLaunchError::safe(config_error()))?;
-    }
-    let path =
-        std::fs::canonicalize(root.path()).map_err(|_| DriverLaunchError::safe(config_error()))?;
-    if !path.is_dir() {
-        return Err(DriverLaunchError::safe(config_error()));
-    }
-    Ok(Some(PrivateWorkspace { path, _root: root }))
 }
 
 impl ProviderDriver for OpenCodeDriver {

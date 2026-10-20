@@ -1,4 +1,4 @@
-use super::{driver_model, key_broker};
+use super::{conversation_workspace, driver_model, key_broker};
 use crate::opencode_protocol::validate_profile;
 use crate::test_support::durable_session;
 
@@ -91,4 +91,42 @@ fn harness_profile_accepts_the_mapped_model_without_loosening_real_sessions() {
         validate_profile(&real).is_err(),
         "real OpenCode sessions must not accept API provider ids"
     );
+}
+
+#[tokio::test]
+async fn a_conversation_agent_keeps_one_private_folder_across_launches() {
+    let state = tempfile::tempdir().unwrap_or_else(|error| panic!("state root: {error}"));
+    let session = durable_session("room", "agent", "Gemini", "gemini_api", "model", "https");
+    let first = conversation_workspace(Some(state.path()), &session)
+        .await
+        .unwrap_or_else(|error| panic!("first launch folder: {error:?}"))
+        .unwrap_or_else(|| panic!("a conversation agent needs a folder"));
+    let second = conversation_workspace(Some(state.path()), &session)
+        .await
+        .unwrap_or_else(|error| panic!("second launch folder: {error:?}"));
+    assert_eq!(second.as_ref(), Some(&first));
+    assert!(first.starts_with(std::fs::canonicalize(state.path()).unwrap_or_default()));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&first)
+            .unwrap_or_else(|error| panic!("folder metadata: {error}"))
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o077, 0);
+    }
+
+    let other = durable_session("room", "other", "Gemini", "gemini_api", "model", "https");
+    let other = conversation_workspace(Some(state.path()), &other)
+        .await
+        .unwrap_or_else(|error| panic!("other agent folder: {error:?}"));
+    assert_ne!(other.as_ref(), Some(&first));
+
+    let mut owned = session.clone();
+    owned.workspace = "/owner/selected".to_owned();
+    let owned = conversation_workspace(None, &owned)
+        .await
+        .unwrap_or_else(|error| panic!("owner workspace: {error:?}"));
+    assert_eq!(owned, None);
+    assert!(conversation_workspace(None, &session).await.is_err());
 }

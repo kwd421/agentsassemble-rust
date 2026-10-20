@@ -1432,9 +1432,11 @@ requested values against the provider catalog but stores them empty for an
 OpenCode-harness session; `validate_profile` refuses a nonempty one.
 
 A session workspace is used when the owner selected one. A conversation-only API
-agent without a workspace gets a private per-session temporary directory owned and
-removed by the OpenCode driver, with the same permission modes the driver already
-applies (room-read-only still denies tool writes; workspace-write and full-access
+agent without a workspace gets one private (0700) directory per room session under
+the server state root (`provider-state/opencode-conversation/<hash>`). It outlives a
+launch because OpenCode keeps the session and its directory in the owner's data
+root, so a resumed session must find the same folder. The driver applies the same
+permission modes it already applies (room-read-only still denies tool writes; workspace-write and full-access
 follow the existing OpenCode permission mapping). Real OpenCode sessions are
 unchanged: their model ids, controls and validation stay strict. The add-agent
 settings step offers "하네스" (기본/OpenCode) only for Gemini and DeepSeek while

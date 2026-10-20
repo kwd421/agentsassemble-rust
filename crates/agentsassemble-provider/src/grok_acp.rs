@@ -226,32 +226,9 @@ async fn state_home(
     tokio::fs::create_dir_all(&home)
         .await
         .map_err(|_| DriverLaunchError::safe(state_error()))?;
-    secure_directory(&home).map_err(|_| DriverLaunchError::safe(state_error()))?;
+    crate::filesystem::secure_private_directory(&home)
+        .map_err(|_| DriverLaunchError::safe(state_error()))?;
     Ok(home)
-}
-
-fn secure_directory(path: &Path) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
-        let metadata = std::fs::symlink_metadata(path)?;
-        if !metadata.is_dir()
-            || metadata.file_type().is_symlink()
-            || metadata.uid() != rustix::process::geteuid().as_raw()
-            || metadata.permissions().mode() & 0o077 != 0
-        {
-            return Err(std::io::Error::other("Grok state directory is not private"));
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let metadata = std::fs::symlink_metadata(path)?;
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(std::io::Error::other("Grok state directory is invalid"));
-        }
-    }
-    Ok(())
 }
 
 pub(crate) fn auth_path() -> Option<PathBuf> {
