@@ -9,36 +9,23 @@
   font-weight: 800;
 }
 
-/* A person's agents hang off that person's avatar with elbow connectors. */
+/* A person's agents run straight down from that person's avatar. The group owns
+   the decoration spine; its rows start at 32px so the avatar (8px row padding)
+   sits at 40px, i.e. 32px right of the owner's avatar at 8px. */
 .dc-owner-agent-group {
   position: relative;
   margin-bottom: 8px;
-  margin-left: 24px;
-  padding-left: 12px;
-}
-
-.dc-owner-agent-item {
-  position: relative;
-}
-
-.dc-owner-agent-item::before {
-  position: absolute;
-  top: 0;
-  left: -11px;
-  width: 16px;
-  height: 50%;
-  border-bottom: 2px solid var(--color-member-spine);
-  border-left: 2px solid var(--color-member-spine);
-  border-bottom-left-radius: 6px;
-  content: "";
 }
 
 /* The single fold control: a Discord channel-category style header row. The bulk
-   pause/resume buttons share this row at the right and never collapse it. */
+   pause/resume buttons share this row at the right and never collapse it. The
+   header shares the rows' 32px indent; its 8px toggle padding puts the chevron
+   at 40px, on the agent avatars' left edge. */
 .dc-owner-agent-head {
   display: flex;
   align-items: center;
   gap: 2px;
+  padding-left: 32px;
 }
 
 .dc-owner-agent-toggle {
@@ -93,17 +80,16 @@
   flex-shrink: 0;
 }
 
-.dc-owner-agent-list-wrap {
-  position: relative;
-}
-
-/* The connector spine is decoration only: it runs under the header chevron and
-   stops where the last row's elbow curves in, so each row hangs off one line. */
+/* The connector spine is decoration only: one straight line under the owner's
+   avatar (8px row padding + 16px avatar half = 24px centre, so left 23px for a
+   2px line), starting at the group top just under the avatar and ending at the
+   middle of the last 42px agent row (bottom 21px). The list wrap is not
+   positioned so this absolute line anchors to the group, not the header. */
 .dc-owner-agent-spine {
   position: absolute;
-  top: -2px;
-  bottom: 27px;
-  left: 13px;
+  top: 0;
+  bottom: 21px;
+  left: 23px;
   width: 2px;
   border-radius: 2px;
   background: var(--color-member-spine);
@@ -111,7 +97,7 @@
 }
 
 .dc-owner-agent-list {
-  padding-left: 24px;
+  padding-left: 32px;
 }
 
 .dc-owner-agent-list .dc-member {
@@ -176,8 +162,9 @@
     display: none;
   }
 
+  /* Same 32px avatar offset as the desktop list: 18px card padding + 32px. */
   .dc-mobile-owner-agent-row {
-    padding-left: 28px;
+    padding-left: 50px;
   }
 }
 
