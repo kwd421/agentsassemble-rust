@@ -1,14 +1,29 @@
 import { useMemo, useState } from "react";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { isProviderUnavailable } from "../../lib/providerCatalogGroups";
-import { Plus, Search } from "../../ui/icons";
+import { Plus, Search, Star } from "../../ui/icons";
 import ProviderLogo from "./ProviderLogo";
-import { RUN_MODE_LABEL, vendorEntries, vendorForProvider, type VendorEntry } from "./providerVendors";
+import { RUN_MODE_LABEL, vendorEntries, vendorForProvider, type RunMode, type VendorEntry } from "./providerVendors";
 
-// One "+" card instead of a wall of tiles: it opens a short searchable list, and
-// the chosen AI's card then offers how it runs (구독 / API / 로컬).
-// A provider that is not installed stays selectable; the setup below the card
-// offers to install it and then signs in.
+// One "+" card instead of a wall of tiles: it opens a short searchable list that
+// can be narrowed by how an AI runs (구독 / API / 로컬), with starred favourites
+// on top; the chosen AI's card then offers its run modes. A provider that is not
+// installed stays selectable; the setup below the card offers to install it and
+// then signs in.
+const FAVOURITES_KEY = "agentsassemble.aiPicker.favourites.v1";
+
+// Favourites are a per-viewer convenience: unreadable storage just means none.
+function loadFavourites(): string[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(FAVOURITES_KEY) || "[]");
+    return Array.isArray(stored) ? stored.filter((item): item is string => typeof item === "string") : [];
+  } catch { return []; }
+}
+
+function saveFavourites(ids: string[]) {
+  try { localStorage.setItem(FAVOURITES_KEY, JSON.stringify(ids)); } catch { /* not remembered */ }
+}
+
 // The app or service behind an AI (e.g. ChatGPT runs through Codex), when it is not the AI's own name.
 function appNames(entry: VendorEntry): string[] {
   return [...new Set(entry.modes.map(({ provider }) => provider.display_name))].filter((name) => name && name !== entry.name);
@@ -25,13 +40,25 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
   const selected = vendorForProvider(entries, selectedId);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [modeFilter, setModeFilter] = useState<RunMode | null>(null);
+  const [favourites, setFavourites] = useState(loadFavourites);
   const needle = query.trim().toLocaleLowerCase();
-  const matches = entries.filter((entry) => !needle || entry.name.toLocaleLowerCase().includes(needle)
-    || entry.modes.some(({ provider }) => provider.display_name.toLocaleLowerCase().includes(needle)));
+  const matches = entries.filter((entry) => (!modeFilter || entry.modes.some(({ mode }) => mode === modeFilter))
+    && (!needle || entry.name.toLocaleLowerCase().includes(needle)
+      || entry.modes.some(({ provider }) => provider.display_name.toLocaleLowerCase().includes(needle))));
+  const availableModes = (Object.keys(RUN_MODE_LABEL) as RunMode[])
+    .filter((mode) => entries.some((entry) => entry.modes.some((item) => item.mode === mode)));
+
+  function toggleFavourite(id: string) {
+    const next = favourites.includes(id) ? favourites.filter((item) => item !== id) : [...favourites, id];
+    setFavourites(next);
+    saveFavourites(next);
+  }
   const missing = (entry: VendorEntry) => !remoteCatalog && entry.modes.every(({ provider }) => isProviderUnavailable(provider));
 
   function choose(entry: VendorEntry) {
-    const ready = entry.modes.find(({ provider }) => remoteCatalog || !isProviderUnavailable(provider)) ?? entry.modes[0];
+    const candidates = modeFilter ? entry.modes.filter(({ mode }) => mode === modeFilter) : entry.modes;
+    const ready = candidates.find(({ provider }) => remoteCatalog || !isProviderUnavailable(provider)) ?? candidates[0];
     onSelect(ready.provider);
     setOpen(false);
     setQuery("");
@@ -43,8 +70,9 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
         <Plus size={20} aria-hidden />AI 고르기
       </button>;
     }
-    // One list: ready apps first, ones that still need installing after.
-    const ordered = [...matches.filter((entry) => !missing(entry)), ...matches.filter(missing)];
+    // One list: starred first, then ready apps, then ones that still need installing.
+    const rank = (entry: VendorEntry) => (favourites.includes(entry.id) ? 0 : 2) + (missing(entry) ? 1 : 0);
+    const ordered = [...matches].sort((a, b) => rank(a) - rank(b));
     return <section className="dc-provider-picker" aria-label="AI 고르기">
       <label className="dc-provider-search">
         <Search size={16} aria-hidden />
@@ -52,15 +80,30 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); setQuery(""); } }} />
       </label>
+      {availableModes.length > 1 && <div className="dc-provider-filters" role="radiogroup" aria-label="실행 방식으로 거르기">
+        {[null, ...availableModes].map((mode) => <button key={mode ?? "all"} type="button" role="radio"
+          aria-checked={modeFilter === mode} onClick={() => setModeFilter(mode)}>
+          {mode ? RUN_MODE_LABEL[mode] : "전체"}
+        </button>)}
+      </div>}
       <div className="dc-provider-picker-scroll">
       {matches.length === 0 && <p className="dc-provider-empty">찾는 AI가 없어요.</p>}
       <div role="list" aria-label="AI 목록" className="dc-provider-list">
-        {ordered.map((entry) => <button key={entry.id} type="button" role="listitem" className="dc-provider-row"
-          disabled={disabled} aria-label={[entry.name, ...appNames(entry)].join(" ")} onClick={() => choose(entry)}>
-          <ProviderLogo providerId={entry.modes[0].provider.id} providerKind={entry.modes[0].provider.provider_kind} size={20} />
-          <span className="dc-provider-row-name">{entry.name}</span>
-          {missing(entry) && <span className="dc-provider-row-meta">설치 필요</span>}
-        </button>)}
+        {ordered.map((entry) => {
+          const starred = favourites.includes(entry.id);
+          return <div key={entry.id} className="dc-provider-row-wrap">
+            <button type="button" role="listitem" className="dc-provider-row"
+              disabled={disabled} aria-label={[entry.name, ...appNames(entry)].join(" ")} onClick={() => choose(entry)}>
+              <ProviderLogo providerId={entry.modes[0].provider.id} providerKind={entry.modes[0].provider.provider_kind} size={20} />
+              <span className="dc-provider-row-name">{entry.name}</span>
+              {missing(entry) && <span className="dc-provider-row-meta">설치 필요</span>}
+            </button>
+            <button type="button" className="dc-provider-star" aria-pressed={starred}
+              aria-label={`${entry.name} 즐겨찾기`} onClick={() => toggleFavourite(entry.id)}>
+              <Star size={16} fill={starred ? undefined : "none"} aria-hidden />
+            </button>
+          </div>;
+        })}
       </div>
       </div>
     </section>;

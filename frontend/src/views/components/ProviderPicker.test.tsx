@@ -32,3 +32,29 @@ it("shows the chosen AI with how it runs and lets the person change it", () => {
   fireEvent.keyDown(screen.getByRole("searchbox", { name: "AI 검색" }), { key: "Escape" });
   expect(screen.getByRole("region", { name: "고른 AI" })).toBeTruthy();
 });
+
+it("narrows the list by how an AI runs and picks that way", () => {
+  const onSelect = vi.fn();
+  render(<ProviderPicker providers={[codexProvider(), deepSeekProvider(), openCodeProvider()]} selectedId="" onSelect={onSelect} />);
+  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+  fireEvent.click(screen.getByRole("radio", { name: "API" }));
+  expect(screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))).toEqual(["DeepSeek"]);
+  fireEvent.click(screen.getByRole("radio", { name: "구독" }));
+  expect(screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))).toEqual(["ChatGPT Codex", "OpenCode"]);
+  fireEvent.click(screen.getByRole("radio", { name: "전체" }));
+  expect(screen.getAllByRole("listitem")).toHaveLength(3);
+});
+
+it("keeps starred AIs on top across openings", () => {
+  localStorage.clear();
+  const view = render(<ProviderPicker providers={[codexProvider(), deepSeekProvider(), openCodeProvider()]} selectedId="" onSelect={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+  fireEvent.click(screen.getByRole("button", { name: "OpenCode 즐겨찾기" }));
+  expect(screen.getByRole("button", { name: "OpenCode 즐겨찾기" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getAllByRole("listitem")[0].getAttribute("aria-label")).toBe("OpenCode");
+  view.unmount();
+  render(<ProviderPicker providers={[codexProvider(), deepSeekProvider(), openCodeProvider()]} selectedId="" onSelect={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+  expect(screen.getAllByRole("listitem")[0].getAttribute("aria-label")).toBe("OpenCode");
+  localStorage.clear();
+});

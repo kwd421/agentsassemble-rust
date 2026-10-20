@@ -17,6 +17,12 @@ const VENDORS: VendorDefinition[] = [
   { id: "cerebras", name: "Cerebras", modes: { api: "cerebras" } },
   { id: "ollama", name: "Ollama", modes: { local: "ollama" } },
   { id: "lmstudio", name: "LM Studio", modes: { local: "lmstudio" } },
+  { id: "opencode", name: "OpenCode", modes: { subscription: "opencode" } },
+  { id: "openrouter", name: "OpenRouter", modes: { api: "openrouter" } },
+  { id: "vercel", name: "Vercel AI Gateway", modes: { api: "vercel" } },
+  { id: "llmgateway", name: "LLM Gateway", modes: { api: "llmgateway" } },
+  { id: "tokenrouter", name: "TokenRouter", modes: { api: "tokenrouter" } },
+  { id: "custom_api", name: "Custom API", modes: { api: "custom_api" } },
 ];
 
 // OAuth-only products are left out of the picker for now (owner, 2026-10-20).

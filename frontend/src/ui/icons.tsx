@@ -75,6 +75,7 @@ import {
   SpeakerHigh as PhosphorSpeakerHigh,
   SpeakerSlash as PhosphorSpeakerSlash,
   Square as PhosphorSquare,
+  Star as PhosphorStar,
   SquaresFour as PhosphorSquaresFour,
   StopCircle as PhosphorStopCircle,
   Terminal as PhosphorTerminal,
@@ -208,6 +209,7 @@ export const ShieldQuestion = createIcon("shield-question", PhosphorShieldWarnin
 export const Smartphone = createIcon("smartphone", PhosphorDeviceMobile, "fill");
 export const Smile = createIcon("smile", PhosphorSmiley, "fill");
 export const Sparkles = createIcon("sparkles", PhosphorSparkle, "fill");
+export const Star = createIcon("star", PhosphorStar, "fill");
 export const Square = createIcon("square", PhosphorSquare, "fill");
 export const Terminal = createIcon("terminal", PhosphorTerminal, "fill");
 export const Trash2 = createIcon("trash-2", PhosphorTrash, "fill");

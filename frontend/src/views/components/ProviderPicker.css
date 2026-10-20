@@ -150,3 +150,56 @@
 .dc-provider-change:hover:not(:disabled) {
   text-decoration: underline;
 }
+
+.dc-provider-filters {
+  display: flex;
+  gap: 4px;
+}
+
+.dc-provider-filters button {
+  min-height: 28px;
+  border-radius: 999px;
+  background: #121214;
+  padding: 0 12px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.dc-provider-filters button[aria-checked="true"] {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.dc-provider-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.dc-provider-row-wrap .dc-provider-row {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The favourite star: quiet until hovered or set. */
+.dc-provider-star {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+.dc-provider-row-wrap:hover .dc-provider-star,
+.dc-provider-star:focus-visible {
+  opacity: 1;
+}
+
+.dc-provider-star[aria-pressed="true"] {
+  color: #f0b232;
+  opacity: 1;
+}
