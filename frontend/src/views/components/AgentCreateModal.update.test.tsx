@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { pickAi } from "./AgentCreateModal.testUi";
 import { afterEach, expect, it, vi } from "vitest";
 import AgentCreateModal from "./AgentCreateModal";
 import { chooseLocalWorkspace } from "../../api";
@@ -23,7 +24,7 @@ it("preserves the creation draft and prevents creation during the selected CLI u
   vi.mocked(providerUpdateOperation).mockResolvedValueOnce(offer);
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" catalogRevision="revision"
     onClose={vi.fn()} onCreate={vi.fn()} providers={[{ ...codexProvider(), update_supported: true }]} />);
-  fireEvent.click(screen.getByRole("listitem", { name: /Codex/ }));
+  pickAi(/Codex/);
   const update = await screen.findByRole("button", { name: "업데이트" });
   // The offer belongs to the harness choice, so it comes before the fields it gates.
   expect(Boolean(update.compareDocumentPosition(screen.getByText("기본 정보")) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -47,7 +48,7 @@ it.each(["remote", "authentication_required", "command_missing", "loading"])(
     render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" onClose={vi.fn()} onCreate={vi.fn()}
       localProviderActions={state !== "remote"} providers={[{ ...codexProvider(), update_supported: true,
         discovery_status: state === "loading" ? "loading" : "failed", discovery_error_code: state }]} />);
-    fireEvent.click(screen.getByRole("listitem", { name: /Codex/ }));
+    pickAi(/Codex/);
     await act(async () => {});
     expect(providerUpdateOperation).not.toHaveBeenCalled();
   }
@@ -67,12 +68,12 @@ it("retains each pending installation when selections and completion order diffe
   vi.mocked(chooseLocalWorkspace).mockResolvedValue({ selected: true, path: "/tmp/agentsassemble-workspace" });
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" catalogRevision="revision"
     onClose={vi.fn()} onCreate={vi.fn()} providers={[codexProvider(), claudeProvider()].map((p) => ({ ...p, update_supported: true }))} />);
-  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "폴더 선택" })));
   fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
-  fireEvent.click(screen.getByRole("listitem", { name: "Claude Code" }));
+  pickAi("Claude Code");
   fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
-  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   await screen.findByText("새 버전을 확인하고 있어요…");
   expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(true);
   await act(async () => finishes.get("claude")?.({ ...offer, provider_id: "claude", current_version: "2.0.0", completed: true, update_available: false }));
@@ -89,7 +90,7 @@ it("keeps creation blocked after transport loss and while a read joins the insta
   vi.mocked(chooseLocalWorkspace).mockResolvedValue({ selected: true, path: "/tmp/agentsassemble-workspace" });
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" catalogRevision="revision"
     onClose={vi.fn()} onCreate={onCreate} providers={[{ ...codexProvider(), update_supported: true }]} />);
-  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   const update = await screen.findByRole("button", { name: "업데이트" });
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "폴더 선택" })));
   fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "Retained draft" } });

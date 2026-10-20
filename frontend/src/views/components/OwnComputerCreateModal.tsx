@@ -3,7 +3,7 @@ import { isDesktopWebview } from "../../lib/desktopBridge";
 import { X } from "../../ui/icons";
 import type { CompanionInviteControls } from "../../app/useCompanionInvites";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
-import ProviderTileGrid from "./ProviderTileGrid";
+import ProviderPicker from "./ProviderPicker";
 
 export default function OwnComputerCreateModal({ roomLabel, providers, controls, onClose, locationChoice }: {
   roomLabel: string; providers: NativeCliProviderAvailability[]; controls: CompanionInviteControls;
@@ -31,7 +31,7 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
       <div className="dc-agent-create-body">
         {locationChoice}
         <p className="dc-agent-hint preserve-words">모델과 작업 폴더는 이 컴퓨터에 뜨는 창에서 골라요. 내가 방을 나가면 이 AI도 함께 나가요.</p>
-        <ProviderTileGrid providers={providers} selectedId={controls.provider} remoteCatalog disabled={controls.creating}
+        <ProviderPicker providers={providers} selectedId={controls.provider} remoteCatalog disabled={controls.creating}
           onSelect={(provider) => { controls.setProvider(provider.id); if (!displayNameEdited) controls.setDisplayName(provider.display_name); }} />
         {selectedProvider && <section className="dc-agent-section">
           <p className="dc-agent-section-title">기본 정보</p>

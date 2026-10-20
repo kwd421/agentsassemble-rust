@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { pickAi } from "./AgentCreateModal.testUi";
 import { afterEach, expect, it, vi } from "vitest";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 import { useState } from "react";
@@ -27,7 +28,7 @@ it.each([60_000, 600_000])("preserves the draft and admission with %i ms left, s
       controls={controls} onClose={() => {}} locationChoice={<button onClick={onHost}>서버 컴퓨터</button>} />;
   }
   const view = render(<Surface ready={false} />);
-  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   expect((screen.getByLabelText("표시 이름") as HTMLInputElement).value).toBe("Codex");
   fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "My own AI" } });
   expect(screen.queryByRole("combobox", { name: "모델" })).toBeNull();
@@ -63,7 +64,7 @@ it("closes desktop creation after handoff, leaves status and never retains setup
       : <p role="status">{controls.status}</p>}<button onClick={() => setOpen(true)}>다시 열기</button></>;
   }
   render(<Surface />);
-  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "이 컴퓨터에서 계속" })));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.getByRole("status").textContent).toBe("이 컴퓨터에 뜬 창에서 마저 설정해 주세요.");
@@ -79,10 +80,10 @@ it("keeps a typed name when changing the this-computer provider", () => {
       controls={controls} onClose={() => {}} />;
   }
   render(<Surface />);
-  fireEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
+  pickAi("OpenCode");
   const name = screen.getByLabelText("표시 이름") as HTMLInputElement;
   expect(name.value).toBe("OpenCode");
   fireEvent.change(name, { target: { value: "My own AI" } });
-  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   expect(name.value).toBe("My own AI");
 });

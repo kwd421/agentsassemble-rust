@@ -30,7 +30,9 @@ it("offers remote owners both computers without claiming remote discovery is loc
   expect(screen.getByRole("radio", { name: "이 컴퓨터" })).toBeTruthy();
   expect(screen.getByRole("radiogroup", { name: "어디서 실행할까요?" })).toBeTruthy();
   expect(screen.getByText("집 Mac")).toBeTruthy();
-  expect(screen.getByRole("listitem", { name: "Codex" }).getAttribute("data-unavailable")).toBe("false");
+  // Remote discovery is not local availability: the remote catalog never says "설치 필요".
+  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+  expect(screen.getByRole("listitem", { name: /Codex/ }).textContent).not.toContain("설치 필요");
   expect(screen.queryByRole("combobox")).toBeNull();
   expect(screen.queryByText("목록에만 추가")).toBeNull();
   expect(screen.getByRole("button", { name: "이 컴퓨터에서 계속" }).closest("footer")).toBeTruthy();
@@ -38,11 +40,12 @@ it("offers remote owners both computers without claiming remote discovery is loc
   fireEvent.click(screen.getByRole("radio", { name: "서버 컴퓨터" }));
   expect(screen.queryByRole("combobox", { name: "AI 종류" })).toBeNull();
   fireEvent.click(screen.getByRole("radio", { name: "이 컴퓨터" }));
-  expect(screen.getByRole("listitem", { name: "Codex" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "AI 고르기" })).toBeTruthy();
 });
 it("lets writable members add only on this computer without server agent control", () => {
   render(<AppOverlays controller={controller(false)} companionInvites={controls} />);
-  expect(screen.getByRole("listitem", { name: "Codex" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+  expect(screen.getByRole("listitem", { name: /Codex/ })).toBeTruthy();
   expect(screen.queryByRole("radio")).toBeNull();
 });
 it("preserves local server creation and hides creation when neither authority is available", () => {

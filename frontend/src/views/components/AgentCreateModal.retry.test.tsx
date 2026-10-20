@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import AgentCreateModal from "./AgentCreateModal";
 import { RoomSocketSayError } from "../../roomSocketClient";
 import { codexProvider } from "./AgentCreateModal.testProviders";
-import { chooseWorkspace, primaryActionButton, resetAgentCreateApiMocks } from "./AgentCreateModal.testUi";
+import { pickAi, chooseWorkspace, primaryActionButton, resetAgentCreateApiMocks } from "./AgentCreateModal.testUi";
 
 const apiMocks = vi.hoisted(() => ({ chooseLocalWorkspace: vi.fn(),
   deleteProviderCredential: vi.fn(), fetchProviderCredentialStatus: vi.fn(), setProviderCredential: vi.fn() }));
@@ -18,7 +18,7 @@ it.each([false, true])("recovers the same creation after uncertain outcome (star
   const onClose = vi.fn();
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" catalogRevision="cat-test"
     providers={[codexProvider()]} onClose={onClose} onCreate={onCreate} />);
-  await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   await chooseWorkspace();
   const startToggle = screen.getByRole("switch", { name: "추가하자마자 실행" });
   if ((startToggle.getAttribute("aria-checked") === "true") !== start) await userEvent.click(startToggle);
@@ -39,7 +39,7 @@ it("uses a new creation intent after the user changes the retained form", async 
     .mockResolvedValue(undefined);
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" catalogRevision="cat-test"
     providers={[codexProvider()]} onClose={() => {}} onCreate={onCreate} />);
-  await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   await chooseWorkspace();
   await userEvent.click(primaryActionButton());
   await screen.findByText("에이전트 추가 실패");
@@ -56,7 +56,7 @@ it("retains the exact creation retry when only the catalog revision refreshes", 
   const providers = [codexProvider()];
   const props = { open: true, meetingId: "room-a", roomLabel: "Room A", providers, onClose, onCreate };
   const view = render(<AgentCreateModal {...props} catalogRevision="cat-before" />);
-  await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   await chooseWorkspace();
   await userEvent.click(primaryActionButton());
   await screen.findByText("에이전트 추가 실패");

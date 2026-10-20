@@ -604,50 +604,11 @@ button:disabled,
   letter-spacing: 0.02em;
 }
 
-.dc-agent-provider-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  margin: 0;
-}
 
-.dc-agent-provider-grid button {
-  display: flex;
-  min-width: 0;
-  min-height: 40px;
-  padding: 8px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: var(--color-panel-soft);
-  color: var(--color-sidebar-text);
-  font-size: 12px;
-  font-weight: 800;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-}
 
-.dc-agent-provider-grid button[data-active="false"]:hover:not(:disabled) {
-  background: #2c2c30;
-  color: var(--color-text-primary);
-}
 
-.dc-agent-provider-grid button[data-active="true"],
-.dc-agent-provider-grid button[data-active="true"]:hover:not(:disabled) {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
 
-.dc-agent-provider-grid button[data-unavailable="true"] {
-  opacity: 0.4;
-}
 
-.dc-agent-provider-grid button:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
 
 .dc-provider-logo {
   display: inline-grid;
@@ -701,7 +662,6 @@ button:disabled,
   border-radius: 6px;
   background: var(--color-panel);
 }
-.dc-agent-provider-category + .dc-agent-provider-category { margin-top: 6px; }
 .dc-agent-provider-category > h3 {
   color: var(--color-text-secondary);
   font-size: 12px;

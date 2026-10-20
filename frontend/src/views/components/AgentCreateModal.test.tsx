@@ -19,7 +19,7 @@ import {
   tokenRouterProvider,
   vercelProvider,
 } from "./AgentCreateModal.testProviders";
-import {
+import { pickAi,
   chooseProviderControl,
   chooseWorkspace,
   expectProviderControlValue,
@@ -57,7 +57,7 @@ describe("AgentCreateModal", () => {
         display_name: "Stored Codex", model: "stored-model" }),
         agentSessionFixture({ room_id: "room-a", session_id: "exported-codex", participant_id: "exported-codex", display_name: "Exported Codex", model: "stored-model" })]}
       participants={[participantFixture({ room_id: "room-a", participant_id: "exported-codex", status: "exported" })]} />);
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     await userEvent.click(screen.getByRole("combobox", { name: "기존 세션" }));
     expect(screen.queryByRole("option", { name: "Exported Codex · stored-model" })).toBeNull();
     await userEvent.click(screen.getByRole("option", { name: "Stored Codex · stored-model" }));
@@ -78,7 +78,7 @@ describe("AgentCreateModal", () => {
       onClose={() => {}} onCreate={onCreate}
       existingSessions={[agentSessionFixture({ room_id: "room-a", session_id: "stored-offline",
         display_name: "Offline Codex", model: "stored-model" })]} />);
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     expect((primaryActionButton() as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("switch", { name: "추가하자마자 실행" }) as HTMLButtonElement).disabled).toBe(true);
     await chooseProviderControl("기존 세션", "Offline Codex · stored-model");
@@ -132,7 +132,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     const model = screen.getByRole("combobox", { name: "모델" });
     await userEvent.click(model);
     expect(screen.getByRole("option", { name: "Luna" })).toBeTruthy();
@@ -166,7 +166,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Claude Code" }));
+    pickAi("Claude Code");
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
     expect(
       screen.getByRole("menuitemradio", { name: "Claude Sonnet 4.6" })
@@ -191,7 +191,7 @@ describe("AgentCreateModal", () => {
     const ready = codexProvider();
     const loading = { ...ready, available: false, startable: false, discovery_status: "loading", controls: [], default_model: "" };
     const { rerender } = render(<AgentCreateModal {...common} providers={[loading]} catalogRevision="cold" />);
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     await userEvent.clear(screen.getByRole("textbox", { name: "표시 이름" }));
     await userEvent.type(screen.getByRole("textbox", { name: "표시 이름" }), "My draft");
     rerender(<AgentCreateModal {...common} providers={[ready]} catalogRevision="first" />);
@@ -214,7 +214,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Claude Code" }));
+    pickAi("Claude Code");
     await chooseProviderControl("모델", "Claude Sonnet 4.6");
 
     rerender(
@@ -230,7 +230,7 @@ describe("AgentCreateModal", () => {
     );
 
     expectProviderControlValue("모델", "Claude Sonnet 4.6");
-    expect(screen.getByRole("listitem", { name: "Claude Code" }).getAttribute("data-active")).toBe("true");
+    expect(screen.getByRole("region", { name: "고른 AI" }).textContent).toContain("Claude");
   });
 
   it("does not advertise authentication when no Rust operation owns it", async () => {
@@ -243,13 +243,13 @@ describe("AgentCreateModal", () => {
         providers={[
           {
             ...codexProvider(),
-            id: "cursor",
-            display_name: "Cursor",
-            provider_kind: "cursor_live_session",
+            id: "grok",
+            display_name: "Grok",
+            provider_kind: "grok_live_session",
             startable: false,
             discovery_status: "failed",
             discovery_error_code: "authentication_required",
-            discovery_error: "Cursor CLI 로그인이 필요합니다.",
+            discovery_error: "Grok CLI 로그인이 필요합니다.",
             credential_available: false,
             controls: [],
           },
@@ -259,8 +259,8 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Cursor" }));
-    expect(screen.getByText("Cursor CLI 로그인이 필요합니다.")).toBeTruthy();
+    pickAi("Grok");
+    expect(screen.getByText("Grok CLI 로그인이 필요합니다.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /로그인/ })).toBeNull();
   });
 
@@ -278,7 +278,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Claude Code" }));
+    pickAi("Claude Code");
     await chooseProviderControl("모델", "Claude Sonnet 4.6");
 
     rerender(
@@ -294,7 +294,8 @@ describe("AgentCreateModal", () => {
     );
 
     expect(screen.getByText("선택한 AI가 현재 목록에 없어요.")).toBeTruthy();
-    expect(screen.getByRole("listitem", { name: "Codex" }).getAttribute("data-active")).toBe("false");
+    // The vanished choice is not swapped for another one: the picker asks again.
+    expect(screen.getByRole("button", { name: "AI 고르기" })).toBeTruthy();
     expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
   });
 
@@ -312,7 +313,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Claude Code" }));
+    pickAi("Claude Code");
     await chooseProviderControl("모델", "Claude Sonnet 4.6");
     const refreshed = claudeProvider();
     refreshed.controls[0].options = refreshed.controls[0].options.filter(
@@ -360,7 +361,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     expectProviderControlValue("모델", "선택 필요");
     expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("모델의 유효한 기본값이 없어 직접 선택해야 해요.")).toBeTruthy();
@@ -379,7 +380,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     await chooseProviderControl("모델", "Variable model");
 
     await userEvent.click(screen.getByRole("combobox", { name: "추론 강도" }));
@@ -412,7 +413,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
     const menu = screen.getByRole("listbox", { name: "모델" });
 
@@ -437,7 +438,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     await chooseProviderControl("모델", "High model");
     expectProviderControlValue("추론 강도", "선택 필요");
     expectProviderControlValue("응답 속도", "기본");
@@ -465,7 +466,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    pickAi("Codex");
     const refreshed = codexProviderWithRelations();
     refreshed.controls[0].options[0].metadata = {
       reasoning_efforts: ["high"],
@@ -505,7 +506,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Claude Code" }));
+    pickAi("Claude Code");
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
 
     expect(
@@ -536,7 +537,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
+    pickAi("OpenCode");
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
 
     await userEvent.click(
@@ -575,11 +576,11 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    expect(screen.getByRole("listitem", { name: "DeepSeek" })).toBeTruthy();
-    expect(screen.getByRole("list", { name: "API 키 AI" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+    expect(within(screen.getByRole("list", { name: "AI" })).getByRole("listitem", { name: "DeepSeek" }).textContent).toContain("API");
     expect(screen.queryByLabelText("API 키")).toBeNull();
 
-    await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));
+    pickAi("DeepSeek");
     expect(screen.getByLabelText("API 키")).toBeTruthy();
     await chooseProviderControl("최대 응답 길이", "8,192 토큰");
     await chooseProviderControl("권한", "작업 폴더 쓰기");
@@ -608,15 +609,16 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    expect(screen.getByRole("listitem", { name: "Ollama" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+    expect(screen.getByRole("listitem", { name: "Ollama" }).textContent).toContain("로컬");
     expect(screen.getByRole("listitem", { name: "LM Studio" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("listitem", { name: "Ollama" }));
+    pickAi("Ollama");
     expectProviderControlValue("모델", "Nemotron 3 Super");
     expect(screen.getByRole("combobox", { name: "모델" }).textContent).toContain(
       "Free tier"
     );
 
-    expect(screen.getAllByRole("listitem", { name: "Ollama" })).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "고른 AI" }).textContent).toContain("Ollama");
     expect(screen.queryByRole("button", { name: /사용 안 함/ })).toBeNull();
 
     expect(screen.queryByLabelText("API 키")).toBeNull();
@@ -656,7 +658,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));
+    pickAi("DeepSeek");
     const secretInput = screen.getByLabelText("API 키") as HTMLInputElement;
     await userEvent.type(secretInput, "sk-not-saved");
     expect(secretInput.value).toBe("sk-not-saved");
@@ -703,9 +705,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(
-      screen.getByRole("listitem", { name: "Cerebras" })
-    );
+    pickAi("Cerebras");
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("cerebras");
     expect(apiMocks.setProviderCredential).not.toHaveBeenCalled();
@@ -724,7 +724,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "OpenRouter" }));
+    pickAi("OpenRouter");
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("openrouter");
   });
@@ -742,9 +742,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(
-      screen.getByRole("listitem", { name: "Vercel AI Gateway" })
-    );
+    pickAi("Vercel AI Gateway");
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("vercel");
   });
@@ -762,7 +760,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "LLM Gateway" }));
+    pickAi("LLM Gateway");
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("llmgateway");
   });
@@ -780,7 +778,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "TokenRouter" }));
+    pickAi("TokenRouter");
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("tokenrouter");
   });
@@ -805,7 +803,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));
+    pickAi("DeepSeek");
     const deleteButton = await screen.findByRole("button", { name: "키 삭제" });
     await userEvent.click(deleteButton);
 

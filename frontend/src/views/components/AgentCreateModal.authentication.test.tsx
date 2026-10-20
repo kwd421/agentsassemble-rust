@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { pickAi } from "./AgentCreateModal.testUi";
 import { afterEach, expect, it, vi } from "vitest";
 import AgentCreateModal from "./AgentCreateModal";
 import { codexProvider } from "./AgentCreateModal.testProviders";
@@ -22,7 +23,7 @@ it("returns required login to the same creation draft and removes the login cont
     discovery_error_code: "authentication_required" };
   const props = { open: true, meetingId: "room-a", roomLabel: "Room A", onClose: vi.fn(), onCreate: vi.fn() };
   const view = render(<AgentCreateModal {...props} providers={[required]} />);
-  fireEvent.click(screen.getByRole("listitem", { name: /Codex/ }));
+  pickAi(/Codex/);
   await screen.findByText("로그인 창에서 안내를 따라 주세요.");
   fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "My preserved draft" } });
   await act(async () => complete({ provider_id: "codex", status: "authenticated" }));
@@ -36,7 +37,7 @@ it.each(["ready", "probe_failed", "remote"])("does not start local login for %s"
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" onClose={vi.fn()} onCreate={vi.fn()}
     localProviderActions={state !== "remote"} providers={[{ ...codexProvider(), login_supported: true,
       discovery_error_code: state === "remote" ? "authentication_required" : state }]} />);
-  fireEvent.click(screen.getByRole("listitem", { name: /Codex/ }));
+  pickAi(/Codex/);
   await act(async () => {});
   expect(postJsonServerOperator).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "Codex 로그인" })).toBeNull();

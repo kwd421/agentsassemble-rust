@@ -5,6 +5,7 @@ import "../views/components/ComposerCommandMenu.css";
 import "./channel-search.css";
 import "../views/lobby/MessageMutationControls.css";
 import "../views/components/ProviderControlSelect.css";
+import "../views/components/ProviderPicker.css";
 import "../views/components/AgentPersonaPicker.css";
 import "../views/components/UserSettingsPanel.css";
 import "../views/components/member/MemberOwnership.css";

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, type Mock } from "vitest";
 
@@ -75,4 +75,11 @@ export function expectProviderControlValue(label: string, option: string): void 
     return;
   }
   expect(control.textContent).toContain(option);
+}
+
+/** Opens the AI picker when needed and chooses the row whose name matches. */
+export function pickAi(name: string | RegExp): void {
+  const opener = screen.queryByRole("button", { name: "AI 고르기" }) ?? screen.queryByRole("button", { name: "바꾸기" });
+  if (opener) fireEvent.click(opener);
+  fireEvent.click(screen.getByRole("listitem", { name: typeof name === "string" ? new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) : name }));
 }

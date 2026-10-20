@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AgentCreateModal from "./AgentCreateModal";
 import { customApiProvider } from "./AgentCreateModal.testProviders";
-import {
+import { pickAi,
   primaryActionButton,
   resetAgentCreateApiMocks,
 } from "./AgentCreateModal.testUi";
@@ -45,7 +45,7 @@ describe("AgentCreateModal Custom API", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Custom API" }));
+    pickAi("Custom API");
     expect(primaryActionButton().disabled).toBe(true);
 
     await userEvent.type(

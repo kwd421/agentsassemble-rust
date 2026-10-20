@@ -23,7 +23,7 @@ import {
   providerCatalogGroup,
   providerGroupLabel,
 } from "../../lib/providerCatalogGroups";
-import ProviderTileGrid from "./ProviderTileGrid";
+import ProviderPicker from "./ProviderPicker";
 import ProviderModelRefresh from "./ProviderModelRefresh";
 import type { ProviderCatalog } from "../../types/generated/ProviderCatalog";
 import { fetchLocalProviderCatalog, refreshLocalProviderCatalog } from "../../api/providerOperations";
@@ -409,7 +409,7 @@ export default function AgentCreateModal({
         <div className="dc-agent-create-body">
           {locationChoice}
           {!selectedProvider && statusMessage && <p className="dc-agent-create-note">{statusMessage}</p>}
-          <ProviderTileGrid providers={providers} selectedId={providerId}
+          <ProviderPicker providers={providers} selectedId={providerId}
             onSelect={(provider) => { applyProvider(provider); setStatus(""); }} />
 
           {localProviderActions && !existingSessionId && selectedProvider?.login_supported &&

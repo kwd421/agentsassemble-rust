@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { pickAi } from "./AgentCreateModal.testUi";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
@@ -57,7 +58,7 @@ describe("AgentCreateModal persona selection", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));
+    pickAi("DeepSeek");
     await userEvent.click(screen.getByRole("button", { name: /사용 안 함/ }));
     await waitFor(() => expect(screen.getByRole("radio", { name: /Night Guide/ })).toBeTruthy());
     await userEvent.click(screen.getByRole("radio", { name: /Night Guide/ }));

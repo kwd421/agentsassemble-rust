@@ -6,7 +6,7 @@ import AgentCreateModal from "./AgentCreateModal";
 import { defaultAgentDisplayName } from "./agentCreateModel";
 import { agentCreationPayload } from "../../api/agentSessions";
 import { localAttendeeCreateRequest } from "../../api/localAttendee";
-import { chooseWorkspace } from "./AgentCreateModal.testUi";
+import { pickAi, chooseWorkspace } from "./AgentCreateModal.testUi";
 import { workPermissionControl, codexProvider, claudeProvider, openCodeProvider, deepSeekProvider, lmStudioProvider } from "./AgentCreateModal.testProviders";
 
 vi.mock("../../api", async (importOriginal) => ({
@@ -32,8 +32,8 @@ describe("AgentCreateModal provider selection", () => {
     expect(screen.queryByLabelText("표시 이름")).toBeNull();
     expect(screen.getByRole("dialog").getAttribute("data-provider-selected")).toBe("false");
     const hint = screen.getByText("사용할 AI를 골라 주세요.");
-    expect(hint.compareDocumentPosition(screen.getByRole("list", { name: "구독 에이전트 AI" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    expect(hint.compareDocumentPosition(screen.getByRole("button", { name: "AI 고르기" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    pickAi("Codex");
     expect(screen.getByLabelText("표시 이름")).toBeTruthy();
     expect(screen.getByRole("dialog").getAttribute("data-provider-selected")).toBe("true");
   });
@@ -45,36 +45,38 @@ it("keeps an unavailable provider selectable for local setup without permitting 
     providers={[{ ...codexProvider(), available: false, startable: false, discovery_status: "failed",
       discovery_error_code: "command_missing", discovery_error: "CLI가 설치되지 않았어요." }, openCodeProvider(), deepSeekProvider(), lmStudioProvider()]}
     onClose={() => undefined} onCreate={onCreate} />);
-  expect(screen.queryByRole("list", { name: "에이전트 종류" })).toBeNull();
-  expect(screen.getAllByRole("heading", { level: 3 }).map((item) => item.textContent))
-    .toEqual(["구독 에이전트", "API 키", "로컬 모델"]);
-  expect(within(screen.getByRole("list", { name: "구독 에이전트 AI" })).getAllByRole("listitem")
-    .map((item) => item.getAttribute("aria-label"))).toEqual(["OpenCode", "Codex"]);
-  expect(screen.getByRole("listitem", { name: "Codex" }).getAttribute("data-unavailable")).toBe("true");
-  await userEvent.click(screen.getByRole("listitem", { name: /Codex/ }));
+  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+  expect(within(screen.getByRole("list", { name: "AI" })).getAllByRole("listitem").map((item) => item.getAttribute("aria-label")))
+    .toEqual(["ChatGPT Codex", "DeepSeek", "LM Studio"]);
+  expect(within(screen.getByRole("list", { name: "라우터" })).getAllByRole("listitem").map((item) => item.getAttribute("aria-label")))
+    .toEqual(["OpenCode"]);
+  // A missing app is still offered: choosing it leads to its setup instead of a dead end.
+  expect(screen.getByRole("listitem", { name: "ChatGPT Codex" }).textContent).toContain("설치 필요");
+  pickAi(/Codex/);
   const setup = screen.getByRole("link", { name: "이 컴퓨터에서 Codex 설정 열기" });
   expect(setup.getAttribute("href")).toBe("agentsassemble://provider-setup/codex");
   expect((screen.getByRole("button", { name: "추가" }) as HTMLButtonElement).disabled).toBe(true);
   expect(onCreate).not.toHaveBeenCalled();
 });
 
-it("keeps initial loading providers undimmed in catalog order", () => {
+it("does not call a still-loading app missing, and marks it once discovery says so", () => {
   const providers = [codexProvider(), claudeProvider(), openCodeProvider()].map((provider) => ({
     ...provider, available: false, startable: false, discovery_status: "loading",
     catalog_source: "discovered", controls: [], default_model: "",
   }));
   const { rerender } = render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
     providers={providers} onClose={() => undefined} onCreate={vi.fn()} />);
-  const choices = () => within(screen.getByRole("list", { name: "구독 에이전트 AI" })).getAllByRole("listitem");
-  expect(choices().map((item) => item.getAttribute("aria-label"))).toEqual(["Codex", "Claude Code", "OpenCode"]);
-  expect(choices().map((item) => item.getAttribute("data-unavailable"))).toEqual(["false", "false", "false"]);
+  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+  const row = (name: RegExp) => screen.getByRole("listitem", { name });
+  expect(row(/ChatGPT/).textContent).not.toContain("설치 필요");
+  expect(row(/Claude/).textContent).not.toContain("설치 필요");
 
   rerender(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
     providers={[{ ...providers[0], discovery_status: "failed", discovery_error_code: "command_missing" },
       providers[1], openCodeProvider()]}
     onClose={() => undefined} onCreate={vi.fn()} />);
-  expect(choices().map((item) => item.getAttribute("aria-label"))).toEqual(["Claude Code", "OpenCode", "Codex"]);
-  expect(choices().map((item) => item.getAttribute("data-unavailable"))).toEqual(["false", "false", "true"]);
+  expect(row(/ChatGPT/).textContent).toContain("설치 필요");
+  expect(row(/Claude/).textContent).not.toContain("설치 필요");
 });
 
 it("disables conversation-only permission for a free OpenCode model", async () => {
@@ -87,7 +89,7 @@ it("disables conversation-only permission for a free OpenCode model", async () =
   provider.controls.push(permissions);
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
     providers={[provider]} catalogRevision="local-revision" onClose={() => undefined} onCreate={onCreate} />);
-  await userEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
+  pickAi("OpenCode");
   expect(screen.getByText("OpenCode 무료 모델은 작업 폴더 쓰기나 전체 액세스 권한이 필요해요.")).toBeTruthy();
   const permission = screen.getByRole("combobox", { name: "권한" });
   expect(permission.textContent).toContain("작업 폴더 쓰기");
@@ -114,7 +116,7 @@ it.each([false, true])("defaults to the catalog label and preserves typed names 
   const props = { open: true, meetingId: "room-a", roomLabel: "Room A", localProviderActions,
     providers: [provider, codexProvider()], onClose: vi.fn(), onCreate: vi.fn() };
   const { rerender } = render(<AgentCreateModal {...props} />);
-  await userEvent.click(screen.getByRole("listitem", { name: "OpenCode" }));
+  pickAi("OpenCode");
   const name = screen.getByLabelText("표시 이름") as HTMLInputElement;
   expect(name.value).toBe("MiMo 2.6 Flash");
   const refreshed = { ...provider, controls: [{ ...provider.controls[0], options: [
@@ -125,7 +127,7 @@ it.each([false, true])("defaults to the catalog label and preserves typed names 
   fireEvent.change(name, { target: { value: "My agent" } });
   rerender(<AgentCreateModal {...props} />);
   expect(name.value).toBe("My agent");
-  await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  pickAi("Codex");
   expect(name.value).toBe("My agent");
 });
 

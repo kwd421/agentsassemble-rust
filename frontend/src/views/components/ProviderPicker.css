@@ -1,0 +1,141 @@
+/* Add-agent AI picker: a "+" card, a searchable list, then the chosen AI's card. */
+.dc-provider-add-card {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dc-provider-add-card:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-primary);
+}
+
+.dc-provider-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.dc-provider-search {
+  display: flex;
+  height: 40px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: #121214;
+  padding: 0 12px;
+  color: var(--color-text-muted);
+}
+
+.dc-provider-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  outline: none;
+}
+
+.dc-provider-list {
+  display: grid;
+  gap: 2px;
+}
+
+.dc-provider-list-title {
+  margin: 4px 0 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dc-provider-row {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  border-radius: 8px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.dc-provider-row:hover:not(:disabled),
+.dc-provider-row:focus-visible {
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+.dc-provider-row-name {
+  min-width: 0;
+  flex: 1;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.dc-provider-row-meta,
+.dc-provider-empty {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.dc-provider-selected {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: 12px;
+  border-radius: 8px;
+  background: var(--color-panel-soft);
+  padding: 12px;
+}
+
+.dc-provider-selected-name {
+  min-width: 0;
+  flex: 1;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dc-provider-modes {
+  display: inline-flex;
+  gap: 2px;
+  border-radius: 8px;
+  background: #121214;
+  padding: 2px;
+}
+
+.dc-provider-modes button {
+  min-width: 56px;
+  min-height: 32px;
+  border-radius: 6px;
+  padding: 0 12px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dc-provider-modes button[aria-checked="true"] {
+  background: #3a3b41;
+  color: var(--color-text-primary);
+}
+
+.dc-provider-change {
+  min-height: 32px;
+  border-radius: 6px;
+  padding: 0 12px;
+  color: #00a8fc;
+  font-size: 14px;
+}
+
+.dc-provider-change:hover:not(:disabled) {
+  text-decoration: underline;
+}
