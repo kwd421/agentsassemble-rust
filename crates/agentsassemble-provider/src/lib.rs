@@ -55,6 +55,7 @@ mod ollama;
 mod openai_stream;
 mod opencode;
 mod opencode_harness;
+mod opencode_key_broker;
 #[cfg(not(unix))]
 mod opencode_process;
 mod opencode_protocol;

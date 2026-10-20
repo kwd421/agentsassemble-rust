@@ -16,8 +16,7 @@ pub(super) fn isolated_environment(
     // watches the parent of the machine config even when no file exists.
     let path = |name: &str| -> Result<String, DriverLaunchError> {
         let directory = root.join(name);
-        std::fs::create_dir_all(&directory)
-            .map_err(|_| DriverLaunchError::safe(config_error()))?;
+        std::fs::create_dir_all(&directory).map_err(|_| DriverLaunchError::safe(config_error()))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -73,6 +72,18 @@ pub(super) fn isolated_environment(
             server_password.to_owned(),
         ),
     ];
+    // On Windows Node resolves the home from USERPROFILE and app data from
+    // APPDATA/LOCALAPPDATA, and temp files from TMP/TEMP; all of them would
+    // otherwise come from the owner's real profile through the inherited allowlist.
+    #[cfg(windows)]
+    {
+        let temp = path("tmp")?;
+        environment.push(("USERPROFILE".to_owned(), path("home")?));
+        environment.push(("APPDATA".to_owned(), path("appdata")?));
+        environment.push(("LOCALAPPDATA".to_owned(), path("localappdata")?));
+        environment.push(("TMP".to_owned(), temp.clone()));
+        environment.push(("TEMP".to_owned(), temp));
+    }
     // OpenCode 2 keeps interactive credentials, sessions, snapshots and its log in
     // the data root. Keep the owner's existing data authority so an OpenCode login
     // and its diagnostics survive; config, skills and watchers never read it.

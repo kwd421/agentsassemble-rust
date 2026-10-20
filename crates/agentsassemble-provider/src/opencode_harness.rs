@@ -1,8 +1,12 @@
 #[cfg(unix)]
 use crate::runtime_lease::HeldRuntimeLease;
 use crate::{
-    driver::DriverError, launch_error::DriverLaunchError, opencode::OpenCodeDriver,
-    provider_factory::ProductionDriverFactory, runtime::ProviderDriver,
+    driver::DriverError,
+    launch_error::DriverLaunchError,
+    opencode::OpenCodeDriver,
+    opencode_key_broker::{KeyBroker, Upstream},
+    provider_factory::ProductionDriverFactory,
+    runtime::ProviderDriver,
 };
 use agentsassemble_domain::DurableAgentSession;
 
@@ -10,19 +14,14 @@ use agentsassemble_domain::DurableAgentSession;
 pub(crate) const NAME: &str = "opencode";
 
 struct HarnessProvider {
-    environment: &'static str,
     opencode_provider: &'static str,
 }
 
 const GEMINI: HarnessProvider = HarnessProvider {
-    environment: "GOOGLE_GENERATIVE_AI_API_KEY",
     opencode_provider: "google",
 };
 
-// OpenCode documents this provider id and environment variable. They live in one
-// place so the mapping can be corrected without touching selection or the driver.
 const DEEPSEEK: HarnessProvider = HarnessProvider {
-    environment: "DEEPSEEK_API_KEY",
     opencode_provider: "deepseek",
 };
 
@@ -49,19 +48,16 @@ pub(crate) fn driver_model(provider_kind: &str, model: &str) -> Option<String> {
     Some(format!("{}/{model}", provider.opencode_provider))
 }
 
-/// The one credential pair added to the isolated OpenCode child environment.
-pub(crate) fn environment(
-    provider_kind: &str,
+/// Starts the loopback key broker that holds this session's API key. OpenCode
+/// only ever receives the broker's address and per-launch token.
+pub(crate) async fn key_broker(
+    session: &DurableAgentSession,
     secret: &str,
-) -> Result<Vec<(String, String)>, DriverError> {
-    let provider = provider(provider_kind).ok_or_else(profile_error)?;
-    if secret.is_empty() || secret.contains('\0') {
-        return Err(DriverError::new(
-            "provider_credential_invalid",
-            "The saved API credential cannot be passed to OpenCode.",
-        ));
-    }
-    Ok(vec![(provider.environment.to_owned(), secret.to_owned())])
+) -> Result<KeyBroker, DriverError> {
+    let upstream =
+        Upstream::for_provider(&session.public.provider_kind).ok_or_else(profile_error)?;
+    driver_model(&session.public.provider_kind, &session.public.model).ok_or_else(profile_error)?;
+    KeyBroker::start(upstream, session.public.model.clone(), secret.to_owned()).await
 }
 
 #[cfg(unix)]
@@ -71,10 +67,9 @@ pub(crate) async fn launch(
     runtime_lease: &HeldRuntimeLease,
     credential: &crate::credentials::ProviderCredential,
 ) -> Result<Box<dyn ProviderDriver>, DriverLaunchError> {
-    let environment = environment(&session.public.provider_kind, credential.expose())?;
+    let broker = key_broker(session, credential.expose()).await?;
     let driver =
-        OpenCodeDriver::spawn_harness(session, runtime_lease, factory.guardian()?, environment)
-            .await?;
+        OpenCodeDriver::spawn_harness(session, runtime_lease, factory.guardian()?, broker).await?;
     Ok(Box::new(driver))
 }
 
@@ -84,8 +79,8 @@ pub(crate) async fn launch(
     session: &DurableAgentSession,
     credential: &crate::credentials::ProviderCredential,
 ) -> Result<Box<dyn ProviderDriver>, DriverLaunchError> {
-    let environment = environment(&session.public.provider_kind, credential.expose())?;
-    let driver = OpenCodeDriver::spawn_harness(session, environment).await?;
+    let broker = key_broker(session, credential.expose()).await?;
+    let driver = OpenCodeDriver::spawn_harness(session, broker).await?;
     Ok(Box::new(driver))
 }
 

@@ -17,6 +17,7 @@ use isolation::isolated_environment;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use crate::filesystem::BoundExecutable;
+use crate::opencode_key_broker::KeyBroker;
 #[cfg(not(unix))]
 use crate::opencode_protocol::health_error;
 use crate::{
@@ -69,6 +70,8 @@ pub(crate) struct OpenCodeDriver {
     http: LoopbackHttp,
     room_portal: RoomPortal,
     config_root: tempfile::TempDir,
+    /// Holds an API agent's key outside the OpenCode process for the driver's life.
+    _key_broker: Option<KeyBroker>,
     _private_workspace: Option<PrivateWorkspace>,
     session_instructions: Option<String>,
     attached_session_id: Option<String>,
@@ -88,39 +91,39 @@ impl OpenCodeDriver {
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, runtime_lease, guardian, Vec::new()).await
+        Self::spawn_inner(session, runtime_lease, guardian, None).await
     }
 
-    /// Starts OpenCode for an API provider, adding one credential pair to the
-    /// isolated child environment.
+    /// Starts OpenCode for an API provider. The key stays in the broker; OpenCode
+    /// only learns the broker's loopback address and per-launch token.
     #[cfg(unix)]
     pub(crate) async fn spawn_harness(
         session: &DurableAgentSession,
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
-        environment: Vec<(String, String)>,
+        broker: KeyBroker,
     ) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, runtime_lease, guardian, environment).await
+        Self::spawn_inner(session, runtime_lease, guardian, Some(broker)).await
     }
 
     #[cfg(not(unix))]
     pub(crate) async fn spawn(session: &DurableAgentSession) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, Vec::new()).await
+        Self::spawn_inner(session, None).await
     }
 
     #[cfg(not(unix))]
     pub(crate) async fn spawn_harness(
         session: &DurableAgentSession,
-        environment: Vec<(String, String)>,
+        broker: KeyBroker,
     ) -> Result<Self, DriverLaunchError> {
-        Self::spawn_inner(session, environment).await
+        Self::spawn_inner(session, Some(broker)).await
     }
 
     async fn spawn_inner(
         session: &DurableAgentSession,
         #[cfg(unix)] runtime_lease: &HeldRuntimeLease,
         #[cfg(unix)] guardian: &GuardianLaunch,
-        harness_environment: Vec<(String, String)>,
+        key_broker: Option<KeyBroker>,
     ) -> Result<Self, DriverLaunchError> {
         validate_profile(session)?;
         let private_workspace = private_workspace(session)?;
@@ -132,7 +135,16 @@ impl OpenCodeDriver {
         let config_root = isolated_config_root()?;
         let server_password = server_password();
         let mut environment = isolated_environment(config_root.path(), &server_password)?;
-        environment.extend(harness_environment);
+        if let Some(broker) = &key_broker {
+            let content = broker.config_content();
+            match environment
+                .iter_mut()
+                .find(|(name, _)| name == "OPENCODE_CONFIG_CONTENT")
+            {
+                Some((_, value)) => *value = content,
+                None => environment.push(("OPENCODE_CONFIG_CONTENT".to_owned(), content)),
+            }
+        }
         let port = reserve_loopback_port().await?;
         let endpoint = format!("http://127.0.0.1:{port}/");
         let ready_line = format!("server listening on http://127.0.0.1:{port}");
@@ -193,6 +205,7 @@ impl OpenCodeDriver {
             http,
             room_portal,
             config_root,
+            _key_broker: key_broker,
             _private_workspace: private_workspace,
             session_instructions: None,
             attached_session_id: None,
