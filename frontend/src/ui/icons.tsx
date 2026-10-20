@@ -31,6 +31,7 @@ import {
   DeviceMobile as PhosphorDeviceMobile,
   Devices as PhosphorDevices,
   DotsThree as PhosphorDotsThree,
+  DotsThreeVertical as PhosphorDotsThreeVertical,
   DownloadSimple as PhosphorDownloadSimple,
   FileArrowDown as PhosphorFileArrowDown,
   FileArrowUp as PhosphorFileArrowUp,
@@ -184,6 +185,7 @@ export const MessageSquare = createIcon("message-square", PhosphorChatCircle, "f
 export const Monitor = createIcon("monitor", PhosphorMonitor, "fill");
 export const MonitorSmartphone = createIcon("monitor-smartphone", PhosphorDevices, "fill");
 export const MoreHorizontal = createIcon("more-horizontal", PhosphorDotsThree, "bold");
+export const MoreVertical = createIcon("more-vertical", PhosphorDotsThreeVertical, "bold");
 export const PackageOpen = createIcon("package-open", PhosphorPackage, "fill");
 export const Palette = createIcon("palette", PhosphorPalette, "fill");
 export const Paperclip = createIcon("paperclip", PhosphorPaperclip, "bold");

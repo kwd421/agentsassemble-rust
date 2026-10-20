@@ -29,8 +29,13 @@
 .dc-friend-section-head h2 { margin: 0; color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
 .dc-friends-activity > h2 { margin: 0; font-size: 20px; font-weight: 700; }
 .dc-friend-empty { color: var(--color-text-muted); font-size: 13px; }
-.dc-friend-row { display: flex; min-height: 62px; align-items: center; gap: 12px; border-top: 1px solid var(--color-panel-border); padding: 0; }
-.dc-friend-row[data-selected="true"] { background: rgba(255, 255, 255, .035); }
+/* Discord's friend row: the hover fill reaches 10px past the divider on both sides,
+   so the row tools sit inside it; the divider hides around a filled row. */
+.dc-friend-row { position: relative; display: flex; min-height: 62px; align-items: center; gap: 12px; margin: 0 -10px; border-radius: 8px; padding: 0 10px; }
+.dc-friend-row::before { position: absolute; top: 0; right: 10px; left: 10px; height: 1px; background: var(--color-panel-border); content: ""; }
+.dc-friend-row:hover, .dc-friend-row[data-selected="true"] { background: rgba(255, 255, 255, .05); }
+.dc-friend-row:hover::before, .dc-friend-row[data-selected="true"]::before,
+.dc-friend-row:hover + .dc-friend-row::before, .dc-friend-row[data-selected="true"] + .dc-friend-row::before { opacity: 0; }
 .dc-friend-main-button { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; min-height: 44px; border-radius: 5px; padding: 4px 6px; text-align: left; }
 .dc-friend-main-button > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 /* Matches the room member list: people are brand initials, AIs a grey provider mark. */
@@ -57,7 +62,8 @@
 .dc-friends-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; color: var(--color-danger); font-size: 14px; }
 .dc-friends-small-button { display: inline-flex; min-height: 40px; align-items: center; padding: 0 16px; font-size: 14px; }
 /* Row overflow: a round icon button that recedes until hovered, as in Discord. */
-.dc-friends-more { display: grid; width: 36px; height: 36px; flex-shrink: 0; place-items: center; border-radius: 50%; background: var(--color-server-rail); color: var(--color-text-muted); }
+.dc-friends-more { display: grid; width: 36px; height: 36px; flex-shrink: 0; place-items: center; border-radius: 50%; background: transparent; color: var(--color-text-muted); }
+.dc-friend-row:hover .dc-friends-more, .dc-friend-row[data-selected="true"] .dc-friends-more { background: var(--color-server-rail); }
 .dc-friends-more:hover:not(:disabled), .dc-friends-more:focus-visible { color: var(--color-text-primary); outline: none; }
 .dc-friends-more:disabled { opacity: .5; }
 

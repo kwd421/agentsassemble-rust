@@ -1,4 +1,4 @@
-import { MoreHorizontal, UserRound, Bot, Cloud, Cpu, Wifi, Users, Search, RefreshCw, X } from "../ui/icons";
+import { MoreVertical, UserRound, Bot, Cloud, Cpu, Wifi, Users, Search, RefreshCw, X } from "../ui/icons";
 import ParticipantAvatarContent from "./components/ParticipantAvatarContent";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFriendsDirectory } from "../app/useFriendsDirectory";
@@ -147,7 +147,7 @@ function FriendRow({ friend, busy, selected, onSelect, onEdit, onDelete }: { fri
     </span></button>
     <button ref={trigger} type="button" className="dc-friends-more" disabled={busy}
       aria-label={`${friend.details.display_name} 더보기`} aria-haspopup="dialog"
-      onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openMenu(rect.right - 208, rect.bottom + 8); }}><MoreHorizontal size={20} /></button>
+      onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openMenu(rect.right - 208, rect.bottom + 8); }}><MoreVertical size={20} /></button>
     <dialog ref={menu} className="dc-member-context-menu" aria-label="친구 동작"
       style={{ position: "fixed", margin: 0, width: 208, maxWidth: "calc(100vw - 32px)", padding: 8, boxSizing: "border-box", color: "var(--color-text-primary)", border: "1px solid var(--color-panel-border)" }}
       onClick={(event) => { if (event.target === event.currentTarget) menu.current?.close(); }}>
