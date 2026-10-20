@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CirclePause, LifeBuoy, Play, RotateCcw, Save, Square, Zap } from "../../ui/icons";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
@@ -221,7 +221,8 @@ export default function AgentSessionDetails({
 }) {
   const [pendingAction, setPendingAction] = useState<AgentSessionControlAction | null>(null);
   const [actionStatus, setActionStatus] = useState("");
-  const [settings, setSettings] = useState<Record<string, string>>({});
+  // Only the owner's unsaved edits are state; everything else follows the saved values.
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const status = session.runtime_status;
@@ -252,14 +253,6 @@ export default function AgentSessionDetails({
   );
   const runtimeSettingLabels =
     runtimeControls.map((control) => control.label).join("·") || "실행 설정";
-  const invalidRuntimeControl = provider && runtimeControls.find((control) =>
-    !effectiveProviderControlOptions(provider, control, settings).some(
-      (option) => option.value === (settings[control.key] ?? "")
-    )
-  );
-  const invalidRuntimeValue = invalidRuntimeControl
-    ? settings[invalidRuntimeControl.key] || ""
-    : "";
   const sessionError = sessionErrorInfo(session);
   const storedSettings = useMemo(() => {
     const storedModel = session.model || controlDefault(provider, "model");
@@ -293,17 +286,28 @@ export default function AgentSessionDetails({
     session.max_output_tokens,
   ]);
 
-  // A catalog refresh replaces the provider object without changing what is saved;
-  // only another provider or new saved values may discard an unsaved choice.
-  const resetKey = useRef("");
-  useEffect(() => {
-    const key = `${provider?.id ?? ""}\n${JSON.stringify(storedSettings)}`;
-    if (resetKey.current === key) return;
-    resetKey.current = key;
-    setSettings(provider && requiresOpenCodeApproval(provider, storedSettings) && storedSettings.permission_mode !== "full_access"
-      ? { ...storedSettings, permission_mode: "workspace_write" } : storedSettings);
-  }, [provider, storedSettings]);
+  const savedSettings = useMemo((): Record<string, string> =>
+    provider && requiresOpenCodeApproval(provider, storedSettings) && storedSettings.permission_mode !== "full_access"
+      ? { ...storedSettings, permission_mode: "workspace_write" } : storedSettings,
+  [provider, storedSettings]);
+  // A catalog refresh replaces the provider object without changing what is saved,
+  // so only another session, provider or saved value discards an unsaved edit.
+  const savedKey = [
+    session.session_id, session.provider_kind, session.model, session.reasoning_effort,
+    session.service_tier, session.variant, session.execution_harness, session.permission_mode,
+    session.max_output_tokens,
+  ].join("\n");
+  useEffect(() => setDraft(null), [savedKey]);
+  const settings = draft ?? savedSettings;
   const settingsChanged = Object.entries(storedSettings).some(([key, value]) => settings[key] !== value);
+  const invalidRuntimeControl = provider && runtimeControls.find((control) =>
+    !effectiveProviderControlOptions(provider, control, settings).some(
+      (option) => option.value === (settings[control.key] ?? "")
+    )
+  );
+  const invalidRuntimeValue = invalidRuntimeControl
+    ? settings[invalidRuntimeControl.key] || ""
+    : "";
 
   async function runControl(action: AgentSessionControlAction) {
     if (!onControl || pendingAction) return;
@@ -343,17 +347,13 @@ export default function AgentSessionDetails({
 
   function updateRuntimeSetting(key: string, value: string) {
     if (!provider) return;
-    setSettings((previous) => ({
-      ...previous,
-      ...reconcileProviderSettings(
-        provider,
-        {
-          ...previous,
-          [key]: value,
-        },
-        key
-      ),
-    }));
+    setDraft((previous) => {
+      const current = previous ?? savedSettings;
+      return {
+        ...current,
+        ...reconcileProviderSettings(provider, { ...current, [key]: value }, key),
+      };
+    });
   }
 
   return (

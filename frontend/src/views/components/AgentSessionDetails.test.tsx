@@ -259,6 +259,23 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(screen.getByRole("combobox", { name: "권한" }).textContent).toContain("대화 전용");
   });
 
+  it("offers no save while the catalog reloads and nothing was changed", () => {
+    const session = agentSessionFixture({
+      runtime_status: "stopped", enabled: false, provider_kind: "gemini_api",
+      model: "gemini-3.1-flash-lite", service_tier: "", execution_harness: "opencode",
+      permission_mode: "meeting_read_only",
+    });
+    const save = () => (screen.getByRole("button", { name: "실행 설정 저장" }) as HTMLButtonElement).disabled;
+    const { rerender } = render(<AgentSessionDetails session={session} provider={geminiProvider()} onConfigure={vi.fn()} />);
+    fireEvent.click(screen.getByText("실행 설정"));
+    expect(save()).toBe(true);
+    rerender(<AgentSessionDetails session={session} onConfigure={vi.fn()}
+      provider={{ ...geminiProvider(), controls: [], discovery_status: "loading" }} />);
+    expect(save()).toBe(true);
+    rerender(<AgentSessionDetails session={session} provider={geminiProvider()} onConfigure={vi.fn()} />);
+    expect(save()).toBe(true);
+  });
+
   it("replaces the applied bot card on a stopped API session", async () => {
     const onConfigure = vi.fn().mockResolvedValue(undefined);
     const provider: NativeCliProviderAvailability = {
