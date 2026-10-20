@@ -55,6 +55,7 @@ pub(crate) static AGENT_PLATFORM_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
+    require_tool_choice_on_observation: true,
     tool_calls_may_finish_with_stop: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded Agent Platform request context is too large.",
@@ -389,6 +390,28 @@ mod tests {
         assert!(
             payload.get("service_tier").is_none(),
             "the tier must travel in the header, not the body"
+        );
+    }
+
+    #[test]
+    fn observation_payload_requires_a_tool_call_only_when_tools_are_offered() {
+        let session = session();
+        let messages = [json!({"role": "user", "content": "hello"})];
+        let tools = [json!({"type": "function"})];
+
+        let observed = AGENT_PLATFORM_SPEC.request_body(&session, &messages, Some(&tools), true);
+        assert_eq!(observed["tool_choice"], "required");
+        assert!(
+            AGENT_PLATFORM_SPEC
+                .request_body(&session, &messages, Some(&tools), false)
+                .get("tool_choice")
+                .is_none()
+        );
+        assert!(
+            AGENT_PLATFORM_SPEC
+                .request_body(&session, &messages, None, true)
+                .get("tool_choice")
+                .is_none()
         );
     }
 

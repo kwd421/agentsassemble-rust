@@ -51,6 +51,7 @@ pub(crate) static GEMINI_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
+    require_tool_choice_on_observation: true,
     tool_calls_may_finish_with_stop: true,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded Gemini request context is too large.",
@@ -362,6 +363,36 @@ mod tests {
             );
         }
         assert_eq!(GEMINI_SPEC.provider_kind, "gemini_api");
+    }
+
+    #[test]
+    fn observation_payload_requires_a_tool_call_only_when_tools_are_offered() {
+        let mut session = durable_session(
+            "room",
+            "gemini-session",
+            "Gemini",
+            "gemini_api",
+            "gemini-3.5-flash",
+            "https",
+        );
+        session.public.runtime_kind = "api".to_owned();
+        let messages = [json!({"role": "user", "content": "hello"})];
+        let tools = [json!({"type": "function"})];
+
+        let observed = GEMINI_SPEC.request_body(&session, &messages, Some(&tools), true);
+        assert_eq!(observed["tool_choice"], "required");
+        assert!(
+            GEMINI_SPEC
+                .request_body(&session, &messages, Some(&tools), false)
+                .get("tool_choice")
+                .is_none()
+        );
+        assert!(
+            GEMINI_SPEC
+                .request_body(&session, &messages, None, true)
+                .get("tool_choice")
+                .is_none()
+        );
     }
 
     #[tokio::test]

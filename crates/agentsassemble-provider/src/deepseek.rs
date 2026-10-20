@@ -26,6 +26,7 @@ pub(crate) static DEEPSEEK_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: true,
+    require_tool_choice_on_observation: false,
     tool_calls_may_finish_with_stop: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded DeepSeek request context is too large.",
@@ -113,5 +114,12 @@ mod tests {
         );
         assert_eq!(DEEPSEEK_SPEC.provider_kind, "deepseek_api");
         assert!(DEEPSEEK_SPEC.retain_reasoning);
+        assert!(
+            DEEPSEEK_SPEC
+                .request_body(&session, &messages, Some(&tools), true)
+                .get("tool_choice")
+                .is_none(),
+            "only the Google providers require tool_choice"
+        );
     }
 }

@@ -217,7 +217,13 @@ impl RemoteOpenAiDriver {
         for round in 0..=MAX_TOOL_ROUNDS {
             let response = self
                 .api
-                .complete(session, credential.as_ref(), &messages, tools.as_deref())
+                .complete(
+                    session,
+                    credential.as_ref(),
+                    &messages,
+                    tools.as_deref(),
+                    observation.is_some(),
+                )
                 .await?;
             validate_completion(&response, &session.public.model, self.spec)?;
             let provider_turn_id = response.id.clone();
@@ -628,8 +634,11 @@ impl RemoteOpenAiApi {
         credential: Option<&ProviderCredential>,
         messages: &[Value],
         tools: Option<&[Value]>,
+        observation: bool,
     ) -> Result<OpenAiStreamCompletion, DriverError> {
-        let payload = (self.spec.request_payload)(session, messages, tools);
+        let payload = self
+            .spec
+            .request_body(session, messages, tools, observation);
         let body = serde_json::to_vec(&payload).map_err(|_| {
             provider_error(
                 "provider_protocol_invalid",

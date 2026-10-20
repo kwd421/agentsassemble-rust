@@ -36,6 +36,10 @@ pub(crate) struct RemoteOpenAiSpec {
     pub(crate) request_payload: fn(&DurableAgentSession, &[Value], Option<&[Value]>) -> Value,
     pub(crate) response_model: ResponseModelIdentity,
     pub(crate) retain_reasoning: bool,
+    /// A room turn can only end through a terminal room tool, so a provider that
+    /// ignores the plain-text rule can be told to call a tool on those rounds.
+    /// Only a provider whose API was verified to honor `tool_choice` sets it.
+    pub(crate) require_tool_choice_on_observation: bool,
     /// AI Studio reports a streamed tool-call turn as `stop` instead of
     /// `tool_calls`. Only a provider whose stream was verified to do this sets it.
     pub(crate) tool_calls_may_finish_with_stop: bool,
@@ -89,6 +93,23 @@ impl RemoteOpenAiEndpoint {
 }
 
 impl RemoteOpenAiSpec {
+    /// Build the request body. An observation turn must end with a room action,
+    /// so a provider configured for it is asked for a tool call on every round,
+    /// but only while tool definitions are actually part of the request.
+    pub(crate) fn request_body(
+        &self,
+        session: &DurableAgentSession,
+        messages: &[Value],
+        tools: Option<&[Value]>,
+        observation: bool,
+    ) -> Value {
+        let mut payload = (self.request_payload)(session, messages, tools);
+        if observation && tools.is_some() && self.require_tool_choice_on_observation {
+            payload["tool_choice"] = Value::String("required".to_owned());
+        }
+        payload
+    }
+
     pub(crate) const fn credential_id(&self) -> Option<ProviderCredentialId> {
         match self.authentication {
             RemoteOpenAiAuthentication::Bearer { credential, .. }

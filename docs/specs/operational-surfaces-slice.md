@@ -1370,7 +1370,10 @@ field from the request. A streamed tool-call turn may finish with `stop` instead
 accepted for Gemini only. Gemini 3 attaches `extra_content.google.thought_signature`
 to each tool call and requires the same object back on that call in the next request,
 so it is retained exactly (a non-object or one over 64 KiB is refused) and returned on
-the assistant tool call. Credential values never enter errors, events or logs.
+the assistant tool call. Every round of a room turn (an observation turn) sends
+`"tool_choice":"required"` when tool definitions are offered, because such a turn can
+only end through a terminal room tool; other turns and requests without tools omit it.
+Credential values never enter errors, events or logs.
 
 Agent Platform (owner approved 2026-10-20) is the sixteenth managed provider and the
 same product as Google Vertex AI, so its display name is "Agent Platform (Vertex AI)".
@@ -1390,7 +1393,10 @@ control ("응답 속도") exposes `default`/"기본", `flex`/"Flex" and `priorit
 non-default tiers travel in the `X-Vertex-AI-LLM-Shared-Request-Type` request header
 and `default` sends no header. Tool-call turns finish with `tool_calls` here, and
 Gemini 3 models attach the same `extra_content.google.thought_signature`, which is
-returned on that assistant tool call in later rounds. The add-agent credential section
+returned on that assistant tool call in later rounds. Every round of a room turn (an
+observation turn) sends `"tool_choice":"required"` when tool definitions are offered,
+because such a turn can only end through a terminal room tool; other turns and requests
+without tools omit it. The add-agent credential section
 asks for API 키, 프로젝트 ID and 지역 (default `global`). Credential values never enter
 errors, events or logs.
 

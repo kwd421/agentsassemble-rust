@@ -37,6 +37,7 @@ pub(crate) static TOKENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
+    require_tool_choice_on_observation: false,
     tool_calls_may_finish_with_stop: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded TokenRouter request context is too large.",
