@@ -48,6 +48,10 @@ export default function ProviderControlSelect({
   const controlRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // The trigger's viewport position when the menu opened. A scroll that leaves
+  // it in place (for example the browser scrolling to a focused field) must not
+  // dismiss the menu; a real page or panel scroll moves it.
+  const anchorRef = useRef<{ left: number; top: number } | null>(null);
   const selectedOption = options.find((option) => option.value === value);
   const hasOnlyResolvedOption = options.length === 1 && Boolean(selectedOption);
   const loadingOptions = !disabled && !hasOnlyResolvedOption && options.length === 0;
@@ -104,6 +108,11 @@ export default function ProviderControlSelect({
       ) {
         return;
       }
+      const anchor = anchorRef.current;
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (anchor && rect && Math.abs(rect.left - anchor.left) < 1 && Math.abs(rect.top - anchor.top) < 1) {
+        return;
+      }
       setOpen(false);
       setActiveGroup("");
     };
@@ -158,7 +167,7 @@ export default function ProviderControlSelect({
       : showModelTools
         ? 'input[aria-label="모델 검색"]'
         : '[role="option"], [role^="menuitem"]';
-    menuRef.current.querySelector<HTMLElement>(selector)?.focus();
+    menuRef.current.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
   }, [activeGroup, menuPosition, open, showModelTools]);
 
   function toggleMenu() {
@@ -173,6 +182,7 @@ export default function ProviderControlSelect({
       return;
     }
     const rect = buttonRef.current.getBoundingClientRect();
+    anchorRef.current = { left: rect.left, top: rect.top };
     const optionHeight =
       !isModelControl && options.some(providerControlOptionHasDescription) ? 50 : 36;
     const estimatedHeight = Math.min(
@@ -199,7 +209,7 @@ export default function ProviderControlSelect({
     setOpen(false);
     setActiveGroup("");
     setQuery("");
-    buttonRef.current?.focus();
+    buttonRef.current?.focus({ preventScroll: true });
   }
 
   return (
@@ -236,10 +246,17 @@ export default function ProviderControlSelect({
       {open &&
         menuPosition &&
         createPortal(
+          // Keep the search field focused while pressing a row. A blur
+          // re-render before mouseup would otherwise swallow the first click.
           <div
             ref={menuRef}
             className="dc-agent-select-popover"
             style={menuPosition}
+            onMouseDown={(event) => {
+              if (event.target instanceof Element && event.target.closest("button")) {
+                event.preventDefault();
+              }
+            }}
           >
               {showModelTools && (
                 <div className="dc-agent-model-tools">

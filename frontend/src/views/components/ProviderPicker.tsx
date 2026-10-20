@@ -85,13 +85,18 @@ export default function ProviderPicker({ providers, selectedId, onSelect, view, 
         {ordered.map((entry) => {
           const starred = favourites.includes(entry.id);
           return <div key={entry.id} className="dc-provider-row-wrap">
+            {/* Keep the search field focused through the press. Otherwise its
+                blur re-render can replace the row between pointer down and up,
+                so the first click never fires. */}
             <button type="button" role="listitem" className="dc-provider-row"
+              onMouseDown={(event) => event.preventDefault()}
               disabled={disabled} aria-label={[entry.name, ...appNames(entry)].join(" ")} onClick={() => choose(entry)}>
               <ProviderLogo providerId={entry.modes[0].provider.id} providerKind={entry.modes[0].provider.provider_kind} size={20} />
               <span className="dc-provider-row-name">{entry.name}</span>
               {missing(entry) && <span className="dc-provider-row-meta">설치 필요</span>}
             </button>
             <button type="button" className="dc-provider-star" aria-pressed={starred}
+              onMouseDown={(event) => event.preventDefault()}
               aria-label={`${entry.name} 즐겨찾기`} onClick={() => toggleFavourite(entry.id)}>
               <Star size={16} fill={starred ? undefined : "none"} aria-hidden />
             </button>

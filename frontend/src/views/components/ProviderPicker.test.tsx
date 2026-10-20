@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import ProviderPicker from "./ProviderPicker";
 import { agentPlatformProvider, codexProvider, deepSeekProvider, openCodeProvider } from "./AgentCreateModal.testProviders";
@@ -66,4 +67,26 @@ it("finds Agent Platform by its Vertex display name", () => {
   expect(screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))).toEqual([
     "Agent Platform Agent Platform (Vertex AI)",
   ]);
+});
+
+it("selects on the first click after typing and leaves the search field focused", async () => {
+  const onSelect = vi.fn();
+  render(
+    <ProviderPicker
+      providers={[codexProvider(), deepSeekProvider(), openCodeProvider()]}
+      selectedId=""
+      view="list"
+      onSelect={onSelect}
+    />
+  );
+  const user = userEvent.setup();
+  const search = screen.getByRole("searchbox", { name: "AI 검색" });
+  await user.type(search, "deep");
+  await user.click(screen.getByRole("listitem", { name: "DeepSeek" }));
+
+  expect(onSelect).toHaveBeenCalledTimes(1);
+  expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "deepseek" }));
+  // The row press must not blur the search field; that blur re-render is what
+  // used to replace the row before mouseup and eat the first click.
+  expect(document.activeElement).toBe(search);
 });

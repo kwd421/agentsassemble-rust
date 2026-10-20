@@ -73,6 +73,55 @@ describe("ProviderControlSelect", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("keeps the model search focused on the first press so one click selects", async () => {
+    const onChange = vi.fn();
+    render(
+      <ProviderControlSelect
+        label="모델"
+        options={[
+          { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite" },
+          { value: "gemini-3-pro", label: "Gemini 3 Pro" },
+          { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+        ]}
+        value=""
+        onChange={onChange}
+      />
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("combobox", { name: "모델" }));
+    const search = screen.getByRole("searchbox", { name: "모델 검색" });
+    await user.type(search, "gemini 3.1");
+    const option = screen.getByRole("option", { name: /Gemini 3\.1 Flash Lite/ });
+
+    await user.pointer({ keys: "[MouseLeft>]", target: option });
+    // The press must not move focus out of the search field before mouseup.
+    expect(document.activeElement).toBe(search);
+    await user.pointer({ keys: "[/MouseLeft]", target: option });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith("gemini-3.1-flash-lite");
+  });
+
+  it("focuses the model search without scrolling the page under the menu", async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    render(
+      <ProviderControlSelect
+        label="모델"
+        options={[
+          { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite" },
+          { value: "gemini-3-pro", label: "Gemini 3 Pro" },
+        ]}
+        value=""
+        onChange={vi.fn()}
+      />
+    );
+    await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
+    // Focusing without preventScroll makes the browser scroll the document to
+    // the fixed menu; the scroll handler then closes the menu on open.
+    expect(focus.mock.calls.some(([options]) => options?.preventScroll === true)).toBe(true);
+    focus.mockRestore();
+  });
   it("drills into model families inside the same bounded menu", async () => {
     render(
       <ProviderControlSelect
