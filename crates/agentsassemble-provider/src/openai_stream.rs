@@ -12,6 +12,7 @@ pub(crate) const MAX_REQUEST_BYTES: usize = 256_000 - 16_384 - 32_768;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TOOL_CALLS: usize = 16;
 const MAX_TOOL_ARGUMENT_BYTES: usize = 64 * 1024;
+const MAX_EXTRA_CONTENT_BYTES: usize = 64 * 1024;
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_FINISH_REASON_BYTES: usize = 64;
 
@@ -56,6 +57,10 @@ pub(crate) struct ToolCall {
     #[serde(rename = "type")]
     pub(crate) kind: &'static str,
     pub(crate) function: ToolFunction,
+    /// Google attaches this to Gemini 3 tool calls and rejects the following
+    /// request unless the same object returns on that call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) extra_content: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -104,13 +109,17 @@ struct UsageChunk {
 
 #[derive(Debug, Deserialize)]
 struct ToolCallDelta {
-    index: usize,
+    /// AI Studio omits this for a delta that carries one complete call.
+    #[serde(default)]
+    index: Option<usize>,
     #[serde(default)]
     id: Option<String>,
     #[serde(rename = "type", default)]
     kind: Option<String>,
     #[serde(default)]
     function: Option<ToolFunctionDelta>,
+    #[serde(default)]
+    extra_content: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +146,7 @@ struct ToolCallAccumulator {
     id: String,
     name: String,
     arguments: String,
+    extra_content: Option<Value>,
 }
 
 pub(crate) async fn send_chat_completion(
@@ -283,10 +293,17 @@ impl CompletionAccumulator {
     }
 
     fn push_tool_delta(&mut self, delta: ToolCallDelta) -> Result<(), OpenAiStreamError> {
-        if delta.index >= MAX_TOOL_CALLS {
+        // A missing position is only addressable when the delta is a complete,
+        // identified call; a bare fragment would have nowhere to merge.
+        let index = match delta.index {
+            Some(index) => index,
+            None if delta.id.as_deref().is_some_and(|id| !id.is_empty()) => self.tools.len(),
+            None => return Err(OpenAiStreamError::InvalidResponse),
+        };
+        if index >= MAX_TOOL_CALLS {
             return Err(OpenAiStreamError::InvalidResponse);
         }
-        let call = self.tools.entry(delta.index).or_default();
+        let call = self.tools.entry(index).or_default();
         if let Some(kind) = delta.kind.as_deref().filter(|kind| !kind.is_empty())
             && kind != "function"
         {
@@ -307,6 +324,16 @@ impl CompletionAccumulator {
                 if call.arguments.len() > MAX_TOOL_ARGUMENT_BYTES {
                     return Err(OpenAiStreamError::InvalidResponse);
                 }
+            }
+        }
+        if let Some(extra_content) = delta.extra_content {
+            validate_extra_content(&extra_content)?;
+            if call
+                .extra_content
+                .replace(extra_content.clone())
+                .is_some_and(|prior| prior != extra_content)
+            {
+                return Err(OpenAiStreamError::InvalidResponse);
             }
         }
         Ok(())
@@ -337,6 +364,7 @@ impl CompletionAccumulator {
                     name: call.name,
                     arguments: call.arguments,
                 },
+                extra_content: call.extra_content,
             });
         }
         Ok(OpenAiStreamCompletion {
@@ -380,6 +408,16 @@ fn append_optional_text(
     let value = value.as_str().ok_or(OpenAiStreamError::InvalidResponse)?;
     target.push_str(value);
     Ok(())
+}
+
+fn validate_extra_content(value: &Value) -> Result<(), OpenAiStreamError> {
+    if !value.is_object() {
+        return Err(OpenAiStreamError::InvalidResponse);
+    }
+    let encoded = serde_json::to_vec(value).map_err(|_| OpenAiStreamError::InvalidResponse)?;
+    (encoded.len() <= MAX_EXTRA_CONTENT_BYTES)
+        .then_some(())
+        .ok_or(OpenAiStreamError::InvalidResponse)
 }
 
 fn valid_text(value: &str, max_bytes: usize) -> bool {
@@ -468,6 +506,114 @@ mod tests {
         );
         assert_eq!(completion.message.tool_calls[0].function.arguments, "{}");
         assert_eq!(completion.usage.map(|usage| usage.total), Some(5));
+    }
+
+    // AI Studio sends one complete call per delta with no index, and closes the
+    // turn with `stop` instead of `tool_calls`.
+    #[tokio::test]
+    async fn indexless_complete_tool_call_keeps_its_extra_content() {
+        let payload = [
+            event(&json!({
+                "id": "chat-1",
+                "model": "gemini-3.5-flash",
+                "choices": [{
+                    "index": 0,
+                    "delta": {
+                        "role": "assistant",
+                        "tool_calls": [{
+                            "extra_content": {"google": {"thought_signature": "opaque-fake-signature"}},
+                            "function": {"arguments": "{}", "name": "read_discussion"},
+                            "id": "call_670907",
+                            "type": "function"
+                        }]
+                    }
+                }]
+            })),
+            event(&json!({
+                "id": "chat-1",
+                "model": "gemini-3.5-flash",
+                "choices": [{
+                    "index": 0,
+                    "delta": {"role": "assistant"},
+                    "finish_reason": "stop"
+                }]
+            })),
+            "data: [DONE]\n\n".to_owned(),
+        ]
+        .concat();
+        let completion = decode_events(stream::iter([Ok(Bytes::from(payload))]))
+            .await
+            .unwrap_or_else(|error| panic!("decode indexless stream: {error}"));
+
+        assert_eq!(completion.finish_reason, "stop");
+        assert_eq!(completion.message.tool_calls.len(), 1);
+        assert_eq!(completion.message.tool_calls[0].id, "call_670907");
+        assert_eq!(
+            completion.message.tool_calls[0].function.name,
+            "read_discussion"
+        );
+        assert_eq!(
+            completion.message.tool_calls[0].extra_content,
+            Some(json!({"google": {"thought_signature": "opaque-fake-signature"}}))
+        );
+    }
+
+    #[tokio::test]
+    async fn indexless_tool_fragment_without_an_id_is_rejected() {
+        let payload = event(&json!({
+            "id": "chat-1",
+            "model": "gemini-3.5-flash",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "function": {"arguments": "{", "name": "read_discussion"},
+                        "type": "function"
+                    }]
+                }
+            }]
+        }));
+        let error = decode_events(stream::iter([Ok(Bytes::from(payload))]))
+            .await
+            .err()
+            .unwrap_or_else(|| panic!("unaddressable fragment must fail"));
+        assert_eq!(error, OpenAiStreamError::InvalidResponse);
+    }
+
+    #[tokio::test]
+    async fn extra_content_must_be_a_bounded_object() {
+        for extra_content in [
+            json!({"google": {"thought_signature": "x".repeat(65 * 1024)}}),
+            json!("not-an-object"),
+        ] {
+            let payload = [
+                event(&json!({
+                    "id": "chat-1",
+                    "model": "gemini-3.5-flash",
+                    "choices": [{
+                        "index": 0,
+                        "delta": {
+                            "role": "assistant",
+                            "tool_calls": [{
+                                "index": 0,
+                                "extra_content": extra_content,
+                                "function": {"arguments": "{}", "name": "read_discussion"},
+                                "id": "call_670907",
+                                "type": "function"
+                            }]
+                        }
+                    }]
+                })),
+                "data: [DONE]\n\n".to_owned(),
+            ]
+            .concat();
+            let error = decode_events(stream::iter([Ok(Bytes::from(payload))]))
+                .await
+                .err()
+                .unwrap_or_else(|| panic!("invalid extra_content must fail"));
+            assert_eq!(error, OpenAiStreamError::InvalidResponse);
+        }
     }
 
     #[tokio::test]

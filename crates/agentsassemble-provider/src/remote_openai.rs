@@ -719,7 +719,9 @@ fn validate_completion(
             spec.errors.output_truncated,
         ));
     }
-    if (has_tools && response.finish_reason != "tool_calls")
+    if (has_tools
+        && response.finish_reason != "tool_calls"
+        && !(spec.tool_calls_may_finish_with_stop && response.finish_reason == "stop"))
         || (!has_tools && response.finish_reason != "stop")
     {
         return Err(provider_error(

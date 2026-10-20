@@ -18,6 +18,7 @@ fn tool_call(id: &str, name: &str, arguments: &serde_json::Value) -> ToolCall {
             name: name.to_owned(),
             arguments: arguments.to_string(),
         },
+        extra_content: None,
     }
 }
 
@@ -184,6 +185,7 @@ async fn a_tool_the_room_does_not_offer_is_answered_instead_of_ending_the_sessio
                     name: "read_discussion".to_owned(),
                     arguments: "not json".to_owned(),
                 },
+                extra_content: None,
             },
             false,
         )

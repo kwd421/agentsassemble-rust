@@ -51,6 +51,7 @@ pub(crate) static GEMINI_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
+    tool_calls_may_finish_with_stop: true,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded Gemini request context is too large.",
         rate_limited: "Gemini rate-limited the request.",

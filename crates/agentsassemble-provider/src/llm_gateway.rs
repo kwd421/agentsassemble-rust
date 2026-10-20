@@ -41,6 +41,7 @@ pub(crate) static LLM_GATEWAY_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
+    tool_calls_may_finish_with_stop: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded LLM Gateway request context is too large.",
         rate_limited: "LLM Gateway rate-limited the request.",

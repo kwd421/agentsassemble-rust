@@ -36,6 +36,9 @@ pub(crate) struct RemoteOpenAiSpec {
     pub(crate) request_payload: fn(&DurableAgentSession, &[Value], Option<&[Value]>) -> Value,
     pub(crate) response_model: ResponseModelIdentity,
     pub(crate) retain_reasoning: bool,
+    /// AI Studio reports a streamed tool-call turn as `stop` instead of
+    /// `tool_calls`. Only a provider whose stream was verified to do this sets it.
+    pub(crate) tool_calls_may_finish_with_stop: bool,
     pub(crate) errors: RemoteOpenAiErrors,
 }
 

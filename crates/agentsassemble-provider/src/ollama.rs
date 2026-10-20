@@ -58,6 +58,7 @@ static SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
+    tool_calls_may_finish_with_stop: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded Ollama request context is too large.",
         rate_limited: "Ollama rate-limited the request.",

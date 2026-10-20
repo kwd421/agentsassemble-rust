@@ -1365,7 +1365,12 @@ existing bearer credential owner (`AgentsAssemble`/`gemini`). Model discovery re
 keeps only `generateContent` models, strips the `models/` prefix and defaults to
 `gemini-3.5-flash`. The `service_tier` control ("응답 속도") exposes
 `default`/"기본", `flex`/"Flex" and `priority`/"Priority"; `default` omits the
-field from the request. Credential values never enter errors, events or logs.
+field from the request. A streamed tool-call turn may finish with `stop` instead of
+`tool_calls`, and its complete tool call may omit `index`; those two shapes are
+accepted for Gemini only. Gemini 3 attaches `extra_content.google.thought_signature`
+to each tool call and requires the same object back on that call in the next request,
+so it is retained exactly (a non-object or one over 64 KiB is refused) and returned on
+the assistant tool call. Credential values never enter errors, events or logs.
 
 Agent Platform (owner approved 2026-10-20) is the sixteenth managed provider and the
 same product as Google Vertex AI, so its display name is "Agent Platform (Vertex AI)".
@@ -1383,9 +1388,11 @@ catalog is fixed: `google/gemini-2.5-flash-lite` (default), `google/gemini-2.5-f
 and `google/gemini-3.1-pro-preview`. The `service_tier`
 control ("응답 속도") exposes `default`/"기본", `flex`/"Flex" and `priority`/"Priority";
 non-default tiers travel in the `X-Vertex-AI-LLM-Shared-Request-Type` request header
-and `default` sends no header. The add-agent credential section asks for API 키,
-프로젝트 ID and 지역 (default `global`). Credential values never enter errors, events
-or logs.
+and `default` sends no header. Tool-call turns finish with `tool_calls` here, and
+Gemini 3 models attach the same `extra_content.google.thought_signature`, which is
+returned on that assistant tool call in later rounds. The add-agent credential section
+asks for API 키, 프로젝트 ID and 지역 (default `global`). Credential values never enter
+errors, events or logs.
 
 Freebuff and app-managed Antigravity remain excluded by user scope. External
 Antigravity's Room Connector admission is independent of this account matrix.

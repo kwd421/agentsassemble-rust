@@ -7,12 +7,14 @@ use hyper_util::rt::TokioIo;
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, sync::mpsc};
 
-use super::{RemoteOpenAiApi, RemoteOpenAiDriver};
+use super::{RemoteOpenAiApi, RemoteOpenAiDriver, validate_completion};
 use crate::{
     credentials::ProviderCredentialStore,
     custom_api::CUSTOM_API_SPEC,
     deepseek::DEEPSEEK_SPEC,
     driver::{DriverError, ProviderDriver, ProviderRoomObservation, ProviderTurnRequest},
+    gemini::GEMINI_SPEC,
+    openai_stream::{AssistantMessage, OpenAiStreamCompletion, ToolCall, ToolFunction},
     remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiSpec},
     room_portal::ProviderTurnOutcome,
     test_support::durable_session,
@@ -35,6 +37,36 @@ fn tool_stream(model: &str, tool: &str, finish_reason: &str) -> String {
     });
     format!("data: {chunk}\n\ndata: [DONE]\n\n")
 }
+
+/// The exact AI Studio shape: a complete tool call without `index`, then a
+/// separate `stop` finish chunk, with Gemini's thought signature on the call.
+fn gemini_tool_stream(model: &str, tool: &str, signature: &str) -> String {
+    let arguments = if tool == "publish_message" {
+        json!({"content": "Bounded room reply", "next_agent_id": ""})
+    } else {
+        json!({})
+    };
+    let call = json!({
+        "id": "completion-fixture",
+        "model": model,
+        "choices": [{"delta": {
+            "role": "assistant",
+            "tool_calls": [{
+                "extra_content": {"google": {"thought_signature": signature}},
+                "function": {"arguments": arguments.to_string(), "name": tool},
+                "id": format!("call-{tool}"),
+                "type": "function"
+            }]
+        }, "index": 0}]
+    });
+    let stop = json!({
+        "id": "completion-fixture",
+        "model": model,
+        "choices": [{"delta": {"role": "assistant"}, "finish_reason": "stop", "index": 0}]
+    });
+    format!("data: {call}\n\ndata: {stop}\n\ndata: [DONE]\n\n")
+}
+
 
 async fn api_fixture(
     responses: Vec<String>,
@@ -154,6 +186,7 @@ async fn portal_completion_rejects_an_unread_turn_and_passes_an_unpublished_one(
                     name: "read_discussion".to_owned(),
                     arguments: "{}".to_owned(),
                 },
+                extra_content: None,
             },
             false,
         )
@@ -409,6 +442,79 @@ async fn invalid_completion_and_unpermitted_tools_never_publish() {
         };
         assert_eq!(error.code, code);
     }
+}
+
+fn stop_finished_completion(model: &str) -> OpenAiStreamCompletion {
+    OpenAiStreamCompletion {
+        id: "completion-fixture".to_owned(),
+        model: model.to_owned(),
+        finish_reason: "stop".to_owned(),
+        message: AssistantMessage {
+            role: "assistant",
+            content: None,
+            reasoning_content: None,
+            tool_calls: vec![ToolCall {
+                id: "call-fixture".to_owned(),
+                kind: "function",
+                function: ToolFunction {
+                    name: "read_discussion".to_owned(),
+                    arguments: "{}".to_owned(),
+                },
+                extra_content: None,
+            }],
+        },
+        usage: None,
+    }
+}
+
+#[test]
+fn stop_finished_tool_calls_stay_invalid_outside_gemini() {
+    for (spec, model) in [
+        (&CUSTOM_API_SPEC, "vendor/model"),
+        (&DEEPSEEK_SPEC, "deepseek-v4-flash"),
+    ] {
+        let error = validate_completion(&stop_finished_completion(model), model, spec)
+            .expect_err("a strict provider accepted a stop-finished tool call");
+        assert_eq!(error.code, "provider_protocol_invalid");
+    }
+    assert!(
+        validate_completion(
+            &stop_finished_completion("gemini-3.5-flash"),
+            "gemini-3.5-flash",
+            &GEMINI_SPEC
+        )
+        .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn gemini_stop_finished_tool_calls_carry_their_thought_signature() {
+    let model = "gemini-3.5-flash";
+    let signature = "opaque-fake-thought-signature";
+    let (outcome, requests) = room_turn(
+        &GEMINI_SPEC,
+        model,
+        vec![
+            gemini_tool_stream(model, "read_discussion", signature),
+            gemini_tool_stream(model, "publish_message", signature),
+        ],
+        None,
+    )
+    .await;
+    assert_eq!(
+        outcome,
+        Ok(ProviderTurnOutcome::Message {
+            attachment_ids: Vec::new(),
+            content: "Bounded room reply".to_owned(),
+            target_agent_id: String::new(),
+            reply_to_event_id: None,
+        })
+    );
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        requests[1]["messages"][2]["tool_calls"][0]["extra_content"],
+        json!({"google": {"thought_signature": signature}})
+    );
 }
 
 #[tokio::test]
