@@ -371,6 +371,78 @@ async fn a_nonce_is_consumed_once_and_a_replay_is_refused() {
     );
 }
 
+#[test]
+fn a_channel_keeps_at_most_one_outstanding_nonce() {
+    let nonces = super::MemberResumeNonces::default();
+    let binding = agentsassemble_persistence::SecureSessionBinding {
+        client_key_fingerprint: [3; 32],
+        channel_id: "c".repeat(43),
+    };
+    let other = agentsassemble_persistence::SecureSessionBinding {
+        client_key_fingerprint: [4; 32],
+        channel_id: "d".repeat(43),
+    };
+    let now = chrono::Utc::now();
+    let first = nonces
+        .issue(&binding, EPOCH, now)
+        .unwrap_or_else(|error| panic!("issue the first nonce: {error:?}"));
+    let second = nonces
+        .issue(&binding, EPOCH, now)
+        .unwrap_or_else(|error| panic!("issue the second nonce: {error:?}"));
+    assert_ne!(first, second, "every issued nonce is fresh");
+    assert!(
+        !nonces.consume(&first, &binding, EPOCH, now),
+        "the replaced nonce of a channel must never open the direct path"
+    );
+    assert!(
+        nonces.consume(&second, &binding, EPOCH, now),
+        "the current nonce of the channel opens the direct path"
+    );
+    // A nonce of another channel never opens this one.
+    let foreign = nonces
+        .issue(&other, EPOCH, now)
+        .unwrap_or_else(|error| panic!("issue the other nonce: {error:?}"));
+    assert!(
+        !nonces.consume(&foreign, &binding, EPOCH, now),
+        "a nonce of another channel must be refused"
+    );
+}
+
+#[test]
+fn the_nonce_store_refuses_more_channels_than_it_can_hold() {
+    let nonces = super::MemberResumeNonces::default();
+    let now = chrono::Utc::now();
+    let mut first = agentsassemble_persistence::SecureSessionBinding {
+        client_key_fingerprint: [3; 32],
+        channel_id: "c".repeat(43),
+    };
+    for index in 0..super::RESUME_NONCE_LIMIT {
+        first.channel_id = format!("{index:0>43}");
+        nonces
+            .issue(&first, EPOCH, now)
+            .unwrap_or_else(|error| panic!("issue the nonce of channel {index}: {error:?}"));
+    }
+    // One channel too many is refused with the same 429 the connect
+    // challenge map answers.
+    let overflow = agentsassemble_persistence::SecureSessionBinding {
+        client_key_fingerprint: [3; 32],
+        channel_id: "z".repeat(43),
+    };
+    let error = nonces
+        .issue(&overflow, EPOCH, now)
+        .err()
+        .unwrap_or_else(|| panic!("the store must refuse one channel too many"));
+    assert_eq!(error.status, axum::http::StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(error.code, "member_challenge_capacity");
+    // A channel that already holds a nonce only replaces it: the cap never
+    // refuses a replacement.
+    first.channel_id = format!("{:0>43}", 0);
+    assert!(
+        nonces.issue(&first, EPOCH, now).is_ok(),
+        "a channel that already holds a nonce must be able to replace it"
+    );
+}
+
 #[tokio::test]
 async fn a_signature_never_works_on_another_channel_origin_or_generation() {
     let fixture = fixture().await;

@@ -54,11 +54,19 @@ pub(crate) fn resume_transcript(
 }
 
 /// Host-issued single-use nonces, each bound to one secure channel.
+///
+/// A channel holds at most one outstanding nonce: a new request replaces
+/// that channel's previous nonce. The store holds at most
+/// `RESUME_NONCE_LIMIT` channels at a time, exactly like the connect
+/// challenge map, and refuses one more with the same 429.
 #[derive(Default)]
-pub(crate) struct MemberResumeNonces(parking_lot::Mutex<HashMap<[u8; 32], ResumeNonce>>);
+pub(crate) struct MemberResumeNonces(parking_lot::Mutex<HashMap<String, ResumeNonce>>);
+
+/// How many channels may hold an outstanding resume nonce at once.
+const RESUME_NONCE_LIMIT: usize = 1024;
 
 struct ResumeNonce {
-    channel_id: String,
+    nonce: [u8; 32],
     client_key_fingerprint: [u8; 32],
     registration_epoch: String,
     expires_at: chrono::DateTime<chrono::Utc>,
@@ -78,10 +86,16 @@ impl MemberResumeNonces {
             .map_err(|_| invalid_resume())?;
         let mut entries = self.0.lock();
         entries.retain(|_, entry| entry.expires_at > now);
+        // A channel that already holds a nonce only replaces it: the store
+        // grows with the number of channels, never with the number of
+        // requests.
+        if !entries.contains_key(&binding.channel_id) && entries.len() >= RESUME_NONCE_LIMIT {
+            return Err(super::challenge_capacity());
+        }
         entries.insert(
-            nonce,
+            binding.channel_id.clone(),
             ResumeNonce {
-                channel_id: binding.channel_id.clone(),
+                nonce,
                 client_key_fingerprint: binding.client_key_fingerprint,
                 registration_epoch: registration_epoch.to_owned(),
                 expires_at: now + RESUME_NONCE_TTL,
@@ -100,11 +114,18 @@ impl MemberResumeNonces {
         now: chrono::DateTime<chrono::Utc>,
     ) -> bool {
         let mut entries = self.0.lock();
-        let Some(entry) = entries.remove(nonce) else {
+        let Some(entry) = entries.get(&binding.channel_id) else {
+            return false;
+        };
+        // A nonce that is not this channel's current one never opens the
+        // direct path, and it leaves the current one usable.
+        if entry.nonce != *nonce {
+            return false;
+        }
+        let Some(entry) = entries.remove(&binding.channel_id) else {
             return false;
         };
         entry.expires_at > now
-            && entry.channel_id == binding.channel_id
             && entry.client_key_fingerprint == binding.client_key_fingerprint
             && entry.registration_epoch == registration_epoch
     }

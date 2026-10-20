@@ -80,11 +80,7 @@ impl MemberChallenges {
         let mut entries = self.0.lock();
         entries.retain(|_, challenge| challenge.expires > now);
         if entries.len() >= CHALLENGE_LIMIT {
-            return Err(HumanInviteHttpError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "member_challenge_capacity",
-                "Retry after the pending challenges expire.",
-            ));
+            return Err(challenge_capacity());
         }
         // Two independent random UUIDs supply 244 random bits, without raw credentials.
         let id = format!(
@@ -199,6 +195,16 @@ fn invalid_challenge() -> HumanInviteHttpError {
     HumanInviteHttpError::unauthorized(
         "member_challenge_invalid",
         "Start again with a fresh member challenge and grant.",
+    )
+}
+
+/// The one capacity refusal the member challenge stores share: too many
+/// pending challenges on this host, retry when they expire.
+pub(super) fn challenge_capacity() -> HumanInviteHttpError {
+    HumanInviteHttpError::new(
+        StatusCode::TOO_MANY_REQUESTS,
+        "member_challenge_capacity",
+        "Retry after the pending challenges expire.",
     )
 }
 

@@ -4600,6 +4600,12 @@ contradicted the design, the review decided. The binding shape:
   `expires_at`. The tuple's `client_public_key` is the ephemeral key of
   the channel the request arrived on; the device's own resume public key
   travels beside it and selects the stored row the host verifies.
+- **Nonce store.** The host-issued resume nonces are bounded like the
+  connect challenge map: one outstanding nonce per channel (a new request
+  replaces that channel's previous nonce) and at most 1024 channels at
+  once, which answers the same 429 (`member_challenge_capacity`) as the
+  challenge map. A client that asks for more nonces than the host can hold
+  never grows the host's memory.
 - **Revocation.** The person's resume rows are deleted in the same
   transaction as the `central_member_removals` insert
   (`central_member_removal.rs`, `account_deleted_host.rs`) and in
@@ -4668,6 +4674,9 @@ Acceptance for this slice:
   `expires_at` unchanged. A direct resume never issues or refreshes a key:
   the `resume-key` request after a resume is refused and the stored
   `expires_at` stays byte-identical.
+- The nonce store keeps one outstanding nonce per channel: a replaced
+  nonce never opens the direct path, and the store refuses one channel too
+  many with the challenge map's 429.
 - The stored projection and `acked_revision` stay unchanged across a
   direct list and select; a kick or a leave refuses the direct select
   with `MemberMembershipEnded`; the account-deletion insert makes
