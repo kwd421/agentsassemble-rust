@@ -765,3 +765,5 @@ checks and phase-wide Daybreak review. Actual providers and packaged flows remai
 in the final-stage matrix. Cost review covers bounded catalog projection, one
 command/transaction/effect chain and existing resource ownership; no background
 work or new external dependency is needed.
+
+Claude Code Ultracode (owner, 2026-10-20): the Claude Agent SDK runtime offers "Ultracode" as an extra 추론 강도 choice only on models whose SDK catalog includes `xhigh`. Selecting it runs the session at `xhigh` with the Claude Code session setting `ultracode: true` (dynamic-workflow orchestration); the applied-effort receipt for such a session is `xhigh`. It is stored as `reasoning_effort = "ultracode"` and shown with the galaxy avatar effect like Codex `ultra`. Real execution follows the existing Claude Code verification approval rules.

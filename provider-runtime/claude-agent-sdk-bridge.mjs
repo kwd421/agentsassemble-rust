@@ -10,6 +10,9 @@ const MAX_RESULT_BYTES = 128 * 1024;
 const MODEL_ID = /^claude-(?:fable|haiku|opus|sonnet)-\d+(?:-\d+)?$/;
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
+// Ultracode is a Claude Code session setting, not a model effort: it runs at xhigh
+// with dynamic-workflow orchestration and needs an xhigh-capable model.
+const ULTRACODE = "ultracode";
 
 class InputQueue {
   #values = [];
@@ -172,7 +175,9 @@ function nativePermissionMode(permission) {
 function sessionOptions(command, claudePath, sessionId) {
   const workspace = requireString(command.workspace, "workspace");
   const model = requireString(command.model, "model");
-  const effort = requireString(command.reasoning_effort, "reasoning effort");
+  const requested = requireString(command.reasoning_effort, "reasoning effort");
+  const ultracode = requested === ULTRACODE;
+  const effort = ultracode ? "xhigh" : requested;
   const permission = command.permission_mode;
   const tier = command.service_tier;
   if (!MODEL_ID.test(model) || !EFFORTS.has(effort)) throw new Error("invalid runtime selection");
@@ -203,6 +208,7 @@ function sessionOptions(command, claudePath, sessionId) {
     },
     systemPrompt: { type: "preset", preset: "claude_code", snapshot: true },
     settings: {
+      ...(ultracode ? { ultracode: true } : {}),
       ...(tier === "fast" ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
       ...(permission === "workspace_write" ? { permissions: { ask: ["Bash", "Edit", "Write", "NotebookEdit"] } } : {}),
     },

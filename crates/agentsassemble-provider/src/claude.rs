@@ -32,6 +32,9 @@ use crate::{guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease};
 
 const PREFERRED_MODEL: &str = "claude-haiku-4-5";
 const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+// Ultracode is a Claude Code session setting (xhigh plus dynamic-workflow
+// orchestration), offered only on models that support xhigh.
+const ULTRACODE: &str = "ultracode";
 
 pub(crate) async fn discover(
     mut provider: ProviderAvailability,
@@ -231,6 +234,10 @@ fn parse_catalog(output: &str) -> Option<ClaudeCatalog> {
         if efforts.is_empty() {
             return None;
         }
+        if efforts.iter().any(|effort| effort == "xhigh") {
+            observed_efforts.insert(ULTRACODE.to_owned());
+            efforts.push(ULTRACODE.to_owned());
+        }
         has_fast |= model.fast;
         let service_tiers = if model.fast {
             vec!["default", "fast"]
@@ -252,6 +259,7 @@ fn parse_catalog(output: &str) -> Option<ClaudeCatalog> {
     }
     let efforts = EFFORTS
         .into_iter()
+        .chain([ULTRACODE])
         .filter(|effort| observed_efforts.contains(*effort))
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
@@ -387,7 +395,8 @@ impl ProviderDriver for ClaudeAgentSdkDriver {
 #[cfg(any(unix, windows))]
 fn validate_profile(session: &DurableAgentSession) -> Result<(), DriverError> {
     if !valid_model_id(&session.public.model)
-        || !EFFORTS.contains(&session.public.reasoning_effort.as_str())
+        || !(EFFORTS.contains(&session.public.reasoning_effort.as_str())
+            || session.public.reasoning_effort == ULTRACODE)
         || !matches!(session.public.service_tier.as_str(), "default" | "fast")
         || !matches!(
             session.public.permission_mode.as_str(),
@@ -425,6 +434,7 @@ fn effort_label(effort: &str) -> &str {
         "high" => "High",
         "xhigh" => "XHigh",
         "max" => "Max",
+        ULTRACODE => "Ultracode",
         _ => effort,
     }
 }

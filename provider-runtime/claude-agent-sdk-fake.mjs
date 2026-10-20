@@ -70,6 +70,10 @@ class FakeQuery {
           throw new Error("incorrect persistent instruction or resume options");
         }
       }
+      if (process.env.AA_FAKE_EXPECT_ULTRACODE &&
+          (this.options.effort !== "xhigh" || this.options.settings?.ultracode !== true)) {
+        throw new Error("ultracode must run at xhigh with the ultracode setting");
+      }
       yield {
         type: "system",
         subtype: "init",

@@ -7,7 +7,19 @@ fn catalog_preserves_exact_per_model_relations() {
     )
     .unwrap_or_else(|| panic!("parse Claude catalog"));
     assert_eq!(catalog.default_model, "claude-haiku-4-5");
-    assert_eq!(catalog.efforts, ["low", "medium", "high", "xhigh"]);
+    // Ultracode rides on xhigh: offered for Opus (xhigh), not for Haiku.
+    assert_eq!(
+        catalog.efforts,
+        ["low", "medium", "high", "xhigh", "ultracode"]
+    );
+    assert_eq!(
+        catalog.models[0].metadata.get("reasoning_efforts"),
+        Some(&Value::from(vec!["low", "medium"]))
+    );
+    assert_eq!(
+        catalog.models[1].metadata.get("reasoning_efforts"),
+        Some(&Value::from(vec!["high", "xhigh", "ultracode"]))
+    );
     assert_eq!(
         catalog.models[1].metadata.get("service_tiers"),
         Some(&Value::from(vec!["default", "fast"]))
