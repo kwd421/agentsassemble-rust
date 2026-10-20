@@ -128,11 +128,10 @@ impl RemoteOpenAiDriver {
         client: Client,
         endpoint: Url,
     ) -> Result<Self, DriverLaunchError> {
-        if spec.endpoint != RemoteOpenAiEndpoint::AgentSession
-            || !matches!(
-                spec.authentication,
-                RemoteOpenAiAuthentication::Bearer { .. }
-            )
+        if !matches!(
+            spec.endpoint,
+            RemoteOpenAiEndpoint::AgentSession | RemoteOpenAiEndpoint::AgentSettings
+        ) || spec.credential_id().is_none()
         {
             return Err(
                 provider_error("provider_api_unavailable", spec.errors.api_unavailable).into(),
@@ -423,7 +422,7 @@ impl RemoteOpenAiDriver {
                 session.provider_endpoint.is_empty()
                     && self.api.session_endpoint_authority.is_none()
             }
-            RemoteOpenAiEndpoint::AgentSession => self
+            RemoteOpenAiEndpoint::AgentSession | RemoteOpenAiEndpoint::AgentSettings => self
                 .api
                 .session_endpoint_authority
                 .as_deref()
@@ -642,6 +641,9 @@ impl RemoteOpenAiApi {
             (RemoteOpenAiAuthentication::Bearer { .. }, Some(credential)) => {
                 request = request.bearer_auth(credential.expose());
             }
+            (RemoteOpenAiAuthentication::Header { name, .. }, Some(credential)) => {
+                request = request.header(name, credential.expose());
+            }
             (RemoteOpenAiAuthentication::Unauthenticated, None) => {}
             _ => {
                 return Err(provider_error(
@@ -652,6 +654,13 @@ impl RemoteOpenAiApi {
         }
         for (name, value) in self.spec.headers {
             request = request.header(*name, *value);
+        }
+        if let Some((name, value)) = self
+            .spec
+            .service_tier_header
+            .and_then(|header| header(session))
+        {
+            request = request.header(name, value);
         }
         send_chat_completion(request, body)
             .await

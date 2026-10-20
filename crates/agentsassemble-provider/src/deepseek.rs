@@ -22,6 +22,7 @@ pub(crate) static DEEPSEEK_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     provider_kind: "deepseek_api",
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.deepseek.com/chat/completions"),
     headers: &[],
+    service_tier_header: None,
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: true,

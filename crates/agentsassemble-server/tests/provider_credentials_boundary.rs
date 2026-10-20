@@ -137,6 +137,7 @@ async fn remote_api_credential_routes_require_operator_authority() {
     for provider in [
         "cerebras",
         "gemini",
+        "agent_platform",
         "openrouter",
         "vercel",
         "llmgateway",

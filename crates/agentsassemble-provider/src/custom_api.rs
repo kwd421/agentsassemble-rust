@@ -31,6 +31,7 @@ pub(crate) static CUSTOM_API_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     provider_kind: PROVIDER_KIND,
     endpoint: RemoteOpenAiEndpoint::AgentSession,
     headers: &[],
+    service_tier_header: None,
     request_payload,
     response_model: ResponseModelIdentity::EndpointResolved,
     retain_reasoning: false,

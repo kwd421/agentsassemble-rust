@@ -62,6 +62,7 @@ pub(crate) static OPENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         ("HTTP-Referer", "http://127.0.0.1:8765/"),
         ("X-Title", "AgentsAssemble"),
     ],
+    service_tier_header: None,
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,

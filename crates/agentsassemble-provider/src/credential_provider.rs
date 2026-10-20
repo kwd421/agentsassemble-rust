@@ -5,6 +5,7 @@ pub enum ProviderCredentialId {
     DeepSeek,
     Cerebras,
     Gemini,
+    AgentPlatform,
     OpenRouter,
     Vercel,
     LlmGateway,
@@ -19,6 +20,7 @@ impl ProviderCredentialId {
             Self::DeepSeek => "deepseek",
             Self::Cerebras => "cerebras",
             Self::Gemini => "gemini",
+            Self::AgentPlatform => "agent_platform",
             Self::OpenRouter => "openrouter",
             Self::Vercel => "vercel",
             Self::LlmGateway => "llmgateway",
@@ -37,6 +39,10 @@ mod tests {
         assert_eq!(ProviderCredentialId::DeepSeek.as_str(), "deepseek");
         assert_eq!(ProviderCredentialId::Cerebras.as_str(), "cerebras");
         assert_eq!(ProviderCredentialId::Gemini.as_str(), "gemini");
+        assert_eq!(
+            ProviderCredentialId::AgentPlatform.as_str(),
+            "agent_platform"
+        );
         assert_eq!(ProviderCredentialId::OpenRouter.as_str(), "openrouter");
         assert_eq!(ProviderCredentialId::Vercel.as_str(), "vercel");
         assert_eq!(ProviderCredentialId::LlmGateway.as_str(), "llmgateway");

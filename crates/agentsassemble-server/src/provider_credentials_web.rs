@@ -55,6 +55,9 @@ registered_routes! {
         private "/api/provider-credentials/gemini" => get(gemini_status)
             .post(set_gemini)
             .delete(delete_gemini),
+        private "/api/provider-credentials/agent_platform" => get(agent_platform_status)
+            .post(set_agent_platform)
+            .delete(delete_agent_platform),
         private "/api/provider-credentials/openrouter" => get(openrouter_status)
             .post(set_openrouter)
             .delete(delete_openrouter),
@@ -134,6 +137,27 @@ async fn delete_gemini(
     request: Request,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
     delete_credential(state, request, ProviderCredentialId::Gemini).await
+}
+
+async fn agent_platform_status(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    credential_status(state, request, ProviderCredentialId::AgentPlatform).await
+}
+
+async fn set_agent_platform(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    set_credential(state, request, ProviderCredentialId::AgentPlatform).await
+}
+
+async fn delete_agent_platform(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    delete_credential(state, request, ProviderCredentialId::AgentPlatform).await
 }
 
 async fn openrouter_status(

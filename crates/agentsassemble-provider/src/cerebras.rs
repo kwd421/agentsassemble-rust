@@ -25,6 +25,7 @@ pub(crate) static CEREBRAS_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     provider_kind: "cerebras_api",
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.cerebras.ai/v1/chat/completions"),
     headers: &[("X-Cerebras-Version-Patch", "2")],
+    service_tier_header: None,
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,

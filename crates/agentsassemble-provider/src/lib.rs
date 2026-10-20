@@ -5,6 +5,7 @@ mod provider_updater;
 pub use provider_update::{ProviderUpdateError, ProviderUpdateService};
 mod acp_client;
 mod acp_runtime;
+mod agent_platform;
 mod catalog;
 #[cfg(test)]
 mod catalog_lifecycle_tests;

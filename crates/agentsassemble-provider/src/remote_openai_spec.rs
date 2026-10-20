@@ -29,6 +29,10 @@ pub(crate) struct RemoteOpenAiSpec {
     pub(crate) provider_kind: &'static str,
     pub(crate) endpoint: RemoteOpenAiEndpoint,
     pub(crate) headers: &'static [(&'static str, &'static str)],
+    /// The selected tier travels in a request header for providers whose
+    /// OpenAI-compatible endpoint does not read it from the payload.
+    pub(crate) service_tier_header:
+        Option<fn(&DurableAgentSession) -> Option<(&'static str, &'static str)>>,
     pub(crate) request_payload: fn(&DurableAgentSession, &[Value], Option<&[Value]>) -> Value,
     pub(crate) response_model: ResponseModelIdentity,
     pub(crate) retain_reasoning: bool,
@@ -51,6 +55,14 @@ pub(crate) enum RemoteOpenAiAuthentication {
         invalid: &'static str,
         rejected: &'static str,
     },
+    /// The provider authenticates with a fixed API-key header instead of Bearer.
+    Header {
+        name: &'static str,
+        credential: ProviderCredentialId,
+        required: &'static str,
+        invalid: &'static str,
+        rejected: &'static str,
+    },
     Unauthenticated,
 }
 
@@ -58,13 +70,16 @@ pub(crate) enum RemoteOpenAiAuthentication {
 pub(crate) enum RemoteOpenAiEndpoint {
     Fixed(&'static str),
     FixedLoopback(&'static str),
+    /// The caller owns the completion endpoint under the provider's fixed host.
     AgentSession,
+    /// The caller owns project and location settings; the provider fixes the URL shape.
+    AgentSettings,
 }
 
 impl RemoteOpenAiEndpoint {
     pub(crate) const fn transport(self) -> &'static str {
         match self {
-            Self::Fixed(_) | Self::AgentSession => "https",
+            Self::Fixed(_) | Self::AgentSession | Self::AgentSettings => "https",
             Self::FixedLoopback(_) => "http",
         }
     }
@@ -73,17 +88,23 @@ impl RemoteOpenAiEndpoint {
 impl RemoteOpenAiSpec {
     pub(crate) const fn credential_id(&self) -> Option<ProviderCredentialId> {
         match self.authentication {
-            RemoteOpenAiAuthentication::Bearer { credential, .. } => Some(credential),
+            RemoteOpenAiAuthentication::Bearer { credential, .. }
+            | RemoteOpenAiAuthentication::Header { credential, .. } => Some(credential),
             RemoteOpenAiAuthentication::Unauthenticated => None,
         }
     }
 
     pub(crate) const fn credential_error(&self, error: ProviderCredentialError) -> DriverError {
-        let RemoteOpenAiAuthentication::Bearer {
-            required, invalid, ..
-        } = self.authentication
-        else {
-            return provider_error("provider_protocol_invalid", self.errors.invalid_response);
+        let (required, invalid) = match self.authentication {
+            RemoteOpenAiAuthentication::Bearer {
+                required, invalid, ..
+            }
+            | RemoteOpenAiAuthentication::Header {
+                required, invalid, ..
+            } => (required, invalid),
+            RemoteOpenAiAuthentication::Unauthenticated => {
+                return provider_error("provider_protocol_invalid", self.errors.invalid_response);
+            }
         };
         match error {
             ProviderCredentialError::MissingSecret => {
@@ -105,7 +126,8 @@ impl RemoteOpenAiSpec {
                 provider_error("provider_context_limit", self.errors.context_limit)
             }
             OpenAiStreamError::CredentialRejected => match self.authentication {
-                RemoteOpenAiAuthentication::Bearer { rejected, .. } => {
+                RemoteOpenAiAuthentication::Bearer { rejected, .. }
+                | RemoteOpenAiAuthentication::Header { rejected, .. } => {
                     provider_error("provider_credential_rejected", rejected)
                 }
                 RemoteOpenAiAuthentication::Unauthenticated => {

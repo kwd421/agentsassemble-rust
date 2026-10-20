@@ -5,6 +5,7 @@ use crate::registration::provider_registrations;
 #[test]
 fn registrations_cover_each_retained_provider_once() {
     let expected = BTreeSet::from([
+        "agent_platform",
         "cerebras",
         "claude",
         "codex",

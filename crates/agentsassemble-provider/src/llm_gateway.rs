@@ -37,6 +37,7 @@ pub(crate) static LLM_GATEWAY_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     provider_kind: PROVIDER_KIND,
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.llmgateway.io/v1/chat/completions"),
     headers: &[],
+    service_tier_header: None,
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,

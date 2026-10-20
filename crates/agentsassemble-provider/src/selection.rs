@@ -176,21 +176,31 @@ impl ProviderSelection {
                 "Bot cards and Risu modules are available only to API and Local Agent Sessions.",
             ));
         }
-        let provider_endpoint = if registration.configuration_authority.custom_endpoint() {
-            let requested = input.provider_endpoint.as_deref().unwrap_or_default();
-            crate::custom_api::normalize_endpoint(requested).map_err(|error| {
-                ProviderSelectionError::new("invalid_provider_endpoint", error.message())
-            })?
-        } else if input
-            .provider_endpoint
-            .is_some_and(|value| !value.is_empty())
-        {
-            return Err(ProviderSelectionError::new(
-                "unsupported_control",
-                "This provider does not accept a custom endpoint.",
-            ));
-        } else {
-            String::new()
+        let provider_endpoint = match registration.configuration_authority {
+            crate::registration::ProviderConfigurationAuthority::CallerOpenAi => {
+                let requested = input.provider_endpoint.as_deref().unwrap_or_default();
+                crate::custom_api::normalize_endpoint(requested).map_err(|error| {
+                    ProviderSelectionError::new("invalid_provider_endpoint", error.message())
+                })?
+            }
+            crate::registration::ProviderConfigurationAuthority::CallerAgentSettings => {
+                let requested = input.provider_endpoint.as_deref().unwrap_or_default();
+                crate::agent_platform::normalize_settings(requested).map_err(|error| {
+                    ProviderSelectionError::new("invalid_provider_endpoint", error.message())
+                })?
+            }
+            crate::registration::ProviderConfigurationAuthority::Catalog => {
+                if input
+                    .provider_endpoint
+                    .is_some_and(|value| !value.is_empty())
+                {
+                    return Err(ProviderSelectionError::new(
+                        "unsupported_control",
+                        "This provider does not accept a custom endpoint.",
+                    ));
+                }
+                String::new()
+            }
         };
         let workspace_required = registration.workspace_required
             || matches!(permission_mode.as_str(), "workspace_write" | "full_access")
@@ -340,6 +350,10 @@ fn executable_validation_error(failure: FilesystemFailure) -> ProviderSelectionE
 #[cfg(test)]
 #[path = "selection_custom_api_tests.rs"]
 mod custom_api_tests;
+
+#[cfg(test)]
+#[path = "selection_agent_platform_tests.rs"]
+mod agent_platform_tests;
 
 #[cfg(test)]
 mod tests {

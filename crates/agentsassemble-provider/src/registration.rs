@@ -7,7 +7,7 @@ use tokio_util::sync::CancellationToken;
 #[cfg(any(unix, windows))]
 use crate::claude::ClaudeAgentSdkDriver;
 use crate::{
-    ProviderCredentialId,
+    ProviderCredentialId, agent_platform,
     catalog::{
         discover_cerebras, discover_codex, discover_custom_api, discover_deepseek,
         discover_llm_gateway, discover_opencode, discover_openrouter, discover_tokenrouter,
@@ -54,6 +54,7 @@ pub(crate) type ProviderLaunch =
 pub(crate) enum ProviderConfigurationAuthority {
     Catalog,
     CallerOpenAi,
+    CallerAgentSettings,
 }
 
 impl ProviderConfigurationAuthority {
@@ -275,6 +276,27 @@ pub(crate) static GEMINI_PROVIDER: ProviderRegistration = ProviderRegistration {
     launch: launch_gemini,
 };
 
+pub(crate) static AGENT_PLATFORM_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "agent_platform",
+    display_name: agent_platform::DISPLAY_NAME,
+    provider_kind: agent_platform::PROVIDER_KIND,
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    remote_spec: Some(&agent_platform::AGENT_PLATFORM_SPEC),
+    update: None,
+    usage: None,
+    login: None,
+    turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
+    configuration_authority: ProviderConfigurationAuthority::CallerAgentSettings,
+    discover: discover_agent_platform_registered,
+    launch: launch_agent_platform,
+};
+
 pub(crate) static OPENROUTER_PROVIDER: ProviderRegistration = ProviderRegistration {
     id: "openrouter",
     display_name: "OpenRouter",
@@ -389,6 +411,7 @@ static PROVIDER_REGISTRATIONS: &[&ProviderRegistration] = &[
     &DEEPSEEK_PROVIDER,
     &CEREBRAS_PROVIDER,
     &GEMINI_PROVIDER,
+    &AGENT_PLATFORM_PROVIDER,
     &OPENROUTER_PROVIDER,
     &VERCEL_PROVIDER,
     &LLM_GATEWAY_PROVIDER,
@@ -535,6 +558,18 @@ fn discover_gemini_registered<'a>(
     cancellation: &'a CancellationToken,
 ) -> ProviderDiscoveryFuture<'a> {
     Box::pin(gemini::discover(provider, credentials, cancellation))
+}
+
+fn discover_agent_platform_registered<'a>(
+    provider: ProviderAvailability,
+    credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
+    Box::pin(agent_platform::discover(
+        provider,
+        credentials,
+        cancellation,
+    ))
 }
 
 fn discover_openrouter_registered<'a>(
@@ -808,6 +843,22 @@ fn launch_gemini<'a>(
             .await
             .map_err(|error| DriverLaunchError::safe(gemini::credential_error(error)))?;
         let driver = gemini::launch(factory.credentials.clone()).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_agent_platform<'a>(
+    factory: &'a ProductionDriverFactory,
+    session: &'a DurableAgentSession,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        factory
+            .credentials
+            .secret(ProviderCredentialId::AgentPlatform)
+            .await
+            .map_err(|error| DriverLaunchError::safe(agent_platform::credential_error(error)))?;
+        let driver = agent_platform::launch(factory.credentials.clone(), session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

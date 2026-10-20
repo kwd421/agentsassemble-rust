@@ -54,6 +54,7 @@ static SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     provider_kind: "ollama_api",
     endpoint: RemoteOpenAiEndpoint::FixedLoopback("http://127.0.0.1:11434/v1/chat/completions"),
     headers: &[],
+    service_tier_header: None,
     request_payload,
     response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
