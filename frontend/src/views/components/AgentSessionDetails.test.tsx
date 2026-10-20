@@ -276,6 +276,20 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(save()).toBe(true);
   });
 
+  it("explains next to the save button that writing needs a work folder", async () => {
+    const onConfigure = vi.fn().mockRejectedValue(Object.assign(new Error("An existing workspace directory is required."), { code: "invalid_workspace" }));
+    const session = agentSessionFixture({
+      runtime_status: "stopped", enabled: false, provider_kind: "gemini_api",
+      model: "gemini-3.1-flash-lite", service_tier: "default", permission_mode: "meeting_read_only",
+    });
+    render(<AgentSessionDetails session={session} provider={geminiProvider()} onConfigure={onConfigure} />);
+    fireEvent.click(screen.getByText("실행 설정"));
+    await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
+    await userEvent.click(screen.getByRole("option", { name: /작업 폴더 쓰기/ }));
+    await userEvent.click(screen.getByRole("button", { name: "실행 설정 저장" }));
+    expect(await screen.findByText("작업 폴더 쓰기와 전체 액세스는 작업 폴더를 골라 만든 에이전트만 쓸 수 있어요.")).toBeTruthy();
+  });
+
   it("replaces the applied bot card on a stopped API session", async () => {
     const onConfigure = vi.fn().mockResolvedValue(undefined);
     const provider: NativeCliProviderAvailability = {

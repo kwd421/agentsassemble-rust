@@ -16,7 +16,7 @@ import AgentActivitySettings from "./AgentActivitySettings";
 import ProviderModelRefresh from "./ProviderModelRefresh";
 import { resolveProviderPresentation } from "./providerBranding";
 import ProviderRuntimeSettingField from "./ProviderRuntimeSettingField";
-import { userFacingError } from "../../lib/apiErrors";
+import { errorCodeOf, userFacingError } from "../../lib/apiErrors";
 
 export type AgentSessionControlAction = "start" | "pause" | "stop" | "resume" | "interrupt";
 
@@ -221,6 +221,7 @@ export default function AgentSessionDetails({
 }) {
   const [pendingAction, setPendingAction] = useState<AgentSessionControlAction | null>(null);
   const [actionStatus, setActionStatus] = useState("");
+  const [settingsStatus, setSettingsStatus] = useState("");
   // Only the owner's unsaved edits are state; everything else follows the saved values.
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -332,14 +333,17 @@ export default function AgentSessionDetails({
       settingsBusy
     ) return;
     setSettingsBusy(true);
-    setActionStatus("");
+    setSettingsStatus("");
     try {
       if (settings.permission_mode === "full_access") await onConfigure(session, settings, true);
       else await onConfigure(session, settings);
       // The saved form state is the only feedback; no success box.
-      setActionStatus("");
+      setSettingsStatus("");
     } catch (error) {
-      setActionStatus(userFacingError(error, "실행 설정을 저장하지 못했어요."));
+      // Only agents created with a work folder can write: settings cannot pick one.
+      setSettingsStatus(errorCodeOf(error) === "invalid_workspace"
+        ? "작업 폴더 쓰기와 전체 액세스는 작업 폴더를 골라 만든 에이전트만 쓸 수 있어요."
+        : userFacingError(error, "실행 설정을 저장하지 못했어요."));
     } finally {
       setSettingsBusy(false);
     }
@@ -490,6 +494,7 @@ export default function AgentSessionDetails({
                   : `${invalidRuntimeControl.label}을(를) 선택하세요.`
                 : `${runtimeSettingLabels}을 함께 저장해요. 변경은 다음 세션 시작부터 적용돼요.`}
           </p>
+          {settingsStatus && <p role="status" className="dc-member-session-status preserve-words">{settingsStatus}</p>}
           </div>
         </details>
       )}

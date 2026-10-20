@@ -53,7 +53,7 @@ const KNOWN_ERROR_KOREAN: Record<string, string> = {
   workspace_picker_failed: "폴더 선택 창을 열지 못했어요. 앱을 앞으로 가져온 뒤 다시 시도해 주세요.",
 };
 
-function errorCodeOf(error: unknown): string {
+export function errorCodeOf(error: unknown): string {
   if (error !== null && typeof error === "object") {
     const record = error as { code?: unknown; category?: unknown };
     if (typeof record.code === "string" && record.code.trim()) return record.code.trim();
