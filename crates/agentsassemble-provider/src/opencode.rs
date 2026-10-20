@@ -22,8 +22,8 @@ use crate::{
     launch_error::DriverLaunchError,
     loopback_http::{JsonResponse, LoopbackHttp, VerifiedLoopbackConnection},
     opencode_protocol::{
-        assistant_message, clean_session_id, config_error, executable_error, http_driver_error,
-        is_harness, model_mismatch, model_parts, profile_error, protocol_error,
+        OpenCodeApi, assistant_message, clean_session_id, config_error, executable_error,
+        http_driver_error, is_harness, model_mismatch, model_parts, profile_error, protocol_error,
         provider_request_error, provider_response_error, runtime_exited, session_mismatch,
         session_missing, session_model, session_path, session_unconfirmed, startup_error,
         turn_empty, turn_in_progress, turn_mismatch, turn_transport_error, validate_profile,
@@ -50,7 +50,9 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const TURN_TIMEOUT: Duration = Duration::from_mins(3);
 const MCP_NAME: &str = "agentsassemble_room";
-const SERVER_USERNAME: &str = "agentsassemble";
+// OpenCode 2 accepts Basic auth only under this fixed username; the password
+// still comes from the per-launch OPENCODE_SERVER_PASSWORD capability.
+const SERVER_USERNAME: &str = "opencode";
 
 pub(crate) struct OpenCodeDriver {
     #[cfg(unix)]
@@ -70,6 +72,7 @@ pub(crate) struct OpenCodeDriver {
     attached_reused: bool,
     session_creation: SessionCreationAuthority,
     mcp_registered: bool,
+    api: OpenCodeApi,
     active_turn: Option<ProviderTurnRequest>,
     completed_turn: Option<(ProviderTurnRequest, ProviderTurnCompleted)>,
     poisoned: bool,
@@ -193,6 +196,7 @@ impl OpenCodeDriver {
             attached_reused: false,
             session_creation: SessionCreationAuthority::default(),
             mcp_registered: false,
+            api: OpenCodeApi::V1,
             active_turn: None,
             completed_turn: None,
             poisoned: false,
@@ -226,6 +230,23 @@ impl OpenCodeDriver {
             return Err(startup_error());
         }
         loop {
+            // OpenCode 2 serves the JSON API under /api and reports its version from
+            // /api/info. OpenCode 1 only has /global/health. Probe both once per
+            // launch; afterwards every request uses that single decided shape.
+            if let Ok(connection) = self.connect_owned_peer().await
+                && let Ok(response) = connection
+                    .get_json("/api/info", Duration::from_millis(500))
+                    .await
+                && response.status.is_success()
+                && response
+                    .value
+                    .get("version")
+                    .and_then(Value::as_str)
+                    .is_some()
+            {
+                self.api = OpenCodeApi::V2;
+                return Ok(());
+            }
             if let Ok(connection) = self.connect_owned_peer().await
                 && let Ok(response) = connection
                     .get_json("/global/health", Duration::from_millis(500))
@@ -233,6 +254,7 @@ impl OpenCodeDriver {
                 && response.status.is_success()
                 && response.value.get("healthy").and_then(Value::as_bool) == Some(true)
             {
+                self.api = OpenCodeApi::V1;
                 return Ok(());
             }
             if tokio::time::Instant::now() >= deadline {
@@ -292,39 +314,95 @@ impl OpenCodeDriver {
     }
 
     async fn register_room_portal(&mut self) -> Result<(), DriverError> {
+        let headers = json!({
+            "Authorization": format!("Bearer {}", self.room_portal.bearer_token()),
+        });
+        if self.api == OpenCodeApi::V1 {
+            let response = self
+                .connect_owned_peer()
+                .await?
+                .post_json(
+                    "/mcp",
+                    &json!({
+                        "name": MCP_NAME,
+                        "config": {
+                            "type": "remote",
+                            "url": self.room_portal.endpoint(),
+                            "enabled": true,
+                            "headers": headers,
+                            "timeout": 10_000,
+                        },
+                    }),
+                    STARTUP_TIMEOUT,
+                )
+                .await
+                .map_err(http_driver_error)?;
+            return if response.status.is_success()
+                && response
+                    .value
+                    .get(MCP_NAME)
+                    .and_then(Value::as_object)
+                    .and_then(|status| status.get("status"))
+                    .and_then(Value::as_str)
+                    == Some("connected")
+            {
+                Ok(())
+            } else {
+                Err(ROOM_PORTAL_UNAVAILABLE)
+            };
+        }
         let response = self
             .connect_owned_peer()
             .await?
-            .post_json(
-                "/mcp",
+            .put_json(
+                &self.api.mcp_path(MCP_NAME)?,
                 &json!({
-                    "name": MCP_NAME,
                     "config": {
                         "type": "remote",
                         "url": self.room_portal.endpoint(),
-                        "enabled": true,
-                        "headers": {
-                            "Authorization": format!("Bearer {}", self.room_portal.bearer_token()),
-                        },
-                        "timeout": 10_000,
+                        "disabled": false,
+                        "headers": headers,
+                        "timeout": {"startup": 10_000},
                     },
                 }),
                 STARTUP_TIMEOUT,
             )
             .await
             .map_err(http_driver_error)?;
-        let connected = response.status.is_success()
-            && response
-                .value
-                .get(MCP_NAME)
-                .and_then(Value::as_object)
-                .and_then(|status| status.get("status"))
-                .and_then(Value::as_str)
-                == Some("connected");
-        if connected {
-            Ok(())
-        } else {
-            Err(ROOM_PORTAL_UNAVAILABLE)
+        if !response.status.is_success() {
+            return Err(ROOM_PORTAL_UNAVAILABLE);
+        }
+        self.wait_for_mcp_connected().await
+    }
+
+    async fn wait_for_mcp_connected(&mut self) -> Result<(), DriverError> {
+        let deadline = tokio::time::Instant::now() + STARTUP_TIMEOUT;
+        loop {
+            if let Ok(connection) = self.connect_owned_peer().await
+                && let Ok(response) = connection
+                    .get_json(self.api.mcp_list_path(), Duration::from_millis(1_000))
+                    .await
+                && response.status.is_success()
+            {
+                let connected = response
+                    .value
+                    .get("data")
+                    .and_then(Value::as_array)
+                    .is_some_and(|servers| {
+                        servers.iter().any(|server| {
+                            server.get("name").and_then(Value::as_str) == Some(MCP_NAME)
+                                && server.pointer("/status/status").and_then(Value::as_str)
+                                    == Some("connected")
+                        })
+                    });
+                if connected {
+                    return Ok(());
+                }
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(ROOM_PORTAL_UNAVAILABLE);
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 
@@ -346,12 +424,15 @@ impl OpenCodeDriver {
         if !session.public.variant.is_empty() {
             model["variant"] = json!(session.public.variant);
         }
-        let connection = self.connect_owned_peer().await?;
-        guarded_session_creation(&mut self.session_creation, async move {
-            let response = connection
-                .post_json(
-                "/session",
-                &json!({
+        let external = if permission_action == "allow" {
+            "allow"
+        } else {
+            "deny"
+        };
+        let (path, payload) = match self.api {
+            OpenCodeApi::V1 => (
+                "/session".to_owned(),
+                json!({
                     "title": format!("AgentsAssemble {}", session.public.session_id),
                     "model": model,
                     "permission": [
@@ -360,21 +441,44 @@ impl OpenCodeDriver {
                         {"permission": "glob", "pattern": "*", "action": "allow"},
                         {"permission": "grep", "pattern": "*", "action": "allow"},
                         {"permission": "list", "pattern": "*", "action": "allow"},
-                        {"permission": "external_directory", "pattern": "*", "action": if permission_action == "allow" { "allow" } else { "deny" }},
+                        {"permission": "external_directory", "pattern": "*", "action": external},
                         {"permission": "agentsassemble_room_*", "pattern": "*", "action": "allow"},
                     ],
                 }),
-                REQUEST_TIMEOUT,
-            )
-            .await
-            .map_err(http_driver_error)?;
+            ),
+            OpenCodeApi::V2 => (
+                self.api.sessions_path().to_owned(),
+                json!({
+                    "title": format!("AgentsAssemble {}", session.public.session_id),
+                    "agent": "build",
+                    "model": model,
+                    "permissions": [
+                        {"action": "*", "resource": "*", "effect": permission_action},
+                        {"action": "read", "resource": "*", "effect": "allow"},
+                        {"action": "glob", "resource": "*", "effect": "allow"},
+                        {"action": "grep", "resource": "*", "effect": "allow"},
+                        {"action": "list", "resource": "*", "effect": "allow"},
+                        {"action": "external_directory", "resource": "*", "effect": external},
+                        {"action": "agentsassemble_room_*", "resource": "*", "effect": "allow"},
+                    ],
+                }),
+            ),
+        };
+        let connection = self.connect_owned_peer().await?;
+        let api = self.api;
+        guarded_session_creation(&mut self.session_creation, async move {
+            let response = connection
+                .post_json(&path, &payload, REQUEST_TIMEOUT)
+                .await
+                .map_err(http_driver_error)?;
             if !response.status.is_success() {
                 return Err(provider_request_error());
             }
-            response
-                .value
-                .get("id")
-                .and_then(Value::as_str)
+            let id = match api {
+                OpenCodeApi::V1 => response.value.get("id"),
+                OpenCodeApi::V2 => response.value.pointer("/data/id"),
+            };
+            id.and_then(Value::as_str)
                 .and_then(clean_session_id)
                 .ok_or_else(session_unconfirmed)
         })
@@ -385,7 +489,10 @@ impl OpenCodeDriver {
         let response = self
             .connect_owned_peer()
             .await?
-            .get_json(&session_path(provider_session_id)?, REQUEST_TIMEOUT)
+            .get_json(
+                &session_path(self.api, provider_session_id)?,
+                REQUEST_TIMEOUT,
+            )
             .await
             .map_err(http_driver_error)?;
         match response.status {
@@ -440,10 +547,14 @@ impl OpenCodeDriver {
             let response = self
                 .connect_owned_peer()
                 .await?
-                .post_json("/instance/dispose", &json!({}), STARTUP_TIMEOUT)
+                .post_json(self.api.reload_path(), &json!({}), STARTUP_TIMEOUT)
                 .await
                 .map_err(http_driver_error)?;
-            if !response.status.is_success() || response.value != json!(true) {
+            let reloaded = match self.api {
+                OpenCodeApi::V1 => response.value == json!(true),
+                OpenCodeApi::V2 => response.status == StatusCode::NO_CONTENT,
+            };
+            if !response.status.is_success() || !reloaded {
                 return Err(config_error());
             }
             self.register_room_portal().await?;
@@ -453,23 +564,34 @@ impl OpenCodeDriver {
         let event_response = self
             .connect_owned_peer()
             .await?
-            .get_stream("/event", TURN_TIMEOUT)
+            .get_stream(self.api.event_path(), TURN_TIMEOUT)
             .await
             .map_err(http_driver_error)?;
-        let path = format!("{}/message", session_path(&attached)?);
-        let model = session_model(session)?;
-        let (provider, model_id) = model_parts(&model, is_harness(session))?;
-        let mut payload = json!({
-            "model": {
-                "providerID": provider,
-                "modelID": model_id,
-            },
-            "agent": "build",
-            "parts": [{"type": "text", "text": request.input}],
-        });
-        if !session.public.variant.is_empty() {
-            payload["variant"] = json!(session.public.variant);
-        }
+        let (path, payload) = match self.api {
+            OpenCodeApi::V1 => {
+                let model = session_model(session)?;
+                let (provider, model_id) = model_parts(&model, is_harness(session))?;
+                let mut payload = json!({
+                    "model": {
+                        "providerID": provider,
+                        "modelID": model_id,
+                    },
+                    "agent": "build",
+                    "parts": [{"type": "text", "text": request.input}],
+                });
+                if !session.public.variant.is_empty() {
+                    payload["variant"] = json!(session.public.variant);
+                }
+                (
+                    format!("{}/message", session_path(self.api, &attached)?),
+                    payload,
+                )
+            }
+            OpenCodeApi::V2 => (
+                format!("{}/prompt", session_path(self.api, &attached)?),
+                json!({"text": request.input}),
+            ),
+        };
         let prompt_connection = self.connect_owned_peer().await?;
         let (prompt, events) = match self
             .run_turn_transport(
@@ -486,7 +608,7 @@ impl OpenCodeDriver {
             Err(error) => return self.poison(error),
         };
         let completed =
-            Self::completed_from_response(session, request, &attached, &prompt, &events);
+            Self::completed_from_response(session, request, &attached, &prompt, &events, self.api);
         match completed {
             Ok(completed) => {
                 self.active_turn = None;
@@ -503,6 +625,7 @@ impl OpenCodeDriver {
         attached: &str,
         prompt: &JsonResponse,
         events: &OpenCodeTurnEvents,
+        api: OpenCodeApi,
     ) -> Result<ProviderTurnCompleted, DriverError> {
         if !prompt.status.is_success()
             || prompt
@@ -512,29 +635,51 @@ impl OpenCodeDriver {
         {
             return Err(provider_response_error(&prompt.value));
         }
-        let message = assistant_message(&prompt.value)?;
-        if message.parent_id != events.request_message {
-            return Err(turn_mismatch());
-        }
-        if !events.assistant_message.is_empty() && message.id != events.assistant_message {
-            return Err(turn_mismatch());
-        }
-        if message.observed_model != session_model(session)?
-            || events.observed_model != session_model(session)?
-            || message.observed_model != events.observed_model
-        {
-            return Err(model_mismatch());
-        }
-        if message.content.is_empty() && request.room_observation.is_none() {
+        let (provider_turn_id, content) = match api {
+            OpenCodeApi::V1 => {
+                let message = assistant_message(&prompt.value)?;
+                if message.parent_id != events.request_message {
+                    return Err(turn_mismatch());
+                }
+                if !events.assistant_message.is_empty() && message.id != events.assistant_message {
+                    return Err(turn_mismatch());
+                }
+                if message.observed_model != session_model(session)?
+                    || events.observed_model != session_model(session)?
+                    || message.observed_model != events.observed_model
+                {
+                    return Err(model_mismatch());
+                }
+                (message.id, message.content)
+            }
+            OpenCodeApi::V2 => {
+                let request_message = prompt
+                    .value
+                    .pointer("/data/id")
+                    .and_then(Value::as_str)
+                    .and_then(clean_session_id);
+                if request_message.as_deref() != Some(events.request_message.as_str()) {
+                    return Err(turn_mismatch());
+                }
+                if events.assistant_message.is_empty() {
+                    return Err(turn_empty());
+                }
+                if events.observed_model != session_model(session)? {
+                    return Err(model_mismatch());
+                }
+                (events.assistant_message.clone(), events.content.clone())
+            }
+        };
+        if content.is_empty() && request.room_observation.is_none() {
             return Err(turn_empty());
         }
         Ok(ProviderTurnCompleted {
             turn_id: request.turn_id.clone(),
-            provider_turn_id: message.id,
+            provider_turn_id,
             provider_session_id: Some(attached.to_owned()),
             outcome: ProviderTurnOutcome::Message {
                 attachment_ids: Vec::new(),
-                content: message.content,
+                content,
                 target_agent_id: String::new(),
                 reply_to_event_id: None,
             },
@@ -542,16 +687,28 @@ impl OpenCodeDriver {
     }
 
     async fn abort_session(&mut self, session_id: &str) -> Result<(), DriverError> {
-        let Ok(path) = session_path(session_id).map(|path| format!("{path}/abort")) else {
+        let Ok(path) = session_path(self.api, session_id) else {
             return Err(protocol_error());
+        };
+        let (path, payload) = match self.api {
+            OpenCodeApi::V1 => (format!("{path}/abort"), json!({})),
+            OpenCodeApi::V2 => (format!("{path}/interrupt"), json!({})),
         };
         let response = self
             .connect_owned_peer()
             .await?
-            .post_json(&path, &json!({}), Duration::from_secs(5))
+            .post_json(&path, &payload, Duration::from_secs(5))
             .await
             .map_err(http_driver_error)?;
-        if !response.status.is_success() || response.value.as_bool() != Some(true) {
+        let interrupted = match self.api {
+            OpenCodeApi::V1 => response.value.as_bool() == Some(true),
+            OpenCodeApi::V2 => response
+                .value
+                .get("interrupted")
+                .and_then(Value::as_bool)
+                .is_some(),
+        };
+        if !response.status.is_success() || !interrupted {
             return Err(provider_request_error());
         }
         Ok(())
@@ -578,7 +735,7 @@ impl OpenCodeDriver {
         let events = self
             .connect_owned_peer()
             .await?
-            .get_stream("/event", Duration::from_secs(10))
+            .get_stream(self.api.event_path(), Duration::from_secs(10))
             .await
             .map_err(http_driver_error)?;
         self.abort_session(&attached).await?;

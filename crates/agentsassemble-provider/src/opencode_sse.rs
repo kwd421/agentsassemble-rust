@@ -30,6 +30,7 @@ pub(crate) struct OpenCodeTurnEvents {
     pub(crate) request_message: String,
     pub(crate) assistant_message: String,
     pub(crate) observed_model: String,
+    pub(crate) content: String,
 }
 
 #[derive(Default)]
@@ -62,19 +63,31 @@ impl EventState {
             .get("type")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let Some(properties) = event.get("properties").and_then(Value::as_object) else {
+        // OpenCode 1 wraps its event payload in `properties`; OpenCode 2 uses `data`.
+        let Some(properties) = event
+            .get("properties")
+            .or_else(|| event.get("data"))
+            .and_then(Value::as_object)
+        else {
             return Ok(false);
         };
-        if properties
+        let event_session = properties
             .get("sessionID")
             .and_then(Value::as_str)
-            .unwrap_or_default()
-            != self.session_id
-        {
+            .or_else(|| {
+                properties
+                    .get("form")
+                    .and_then(|form| form.get("sessionID"))
+                    .and_then(Value::as_str)
+            })
+            .unwrap_or_default();
+        if event_session != self.session_id {
             return Ok(false);
         }
         match event_type {
-            "permission.asked" | "question.asked" if self.mode == WaitMode::Turn => {
+            "permission.asked" | "question.asked" | "form.created"
+                if self.mode == WaitMode::Turn =>
+            {
                 self.request = Some(event.clone());
                 return Ok(false);
             }
@@ -100,11 +113,7 @@ impl EventState {
                     if let Some(model) =
                         observed_model(info).map_err(|_| OpenCodeEventError::Protocol)?
                     {
-                        if !self.turn.observed_model.is_empty() && self.turn.observed_model != model
-                        {
-                            return Err(OpenCodeEventError::Protocol);
-                        }
-                        self.turn.observed_model = model;
+                        self.observe_model(model)?;
                     }
                     if info.get("error").is_some_and(Value::is_object) {
                         self.provider_error =
@@ -112,21 +121,97 @@ impl EventState {
                     }
                 }
             }
+            "session.inbox.delivered" if self.turn.request_message.is_empty() => {
+                self.turn.request_message = clean_id(
+                    properties
+                        .get("inboxID")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default(),
+                );
+            }
+            "session.step.started" => {
+                let message_id = clean_id(
+                    properties
+                        .get("assistantMessageID")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default(),
+                );
+                if !message_id.is_empty() {
+                    if self.turn.assistant_message != message_id {
+                        self.turn.content.clear();
+                    }
+                    self.turn.assistant_message = message_id;
+                }
+                if let Some(model) =
+                    observed_model(properties).map_err(|_| OpenCodeEventError::Protocol)?
+                {
+                    self.observe_model(model)?;
+                }
+            }
+            "session.text.delta" => {
+                if properties.get("assistantMessageID").and_then(Value::as_str)
+                    == Some(self.turn.assistant_message.as_str())
+                    && let Some(delta) = properties.get("delta").and_then(Value::as_str)
+                {
+                    self.turn.content.push_str(delta);
+                }
+            }
+            "session.text.ended" => {
+                if properties.get("assistantMessageID").and_then(Value::as_str)
+                    == Some(self.turn.assistant_message.as_str())
+                    && let Some(text) = properties.get("text").and_then(Value::as_str)
+                {
+                    text.clone_into(&mut self.turn.content);
+                }
+            }
+            "session.message.content.updated" => {
+                if properties.get("messageID").and_then(Value::as_str)
+                    == Some(self.turn.assistant_message.as_str())
+                    && let Some(content) = properties.get("content").and_then(Value::as_array)
+                {
+                    self.turn.content = content
+                        .iter()
+                        .filter(|part| part.get("type").and_then(Value::as_str) == Some("text"))
+                        .filter_map(|part| part.get("text").and_then(Value::as_str))
+                        .collect();
+                }
+            }
+            "session.execution.succeeded" | "session.execution.interrupted" => {
+                return self.complete();
+            }
+            "session.execution.failed" => {
+                if let Some(error) = properties.get("error") {
+                    self.provider_error = Some(provider_response_error(error));
+                }
+                return self.complete();
+            }
             "session.status"
                 if terminal_idle(event_type, properties)
                     && (self.mode == WaitMode::Quiescence
                         || !self.turn.request_message.is_empty()) =>
             {
-                if self.mode == WaitMode::Turn
-                    && let Some(error) = &self.provider_error
-                {
-                    return Err(OpenCodeEventError::Provider(error.clone()));
-                }
-                return Ok(true);
+                return self.complete();
             }
             _ => {}
         }
         Ok(false)
+    }
+
+    fn observe_model(&mut self, model: String) -> Result<(), OpenCodeEventError> {
+        if !self.turn.observed_model.is_empty() && self.turn.observed_model != model {
+            return Err(OpenCodeEventError::Protocol);
+        }
+        self.turn.observed_model = model;
+        Ok(())
+    }
+
+    fn complete(&self) -> Result<bool, OpenCodeEventError> {
+        if self.mode == WaitMode::Turn
+            && let Some(error) = &self.provider_error
+        {
+            return Err(OpenCodeEventError::Provider(error.clone()));
+        }
+        Ok(true)
     }
 }
 
@@ -373,6 +458,70 @@ mod tests {
                 .and_then(|request| request.pointer("/properties/id"))
                 .and_then(serde_json::Value::as_str),
             Some("permission-1")
+        );
+    }
+
+    #[test]
+    fn v2_turn_events_pair_the_inbox_step_text_and_terminal_execution() {
+        let mut state = EventState::new("session-1", WaitMode::Turn);
+        for event in [
+            json!({"type":"session.inbox.delivered", "data":{"sessionID":"session-1","inboxID":"user-1"}}),
+            json!({"type":"session.step.started", "data":{
+                "sessionID":"session-1","assistantMessageID":"assistant-1",
+                "agent":"build","model":{"providerID":"opencode","id":"fixture"}
+            }}),
+            json!({"type":"session.text.started", "data":{"sessionID":"session-1","assistantMessageID":"assistant-1"}}),
+            json!({"type":"session.text.delta", "data":{"sessionID":"session-1","assistantMessageID":"assistant-1","delta":"hel"}}),
+            json!({"type":"session.text.delta", "data":{"sessionID":"session-1","assistantMessageID":"assistant-1","delta":"lo"}}),
+            json!({"type":"session.text.ended", "data":{"sessionID":"session-1","assistantMessageID":"assistant-1","text":"hello"}}),
+        ] {
+            assert_eq!(state.accept(&event), Ok(false), "{event}");
+        }
+        assert_eq!(state.turn.request_message, "user-1");
+        assert_eq!(state.turn.assistant_message, "assistant-1");
+        assert_eq!(state.turn.observed_model, "opencode/fixture");
+        assert_eq!(state.turn.content, "hello");
+        assert_eq!(
+            state.accept(
+                &json!({"type":"session.execution.succeeded", "data":{"sessionID":"session-1"}})
+            ),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn v2_failure_keeps_the_provider_error_until_the_terminal_execution() {
+        let mut state = EventState::new("session-1", WaitMode::Turn);
+        state.turn.request_message = "user-1".into();
+        assert_eq!(
+            state.accept(&json!({"type":"session.execution.failed", "data":{
+                "sessionID":"session-1",
+                "error":{"message":"provider unavailable"}
+            }})),
+            Err(super::OpenCodeEventError::Provider(
+                crate::opencode_protocol::provider_response_error(
+                    &json!({"message":"provider unavailable"})
+                )
+            ))
+        );
+    }
+
+    #[test]
+    fn v2_form_created_is_retained_for_the_turn_owner() {
+        let mut state = EventState::new("ses_1", WaitMode::Turn);
+        assert_eq!(
+            state.accept(&json!({"type":"form.created", "data":{"form":{
+                "id":"frm_1","sessionID":"ses_1","title":"Pick","fields":[]
+            }}})),
+            Ok(false)
+        );
+        assert_eq!(
+            state
+                .request
+                .as_ref()
+                .and_then(|request| request.pointer("/data/form/id"))
+                .and_then(serde_json::Value::as_str),
+            Some("frm_1")
         );
     }
 

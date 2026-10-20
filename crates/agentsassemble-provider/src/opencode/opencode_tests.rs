@@ -8,7 +8,8 @@ use super::{
     server_arguments, server_password,
 };
 use crate::{
-    loopback_http::LoopbackHttp, opencode_protocol::http_driver_error,
+    loopback_http::LoopbackHttp,
+    opencode_protocol::{OpenCodeApi, http_driver_error},
     opencode_startup::observe_startup,
 };
 
@@ -32,7 +33,7 @@ fn server_launch_disables_external_and_project_configuration() {
     assert_eq!(value("OPENCODE_PURE"), Some("1"));
     assert_eq!(value("OPENCODE_DISABLE_EXTERNAL_SKILLS"), Some("1"));
     assert_eq!(value("XDG_CONFIG_HOME"), root.path().to_str());
-    assert_eq!(value("OPENCODE_SERVER_USERNAME"), Some("agentsassemble"));
+    assert_eq!(value("OPENCODE_SERVER_USERNAME"), Some("opencode"));
     assert_eq!(value("OPENCODE_SERVER_PASSWORD"), Some(password.as_str()));
     assert_eq!(password.len(), 64);
     assert!(password.bytes().all(|byte| byte.is_ascii_hexdigit()));
@@ -210,6 +211,7 @@ async fn tool_only_completion_preserves_portal_validation_and_native_authority()
         request_message: "request".to_owned(),
         assistant_message: "assistant".to_owned(),
         observed_model: "opencode/model".to_owned(),
+        content: String::new(),
     };
     assert!(
         super::OpenCodeDriver::completed_from_response(
@@ -217,7 +219,8 @@ async fn tool_only_completion_preserves_portal_validation_and_native_authority()
             &request,
             "native-session",
             &response,
-            &events
+            &events,
+            OpenCodeApi::V1,
         )
         .is_err()
     );
@@ -237,6 +240,7 @@ async fn tool_only_completion_preserves_portal_validation_and_native_authority()
         "native-session",
         &response,
         &events,
+        OpenCodeApi::V1,
     )
     .unwrap_or_else(|error| panic!("allow room publication validation: {error}"));
     assert_eq!(completed.provider_turn_id, "assistant");
@@ -251,7 +255,8 @@ async fn tool_only_completion_preserves_portal_validation_and_native_authority()
             &request,
             "native-session",
             &response,
-            &events
+            &events,
+            OpenCodeApi::V1,
         )
         .is_err()
     );

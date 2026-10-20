@@ -163,9 +163,66 @@ pub(crate) fn clean_session_id(value: &str) -> Option<String> {
     .then(|| value.to_owned())
 }
 
-pub(crate) fn session_path(session_id: &str) -> Result<String, DriverError> {
+/// The server API shape is decided once per launch from its own readiness probe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OpenCodeApi {
+    V1,
+    V2,
+}
+
+impl OpenCodeApi {
+    pub(crate) const fn sessions_path(self) -> &'static str {
+        match self {
+            Self::V1 => "/session",
+            Self::V2 => "/api/session",
+        }
+    }
+
+    pub(crate) const fn event_path(self) -> &'static str {
+        match self {
+            Self::V1 => "/event",
+            Self::V2 => "/api/event",
+        }
+    }
+
+    pub(crate) const fn reload_path(self) -> &'static str {
+        match self {
+            Self::V1 => "/instance/dispose",
+            Self::V2 => "/api/location/reload",
+        }
+    }
+
+    pub(crate) fn mcp_path(self, name: &str) -> Result<String, DriverError> {
+        match self {
+            Self::V1 => Ok("/mcp".to_owned()),
+            Self::V2 => {
+                if name.is_empty()
+                    || name.len() > 128
+                    || name
+                        .bytes()
+                        .any(|byte| !(byte.is_ascii_alphanumeric() || b"._-".contains(&byte)))
+                {
+                    return Err(protocol_error());
+                }
+                Ok(format!("/api/experimental/mcp/{name}"))
+            }
+        }
+    }
+
+    pub(crate) const fn mcp_list_path(self) -> &'static str {
+        match self {
+            Self::V1 => "/mcp",
+            Self::V2 => "/api/mcp",
+        }
+    }
+}
+
+pub(crate) fn session_path(api: OpenCodeApi, session_id: &str) -> Result<String, DriverError> {
     clean_session_id(session_id)
-        .map(|session_id| format!("/session/{session_id}"))
+        .map(|session_id| match api {
+            OpenCodeApi::V1 => format!("/session/{session_id}"),
+            OpenCodeApi::V2 => format!("/api/session/{session_id}"),
+        })
         .ok_or_else(protocol_error)
 }
 
@@ -426,6 +483,19 @@ mod tests {
         assert!(model_parts("opencode/hy3-free", true).is_err());
         assert_eq!(clean_session_id("ses_123"), Some("ses_123".to_owned()));
         assert_eq!(clean_session_id("../ses"), None);
+        assert_eq!(
+            super::session_path(super::OpenCodeApi::V1, "ses_123"),
+            Ok("/session/ses_123".to_owned())
+        );
+        assert_eq!(
+            super::session_path(super::OpenCodeApi::V2, "ses_123"),
+            Ok("/api/session/ses_123".to_owned())
+        );
+        assert_eq!(
+            super::OpenCodeApi::V2.mcp_path("agentsassemble_room"),
+            Ok("/api/experimental/mcp/agentsassemble_room".to_owned())
+        );
+        assert!(super::OpenCodeApi::V2.mcp_path("../escape").is_err());
     }
 
     #[test]

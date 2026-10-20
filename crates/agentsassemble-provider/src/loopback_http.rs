@@ -209,6 +209,16 @@ impl VerifiedLoopbackConnection {
             .await
     }
 
+    pub(crate) async fn put_json(
+        self,
+        path: &str,
+        payload: &Value,
+        timeout: Duration,
+    ) -> Result<JsonResponse, LoopbackHttpError> {
+        self.json_request(Method::PUT, path, Some(payload), timeout)
+            .await
+    }
+
     /// The `OpenCode` turn owner applies its active-time deadline while excluding human waits.
     pub(crate) async fn post_turn_json(
         self,
