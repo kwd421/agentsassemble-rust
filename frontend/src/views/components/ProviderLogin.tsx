@@ -77,7 +77,7 @@ export default function ProviderLogin({ providerId, displayName, onAuthenticated
 
   return <section className="dc-agent-section" aria-label={`${displayName} 로그인`}>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-      <button type="button" className="dc-agent-login-action" style={{ minHeight: 44 }} disabled={busy} onClick={() => void login()}>
+      <button type="button" className="dc-button dc-button--lg dc-button--primary mt-2.5" disabled={busy} onClick={() => void login()}>
         {busy ? "로그인 중…" : `${displayName} 로그인`}
       </button>
       {busy && <button type="button" className="dc-button dc-button--secondary dc-button--lg" style={{ minHeight: 44, padding: "0 12px" }} disabled={cancelling} onClick={() => void cancel()}>

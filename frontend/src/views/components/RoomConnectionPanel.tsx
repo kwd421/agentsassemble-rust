@@ -87,7 +87,7 @@ export default function RoomConnectionPanel({
     <div className="dc-room-connection-panel">
       {(capabilities["agent.control"] || canAddCompanion) && onStartAddAgent && (
         <div className="dc-room-agent-add-row">
-          <button type="button" className="dc-agent-add-entry" onClick={onStartAddAgent}>
+          <button type="button" className="dc-button dc-button--secondary" onClick={onStartAddAgent}>
             <Plus size={16} />
             에이전트 추가
           </button>

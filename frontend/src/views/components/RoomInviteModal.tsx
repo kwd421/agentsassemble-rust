@@ -344,8 +344,8 @@ export default function RoomInviteModal({
                         <span className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
-                            className="dc-invite-row-button"
-                            style={{ minWidth: 44, minHeight: 44 }}
+                            className="dc-button dc-button--lg dc-button--secondary"
+                            style={{ minWidth: 44 }}
                             aria-label={`사람 초대 ${index + 1} 링크 ${copiedKey === invite.key ? "복사됨" : "복사"}`}
                             disabled={!invite.copyUrl}
                             onClick={() => handleCopy(invite.key, onCopyHumanInvite)}
@@ -354,9 +354,8 @@ export default function RoomInviteModal({
                           </button>
                           <button
                             type="button"
-                            className="dc-invite-row-button"
-                            data-tone="danger"
-                            style={{ minWidth: 44, minHeight: 44 }}
+                            className="dc-button dc-button--lg dc-button--danger-soft"
+                            style={{ minWidth: 44 }}
                             aria-label={`사람 초대 ${index + 1} 폐기`}
                             disabled={revokeBusy || revokeDead}
                             onClick={() => onRevokeHumanInvite(invite.key)}
@@ -416,12 +415,12 @@ export default function RoomInviteModal({
                           <p>휴대폰 카메라로 스캔해 연결하세요.</p>
                         </div>
                       )}
-                      <button type="button" className="dc-invite-row-button"
-                        style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
+                      <button type="button" className="dc-button dc-button--lg dc-button--secondary"
+                        style={{ minWidth: 44, flexShrink: 0 }}
                         aria-label={`기기 연결 ${index + 1} 링크 ${copiedKey === pairing.key ? "복사됨" : "복사"}`}
                         disabled={!pairing.copyable} onClick={() => handleCopy(pairing.key, onCopyPairing)}>{copiedKey === pairing.key ? "복사됨" : "복사"}</button>
-                      <button type="button" className="dc-invite-row-button" data-tone="danger"
-                        style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
+                      <button type="button" className="dc-button dc-button--lg dc-button--danger-soft"
+                        style={{ minWidth: 44, flexShrink: 0 }}
                         aria-label={`기기 연결 ${index + 1} 해제`}
                         disabled={pairing.state === "revoking" || pairing.state === "revoked"}
                         onClick={() => onRevokePairing(pairing.key)}>
@@ -469,12 +468,12 @@ export default function RoomInviteModal({
               <p className="dc-invite-hosting-error preserve-words">{PUBLIC_INGRESS_START_ERROR}</p>
             )}
           </div>
-          {publicAccessQuery === "unavailable" && onRetryPublicAccess && <button type="button" className="dc-invite-row-button" onClick={onRetryPublicAccess}>상태 다시 확인</button>}
+          {publicAccessQuery === "unavailable" && onRetryPublicAccess && <button type="button" className="dc-button dc-button--secondary" onClick={onRetryPublicAccess}>상태 다시 확인</button>}
           {canControlIngress && publicAccessKnown && (showStopTunnel ? (
             <button
               type="button"
-              className="dc-invite-row-button"
-              style={{ minWidth: 44, minHeight: 44 }}
+              className="dc-button dc-button--lg dc-button--secondary"
+              style={{ minWidth: 44 }}
               disabled={
                 publicAccessStopping ||
                 (!publicAccessStarting && !publicTunnelActive) ||
@@ -487,8 +486,8 @@ export default function RoomInviteModal({
           ) : (
             <button
               type="button"
-              className="dc-invite-row-button"
-              style={{ minWidth: 44, minHeight: 44 }}
+              className="dc-button dc-button--lg dc-button--secondary"
+              style={{ minWidth: 44 }}
               disabled={publicAccessBusy || !publicAccessControllable}
               onClick={onStartTunnel}
             >

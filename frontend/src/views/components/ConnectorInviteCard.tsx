@@ -38,7 +38,7 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }
           <strong>AI 초대 {controls.invites.length - index}{invite.local ? " · 이 컴퓨터 전용" : ""}</strong>
           <p>{invite.copyable ? `만료 ${new Date(invite.expiresAt).toLocaleTimeString()}` : "만료되었거나 현재 주소에서 사용할 수 없어요."}</p>
         </div>
-        <button type="button" className="dc-invite-row-button" style={{ minWidth: 44, minHeight: 44 }}
+        <button type="button" className="dc-button dc-button--lg dc-button--secondary" style={{ minWidth: 44 }}
           disabled={!invite.copyable} onClick={() => {
             void Promise.resolve(controls.copy(invite.key)).then((ok) => {
               if (ok !== true) return;

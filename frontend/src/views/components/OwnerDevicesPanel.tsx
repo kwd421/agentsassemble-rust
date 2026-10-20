@@ -74,12 +74,12 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
               {session.last_connected_at !== null && <>{os || session.kind === "pairing" ? " · " : ""}마지막 접속 <time dateTime={new Date(session.last_connected_at * 1000).toISOString()} title={new Date(session.last_connected_at * 1000).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}>{relativeTimeLabel(session.last_connected_at * 1000)}</time></>}</p>
             {session.connected === false && <p>지금은 접속해 있지 않아요.</p>}
           </div>
-          {session.revocable && <button type="button" className="owner-device-revoke" disabled={busy} aria-label={`${name} 연결 해제`}
+          {session.revocable && <button type="button" className="dc-button dc-button--md dc-button--secondary owner-device-revoke" disabled={busy} aria-label={`${name} 연결 해제`}
             onClick={() => setSelection({ request: { scope: "session", session_id: session.session_id }, name, current: session.current })}>연결 해제</button>}
         </li>;
       })}
     </ul>
-    <button type="button" className="owner-devices-revoke-all" disabled={busy || !sessions?.some(row => row.revocable)}
+    <button type="button" className="dc-button dc-button--md dc-button--danger owner-devices-revoke-all" disabled={busy || !sessions?.some(row => row.revocable)}
       onClick={() => setSelection({ request: { scope: "all" }, name: "모든 기기", current: Boolean(identity.centralSession) })}>모든 기기 연결 해제</button>
     {selection && <RevokeConfirmation selection={selection} busy={busy} error={error} onCancel={() => setSelection(null)} onConfirm={() => void confirm()} />}
   </div>;
@@ -111,6 +111,6 @@ function RevokeConfirmation({ selection, busy, error, onCancel, onConfirm }: {
     <h3>{selection.name} 연결을 해제할까요?</h3>
     <p>{selection.request.scope === "all" ? "서버 컴퓨터를 뺀 모든 기기의 연결이" : "이 기기의 연결이"} 바로 끊겨요.{selection.current && " 지금 쓰는 이 기기도 끊겨요."} 다시 쓰려면 새로 연결해야 해요.</p>
     {error && <p role="alert" className="owner-devices-error">{error}</p>}
-    <div><button ref={cancel} type="button" disabled={busy} onClick={onCancel}>취소</button><button type="button" disabled={busy} onClick={onConfirm}>{busy ? "해제하는 중…" : "연결 해제"}</button></div>
+    <div><button ref={cancel} type="button" className="dc-button dc-button--lg dc-button--secondary" disabled={busy} onClick={onCancel}>취소</button><button type="button" className="dc-button dc-button--lg dc-button--danger" disabled={busy} onClick={onConfirm}>{busy ? "해제하는 중…" : "연결 해제"}</button></div>
   </dialog>;
 }

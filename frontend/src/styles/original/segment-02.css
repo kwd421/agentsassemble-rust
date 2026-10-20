@@ -144,22 +144,6 @@
   line-height: 20px;
 }
 
-.dc-startup-error-retry {
-  justify-self: start;
-  min-height: 32px;
-  margin-top: 10px;
-  border-radius: 8px;
-  background: #4e5058;
-  padding: 0 14px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.dc-startup-error-retry:hover {
-  background: #6d6f78;
-}
-
 .dc-google-signin {
   display: inline-flex;
   min-height: 44px;

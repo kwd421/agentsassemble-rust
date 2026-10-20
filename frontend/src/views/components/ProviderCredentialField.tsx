@@ -42,6 +42,7 @@ export default function ProviderCredentialField({
             />
             <button
               type="button"
+              className="dc-button dc-button--md dc-button--secondary"
               style={{ minWidth: 96 }}
               disabled={!value.trim() || busy}
               onClick={onSave}
@@ -49,7 +50,7 @@ export default function ProviderCredentialField({
               저장
             </button>
             {status?.source === "keyring" && (
-              <button type="button" data-variant="danger" disabled={busy} onClick={onDelete}>
+              <button type="button" className="dc-button dc-button--md dc-button--danger-soft" disabled={busy} onClick={onDelete}>
                 키 삭제
               </button>
             )}

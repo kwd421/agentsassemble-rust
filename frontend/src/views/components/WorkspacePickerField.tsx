@@ -47,7 +47,7 @@ export default function WorkspacePickerField({
           placeholder="선택되지 않음"
           readOnly
         />
-        <button type="button" disabled={busy || disabled} onClick={() => void chooseWorkspace()}>
+        <button type="button" className="dc-button dc-button--md dc-button--secondary" disabled={busy || disabled} onClick={() => void chooseWorkspace()}>
           {busy ? "선택 중..." : "폴더 선택"}
         </button>
       </div>

@@ -73,7 +73,7 @@ function failureMessage(reason: unknown, message: string, onRetry?: () => void):
   return <>
     <p className="font-semibold">{message}</p>
     <p>{cause !== message ? cause : "잠시 후 다시 시도해 주세요."}</p>
-    {onRetry && <button type="button" className="dc-startup-error-retry" onClick={onRetry}>다시 시도</button>}
+    {onRetry && <button type="button" className="dc-button dc-button--secondary mt-2.5 justify-self-start" onClick={onRetry}>다시 시도</button>}
   </>;
 }
 

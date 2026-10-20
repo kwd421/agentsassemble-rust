@@ -507,7 +507,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               <h1 id="empty-room-title">{noRoomCopy.title}</h1>
               <p className="dc-disconnected-room-description">{noRoomCopy.description}</p>
               <div className="flex flex-wrap gap-3" style={{ justifyContent: "center", marginTop: 20 }}>
-                {canCreateRoom && <button type="button" className="dc-agent-create-primary" onClick={() => setCreateRoomOpen(true)}>새 방 만들기</button>}
+                {canCreateRoom && <button type="button" className="dc-button dc-button--md dc-button--primary" onClick={() => setCreateRoomOpen(true)}>새 방 만들기</button>}
               </div>
             </section>
           ) : channel === "lobby" ? (

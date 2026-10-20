@@ -97,8 +97,7 @@ export default function LeaveRoomDialog({
           </button>
           <button
             type="button"
-            className="dc-agent-create-primary dc-leave-room-confirm"
-            style={{ minHeight: 40 }}
+            className="dc-button dc-button--md dc-button--danger"
             onClick={() => void confirmLeave()}
             disabled={busy}
           >

@@ -32,7 +32,7 @@ export function resetAgentCreateApiMocks(apiMocks: AgentCreateApiMocks): void {
 export function primaryActionButton(): HTMLButtonElement {
   const button = screen
     .getByRole("dialog", { name: "에이전트 추가" })
-    .querySelector<HTMLButtonElement>(".dc-agent-create-primary");
+    .querySelector<HTMLButtonElement>(".dc-agent-footer-actions .dc-button--primary");
   if (!button) throw new Error("Agent create primary action was not rendered");
   return button;
 }

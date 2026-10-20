@@ -567,31 +567,6 @@ dialog.dc-user-settings-dialog {
 }
 
 /* Destructive entry: outlined red, filled on hover, as Discord's delete button. */
-.dc-account-delete-button {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 36px;
-  align-items: center;
-  border: 1px solid var(--color-danger);
-  border-radius: 8px;
-  padding: 0 16px;
-  color: var(--color-danger);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.dc-account-delete-button:hover:not(:disabled),
-.dc-account-delete-button:focus-visible {
-  background: var(--color-danger);
-  color: #fff;
-  outline: none;
-}
-
-.dc-account-delete-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .dc-user-settings-close {
   width: 32px;
   height: 32px;

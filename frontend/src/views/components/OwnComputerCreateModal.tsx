@@ -72,7 +72,7 @@ export default function OwnComputerCreateModal({ roomLabel, providers, controls,
       {!showPicker && <footer className="dc-agent-create-footer">
         <div className="dc-agent-footer-actions">
           <button type="button" className="dc-agent-create-secondary" onClick={onClose}>취소</button>
-          <button type="button" className="dc-agent-create-primary"
+          <button type="button" className="dc-button dc-button--md dc-button--primary"
             disabled={controls.creating || !selectedProvider || !controls.displayName.trim()}
             onClick={() => void controls.create((link) => { window.location.assign(link); if (isDesktopWebview()) onClose(); })}>
             {controls.creating ? "여는 중…" : "이 컴퓨터에서 계속"}

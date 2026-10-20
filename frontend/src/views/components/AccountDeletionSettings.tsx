@@ -12,7 +12,7 @@ import { userFacingError } from "../../lib/apiErrors";
 
 export default function AccountDeletionSettings({ disabled, label = "계정 탈퇴" }: { disabled: boolean; label?: string }) {
   const open = useContext(AccountDeletionContext);
-  return <button type="button" className="dc-account-delete-button" disabled={disabled} onClick={() => {
+  return <button type="button" className="dc-button dc-button--danger-soft w-fit" disabled={disabled} onClick={() => {
     if (!open) throw new Error("계정 탈퇴 화면을 열지 못했어요.");
     open();
   }}>{label}</button>;

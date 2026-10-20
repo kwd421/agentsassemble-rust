@@ -180,7 +180,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         <p>‘{confirmed.name}’만 내 서버로 남길까요?</p>
         <p>나머지 컴퓨터는 더 이상 내 서버가 아니고, 이 계정에 기기로만 연결할 수 있어요. 되돌릴 수 없어요. 방과 대화 기록은 그 컴퓨터에 그대로 남아요.</p>
         <button autoFocus className="dc-button dc-button--secondary dc-button--lg min-h-10" disabled={saving} onClick={() => setConfirmKeeper("")}>취소</button>
-        <button className="dc-account-delete-button" disabled={busy || saving} onClick={() => void resolve()}>나머지 서버에서 빼기</button>
+        <button type="button" className="dc-button dc-button--danger-soft w-fit" disabled={busy || saving} onClick={() => void resolve()}>나머지 서버에서 빼기</button>
       </> : <>
         <fieldset disabled={busy || saving}>
           <legend>이 계정에서 사용할 서버 하나를 선택해 주세요.</legend>

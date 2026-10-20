@@ -695,7 +695,7 @@ export default function AgentCreateModal({
             </button>
             <button
               type="button"
-              className="dc-agent-create-primary"
+              className="dc-button dc-button--md dc-button--primary"
               disabled={!canCreate || busy}
               onClick={() => void handleCreate()}
             >

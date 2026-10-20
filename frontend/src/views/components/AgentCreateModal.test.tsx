@@ -297,7 +297,7 @@ describe("AgentCreateModal", () => {
     // The vanished choice is not swapped for another one: the picker asks again.
     expect(screen.getByRole("searchbox", { name: "AI 검색" })).toBeTruthy();
     // Nothing can be added from the list step.
-    expect(document.querySelector(".dc-agent-create-primary")).toBeNull();
+    expect(document.querySelector(".dc-agent-footer-actions .dc-button--primary")).toBeNull();
   });
 
   it("invalidates a selected model removed by a catalog refresh", async () => {

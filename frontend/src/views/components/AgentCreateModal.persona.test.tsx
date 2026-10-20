@@ -64,7 +64,7 @@ describe("AgentCreateModal persona selection", () => {
     await userEvent.click(screen.getByRole("radio", { name: /Night Guide/ }));
     await userEvent.click(
       screen.getByRole("dialog", { name: "에이전트 추가" })
-        .querySelector<HTMLButtonElement>(".dc-agent-create-primary")!
+        .querySelector<HTMLButtonElement>(".dc-agent-footer-actions .dc-button--primary")!
     );
 
     expect(onCreate).toHaveBeenCalledWith(

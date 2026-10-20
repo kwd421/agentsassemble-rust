@@ -31,22 +31,9 @@
   flex: 1 1 auto;
 }
 
-.dc-agent-folder-field button,
-.dc-provider-secret-row button {
-  min-height: 40px;
+.dc-agent-folder-field .dc-button,
+.dc-provider-secret-row .dc-button {
   flex: 0 0 auto;
-  border: 1px solid rgba(151, 151, 159, 0.2);
-  border-radius: 8px;
-  background: rgba(151, 151, 159, 0.12);
-  padding: 0 14px;
-  color: var(--color-text-primary);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.dc-agent-folder-field button:hover:not(:disabled),
-.dc-provider-secret-row button:hover:not(:disabled) {
-  background: rgba(151, 151, 159, 0.2);
 }
 
 .dc-provider-secret-row {
@@ -58,20 +45,6 @@
 .dc-provider-secret-row input {
   min-width: 0;
   flex: 1 1 auto;
-}
-
-.dc-provider-secret-row button[data-variant="danger"] {
-  color: #ff6b6d;
-}
-
-.dc-provider-secret-row button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.dc-agent-folder-field button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .dc-provider-secret-field {
@@ -105,26 +78,6 @@
 .dc-agent-start-toggle input {
   width: 16px;
   height: 16px;
-}
-
-.dc-agent-login-action {
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  margin-top: 10px;
-  padding: 0 12px;
-  border-radius: 4px;
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.dc-agent-login-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.52;
 }
 
 .dc-agent-create-footer {
@@ -211,8 +164,8 @@
   margin-left: auto;
 }
 
-.dc-agent-create-secondary,
-.dc-agent-create-primary {
+/* Link-style cancel beside a dialog's main action. */
+.dc-agent-create-secondary {
   display: inline-flex;
   min-height: 40px;
   align-items: center;
@@ -220,49 +173,15 @@
   gap: 7px;
   padding: 0 16px;
   border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.dc-agent-create-secondary {
   background: transparent;
   color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .dc-agent-create-secondary:hover {
   color: var(--color-text-primary);
   text-decoration: underline;
-}
-
-.dc-agent-create-primary {
-  background: var(--color-accent);
-  color: #fff;
-}
-
-.dc-agent-create-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.dc-agent-create-primary:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.dc-agent-add-entry {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border-radius: 4px;
-  background: var(--color-sidebar-hover);
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.dc-agent-add-entry:disabled {
-  cursor: not-allowed;
-  opacity: 0.52;
 }
 
 .dc-invite-friend-list {

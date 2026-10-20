@@ -121,35 +121,6 @@ dialog.dc-invite-modal {
   background: color-mix(in srgb, var(--color-panel-soft) 70%, transparent);
 }
 
-.dc-invite-row-button {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 14px;
-  color: var(--color-text-primary);
-  background: #474851;
-  border: 0;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.dc-invite-row-button:hover:not(:disabled) {
-  background: #5d5e67;
-}
-
-.dc-invite-row-button[data-tone="danger"]:hover:not(:disabled) {
-  background: #da373c;
-}
-
-.dc-invite-row-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .dc-invite-issued {
   display: grid;
   gap: 6px;
@@ -174,9 +145,8 @@ dialog.dc-invite-modal {
   line-height: 1.4;
 }
 
-.dc-invite-inline-error .dc-invite-row-button {
+.dc-invite-inline-error .dc-button {
   flex-shrink: 0;
-  min-height: 32px;
 }
 
 .dc-invite-details > summary {
