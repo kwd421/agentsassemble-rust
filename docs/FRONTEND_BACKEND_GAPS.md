@@ -269,13 +269,13 @@ existence alone does not establish a frontend entry or authorize its caller.
 | Current external AI through Room Connector | connector invite/session/principal, room tools and MCP client | external-AI invite UI plus `assemble room connector-mcp` / remote MCP; external Antigravity uses this path exclusively |
 | External AgentBridge attendee and companion | attendee invite/admission, WebSocket/report/tool and cleanup owners | AI-friend/companion packet UI plus `assemble room attend`; no human credential alias. Actual macOS friend/companion execution and historical-attachment relay correction: [2026-09-30 evidence](verification/2026-09-30-external-invites.md). Windows execution and CLI installation are not covered by that run. |
 | Server-managed AgentBridge runtime | managed provider process custody and report/turn owner | server-managed Agent Sessions through the provider chooser; distinct from both external admission paths |
-| Fourteen-provider catalog, credentials and runtime availability | provider registration, credential store, catalog worker and native/API/local drivers | Harness/API/Local chooser, exact model controls and credential settings; availability follows actual dependencies, not permission to collect real-run evidence |
+| Fifteen-provider catalog, credentials and runtime availability | provider registration, credential store, catalog worker and native/API/local drivers | Harness/API/Local chooser, exact model controls and credential settings; availability follows actual dependencies, not permission to collect real-run evidence |
 | Provider login/usage/refresh | registration-owned login/usage; selected-provider discovery through native private control, HTTP catalog result reads only | local Agent Add automatically checks the selected provider and exposes one selected-provider refresh; admitted browsers cannot refresh the host catalog. Final packaged correction verification remains pending. |
 | Public ingress | manual, managed tunnel and stable-entry owners | invite connection panel and external-open controls; errors remain visible and temporary tunnel continuity is not promised across restart |
 | Runtime version/update/restart | immutable frontend release, durable restart receipt, POSIX executor and desktop supervisor | update notice, local Server Status restart and CLI; exact build identity and cleanup failure are exposed |
 | Resources/release health | local sampler, persisted report reader and explicit release-health command | reachable Server Status/AdminPanel and CLI report workflow; no hidden background health run |
 
-Provider IDs are Codex, Claude, OpenCode, Cursor, Grok, DeepSeek, Cerebras,
+Provider IDs are Codex, Claude, OpenCode, Cursor, Grok, DeepSeek, Cerebras, Gemini,
 OpenRouter, Vercel, LLM Gateway, TokenRouter, Custom API, Ollama and LM Studio.
 Browser OAuth login is supported for Codex/Claude/Grok/Cursor; OpenCode reports a
 terminal handoff. Usage is supported for Codex/Claude/Grok/OpenCode/DeepSeek.

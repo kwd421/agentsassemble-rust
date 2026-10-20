@@ -207,6 +207,10 @@ mod tests {
             Some(RouteExposure::Private)
         );
         assert_eq!(
+            registered_route_exposure(HttpMethod::Delete, "/api/provider-credentials/gemini"),
+            Some(RouteExposure::Private)
+        );
+        assert_eq!(
             registered_route_exposure(HttpMethod::Delete, "/api/provider-credentials/openrouter"),
             Some(RouteExposure::Private)
         );

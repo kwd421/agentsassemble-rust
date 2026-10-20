@@ -24,6 +24,7 @@ export type ProviderBrandKey =
   | "opencode"
   | "deepseek"
   | "cerebras"
+  | "gemini"
   | "ollama"
   | "lmstudio"
   | "llmgateway"
@@ -66,6 +67,8 @@ const PROVIDER_ALIASES: Record<string, ProviderBrandKey> = {
   deepseek_api: "deepseek",
   cerebras: "cerebras",
   cerebras_api: "cerebras",
+  gemini: "gemini",
+  gemini_api: "gemini",
   ollama: "ollama",
   ollama_api: "ollama",
   lmstudio: "lmstudio",
@@ -148,6 +151,13 @@ export const PROVIDER_BRANDS: Record<ProviderBrandKey, ProviderBrand> = {
     logo: cerebrasLogo,
     background: "#ffffff",
     scale: "70%",
+  },
+  gemini: {
+    productName: "Gemini",
+    logoLabel: "Google Gemini",
+    logo: geminiLogo,
+    background: "#ffffff",
+    scale: "79%",
   },
   ollama: {
     productName: "Ollama",

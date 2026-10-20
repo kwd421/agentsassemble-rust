@@ -19,7 +19,7 @@ use crate::{
     cursor_acp::CursorAcpDriver,
     custom_api, deepseek,
     driver::{DriverError, DriverFuture, ProviderDriver},
-    grok,
+    gemini, grok,
     grok_acp::GrokAcpDriver,
     launch_error::DriverLaunchError,
     llm_gateway, lm_studio, ollama,
@@ -254,6 +254,27 @@ pub(crate) static CEREBRAS_PROVIDER: ProviderRegistration = ProviderRegistration
     launch: launch_cerebras,
 };
 
+pub(crate) static GEMINI_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "gemini",
+    display_name: "Gemini",
+    provider_kind: "gemini_api",
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    remote_spec: Some(&gemini::GEMINI_SPEC),
+    update: None,
+    usage: None,
+    login: None,
+    turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
+    discover: discover_gemini_registered,
+    launch: launch_gemini,
+};
+
 pub(crate) static OPENROUTER_PROVIDER: ProviderRegistration = ProviderRegistration {
     id: "openrouter",
     display_name: "OpenRouter",
@@ -367,6 +388,7 @@ static PROVIDER_REGISTRATIONS: &[&ProviderRegistration] = &[
     &GROK_PROVIDER,
     &DEEPSEEK_PROVIDER,
     &CEREBRAS_PROVIDER,
+    &GEMINI_PROVIDER,
     &OPENROUTER_PROVIDER,
     &VERCEL_PROVIDER,
     &LLM_GATEWAY_PROVIDER,
@@ -505,6 +527,14 @@ fn discover_cerebras_registered<'a>(
     cancellation: &'a CancellationToken,
 ) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_cerebras(provider, cancellation))
+}
+
+fn discover_gemini_registered<'a>(
+    provider: ProviderAvailability,
+    credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
+    Box::pin(gemini::discover(provider, credentials, cancellation))
 }
 
 fn discover_openrouter_registered<'a>(
@@ -762,6 +792,22 @@ fn launch_cerebras<'a>(
             .await
             .map_err(|error| DriverLaunchError::safe(cerebras::credential_error(error)))?;
         let driver = cerebras::launch(factory.credentials.clone()).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_gemini<'a>(
+    factory: &'a ProductionDriverFactory,
+    _session: &'a DurableAgentSession,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        factory
+            .credentials
+            .secret(ProviderCredentialId::Gemini)
+            .await
+            .map_err(|error| DriverLaunchError::safe(gemini::credential_error(error)))?;
+        let driver = gemini::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

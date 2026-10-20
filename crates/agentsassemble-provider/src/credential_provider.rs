@@ -4,6 +4,7 @@
 pub enum ProviderCredentialId {
     DeepSeek,
     Cerebras,
+    Gemini,
     OpenRouter,
     Vercel,
     LlmGateway,
@@ -17,6 +18,7 @@ impl ProviderCredentialId {
         match self {
             Self::DeepSeek => "deepseek",
             Self::Cerebras => "cerebras",
+            Self::Gemini => "gemini",
             Self::OpenRouter => "openrouter",
             Self::Vercel => "vercel",
             Self::LlmGateway => "llmgateway",
@@ -34,6 +36,7 @@ mod tests {
     fn secure_store_accounts_match_provider_ids() {
         assert_eq!(ProviderCredentialId::DeepSeek.as_str(), "deepseek");
         assert_eq!(ProviderCredentialId::Cerebras.as_str(), "cerebras");
+        assert_eq!(ProviderCredentialId::Gemini.as_str(), "gemini");
         assert_eq!(ProviderCredentialId::OpenRouter.as_str(), "openrouter");
         assert_eq!(ProviderCredentialId::Vercel.as_str(), "vercel");
         assert_eq!(ProviderCredentialId::LlmGateway.as_str(), "llmgateway");

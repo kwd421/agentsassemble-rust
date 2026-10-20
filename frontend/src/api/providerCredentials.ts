@@ -13,6 +13,7 @@ export interface ProviderCredentialStatus {
 const CREDENTIAL_PATHS: Readonly<Record<string, string>> = {
   deepseek: "/api/provider-credentials/deepseek",
   cerebras: "/api/provider-credentials/cerebras",
+  gemini: "/api/provider-credentials/gemini",
   openrouter: "/api/provider-credentials/openrouter",
   vercel: "/api/provider-credentials/vercel",
   llmgateway: "/api/provider-credentials/llmgateway",

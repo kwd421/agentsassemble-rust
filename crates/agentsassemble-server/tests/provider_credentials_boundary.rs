@@ -136,6 +136,7 @@ async fn remote_api_credential_routes_require_operator_authority() {
     let server = start().await;
     for provider in [
         "cerebras",
+        "gemini",
         "openrouter",
         "vercel",
         "llmgateway",

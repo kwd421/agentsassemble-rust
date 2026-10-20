@@ -33,6 +33,7 @@ mod deepseek;
 mod deepseek_catalog;
 mod driver;
 mod filesystem;
+mod gemini;
 mod grok;
 mod grok_acp;
 mod grok_usage;

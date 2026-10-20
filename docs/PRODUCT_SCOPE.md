@@ -30,3 +30,8 @@ Real-provider verification runs after reimplementation: only the already configu
 DeepSeek API, Codex, OpenCode, external Antigravity, Grok, and Cursor `auto` are
 authorized. Implement other providers from their reachable original contracts without
 real execution. Local tests, mandatory gates, and phase code reviews still apply.
+
+Provider scope addition (owner approved 2026-10-20): Google Gemini API (AI Studio API
+key) is included as a provider using the existing credential-store owner. It is
+implemented from its documented contract and remains outside the real-provider
+verification list above; no Gemini real execution is authorized by this addition.

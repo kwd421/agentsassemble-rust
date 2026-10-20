@@ -11,6 +11,7 @@ fn registrations_cover_each_retained_provider_once() {
         "cursor",
         "custom_api",
         "deepseek",
+        "gemini",
         "grok",
         "llmgateway",
         "lmstudio",
