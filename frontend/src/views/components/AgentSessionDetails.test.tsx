@@ -239,6 +239,26 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(screen.getByLabelText("응답 속도")).toBeTruthy();
   });
 
+  it("keeps an unsaved choice when the catalog refresh replaces the provider", async () => {
+    const session = agentSessionFixture({
+      runtime_status: "stopped", enabled: false, provider_kind: "gemini_api",
+      model: "gemini-3.1-flash-lite", service_tier: "default", permission_mode: "meeting_read_only",
+    });
+    const { rerender } = render(<AgentSessionDetails session={session} provider={geminiProvider()}
+      onConfigure={vi.fn()} />);
+    fireEvent.click(screen.getByText("실행 설정"));
+    await userEvent.click(screen.getByRole("combobox", { name: "권한" }));
+    await userEvent.click(screen.getByRole("option", { name: /작업 폴더 쓰기/ }));
+
+    rerender(<AgentSessionDetails session={session} provider={geminiProvider()} onConfigure={vi.fn()} />);
+    expect(screen.getByRole("combobox", { name: "권한" }).textContent).toContain("작업 폴더 쓰기");
+
+    rerender(<AgentSessionDetails session={{ ...session, permission_mode: "workspace_write", model: "other" }}
+      provider={geminiProvider()} onConfigure={vi.fn()} />);
+    rerender(<AgentSessionDetails session={session} provider={geminiProvider()} onConfigure={vi.fn()} />);
+    expect(screen.getByRole("combobox", { name: "권한" }).textContent).toContain("대화 전용");
+  });
+
   it("replaces the applied bot card on a stopped API session", async () => {
     const onConfigure = vi.fn().mockResolvedValue(undefined);
     const provider: NativeCliProviderAvailability = {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CirclePause, LifeBuoy, Play, RotateCcw, Save, Square, Zap } from "../../ui/icons";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
@@ -293,8 +293,16 @@ export default function AgentSessionDetails({
     session.max_output_tokens,
   ]);
 
-  useEffect(() => { setSettings(provider && requiresOpenCodeApproval(provider, storedSettings) && storedSettings.permission_mode !== "full_access"
-    ? { ...storedSettings, permission_mode: "workspace_write" } : storedSettings); }, [provider, storedSettings]);
+  // A catalog refresh replaces the provider object without changing what is saved;
+  // only another provider or new saved values may discard an unsaved choice.
+  const resetKey = useRef("");
+  useEffect(() => {
+    const key = `${provider?.id ?? ""}\n${JSON.stringify(storedSettings)}`;
+    if (resetKey.current === key) return;
+    resetKey.current = key;
+    setSettings(provider && requiresOpenCodeApproval(provider, storedSettings) && storedSettings.permission_mode !== "full_access"
+      ? { ...storedSettings, permission_mode: "workspace_write" } : storedSettings);
+  }, [provider, storedSettings]);
   const settingsChanged = Object.entries(storedSettings).some(([key, value]) => settings[key] !== value);
 
   async function runControl(action: AgentSessionControlAction) {
