@@ -548,12 +548,13 @@ describe("UserPanel", () => {
     );
     await waitFor(() => expect(apiMocks.fetchUserProfile).toHaveBeenCalled());
     // Neutral Korean loading/failure copy only; internal jargon never
-    // appears in the visible status (raw detail stays collapsed).
+    // appears anywhere in the panel, and there is no detail disclosure.
     const status = within(view.container).getByRole("status");
     expect(status.textContent).toContain("프로필을 불러오지 못했어요");
     expect(status.textContent).not.toContain("제품 표면");
     expect(status.textContent).not.toContain("고정");
-    expect(within(view.container).getByText("자세히")).toBeTruthy();
+    expect(view.container.textContent).not.toContain("제품 표면");
+    expect(within(view.container).queryByText("자세히")).toBeNull();
   });
 
   it("keeps signed-in central settings reachable without local server authority", async () => {

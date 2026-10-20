@@ -505,8 +505,8 @@ export default function UserPanel({
   }
 
   if (!profileHydrated) {
-    // Startup stays neutral: internal/English fetch details never appear on
-    // screen. The raw error stays available in a collapsed detail only.
+    // Startup stays neutral: the panel keeps its Discord shape and the
+    // already user-facing reason is only a hover tooltip.
     const loadingTitle = profileError ? "프로필을 불러오지 못했어요" : "프로필 불러오는 중";
     const loadingSubtitle = profileError ? "다시 시도하고 있어요" : "프로필을 불러오고 있어요";
     return (
@@ -515,6 +515,7 @@ export default function UserPanel({
           <div
             className="dc-user-identity"
             aria-label={profileError ? "프로필 불러오기 실패" : "프로필 불러오는 중"}
+            title={profileError || undefined}
             role="status"
           >
             <span className="dc-self-avatar" aria-hidden>
@@ -529,12 +530,6 @@ export default function UserPanel({
               </span>
             </span>
           </div>
-          {profileError && (
-            <details>
-              <summary className="text-[12px] text-text-muted">자세히</summary>
-              <p className="break-all whitespace-pre-wrap">{profileError}</p>
-            </details>
-          )}
         </div>
       </div>
     );
