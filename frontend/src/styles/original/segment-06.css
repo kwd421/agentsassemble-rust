@@ -225,6 +225,11 @@
   font-weight: 800;
 }
 
+.dc-room-play-error-code {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
 .dc-room-play-state.ready {
   background: rgba(88, 101, 242, 0.14);
   color: var(--color-brand);

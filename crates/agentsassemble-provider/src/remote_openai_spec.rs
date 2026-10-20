@@ -144,7 +144,7 @@ impl RemoteOpenAiSpec {
         }
     }
 
-    pub(crate) const fn stream_error(&self, error: OpenAiStreamError) -> DriverError {
+    pub(crate) fn stream_error(&self, error: OpenAiStreamError) -> DriverError {
         match error {
             OpenAiStreamError::ContextLimit => {
                 provider_error("provider_context_limit", self.errors.context_limit)
@@ -161,14 +161,20 @@ impl RemoteOpenAiSpec {
             OpenAiStreamError::RateLimited => {
                 provider_error("provider_rate_limited", self.errors.rate_limited)
             }
-            OpenAiStreamError::Overloaded => provider_error(
-                "provider_api_busy",
-                "The AI service is temporarily overloaded.",
-            ),
+            // The HTTP status is the only provider detail kept: a number the room can show.
+            OpenAiStreamError::Overloaded(status) => DriverError {
+                code: "provider_api_busy".into(),
+                message: format!("The AI service is temporarily overloaded (HTTP {status}).")
+                    .into(),
+            },
             OpenAiStreamError::ResponseTooLarge | OpenAiStreamError::InvalidResponse => {
                 provider_error("provider_protocol_invalid", self.errors.invalid_response)
             }
-            OpenAiStreamError::Http | OpenAiStreamError::Transport => {
+            OpenAiStreamError::Http(status) => DriverError {
+                code: "provider_api_unavailable".into(),
+                message: format!("{} (HTTP {status})", self.errors.api_unavailable).into(),
+            },
+            OpenAiStreamError::Transport => {
                 provider_error("provider_api_unavailable", self.errors.api_unavailable)
             }
         }

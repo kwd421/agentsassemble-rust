@@ -24,10 +24,10 @@ pub(crate) enum OpenAiStreamError {
     CredentialRejected,
     #[error("the provider rate-limited the request")]
     RateLimited,
-    #[error("the provider is temporarily overloaded")]
-    Overloaded,
-    #[error("the provider returned an unsuccessful HTTP status")]
-    Http,
+    #[error("the provider is temporarily overloaded (HTTP {0})")]
+    Overloaded(u16),
+    #[error("the provider returned an unsuccessful HTTP status {0}")]
+    Http(u16),
     #[error("the provider request did not complete")]
     Transport,
     #[error("the provider returned an oversized response")]
@@ -173,9 +173,9 @@ pub(crate) async fn send_chat_completion(
         StatusCode::TOO_MANY_REQUESTS => return Err(OpenAiStreamError::RateLimited),
         // 503 (and 529 used by some gateways) is the service shedding load, not a bad request.
         status if status == StatusCode::SERVICE_UNAVAILABLE || status.as_u16() == 529 => {
-            return Err(OpenAiStreamError::Overloaded);
+            return Err(OpenAiStreamError::Overloaded(status.as_u16()));
         }
-        _ => return Err(OpenAiStreamError::Http),
+        status => return Err(OpenAiStreamError::Http(status.as_u16())),
     }
     let content_type = response
         .headers()
@@ -713,8 +713,10 @@ mod tests {
                 .err()
                 .unwrap_or_else(|| panic!("{status} must fail"));
             let actual = match error {
-                OpenAiStreamError::Overloaded => "Overloaded",
-                OpenAiStreamError::Http => "Http",
+                OpenAiStreamError::Overloaded(code) if status.starts_with(&code.to_string()) => {
+                    "Overloaded"
+                }
+                OpenAiStreamError::Http(code) if status.starts_with(&code.to_string()) => "Http",
                 _ => "other",
             };
             assert_eq!(actual, expected, "{status}");

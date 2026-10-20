@@ -81,7 +81,16 @@ function actionCompletedLabel(action: AgentSessionControlAction) {
 }
 
 /** One Korean line for the session, with raw provider text kept behind the disclosure. */
-function sessionErrorInfo(session: RoomAgentSession): { summary: string; detail: string } {
+function sessionErrorInfo(session: RoomAgentSession): { summary: string; detail: string; status?: string } {
+  const info = sessionErrorText(session);
+  // The provider's HTTP status is the one detail worth showing beside the Korean line.
+  const status = session.last_error_code === "provider_rate_limited"
+    ? "429"
+    : /\(HTTP (\d{3})\)/.exec(session.last_error || "")?.[1];
+  return status && info.summary ? { ...info, status } : info;
+}
+
+function sessionErrorText(session: RoomAgentSession): { summary: string; detail: string } {
   if (session.last_error_code === "managed_bridge_exited") {
     return { summary: "에이전트 연결이 끊겼어요. 중지한 뒤 재개해 주세요.", detail: "" };
   }
@@ -342,7 +351,7 @@ export default function AgentSessionDetails({
       </div>
       {(status === "error" || session.recovery_required) && sessionError.summary && (
         <div className="dc-room-play-error preserve-words">
-          <p>오류 원인 · {sessionError.summary}</p>
+          <p>{sessionError.summary}{sessionError.status && <span className="dc-room-play-error-code"> ({sessionError.status})</span>}</p>
           {sessionError.detail && <details><summary>자세히</summary><p className="break-all whitespace-pre-wrap">{sessionError.detail}</p></details>}
         </div>
       )}
