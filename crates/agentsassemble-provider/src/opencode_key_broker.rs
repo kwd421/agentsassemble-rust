@@ -73,6 +73,18 @@ impl Upstream {
         }
     }
 
+    /// DeepSeek names the model only in the body, so the broker checks it there;
+    /// Gemini's path already carries it.
+    fn body_names_model(self, model: &str, body: &[u8]) -> bool {
+        match self {
+            Self::Gemini => true,
+            Self::DeepSeek => serde_json::from_slice::<serde_json::Value>(body)
+                .ok()
+                .and_then(|value| value.get("model")?.as_str().map(|named| named == model))
+                .unwrap_or(false),
+        }
+    }
+
     fn presented_token<B>(self, request: &Request<B>) -> Option<&[u8]> {
         let headers = request.headers();
         match self {
@@ -228,6 +240,9 @@ impl BrokerState {
         else {
             return status(StatusCode::PAYLOAD_TOO_LARGE);
         };
+        if !self.upstream.body_names_model(&self.model, &body) {
+            return status(StatusCode::NOT_FOUND);
+        }
         let target = match &query {
             Some(query) => format!("{}{path}?{query}", self.host),
             None => format!("{}{path}", self.host),

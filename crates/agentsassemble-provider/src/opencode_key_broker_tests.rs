@@ -137,10 +137,26 @@ async fn only_the_session_token_and_model_reach_the_provider_with_the_real_key()
 async fn deepseek_takes_a_bearer_token_and_swaps_in_the_real_key() {
     let (host, mut seen) = provider_fixture().await;
     let broker = broker(Upstream::DeepSeek, host).await;
-    let response = reqwest::Client::new()
-        .post(format!("http://127.0.0.1:{}/chat/completions", broker.port))
+    let client = reqwest::Client::new();
+    let url = format!("http://127.0.0.1:{}/chat/completions", broker.port);
+    // DeepSeek names the model in the body; another model never reaches the provider.
+    for body in [
+        "{}".to_owned(),
+        r#"{"model":"deepseek-reasoner"}"#.to_owned(),
+    ] {
+        let other = client
+            .post(&url)
+            .bearer_auth(&broker.token)
+            .body(body)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("other model request: {error}"));
+        assert_eq!(other.status(), 404);
+    }
+    let response = client
+        .post(&url)
         .bearer_auth(&broker.token)
-        .body("{}")
+        .body(format!(r#"{{"model":"{MODEL}"}}"#))
         .send()
         .await
         .unwrap_or_else(|error| panic!("deepseek request: {error}"));
