@@ -1357,7 +1357,10 @@ Gemini (owner approved 2026-10-20) is the fifteenth managed provider. Its
 OpenAI-compatible completion endpoint is
 `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` with the
 existing bearer credential owner (`AgentsAssemble`/`gemini`). Model discovery reads
-`https://generativelanguage.googleapis.com/v1beta/models` with `x-goog-api-key`,
+`https://generativelanguage.googleapis.com/v1beta/models` with `x-goog-api-key` and
+`pageSize=1000`, because the endpoint otherwise returns only 50 models and a
+`nextPageToken`. The whole account list arrives in one bounded response; a residual
+`nextPageToken` is ignored instead of followed, so discovery never loops. Discovery
 keeps only `generateContent` models, strips the `models/` prefix and defaults to
 `gemini-3.5-flash`. The `service_tier` control ("응답 속도") exposes
 `default`/"기본", `flex`/"Flex" and `priority`/"Priority"; `default` omits the

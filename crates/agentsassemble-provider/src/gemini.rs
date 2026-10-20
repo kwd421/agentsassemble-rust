@@ -23,7 +23,11 @@ use crate::{
     },
 };
 
-pub(crate) const CATALOG_ENDPOINT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+/// Google paginates this endpoint at 50 models unless asked for more. One
+/// request asks for the whole account list; a residual `nextPageToken` is
+/// ignored rather than followed so discovery stays single-request and bounded.
+pub(crate) const CATALOG_ENDPOINT: &str =
+    "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000";
 const DEFAULT_MODEL: &str = "gemini-3.5-flash";
 const SERVICE_TIERS: [(&str, &str); 3] = [
     ("default", "기본"),
@@ -216,10 +220,26 @@ pub(crate) async fn launch(
 mod tests {
     use serde_json::json;
 
-    use super::{GEMINI_SPEC, credential_error, discover, model_options, ready, request_payload};
+    use super::{
+        CATALOG_ENDPOINT, GEMINI_SPEC, credential_error, discover, model_options, ready,
+        request_payload,
+    };
     use crate::ProviderCredentialStore;
     use crate::registration::{GEMINI_PROVIDER, loading_provider};
+    use crate::remote_https::fixed_catalog_client;
     use crate::test_support::durable_session;
+
+    #[test]
+    fn catalog_request_asks_for_the_whole_model_list_in_one_page() {
+        let request = fixed_catalog_client()
+            .unwrap_or_else(|error| panic!("build Gemini catalog client: {error}"))
+            .get(CATALOG_ENDPOINT)
+            .build()
+            .unwrap_or_else(|error| panic!("build Gemini catalog request: {error}"));
+
+        assert_eq!(request.url().path(), "/v1beta/models");
+        assert_eq!(request.url().query(), Some("pageSize=1000"));
+    }
 
     #[test]
     fn model_list_keeps_generate_content_and_strips_prefix() {
