@@ -14,5 +14,5 @@ export default function DeletionGooglePopup() {
     });
     return () => { active = false; controller.abort(); };
   }, []);
-  return <main className="grid min-h-screen place-content-center gap-6 p-6"><h1>계정 탈퇴</h1><p role="status">{message}</p><button className="ops-button" onClick={() => window.close()}>확인</button></main>;
+  return <main className="grid min-h-screen place-content-center gap-6 p-6"><h1>계정 탈퇴</h1><p role="status">{message}</p><button className="dc-button dc-button--secondary dc-button--lg" onClick={() => window.close()}>확인</button></main>;
 }

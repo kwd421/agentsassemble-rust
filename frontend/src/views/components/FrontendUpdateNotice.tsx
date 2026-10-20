@@ -61,7 +61,7 @@ export default function FrontendUpdateNotice({ connected }: { connected: boolean
     <p style={{ flex: 1 }}>{updated
       ? observation === "protocol_changed" ? "새 버전에 맞춰 화면을 새로고침해 주세요." : "새 화면 버전이 준비됐어요."
       : "화면 버전을 확인하지 못했어요."}</p>
-    <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44, flexShrink: 0 }}
+    <button type="button" className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" style={{ minHeight: 44, flexShrink: 0 }}
       disabled={checking} onClick={() => {
         if (updated || !baseline) window.location.reload();
         else setRevision((value) => value + 1);

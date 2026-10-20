@@ -182,6 +182,106 @@ textarea {
   color: var(--color-text-muted);
 }
 
+/* The one action button. Size lives in the components layer so a usage's own
+   Tailwind size or padding still wins; color comes from one variant class. */
+@layer components {
+  .dc-button {
+    display: inline-flex;
+    min-height: 32px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 14px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .dc-button--md {
+    min-height: 40px;
+  }
+
+  .dc-button--lg {
+    min-height: 44px;
+  }
+
+  @media (pointer: coarse) {
+    .dc-button {
+      min-height: 44px;
+    }
+  }
+}
+
+.dc-button {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.dc-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.dc-button:disabled,
+.dc-button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dc-button--primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.dc-button--primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+/* Discord's secondary button: filled grey (measured #2F2E35 on #201F24). */
+.dc-button--secondary {
+  background: rgba(151, 151, 159, 0.12);
+  color: var(--color-text-primary);
+}
+
+.dc-button--secondary:hover:not(:disabled) {
+  background: rgba(151, 151, 159, 0.2);
+}
+
+.dc-button--danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.dc-button--danger:hover:not(:disabled) {
+  background: #c73639;
+}
+
+/* A destructive action that should not shout until it is about to happen. */
+.dc-button--danger-soft {
+  background: rgba(151, 151, 159, 0.12);
+  color: #f57976;
+}
+
+.dc-button--danger-soft:hover:not(:disabled),
+.dc-button--danger-soft:focus-visible {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.dc-button--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.dc-button--ghost:hover:not(:disabled) {
+  background: rgba(151, 151, 159, 0.12);
+  color: var(--color-text-primary);
+}
+
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
 summary,

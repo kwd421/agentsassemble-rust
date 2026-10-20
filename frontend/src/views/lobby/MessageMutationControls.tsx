@@ -187,12 +187,12 @@ export default function MessageMutationControls({
             {error && <p className="dc-channel-composer-error" role="alert">{error}</p>}
 
             <footer>
-              <button type="button" className="ops-button" disabled={busy} onClick={() => setMutation(null)}>
+              <button type="button" className="dc-button dc-button--secondary dc-button--lg" disabled={busy} onClick={() => setMutation(null)}>
                 취소
               </button>
               <button
                 type="button"
-                className={mutation === "delete" ? "ops-button dc-message-delete-confirm" : "ops-cta"}
+                className={mutation === "delete" ? "dc-button dc-button--secondary dc-button--lg dc-message-delete-confirm" : "dc-button dc-button--primary dc-button--lg"}
                 disabled={busy || (mutation === "edit" && !draft.trim())}
                 onClick={() => void (mutation === "edit" ? runEdit() : runDelete())}
               >

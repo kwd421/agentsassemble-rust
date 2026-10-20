@@ -57,7 +57,7 @@ export default function ProviderModelRefresh({ title, compact = false, providerI
       {!compact && <p className="dc-agent-section-title">{title}</p>}
       {desktop && <button
         type="button"
-        className={compact ? undefined : "ops-button"}
+        className={compact ? undefined : "dc-button dc-button--secondary dc-button--lg"}
         aria-label={compact ? "AI 다시 확인" : "모델 목록 새로고침"}
         title={compact ? "AI 다시 확인" : "모델 목록 새로고침"}
         aria-busy={busy}

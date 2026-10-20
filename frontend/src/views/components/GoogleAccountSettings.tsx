@@ -121,7 +121,7 @@ export default function GoogleAccountSettings({ identity }: { identity: UserProf
           <strong>Google 계정이 연결됐어요.</strong>
           <small>연결을 해제해도 프로필과 방 참여는 유지돼요.</small>
         </span>
-        <button type="button" className="ops-button dc-account-block-action" disabled={busy} onClick={() => void disconnect()}>
+        <button type="button" className="dc-button dc-button--secondary dc-button--lg dc-account-block-action" disabled={busy} onClick={() => void disconnect()}>
           {busy ? "해제 중…" : "연결 해제"}
         </button>
       </div>}
@@ -135,7 +135,7 @@ export default function GoogleAccountSettings({ identity }: { identity: UserProf
           {challenge && <GoogleButton challenge={challenge} onCredential={acceptCredential} onError={reportGoogleError} />}
         </>)}
       {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
-      {!status && error && <button type="button" className="ops-button" onClick={() => setRefresh((value) => value + 1)}>다시 불러오기</button>}
+      {!status && error && <button type="button" className="dc-button dc-button--secondary dc-button--lg" onClick={() => setRefresh((value) => value + 1)}>다시 불러오기</button>}
       {credential && <AccountSwitchConfirmation busy={busy} onCancel={() => setCredential("")} onConnect={() => void connect()} />}
     </section>
   );
@@ -177,7 +177,7 @@ function AccountSwitchConfirmation({ busy, onCancel, onConnect }: { busy: boolea
       <h3 id="google-account-confirm-title">Google 계정을 연결할까요?</h3>
       <p style={{ margin: 0, fontSize: 14, lineHeight: 1.7 }}>이미 이 서버에서 쓰던 계정이면 그 계정으로 전환돼요. 현재 게스트 프로필, 방 참여와 복구 코드는 폐기되며, 다시 참여하려면 새 초대가 필요해요. 이전 대화 기록은 남아요.</p>
       <div className="dc-create-channel-actions" style={{ gap: 12 }}>
-        <button type="button" className="ops-button" style={{ minHeight: 44 }} disabled={busy} onClick={onCancel} autoFocus>취소</button>
+        <button type="button" className="dc-button dc-button--secondary dc-button--lg" style={{ minHeight: 44 }} disabled={busy} onClick={onCancel} autoFocus>취소</button>
         <button type="button" className="dc-agent-create-primary" style={{ minHeight: 44 }} disabled={busy} onClick={onConnect}>{busy ? "연결 중…" : "연결"}</button>
       </div>
     </section>

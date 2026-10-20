@@ -51,7 +51,7 @@ export default function ProviderSetupPanel({ providerId }: { providerId: string 
           ? providerUnavailableText(provider)
         : provider?.discovery_status === "loading" ? "제공자 정보를 확인 중이에요. 잠시 후 다시 확인해 주세요."
         : provider?.discovery_error || "아직 실행 가능한 상태를 확인하지 못했어요."}</p>
-      <button type="button" className="ops-button rounded-lg px-4 py-2" disabled={busy || updating}
+      <button type="button" className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" disabled={busy || updating}
         style={{ minHeight: 44, marginTop: 12 }} onClick={() => void read(true)}>
         {busy ? "확인 중…" : "설정 후 상태 다시 확인"}
       </button>

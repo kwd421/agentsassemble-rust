@@ -54,10 +54,10 @@ export default function DelegatedActionCard({ delegateName, summary, consequence
           : <p className="dc-delegated-action-note">{remaining(expiresAt, now)}</p>}
       </div>
       <div className="dc-delegated-action-buttons">
-        <button type="button" className="dc-quiet-button" disabled={locked} onClick={onDecline}>
+        <button type="button" className="dc-button dc-button--secondary" disabled={locked} onClick={onDecline}>
           {busy === "decline" ? "거절하는 중…" : "거절"}
         </button>
-        <button type="button" className="dc-accent-button" data-danger={destructive || undefined}
+        <button type="button" className={destructive ? "dc-button dc-button--danger" : "dc-button dc-button--primary"}
           disabled={locked || (fullAccess && !acknowledged)} onClick={() => onAllow(acknowledged)}>
           {busy === "allow" ? "허용하는 중…" : "허용"}
         </button>

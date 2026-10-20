@@ -228,7 +228,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           <span>{ownedOnline && liveOwned ? "내 서버는 다른 컴퓨터에서 실행 중이에요." : "내 서버가 있는 컴퓨터가 꺼져 있어요."}</span>
           {ownedOnline && liveOwned && <button
             type="button"
-            className="ops-button min-h-9 px-3"
+            className="dc-button dc-button--secondary dc-button--lg min-h-9 px-3"
             disabled={ownServerBusy}
             onClick={() => {
               if (!liveOwned || ownServerBusy) return;
@@ -485,7 +485,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               <div className="dc-disconnected-room-icon" aria-hidden><Users size={30} /></div>
               <h1 id="friends-unavailable-title">친구 목록을 쓸 수 없어요</h1>
               <p className="dc-disconnected-room-description">{controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 다시 연결되면 친구를 볼 수 있어요." : "내 컴퓨터에서 앱을 열면 친구를 볼 수 있어요."}</p>
-              <button type="button" className="ops-button min-h-11 px-4" onClick={() => setFriendsOpen(false)}>대화로 돌아가기</button>
+              <button type="button" className="dc-button dc-button--secondary dc-button--lg min-h-11 px-4" onClick={() => setFriendsOpen(false)}>대화로 돌아가기</button>
             </section>
           ) : guestExpired && !ownerProfileSession ? (
             <section className="dc-disconnected-room" role="status" style={{ padding: 24 }}>

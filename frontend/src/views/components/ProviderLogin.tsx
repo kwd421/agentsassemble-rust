@@ -80,7 +80,7 @@ export default function ProviderLogin({ providerId, displayName, onAuthenticated
       <button type="button" className="dc-agent-login-action" style={{ minHeight: 44 }} disabled={busy} onClick={() => void login()}>
         {busy ? "로그인 중…" : `${displayName} 로그인`}
       </button>
-      {busy && <button type="button" className="ops-button" style={{ minHeight: 44, padding: "0 12px" }} disabled={cancelling} onClick={() => void cancel()}>
+      {busy && <button type="button" className="dc-button dc-button--secondary dc-button--lg" style={{ minHeight: 44, padding: "0 12px" }} disabled={cancelling} onClick={() => void cancel()}>
         {cancelling ? "취소 중…" : "로그인 취소"}
       </button>}
     </div>

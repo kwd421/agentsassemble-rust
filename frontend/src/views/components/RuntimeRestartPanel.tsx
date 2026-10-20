@@ -94,8 +94,8 @@ export default function RuntimeRestartPanel() {
         <p className="mt-1 text-[13px] text-text-muted">진행 중인 대화가 끝난 뒤 시작해요. 연결이 잠시 끊겨요.</p>
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
-      <button type="button" className="dc-quiet-button" disabled={!status?.supported || preparing || pending} onClick={() => { void restart(); }}>{preparing ? "요청 중" : query.id && !receipt ? "같은 요청 다시 보내기" : "서버 재시작"}</button>
-      {(query.id || error) && <button type="button" className="dc-quiet-button" disabled={preparing || observing} onClick={() => {
+      <button type="button" className="dc-button dc-button--secondary" disabled={!status?.supported || preparing || pending} onClick={() => { void restart(); }}>{preparing ? "요청 중" : query.id && !receipt ? "같은 요청 다시 보내기" : "서버 재시작"}</button>
+      {(query.id || error) && <button type="button" className="dc-button dc-button--secondary" disabled={preparing || observing} onClick={() => {
         setError(""); setQuery((current) => ({ ...current, revision: current.revision + 1 }));
       }}>결과 확인</button>}
       </div>

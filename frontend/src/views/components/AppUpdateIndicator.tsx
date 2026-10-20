@@ -70,8 +70,8 @@ export default function AppUpdateIndicator() {
       <p className="dc-head-popover-copy">버전 {version} · 다시 시작하면 적용돼요.</p>
       {error && <p role="alert" className="dc-head-popover-copy text-danger">{error}</p>}
       <div className="mt-3 flex justify-end gap-2">
-        <button type="button" className="dc-quiet-button" onClick={close}>나중에</button>
-        <button ref={installButton} type="button" className="dc-accent-button"
+        <button type="button" className="dc-button dc-button--secondary" onClick={close}>나중에</button>
+        <button ref={installButton} type="button" className="dc-button dc-button--primary"
           disabled={installing} onClick={() => void install()}>
           {installing ? "업데이트하는 중…" : "다시 시작"}
         </button>

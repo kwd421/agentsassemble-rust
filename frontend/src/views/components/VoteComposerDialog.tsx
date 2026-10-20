@@ -224,7 +224,7 @@ export default function VoteComposerDialog({
                 />
                 <button
                   type="button"
-                  className="ops-button grid h-10 min-h-10 place-items-center px-0"
+                  className="dc-button dc-button--secondary dc-button--lg grid h-10 min-h-10 place-items-center px-0"
                   onClick={() => removeOption(index)}
                   disabled={busy || options.length <= MIN_VOTE_OPTIONS}
                   aria-label={`선택지 ${index + 1} 제거`}
@@ -235,7 +235,7 @@ export default function VoteComposerDialog({
             ))}
             <button
               type="button"
-              className="ops-button mt-1 inline-flex h-10 min-h-10 items-center justify-center gap-2"
+              className="dc-button dc-button--secondary dc-button--lg mt-1 inline-flex h-10 min-h-10 items-center justify-center gap-2"
               onClick={addOption}
               disabled={busy || options.length >= MAX_VOTE_OPTIONS}
             >
@@ -304,7 +304,7 @@ export default function VoteComposerDialog({
             </button>
             <button
               type="submit"
-              className="ops-cta"
+              className="dc-button dc-button--primary dc-button--lg"
               style={{ padding: "0 16px" }}
               disabled={busy}
             >

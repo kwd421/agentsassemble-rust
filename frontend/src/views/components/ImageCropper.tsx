@@ -295,7 +295,7 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
         <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} onClick={cancel}>
           취소
         </button>
-        <button type="button" className="ops-cta min-h-10 min-w-[96px] px-4" disabled={!natural || cropping} onClick={() => void cropImage()}>
+        <button type="button" className="dc-button dc-button--primary dc-button--lg min-h-10 min-w-[96px] px-4" disabled={!natural || cropping} onClick={() => void cropImage()}>
           적용
         </button>
       </div>

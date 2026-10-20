@@ -161,7 +161,7 @@ export default function PendingDelegatedActions({ socket, viewerParticipantId }:
             <p className="dc-delegated-action-summary preserve-words" role="alert">{text}</p>
           </div>
           <div className="dc-delegated-action-buttons">
-            <button type="button" className="dc-quiet-button" onClick={() => setOutcomes((current) => current.filter((item) => item.id !== id))}>닫기</button>
+            <button type="button" className="dc-button dc-button--secondary" onClick={() => setOutcomes((current) => current.filter((item) => item.id !== id))}>닫기</button>
           </div>
         </section>
       ))}

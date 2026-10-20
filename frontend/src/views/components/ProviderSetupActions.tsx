@@ -30,7 +30,7 @@ export default function ProviderSetupActions({ providerId, provider, localAvaila
       installable={Boolean(provider?.install_supported)} onUpdating={onUpdating} onInstalled={onUpdated} />}
     {!desktop && <>
       <p className="dc-agent-hint preserve-words">이 컴퓨터의 로그인·설치 상태는 AgentsAssemble 앱에서 확인할 수 있어요.</p>
-      <a className="ops-button rounded-lg px-4 py-2" href={link}
+      <a className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" href={link}
         style={{ minHeight: 40, display: "inline-flex", alignItems: "center", justifyContent: "center", marginTop: 8 }}
         onClick={() => setStatus("앱이 열리지 않으면 이 컴퓨터에 AgentsAssemble이 설치되어 있는지 확인해 주세요.")}>
         이 컴퓨터에서 {destination.display_name} 설정 열기

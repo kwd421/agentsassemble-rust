@@ -38,7 +38,7 @@ export default function DelegatedInviteLink({ invite, onClose }: { invite: Deleg
         {copied === "failed" && <p className="dc-delegated-action-note" data-tone="error" role="alert">복사하지 못했어요. 링크를 직접 선택해 주세요.</p>}
       </div>
       <div className="dc-delegated-action-buttons">
-        <button type="button" className="dc-quiet-button" onClick={onClose}>닫기</button>
+        <button type="button" className="dc-button dc-button--secondary" onClick={onClose}>닫기</button>
       </div>
     </section>
   );

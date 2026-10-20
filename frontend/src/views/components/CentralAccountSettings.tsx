@@ -34,7 +34,7 @@ export default function CentralAccountSettings({ disabled, showEntryLink = true 
   if (!session) return <section className="dc-guest-recovery-settings dc-account-block" aria-label="앱 계정">
     <h4>앱 계정</h4>
     <p className="dc-account-block-lead">로그인하면 계정과 내 서버를 확인할 수 있어요.</p>
-    {showEntryLink && <a className="ops-button dc-account-block-action" href={`${centralAccountEntryUrl()}?account=settings`} target="_blank" rel="noopener noreferrer">계정 설정 열기</a>}
+    {showEntryLink && <a className="dc-button dc-button--secondary dc-button--lg dc-account-block-action" href={`${centralAccountEntryUrl()}?account=settings`} target="_blank" rel="noopener noreferrer">계정 설정 열기</a>}
     {retainedReceipt && <AccountDeletionSettings disabled={disabled} label="탈퇴 진행 상황" />}
   </section>;
   const person = session.person;
@@ -47,7 +47,7 @@ export default function CentralAccountSettings({ disabled, showEntryLink = true 
           <strong className="preserve-words">{person.display_name}</strong>
           <small>{person.identity_kind === "google" ? "Google로 로그인했어요" : "게스트로 로그인했어요"}</small>
         </span>
-        <button type="button" className="ops-button dc-account-block-action" disabled={disabled || busy} onClick={() => void logout()}>
+        <button type="button" className="dc-button dc-button--secondary dc-button--lg dc-account-block-action" disabled={disabled || busy} onClick={() => void logout()}>
           {busy ? "로그아웃 중…" : "로그아웃"}
         </button>
       </div>

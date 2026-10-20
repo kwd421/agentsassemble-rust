@@ -14,7 +14,7 @@ export default function FreshHostRegistrationButton({ serverId, deviceToken, dis
   }
   return <section aria-label="새 계정으로 서버 등록" aria-busy={busy}>
     <p>이 컴퓨터는 이전 계정의 탈퇴로 외부 연결이 중지됐어요. 이전 계정의 정리가 끝나면 새 계정으로 서버를 다시 등록할 수 있어요. 이전 계정의 연결 관계는 이어받지 않아요.</p>
-    <button type="button" className="ops-button" disabled={disabled || busy} onClick={() => void register()}>{busy ? "등록 중…" : "새 계정으로 이 컴퓨터의 서버 등록"}</button>
+    <button type="button" className="dc-button dc-button--secondary dc-button--lg" disabled={disabled || busy} onClick={() => void register()}>{busy ? "등록 중…" : "새 계정으로 이 컴퓨터의 서버 등록"}</button>
     {error && <p role="alert">{error}</p>}
   </section>;
 }

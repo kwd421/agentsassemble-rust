@@ -557,13 +557,13 @@ export default function StartupIdentityGate({
       >
         <div className="flex items-center justify-end gap-2 empty:hidden">
         <AppUpdateIndicator />
-        {centralPerson && (screen === "servers" || screen === "choice") && !accountSettingsOpen && <button type="button" className="ops-button flex min-h-11 max-w-full items-center gap-2 justify-self-end" aria-label="계정 설정" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>
+        {centralPerson && (screen === "servers" || screen === "choice") && !accountSettingsOpen && <button type="button" className="dc-button dc-button--secondary dc-button--lg flex min-h-11 max-w-full items-center gap-2 justify-self-end" aria-label="계정 설정" disabled={busy} onClick={() => setAccountSettingsOpen(true)}>
           <span className="dc-member-avatar" style={{ width: 28, height: 28 }} aria-hidden="true">{centralPerson.avatar_url ? <img src={centralPerson.avatar_url} alt="" referrerPolicy="no-referrer" /> : centralPerson.display_name.slice(0, 1) || "•"}</span>
           <span className="truncate">{centralPerson.display_name}</span>
         </button>}
         </div>
         {accountSettingsOpen ? <>
-          <button type="button" className="ops-button min-h-11 justify-self-start" disabled={busy} onClick={() => setAccountSettingsOpen(false)}>← 돌아가기</button>
+          <button type="button" className="dc-button dc-button--secondary dc-button--lg min-h-11 justify-self-start" disabled={busy} onClick={() => setAccountSettingsOpen(false)}>← 돌아가기</button>
           <CentralAccountSettings disabled={busy} showEntryLink={false} />
         </> : <>
         <header className={screen === "choice" && !centralPerson ? "grid gap-2 text-center" : "grid gap-2"}>
@@ -586,7 +586,7 @@ export default function StartupIdentityGate({
             className="dc-startup-error"
           >
             {error}
-            {screen === "choice" && loadCentralSession() && <button type="button" className="ops-button mt-2 block" disabled={busy} onClick={() => void refreshServers()}>다시 확인</button>}
+            {screen === "choice" && loadCentralSession() && <button type="button" className="dc-button dc-button--secondary dc-button--lg mt-2 block" disabled={busy} onClick={() => void refreshServers()}>다시 확인</button>}
           </div>
         )}
         {!webEntry && hostingChecked && hostingState === "account_deleted" && <LocalAccountDataChoice disabled={busy} />}

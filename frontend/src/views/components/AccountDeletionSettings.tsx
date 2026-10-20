@@ -140,7 +140,7 @@ export function AccountDeletionFlow({ disabled, onClose, onDeleted }: { disabled
       {skipped.length > 0 && <div aria-label="건너뛴 서버"><p>정리하지 못한 서버에는 이름과 사진이 남을 수 있어요.</p><ul className="dc-account-deletion-servers">{skipped.map(item => <li key={item.key}><span>{item.reason === "지금 연결할 수 없어요." ? `꺼져 있어서 정리하지 못한 서버: ${item.name}` : item.name}{item.reason && <small className="text-text-muted block">{item.reason}</small>}</span><span className="dc-member-status-chip" data-state="attention">건너뜀</span></li>)}</ul></div>}
       {localFollowup === "local_stopped" && <LocalAccountDataChoice disabled={disabled || busy} />}
       {localFollowup === "server_app" && <p>방 데이터를 지우려면 서버 컴퓨터의 앱에서 선택해 주세요. 그대로 두어도 돼요.</p>}
-      <footer><button type="button" className="ops-cta min-h-11 px-4" onClick={close}>확인</button></footer>
+      <footer><button type="button" className="dc-button dc-button--primary dc-button--lg min-h-11 px-4" onClick={close}>확인</button></footer>
     </>}
     {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
   </section>;

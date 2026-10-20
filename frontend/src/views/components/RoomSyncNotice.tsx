@@ -43,7 +43,7 @@ export default function RoomSyncNotice({
     >
       {operation.pending && <p className="preserve-words">‘{operation.pending.confirmationName || operation.pending.roomId}’ 방 관리 결과</p>}
       <p className="preserve-words">{operation.error || operation.notice || "방 관리 요청을 처리하고 있어요."}</p>
-      <button type="button" className="ops-button mt-2 px-3 py-2" disabled={operation.busy}
+      <button type="button" className="dc-button dc-button--secondary dc-button--lg mt-2 px-3 py-2" disabled={operation.busy}
         onClick={operation.pending ? operation.retry : operation.dismissNotice}>
         {operation.pending ? "완료 여부 확인" : "닫기"}
       </button>

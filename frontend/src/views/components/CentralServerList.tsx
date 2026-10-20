@@ -151,8 +151,8 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
       {namePreview(editingName.trim(), server?.server_id || localHost?.server_id)}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2">
-          <button type="submit" className="ops-cta min-h-10 px-4" disabled={busy || saving || !editingName.trim() || editingName.trim().length > 80}>이름 저장</button>
-          <button type="button" className="ops-button" disabled={saving} onClick={() => { setEditingId(null); setError(""); }}>취소</button>
+          <button type="submit" className="dc-button dc-button--primary dc-button--lg min-h-10 px-4" disabled={busy || saving || !editingName.trim() || editingName.trim().length > 80}>이름 저장</button>
+          <button type="button" className="dc-button dc-button--secondary dc-button--lg" disabled={saving} onClick={() => { setEditingId(null); setError(""); }}>취소</button>
         </div>
         {defaultName && (editingName.trim() !== defaultName || (server ? server.name_is_default === false : Boolean(localName))) && <button type="button" className="dc-server-row-text-button" disabled={busy || saving}
           onClick={() => void save(true)}>기본 이름으로 되돌리기</button>}
@@ -179,7 +179,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
       {confirmed ? <>
         <p>‘{confirmed.name}’만 내 서버로 남길까요?</p>
         <p>나머지 컴퓨터는 더 이상 내 서버가 아니고, 이 계정에 기기로만 연결할 수 있어요. 되돌릴 수 없어요. 방과 대화 기록은 그 컴퓨터에 그대로 남아요.</p>
-        <button autoFocus className="ops-button min-h-10" disabled={saving} onClick={() => setConfirmKeeper("")}>취소</button>
+        <button autoFocus className="dc-button dc-button--secondary dc-button--lg min-h-10" disabled={saving} onClick={() => setConfirmKeeper("")}>취소</button>
         <button className="dc-account-delete-button" disabled={busy || saving} onClick={() => void resolve()}>나머지 서버에서 빼기</button>
       </> : <>
         <fieldset disabled={busy || saving}>
@@ -189,7 +189,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
             <span className="dc-server-row-copy"><strong>{server.name}</strong><span>{server.online ? "연결 가능" : "연결 끊김"} · 마지막 접속: {server.last_seen_at === null ? "기록 없음" : new Date(server.last_seen_at * 1000).toLocaleString("ko-KR")}</span></span>
           </label>)}
         </fieldset>
-        <button className="ops-cta min-h-10" disabled={!selected || busy || saving} onClick={() => setConfirmKeeper(selected?.server_id || "")}>이 서버 남기기</button>
+        <button className="dc-button dc-button--primary dc-button--lg min-h-10" disabled={!selected || busy || saving} onClick={() => setConfirmKeeper(selected?.server_id || "")}>이 서버 남기기</button>
       </>}
       {error && <p role="alert">{error}</p>}
     </section>;
@@ -209,7 +209,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         {editingId !== "local" && <div className="dc-server-row-actions">
           <button type="button" className="dc-server-row-icon-button" aria-label={`${localName || localDefaultName} 이름 변경`} title="이름 변경" disabled={busy || saving || !localDefaultName}
             onClick={() => { setEditingId("local"); setName(localName || localDefaultName); setError(""); }}><Pencil size={16} /></button>
-          <button type="button" className={localChecking ? "ops-button dc-server-row-open" : "ops-cta dc-server-row-open"} aria-label="이 컴퓨터 서버 열기" disabled={busy || saving || localChecking || !localDefaultName} onClick={() => void onOpenLocal(localName)}>{localChecking ? "확인 중" : "열기"}</button>
+          <button type="button" className={localChecking ? "dc-button dc-button--secondary dc-button--lg dc-server-row-open" : "dc-button dc-button--primary dc-button--lg dc-server-row-open"} aria-label="이 컴퓨터 서버 열기" disabled={busy || saving || localChecking || !localDefaultName} onClick={() => void onOpenLocal(localName)}>{localChecking ? "확인 중" : "열기"}</button>
         </div>}
       </div>}
     {servers.map((server) => {
@@ -239,7 +239,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
         </div>
         {editingId !== server.server_id && <div className="dc-server-row-actions">
           {server.relation === "owner" && <button type="button" className="dc-server-row-icon-button" aria-label={`${name} 이름 변경`} title="이름 변경" disabled={busy || saving || centralUnavailable} onClick={() => { setEditingId(server.server_id); setName(server.alias); setError(""); }}><Pencil size={16} /></button>}
-          <button type="button" className={openable ? "ops-cta dc-server-row-open" : "ops-button dc-server-row-open"} aria-label={!isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : `${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>{checking ? "확인 중" : !isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : "열기"}</button>
+          <button type="button" className={openable ? "dc-button dc-button--primary dc-button--lg dc-server-row-open" : "dc-button dc-button--secondary dc-button--lg dc-server-row-open"} aria-label={!isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : `${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>{checking ? "확인 중" : !isLocal && deviceConnect && server.relation === "owner" ? "이 기기로 연결" : "열기"}</button>
         </div>}
       </div>;
     })}

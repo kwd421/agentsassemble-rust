@@ -16,7 +16,7 @@ export default function MembershipEndedView({ room, scope, onConfirm }: {
       </div>
       <h1 id="membership-ended-title">{copy.title}</h1>
       <p className="dc-disconnected-room-description">{copy.body}</p>
-      <button type="button" className="ops-button min-h-10 min-w-[96px] px-4" onClick={onConfirm}>확인</button>
+      <button type="button" className="dc-button dc-button--secondary dc-button--lg min-h-10 min-w-[96px] px-4" onClick={onConfirm}>확인</button>
     </section>
   );
 }

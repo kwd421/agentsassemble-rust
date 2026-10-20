@@ -45,7 +45,7 @@ export function EndedWorkspace({ reason, serverId }: { reason: "revoked" | "disc
           ? "호스트에서 이 기기의 연결을 해제했어요."
           : reason === "disconnected" ? "호스트와의 연결이 끊겼어요."
           : "서버 접속 권한을 확인하지 못했어요."} 내 서버 목록에서 다시 연결해 주세요.</p>
-        {centralAccountEntryUrl() && <a className="ops-button" href={centralAccountEntryUrl()} onClick={event => { if (serverId && hasRemoteWorkspace()) { event.preventDefault(); closeRemoteWorkspace(serverId); } }}>내 서버 목록으로</a>}
+        {centralAccountEntryUrl() && <a className="dc-button dc-button--secondary dc-button--lg" href={centralAccountEntryUrl()} onClick={event => { if (serverId && hasRemoteWorkspace()) { event.preventDefault(); closeRemoteWorkspace(serverId); } }}>내 서버 목록으로</a>}
       </main>
     </dialog>;
 }

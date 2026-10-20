@@ -145,15 +145,15 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     {error && <p role="alert">{error}</p>}
     {operation?.error_code && <p role="alert" className="dc-agent-hint preserve-words">{localAttendeeFailureReason(operation.error_code)}</p>}
     <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-      {needsPreparation && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling}
+      {needsPreparation && <button className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling}
         onClick={() => void read(undefined, true)}>이 컴퓨터에서 AI를 쓸 준비하기</button>}
-      <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void read()}>상태 다시 확인</button>
-      {editable && dismissed && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} onClick={() => setDismissed(false)}>설정 계속하기</button>}
-      {!operation && submitted.current && !cancelIntent.current && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling}
+      <button className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void read()}>상태 다시 확인</button>
+      {editable && dismissed && <button className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" style={{ minHeight: 44 }} onClick={() => setDismissed(false)}>설정 계속하기</button>}
+      {!operation && submitted.current && !cancelIntent.current && <button className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling}
         onClick={() => { void create().catch(() => undefined); }}>같은 요청 다시 시도</button>}
-      {!cancelIntent.current && operation?.phase === "admitted" && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void command("start")}>이 컴퓨터에서 실행</button>}
-      {!cancelIntent.current && operation?.phase === "admission_unresolved" && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void command("retry_admission")}>참가 결과 복구</button>}
-      {(operation || submitted.current) && !["stopped", "failed", "cleanup_unconfirmed"].includes(operation?.phase ?? "") && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={cancelling}
+      {!cancelIntent.current && operation?.phase === "admitted" && <button className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void command("start")}>이 컴퓨터에서 실행</button>}
+      {!cancelIntent.current && operation?.phase === "admission_unresolved" && <button className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy || cancelling} onClick={() => void command("retry_admission")}>참가 결과 복구</button>}
+      {(operation || submitted.current) && !["stopped", "failed", "cleanup_unconfirmed"].includes(operation?.phase ?? "") && <button className="dc-button dc-button--secondary dc-button--lg rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={cancelling}
         onClick={() => void command("cancel")}>에이전트 종료하고 나가기</button>}
     </div>
     {catalog && (editable || submitted.current) && !operation && <div style={{ display: editable && !dismissed ? undefined : "none" }}>

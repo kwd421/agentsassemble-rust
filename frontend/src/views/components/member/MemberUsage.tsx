@@ -31,7 +31,7 @@ export default function MemberUsage({ displayName, provider }: {
       </p> : !local ? <p className="dc-member-detail-note preserve-words">
         계정 사용량은 서버 운영자의 데스크톱 앱에서 확인할 수 있어요.
       </p> : <>
-        <button type="button" className="ops-button" style={{ minHeight: 44, padding: "0 12px", width: "fit-content", alignSelf: "start", fontSize: 13 }} disabled={busy} onClick={() => void read()}>
+        <button type="button" className="dc-button dc-button--secondary dc-button--lg" style={{ minHeight: 44, padding: "0 12px", width: "fit-content", alignSelf: "start", fontSize: 13 }} disabled={busy} onClick={() => void read()}>
           {busy ? "조회 중…" : "계정 사용량 조회"}
         </button>
         {error && <p role="alert" className="dc-member-detail-note preserve-words">{error}</p>}

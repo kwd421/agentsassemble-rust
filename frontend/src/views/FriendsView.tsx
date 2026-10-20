@@ -78,7 +78,7 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
           {onlineOnly && <p className="dc-friend-empty">마지막으로 저장된 상태를 기준으로 표시해요.</p>}
           {!editing && !deleting && directory.error && <div role="alert" className="dc-friends-error">
             <span>{directory.error}</span>
-            {!directory.loaded && <button type="button" className="ops-button dc-friends-small-button" disabled={directory.busy} onClick={() => void directory.reload()}>다시 시도</button>}
+            {!directory.loaded && <button type="button" className="dc-button dc-button--secondary dc-button--lg dc-friends-small-button" disabled={directory.busy} onClick={() => void directory.reload()}>다시 시도</button>}
           </div>}
           {directory.busy && !directory.loaded && <p role="status" className="dc-friend-empty">친구 목록을 불러오는 중이에요…</p>}
           {directory.loaded && !directory.busy && !directory.error && visible.length === 0 && <p className="dc-friend-empty">{query || type !== "all" || onlineOnly ? "일치하는 친구가 없어요." : "친구를 추가해 보세요."}</p>}
@@ -129,7 +129,7 @@ function FriendProfile({ friend, busy, onEdit }: { friend: SavedFriend; busy: bo
     <div className="dc-friend-profile-banner" aria-hidden />
     <div className="dc-friend-profile-body"><FriendAvatar friend={friend} size={64} /><h3>{details.display_name}</h3>
       {details.handle && <p className="dc-friend-profile-handle">{details.handle}</p>}
-      <button type="button" className="ops-button dc-friends-small-button" disabled={busy} onClick={onEdit}>친구 편집</button>
+      <button type="button" className="dc-button dc-button--secondary dc-button--lg dc-friends-small-button" disabled={busy} onClick={onEdit}>친구 편집</button>
       <dl className="dc-friend-profile-facts">{facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     </div>
   </article>;
@@ -199,7 +199,7 @@ function FriendEditor({ initial, busy, error, onCancel, onSave }: {
       {error && <p role="alert" className="dc-channel-composer-error">{error}</p>}
       <div className="dc-create-channel-actions">
         <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={busy} onClick={onCancel}>취소</button>
-        <button type="submit" className="ops-cta" style={{ padding: "0 16px" }} disabled={busy || !changed || !draft.details.display_name.trim()}>{busy ? "저장 중…" : "저장"}</button>
+        <button type="submit" className="dc-button dc-button--primary dc-button--lg" style={{ padding: "0 16px" }} disabled={busy || !changed || !draft.details.display_name.trim()}>{busy ? "저장 중…" : "저장"}</button>
       </div>
     </form>
   </FriendDialog>;

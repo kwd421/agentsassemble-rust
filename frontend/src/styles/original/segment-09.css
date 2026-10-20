@@ -202,7 +202,7 @@
   transition: width 160ms linear;
 }
 
-.dc-outgoing-upload .dc-quiet-button {
+.dc-outgoing-upload .dc-button {
   flex-shrink: 0;
   gap: 6px;
 }
@@ -289,14 +289,6 @@
   gap: 8px;
 }
 
-.dc-accent-button[data-danger] {
-  background: var(--color-danger);
-}
-
-.dc-accent-button[data-danger]:hover:not(:disabled) {
-  background: #c73639;
-}
-
 .dc-upload-limit-dialog {
   position: fixed;
   inset: 0;
@@ -332,7 +324,7 @@
   line-height: 20px;
 }
 
-.dc-upload-limit-dialog .dc-accent-button {
+.dc-upload-limit-dialog .dc-button {
   justify-self: end;
   min-width: 96px;
   min-height: 40px;

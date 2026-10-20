@@ -86,7 +86,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
       {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
       <div className="dc-create-channel-actions">
         <button type="button" className="dc-agent-create-secondary" disabled={busy} onClick={onClose} style={{ minHeight: 40 }}>취소</button>
-        <button type="button" className="ops-cta" disabled={busy} aria-disabled={!validName || undefined} onClick={() => void submit()} style={{ padding: "0 16px" }}>
+        <button type="button" className="dc-button dc-button--primary dc-button--lg" disabled={busy} aria-disabled={!validName || undefined} onClick={() => void submit()} style={{ padding: "0 16px" }}>
           {busy ? "만드는 중…" : "만들기"}
         </button>
       </div>

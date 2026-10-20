@@ -573,7 +573,7 @@ export default function RoomSettingsModal({
               </label>
             </div>
             {canInvite && (
-              <button type="button" className="ops-cta dc-settings-invite" onClick={onInvite}>
+              <button type="button" className="dc-button dc-button--primary dc-button--lg dc-settings-invite" onClick={onInvite}>
                 <UserPlus size={15} />
                 초대 링크 만들기
               </button>

@@ -44,7 +44,7 @@ export default function OutgoingUploadCard({ phase, fileCount, bytesDone, bytesT
         )}
       </div>
       {stopped && onRetry && (
-        <button type="button" className="dc-quiet-button" onClick={onRetry}>
+        <button type="button" className="dc-button dc-button--secondary" onClick={onRetry}>
           <RotateCcw size={14} aria-hidden="true" />
           다시 시도
         </button>
