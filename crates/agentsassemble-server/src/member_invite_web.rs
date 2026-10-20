@@ -1,8 +1,9 @@
 use super::{
     AppState, DEVICE_CREDENTIAL_HEADER, Deserialize, HeaderMap, HumanAdmissionDecision,
-    HumanAdmissionInput, HumanInviteHttpError, HumanInvitePreflight, HumanInvitePreflightRejection,
-    JoinResponse, Json, MAX_ADMISSION_BODY_BYTES, PreflightRequest, PreparedHumanAdmission,
-    Request, State, StatusCode, Value, decode_json_body, fingerprint_browser_credential, json,
+    HumanAdmissionInput, HumanAdmissionInputError, HumanInviteHttpError, HumanInvitePreflight,
+    HumanInvitePreflightRejection, JoinResponse, Json, MAX_ADMISSION_BODY_BYTES,
+    MAX_JOIN_BODY_BYTES, PersistenceError, PreflightRequest, PreparedHumanAdmission, Request,
+    State, StatusCode, Value, decode_json_body, fingerprint_browser_credential, json,
     presented_invite_evidence, required_header,
 };
 use agentsassemble_persistence::{HumanInvitePreflightRequest, MemberAdmission};
@@ -21,6 +22,14 @@ pub(crate) mod resume;
 
 const CHALLENGE_LIMIT: usize = 1024;
 const CHALLENGE_TTL: Duration = Duration::seconds(300);
+
+/// URL query pair through which a client build advertises that it can read the
+/// optional `member_join_profile` challenge field and will send a `profile` on
+/// join. Old hosts ignore the query, and the host only sends the field to a
+/// client that advertised it, so old strict challenge parsers keep their shape.
+const MEMBER_JOIN_PROFILE_QUERY: &str = "member_join_profile";
+const MEMBER_JOIN_PROFILE_VALUE: &str = "1";
+const MEMBER_PROFILE_DISPLAY_NAME_CHARACTERS: usize = 128;
 
 #[derive(Default)]
 pub(crate) struct MemberChallenges(Mutex<HashMap<String, Challenge>>);
@@ -221,6 +230,85 @@ struct MemberJoinRequest {
     grant_token: String,
     request_id: String,
     client_id: String,
+    #[serde(default)]
+    profile: Option<MemberJoinProfile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemberJoinProfile {
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    avatar_png_base64: Option<String>,
+}
+
+fn client_advertises_member_join_profile(query: Option<&str>) -> bool {
+    query.is_some_and(|query| {
+        query.split('&').any(|pair| {
+            pair.split_once('=') == Some((MEMBER_JOIN_PROFILE_QUERY, MEMBER_JOIN_PROFILE_VALUE))
+        })
+    })
+}
+
+/// Reuses guest admission name trimming and bounds, but refuses an explicitly
+/// supplied name that would otherwise be truncated or collapse to empty.
+fn member_profile_display_name(
+    profile: Option<&MemberJoinProfile>,
+) -> Result<String, HumanInviteHttpError> {
+    let Some(name) = profile.and_then(|profile| profile.display_name.as_deref()) else {
+        return Ok(String::new());
+    };
+    let cleaned = agentsassemble_domain::clean_identifier(name, usize::MAX);
+    if cleaned.is_empty() || cleaned.chars().count() > MEMBER_PROFILE_DISPLAY_NAME_CHARACTERS {
+        return Err(member_profile_name_invalid());
+    }
+    Ok(name.to_owned())
+}
+
+/// The guest admission path consumes PNG avatars as a data URL. The member
+/// profile carries only the base64 payload, so add the same canonical prefix.
+fn member_profile_avatar(profile: Option<&MemberJoinProfile>) -> String {
+    profile
+        .and_then(|profile| profile.avatar_png_base64.as_deref())
+        .map(|encoded| format!("data:image/png;base64,{encoded}"))
+        .unwrap_or_default()
+}
+
+fn member_profile_name_invalid() -> HumanInviteHttpError {
+    HumanInviteHttpError::bad_request(
+        "member_profile_name_invalid",
+        "Member profile display name must be between 1 and 128 characters after trimming.",
+    )
+}
+
+fn member_profile_avatar_invalid() -> HumanInviteHttpError {
+    HumanInviteHttpError::bad_request(
+        "member_profile_avatar_invalid",
+        "Member profile avatar must be a bounded PNG image.",
+    )
+}
+
+fn member_profile_input_error(error: HumanAdmissionInputError) -> HumanInviteHttpError {
+    match error {
+        HumanAdmissionInputError::Avatar => member_profile_avatar_invalid(),
+        other => HumanInviteHttpError::from_input(other),
+    }
+}
+
+fn is_profile_avatar_rejection(error: &PersistenceError) -> bool {
+    matches!(
+        error,
+        PersistenceError::CommandRejected { code, .. }
+            if matches!(
+                code.as_bytes(),
+                b"attachment_too_large"
+                    | b"attachment_type_unsupported"
+                    | b"attachment_type_mismatch"
+                    | b"attachment_invalid_image"
+                    | b"attachment_image_limits"
+            )
+    )
 }
 
 pub(super) async fn start(
@@ -229,6 +317,7 @@ pub(super) async fn start(
 ) -> Result<Json<Value>, HumanInviteHttpError> {
     let client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
+    let advertises_profile = client_advertises_member_join_profile(request.uri().query());
     let body: PreflightRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
         .await
         .map_err(HumanInviteHttpError::from_body)?;
@@ -266,10 +355,12 @@ pub(super) async fn start(
         now,
         client.as_ref().map(|client| client.binding().clone()),
     )?;
-    Ok(Json(
-        json!({"challenge_id": id, "challenge_hash": URL_SAFE_NO_PAD.encode(Sha256::digest(id.as_bytes())),
-        "server_id": state.central_host_identity.server_id(), "registration_epoch": epoch, "expires_at": expires.timestamp()}),
-    ))
+    let mut payload = json!({"challenge_id": id, "challenge_hash": URL_SAFE_NO_PAD.encode(Sha256::digest(id.as_bytes())),
+        "server_id": state.central_host_identity.server_id(), "registration_epoch": epoch, "expires_at": expires.timestamp()});
+    if advertises_profile {
+        payload["member_join_profile"] = json!(true);
+    }
+    Ok(Json(payload))
 }
 
 pub(super) async fn join(
@@ -278,25 +369,27 @@ pub(super) async fn join(
 ) -> Result<Json<JoinResponse>, HumanInviteHttpError> {
     let client = crate::secure_client::from_request(&request);
     let browser = browser(request.headers())?;
-    let body: MemberJoinRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
+    let body: MemberJoinRequest = decode_json_body(request, MAX_JOIN_BODY_BYTES)
         .await
         .map_err(HumanInviteHttpError::from_body)?;
     let credential =
         presented_invite_evidence(body.invite_token.trim()).map_err(|_| invalid_challenge())?;
+    let display_name = member_profile_display_name(body.profile.as_ref())?;
+    let avatar_image_url = member_profile_avatar(body.profile.as_ref());
     let prepared = PreparedHumanAdmission::prepare(
         credential,
         browser,
         &HumanAdmissionInput {
             request_id: body.request_id.clone(),
             meeting_id_assertion: String::new(),
-            display_name: String::new(),
+            display_name,
             participant_type: "human".into(),
             owner_display_name: String::new(),
             client_id: body.client_id.clone(),
-            avatar_image_url: String::new(),
+            avatar_image_url,
         },
     )
-    .map_err(HumanInviteHttpError::from_input)?;
+    .map_err(member_profile_input_error)?;
     if prepared.client_id().is_empty() {
         return Err(HumanInviteHttpError::bad_request(
             "client_id_required",
@@ -306,14 +399,31 @@ pub(super) async fn join(
     let response_request_id = prepared.request_id().to_string();
     let response_client_id = prepared.client_id().to_owned();
     let request_hash: [u8; 32] = Sha256::digest(
-        json!([body.grant_token, body.request_id, body.client_id])
-            .to_string()
-            .as_bytes(),
+        json!([
+            &body.grant_token,
+            &body.request_id,
+            &body.client_id,
+            body.profile
+                .as_ref()
+                .and_then(|profile| profile.display_name.as_deref()),
+            body.profile
+                .as_ref()
+                .and_then(|profile| profile.avatar_png_base64.as_deref()),
+        ])
+        .to_string()
+        .as_bytes(),
     )
     .into();
     let member = redeem_member(&state, &body, browser, request_hash, client.as_ref()).await?;
     let prepared = prepared.with_member(member.clone());
-    match state.rooms.admit_human(prepared).await? {
+    let decision = match state.rooms.admit_human(prepared).await {
+        Ok(decision) => decision,
+        Err(error) if is_profile_avatar_rejection(&error) => {
+            return Err(member_profile_avatar_invalid());
+        }
+        Err(error) => return Err(error.into()),
+    };
+    match decision {
         HumanAdmissionDecision::Admitted(commit) => {
             if let Some(challenge) = state.member_challenges.0.lock().get_mut(&body.challenge_id) {
                 challenge.completed = Some((request_hash, member));

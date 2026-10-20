@@ -48,14 +48,14 @@ async fn removal_commit_fences_both_existing_devices_replay_connect_and_mutation
         [2; 32],
         [3; 32],
         &uuid::Uuid::new_v4().to_string(),
-        "ignored",
+        "",
     )
     .with_member(member());
     let b = prepared(
         [2; 32],
         [4; 32],
         &uuid::Uuid::new_v4().to_string(),
-        "ignored",
+        "",
     )
     .with_member(member());
     let first = admitted(store.admit_human(&a, now).await?);
@@ -226,7 +226,7 @@ async fn wrong_channel_epoch_and_failed_initial_work_leave_no_fence() -> TestRes
         [2; 32],
         [3; 32],
         &uuid::Uuid::new_v4().to_string(),
-        "ignored",
+        "",
     )
     .with_member(member());
     assert!(matches!(

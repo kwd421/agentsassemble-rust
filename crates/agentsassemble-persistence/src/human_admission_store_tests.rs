@@ -618,7 +618,7 @@ pub(crate) fn prepared(
     )
 }
 
-fn prepared_with_avatar(
+pub(crate) fn prepared_with_avatar(
     invite_fingerprint: [u8; 32],
     browser_fingerprint: [u8; 32],
     request_id: &str,

@@ -8,7 +8,10 @@ use axum::{
     http::{HeaderMap, StatusCode, Uri},
     routing::post,
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{
+    Engine as _,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use ring::signature::KeyPair;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -473,8 +476,17 @@ async fn challenge(
     invite: &str,
     browser: &str,
 ) -> Result<Value, reqwest::Error> {
+    challenge_with_query(client, base, invite, browser, "").await
+}
+async fn challenge_with_query(
+    client: &reqwest::Client,
+    base: &str,
+    invite: &str,
+    browser: &str,
+    query: &str,
+) -> Result<Value, reqwest::Error> {
     let response = client
-        .post(format!("{base}/api/room-invite/member-challenge"))
+        .post(format!("{base}/api/room-invite/member-challenge{query}"))
         .header("x-device-token", browser)
         .json(&json!({"invite_token":invite}))
         .send()
@@ -492,9 +504,27 @@ async fn join(
     challenge: &Value,
     grant: &str,
 ) -> Result<reqwest::Response, reqwest::Error> {
-    client.post(format!("{base}/api/room-invite/member-join"))
+    join_with_profile(client, base, invite, browser, challenge, grant, None).await
+}
+async fn join_with_profile(
+    client: &reqwest::Client,
+    base: &str,
+    invite: &str,
+    browser: &str,
+    challenge: &Value,
+    grant: &str,
+    profile: Option<Value>,
+) -> Result<reqwest::Response, reqwest::Error> {
+    let mut body = json!({"invite_token":invite,"challenge_id":challenge["challenge_id"],"grant_token":grant,"request_id":challenge["request_id"],"client_id":format!("client-{browser}")});
+    if let Some(profile) = profile {
+        body["profile"] = profile;
+    }
+    client
+        .post(format!("{base}/api/room-invite/member-join"))
         .header("x-device-token", browser)
-        .json(&json!({"invite_token":invite,"challenge_id":challenge["challenge_id"],"grant_token":grant,"request_id":challenge["request_id"],"client_id":format!("client-{browser}")})).send().await
+        .json(&body)
+        .send()
+        .await
 }
 
 async fn assert_member_socket(client: &reqwest::Client, base: &str, token: &str) {
@@ -828,3 +858,6 @@ async fn assert_durable_replay(
     assert!(same_bearer);
     Ok(())
 }
+
+#[path = "member_join_profile_boundary.rs"]
+mod profile;

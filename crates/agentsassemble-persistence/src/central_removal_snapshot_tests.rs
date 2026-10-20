@@ -11,7 +11,7 @@ async fn snapshot_fixture()
         [2; 32],
         [3; 32],
         &uuid::Uuid::new_v4().to_string(),
-        "ignored",
+        "",
     )
     .with_member(member());
     let joined = admitted(store.admit_human(&request, now).await?);

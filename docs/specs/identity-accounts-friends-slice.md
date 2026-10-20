@@ -1451,6 +1451,68 @@ H1 API (양쪽 요청 모두 기존 `x-device-token` 브라우저 credential 필
   challenge 상한(호스트당 1024)은 429 `member_challenge_capacity`; 방/초대 거절은 기존 코드다.
   UI는 명시적 재시도로 challenge와 중앙 grant를 새로 발급하며 자동 재시도하지 않는다.
 
+#### Member invite join profile defaults (owner requirement, 2026-10-20)
+
+The signed-in member join screen shows the person's current name and photo as
+editable defaults and lets them change both before joining. The host stores the
+submitted values as that member's room display name and profile avatar in that
+host. This applies only to membership gained through the invite join route,
+never to `member-connect`/resume/reconnect. The central identity (`issuer`,
+`person_id`, projection) and room membership are unchanged; the name is a
+host-local room display name, not a central profile mutation.
+
+Entry point and capability advertisement:
+
+- Before joining, the client posts `POST /api/room-invite/member-challenge`
+  with the URL query pair `member_join_profile=1`. A host that supports this
+  contract adds exactly `"member_join_profile": true` to the existing challenge
+  response `{challenge_id, challenge_hash, server_id, registration_epoch,
+  expires_at}`. The field is present only when the query pair is exactly
+  `member_join_profile=1`; an old host ignores the query and keeps the old exact
+  response, and an old strict client omits the query and never sends `profile`.
+  The client may send `profile` only when it read `member_join_profile: true`.
+
+Request (only `POST /api/room-invite/member-join`; all levels keep
+`deny_unknown_fields`, so unknown fields are 400 `bad_request`):
+
+```json
+{
+  "invite_token": "...",
+  "challenge_id": "...",
+  "grant_token": "...",
+  "request_id": "...",
+  "client_id": "...",
+  "profile": {
+    "display_name": "edited name",
+    "avatar_png_base64": "iVBORw0KGgo..."
+  }
+}
+```
+
+- `profile`, `profile.display_name`, and `profile.avatar_png_base64` are all
+  optional. Omitting a field keeps the existing behaviour: an existing member
+  profile is unchanged, and a first join defaults to the verified central
+  `display_name` with no avatar.
+- `display_name` uses the guest admission trimming and bounds
+  (`clean_identifier(_, 128)`: CR/LF become spaces, Python whitespace is
+  trimmed). A provided name that is empty after trimming or exceeds 128
+  characters is refused with 400 `member_profile_name_invalid` rather than
+  truncated.
+- `avatar_png_base64` is standard base64 PNG bytes without a `data:` prefix.
+  It reuses the guest admission data-URL path, base64 and 10 MiB decoded
+  bounds, `prepare_raster` PNG/type/dimension validation, and the existing
+  `profile_avatar_assets` pending→current attachment owner. Invalid base64,
+  size, type, bytes, or dimensions are 400 `member_profile_avatar_invalid`.
+  Storage quota keeps its existing 429 `attachment_quota_reached`. A rejected
+  profile commits no profile, avatar, participant, or binding row.
+- On the join admission transaction, after central redemption and the existing
+  invite/room/membership checks, provided fields update the member's host-local
+  `user_profiles.display_name` and `avatar_image_url` and project to the
+  member's joined rooms. This covers a first join and a re-join through an
+  existing admission. The same request id retries idempotently; the profile is
+  part of the request hash, so reusing the challenge with different profile
+  values is rejected like any other changed request.
+
 ### 최소판 F1 (2026-10-05, 승인 설계 v3/v3.1)
 
 2026-10-05 입장 화면 보정: 웹 `/join`과 Tauri 공용 `GuestJoinProfilePanel`의

@@ -119,36 +119,65 @@ pub(super) async fn resolve_identity(
 pub(super) async fn resolve_member_identity(
     transaction: &mut Transaction<'_, Sqlite>,
     member: &crate::MemberAdmission,
+    request: &PreparedHumanAdmission,
+    avatar: Option<&AdmissionAvatar>,
     now: DateTime<Utc>,
 ) -> Result<(String, ResolvedIdentity), PersistenceError> {
     let existing = sqlx::query("SELECT b.binding_id, b.user_id, p.participant_id, p.profile_json FROM central_identity_bindings b JOIN user_profiles p ON p.user_id = b.user_id WHERE b.issuer = ? AND b.person_id = ?")
         .bind(&member.issuer).bind(&member.person_id).fetch_optional(&mut **transaction).await?;
     let new = existing.is_none();
-    let (binding, user_id, participant_id, profile) = if let Some(row) = existing {
-        let participant: String = row.try_get("participant_id")?;
-        let profile =
-            decode_bound_profile(&participant, &participant, row.try_get("profile_json")?)?;
-        (
-            row.try_get("binding_id")?,
-            row.try_get("user_id")?,
-            participant,
-            profile,
-        )
-    } else {
-        let profile =
-            UserProfile::for_admitted_human(&member.display_name, "", now).ok_or_else(|| {
+    let (binding, user_id, participant_id, profile, previous_avatar_url, profile_changed) =
+        if let Some(row) = existing {
+            let participant: String = row.try_get("participant_id")?;
+            let profile =
+                decode_bound_profile(&participant, &participant, row.try_get("profile_json")?)?;
+            let previous_avatar_url = profile.avatar_image_url.clone();
+            let mut updated = profile;
+            // Invite join supplies host-local room display defaults only; the
+            // central issuer/person/projection and membership stay untouched.
+            let profile_changed = updated.apply_patch(
+                UserProfilePatch {
+                    display_name: (!request.display_name().is_empty())
+                        .then(|| request.display_name().to_owned()),
+                    avatar_image_url: avatar.map(|avatar| avatar.url.clone()),
+                    ..UserProfilePatch::default()
+                },
+                now,
+            );
+            (
+                row.try_get("binding_id")?,
+                row.try_get("user_id")?,
+                participant,
+                updated,
+                previous_avatar_url,
+                profile_changed,
+            )
+        } else {
+            let display_name = if request.display_name().is_empty() {
+                member.display_name.as_str()
+            } else {
+                request.display_name()
+            };
+            let profile = UserProfile::for_admitted_human(
+                display_name,
+                avatar.map_or("", |avatar| avatar.url.as_str()),
+                now,
+            )
+            .ok_or_else(|| {
                 crate::account_identity::rejected(
                     "identity_conflict",
                     "Invalid member profile snapshot.",
                 )
             })?;
-        (
-            uuid::Uuid::new_v4().to_string(),
-            format!("u-member-{}", uuid::Uuid::new_v4()),
-            format!("member-{}", uuid::Uuid::new_v4()),
-            profile,
-        )
-    };
+            (
+                uuid::Uuid::new_v4().to_string(),
+                format!("u-member-{}", uuid::Uuid::new_v4()),
+                format!("member-{}", uuid::Uuid::new_v4()),
+                profile,
+                String::new(),
+                false,
+            )
+        };
     Ok((
         binding,
         ResolvedIdentity {
@@ -156,8 +185,8 @@ pub(super) async fn resolve_member_identity(
             participant_id,
             profile,
             profile_events: vec![],
-            previous_avatar_url: String::new(),
-            profile_changed: false,
+            previous_avatar_url,
+            profile_changed,
             new,
         },
     ))

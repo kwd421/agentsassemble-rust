@@ -1,17 +1,28 @@
 use crate::{
     HumanAdmissionDecision, HumanAdmissionRejection, MemberAdmission, PreparedHumanAdmission,
-    human_admission_store::tests::{admitted, fixture, insert_invite, prepared},
+    human_admission_store::tests::{admitted, fixture, insert_invite, prepared_with_avatar},
 };
 use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 fn member(join: u8, browser: u8, name: &str) -> PreparedHumanAdmission {
-    prepared(
+    member_with_profile(join, browser, name, "", "")
+}
+
+fn member_with_profile(
+    join: u8,
+    browser: u8,
+    name: &str,
+    request_name: &str,
+    avatar_image_url: &str,
+) -> PreparedHumanAdmission {
+    prepared_with_avatar(
         [join; 32],
         [browser; 32],
         &uuid::Uuid::new_v4().to_string(),
-        "ignored",
+        request_name,
+        avatar_image_url,
     )
     .with_member(MemberAdmission {
         secure: None,
@@ -93,6 +104,39 @@ async fn member_devices_retry_canonical_result_without_profile_overwrite_or_devi
             .await?;
         assert!(store.authorize_human_session(&fingerprint).await.is_err());
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn member_join_profile_updates_the_reentry_result_and_room_participant() -> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
+    let first = admitted(
+        store
+            .admit_human(&member(2, 3, "Central Name"), now)
+            .await?,
+    );
+    assert_eq!(first.result().display_name, "Central Name");
+    assert!(first.result().avatar_image_url.is_empty());
+
+    let request = member_with_profile(2, 3, "Ignored central", "Room Name", "");
+    let next = store.admit_human(&request, now).await?;
+    let next = admitted(next);
+    assert_eq!(next.result().display_name, "Room Name");
+    assert_eq!(next.result().agent_id, first.result().agent_id);
+    assert!(
+        next.events()
+            .iter()
+            .any(|event| event.event_type == "participant_updated")
+    );
+    let participant = store
+        .participant("general", &next.result().agent_id)
+        .await?;
+    assert_eq!(participant.display_name, "Room Name");
+    let exact = admitted(store.admit_human(&request, now).await?);
+    assert!(exact.deduplicated());
+    assert_eq!(exact.result().display_name, "Room Name");
     Ok(())
 }
 

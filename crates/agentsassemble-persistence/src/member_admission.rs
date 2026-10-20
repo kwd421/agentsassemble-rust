@@ -81,22 +81,40 @@ pub(crate) async fn admit(
     {
         return Ok(denied(Rejection::MeetingMismatch));
     }
-    let (binding, identity) =
-        crate::human_admission_identity::resolve_member_identity(tx, member, now).await?;
+    let avatar =
+        crate::human_admission_identity::resolve_admission_avatar(tx, request, &invite, now)
+            .await?;
+    let (binding, identity) = crate::human_admission_identity::resolve_member_identity(
+        tx,
+        member,
+        request,
+        avatar.as_ref(),
+        now,
+    )
+    .await?;
     let participant = &identity.participant_id;
     if let Some(reason) = membership_rejection(tx, &invite.room_id, participant).await? {
         return Ok(denied(reason));
     }
     let input_hash = canonical_input_hash(&binding, &invite)?;
     let previous =
-        sqlx::query("SELECT admission_id, participant_id, room_id, invite_id, invite_scope, input_hash, session_key, result_json, replay_floor FROM member_admissions WHERE binding_id = ? AND room_id = ?")
+        sqlx::query("SELECT admission_id, user_id, participant_id, room_id, invite_id, invite_scope, input_hash, session_key, result_json, replay_floor FROM member_admissions WHERE binding_id = ? AND room_id = ?")
             .bind(&binding)
             .bind(&invite.room_id)
             .fetch_optional(&mut **tx)
             .await?;
     if let Some(row) = previous {
         anchor(tx, &binding, member, false).await?;
-        return reenter(store, tx, request, &invite, input_hash, row, now).await;
+        let identity = crate::human_admission_identity::persist_identity(
+            tx,
+            identity,
+            request,
+            &invite,
+            avatar.as_ref(),
+            now,
+        )
+        .await?;
+        return reenter(store, tx, request, &invite, input_hash, row, identity, now).await;
     }
     if invite.use_count >= invite.effective_use_limit() {
         return Ok(denied(Rejection::InviteUseLimitReached));
@@ -105,10 +123,16 @@ pub(crate) async fn admit(
         return Ok(denied(Rejection::CapacityReached));
     }
     let is_new = identity.new;
-    let identity = crate::human_admission_identity::persist_identity(
-        tx, identity, request, &invite, None, now,
+    let mut identity = crate::human_admission_identity::persist_identity(
+        tx,
+        identity,
+        request,
+        &invite,
+        avatar.as_ref(),
+        now,
     )
     .await?;
+    let mut events = std::mem::take(&mut identity.profile_events);
     let user = &identity.user_id;
     let participant = &identity.participant_id;
     let profile = &identity.profile;
@@ -155,10 +179,11 @@ pub(crate) async fn admit(
         HumanAdmissionCommit {
             result,
             session_bearer: issued.bearer,
-            events: if is_joined {
-                vec![append_participant_joined(tx, &joined, now).await?]
-            } else {
-                vec![]
+            events: {
+                if is_joined {
+                    events.push(append_participant_joined(tx, &joined, now).await?);
+                }
+                events
             },
             replaced_session_fingerprints: vec![],
             deduplicated: false,
@@ -223,6 +248,7 @@ async fn reenter(
     invite: &crate::HumanInvite,
     input_hash: [u8; 32],
     row: sqlx::sqlite::SqliteRow,
+    identity: crate::human_admission_identity::ResolvedIdentity,
     now: DateTime<Utc>,
 ) -> Result<HumanAdmissionDecision, PersistenceError> {
     let member = request.member.as_ref().ok_or_else(|| {
@@ -234,7 +260,8 @@ async fn reenter(
     {
         return Ok(denied(Rejection::IdempotencyConflict));
     }
-    mint_session(
+    let profile_events = identity.profile_events;
+    let decision = mint_session(
         store,
         tx,
         member,
@@ -246,7 +273,16 @@ async fn reenter(
         row,
         now,
     )
-    .await
+    .await?;
+    let HumanAdmissionDecision::Admitted(mut commit) = decision else {
+        return Ok(decision);
+    };
+    if !profile_events.is_empty() {
+        let mut events = profile_events;
+        events.append(&mut commit.events);
+        commit.events = events;
+    }
+    Ok(HumanAdmissionDecision::Admitted(commit))
 }
 
 pub(crate) async fn mint_session(
@@ -259,6 +295,12 @@ pub(crate) async fn mint_session(
 ) -> Result<HumanAdmissionDecision, PersistenceError> {
     let seed =
         crate::human_session_authority::fixed_session_fingerprint(row.try_get("session_key")?)?;
+    let profile = crate::profile_store::load_profile_for_identity(
+        tx,
+        row.try_get("user_id")?,
+        row.try_get("participant_id")?,
+    )
+    .await?;
     let key = reentry_key(
         &seed,
         browser,
@@ -286,9 +328,15 @@ pub(crate) async fn mint_session(
             member.secure.as_ref(),
         )
         .await?;
+        let mut result: crate::HumanAdmissionResult =
+            serde_json::from_str(exact.try_get("result_json")?)?;
+        result.display_name.clone_from(&profile.display_name);
+        result
+            .avatar_image_url
+            .clone_from(&profile.avatar_image_url);
         return Ok(HumanAdmissionDecision::Admitted(Box::new(
             HumanAdmissionCommit {
-                result: serde_json::from_str(exact.try_get("result_json")?)?,
+                result,
                 session_bearer: issued.bearer,
                 events: vec![],
                 replaced_session_fingerprints: vec![],
@@ -309,6 +357,10 @@ pub(crate) async fn mint_session(
         crate::member_sessions::replace_devices(tx, admission, browser, now).await?;
     let mut result: crate::HumanAdmissionResult =
         serde_json::from_str(row.try_get("result_json")?)?;
+    result.display_name.clone_from(&profile.display_name);
+    result
+        .avatar_image_url
+        .clone_from(&profile.avatar_image_url);
     result.request_id = request_id.to_owned();
     result.client_id = client_id.to_owned();
     result.expires_at = now + store.human_room_session_ttl();
