@@ -292,13 +292,8 @@
   text-overflow: ellipsis;
 }
 
-.dc-agent-name-input:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
 .dc-agent-name-input:focus {
-  border-color: var(--color-brand);
-  background: #1e1f22;
+  border-color: var(--color-accent);
   outline: none;
 }
 
