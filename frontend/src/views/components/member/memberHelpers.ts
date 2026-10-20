@@ -35,8 +35,8 @@ export function rowPointerMovedTooFar(start: { x: number; y: number }, event: Re
 export function isGalaxyAgent(
   session?: Pick<RoomAgentSession, "reasoning_effort">
 ): boolean {
-  // The ultracode flag will join this maximum-reasoning check when it ships.
-  return String(session?.reasoning_effort || "").trim().toLowerCase() === "ultra";
+  // Codex "ultra" and Claude Code "ultracode" are the maximum-reasoning modes.
+  return ["ultra", "ultracode"].includes(String(session?.reasoning_effort || "").trim().toLowerCase());
 }
 
 export function memberSpeed(value?: string): MemberSpeed | null {
