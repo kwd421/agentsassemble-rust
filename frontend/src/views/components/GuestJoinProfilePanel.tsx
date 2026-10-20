@@ -23,6 +23,8 @@ type GuestJoinProfilePanelProps = {
   pairing?: boolean;
   pairingState?: OperatorPairingState;
   retryMode?: "preflight" | "join";
+  /** Shows the name and picture fields beside other join content (a signed-in member's consent). */
+  showProfileFields?: boolean;
   onDisplayNameChange: (value: string) => void;
   onAvatarImageChange: (value: string) => void;
   onJoin: () => void;
@@ -45,6 +47,7 @@ export default function GuestJoinProfilePanel({
   pairing = false,
   pairingState = "idle",
   retryMode,
+  showProfileFields = false,
   onDisplayNameChange,
   onAvatarImageChange,
   onJoin,
@@ -93,7 +96,7 @@ export default function GuestJoinProfilePanel({
         <h1>{titleContent || heading}</h1>
         {serverLabel && <p className="dc-join-server-label">{serverLabel}</p>}
         {error && <p role="alert" className="dc-join-error preserve-words">{error}</p>}
-        {!children && !pairing && !retryMode && (
+        {(showProfileFields || (!children && !pairing && !retryMode)) && (
           <div className="dc-guest-avatar-row">
             <label className="dc-guest-avatar" data-has-image={Boolean(avatarImage)}>
               {avatarImage ? <ResourceImage src={avatarImage} alt="" /> : <span aria-hidden="true">{avatarLabel}</span>}
@@ -148,7 +151,7 @@ export default function GuestJoinProfilePanel({
             다시 시도
           </button>
         )}
-        {!children && !pairing && !retryMode && cropFile && (
+        {(showProfileFields || (!children && !pairing && !retryMode)) && cropFile && (
           <ImageCropper
             file={cropFile}
             onCancel={() => setCropFile(null)}

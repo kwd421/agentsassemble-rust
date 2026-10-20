@@ -19,6 +19,7 @@ import {
   type MemberGrant, type MemberHandoff, type MemberReturn, type MemberTargetRequest,
 } from "../../lib/central/memberConnect";
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
+import { currentProfilePictureUrl, pictureAsJoinAvatar } from "../../lib/memberJoinProfile";
 import GoogleGLogo from "./GoogleGLogo";
 
 export type MemberJoinHost = {
@@ -78,6 +79,10 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
   const record = useRef<MemberHandoff | undefined>(host?.callback?.record);
   const active = useRef(true);
   const flight = useRef(false);
+  // A first join offers the person's current name and picture, editable here.
+  const [joinName, setJoinName] = useState("");
+  const [joinAvatar, setJoinAvatar] = useState("");
+  const joinDefaultsFor = useRef("");
   const initialized = useRef(false);
   const loginAbort = useRef<AbortController | null>(null);
 
@@ -227,7 +232,10 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
         const admission = await SecureMemberAdmission.open(secureEntry, consent.target.target, consent.sessionToken, loginAbort.current.signal);
         secureAdmission.current = admission;
         try {
-          const available = await admission.admit();
+          const name = joinName.trim();
+          const avatar = joinAvatar.startsWith("data:image/png;base64,") ? joinAvatar.slice("data:image/png;base64,".length) : "";
+          const available = await admission.admit(undefined, consent.request.purpose === "connect" ? undefined
+            : { ...(name ? { display_name: name } : {}), ...(avatar ? { avatar_png_base64: avatar } : {}) });
           if (!active.current) { admission.close(); return; }
           if (available?.length === 1) {
             secureAnchor.current = { target: consent.target.target, rooms: available };
@@ -273,13 +281,26 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
   }
 
   const terminalError = Boolean(error) && TERMINAL_JOIN_MESSAGES.has(error);
-  return <GuestJoinProfilePanel displayName="" busy={busy} status={error ? "" : status} error={error}
+  // Only the encrypted entry carries the profile to the host; the redirect path cannot.
+  const editsJoinProfile = Boolean(secureEntry && consent && !error && !reconnect && rooms.length === 0);
+  useEffect(() => {
+    if (!consent || consent.request.purpose === "connect" || joinDefaultsFor.current === consent.sessionToken) return;
+    joinDefaultsFor.current = consent.sessionToken;
+    const person = loadCentralSession()?.person;
+    setJoinName(person?.display_name || consent.account);
+    void currentProfilePictureUrl(person?.avatar_url).then(async (url) => {
+      const avatar = url ? await pictureAsJoinAvatar(url) : undefined;
+      if (avatar && active.current && joinDefaultsFor.current === consent.sessionToken) setJoinAvatar((current) => current || avatar);
+    });
+  }, [consent]);
+  return <GuestJoinProfilePanel displayName={editsJoinProfile ? joinName : ""} avatarImage={editsJoinProfile ? joinAvatar || undefined : undefined}
+    showProfileFields={editsJoinProfile} busy={busy} status={error ? "" : status} error={error}
     title={error ? "참가하지 못했어요" : rooms.length ? "참가 중인 방을 선택해 주세요" : consent ? title : "로그인하고 참가"}
     identityLabel={consent && !error ? roomName : undefined}
     serverLabel={consent && !error && !reconnect ? `${consent.target.label}에서 열린 방` : undefined}
     titleContent={consent && !error && !reconnect ? <>{roomName ? <>‘<strong>{roomName}</strong>’에 참가할까요?</> : title}</> : undefined}
     retryMode={error && !terminalError && !(secureEntry && !loadCentralSession()) ? "join" : undefined} onJoin={retry}
-    onDisplayNameChange={() => {}} onAvatarImageChange={() => {}}>
+    onDisplayNameChange={setJoinName} onAvatarImageChange={setJoinAvatar}>
     <section aria-label="방 참가" className="grid gap-3 text-text-primary">
       {rooms.map(room => <button key={room.room_id} className="dc-guest-join-button" disabled={busy} onClick={() => void run(() => selectRoom(room.room_id))}>{room.name || "이름 없는 방"}</button>)}
       {consent && !error && <>

@@ -14,6 +14,8 @@ export type MemberTargetRequest = {
 };
 export type MemberChallenge = Omit<MemberTargetRequest, "handoff_state" | "room_name"> & {
   challenge_id: string; expires_at: number;
+  /** The host accepts a join profile (name and picture) on member-join. */
+  member_join_profile?: boolean;
 };
 export type MemberHandoff = MemberTargetRequest & {
   challenge_id: string; expires_at: number; invite_token: string; meeting_id: string;
@@ -54,7 +56,10 @@ export function parseMemberTargetRequest(value: unknown): MemberTargetRequest {
 }
 
 export function parseMemberChallenge(value: unknown): MemberChallenge {
-  const r = strictRecord(value, "입장 확인");
+  const raw = strictRecord(value, "입장 확인");
+  // A host that understood `?member_join_profile=1` says so; any other value is malformed.
+  const { member_join_profile: profileSupport, ...r } = raw;
+  if (profileSupport !== undefined && profileSupport !== true) throw new Error("입장 확인 응답이 올바르지 않아요.");
   assertExactKeys(r, ["challenge_id", "challenge_hash", "server_id", "registration_epoch", "expires_at"], "입장 확인");
   const server_id = requiredString(r, "server_id", "입장 확인");
   const registration_epoch = requiredString(r, "registration_epoch", "입장 확인");
@@ -63,7 +68,8 @@ export function parseMemberChallenge(value: unknown): MemberChallenge {
     throw new Error("입장 확인 응답이 올바르지 않아요.");
   }
   return { server_id, registration_epoch, challenge_hash,
-    challenge_id: requiredString(r, "challenge_id", "입장 확인"), expires_at: liveExpiry(r.expires_at) };
+    challenge_id: requiredString(r, "challenge_id", "입장 확인"), expires_at: liveExpiry(r.expires_at),
+    member_join_profile: profileSupport === true };
 }
 
 export function parseMemberGrant(value: unknown, expected: MemberTargetRequest): MemberGrant {

@@ -177,8 +177,9 @@ const joinFor = (roomId: string, requestId: string) => ({
   },
 });
 
-function fakeTransport() {
+function fakeTransport(profileSupported = false) {
   const state = { active: true };
+  const joins: Record<string, unknown>[] = [];
   const transport = {
     hello,
     get active() { return state.active; },
@@ -186,16 +187,21 @@ function fakeTransport() {
     onClose: vi.fn(() => () => undefined),
     fetch: vi.fn(async (path: string, init?: RequestInit) => {
       const body = init?.body ? JSON.parse(String(init.body)) as Record<string, string> : {};
-      if (path === "/api/room-invite/member-challenge") return new Response(JSON.stringify(challenge));
+      if (path === "/api/room-invite/member-challenge?member_join_profile=1") {
+        return new Response(JSON.stringify(profileSupported ? { ...challenge, member_join_profile: true } : challenge));
+      }
       if (path === "/api/room-invite/admission") return new Response(JSON.stringify(preflight));
-      if (path === "/api/room-invite/member-join") return new Response(JSON.stringify(joinFor(body.room_id || "room-a", body.request_id || "request-1")));
+      if (path === "/api/room-invite/member-join") {
+        joins.push(body);
+        return new Response(JSON.stringify(joinFor(body.room_id || "room-a", body.request_id || "request-1")));
+      }
       if (path === "/api/member-connect/challenge") return new Response(JSON.stringify(challenge));
       if (path.startsWith("/api/member-connect/rooms")) return new Response(JSON.stringify({ rooms: [{ room_id: "room-a", name: "방" }] }));
       if (path.startsWith("/api/member-connect/select")) return new Response(JSON.stringify(joinFor(body.room_id || "room-a", body.request_id || "request-1")));
       throw new Error(`unexpected host path ${path}`);
     }),
   };
-  return { transport, state };
+  return { transport, state, joins };
 }
 
 describe("the invite join path", () => {
@@ -232,6 +238,25 @@ describe("the invite join path", () => {
     expect(taken?.admission).toBe(admission);
     expect(taken?.handoff.expires_at).toBeGreaterThan(Date.now());
     vi.restoreAllMocks();
+  });
+
+  it("sends the chosen join profile only to a host that said it takes one", async () => {
+    const profile = { display_name: "Nel", avatar_png_base64: "iVBORw0KGgo=" };
+    for (const supported of [false, true]) {
+      const { transport, joins } = fakeTransport(supported);
+      vi.spyOn(RemoteTransport, "connect").mockResolvedValue(transport as never);
+      const admission = await SecureMemberAdmission.open(
+        { server_id: SERVER, registration_epoch: EPOCH, inviteToken: "aaj1.invite" },
+        target as never,
+        "central-token",
+        new AbortController().signal,
+      );
+      await admission.admit(new AbortController().signal, profile);
+      expect(joins[0]?.profile).toEqual(supported ? profile : undefined);
+      vi.restoreAllMocks();
+      vi.mocked(loadCentralSession).mockReturnValue(session as never);
+      vi.mocked(signedRequest).mockResolvedValue(grant as never);
+    }
   });
 
   it("an ordinary room select consents to nothing", async () => {

@@ -54,6 +54,9 @@ export async function previewSecureMember(entry: SecureMemberEntry, signal?: Abo
   return { target, label: value.label, endpoint_origin: target.origin, endpoint_generation: target.generation, server_id: entry.server_id };
 }
 
+/** The name and picture a member chose on the join screen. */
+export type MemberJoinProfile = { display_name?: string; avatar_png_base64?: string };
+
 export class SecureMemberAdmission {
   readonly transport: RemoteTransport;
   readonly deviceToken: string;
@@ -88,10 +91,11 @@ export class SecureMemberAdmission {
     if (!response.ok) throw await responseError(response);
     return response.json();
   }
-  async admit(signal?: AbortSignal): Promise<{ room_id: string; name: string }[] | null> {
+  async admit(signal?: AbortSignal, profile?: MemberJoinProfile): Promise<{ room_id: string; name: string }[] | null> {
     const invite = this.entry.inviteToken;
     if (invite) {
-      const challenge = parseMemberChallenge(await this.post("/api/room-invite/member-challenge", { invite_token: invite }, signal));
+      // Asking with the query lets a newer host say it takes a join profile; an older host ignores it.
+      const challenge = parseMemberChallenge(await this.post("/api/room-invite/member-challenge?member_join_profile=1", { invite_token: invite }, signal));
       if (challenge.server_id !== this.entry.server_id || challenge.registration_epoch !== this.entry.registration_epoch) throw new Error("서버 주소가 변경됐어요. 다시 연결해 주세요.");
       this.challengeId = challenge.challenge_id;
       const { protocol, client_public_key, channel_id, origin, generation } = this.transport.hello;
@@ -105,7 +109,8 @@ export class SecureMemberAdmission {
       const preflight = parseRoomInviteAdmissionResponse(await this.post("/api/room-invite/admission", { invite_token: invite }));
       if (!("room_id" in preflight)) throw new Error("초대를 사용할 수 없어요. 새 초대를 받아 주세요.");
       const requestId = createSecureRequestId();
-      const payload = await this.post("/api/room-invite/member-join", { invite_token: invite, challenge_id: this.challengeId, grant_token: grant.grant_token, request_id: requestId, client_id: this.clientId });
+      const joinProfile = challenge.member_join_profile && profile ? { profile } : {};
+      const payload = await this.post("/api/room-invite/member-join", { invite_token: invite, challenge_id: this.challengeId, grant_token: grant.grant_token, request_id: requestId, client_id: this.clientId, ...joinProfile });
       this.install(payload, requestId, preflight.room_id);
       // This join is the person's explicit consent for this host
       // incarnation: the anchor follows the epoch and host key central pinned

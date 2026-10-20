@@ -62,4 +62,20 @@ describe("secure first-join consent", () => {
     expect(window.location.href).toBe(href);
     expect(admission.select).toHaveBeenCalledWith("general");
   });
+
+  it("offers the current name on an invite join and sends the edited one", async () => {
+    render(<MemberJoinPanel secureEntry={{ ...entry, inviteToken: "aaj1.invite" }} onCancel={() => undefined} />);
+    const name = await screen.findByRole("textbox", { name: "이름" }) as HTMLInputElement;
+    expect(name.value).toBe("나");
+    fireEvent.change(name, { target: { value: "  방 이름  " } });
+    fireEvent.click(screen.getByRole("button", { name: "참가하기" }));
+    await vi.waitFor(() => expect(admission.admit).toHaveBeenCalled());
+    expect(admission.admit.mock.calls[0][1]).toEqual({ display_name: "방 이름" });
+  });
+
+  it("does not offer profile fields when reconnecting", async () => {
+    render(<MemberJoinPanel secureEntry={entry} onCancel={() => undefined} />);
+    await screen.findByRole("button", { name: "다시 연결" });
+    expect(screen.queryByRole("textbox", { name: "이름" })).toBeNull();
+  });
 });
