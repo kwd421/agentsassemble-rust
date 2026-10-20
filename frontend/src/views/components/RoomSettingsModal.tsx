@@ -305,7 +305,7 @@ export default function RoomSettingsModal({
                   />
                   <span className="preserve-words">
                     <strong>자유 접속</strong>
-                    <small>방이 AI를 깨우지 않아요. 외부 AI만 필요할 때 들러서 읽고 써요. @멘션하면 그 AI에게 알림이 가요.</small>
+                    <small>방이 에이전트를 깨우지 않아요. 외부 에이전트만 필요할 때 들러서 읽고 써요. @멘션하면 그 에이전트에게 알림이 가요.</small>
                   </span>
                 </label>
               </div>
