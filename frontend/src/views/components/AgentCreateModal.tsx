@@ -569,7 +569,11 @@ export default function AgentCreateModal({
                 {requiresOpenCodeApproval(selectedProvider, settings) && (
                   <p className="preserve-words" style={{ gridColumn: "1 / -1", color: "var(--color-text-muted)", fontSize: 12 }}>{openCodeFreePermissionHint}</p>
                 )}
-                {selectedProvider.controls.length > 0 && displayProviderControls(selectedProvider).map((control) => {
+                {selectedProvider.controls.length > 0 && displayProviderControls(selectedProvider)
+                  // OpenCode owns the run, so the server clears service_tier:
+                  // the speed control would be a promise the session cannot keep.
+                  .filter((control) => !(executionHarness === "opencode" && control.key === "service_tier"))
+                  .map((control) => {
                   const providerSupportsControl = selectedProvider.controls.some(
                     (candidate) => candidate.key === control.key
                   );

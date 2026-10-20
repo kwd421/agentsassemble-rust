@@ -80,6 +80,18 @@ describe("AgentCreateModal OpenCode harness", () => {
     });
   });
 
+  it("hides the service tier OpenCode ignores and restores it for the built-in driver", async () => {
+    renderModal([geminiProvider(), openCodeProvider()]);
+    pickAi("Gemini");
+
+    expect(screen.getByLabelText("응답 속도")).toBeTruthy();
+    await chooseProviderControl("하네스", "OpenCode");
+    expect(screen.queryByLabelText("응답 속도")).toBeNull();
+    expect(screen.getByText(HARNESS_HINT)).toBeTruthy();
+    await chooseProviderControl("하네스", "기본");
+    expect(screen.getByLabelText("응답 속도")).toBeTruthy();
+  });
+
   it("hides the harness select without OpenCode or for another API provider", () => {
     const { unmount } = render(
       <AgentCreateModal
