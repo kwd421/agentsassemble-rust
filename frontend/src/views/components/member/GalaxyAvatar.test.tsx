@@ -47,52 +47,21 @@ describe("GalaxyAvatar", () => {
     expect(full.querySelector(".galaxy-avatar-meteor")).toBeTruthy();
   });
 
-  it("keeps the whole effect inside a circular, radially faded halo", () => {
-    expect(galaxyStyles).toContain(
-      "-webkit-mask-image: radial-gradient(circle, black 55%, transparent 72%);"
-    );
-    expect(galaxyStyles).toContain(
-      "mask-image: radial-gradient(circle, black 55%, transparent 72%);"
-    );
-    expect(galaxyStyles).toMatch(
-      /\.galaxy-avatar-field \{[\s\S]*?border-radius: 50%;/
-    );
-    expect(galaxyStyles).toMatch(
-      /\.galaxy-avatar-field \{[\s\S]*?overflow: hidden;/
-    );
-  });
-
-  it("blends an Ultra row into the halo without a border or hard edge", () => {
-    const rowRule =
-      galaxyStyles.match(/\.dc-member\[data-galaxy="true"\] \{([\s\S]*?)\}/)?.[1] ??
-      "";
-    expect(rowRule).not.toMatch(/\b(background|box-shadow|border|animation)\b/);
-    expect(galaxyStyles).toMatch(
-      /\.dc-member\[data-galaxy="true"\]\[data-ultra="true"\] \{[^}]*overflow: visible;/
-    );
-    const ultraRule =
-      galaxyStyles.match(
-        /\.dc-member\[data-galaxy="true"\]\[data-ultra="true"\] \{([\s\S]*?)\}/
-      )?.[1] ?? "";
-    expect(ultraRule).toContain("background: none;");
-    expect(ultraRule).toContain("box-shadow: none;");
-    expect(ultraRule).toContain("animation: none;");
-
-    const nebulaRule =
+  it("keeps the orbit inside the row and the row card free of borders", () => {
+    // The member row pads the 32px avatar by 8px, so the compact orbit may reach
+    // at most that far; nothing spills over the owner spine or out of the row.
+    const reach = Number(galaxyStyles.match(/--galaxy-reach: (\d+)px;/)?.[1]);
+    expect(reach).toBeGreaterThan(0);
+    expect(reach).toBeLessThanOrEqual(8);
+    expect(galaxyStyles).toMatch(/\.galaxy-avatar-field \{[\s\S]*?inset: calc\(var\(--galaxy-reach\) \* -1\);/);
+    const card =
       galaxyStyles.match(
         /\.dc-member\[data-galaxy="true"\]\[data-ultra="true"\]::before \{([\s\S]*?)\}/
       )?.[1] ?? "";
-    // The nebula is centred on the 32px avatar (24px inset + 16px radius) and
-    // spreads across the whole row rather than ending at the name.
-    expect(nebulaRule).toMatch(/54px 54px at 24px 50%/);
-    expect(nebulaRule).toMatch(/118% 150% at 0% 50%/);
-    expect(nebulaRule).toContain("border-radius: 8px;");
-    expect(nebulaRule).toMatch(/mask-image: linear-gradient\(/);
-    // The right end keeps a faint violet tint; the fade never reaches clear.
-    expect(nebulaRule).toContain("rgba(0, 0, 0, 0.5) 100%");
-    expect(nebulaRule).not.toContain("transparent 84%");
-    expect(nebulaRule).not.toMatch(/\bborder(?!-radius)\b/);
-    expect(nebulaRule).not.toContain("box-shadow");
+    expect(card).toContain("inset: 0;");
+    expect(card).toContain("border-radius: 8px;");
+    expect(card).toMatch(/radial-gradient\(circle at 24px 50%/);
+    expect(card).not.toMatch(/\bborder(?!-radius)\b/);
   });
 
   it("uses 15px member names without changing the row height rules", () => {
@@ -126,29 +95,10 @@ describe("GalaxyAvatar", () => {
     expect(container.querySelector(".galaxy-avatar-meteor")).toBeTruthy();
   });
 
-  it("keeps the star field sparse: three repeating patterns, never speckle", () => {
-    const starLayers = (selector: string) => {
-      const rule =
-        galaxyStyles.match(
-          new RegExp(`\\.galaxy-avatar-stars--${selector}::before \\{([\\s\\S]*?)\\}`)
-        )?.[1] ?? "";
-      return (rule.match(/radial-gradient\(circle/g) ?? []).length;
-    };
-    expect(starLayers("a")).toBe(2);
-    expect(starLayers("b")).toBe(1);
-
-    const rowStars =
-      galaxyStyles.match(
-        /\.dc-member\[data-galaxy="true"\]\[data-ultra="true"\]::before \{([\s\S]*?)\}/
-      )?.[1] ?? "";
-    // Three faint row stars, not a speckled band.
-    expect((rowStars.match(/transparent 1\.[456]\d?px\)/g) ?? []).length).toBe(3);
-  });
-
   it("turns the motion off for reduced-motion readers", () => {
     expect(galaxyStyles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(galaxyStyles).toMatch(
-      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?animation: none;/
+      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?animation: none !important;/
     );
     expect(galaxyStyles).toMatch(
       /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.galaxy-avatar-meteor \{\s*display: none;/
