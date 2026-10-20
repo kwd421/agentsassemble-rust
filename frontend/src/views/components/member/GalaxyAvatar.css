@@ -21,9 +21,9 @@
 }
 
 /* Ultra's animated row fill and left inset read as a box around the halo, so
-   a galaxy row clears them and paints one still nebula instead. Its centre is
-   the avatar centre, so the row and the halo share the same deep-violet glow;
-   a horizontal fade dissolves the right edge. */
+   a galaxy row clears them and paints one still nebula instead. The violet is
+   strongest at the avatar and spreads across the whole row with an even,
+   endless fade: the right end keeps a faint tint instead of ending abruptly. */
 .dc-member[data-galaxy="true"][data-ultra="true"] {
   overflow: visible;
   background: none;
@@ -37,44 +37,43 @@
   z-index: 0;
   border-radius: 8px;
   background:
-    radial-gradient(circle at 58px 10px, rgba(255, 255, 255, 0.82) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 77px 31px, rgba(196, 181, 253, 0.78) 0 1.1px, transparent 1.9px),
-    radial-gradient(circle at 43px 33px, rgba(255, 255, 255, 0.62) 0 0.8px, transparent 1.5px),
-    radial-gradient(circle at 96px 17px, rgba(255, 255, 255, 0.55) 0 0.9px, transparent 1.6px),
-    radial-gradient(circle at 112px 36px, rgba(165, 243, 252, 0.5) 0 0.8px, transparent 1.5px),
-    radial-gradient(circle at 134px 12px, rgba(255, 255, 255, 0.42) 0 0.8px, transparent 1.5px),
-    radial-gradient(circle at 157px 29px, rgba(196, 181, 253, 0.34) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 54px 33px, rgba(255, 255, 255, 0.68) 0 0.9px, transparent 1.6px),
+    radial-gradient(circle at 112px 12px, rgba(196, 181, 253, 0.52) 0 0.85px, transparent 1.55px),
+    radial-gradient(circle at 168px 30px, rgba(255, 255, 255, 0.4) 0 0.75px, transparent 1.4px),
     radial-gradient(
       54px 54px at 24px 50%,
-      rgba(96, 58, 196, 0.5) 0%,
-      rgba(73, 44, 158, 0.34) 46%,
-      rgba(51, 31, 112, 0.14) 70%,
+      rgba(96, 58, 196, 0.54) 0%,
+      rgba(73, 44, 158, 0.38) 46%,
+      rgba(51, 31, 112, 0.18) 70%,
       transparent 100%
     ),
     radial-gradient(
-      146px 82px at 24px 50%,
-      rgba(43, 25, 96, 0.58) 0%,
-      rgba(36, 22, 82, 0.3) 46%,
-      rgba(30, 20, 70, 0.1) 68%,
-      transparent 84%
+      118% 150% at 0% 50%,
+      rgba(76, 45, 168, 0.48) 0%,
+      rgba(58, 36, 134, 0.34) 34%,
+      rgba(45, 28, 108, 0.22) 62%,
+      rgba(37, 24, 90, 0.14) 84%,
+      rgba(33, 22, 80, 0.09) 100%
     );
   content: "";
   pointer-events: none;
   -webkit-mask-image: linear-gradient(
     90deg,
     #000 0%,
-    #000 24%,
-    rgba(0, 0, 0, 0.78) 46%,
-    rgba(0, 0, 0, 0.34) 66%,
-    transparent 84%
+    #000 22%,
+    rgba(0, 0, 0, 0.9) 42%,
+    rgba(0, 0, 0, 0.72) 64%,
+    rgba(0, 0, 0, 0.58) 84%,
+    rgba(0, 0, 0, 0.5) 100%
   );
   mask-image: linear-gradient(
     90deg,
     #000 0%,
-    #000 24%,
-    rgba(0, 0, 0, 0.78) 46%,
-    rgba(0, 0, 0, 0.34) 66%,
-    transparent 84%
+    #000 22%,
+    rgba(0, 0, 0, 0.9) 42%,
+    rgba(0, 0, 0, 0.72) 64%,
+    rgba(0, 0, 0, 0.58) 84%,
+    rgba(0, 0, 0, 0.5) 100%
   );
 }
 
@@ -254,8 +253,8 @@
   transform: rotate(-42deg);
 }
 
-/* Four repeating star patterns, plus four individually twinkling bright stars
-   in the first field. Both fields orbit with the arms at their own speeds. */
+/* Two repeating patterns plus three individual bright stars. The fields stay
+   sparse enough to read as a clean night sky rather than speckle. */
 .galaxy-avatar-stars {
   z-index: 2;
   opacity: 1;
@@ -279,11 +278,9 @@
 .galaxy-avatar-stars--a::before {
   background-image:
     radial-gradient(circle, rgba(255, 255, 255, 1) 0 1.2px, transparent 1.8px),
-    radial-gradient(circle, rgba(214, 234, 255, 0.96) 0 0.95px, transparent 1.5px),
-    radial-gradient(circle, rgba(186, 168, 255, 0.9) 0 1.45px, transparent 2.15px),
-    radial-gradient(circle, rgba(255, 255, 255, 0.82) 0 0.75px, transparent 1.15px);
-  background-size: 19% 23%, 27% 21%, 33% 31%, 15% 17%;
-  background-position: 11% 7%, 63% 31%, 29% 73%, 81% 59%;
+    radial-gradient(circle, rgba(186, 168, 255, 0.9) 0 1.35px, transparent 2.05px);
+  background-size: 46% 51%, 61% 57%;
+  background-position: 13% 9%, 64% 69%;
   -webkit-mask-image: radial-gradient(
     circle,
     transparent 0 42%,
@@ -305,11 +302,9 @@
 
 .galaxy-avatar-stars--b::before {
   background-image:
-    radial-gradient(circle, rgba(255, 255, 255, 0.94) 0 1.55px, transparent 2.25px),
-    radial-gradient(circle, rgba(125, 238, 252, 0.88) 0 0.95px, transparent 1.55px),
-    radial-gradient(circle, rgba(204, 190, 255, 0.9) 0 1.15px, transparent 1.75px);
-  background-size: 23% 29%, 17% 19%, 37% 33%;
-  background-position: 43% 13%, 7% 47%, 67% 79%;
+    radial-gradient(circle, rgba(255, 255, 255, 0.92) 0 1.45px, transparent 2.15px);
+  background-size: 57% 63%;
+  background-position: 37% 61%;
   -webkit-mask-image: radial-gradient(
     circle,
     transparent 0 42%,
@@ -442,14 +437,14 @@
 }
 
 .galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--a::before {
-  background-size: 34% 39%, 43% 41%, 51% 47%, 27% 31%;
+  background-size: 52% 57%, 67% 63%;
 }
 
 .galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--b::before {
-  background-size: 37% 43%, 29% 33%, 47% 41%;
+  background-size: 61% 67%;
 }
 
-/* The compact halo keeps both star fields for a denser ring of stars. */
+/* The compact halo keeps both star fields, but they stay sparse. */
 .galaxy-avatar[data-galaxy-size="compact"] .galaxy-avatar-stars--b {
   animation-duration: 72s;
 }

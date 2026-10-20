@@ -9,13 +9,12 @@ type BrightStar = {
   duration: string;
 };
 
-// The bright stars orbit with the arms. Their staggered timings make a few
-// flare at a time instead of the whole field pulsing together.
+// Three bright stars at even 120° angles keep the halo balanced without a
+// crowded field. Their staggered timings make one flare at a time.
 const BRIGHT_STARS: BrightStar[] = [
-  { angle: 30, radius: 0.58, size: 2.8, delay: "-0.4s", duration: "3.2s" },
-  { angle: 120, radius: 0.65, size: 3, delay: "-1.6s", duration: "2.6s" },
-  { angle: 210, radius: 0.56, size: 2.6, delay: "-2.1s", duration: "3.8s" },
-  { angle: 300, radius: 0.68, size: 3.2, delay: "-0.9s", duration: "2.9s" },
+  { angle: 30, radius: 0.6, size: 2.8, delay: "-0.4s", duration: "3.2s" },
+  { angle: 150, radius: 0.66, size: 3, delay: "-1.6s", duration: "2.6s" },
+  { angle: 270, radius: 0.57, size: 2.6, delay: "-2.1s", duration: "3.8s" },
 ];
 
 /**
@@ -33,7 +32,7 @@ export default function GalaxyAvatar({
   className?: string;
 }) {
   const full = size >= 40;
-  // Four bright stars at even angles keep the glow balanced at both sizes.
+  // Three bright stars at even angles keep the glow balanced at both sizes.
   const stars = BRIGHT_STARS;
   return (
     <span

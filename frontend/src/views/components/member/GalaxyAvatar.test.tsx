@@ -81,10 +81,15 @@ describe("GalaxyAvatar", () => {
       galaxyStyles.match(
         /\.dc-member\[data-galaxy="true"\]\[data-ultra="true"\]::before \{([\s\S]*?)\}/
       )?.[1] ?? "";
-    // The nebula is centred on the 32px avatar (24px inset + 16px radius).
+    // The nebula is centred on the 32px avatar (24px inset + 16px radius) and
+    // spreads across the whole row rather than ending at the name.
     expect(nebulaRule).toMatch(/54px 54px at 24px 50%/);
+    expect(nebulaRule).toMatch(/118% 150% at 0% 50%/);
     expect(nebulaRule).toContain("border-radius: 8px;");
     expect(nebulaRule).toMatch(/mask-image: linear-gradient\(/);
+    // The right end keeps a faint violet tint; the fade never reaches clear.
+    expect(nebulaRule).toContain("rgba(0, 0, 0, 0.5) 100%");
+    expect(nebulaRule).not.toContain("transparent 84%");
     expect(nebulaRule).not.toMatch(/\bborder(?!-radius)\b/);
     expect(nebulaRule).not.toContain("box-shadow");
   });
@@ -100,7 +105,7 @@ describe("GalaxyAvatar", () => {
     );
   });
 
-  it("draws two spiral arms, a rim and more bright stars at profile size", () => {
+  it("draws two spiral arms, a rim and three evenly spread bright stars", () => {
     const view = render(
       <GalaxyAvatar size={32}>
         <span>avatar</span>
@@ -109,16 +114,34 @@ describe("GalaxyAvatar", () => {
     const container = view.container;
     expect(container.querySelectorAll(".galaxy-avatar-arm")).toHaveLength(2);
     expect(container.querySelector(".galaxy-avatar-ring")).toBeTruthy();
-    // Four stars at even angles keep the compact halo balanced all the way round.
-    expect(container.querySelectorAll(".galaxy-avatar-bright")).toHaveLength(4);
+    expect(container.querySelectorAll(".galaxy-avatar-bright")).toHaveLength(3);
 
     view.rerender(
       <GalaxyAvatar size={80}>
         <span>avatar</span>
       </GalaxyAvatar>
     );
-    expect(container.querySelectorAll(".galaxy-avatar-bright")).toHaveLength(4);
+    expect(container.querySelectorAll(".galaxy-avatar-bright")).toHaveLength(3);
     expect(container.querySelector(".galaxy-avatar-meteor")).toBeTruthy();
+  });
+
+  it("keeps the star field sparse: three repeating patterns, never speckle", () => {
+    const starLayers = (selector: string) => {
+      const rule =
+        galaxyStyles.match(
+          new RegExp(`\\.galaxy-avatar-stars--${selector}::before \\{([\\s\\S]*?)\\}`)
+        )?.[1] ?? "";
+      return (rule.match(/radial-gradient\(circle/g) ?? []).length;
+    };
+    expect(starLayers("a")).toBe(2);
+    expect(starLayers("b")).toBe(1);
+
+    const rowStars =
+      galaxyStyles.match(
+        /\.dc-member\[data-galaxy="true"\]\[data-ultra="true"\]::before \{([\s\S]*?)\}/
+      )?.[1] ?? "";
+    // Three faint row stars, not a speckled band.
+    expect((rowStars.match(/transparent 1\.[456]\d?px\)/g) ?? []).length).toBe(3);
   });
 
   it("turns the motion off for reduced-motion readers", () => {
