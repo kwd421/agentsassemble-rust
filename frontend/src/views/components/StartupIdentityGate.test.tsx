@@ -330,7 +330,7 @@ describe("StartupIdentityGate", () => {
 
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
     await userEvent.type(
-      await screen.findByRole("textbox", { name: "게스트 표시 이름" }),
+      await screen.findByRole("textbox", { name: "표시 이름" }),
       "Desktop User"
     );
     await userEvent.click(screen.getByRole("button", { name: "게스트로 계속" }));

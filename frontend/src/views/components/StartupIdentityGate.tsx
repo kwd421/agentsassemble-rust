@@ -500,8 +500,8 @@ export default function StartupIdentityGate({
           <div className="flex justify-end empty:hidden"><AppUpdateIndicator /></div>
           <header className="grid gap-2">
             <h1 className="text-2xl font-bold text-text-primary">어떻게 사용할까요?</h1>
-            <p className="text-[13px] font-semibold leading-5 text-text-muted">
-              로그인 서버가 설정되지 않았어요. 이 기기에서 사용할 이름을 입력해 주세요.
+            <p className="text-sm leading-5 text-text-muted">
+              로그인 서버가 설정되지 않았어요. 이 컴퓨터에서 쓸 이름을 입력해 주세요.
             </p>
           </header>
           {error && (
@@ -512,19 +512,20 @@ export default function StartupIdentityGate({
               {error}
             </div>
           )}
-          <label className="grid gap-2 text-[11px] font-black text-text-secondary">
-            게스트 표시 이름
+          <label className="dc-startup-field">
+            표시 이름
             <input
               autoFocus
               maxLength={80}
               value={displayName}
-              className="min-h-10 rounded-md bg-[#202024] px-3 text-[13px] text-text-primary outline-none"
+              placeholder="다른 참가자에게 보일 이름"
+              className="dc-startup-input"
               onChange={(event) => setDisplayName(event.currentTarget.value)}
             />
           </label>
           <button
             type="button"
-            className="min-h-10 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50"
+            className="dc-startup-primary disabled:opacity-50"
             disabled={!displayName.trim() || busy}
             onClick={() => void continueLocalGuest()}
           >

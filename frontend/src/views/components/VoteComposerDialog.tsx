@@ -211,10 +211,10 @@ export default function VoteComposerDialog({
             {options.map((option, index) => (
               <div
                 key={index}
-                className="grid grid-cols-[minmax(0,1fr)_36px] gap-2"
+                className="grid grid-cols-[minmax(0,1fr)_40px] gap-2"
               >
                 <input
-                  className="ops-input"
+                  className="ops-input h-10 min-h-10"
                   value={option}
                   maxLength={VOTE_OPTION_CHARACTER_LIMIT}
                   placeholder={`선택지 ${index + 1}`}
@@ -224,7 +224,7 @@ export default function VoteComposerDialog({
                 />
                 <button
                   type="button"
-                  className="ops-button grid place-items-center px-0"
+                  className="ops-button grid h-10 min-h-10 place-items-center px-0"
                   onClick={() => removeOption(index)}
                   disabled={busy || options.length <= MIN_VOTE_OPTIONS}
                   aria-label={`선택지 ${index + 1} 제거`}
@@ -235,7 +235,7 @@ export default function VoteComposerDialog({
             ))}
             <button
               type="button"
-              className="ops-button mt-1 inline-flex items-center justify-center gap-2"
+              className="ops-button mt-1 inline-flex h-10 min-h-10 items-center justify-center gap-2"
               onClick={addOption}
               disabled={busy || options.length >= MAX_VOTE_OPTIONS}
             >
@@ -266,6 +266,7 @@ export default function VoteComposerDialog({
             <label className="inline-flex items-center gap-2 text-sm font-semibold">
               <input
                 type="checkbox"
+                className="h-5 w-5"
                 checked={noDeadline}
                 onChange={(event) => setNoDeadline(event.currentTarget.checked)}
                 disabled={busy}
@@ -274,7 +275,7 @@ export default function VoteComposerDialog({
             </label>
             <span
               id={durationHelpId}
-              className="text-[12px] font-medium text-text-muted"
+              className="text-sm text-text-muted"
             >
               {noDeadline
                 ? "투표를 만든 사람이나 방 관리자가 끝낼 때까지 열려 있어요."

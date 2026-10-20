@@ -37,27 +37,41 @@
   padding: 0 8px;
 }
 
+/* Discord's zoom slider: grey track, brand fill up to the thumb, white thumb. */
 .dc-image-crop-zoom input {
   flex: 1;
+  height: 8px;
+  min-height: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--color-accent) var(--dc-range-fill, 0%), #4e5058 var(--dc-range-fill, 0%));
+  appearance: none;
+  cursor: pointer;
+}
+
+.dc-image-crop-zoom input::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  appearance: none;
+}
+
+.dc-image-crop-zoom input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.dc-image-crop-zoom {
   min-height: 44px;
-  accent-color: var(--color-accent);
 }
 
-.dc-image-crop-zoom-small,
-.dc-image-crop-zoom-large {
+.dc-image-crop-zoom-icon {
   flex-shrink: 0;
-  border: 2px solid var(--color-text-muted);
-  border-radius: 4px;
-}
-
-.dc-image-crop-zoom-small {
-  width: 12px;
-  height: 12px;
-}
-
-.dc-image-crop-zoom-large {
-  width: 20px;
-  height: 20px;
+  color: var(--color-text-muted);
 }
 
 .dc-image-crop-actions {

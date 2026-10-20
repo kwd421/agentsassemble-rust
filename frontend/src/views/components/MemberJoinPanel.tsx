@@ -302,7 +302,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
         onComplete={async () => { await run(() => prepare(true)); }} />}
       {busy && secureEntry && loginAbort.current && <button type="button" className="dc-join-cancel" onClick={() => loginAbort.current?.abort()}>로그인 취소</button>}
       {(!host || onCancel) && !busy && <button type="button" className="dc-join-cancel"
-        onClick={onCancel || (() => { clearCentralMemberRequest(); window.history.back(); })}>취소</button>}
+        onClick={onCancel || (() => { clearCentralMemberRequest(); window.history.back(); })}>{error ? "닫기" : "취소"}</button>}
     </section>
   </GuestJoinProfilePanel>;
 }

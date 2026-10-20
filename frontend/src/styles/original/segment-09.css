@@ -309,7 +309,7 @@
   background: var(--color-panel-bg);
   padding: 24px;
   color: var(--color-text-primary);
-  text-align: center;
+  text-align: left;
 }
 
 .dc-upload-limit-dialog:not([open]) {
@@ -333,6 +333,8 @@
 }
 
 .dc-upload-limit-dialog .dc-accent-button {
+  justify-self: end;
+  min-width: 96px;
   min-height: 40px;
   margin-top: 16px;
 }

@@ -1,6 +1,7 @@
 import { createResourceUrl, revokeResourceUrl } from "../../lib/remote/remoteResources";
 import { useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { Image as ImageIcon } from "lucide-react";
 import { userFacingError } from "../../lib/apiErrors";
 
 export type ImageCropShape = "circle" | "square" | "banner";
@@ -250,16 +251,17 @@ export default function ImageCropper({ file, onCancel, onCropped, shape = "circl
       />
       <label className="dc-image-crop-zoom">
         <span className="sr-only">확대</span>
-        <span aria-hidden className="dc-image-crop-zoom-small" />
+        <ImageIcon aria-hidden size={16} className="dc-image-crop-zoom-icon" />
         <input
           type="range"
           min={MIN_SCALE}
           max={MAX_SCALE}
           step={0.01}
           value={scale}
+          style={{ "--dc-range-fill": `${((scale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 100}%` } as CSSProperties}
           onChange={(event) => setScale(Number(event.currentTarget.value))}
         />
-        <span aria-hidden className="dc-image-crop-zoom-large" />
+        <ImageIcon aria-hidden size={24} className="dc-image-crop-zoom-icon" />
       </label>
       <div className="dc-image-crop-actions">
         <button type="button" className="dc-image-crop-reset" onClick={reset}>
