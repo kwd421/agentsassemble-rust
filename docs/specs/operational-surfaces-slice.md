@@ -1367,7 +1367,9 @@ keeps only `generateContent` models, strips the `models/` prefix and defaults to
 `default`/"기본", `flex`/"Flex" and `priority`/"Priority"; `default` omits the
 field from the request. A streamed tool-call turn may finish with `stop` instead of
 `tool_calls`, and its complete tool call may omit `index`; those two shapes are
-accepted for Gemini only. Gemini 3 attaches `extra_content.google.thought_signature`
+accepted for Gemini only. Gemini repeats a growing running usage total on every
+streamed chunk; a later usage report may only stay equal or grow and the last one is
+kept, while a decreasing report is refused. Gemini 3 attaches `extra_content.google.thought_signature`
 to each tool call and requires the same object back on that call in the next request,
 so it is retained exactly (a non-object or one over 64 KiB is refused) and returned on
 the assistant tool call. Every round of a room turn (an observation turn) sends

@@ -243,11 +243,13 @@ impl CompletionAccumulator {
                 completion: usage.completion,
                 total: usage.total,
             };
-            if self
-                .usage
-                .replace(usage)
-                .is_some_and(|prior| prior != usage)
-            {
+            // Gemini repeats a running total on every chunk; a later report may
+            // only grow, and the last one is the turn's usage.
+            if self.usage.replace(usage).is_some_and(|prior| {
+                usage.prompt < prior.prompt
+                    || usage.completion < prior.completion
+                    || usage.total < prior.total
+            }) {
                 return Err(OpenAiStreamError::InvalidResponse);
             }
         }
@@ -638,6 +640,45 @@ mod tests {
             .err()
             .unwrap_or_else(|| panic!("truncated stream must fail"));
         assert_eq!(error, OpenAiStreamError::InvalidResponse);
+    }
+
+    // Gemini streams a growing running total of usage on every chunk.
+    #[tokio::test]
+    async fn running_usage_totals_keep_the_last_and_refuse_a_decrease() {
+        let chunk = |text: &str, completion: u64, finish: Option<&str>| {
+            event(&json!({
+                "id": "chat-usage",
+                "model": "gemini-3.1-flash-lite",
+                "choices": [{"index": 0, "delta": {"role": "assistant", "content": text}, "finish_reason": finish}],
+                "usage": {"prompt_tokens": 17, "completion_tokens": completion, "total_tokens": 17 + completion}
+            }))
+        };
+        let growing = [
+            chunk("봄은 ", 13, None),
+            chunk("따뜻해요.", 37, None),
+            chunk("", 37, Some("stop")),
+            "data: [DONE]\n\n".to_owned(),
+        ]
+        .concat();
+        let completion = decode_events(stream::iter([Ok(Bytes::from(growing))]))
+            .await
+            .unwrap_or_else(|error| panic!("decode growing usage: {error}"));
+        assert_eq!(completion.usage.map(|usage| usage.completion), Some(37));
+        assert_eq!(
+            completion.message.content.as_deref(),
+            Some("봄은 따뜻해요.")
+        );
+
+        let shrinking = [
+            chunk("봄은 ", 37, None),
+            chunk("따뜻해요.", 13, Some("stop")),
+            "data: [DONE]\n\n".to_owned(),
+        ]
+        .concat();
+        assert!(matches!(
+            decode_events(stream::iter([Ok(Bytes::from(shrinking))])).await,
+            Err(OpenAiStreamError::InvalidResponse)
+        ));
     }
 
     // Google answers 503 when a model is shedding load; that is "busy", not a failed request.
