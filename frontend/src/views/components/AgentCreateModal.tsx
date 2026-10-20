@@ -560,7 +560,7 @@ export default function AgentCreateModal({
                       }
                     />
                     {executionHarness === "opencode" && (
-                      <p className="preserve-words">
+                      <p className="dc-agent-hint preserve-words">
                         OpenCode가 이 API 키로 실행돼요. 파일·명령 도구를 쓸 수 있어요.
                       </p>
                     )}
