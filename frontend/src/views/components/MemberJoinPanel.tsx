@@ -302,11 +302,11 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel, s
     retryMode={error && !terminalError && !(secureEntry && !loadCentralSession()) ? "join" : undefined} onJoin={retry}
     onDisplayNameChange={setJoinName} onAvatarImageChange={setJoinAvatar}>
     <section aria-label="방 참가" className="grid gap-3 text-text-primary">
-      {rooms.map(room => <button key={room.room_id} className="dc-guest-join-button" disabled={busy} onClick={() => void run(() => selectRoom(room.room_id))}>{room.name || "이름 없는 방"}</button>)}
+      {rooms.map(room => <button key={room.room_id} className="dc-button dc-button--lg dc-button--primary" disabled={busy} onClick={() => void run(() => selectRoom(room.room_id))}>{room.name || "이름 없는 방"}</button>)}
       {consent && !error && <>
         <p className="text-sm preserve-words">{consent.account} 계정으로 참가</p>
         <p className="text-sm text-text-muted">참가하면 이 방에 내 이름과 프로필이 보여요.</p>
-        <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>{reconnect ? "다시 연결" : "참가하기"}</button>
+        <button type="button" className="dc-button dc-button--lg dc-button--primary" disabled={busy} onClick={() => void confirm()}>{reconnect ? "다시 연결" : "참가하기"}</button>
       </>}
       {consent && !error && isHiddenServer(consent.request.server_id) && <button type="button" className="dc-join-cancel" disabled={busy} onClick={() => void confirm(true)}>다시 표시하고 참가하기</button>}
       {!host && !busy && (!error || (secureEntry && !loadCentralSession())) && !consent && rooms.length === 0 && guestScreen === "choice" && <button type="button" className="dc-google-signin w-full"

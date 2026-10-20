@@ -127,7 +127,7 @@ export default function GuestJoinProfilePanel({
         {pairing && pairingState === "pairing_failed_retryable" && (
           <button
             type="button"
-            className="dc-guest-join-button"
+            className="dc-button dc-button--lg dc-button--primary"
             disabled={busy}
             onClick={onPairingRetry}
           >
@@ -136,14 +136,14 @@ export default function GuestJoinProfilePanel({
           </button>
         )}
         {pairing && pairingState === "pairing_failed_terminal" && (
-          <a className="dc-guest-join-button" href="/">
+          <a className="dc-button dc-button--lg dc-button--primary" href="/">
             새 연결 링크 받기
           </a>
         )}
         {retryMode && (
           <button
             type="button"
-            className="dc-guest-join-button"
+            className="dc-button dc-button--lg dc-button--primary"
             disabled={busy}
             onClick={onJoin}
           >
@@ -160,14 +160,13 @@ export default function GuestJoinProfilePanel({
         )}
         {!children && !pairing && !retryMode && (
           <>
-            {onMemberJoin && <button type="button" className="dc-guest-join-button"
+            {onMemberJoin && <button type="button" className="dc-button dc-button--lg dc-button--primary"
               disabled={busy || avatarPreparing} onClick={onMemberJoin}>
               <LogIn size={16} /> 로그인하고 참가
             </button>}
             <button
               type="button"
-              className="dc-member-session-button"
-              data-active="false"
+              className="dc-button dc-button--lg dc-button--secondary"
               disabled={busy || avatarPreparing || !displayName.trim()}
               onClick={onJoin}
             >

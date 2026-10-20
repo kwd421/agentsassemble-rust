@@ -183,7 +183,9 @@ textarea {
 }
 
 /* The one action button. Size lives in the components layer so a usage's own
-   Tailwind size or padding still wins; color comes from one variant class. */
+   Tailwind size or padding still wins; color comes from one variant class.
+   Type stays outside the layer: the unlayered `font: inherit` above would
+   otherwise reset it. */
 @layer components {
   .dc-button {
     display: inline-flex;
@@ -192,8 +194,6 @@ textarea {
     justify-content: center;
     gap: 6px;
     padding: 0 14px;
-    font-size: 14px;
-    font-weight: 500;
     white-space: nowrap;
     text-decoration: none;
   }
@@ -215,6 +215,8 @@ textarea {
 
 .dc-button {
   border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
   border-radius: 8px;
   transition:
     background-color 120ms ease,

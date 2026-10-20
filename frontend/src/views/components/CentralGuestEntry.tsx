@@ -56,7 +56,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 secondary button so the two read as different actions. */}
             <button
               type="button"
-              className="dc-startup-secondary w-full"
+              className="dc-button dc-button--lg dc-button--secondary w-full"
               disabled={busy}
               onClick={() => {
                 setError("");
@@ -106,7 +106,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </label>
             <button
               type="button"
-              className="dc-startup-primary"
+              className="dc-button dc-button--lg dc-button--primary"
               disabled={!displayName.trim() || busy}
               onClick={() => void createGuest()}
             >
@@ -145,7 +145,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </label>
             <button
               type="button"
-              className="dc-startup-primary"
+              className="dc-button dc-button--lg dc-button--primary"
               disabled={!recoveryInput.trim() || busy}
               onClick={() => void recoverGuest()}
             >
@@ -172,7 +172,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </label>
             <button
               type="button"
-              className="dc-startup-secondary"
+              className="dc-button dc-button--lg dc-button--secondary"
               onClick={() => void copyRecoveryCode()}
             >
               {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "복사됨" : "복구 코드 복사"}
@@ -191,7 +191,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
             </label>
             <button
               type="button"
-              className="dc-startup-primary"
+              className="dc-button dc-button--lg dc-button--primary"
               disabled={!savedRecoveryCode || busy}
               onClick={() => void continueAfterRecoveryCode()}
             >

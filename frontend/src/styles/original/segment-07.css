@@ -459,7 +459,7 @@
   color: var(--color-text-primary);
 }
 
-.dc-agent-runtime-settings .dc-member-session-button,
+.dc-agent-runtime-settings > .dc-button,
 .dc-agent-runtime-settings > p {
   grid-column: 1 / -1;
 }

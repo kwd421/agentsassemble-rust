@@ -47,7 +47,7 @@ export default function MemberLoginPopup() {
   return <GuestJoinProfilePanel title={registration ? "Google 계정 확인" : "Google 로그인"}
     displayName="" status={status} busy={busy} onDisplayNameChange={() => {}} onAvatarImageChange={() => {}} onJoin={returnToInvite}>
     <section className="grid gap-3" aria-label="Google 로그인">
-      {registration && <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void register()}>새로 가입</button>}
+      {registration && <button type="button" className="dc-button dc-button--lg dc-button--primary" disabled={busy} onClick={() => void register()}>새로 가입</button>}
       <button type="button" className="dc-join-cancel" disabled={busy} onClick={returnToInvite}>초대 창으로 돌아가서 다시 시도</button>
     </section>
   </GuestJoinProfilePanel>;

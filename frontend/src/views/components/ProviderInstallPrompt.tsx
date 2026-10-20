@@ -143,9 +143,9 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
       detail={<>{command}<p className="dc-setup-note">
         {offer.package} {offer.version} · 이 계정 권한으로 설치해요 · 관리자 권한은 쓰지 않아요</p></>}
       actions={<>
-        <button type="button" className="dc-setup-button" data-variant="ghost"
+        <button type="button" className="dc-button dc-button--ghost"
           onClick={() => { setOffer(null); setPhase("idle"); }}>취소</button>
-        <button type="button" className="dc-setup-button" data-variant="primary" autoFocus
+        <button type="button" className="dc-button dc-button--primary" autoFocus
           onClick={() => void install()}>설치</button>
       </>}>
       <p className="dc-setup-text" role="status"><strong>아래 명령을 실행해요</strong>
@@ -158,11 +158,11 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
     glyph={checking ? <LoaderCircle size={15} className="dc-setup-spin" />
       : error ? <CircleAlert size={15} strokeWidth={2.5} /> : <Download size={15} strokeWidth={2.5} />}
     actions={installable ? <>
-      <button type="button" className="dc-setup-button" data-variant="ghost"
+      <button type="button" className="dc-button dc-button--ghost"
         onClick={() => void openHelp()}>직접 설치 방법</button>
-      <button type="button" className="dc-setup-button" data-variant="primary"
+      <button type="button" className="dc-button dc-button--primary"
         disabled={checking} onClick={() => void check()}>{checking ? "확인 중…" : "앱에서 설치하기"}</button>
-    </> : <button type="button" className="dc-setup-button" data-variant="primary"
+    </> : <button type="button" className="dc-button dc-button--primary"
       onClick={() => void openHelp()}>설치 안내 열기<ExternalLink size={13} aria-hidden="true" /></button>}>
     <p className="dc-setup-text" role="status"><strong>{title} 없음</strong>
       <span className="dc-setup-muted">{installable ? "이 컴퓨터에서 찾지 못했어요"

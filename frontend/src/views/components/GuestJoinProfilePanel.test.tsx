@@ -32,8 +32,8 @@ describe("GuestJoinProfilePanel", () => {
     expect(photo.closest(".dc-guest-avatar-row")?.contains(screen.getByRole("textbox", { name: "이름" }))).toBe(true);
     const buttons = screen.getAllByRole("button");
     expect(buttons[0].textContent).toContain("로그인하고 참가");
-    expect(buttons[0].className).toBe("dc-guest-join-button");
-    expect(buttons[1].getAttribute("data-active")).toBe("false");
+    expect(buttons[0].className).toContain("dc-button--primary");
+    expect(buttons[1].className).toContain("dc-button--secondary");
     fireEvent.click(screen.getByRole("button", { name: "게스트로 참가" }));
     expect(onJoin).toHaveBeenCalledOnce(); expect(onMemberJoin).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "로그인하고 참가" }));

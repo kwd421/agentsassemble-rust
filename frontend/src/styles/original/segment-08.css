@@ -4,62 +4,6 @@
   }
 }
 
-.dc-member-session-button {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--color-accent);
-  padding: 0 14px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.dc-member-session-button:hover,
-.dc-member-session-button:focus-visible {
-  background: var(--color-accent-hover);
-  outline: none;
-}
-
-/* Only the action that moves the agent forward is filled; the rest stay quiet. */
-.dc-member-session-button[data-active="false"],
-.dc-member-session-button[data-variant="quiet"],
-.dc-member-session-button[data-variant="danger"] {
-  border-color: rgba(151, 151, 159, 0.2);
-  background: rgba(151, 151, 159, 0.12);
-  color: var(--color-text-primary);
-}
-
-.dc-member-session-button[data-active="false"]:hover,
-.dc-member-session-button[data-active="false"]:focus-visible,
-.dc-member-session-button[data-variant="quiet"]:hover,
-.dc-member-session-button[data-variant="quiet"]:focus-visible {
-  background: rgba(151, 151, 159, 0.2);
-}
-
-.dc-member-session-button[data-variant="danger"] {
-  color: #f57976;
-}
-
-.dc-member-session-button[data-variant="danger"]:hover,
-.dc-member-session-button[data-variant="danger"]:focus-visible {
-  border-color: transparent;
-  background: var(--color-danger);
-  color: #fff;
-}
-
-.dc-member-session-button:disabled {
-  cursor: not-allowed;
-  background: rgba(148, 155, 164, 0.18);
-  color: var(--color-text-muted);
-  opacity: 0.72;
-}
-
 .dc-member-session-status {
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -435,38 +379,3 @@
   color: var(--color-danger);
 }
 
-.dc-mafia-control-button {
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border-radius: 5px;
-  background: var(--color-sidebar-hover);
-  padding: 0 10px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.dc-mafia-control-button:hover:not(:disabled),
-.dc-mafia-control-button:focus-visible {
-  background: var(--color-sidebar-active);
-  color: var(--color-text-primary);
-  outline: none;
-}
-
-.dc-mafia-control-button.primary {
-  background: var(--color-accent);
-  color: #fff;
-}
-
-.dc-mafia-control-button.primary:hover:not(:disabled),
-.dc-mafia-control-button.primary:focus-visible {
-  background: var(--color-accent-hover);
-}
-
-.dc-mafia-control-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.46;
-}

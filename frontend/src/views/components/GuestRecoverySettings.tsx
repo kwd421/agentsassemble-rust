@@ -90,7 +90,7 @@ export default function GuestRecoverySettings({
       <p className="dc-guest-recovery-warning">
         새 코드를 만들면 이전 코드는 더 이상 사용할 수 없어요.
       </p>
-      <button style={{ minWidth: 44, minHeight: 44 }} type="button" className="dc-guest-recovery-issue" disabled={busy} onClick={() => void issue()}>
+      <button type="button" className="dc-button dc-button--lg dc-button--primary" disabled={busy} onClick={() => void issue()}>
         <KeyRound size={16} />
         {busy ? "만드는 중…" : code ? "새 코드 만들기" : "복구 코드 만들기"}
       </button>
@@ -100,13 +100,13 @@ export default function GuestRecoverySettings({
             일회용 복구 코드
             <span>
               <input className="dc-input font-mono" value={code} readOnly spellCheck={false} />
-              <button style={{ minWidth: 44, minHeight: 44 }} type="button" aria-label={copiedLabel === "복구 코드" ? "복구 코드 복사됨" : "복구 코드 복사"} onClick={() => void copy(code, "복구 코드")}>
+              <button style={{ minWidth: 44 }} type="button" className="dc-button dc-button--lg dc-button--secondary" aria-label={copiedLabel === "복구 코드" ? "복구 코드 복사됨" : "복구 코드 복사"} onClick={() => void copy(code, "복구 코드")}>
                 <Copy size={16} />
                 {copiedLabel === "복구 코드" ? "복사됨" : null}
               </button>
             </span>
           </label>
-          <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => void copy(recoveryUrl, "복구 링크")}>
+          <button type="button" className="dc-button dc-button--lg dc-button--secondary" onClick={() => void copy(recoveryUrl, "복구 링크")}>
             <Link2 size={16} />
             {copiedLabel === "복구 링크" ? "복사됨" : "복구 링크 복사"}
           </button>

@@ -30,7 +30,7 @@ export default function DelegatedInviteLink({ invite, onClose }: { invite: Deleg
         </p>
         <div className="dc-invite-link-field">
           <input className="dc-invite-link-input" value={invite.join_url} readOnly aria-label="만든 초대 링크" onFocus={(event) => event.currentTarget.select()} />
-          <button type="button" className="dc-invite-copy-button" onClick={() => void copy()}>
+          <button type="button" className="dc-button dc-button--primary" onClick={() => void copy()}>
             <Copy size={15} />
             {copied === "done" ? "복사됨" : "복사"}
           </button>

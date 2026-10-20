@@ -28,7 +28,7 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }
       {localOnly && <p>외부 접속이 꺼져 있어서 이 컴퓨터에서 실행 중인 AI만 쓸 수 있는 초대를 만들어요. 앱을 다시 시작하면 이 초대는 쓸 수 없어요.</p>}
       </details>
     </div>
-    <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
+    <button type="button" className="dc-button dc-button--lg dc-button--primary"
       disabled={disabled || controls.creating} onClick={() => controls.create()}>
       {controls.creating ? "초대 만드는 중" : localOnly ? "이 컴퓨터용 초대 만들기" : "초대 만들기"}
     </button>

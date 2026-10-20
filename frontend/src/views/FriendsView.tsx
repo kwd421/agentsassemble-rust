@@ -97,7 +97,7 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
       {directory.error && <p role="alert">{directory.error}</p>}
       <div className="dc-create-channel-actions">
         <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={directory.busy} autoFocus onClick={() => setDeleting(null)}>취소</button>
-        <button type="button" className="dc-member-session-button" data-variant="danger" style={{ minHeight: 40, minWidth: 96 }} disabled={directory.busy} onClick={async () => { if (await directory.remove(deleting.friend_id)) setDeleting(null); }}>삭제</button>
+        <button type="button" className="dc-button dc-button--md dc-button--danger-soft" style={{ minWidth: 96 }} disabled={directory.busy} onClick={async () => { if (await directory.remove(deleting.friend_id)) setDeleting(null); }}>삭제</button>
       </div>
     </FriendDialog>}
   </section>;

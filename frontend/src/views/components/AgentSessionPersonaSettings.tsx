@@ -64,7 +64,7 @@ export default function AgentSessionPersonaSettings({
         </p>
         <button
           type="button"
-          className="dc-member-session-button"
+          className="dc-button dc-button--md dc-button--primary"
           disabled={!canConfigure || !dirty || busy}
           onClick={() => void savePersona()}
         >

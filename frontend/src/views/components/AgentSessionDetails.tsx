@@ -378,7 +378,7 @@ export default function AgentSessionDetails({
         <div className="dc-member-session-actions" aria-label={`${session.display_name} 세션 제어`}>
           {(canStart || pendingAction === "start") && <button
             type="button"
-            className="dc-member-session-button"
+            className="dc-button dc-button--md dc-button--primary"
             title="세션 시작"
             disabled={!canStart || Boolean(pendingAction)}
             onClick={() => void runControl("start")}
@@ -388,8 +388,7 @@ export default function AgentSessionDetails({
           </button>}
           {(canPause || pendingAction === "pause") && <button
             type="button"
-            className="dc-member-session-button"
-            data-variant="quiet"
+            className="dc-button dc-button--md dc-button--secondary"
             title="세션 일시정지"
             disabled={!canPause || Boolean(pendingAction)}
             onClick={() => void runControl("pause")}
@@ -399,8 +398,7 @@ export default function AgentSessionDetails({
           </button>}
           {(canStop || pendingAction === "stop") && <button
             type="button"
-            className="dc-member-session-button"
-            data-variant={strandedRuntime ? "quiet" : "danger"}
+            className={`dc-button dc-button--md ${strandedRuntime ? "dc-button--secondary" : "dc-button--danger-soft"}`}
             title={strandedRuntime ? "남은 실행이 끝났는지 확인하고 정리해요" : "세션 중지"}
             disabled={!canStop || Boolean(pendingAction)}
             onClick={() => void runControl("stop")}
@@ -410,7 +408,7 @@ export default function AgentSessionDetails({
           </button>}
           {(canResume || pendingAction === "resume") && <button
             type="button"
-            className="dc-member-session-button"
+            className="dc-button dc-button--md dc-button--primary"
             title="세션 재개"
             disabled={!canResume || Boolean(pendingAction)}
             onClick={() => void runControl("resume")}
@@ -420,8 +418,7 @@ export default function AgentSessionDetails({
           </button>}
           {(canInterrupt || pendingAction === "interrupt") && <button
             type="button"
-            className="dc-member-session-button"
-            data-variant="quiet"
+            className="dc-button dc-button--md dc-button--secondary"
             title="현재 응답 중단"
             disabled={!canInterrupt || Boolean(pendingAction)}
             onClick={() => void runControl("interrupt")}
@@ -471,7 +468,7 @@ export default function AgentSessionDetails({
           })}
           <button
             type="button"
-            className="dc-member-session-button"
+            className="dc-button dc-button--md dc-button--primary"
             // The settings grid stretches its own row, so keep the action at its label width.
             style={{ justifySelf: "start" }}
             disabled={

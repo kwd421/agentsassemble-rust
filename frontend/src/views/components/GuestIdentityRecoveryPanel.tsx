@@ -112,11 +112,11 @@ export default function GuestIdentityRecoveryPanel({
               방금 쓴 코드는 이제 쓸 수 없어요. 다음에 쓸 새 코드를 안전한 곳에 보관해 주세요.
             </p>
             <div className="dc-guest-recovery-actions">
-              <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => void copyReplacementCode()}>
+              <button type="button" className="dc-button dc-button--lg dc-button--secondary" onClick={() => void copyReplacementCode()}>
                 <Copy size={16} />
                 {copied ? "복사됨" : "새 코드 복사"}
               </button>
-              <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => onRecovered(recovered)}>
+              <button type="button" className="dc-button dc-button--lg dc-button--primary" onClick={() => onRecovered(recovered)}>
                 방으로 계속
               </button>
             </div>
@@ -124,8 +124,7 @@ export default function GuestIdentityRecoveryPanel({
         ) : (
           <button
             type="button"
-            className="dc-guest-recovery-submit"
-            style={{ minWidth: 44, minHeight: 44 }}
+            className="dc-button dc-button--lg dc-button--primary"
             disabled={busy || !recoveryCode.trim()}
             onClick={() => void recover()}
           >

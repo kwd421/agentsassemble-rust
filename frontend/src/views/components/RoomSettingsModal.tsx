@@ -262,7 +262,7 @@ export default function RoomSettingsModal({
                 >
                   <span className="preserve-words">{routingSettingsMessage}</span>
                   {(settingsStatus === "error" || settingsStatus === "stale") && (
-                    <button type="button" className="dc-upload-button shrink-0" onClick={onRetrySettings}>
+                    <button type="button" className="dc-button dc-button--md dc-button--secondary shrink-0" onClick={onRetrySettings}>
                       다시 불러오기
                     </button>
                   )}
@@ -401,12 +401,12 @@ export default function RoomSettingsModal({
               <div className="dc-settings-field">
               <p className="dc-settings-field-label">이미지</p>
               <div className="flex flex-wrap gap-2">
-              <label className="dc-upload-button">
+              <label className="dc-button dc-button--md dc-button--secondary dc-upload-button">
                 <ImageIcon size={15} />
                 배너 이미지
                 <input type="file" accept="image/*" onChange={(event) => pickAppearanceFile(event, "banner")} />
               </label>
-              <label className="dc-upload-button">
+              <label className="dc-button dc-button--md dc-button--secondary dc-upload-button">
                 <ImageIcon size={15} />
                 방 아이콘
                 <input type="file" accept="image/*" onChange={(event) => pickAppearanceFile(event, "icon")} />
@@ -430,7 +430,7 @@ export default function RoomSettingsModal({
             {appearanceAssetError && (
               <div className="mt-3 flex items-center justify-between gap-3 text-[13px] text-red-400" role="alert">
                 <span className="preserve-words">{appearanceAssetError}</span>
-                <button type="button" className="dc-upload-button shrink-0" onClick={onRetryAppearance}>
+                <button type="button" className="dc-button dc-button--md dc-button--secondary shrink-0" onClick={onRetryAppearance}>
                   이미지 다시 불러오기
                 </button>
               </div>
@@ -482,7 +482,7 @@ export default function RoomSettingsModal({
               >
                 <span className="preserve-words">{preferenceSettingsMessage}</span>
                 {(preferenceStatus === "error" || preferenceStatus === "stale") && (
-                  <button type="button" className="dc-upload-button shrink-0" onClick={onRetrySettings}>
+                  <button type="button" className="dc-button dc-button--md dc-button--secondary shrink-0" onClick={onRetrySettings}>
                     다시 불러오기
                   </button>
                 )}

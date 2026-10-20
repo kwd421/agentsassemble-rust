@@ -139,25 +139,6 @@
   object-fit: cover;
 }
 
-.dc-guest-join-button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-radius: 8px;
-  background: var(--color-accent);
-  padding: 0 16px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.dc-guest-join-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .dc-guest-recovery-card {
   display: grid;
   width: min(460px, 100%);
@@ -207,30 +188,6 @@
   gap: 8px;
 }
 
-.dc-guest-recovery-actions button,
-.dc-guest-recovery-submit,
-.dc-guest-recovery-issue,
-.dc-guest-recovery-result button {
-  display: inline-flex;
-  min-height: 38px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border-radius: 6px;
-  background: #202024;
-  padding: 0 12px;
-  color: var(--color-text-primary);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.dc-guest-recovery-actions button:last-child,
-.dc-guest-recovery-submit,
-.dc-guest-recovery-issue {
-  background: var(--color-accent);
-  color: #fff;
-}
-
 .dc-guest-recovery-settings,
 .dc-guest-recovery-result {
   display: grid;
@@ -248,12 +205,6 @@
 .dc-guest-recovery-warning {
   border-left: 3px solid #f0b232;
   padding-left: 9px;
-}
-
-.dc-guest-recovery-submit:disabled,
-.dc-guest-recovery-issue:disabled {
-  cursor: wait;
-  opacity: 0.55;
 }
 
 @keyframes live-pulse {
@@ -376,9 +327,6 @@
 }
 .dc-join-server-label { color: var(--color-text-muted); font-size: 13px; }
 .dc-guest-avatar-row { margin-top: 12px; }
-/* The guest choice beside the sign-in button: the startup screen's grey button. */
-.dc-guest-join-card .dc-member-session-button { min-height: 44px; justify-content: center; border: 0; border-radius: 8px; background: #4e5058; color: #fff; font-size: 14px; font-weight: 500; }
-.dc-guest-join-card .dc-member-session-button:disabled { cursor: not-allowed; opacity: 0.5; }
 .dc-join-cancel { min-height: 32px; color: #00a8fc; font-size: 14px; }
 .dc-join-cancel:hover { text-decoration: underline; }
 .dc-guest-join-card h1 { word-break: keep-all; text-wrap: balance; }

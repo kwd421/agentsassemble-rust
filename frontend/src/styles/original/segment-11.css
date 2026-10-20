@@ -31,8 +31,7 @@
   gap: 8px;
 }
 
-.dc-preset-grid button,
-.dc-upload-button {
+.dc-preset-grid button {
   min-height: 40px;
   border: 1px solid rgba(151, 151, 159, 0.2);
   border-radius: 8px;
@@ -42,8 +41,7 @@
   font-weight: 500;
 }
 
-.dc-preset-grid button:hover,
-.dc-upload-button:hover {
+.dc-preset-grid button:hover {
   background: rgba(151, 151, 159, 0.2);
 }
 
@@ -60,12 +58,9 @@
   gap: 16px;
 }
 
+/* A file picker drawn as a button: the label opens the hidden input. */
 .dc-upload-button {
-  display: inline-flex;
   cursor: pointer;
-  align-items: center;
-  gap: 7px;
-  padding: 0 12px;
 }
 
 .dc-upload-button input {
@@ -75,8 +70,7 @@
 /* Settings labels are grids; an upload button stays one row: icon, then text. */
 .dc-settings-section label.dc-upload-button {
   display: inline-flex;
-  min-height: 40px;
-  padding: 0 14px;
+  gap: 6px;
   color: var(--color-text-primary);
   font-size: 14px;
   font-weight: 500;

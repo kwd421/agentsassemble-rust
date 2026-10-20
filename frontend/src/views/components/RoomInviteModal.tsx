@@ -258,8 +258,7 @@ export default function RoomInviteModal({
               {secureInviteReady && selectedHumanInvite ? (
                 <button
                   type="button"
-                  className="dc-invite-copy-button"
-                  style={{ minHeight: 32 }}
+                  className="dc-button dc-button--primary"
                   aria-label={copiedKey === selectedHumanInvite.key ? "현재 사람 초대 링크 복사됨" : "현재 사람 초대 링크 복사"}
                   onClick={() => handleCopy(selectedHumanInvite.key, onCopyHumanInvite)}
                 >
@@ -269,8 +268,7 @@ export default function RoomInviteModal({
               ) : (
                 <button
                   type="button"
-                  className="dc-invite-copy-button"
-                  style={{ minHeight: 32 }}
+                  className="dc-button dc-button--primary"
                   aria-label="사람 초대 링크 생성"
                   disabled={publicAccessBusy || (!publicAccessRunning && !canControlIngress)}
                   onClick={() => requestPublicAction({ kind: "human", options: currentHumanOptions })}
@@ -390,8 +388,7 @@ export default function RoomInviteModal({
                 <h3 id="operator-pairing-heading">내 기기 연결</h3>
                 <p>내 다른 기기에서 이 방을 운영할 수 있어요. 연결 링크는 다른 사람에게 보내지 마세요.</p>
               </div>
-              <button type="button" className="dc-invite-copy-button"
-                style={{ minWidth: 44, minHeight: 44 }}
+              <button type="button" className="dc-button dc-button--lg dc-button--primary"
                 aria-label="운영자 기기 연결 링크 생성"
                 disabled={pairingCreating || publicAccessBusy || !publicAccessRunning}
                 onClick={onCreatePairing}>

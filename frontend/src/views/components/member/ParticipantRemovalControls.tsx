@@ -80,7 +80,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
           {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
           <div className="dc-create-channel-actions">
             <button type="button" autoFocus className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={busy} onClick={() => { setConfirmAction(null); setError(""); }}>취소</button>
-            <button type="button" className="dc-member-session-button" data-variant="danger" style={{ minHeight: 40, minWidth: 96 }} disabled={busy} onClick={() => void remove(confirmAction)}>{busy ? "처리 중…" : confirmAction === "kick" ? "추방하기" : "차단하기"}</button>
+            <button type="button" className="dc-button dc-button--md dc-button--danger-soft" style={{ minWidth: 96 }} disabled={busy} onClick={() => void remove(confirmAction)}>{busy ? "처리 중…" : confirmAction === "kick" ? "추방하기" : "차단하기"}</button>
           </div>
         </dialog></div>, document.body
       )}

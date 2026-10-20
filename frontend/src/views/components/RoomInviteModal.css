@@ -83,9 +83,8 @@ dialog.dc-invite-modal {
   font-weight: 600;
 }
 
-.dc-invite-link-field .dc-invite-copy-button {
+.dc-invite-link-field .dc-button {
   min-width: 66px;
-  min-height: 30px;
   border-radius: 4px;
 }
 

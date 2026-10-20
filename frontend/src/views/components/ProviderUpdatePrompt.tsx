@@ -101,7 +101,7 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
 
   if (error) {
     return <ProviderSetupCard label={label} tone="error" glyph={<CircleAlert size={15} strokeWidth={2.5} />}
-      actions={<button type="button" className="dc-setup-button" data-variant="ghost" onClick={() => void run()}>
+      actions={<button type="button" className="dc-button dc-button--ghost" onClick={() => void run()}>
         <RotateCw size={13} aria-hidden="true" />버전 다시 확인</button>}>
       <p className="dc-setup-text" role="alert">{error.message}</p>
     </ProviderSetupCard>;
@@ -110,10 +110,10 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
   if (!observation) return null;
   return <ProviderSetupCard label={label} tone="update" glyph={<ArrowUp size={15} strokeWidth={2.75} />}
     actions={<>
-      <button type="button" className="dc-setup-button" data-variant="ghost" onClick={() => setDeferred(true)}>나중에</button>
+      <button type="button" className="dc-button dc-button--ghost" onClick={() => setDeferred(true)}>나중에</button>
       {observation.native_update
-        ? <button type="button" className="dc-setup-button" data-variant="primary" onClick={() => void update()}>업데이트</button>
-        : <button type="button" className="dc-setup-button" data-variant="primary"
+        ? <button type="button" className="dc-button dc-button--primary" onClick={() => void update()}>업데이트</button>
+        : <button type="button" className="dc-button dc-button--primary"
           onClick={() => void openProviderSetupHelp(providerId).catch((failure: unknown) =>
             setError({ message: userFacingError(failure, "공식 안내를 열지 못했어요.") }))}>
           업데이트 방법 보기<ExternalLink size={13} aria-hidden="true" /></button>}

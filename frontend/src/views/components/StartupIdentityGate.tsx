@@ -525,7 +525,7 @@ export default function StartupIdentityGate({
           </label>
           <button
             type="button"
-            className="dc-startup-primary disabled:opacity-50"
+            className="dc-button dc-button--lg dc-button--primary"
             disabled={!displayName.trim() || busy}
             onClick={() => void continueLocalGuest()}
           >

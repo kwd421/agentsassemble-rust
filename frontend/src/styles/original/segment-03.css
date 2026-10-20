@@ -331,37 +331,6 @@
   font-weight: 700;
 }
 
-.dc-invite-friend-button {
-  min-width: 104px;
-  border-radius: 8px;
-  background: #3b3d44;
-  padding: 10px 16px;
-  color: var(--color-text-primary);
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.dc-invite-friend-button:hover,
-.dc-invite-friend-button:focus-visible {
-  background: #474851;
-  outline: none;
-}
-
-.dc-invite-friend-button[data-state="done"] {
-  background: #248046;
-  color: #fff;
-}
-
-.dc-invite-friend-button[data-state="attention"] {
-  background: #faa61a;
-  color: #121214;
-}
-
-.dc-invite-friend-button:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
-
 .dc-invite-empty {
   display: grid;
   min-height: 180px;
@@ -418,33 +387,6 @@
 .dc-invite-packet-textarea:focus {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 24%, transparent);
-}
-
-.dc-invite-copy-button {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border-radius: 4px;
-  background: var(--color-accent);
-  padding: 0 12px;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.dc-invite-copy-button:hover,
-.dc-invite-copy-button:focus-visible {
-  background: var(--color-accent-hover);
-  outline: none;
-}
-
-.dc-invite-copy-button:disabled {
-  cursor: not-allowed;
-  background: #323237;
-  color: var(--color-text-muted);
-  opacity: 0.72;
 }
 
 /* Setup notes are supporting text, not the loudest line in the dialog. */
