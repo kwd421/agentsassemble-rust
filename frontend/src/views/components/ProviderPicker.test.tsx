@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import ProviderPicker from "./ProviderPicker";
-import { codexProvider, deepSeekProvider, openCodeProvider } from "./AgentCreateModal.testProviders";
+import { agentPlatformProvider, codexProvider, deepSeekProvider, openCodeProvider } from "./AgentCreateModal.testProviders";
 
 afterEach(cleanup);
 
@@ -57,4 +57,13 @@ it("keeps starred AIs on top across openings", () => {
   fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
   expect(screen.getAllByRole("listitem")[0].getAttribute("aria-label")).toBe("OpenCode");
   localStorage.clear();
+});
+
+it("finds Agent Platform by its Vertex display name", () => {
+  render(<ProviderPicker providers={[agentPlatformProvider()]} selectedId="" onSelect={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
+  fireEvent.change(screen.getByRole("searchbox", { name: "AI 검색" }), { target: { value: "vertex" } });
+  expect(screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))).toEqual([
+    "Agent Platform Agent Platform (Vertex AI)",
+  ]);
 });

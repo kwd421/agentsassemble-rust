@@ -35,3 +35,12 @@ Provider scope addition (owner approved 2026-10-20): Google Gemini API (AI Studi
 key) is included as a provider using the existing credential-store owner. It is
 implemented from its documented contract and remains outside the real-provider
 verification list above; no Gemini real execution is authorized by this addition.
+
+Provider scope addition (owner approved 2026-10-20): Google Vertex AI, now named
+Gemini Enterprise Agent Platform, is included as an API-key provider under the
+product name "Agent Platform" with display name "Agent Platform (Vertex AI)". The
+API key uses the existing credential-store owner; the caller-owned project and
+location are non-secret Agent Session settings validated before any request. It is
+implemented from the owner-verified contract and remains outside the real-provider
+verification list above; no Agent Platform real execution is authorized by this
+addition.

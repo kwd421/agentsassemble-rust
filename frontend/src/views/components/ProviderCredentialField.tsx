@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ProviderCredentialStatus } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 
@@ -9,6 +10,8 @@ type ProviderCredentialFieldProps = {
   onValueChange: (value: string) => void;
   onSave: () => void;
   onDelete: () => void;
+  /** Provider-owned non-secret settings that belong beside the API key. */
+  children?: ReactNode;
 };
 
 export default function ProviderCredentialField({
@@ -19,6 +22,7 @@ export default function ProviderCredentialField({
   onValueChange,
   onSave,
   onDelete,
+  children,
 }: ProviderCredentialFieldProps) {
   return (
     <section className="dc-agent-section">
@@ -52,6 +56,7 @@ export default function ProviderCredentialField({
           </div>
         </label>
       </div>
+      {children}
     </section>
   );
 }

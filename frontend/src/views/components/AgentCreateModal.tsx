@@ -89,6 +89,8 @@ export default function AgentCreateModal({
   const [workspacePath, setWorkspacePath] = useState("");
   const [customEndpoint, setCustomEndpoint] = useState("");
   const [customModel, setCustomModel] = useState("");
+  const [agentPlatformProject, setAgentPlatformProject] = useState("");
+  const [agentPlatformLocation, setAgentPlatformLocation] = useState("global");
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [startNow, setStartNow] = useState(false);
   const [status, setStatus] = useState("");
@@ -102,6 +104,15 @@ export default function AgentCreateModal({
   const wasOpen = useRef(false);
   const pendingInitialSettings = useRef("");
   const selectedProvider = providers.find((provider) => provider.id === providerId);
+  const agentPlatformProvider = selectedProvider?.provider_kind === "agent_platform_api";
+  const agentPlatformSettings =
+    agentPlatformProvider && agentPlatformProject.trim() && agentPlatformLocation.trim()
+      ? `projects/${agentPlatformProject.trim()}/locations/${agentPlatformLocation.trim()}`
+      : "";
+  const callerEndpoint = agentPlatformProvider ? agentPlatformSettings : customEndpoint.trim();
+  const callerEndpointRequired = Boolean(
+    selectedProvider && (selectedProvider.custom_endpoint || agentPlatformProvider)
+  );
   const providerGroup = selectedProvider ? providerCatalogGroup(selectedProvider, settings.model) : "";
   const eligibleStoredSessions = existingSessions.filter((session) =>
     session.room_id === meetingId && !session.external_owned && session.process_ownership === "server" &&
@@ -134,7 +145,7 @@ export default function AgentCreateModal({
       existingSessionId
         ? existingSession && (!startNow || selectedProvider.startable)
         : catalogRevision && selectedProvider.startable && !invalidControl && displayName.trim() &&
-          (!selectedProvider.custom_endpoint || customEndpoint.trim()) &&
+          (!callerEndpointRequired || callerEndpoint) &&
           (!selectedProvider.custom_model || customModel.trim()) &&
           (!workspaceRequired || workspacePath.trim())
     )
@@ -157,6 +168,8 @@ export default function AgentCreateModal({
       setExistingSessionId("");
       setCustomEndpoint("");
       setCustomModel("");
+      setAgentPlatformProject("");
+      setAgentPlatformLocation("global");
       setPersonaCardId("");
       return;
     }
@@ -223,6 +236,10 @@ export default function AgentCreateModal({
     setSettings(initialSettings);
     setCustomEndpoint("");
     setCustomModel("");
+    setAgentPlatformProject("");
+    setAgentPlatformLocation(
+      provider.provider_kind === "agent_platform_api" ? "global" : ""
+    );
     setPersonaCardId("");
     setStartNow(provider.startable || provider.discovery_status === "loading");
   }
@@ -285,9 +302,7 @@ export default function AgentCreateModal({
       catalogRevision,
       displayName,
       workspacePath,
-      providerEndpoint: selectedProvider.custom_endpoint
-        ? customEndpoint.trim()
-        : "",
+      providerEndpoint: callerEndpointRequired ? callerEndpoint : "",
       modelId: selectedProvider.custom_model
         ? customModel.trim()
         : settings.model || "",
@@ -467,7 +482,28 @@ export default function AgentCreateModal({
               onValueChange={setProviderApiKey}
               onSave={() => void saveProviderApiKey()}
               onDelete={() => void deleteProviderApiKey()}
-            />
+            >
+              {agentPlatformProvider && !existingSessionId && (
+                <div className="dc-agent-field-grid dc-agent-field-grid--dual">
+                  <label className="dc-agent-field">
+                    <span>프로젝트 ID</span>
+                    <input
+                      value={agentPlatformProject}
+                      placeholder="Google Cloud 프로젝트 ID"
+                      onChange={(event) => setAgentPlatformProject(event.currentTarget.value)}
+                    />
+                  </label>
+                  <label className="dc-agent-field">
+                    <span>지역</span>
+                    <input
+                      value={agentPlatformLocation}
+                      placeholder="global"
+                      onChange={(event) => setAgentPlatformLocation(event.currentTarget.value)}
+                    />
+                  </label>
+                </div>
+              )}
+            </ProviderCredentialField>
           )}
 
           {selectedProvider && (selectedProvider.controls.length > 0 || localProviderActions) && (

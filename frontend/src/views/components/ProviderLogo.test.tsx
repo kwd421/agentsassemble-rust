@@ -20,6 +20,7 @@ describe("ProviderLogo", () => {
       ["deepseek", "deepseek_api"],
       ["cerebras", "cerebras_api"],
       ["gemini", "gemini_api"],
+      ["agent_platform", "agent_platform_api"],
       ["ollama", "ollama_api"],
       ["lmstudio", "lmstudio_api"],
       ["llmgateway", "llm_gateway_api"],

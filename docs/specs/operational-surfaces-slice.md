@@ -43,7 +43,7 @@ The original checkout `d504647` supplies these reachable entry points:
   It must be connected to confirmed diagnostic owners or removed in this phase;
   its lazy import, dead state and pollers are not a retained user flow by themselves.
 
-The fifteen managed providers remain canonical. Freebuff and managed Antigravity
+The sixteen managed providers remain canonical. Freebuff and managed Antigravity
 are excluded. External Antigravity remains a Room Connector participant and has no
 app-managed login/usage/runtime operation. Voice, Mafia, RimWorld and the scripted
 meeting runner are outside this phase. No new account, purchase, usage reset,
@@ -1331,7 +1331,7 @@ and unchanged mandatory gates pass. Real Go account execution remains pending.
 
 Original `d504647` owners are `providers/launch_specs.py` for login commands and
 `providers/provider_usage.py::default_provider_usage_registry` for account readers.
-Current `registration.rs` plus `ollama.rs`/`lm_studio.rs` own all fifteen capability
+Current `registration.rs` plus `ollama.rs`/`lm_studio.rs` own all sixteen capability
 records; `ProviderCatalogService` owns explicit refresh for every discovery entry.
 Unsupported means no original retained account operation, not missing installation.
 
@@ -1345,6 +1345,7 @@ Unsupported means no original retained account operation, not missing installati
 | DeepSeek | Existing API credential settings | `deepseek_usage.rs`, balance HTTPS |
 | Cerebras | Existing API credential settings | Unsupported |
 | Gemini | Existing API credential settings | Unsupported |
+| Agent Platform (Vertex AI) | Existing API credential settings | Unsupported |
 | OpenRouter | Existing API credential settings | Unsupported |
 | Vercel AI Gateway | Existing API credential settings | Unsupported |
 | LLM Gateway | Existing API credential settings | Unsupported |
@@ -1365,6 +1366,25 @@ keeps only `generateContent` models, strips the `models/` prefix and defaults to
 `gemini-3.5-flash`. The `service_tier` control ("응답 속도") exposes
 `default`/"기본", `flex`/"Flex" and `priority`/"Priority"; `default` omits the
 field from the request. Credential values never enter errors, events or logs.
+
+Agent Platform (owner approved 2026-10-20) is the sixteenth managed provider and the
+same product as Google Vertex AI, so its display name is "Agent Platform (Vertex AI)".
+It uses the existing credential owner (`AgentsAssemble`/`agent_platform`) with the
+request header `x-goog-api-key`. The completion URL is
+`https://aiplatform.googleapis.com/v1/projects/{PROJECT}/locations/{LOCATION}/endpoints/openapi/chat/completions`:
+the host is fixed and redirects stay disabled. PROJECT and LOCATION are non-secret
+caller-owned settings stored through the Agent Session's existing caller configuration
+field as `projects/{PROJECT}/locations/{LOCATION}`; no free URL is accepted. PROJECT
+must match `^[a-z][a-z0-9-]{4,28}[a-z0-9]$` or be a project number, and LOCATION must
+be `global` or `^[a-z]+-[a-z]+[0-9]+$`; invalid settings are refused before any
+request. LOCATION defaults to `global`. The model-list API rejects API keys, so the
+catalog is fixed: `google/gemini-2.5-flash-lite` (default), `google/gemini-2.5-flash`,
+`google/gemini-2.5-pro` and `google/gemini-3-flash-preview`. The `service_tier`
+control ("응답 속도") exposes `default`/"기본", `flex`/"Flex" and `priority`/"Priority";
+non-default tiers travel in the `X-Vertex-AI-LLM-Shared-Request-Type` request header
+and `default` sends no header. The add-agent credential section asks for API 키,
+프로젝트 ID and 지역 (default `global`). Credential values never enter errors, events
+or logs.
 
 Freebuff and app-managed Antigravity remain excluded by user scope. External
 Antigravity's Room Connector admission is independent of this account matrix.

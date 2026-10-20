@@ -15,6 +15,7 @@ const VENDORS: VendorDefinition[] = [
   { id: "grok", name: "Grok", modes: { subscription: "grok" } },
   { id: "deepseek", name: "DeepSeek", modes: { api: "deepseek" } },
   { id: "gemini", name: "Gemini", modes: { api: "gemini" } },
+  { id: "agent_platform", name: "Agent Platform", modes: { api: "agent_platform" } },
   { id: "cerebras", name: "Cerebras", modes: { api: "cerebras" } },
   { id: "ollama", name: "Ollama", modes: { local: "ollama" } },
   { id: "lmstudio", name: "LM Studio", modes: { local: "lmstudio" } },

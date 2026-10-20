@@ -14,6 +14,7 @@ const CREDENTIAL_PATHS: Readonly<Record<string, string>> = {
   deepseek: "/api/provider-credentials/deepseek",
   cerebras: "/api/provider-credentials/cerebras",
   gemini: "/api/provider-credentials/gemini",
+  agent_platform: "/api/provider-credentials/agent_platform",
   openrouter: "/api/provider-credentials/openrouter",
   vercel: "/api/provider-credentials/vercel",
   llmgateway: "/api/provider-credentials/llmgateway",

@@ -162,6 +162,49 @@ export function tokenRouterProvider(): NativeCliProviderAvailability {
   };
 }
 
+export function agentPlatformProvider(): NativeCliProviderAvailability {
+  return {
+    ...deepSeekProvider(),
+    id: "agent_platform",
+    display_name: "Agent Platform (Vertex AI)",
+    provider_kind: "agent_platform_api",
+    default_model: "google/gemini-2.5-flash-lite",
+    catalog_source: "static_manifest",
+    credential_available: true,
+    controls: [
+      {
+        key: "model",
+        label: "모델",
+        kind: "combobox",
+        default_value: "google/gemini-2.5-flash-lite",
+        options: [
+          { value: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
+          { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+        ],
+      },
+      {
+        key: "service_tier",
+        label: "응답 속도",
+        kind: "select",
+        default_value: "default",
+        options: [
+          { value: "default", label: "기본" },
+          { value: "flex", label: "Flex" },
+          { value: "priority", label: "Priority" },
+        ],
+      },
+      {
+        key: "max_output_tokens",
+        label: "최대 응답 길이",
+        kind: "select",
+        default_value: "4096",
+        options: [{ value: "4096", label: "4,096 토큰" }],
+      },
+      workPermissionControl(),
+    ],
+  };
+}
+
 export function customApiProvider(): NativeCliProviderAvailability {
   return {
     ...deepSeekProvider(),
