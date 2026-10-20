@@ -33,6 +33,7 @@ export default function ProviderRuntimeSettingField({
           options={control.key === "reasoning_effort" ? options.map(option => ({ ...option, label: reasoningEffortLabel(option.value) })) : options}
           value={value}
           disabled={disabled}
+          showSpeedIcon={control.key === "service_tier"}
           onChange={onChange}
         />
       )}

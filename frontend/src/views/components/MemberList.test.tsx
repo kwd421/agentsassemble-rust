@@ -257,12 +257,43 @@ describe("MemberList component wiring", () => {
     );
 
     const modelLine = screen.getByLabelText(
-      "gpt-5.6-sol, Fast, 추론 Ultra"
+      "gpt-5.6-sol, Priority, 추론 Ultra"
     );
     const memberRow = modelLine.closest(".dc-member");
     expect(modelLine.textContent).toContain("gpt-5.6-sol");
     expect(modelLine.textContent).toContain("Ultra");
     expect(memberRow?.getAttribute("data-ultra")).toBe("true");
+  });
+
+  it.each([
+    ["priority", "Priority", "zap"],
+    ["fast", "Fast", "zap"],
+    ["flex", "Flex", "dollar"],
+  ] as const)("shows the %s speed tier with the right icon and accessible label", (tier, label, icon) => {
+    render(
+      <MemberList
+        agents={[AGENT]}
+        agentSessions={[{ ...SESSION, model: "gpt-5.6-sol", service_tier: tier }]}
+        roomId="room-1"
+        roomName="Room One"
+      />
+    );
+    const modelLine = screen.getByLabelText(`gpt-5.6-sol, ${label}`);
+    expect(modelLine.querySelector(`[data-icon="${icon}"]`)).toBeTruthy();
+    expect(modelLine.querySelector(icon === "zap" ? '[data-icon="dollar"]' : '[data-icon="zap"]')).toBeNull();
+  });
+
+  it("leaves the default speed tier unmarked in the member row", () => {
+    render(
+      <MemberList
+        agents={[AGENT]}
+        agentSessions={[{ ...SESSION, model: "gpt-5.6-sol", service_tier: "default" }]}
+        roomId="room-1"
+        roomName="Room One"
+      />
+    );
+    const modelLine = screen.getByLabelText("gpt-5.6-sol");
+    expect(modelLine.querySelector("[data-icon]")).toBeNull();
   });
 
   it.each([

@@ -26,12 +26,14 @@ export default function ProviderControlSelect({
   options,
   value,
   disabled = false,
+  showSpeedIcon = false,
   onChange,
 }: {
   label: string;
   options: ProviderControlOption[];
   value: string;
   disabled?: boolean;
+  showSpeedIcon?: boolean;
   onChange: (value: string) => void;
 }) {
   const snapMenu = useWholeRowMenu();
@@ -220,6 +222,7 @@ export default function ProviderControlSelect({
           <ProviderControlOptionContent
             option={selectedOption}
             pricingOnly={isModelControl}
+            showSpeedIcon={showSpeedIcon}
           />
         ) : (
           <span className="truncate preserve-words">선택 필요</span>
@@ -343,6 +346,7 @@ export default function ProviderControlSelect({
                           option={option}
                           showDescription={!isModelControl}
                           pricingOnly={isModelControl}
+                          showSpeedIcon={showSpeedIcon}
                         />
                         {selected && <Check size={15} aria-hidden="true" />}
                       </button>
@@ -370,6 +374,7 @@ export default function ProviderControlSelect({
                             option={option}
                             showDescription={!isModelControl}
                             pricingOnly={isModelControl}
+                            showSpeedIcon={showSpeedIcon}
                           />
                           {selected && <Check size={15} aria-hidden="true" />}
                         </button>
@@ -419,6 +424,7 @@ export default function ProviderControlSelect({
                         option={option}
                         showDescription={!isModelControl}
                         pricingOnly={isModelControl}
+                        showSpeedIcon={showSpeedIcon}
                       />
                       {selected && <Check size={15} aria-hidden="true" />}
                     </button>

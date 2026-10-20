@@ -28,6 +28,7 @@ import {
   Copy as PhosphorCopy,
   Cpu as PhosphorCpu,
   Crown as PhosphorCrown,
+  CurrencyDollar as PhosphorCurrencyDollar,
   DeviceMobile as PhosphorDeviceMobile,
   Devices as PhosphorDevices,
   DotsThree as PhosphorDotsThree,
@@ -162,6 +163,7 @@ export const Copy = createIcon("copy", PhosphorCopy, "fill");
 export const Crown = createIcon("crown", PhosphorCrown, "fill");
 export const CornerUpLeft = createIcon("corner-up-left", PhosphorArrowBendUpLeft, "bold");
 export const Cpu = createIcon("cpu", PhosphorCpu, "fill");
+export const Dollar = createIcon("dollar", PhosphorCurrencyDollar, "fill");
 export const Download = createIcon("download", PhosphorDownloadSimple, "bold");
 export const ExternalLink = createIcon("external-link", PhosphorArrowSquareOut, "bold");
 export const FileDown = createIcon("file-down", PhosphorFileArrowDown, "fill");

@@ -13,6 +13,56 @@ function fastClick(element: HTMLElement) {
 }
 
 describe("ProviderControlSelect", () => {
+  it("marks Fast and Priority with lightning, Flex with a dollar, and the default tier with no icon", async () => {
+    const options = [
+      { value: "default", label: "기본" },
+      { value: "fast", label: "Fast" },
+      { value: "priority", label: "Priority" },
+      { value: "flex", label: "Flex" },
+    ];
+    const view = render(
+      <ProviderControlSelect
+        label="응답 속도"
+        options={options}
+        value="default"
+        showSpeedIcon
+        onChange={vi.fn()}
+      />
+    );
+    const trigger = screen.getByRole("combobox", { name: "응답 속도" });
+    expect(trigger.querySelector('[data-icon="zap"]')).toBeNull();
+    expect(trigger.querySelector('[data-icon="dollar"]')).toBeNull();
+
+    view.rerender(
+      <ProviderControlSelect
+        label="응답 속도"
+        options={options}
+        value="priority"
+        showSpeedIcon
+        onChange={vi.fn()}
+      />
+    );
+    expect(trigger.querySelector('[data-icon="zap"]')).toBeTruthy();
+
+    view.rerender(
+      <ProviderControlSelect
+        label="응답 속도"
+        options={options}
+        value="flex"
+        showSpeedIcon
+        onChange={vi.fn()}
+      />
+    );
+    expect(trigger.querySelector('[data-icon="dollar"]')).toBeTruthy();
+
+    await userEvent.click(trigger);
+    const listbox = screen.getByRole("listbox", { name: "응답 속도" });
+    expect(within(listbox).getByRole("option", { name: "기본" }).querySelector("[data-icon]")).toBeNull();
+    expect(within(listbox).getByRole("option", { name: "Fast" }).querySelector('[data-icon="zap"]')).toBeTruthy();
+    expect(within(listbox).getByRole("option", { name: "Priority" }).querySelector('[data-icon="zap"]')).toBeTruthy();
+    expect(within(listbox).getByRole("option", { name: "Flex" }).querySelector('[data-icon="dollar"]')).toBeTruthy();
+  });
+
   it("answers a fast click while options are still loading instead of ignoring it", () => {
     const onChange = vi.fn();
     render(

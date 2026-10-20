@@ -2,7 +2,7 @@ import ResourceImage from "../ResourceImage";
 import { executionLocationLabel, reasoningEffortLabel } from "../../../lib/agentLabels";
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { VolumeX, Zap } from "../../../ui/icons";
+import { Dollar, VolumeX, Zap } from "../../../ui/icons";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ParticipantAvatarContent from "../ParticipantAvatarContent";
 import {
@@ -43,6 +43,7 @@ export default function MemberRow({
   const showDetail = isAgent || !(entry.owner || entry.member?.participant_type === "human");
   // Without a model, an agent's status reads like a Discord activity line instead of a chip.
   const modelText = entry.modelLabel || entry.detail;
+  const SpeedIcon = entry.speed === "flex" ? Dollar : entry.speed ? Zap : undefined;
   // Roles and moderation open from the row's context menu. A row without a profile
   // button still takes focus, so the menu key and Shift+F10 reach it from the keyboard.
   const manageable = Boolean(canManageParticipant && (canEditRoles || (!entry.owner && entry.meetingId)));
@@ -151,8 +152,8 @@ export default function MemberRow({
             aria-label={memberModelAccessibleLabel(entry)}
             title={entry.fullDetail || entry.detail}
           >
-            {entry.fastMode && (
-              <Zap
+            {SpeedIcon && (
+              <SpeedIcon
                 className="dc-member-fast-icon"
                 size={11}
                 fill="currentColor"
@@ -188,7 +189,9 @@ export default function MemberRow({
 
 function memberModelAccessibleLabel(entry: MemberEntry): string {
   const parts = [entry.modelLabel || entry.detail];
-  if (entry.fastMode) parts.push("Fast");
+  if (entry.speed === "fast") parts.push("Fast");
+  else if (entry.speed === "priority") parts.push("Priority");
+  else if (entry.speed === "flex") parts.push("Flex");
   if (entry.reasoningEffort) {
     parts.push(`추론 ${reasoningEffortLabel(entry.reasoningEffort)}`);
   }

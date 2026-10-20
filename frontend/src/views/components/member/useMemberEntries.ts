@@ -17,6 +17,7 @@ import {
   isActive,
   memberActive,
   memberRole,
+  memberSpeed,
   memberStatusLabel,
   ROLE_OPTIONS,
 } from "./memberHelpers";
@@ -101,8 +102,7 @@ export function useMemberEntries({
       const serviceTier = String(
         agentSession?.service_tier || agent.speed || ""
       ).trim().toLowerCase();
-      const fastMode =
-        Boolean(agent.fast_mode) || ["fast", "priority"].includes(serviceTier);
+      const speed = memberSpeed(serviceTier) ?? (agent.fast_mode ? "fast" : null);
       const detail = [
         executionDetail === "Agent Session" ? "" : executionDetail,
         modelLabel,
@@ -119,7 +119,7 @@ export function useMemberEntries({
         detail,
         modelLabel,
         reasoningEffort,
-        fastMode,
+        speed,
         ultraMode: ["ultra", "ultracode"].includes(
           reasoningEffort.toLowerCase()
         ),
@@ -173,9 +173,7 @@ export function useMemberEntries({
           detail: [detail, agentSession?.model].filter(Boolean).join(" · "),
           modelLabel: String(agentSession?.model || "").trim(),
           reasoningEffort: String(agentSession?.reasoning_effort || "").trim(),
-          fastMode: ["fast", "priority"].includes(
-            String(agentSession?.service_tier || "").trim().toLowerCase()
-          ),
+          speed: memberSpeed(agentSession?.service_tier),
           ultraMode: ["ultra", "ultracode"].includes(
             String(agentSession?.reasoning_effort || "").trim().toLowerCase()
           ),

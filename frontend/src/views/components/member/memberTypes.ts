@@ -4,6 +4,8 @@ import type { ParticipantRole } from "../../../types/generated/ParticipantRole";
 
 export type RoleId = ParticipantRole;
 
+export type MemberSpeed = "fast" | "priority" | "flex";
+
 export type MemberEntry = {
   id: string;
   agent?: LiveAgent;
@@ -14,7 +16,7 @@ export type MemberEntry = {
   fullDetail?: string;
   modelLabel?: string;
   reasoningEffort?: string;
-  fastMode?: boolean;
+  speed?: MemberSpeed | null;
   ultraMode?: boolean;
   statusLabel?: string;
   role: RoleId;

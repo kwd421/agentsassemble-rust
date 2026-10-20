@@ -1,4 +1,5 @@
 import type { ProviderControlOption } from "../../roomSocketClient";
+import { Dollar, Zap, type AppIcon } from "../../ui/icons";
 import { providerControlOptionDescription } from "./providerModelOptions";
 
 export default function ProviderControlOptionContent({
@@ -6,18 +7,31 @@ export default function ProviderControlOptionContent({
   showDescription = false,
   contextBadge = "",
   pricingOnly = false,
+  showSpeedIcon = false,
 }: {
   option: ProviderControlOption;
   showDescription?: boolean;
   contextBadge?: string;
   pricingOnly?: boolean;
+  showSpeedIcon?: boolean;
 }) {
   const badges = pricingOnly ? pricingBadges(option) : optionBadges(option);
   const description = showDescription ? providerControlOptionDescription(option) : "";
+  const SpeedIcon = showSpeedIcon ? providerControlSpeedIcon(option) : undefined;
   return (
     <span className="dc-agent-select-option-content">
       <span className="dc-agent-select-option-copy">
-        <span className="truncate preserve-words">{option.label}</span>
+        <span className="dc-agent-select-option-label">
+          {SpeedIcon && (
+            <SpeedIcon
+              className="dc-agent-select-speed-icon"
+              size={14}
+              fill="currentColor"
+              aria-hidden
+            />
+          )}
+          <span className="truncate preserve-words">{option.label}</span>
+        </span>
         {description && (
           <small className="truncate preserve-words">{description}</small>
         )}
@@ -45,6 +59,13 @@ export function providerControlOptionEffect(option?: ProviderControlOption): str
 
 export function providerControlOptionHasDescription(option: ProviderControlOption): boolean {
   return Boolean(providerControlOptionDescription(option));
+}
+
+export function providerControlSpeedIcon(option: ProviderControlOption): AppIcon | undefined {
+  const tier = option.value.trim().toLowerCase();
+  if (tier === "fast" || tier === "priority") return Zap;
+  if (tier === "flex") return Dollar;
+  return undefined;
 }
 
 export function providerControlOptionAccessibleName(option: ProviderControlOption): string {

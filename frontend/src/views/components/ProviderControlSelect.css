@@ -96,6 +96,18 @@
   gap: 2px;
 }
 
+.dc-agent-select-option-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.dc-agent-select-speed-icon {
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
 .dc-agent-select-option-copy > small {
   color: var(--color-text-muted);
   font-size: 10px;

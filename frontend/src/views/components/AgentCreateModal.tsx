@@ -736,6 +736,7 @@ function ProviderControlField({
             ? options.map((option) => ({ ...option, label: reasoningEffortLabel(option.value) })) : options}
           value={value}
           disabled={disabled}
+          showSpeedIcon={control.key === "service_tier"}
           onChange={onChange}
         />
       )}

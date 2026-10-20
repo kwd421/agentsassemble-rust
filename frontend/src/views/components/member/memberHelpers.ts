@@ -3,7 +3,7 @@ import { Bot, Code2, Crown, ShieldCheck, User } from "../../../ui/icons";
 import type { AppIcon } from "../../../ui/icons";
 import type { LiveAgent, RoomMember } from "../../../api";
 import { isActivePresence, presenceStatusLabel } from "../../../lib/presenceStatus";
-import type { RoleId } from "./memberTypes";
+import type { MemberSpeed, RoleId } from "./memberTypes";
 
 export { agentSessionResumeStatus } from "../../../lib/agentSessionStatus";
 
@@ -30,6 +30,14 @@ export function rowPointerMovedTooFar(start: { x: number; y: number }, event: Re
   const movedX = Math.abs(event.clientX - start.x);
   const movedY = Math.abs(event.clientY - start.y);
   return movedX > ROW_POINTER_MOVE_TOLERANCE || movedY > ROW_POINTER_MOVE_TOLERANCE;
+}
+
+export function memberSpeed(value?: string): MemberSpeed | null {
+  const tier = String(value || "").trim().toLowerCase();
+  if (tier === "fast") return "fast";
+  if (tier === "priority") return "priority";
+  if (tier === "flex") return "flex";
+  return null;
 }
 
 export function isActive(agent: LiveAgent) {
