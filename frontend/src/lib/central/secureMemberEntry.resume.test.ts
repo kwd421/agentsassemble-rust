@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { SecureMemberAdmission } from "./secureMemberEntry";
+import { SecureMemberAdmission, previewSecureMember } from "./secureMemberEntry";
+import { MemberAnchorMismatchError } from "./memberAnchors";
 import { memberResumeTranscript } from "./memberResume";
 
 const mocks = vi.hoisted(() => ({
@@ -161,6 +162,23 @@ it("keeps the resume key on the host after a central admission and resumes with 
       }),
     ),
   ).toBe(true);
+});
+
+it("parks the host when the preview names another registration epoch", async () => {
+  mocks.signed.mockResolvedValue({
+    server_id: "server",
+    label: "호스트",
+    endpoint_origin: "https://host.test",
+    endpoint_generation: 3,
+    protocol: "secure_admission_v1",
+    mode: "event_secure_v1",
+    registration_epoch: "other-epoch",
+    host_key_fingerprint: "fingerprint",
+    host_public_key_jwk: {},
+  });
+  // The host serves another incarnation: the anchor no longer matches, so
+  // the host is parked for a fresh consent instead of being retried.
+  await expect(previewSecureMember(entry)).rejects.toBeInstanceOf(MemberAnchorMismatchError);
 });
 
 it("falls back to exactly one central grant when the host has no resume route", async () => {

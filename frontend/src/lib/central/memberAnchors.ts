@@ -109,6 +109,19 @@ export function loadMemberAnchor(personId: string, serverId: string): MemberHost
 
 export const MEMBER_ANCHORS_CHANGED_EVENT = "agentsassemble:member-anchors-changed";
 
+/**
+ * The stored anchor no longer matches the server identity the person is
+ * on: another registration epoch or another host key. The host is parked
+ * with this reason instead of being retried, and the stored anchor stays
+ * as the refusal baseline until fresh consent overwrites it.
+ */
+export class MemberAnchorMismatchError extends Error {
+  constructor() {
+    super("참가 서버 정보가 바뀌었어요. 새 초대로 다시 참가해 주세요.");
+    this.name = "MemberAnchorMismatchError";
+  }
+}
+
 function announceAnchorsChanged(): void {
   try { window.dispatchEvent(new Event(MEMBER_ANCHORS_CHANGED_EVENT)); } catch { /* display cache stays local */ }
 }

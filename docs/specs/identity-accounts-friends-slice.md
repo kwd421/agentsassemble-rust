@@ -4685,7 +4685,10 @@ Acceptance for this slice:
 - `set_registration_epoch` deletes the resume rows and the named-tunnel
   token; a client hello with the old epoch receives no `ServerHello` and
   sends no signature; a preview with a new fingerprint or epoch still
-  surfaces `MemberAnchorMismatchError` and keeps the anchor.
+  surfaces `MemberAnchorMismatchError` and keeps the anchor. The preview
+  raises that refusal itself when the host names another registration
+  epoch, so the host is parked for a fresh consent instead of being
+  retried against an incarnation the person never joined.
 - An old host completes the `member_connect` handshake and answers the
   resume route with 404; an old client keeps the current redeem and
   select bodies; schema 97 is refused by a binary whose current schema

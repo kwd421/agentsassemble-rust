@@ -1,7 +1,11 @@
 import { previewSecureMember, SecureMemberAdmission, type SecureMemberEntry } from "./secureMemberEntry";
-import { loadMemberAnchor, saveMemberAnchor, type MemberHostAnchor } from "./memberAnchors";
+import { loadMemberAnchor, saveMemberAnchor, MemberAnchorMismatchError, type MemberHostAnchor } from "./memberAnchors";
 import type { CentralServer } from "./identity";
 import { probeMemberHostOrigin, type MemberHostOriginProbeResult } from "./memberHostOriginProbe";
+
+// The anchor mismatch is the anchor owner's refusal; the attach flow and
+// the preview both raise it.
+export { MemberAnchorMismatchError };
 
 export type MemberAttachDeps = {
   preview: (entry: SecureMemberEntry, signal?: AbortSignal) => ReturnType<typeof previewSecureMember>;
@@ -14,13 +18,6 @@ const liveDeps: MemberAttachDeps = {
   open: (entry, target, sessionToken, signal) => SecureMemberAdmission.open(entry, target, sessionToken, signal),
   probe: (origin, expected) => probeMemberHostOrigin(origin, expected),
 };
-
-export class MemberAnchorMismatchError extends Error {
-  constructor() {
-    super("참가 서버 정보가 바뀌었어요. 새 초대로 다시 참가해 주세요.");
-    this.name = "MemberAnchorMismatchError";
-  }
-}
 
 /**
  * Silent re-entry to one joined member host: the stored origin and this
