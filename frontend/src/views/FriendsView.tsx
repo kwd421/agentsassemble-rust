@@ -18,8 +18,11 @@ const groupOf = (type: FriendParticipantType): FriendGroup =>
   type === "human" || type === "remote" || type === "unknown" ? type : "mine";
 const groups: Record<FriendGroup, string> = { human: "사람", mine: "내 에이전트", remote: "외부 에이전트", unknown: "기타" };
 const icons: Record<FriendGroup, typeof Users> = { human: UserRound, mine: Bot, remote: Wifi, unknown: Users };
-// The stored value a newly chosen group saves as ("subscription_ai" is the stored name of "my agent").
+// The stored value a newly chosen group saves as; a "my agent" keeps how it runs.
 const storedType: Record<FriendGroup, FriendParticipantType> = { human: "human", mine: "subscription_ai", remote: "remote", unknown: "unknown" };
+// How a "my agent" runs: the same provider (e.g. Ollama) can be any of these.
+const runModes: Partial<Record<FriendParticipantType, string>> = { subscription_ai: "구독", api: "API", local: "로컬" };
+const friendKind = (type: FriendParticipantType) => [groups[groupOf(type)], runModes[type]].filter(Boolean).join(" · ");
 
 function newFriend(): SaveFriend {
   return { friend_id: crypto.randomUUID(), expected_revision: 0, details: {
@@ -119,7 +122,7 @@ function FriendProfile({ friend, busy, onEdit }: { friend: SavedFriend; busy: bo
   const { details } = friend;
   // Only what a person can read: ids (agent, last room) never reach the screen,
   // and a provider is shown only for an AI that has one.
-  const facts = [["종류", groups[groupOf(details.participant_type)]], ["마지막 상태", presenceStatusLabel(details.status)],
+  const facts = [["종류", friendKind(details.participant_type)], ["마지막 상태", presenceStatusLabel(details.status)],
     ...(details.participant_type !== "human" && providerName(details.provider_kind) ? [["제공자", providerName(details.provider_kind)]] : [])];
   return <article className="dc-friend-profile-card">
     <div className="dc-friend-profile-banner" aria-hidden />
@@ -149,7 +152,7 @@ function FriendRow({ friend, busy, selected, onSelect, onEdit, onDelete }: { fri
   return <article className="dc-friend-row" data-selected={selected}
     onContextMenu={(event) => { event.preventDefault(); openMenu(event.clientX, event.clientY); }}>
     <button type="button" className="dc-friend-main-button" aria-label={`${friend.details.display_name} 프로필 보기`} aria-pressed={selected} onClick={onSelect}><FriendAvatar friend={friend} /><span><strong className="dc-friend-name">{friend.details.display_name}</strong>
-      <span className="dc-friend-detail">{[groups[groupOf(friend.details.participant_type)], providerName(friend.details.provider_kind), friend.details.handle].filter(Boolean).join(" · ")}</span>
+      <span className="dc-friend-detail">{[friendKind(friend.details.participant_type), providerName(friend.details.provider_kind), friend.details.handle].filter(Boolean).join(" · ")}</span>
     </span></button>
     <button ref={trigger} type="button" className="dc-friends-more" disabled={busy}
       aria-label={`${friend.details.display_name} 더보기`} aria-haspopup="dialog"
@@ -182,6 +185,9 @@ function FriendEditor({ initial, busy, error, onCancel, onSave }: {
       <label className="dc-create-channel-name">종류<select className="ops-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={groupOf(draft.details.participant_type)} disabled={busy} onChange={(event) => { const group = event.target.value as FriendGroup; setDraft((current) => groupOf(current.details.participant_type) === group ? current : ({ ...current, details: { ...current.details, participant_type: storedType[group] } })); }}>
         {(Object.keys(groups) as FriendGroup[]).map((value) => <option key={value} value={value}>{groups[value]}</option>)}
       </select></label>
+      {groupOf(draft.details.participant_type) === "mine" && <label className="dc-create-channel-name">실행 방식<select className="ops-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={draft.details.participant_type} disabled={busy} onChange={(event) => setDraft((current) => ({ ...current, details: { ...current.details, participant_type: event.target.value as FriendParticipantType } }))}>
+        {Object.entries(runModes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select></label>}
       <label className="dc-create-channel-name">사용자명 (선택)<input className="ops-input" maxLength={120} value={draft.details.handle} disabled={busy} onChange={(event) => update("handle", event.target.value)} /></label>
       {!isHuman && <label className="dc-create-channel-name">제공자 (선택)<select className="ops-input dc-select" style={{ appearance: "none", cursor: "pointer" }} value={currentProvider} disabled={busy} onChange={(event) => update("provider_kind", event.target.value)}>
         <option value="">선택 안 함</option>
