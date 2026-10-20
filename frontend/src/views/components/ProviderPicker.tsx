@@ -68,7 +68,7 @@ export default function ProviderPicker({ providers, selectedId, onSelect, view, 
     const rank = (entry: VendorEntry) => (favourites.includes(entry.id) ? 0 : 2) + (missing(entry) ? 1 : 0);
     const ordered = [...matches].sort((a, b) => rank(a) - rank(b));
     return <section className="dc-provider-picker" aria-label="AI 고르기">
-      <label className="dc-provider-search">
+      <label className="dc-search">
         <Search size={16} aria-hidden />
         <input autoFocus type="search" value={query} placeholder="AI 검색" aria-label="AI 검색"
           onChange={(event) => setQuery(event.target.value)} />

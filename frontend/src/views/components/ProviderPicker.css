@@ -17,27 +17,6 @@
   overflow-y: auto;
 }
 
-.dc-provider-search {
-  display: flex;
-  height: 36px;
-  align-items: center;
-  gap: 8px;
-  border-radius: 8px;
-  background: #121214;
-  padding: 0 12px;
-  color: var(--color-text-muted);
-}
-
-.dc-provider-search input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: 14px;
-  outline: none;
-}
-
 .dc-provider-list {
   display: grid;
   gap: 2px;

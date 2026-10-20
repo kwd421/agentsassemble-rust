@@ -224,7 +224,7 @@ export default function MemberList({
     <div className="flex h-full min-h-0 flex-col">
       {!hideSearch && (
       <div className="dc-member-search shrink-0">
-        <label className="dc-member-search-box">
+        <label className="dc-search dc-search--compact dc-member-search-box">
           <span className="sr-only">{roomName} 멤버 검색</span>
           <input
             type="search"

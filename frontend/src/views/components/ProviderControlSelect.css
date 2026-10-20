@@ -231,34 +231,8 @@
 }
 
 .dc-agent-model-search {
-  display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  border-radius: 5px;
-  background: var(--color-panel-soft);
-  padding: 0 8px;
-  color: var(--color-text-muted);
-}
-
-.dc-agent-model-search:focus-within {
-  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.45);
-}
-
-.dc-agent-model-search input {
-  min-width: 0;
-  flex: 1 1 auto;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  font: inherit;
-}
-
-.dc-agent-model-search input::placeholder {
-  color: var(--color-text-muted);
 }
 
 .dc-agent-model-free-filter {

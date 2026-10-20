@@ -178,7 +178,7 @@ export default function AgentPersonaPicker({
           ) : (
             <>
               {libraryItems.length > VISIBLE_RESULT_LIMIT && (
-                <label className="dc-persona-search">
+                <label className="dc-search">
                   <Search size={16} aria-hidden="true" />
                   <input
                     autoFocus

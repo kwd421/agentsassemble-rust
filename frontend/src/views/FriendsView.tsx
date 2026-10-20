@@ -73,7 +73,7 @@ export default function FriendsView({ onClose, authority, userArea }: { onClose:
       </header>
       <div className="dc-friends-body">
         <div className="dc-friends-main">
-          <label className="dc-friends-search"><input ref={searchRef} aria-label="친구 검색" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="검색하기" /><Search size={18} aria-hidden /></label>
+          <label className="dc-search dc-search--compact"><input ref={searchRef} aria-label="친구 검색" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="검색하기" /><Search size={18} aria-hidden /></label>
           <div className="dc-friend-section-head"><h2>{onlineOnly ? "온라인" : "모든 친구"}{directory.loaded ? ` — ${visible.length}` : ""}</h2><button type="button" className="dc-friends-icon-button" aria-label="새로고침" title="새로고침" disabled={directory.busy} onClick={() => void directory.reload()}><RefreshCw size={16} /></button></div>
           {onlineOnly && <p className="dc-friend-empty">마지막으로 저장된 상태를 기준으로 표시해요.</p>}
           {!editing && !deleting && directory.error && <div role="alert" className="dc-friends-error">

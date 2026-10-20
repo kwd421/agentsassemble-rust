@@ -260,7 +260,7 @@ export default function ProviderControlSelect({
           >
               {showModelTools && (
                 <div className="dc-agent-model-tools">
-                  <label className="dc-agent-model-search">
+                  <label className="dc-search dc-search--compact dc-agent-model-search">
                     <Search size={15} aria-hidden="true" />
                     <input
                       type="search"

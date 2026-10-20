@@ -39,25 +39,7 @@
 }
 
 .dc-head-popover-search {
-  display: flex;
-  height: 34px;
-  align-items: center;
-  gap: 7px;
   margin-top: 9px;
-  border-radius: 5px;
-  background: #121214;
-  padding: 0 9px;
-  color: var(--color-text-muted);
-}
-
-.dc-head-popover-search input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: 12px;
-  outline: none;
 }
 
 .dc-head-search-results {

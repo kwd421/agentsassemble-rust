@@ -265,29 +265,6 @@
   opacity: 0.52;
 }
 
-.dc-invite-search {
-  display: flex;
-  height: 56px;
-  align-items: center;
-  gap: 14px;
-  margin-top: 12px;
-  border-radius: 8px;
-  background: #121214;
-  padding: 0 18px;
-  color: var(--color-text-muted);
-}
-
-.dc-invite-search input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 700;
-  outline: none;
-}
-
 .dc-invite-friend-list {
   display: grid;
   max-height: min(300px, calc(100vh - 520px));

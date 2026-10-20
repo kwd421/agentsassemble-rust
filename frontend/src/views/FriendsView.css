@@ -23,8 +23,6 @@
 .dc-friends-icon-button:disabled { opacity: .5; }
 .dc-friends-body { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr) 360px; }
 .dc-friends-main { min-height: 0; overflow-y: auto; padding: 18px 30px 24px; }
-.dc-friends-search { display: flex; height: 32px; align-items: center; gap: 8px; border-radius: 8px; background: #121214; padding: 0 8px 0 12px; color: var(--color-text-muted); }
-.dc-friends-search input { min-width: 0; flex: 1; border: 0; background: transparent; color: var(--color-text-primary); }
 .dc-friend-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 12px; }
 .dc-friend-section-head h2 { margin: 0; color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
 .dc-friends-activity > h2 { margin: 0; font-size: 20px; font-weight: 700; }

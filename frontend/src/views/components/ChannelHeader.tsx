@@ -286,7 +286,7 @@ export default function ChannelHeader({
             <Users size={20} />
           </button>
         )}
-        <label className="dc-head-search hidden md:flex">
+        <label className="dc-search dc-search--compact dc-head-search hidden md:flex">
           <span className="sr-only">{effectiveSearchLabel} 검색</span>
           <input
             type="search"
@@ -403,7 +403,7 @@ export default function ChannelHeader({
                     </button>
                   </div>
                 )}
-                <label className="dc-head-popover-search">
+                <label className="dc-search dc-search--compact dc-head-popover-search">
                   <span className="sr-only">{effectiveSearchLabel} 검색어</span>
                   <Search size={14} aria-hidden />
                   <input

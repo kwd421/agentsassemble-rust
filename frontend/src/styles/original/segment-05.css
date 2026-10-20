@@ -428,28 +428,6 @@
 
 .dc-head-search {
   width: 200px;
-  height: 32px;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--color-panel-border);
-  border-radius: 8px;
-  background: var(--color-server-rail);
-  padding: 0 7px 0 9px;
-  color: var(--color-text-muted);
-}
-
-.dc-head-search input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: 12px;
-  outline: none;
-}
-
-.dc-head-search input::placeholder {
-  color: var(--color-text-muted);
 }
 
 .dc-head-popover {
