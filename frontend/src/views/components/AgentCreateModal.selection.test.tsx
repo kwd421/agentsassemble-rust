@@ -46,10 +46,9 @@ it("keeps an unavailable provider selectable for local setup without permitting 
       discovery_error_code: "command_missing", discovery_error: "CLI가 설치되지 않았어요." }, openCodeProvider(), deepSeekProvider(), lmStudioProvider()]}
     onClose={() => undefined} onCreate={onCreate} />);
   fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
-  expect(within(screen.getByRole("list", { name: "AI" })).getAllByRole("listitem").map((item) => item.getAttribute("aria-label")))
-    .toEqual(["ChatGPT Codex", "DeepSeek", "LM Studio"]);
-  expect(within(screen.getByRole("list", { name: "라우터" })).getAllByRole("listitem").map((item) => item.getAttribute("aria-label")))
-    .toEqual(["OpenCode"]);
+  // One list, ready apps first and the missing one after.
+  expect(within(screen.getByRole("list", { name: "AI 목록" })).getAllByRole("listitem").map((item) => item.getAttribute("aria-label")))
+    .toEqual(["DeepSeek", "LM Studio", "OpenCode", "ChatGPT Codex"]);
   // A missing app is still offered: choosing it leads to its setup instead of a dead end.
   expect(screen.getByRole("listitem", { name: "ChatGPT Codex" }).textContent).toContain("설치 필요");
   pickAi(/Codex/);

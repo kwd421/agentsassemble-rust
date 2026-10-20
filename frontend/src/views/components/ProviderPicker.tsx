@@ -5,8 +5,8 @@ import { Plus, Search } from "../../ui/icons";
 import ProviderLogo from "./ProviderLogo";
 import { RUN_MODE_LABEL, vendorEntries, vendorForProvider, type VendorEntry } from "./providerVendors";
 
-// One "+" card instead of a wall of tiles: it opens a searchable list of AIs and
-// routers, and the chosen AI's card then offers how it runs (구독 / API / 로컬).
+// One "+" card instead of a wall of tiles: it opens a short searchable list, and
+// the chosen AI's card then offers how it runs (구독 / API / 로컬).
 // A provider that is not installed stays selectable; the setup below the card
 // offers to install it and then signs in.
 // The app or service behind an AI (e.g. ChatGPT runs through Codex), when it is not the AI's own name.
@@ -43,7 +43,8 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
         <Plus size={20} aria-hidden />AI 고르기
       </button>;
     }
-    const list = (router: boolean) => matches.filter((entry) => entry.router === router);
+    // One list: ready apps first, ones that still need installing after.
+    const ordered = [...matches.filter((entry) => !missing(entry)), ...matches.filter(missing)];
     return <section className="dc-provider-picker" aria-label="AI 고르기">
       <label className="dc-provider-search">
         <Search size={16} aria-hidden />
@@ -53,16 +54,14 @@ export default function ProviderPicker({ providers, selectedId, onSelect, remote
       </label>
       <div className="dc-provider-picker-scroll">
       {matches.length === 0 && <p className="dc-provider-empty">찾는 AI가 없어요.</p>}
-      {[false, true].map((router) => list(router).length > 0 && <div key={String(router)} role="list"
-        aria-label={router ? "라우터" : "AI"} className="dc-provider-list">
-        <p className="dc-provider-list-title">{router ? "라우터" : "AI"}</p>
-        {list(router).map((entry) => <button key={entry.id} type="button" role="listitem" className="dc-provider-row"
+      <div role="list" aria-label="AI 목록" className="dc-provider-list">
+        {ordered.map((entry) => <button key={entry.id} type="button" role="listitem" className="dc-provider-row"
           disabled={disabled} aria-label={[entry.name, ...appNames(entry)].join(" ")} onClick={() => choose(entry)}>
           <ProviderLogo providerId={entry.modes[0].provider.id} providerKind={entry.modes[0].provider.provider_kind} size={20} />
           <span className="dc-provider-row-name">{entry.name}</span>
           {missing(entry) && <span className="dc-provider-row-meta">설치 필요</span>}
         </button>)}
-      </div>)}
+      </div>
       </div>
     </section>;
   }

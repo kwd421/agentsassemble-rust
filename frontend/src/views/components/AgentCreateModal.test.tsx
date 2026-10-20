@@ -577,7 +577,7 @@ describe("AgentCreateModal", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "AI 고르기" }));
-    expect(within(screen.getByRole("list", { name: "AI" })).getByRole("listitem", { name: "DeepSeek" })).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "AI 목록" })).getByRole("listitem", { name: "DeepSeek" })).toBeTruthy();
     expect(screen.queryByLabelText("API 키")).toBeNull();
 
     pickAi("DeepSeek");
