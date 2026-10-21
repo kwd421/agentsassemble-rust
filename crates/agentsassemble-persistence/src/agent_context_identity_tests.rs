@@ -343,3 +343,33 @@ async fn only_a_turn_answering_the_owner_is_owner_started() -> Result<(), Box<dy
     assert!(!first_turn_started_by(true).await?);
     Ok(())
 }
+
+/// A card stays while an agent in its room uses it; an agent that left loses
+/// the reference instead of keeping the card undeletable forever.
+#[tokio::test]
+async fn a_card_used_only_by_an_agent_that_left_can_be_deleted()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, _owner, _directory) = fixture().await;
+    sqlx::query("INSERT INTO persona_assets(persona_id, card_json) VALUES ('guide', '{}')")
+        .execute(&store.pool)
+        .await?;
+    sqlx::query("UPDATE agent_sessions SET session_json = json_set(session_json, '$.persona_card_id', 'guide')")
+        .execute(&store.pool)
+        .await?;
+    assert!(matches!(
+        store.delete_persona_asset("guide").await,
+        Err(crate::PersistenceError::CommandRejected { code, .. }) if code.as_ref() == "persona_in_use"
+    ));
+    sqlx::query("UPDATE participants SET participant_json = json_set(participant_json, '$.status', 'kicked') WHERE participant_id = ?")
+        .bind(AGENT_ID)
+        .execute(&store.pool)
+        .await?;
+    store.delete_persona_asset("guide").await?;
+    let reference: String = sqlx::query_scalar(
+        "SELECT json_extract(session_json, '$.persona_card_id') FROM agent_sessions LIMIT 1",
+    )
+    .fetch_one(&store.pool)
+    .await?;
+    assert_eq!(reference, "");
+    Ok(())
+}

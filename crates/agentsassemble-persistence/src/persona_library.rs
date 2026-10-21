@@ -41,8 +41,11 @@ impl SqliteStore {
         Ok(summary)
     }
 
-    /// Deletes one card the owner no longer wants. A card an agent still uses
-    /// stays: every turn loads the selected card, so removing it would break them.
+    /// Deletes one card the owner no longer wants. A card an agent in its room
+    /// still uses stays (a stopped agent is `detached` and still in the room):
+    /// every turn loads the selected card. Agents that left or were removed
+    /// lose the reference, so one that returns comes back without
+    /// the card instead of failing every turn.
     ///
     /// # Errors
     ///
@@ -54,7 +57,10 @@ impl SqliteStore {
         }
         let mut transaction = self.pool.begin().await?;
         let in_use: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM agent_sessions WHERE json_extract(session_json, '$.persona_card_id') = ?",
+            "SELECT COUNT(*) FROM agent_sessions s JOIN participants p ON p.room_id = s.room_id \
+             AND p.participant_id = json_extract(s.session_json, '$.participant_id') \
+             WHERE json_extract(s.session_json, '$.persona_card_id') = ? \
+             AND json_extract(p.participant_json, '$.status') IN ('joined', 'detached')",
         )
         .bind(persona_id)
         .fetch_one(&mut *transaction)
@@ -65,6 +71,14 @@ impl SqliteStore {
                 message: "An agent still uses this bot card or module.".to_owned(),
             });
         }
+        sqlx::query(
+            "UPDATE agent_sessions SET session_json = json_set(session_json, \
+             '$.persona_card_id', '', '$.persona_card', json('null')) \
+             WHERE json_extract(session_json, '$.persona_card_id') = ?",
+        )
+        .bind(persona_id)
+        .execute(&mut *transaction)
+        .await?;
         let deleted = sqlx::query("DELETE FROM persona_assets WHERE persona_id = ?")
             .bind(persona_id)
             .execute(&mut *transaction)
