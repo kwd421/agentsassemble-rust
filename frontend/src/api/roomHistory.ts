@@ -41,6 +41,8 @@ export interface LobbyEvent {
   id: string;
   record_id?: string;
   reply_to_event_id?: string;
+  /** Whom the reply calls with Discord's "@ on". */
+  reply_mention_participant_id?: string;
   seq?: number;
   kind: string;
   name: string;

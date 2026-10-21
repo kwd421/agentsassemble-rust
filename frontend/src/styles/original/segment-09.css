@@ -33,6 +33,33 @@
   font-size: 14px;
 }
 
+/* Discord's reply "@ on/off": brand text when on, muted when off; a short
+   divider separates it from the close button. Colors still to be measured
+   against the Discord client. */
+.dc-reply-draft-mention {
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.dc-reply-draft-mention[aria-pressed="true"] {
+  color: #949cf7;
+}
+
+.dc-reply-draft-mention:hover,
+.dc-reply-draft-mention:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.dc-reply-draft-divider {
+  width: 1px;
+  height: 16px;
+  flex-shrink: 0;
+  background: #35353b;
+}
+
 .dc-reply-draft-close {
   display: grid;
   width: 16px;

@@ -105,7 +105,10 @@ export default function LobbyView({
   pendingSearchTargetEventId = "",
   onSearchTargetHandled,
   onOpenCrossChannelSearchResult,
+  replyMentionSupported = false,
 }: {
+  /** The host advertises `message.reply_mention` (Discord's reply "@ on"). */
+  replyMentionSupported?: boolean;
   /** The lobby's display name as the room names it (the rail shows the same). */
   channelName?: string;
   activeRoom: RoomDockItem;
@@ -191,12 +194,12 @@ export default function LobbyView({
   const [replyTarget, setReplyTarget] = useState({ scope: "", id: "" });
   const replyId = replyTarget.scope === replyScope ? replyTarget.id : "";
   useReplyBarScroll(scrollRef, replyId);
-  const replySource = (id: string, replyText?: string) => {
+  const replySource = (id: string, replyText?: string, called?: string) => {
     const source = visibleEvents.find((event) => (event.record_id || event.id) === id);
     const message = source?.message && plainMentionText(source.message, mentionLabels);
     return { eventId: id, author: source?.name, text: message || source?.vote_question ||
       (source?.attachments?.length ? "첨부파일 메시지" : undefined), deleted: source?.message_deleted,
-      mentioned: replyMentions(replyText, source?.actor_id),
+      mentioned: Boolean(called) || replyMentions(replyText, source?.actor_id),
       avatar: source && { image: source.avatar_image_url, label: source.avatar_label, participantType: source.actor_type,
         providerKind: source.provider_kind || providerKindByParticipant.get(source.actor_id || "") } };
   };
@@ -624,7 +627,8 @@ export default function LobbyView({
                 onReply={canPostMessages && !event.message_deleted && ["message", "vote"].includes(event.kind) && event.flow_action !== "message_delta"
                   ? () => setReplyTarget({ scope: replyScope, id: event.record_id || event.id }) : undefined}
                 replyTarget={Boolean(replyId) && replyId === (event.record_id || event.id)}
-                replySource={event.reply_to_event_id ? replySource(event.reply_to_event_id, event.message) : undefined}
+                replySource={event.reply_to_event_id
+                  ? replySource(event.reply_to_event_id, event.message, event.reply_mention_participant_id) : undefined}
                 onOpenReply={() => {
                   const id = event.reply_to_event_id;
                   if (!id) return;
@@ -756,6 +760,7 @@ export default function LobbyView({
           roomSessionToken={roomSessionToken}
           postingMode={postingMode}
           outgoing={outgoing}
+          replyMentionSupported={replyMentionSupported}
           disabledReason={!canPostMessages ? composerDisabledReason : undefined}
           onGuestSessionExpired={onGuestSessionExpired}
         />

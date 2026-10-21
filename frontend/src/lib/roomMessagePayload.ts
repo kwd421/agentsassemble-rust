@@ -44,6 +44,9 @@ export function roomMessagePayload(request: RoomSayRequest): Record<string, unkn
     case "message":
       return withAttachments({ content: request.message,
         ...(request.replyToEventId ? { reply_to_event_id: request.replyToEventId } : {}),
+        // Sent only when on, and the composer turns it on only for hosts that
+        // advertise `message.reply_mention`, so older hosts never see it.
+        ...(request.replyToEventId && request.replyMention ? { reply_mention: true } : {}),
       }, request);
     case "vote":
       return withAttachments({

@@ -110,6 +110,7 @@ export default function LobbyComposer({
   onCancelReply,
   onReplySent,
   outgoing,
+  replyMentionSupported = false,
 }: {
   meetingId: string;
   onPosted: (events: LobbyEvent[]) => void;
@@ -124,10 +125,16 @@ export default function LobbyComposer({
   onCancelReply?: () => void;
   onReplySent?: (eventId: string) => void;
   outgoing?: ComposerOutgoing;
+  /** The host advertises `message.reply_mention`. */
+  replyMentionSupported?: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (replyTo) inputRef.current?.focus(); }, [replyTo?.eventId]);
+  // Each new reply starts with "@ on", as in Discord.
+  const [replyMentionOff, setReplyMentionOff] = useState({ eventId: "", off: false });
+  const replyMention = replyMentionSupported &&
+    !(replyMentionOff.eventId === replyTo?.eventId && replyMentionOff.off);
   const restoreFocusAfterSubmitRef = useRef(false);
   const commandListId = useId();
   const emojiListId = useId();
@@ -384,6 +391,7 @@ export default function LobbyComposer({
         voteQuestion: voteCommand?.question || "",
         voteOptions: voteCommand?.options || [],
         replyToEventId,
+        replyMention: Boolean(replyToEventId) && replyMention,
       };
       if (draftAttachments.length > 0) {
         // A message with files leaves the composer at once and uploads as an
@@ -395,7 +403,7 @@ export default function LobbyComposer({
           files: draftAttachments.map((item) => item.file),
           request: voteCommand
             ? { kind: "vote", voteQuestion: sayRequest.voteQuestion, voteOptions: sayRequest.voteOptions }
-            : undefined,
+            : sayRequest.replyMention ? { replyMention: true } : undefined,
         });
         const cleared = lobbySubmitSuccessDraft<StagedFile>();
         setMessage(cleared.message);
@@ -559,7 +567,11 @@ export default function LobbyComposer({
   return (
     <>
       <section className="dc-composer-shell">
-      {replyTo && onCancelReply && <ReplyDraft source={replyTo} onCancel={onCancelReply} />}
+      {replyTo && onCancelReply && <ReplyDraft source={replyTo} onCancel={onCancelReply}
+        mention={replyMention}
+        onToggleMention={replyMentionSupported
+          ? () => setReplyMentionOff({ eventId: replyTo.eventId, off: replyMention })
+          : undefined} />}
       {shownError && (
         <p className="mb-2 flex items-start gap-2 rounded border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] font-semibold text-danger preserve-words">
           <span className="min-w-0 flex-1">{shownError}</span>

@@ -36,6 +36,8 @@ export interface RoomSocketHandlers {
 export interface RoomSayRequest {
   message: string;
   replyToEventId?: string;
+  /** Discord's "@ on": the reply also calls the replied-to author. */
+  replyMention?: boolean;
   attachments?: LobbyAttachmentRef[];
   kind?: "message" | "vote" | "vote_cast" | "vote_withdraw" | "vote_close";
   voteId?: string;

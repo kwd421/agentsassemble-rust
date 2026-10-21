@@ -364,6 +364,37 @@ describe("LobbyComposer", () => {
     expect(screen.queryByText("map.png")).toBeNull();
   });
 
+  it("starts a reply with Discord's @ on, sends it, and offers no switch to hosts without it", async () => {
+    const say = vi.fn().mockResolvedValue({ events: [] });
+    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
+    const reply = { eventId: "source", author: "Host", text: "hi" };
+    const { rerender } = render(
+      <RoomSocketProvider socket={socket}>
+        <LobbyComposer meetingId="room-a" onPosted={vi.fn()} replyTo={reply} onCancelReply={vi.fn()} replyMentionSupported />
+      </RoomSocketProvider>
+    );
+    const toggle = screen.getByRole("button", { name: "@ 켜짐" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "calling" } });
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+    await waitFor(() => expect(say).toHaveBeenCalledTimes(1));
+    expect(say.mock.calls[0][0]).toMatchObject({ replyToEventId: "source", replyMention: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "@ 켜짐" }));
+    expect(screen.getByRole("button", { name: "@ 꺼짐" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "quiet" } });
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+    await waitFor(() => expect(say).toHaveBeenCalledTimes(2));
+    expect(say.mock.calls[1][0]).toMatchObject({ replyToEventId: "source", replyMention: false });
+
+    rerender(
+      <RoomSocketProvider socket={socket}>
+        <LobbyComposer meetingId="room-a" onPosted={vi.fn()} replyTo={reply} onCancelReply={vi.fn()} />
+      </RoomSocketProvider>
+    );
+    expect(screen.queryByRole("button", { name: /^@ / })).toBeNull();
+  });
+
   it("keeps the text and the staged files when the outgoing owner refuses the message", async () => {
     const outgoing = outgoingFake({ send: vi.fn(() => { throw new Error("잠시 후 다시 시도해 주세요."); }) });
     render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} outgoing={outgoing} />);

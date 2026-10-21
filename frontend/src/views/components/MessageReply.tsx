@@ -26,11 +26,20 @@ export function MessageReply({ source, onOpen }: { source: ReplySource; onOpen?:
   </button>;
 }
 
-export function ReplyDraft({ source, onCancel }: { source: ReplySource; onCancel: () => void }) {
+export function ReplyDraft({ source, onCancel, mention, onToggleMention }: {
+  source: ReplySource; onCancel: () => void;
+  /** Discord's "@ on/off": shown only where the host can carry it. */
+  mention?: boolean; onToggleMention?: () => void;
+}) {
   return <div className="dc-reply-draft" role="status">
     <span className="min-w-0 flex-1 truncate">{source.author
       ? <><strong className="font-semibold text-text-normal">{source.author}</strong>님에게 답장하는 중</>
       : "메시지에 답장하는 중"}</span>
+    {onToggleMention && <>
+      <button type="button" className="dc-reply-draft-mention" aria-pressed={Boolean(mention)} onClick={onToggleMention}
+        title={mention ? "답장할 때 상대를 불러요" : "답장만 하고 부르지 않아요"}>@ {mention ? "켜짐" : "꺼짐"}</button>
+      <span className="dc-reply-draft-divider" aria-hidden="true" />
+    </>}
     <button type="button" aria-label="답장 취소" onClick={onCancel} className="dc-reply-draft-close"><X size={11} strokeWidth={3.5} /></button>
   </div>;
 }

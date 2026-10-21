@@ -53,6 +53,8 @@ type TimelineRoomEvent = Pick<
   edited_at?: string;
   message_deleted?: boolean;
   reply_to_event_id?: string;
+  /** Whom the reply calls with Discord's "@ on". */
+  reply_mention_participant_id?: string;
   metadata?: { source_event_id?: string };
   phase?: string;
   provider_kind?: string;
@@ -331,6 +333,8 @@ export function projectRoomEventsToTimeline(
         edited_at: String(event.edited_at || existing?.edited_at || "") || undefined,
         message_deleted: event.message_deleted === true,
         reply_to_event_id: event.reply_to_event_id,
+        reply_mention_participant_id: typeof event.reply_mention_participant_id === "string"
+          ? event.reply_mention_participant_id : undefined,
         delegation,
       };
       if (projected.message_deleted) {

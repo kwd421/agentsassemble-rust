@@ -513,6 +513,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : channel === "lobby" ? (
             <LobbyView
               activeRoom={activeRoom}
+              replyMentionSupported={Boolean(canonicalRoom.capabilities["message.reply_mention"])}
               channelName={visibleChannels.find((item) => item.id === "lobby")?.label ?? "일반"}
               roomUid={activeRoom.roomUid ?? ""}
               agents={scopedAgents}
