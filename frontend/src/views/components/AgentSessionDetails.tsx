@@ -14,6 +14,8 @@ import {
 import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
 import AgentActivitySettings from "./AgentActivitySettings";
 import ProviderModelRefresh from "./ProviderModelRefresh";
+import { refreshLocalProviderCatalog } from "../../api/providerOperations";
+import { isDesktopWebview } from "../../lib/desktopBridge";
 import { resolveProviderPresentation } from "./providerBranding";
 import ProviderRuntimeSettingField from "./ProviderRuntimeSettingField";
 import { errorCodeOf, userFacingError } from "../../lib/apiErrors";
@@ -299,6 +301,18 @@ export default function AgentSessionDetails({
     session.max_output_tokens,
   ].join("\n");
   useEffect(() => setDraft(null), [savedKey]);
+  // After an app restart providers are discovered on demand. Saving this agent's settings or
+  // bot card needs its provider in the current catalog, so a detail opened before anything
+  // discovered it asks for that once.
+  const providerId = provider?.id || "";
+  const providerUndiscovered = Boolean(provider) && provider?.discovery_status !== "ready";
+  useEffect(() => {
+    if (!serverOwned || !onConfigure || !localProviderActions || !isDesktopWebview() ||
+        !providerId || !providerUndiscovered) return;
+    const controller = new AbortController();
+    void refreshLocalProviderCatalog(providerId, false, controller.signal).catch(() => undefined);
+    return () => controller.abort();
+  }, [serverOwned, onConfigure, localProviderActions, providerId, providerUndiscovered]);
   const settings = draft ?? savedSettings;
   const settingsChanged = Object.entries(storedSettings).some(([key, value]) => settings[key] !== value);
   const invalidRuntimeControl = provider && runtimeControls.find((control) =>

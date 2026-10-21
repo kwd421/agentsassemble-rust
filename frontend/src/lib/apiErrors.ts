@@ -46,6 +46,8 @@ const KNOWN_ERROR_KOREAN: Record<string, string> = {
   provider_login_failed: "로그인하지 못했어요. 로그인 창을 확인한 뒤 다시 시도해 주세요.",
   provider_login_handoff_unconfirmed: "터미널이 열렸을 수 있어요. 확인한 뒤 카탈로그를 갱신해 주세요.",
   provider_login_cleanup_unconfirmed: "로그인 프로세스가 종료됐는지 확인하지 못했어요.",
+  unsupported_provider: "이 AI를 아직 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.",
+  catalog_not_ready: "AI 목록을 확인하는 중이에요. 잠시 뒤 다시 시도해 주세요.",
   opencode_harness_unavailable: "OpenCode가 아직 준비되지 않았어요. AI 다시 확인을 누른 뒤 다시 시도해 주세요.",
   catalog_changed: "AI 프로그램이 바뀌었어요. AI 다시 확인을 누른 뒤 다시 시도해 주세요.",
   catalog_inconsistent: "AI 목록을 확인하지 못했어요. AI 다시 확인을 누른 뒤 다시 시도해 주세요.",
