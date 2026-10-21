@@ -29,11 +29,11 @@ it("loads memory when opened and deletes a piece on the second press", async () 
   details.open = true;
   fireEvent(details, new Event("toggle"));
   expect(await screen.findByText("등대 이야기")).toBeTruthy();
-  expect(memoryApi.fetchAgentMemory).toHaveBeenCalledWith("room", "agent", undefined);
+  expect(memoryApi.fetchAgentMemory).toHaveBeenCalledWith("room", "agent", null);
   fireEvent.click(screen.getByRole("button", { name: "이 기억 지우기" }));
   expect(memoryApi.deleteAgentMemory).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "지우기" }));
-  await waitFor(() => expect(memoryApi.deleteAgentMemory).toHaveBeenCalledWith("room", "agent", 5, undefined));
+  await waitFor(() => expect(memoryApi.deleteAgentMemory).toHaveBeenCalledWith("room", "agent", 5, null));
   await waitFor(() => expect(screen.queryByText("등대 이야기")).toBeNull());
 });
 

@@ -713,7 +713,20 @@ async fn the_owners_ai_speaks_for_the_owner_only_in_an_owner_started_turn()
     assert!(speaks(handed.clone()).await?);
     record(false).execute(&store.pool).await?;
     assert!(!speaks(handed.clone()).await?);
+    // Missing or unmatched turn details never count, even beside a real one.
     record(true).execute(&store.pool).await?;
+    assert!(speaks(handed.clone()).await?);
+    let mut other_turn = handed.clone();
+    other_turn
+        .extra
+        .insert("turn_id".to_owned(), json!("turn-2"));
+    assert!(!speaks(other_turn).await?);
+    let mut bare = handed.clone();
+    bare.extra.remove("turn_id");
+    assert!(!speaks(bare).await?);
+    let mut stranger = handed.clone();
+    stranger.actor.participant_id = "agent-nobody".to_owned();
+    assert!(!speaks(stranger).await?);
     set_owner("someone-else").execute(&store.pool).await?;
     assert!(!speaks(handed.clone()).await?);
     Ok(())

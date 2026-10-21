@@ -9,8 +9,9 @@ function memoryPath(roomId: string, sessionId: string, fromSeq?: number): string
   return fromSeq === undefined ? base : `${base}/${fromSeq}`;
 }
 
-export async function fetchAgentMemory(roomId: string, sessionId: string, serverId?: string): Promise<AgentMemoryPiece[]> {
-  const host = resolvePersonaHost(serverId);
+export async function fetchAgentMemory(roomId: string, sessionId: string, remoteServerId: string | null): Promise<AgentMemoryPiece[]> {
+  // null is this computer's server; a remote room names its own server.
+  const host = remoteServerId === null ? null : resolvePersonaHost(remoteServerId);
   const suffix = memoryPath(roomId, sessionId);
   const payload = host
     ? await (await remoteOwnerRoute(host, `/api/central-owner/agent-memory${suffix}`, { method: "GET" })).json() as { pieces?: AgentMemoryPiece[] }
@@ -19,8 +20,9 @@ export async function fetchAgentMemory(roomId: string, sessionId: string, server
   return payload.pieces;
 }
 
-export async function deleteAgentMemory(roomId: string, sessionId: string, fromSeq: number, serverId?: string): Promise<void> {
-  const host = resolvePersonaHost(serverId);
+export async function deleteAgentMemory(roomId: string, sessionId: string, fromSeq: number, remoteServerId: string | null): Promise<void> {
+  // null is this computer's server; a remote room names its own server.
+  const host = remoteServerId === null ? null : resolvePersonaHost(remoteServerId);
   const suffix = memoryPath(roomId, sessionId, fromSeq);
   if (host) await remoteOwnerRoute(host, `/api/central-owner/agent-memory${suffix}`, { method: "DELETE" });
   else await deleteJsonServerOperator(`/api/agent-memory${suffix}`);

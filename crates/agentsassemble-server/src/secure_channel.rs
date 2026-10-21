@@ -61,21 +61,14 @@ async fn upgrade(
     let connections = state.connections.clone();
     // The cursor advertisement rides the outer URL query, which this upgrade
     // never parsed before; old hosts ignore it and keep serving old snapshots.
-    let channel_message_cursors =
-        crate::room_socket::client_advertises_channel_message_cursors(request.uri().query());
+    let wire = crate::client_wire::ClientWire::from_query(request.uri().query());
     upgrade
         .max_message_size(96 * 1024 + 24)
         .max_frame_size(96 * 1024 + 24)
         .write_buffer_size(64 * 1024)
         .max_write_buffer_size(512 * 1024)
         .on_upgrade(move |socket| {
-            connections.track_future(run(
-                socket,
-                state,
-                provenance,
-                origin,
-                channel_message_cursors,
-            ))
+            connections.track_future(run(socket, state, provenance, origin, wire))
         })
         .into_response()
 }
@@ -206,7 +199,7 @@ fn run(
     state: AppState,
     provenance: Provenance,
     origin: String,
-    channel_message_cursors: bool,
+    wire: crate::client_wire::ClientWire,
 ) -> futures_util::future::BoxFuture<'static, ()> {
     Box::pin(async move {
         let Ok(Ok(mut crypto)) = tokio::time::timeout(
@@ -223,7 +216,7 @@ fn run(
         let Ok(client) = SecureClient::new(
             crypto.hello.client.clone(),
             crypto.hello.channel_id.clone(),
-            channel_message_cursors,
+            wire,
         ) else {
             return;
         };

@@ -1,4 +1,4 @@
-import { AGENT_CHAIN_LIMITS } from "../lib/agentChainLimit";
+import { AGENT_CHAIN_LIMITS, agentChainLimitIsValid } from "../lib/agentChainLimit";
 export { AGENT_CHAIN_LIMITS };
 import { roomAttachmentPolicyIsValid } from "../lib/roomAttachmentPolicy";
 import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
@@ -261,7 +261,7 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
     "방 preference.settings",
     ["lobby_name", "attachment_file_limit_bytes", "attachment_storage_limit_bytes", "agent_chain_limit"]
   );
-  if (payload.agent_chain_limit !== undefined && !(AGENT_CHAIN_LIMITS as readonly unknown[]).includes(payload.agent_chain_limit)) {
+  if (payload.agent_chain_limit !== undefined && !agentChainLimitIsValid(payload.agent_chain_limit)) {
     throw new Error("방 preference settings 값이 올바르지 않습니다.");
   }
   if (stringField(payload, "room_id", "방 preference.settings") !== expectedRoomId) {
@@ -376,7 +376,7 @@ export function normalizeRoomGlobalSettings(
   ) {
     return null;
   }
-  if (payload.agent_chain_limit !== undefined && !(AGENT_CHAIN_LIMITS as readonly unknown[]).includes(payload.agent_chain_limit)) return null;
+  if (payload.agent_chain_limit !== undefined && !agentChainLimitIsValid(payload.agent_chain_limit)) return null;
   return {
     agentChainLimit: payload.agent_chain_limit ?? AGENT_CHAIN_LIMITS[0],
     attachmentFileLimitBytes: payload.attachment_file_limit_bytes ?? MAX_ATTACHMENT_BYTES,

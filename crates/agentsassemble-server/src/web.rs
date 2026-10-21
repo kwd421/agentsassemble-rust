@@ -648,8 +648,7 @@ async fn upgrade_socket(
     let connections = state.connections.clone();
     // The cursor advertisement rides the URL query so old hosts (whose
     // `TicketQuery` ignores unknown pairs) accept the upgrade untouched.
-    let channel_message_cursors =
-        crate::room_socket::client_advertises_channel_message_cursors(raw_query.as_deref());
+    let wire = crate::client_wire::ClientWire::from_query(raw_query.as_deref());
     Ok(upgrade
         .max_message_size(MAX_ROOM_SOCKET_MESSAGE_BYTES)
         .max_frame_size(MAX_ROOM_SOCKET_MESSAGE_BYTES)
@@ -662,7 +661,7 @@ async fn upgrade_socket(
                 grant,
                 revocations,
                 lease,
-                channel_message_cursors,
+                wire,
             ))
         })
         .into_response())

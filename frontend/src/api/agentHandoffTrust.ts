@@ -11,16 +11,18 @@ function trusted(payload: { trusted?: unknown }): boolean {
   return payload.trusted;
 }
 
-export async function fetchAgentHandoffTrust(roomId: string, sessionId: string, serverId?: string): Promise<boolean> {
-  const host = resolvePersonaHost(serverId);
+export async function fetchAgentHandoffTrust(roomId: string, sessionId: string, remoteServerId: string | null): Promise<boolean> {
+  // null is this computer's server; a remote room names its own server.
+  const host = remoteServerId === null ? null : resolvePersonaHost(remoteServerId);
   const suffix = trustPath(roomId, sessionId);
   return trusted(host
     ? await (await remoteOwnerRoute(host, `/api/central-owner/agent-handoff-trust${suffix}`, { method: "GET" })).json() as { trusted?: unknown }
     : await fetchJsonServerOperator<{ trusted?: unknown }>(`/api/agent-handoff-trust${suffix}`));
 }
 
-export async function setAgentHandoffTrust(roomId: string, sessionId: string, value: boolean, serverId?: string): Promise<boolean> {
-  const host = resolvePersonaHost(serverId);
+export async function setAgentHandoffTrust(roomId: string, sessionId: string, value: boolean, remoteServerId: string | null): Promise<boolean> {
+  // null is this computer's server; a remote room names its own server.
+  const host = remoteServerId === null ? null : resolvePersonaHost(remoteServerId);
   const suffix = trustPath(roomId, sessionId);
   const body = { trusted: value };
   return trusted(host

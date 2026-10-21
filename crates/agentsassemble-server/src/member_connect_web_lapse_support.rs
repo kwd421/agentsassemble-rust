@@ -144,7 +144,7 @@ pub(super) async fn lapse_fixture(room_ids: &[(&str, &str)]) -> LapseFixture {
             [7_u8; 32],
         ),
     };
-    let secure = crate::secure_client::SecureClient::new(hello, "a".repeat(43), false)
+    let secure = crate::secure_client::SecureClient::new(hello, "a".repeat(43), crate::client_wire::ClientWire::default())
         .unwrap_or_else(|()| panic!("fixture secure channel"));
     LapseFixture {
         state,

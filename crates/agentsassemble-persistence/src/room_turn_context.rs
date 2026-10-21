@@ -173,9 +173,6 @@ pub(super) async fn prepare_room_input(
     })
 }
 
-/// Attachments the turn may read: those of the messages that started it, then those of
-/// the other messages shown in its room view, newest first, up to the per-turn limit. A
-/// message that only asks about an attachment posted just before it must still reach it.
 /// The owner's own message, or one from another of the owner's AIs written
 /// in a turn that was itself owner-started. Work handed between the owner's
 /// AIs keeps the owner's word; a chain anyone else began never gains it.
@@ -193,12 +190,16 @@ pub(super) async fn speaks_for_owner(
     let (Some(session_id), Some(turn_id)) = (text("session_id"), text("turn_id")) else {
         return Ok(false);
     };
-    if event.actor.participant_type != "agent"
-        || load_participant(transaction, &event.room_id, actor)
-            .await?
-            .owner_id
-            != owner
-    {
+    // Only a decision about asking: an actor without a participant row is
+    // simply not the owner's.
+    let actor_owner = sqlx::query_scalar::<_, String>(
+        "SELECT COALESCE(json_extract(participant_json, '$.owner_id'), '') FROM participants WHERE room_id = ? AND participant_id = ?",
+    )
+    .bind(&event.room_id)
+    .bind(actor)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    if event.actor.participant_type != "agent" || actor_owner.as_deref() != Some(owner) {
         return Ok(false);
     }
     let started = sqlx::query_scalar::<_, i64>(
@@ -213,6 +214,9 @@ pub(super) async fn speaks_for_owner(
     Ok(started == Some(1))
 }
 
+/// Attachments the turn may read: those of the messages that started it, then those of
+/// the other messages shown in its room view, newest first, up to the per-turn limit. A
+/// message that only asks about an attachment posted just before it must still reach it.
 fn readable_attachment_ids(
     inflight: &[&PendingRoomEvent],
     context: &[RoomEvent],

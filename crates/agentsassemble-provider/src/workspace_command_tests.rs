@@ -142,3 +142,33 @@ async fn a_long_log_runs_to_the_end_and_keeps_its_tail() {
     assert!(output.stdout.len() <= 2 * 1024 * 1024);
     assert!(String::from_utf8_lossy(&output.stdout).ends_with("finished\n"));
 }
+
+/// A program the command leaves running keeps the pipes open; the command
+/// still ends when its shell does, with what it printed, and the program goes.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_command_that_leaves_a_program_running_still_returns() {
+    let folder = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+    let started = std::time::Instant::now();
+    let output = crate::process::run_in_directory(
+        "/bin/sh",
+        &["-c", "sleep 30 & echo $! > child; echo started"],
+        folder.path(),
+        None,
+        &tokio_util::sync::CancellationToken::new(),
+    )
+    .await
+    .unwrap_or_else(|_| panic!("run failed"));
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "started\n");
+    let pid = std::fs::read_to_string(folder.path().join("child"))
+        .ok()
+        .and_then(|text| text.trim().parse::<i32>().ok())
+        .and_then(rustix::process::Pid::from_raw)
+        .unwrap_or_else(|| panic!("no child pid"));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while rustix::process::test_kill_process(pid).is_ok() {
+        assert!(std::time::Instant::now() < deadline, "the background program outlived the command");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}

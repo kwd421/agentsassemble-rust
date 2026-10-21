@@ -3,6 +3,7 @@ import { Users } from "../../ui/icons";
 import type { RoomAgentSession } from "../../api";
 import { fetchAgentHandoffTrust, setAgentHandoffTrust } from "../../api/agentHandoffTrust";
 import { userFacingError } from "../../lib/apiErrors";
+import { useOwnerRouteHost } from "../../app/ownerRouteHost";
 
 const LABEL = "다른 사람 AI가 넘긴 일도 묻지 않기";
 
@@ -11,6 +12,7 @@ const LABEL = "다른 사람 AI가 넘긴 일도 묻지 않기";
  * switch lets other people's AIs in the room hand this agent work too.
  */
 export default function AgentHandoffTrustSetting({ session }: { session: RoomAgentSession }) {
+  const serverId = useOwnerRouteHost() ?? null;
   const [trusted, setTrusted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -19,18 +21,18 @@ export default function AgentHandoffTrustSetting({ session }: { session: RoomAge
     let active = true;
     setTrusted(null);
     setStatus("");
-    fetchAgentHandoffTrust(session.room_id, session.session_id)
+    fetchAgentHandoffTrust(session.room_id, session.session_id, serverId)
       .then((value) => { if (active) setTrusted(value); })
       .catch((error) => { if (active) setStatus(userFacingError(error, "설정을 불러오지 못했어요.")); });
     return () => { active = false; };
-  }, [session.room_id, session.session_id]);
+  }, [session.room_id, session.session_id, serverId]);
 
   async function toggle() {
     if (trusted === null) return;
     setBusy(true);
     setStatus("");
     try {
-      setTrusted(await setAgentHandoffTrust(session.room_id, session.session_id, !trusted));
+      setTrusted(await setAgentHandoffTrust(session.room_id, session.session_id, !trusted, serverId));
     } catch (error) {
       setStatus(userFacingError(error, "설정을 바꾸지 못했어요."));
     } finally {

@@ -17,7 +17,7 @@ use crate::{
 pub(crate) const NAME: &str = "run_workspace_command";
 /// The approval prompt shows the whole command on one line within its 1,200 characters.
 const MAX_COMMAND_CHARACTERS: usize = 1_000;
-/// Each stream the model sees; the whole run is still bounded by the process owner.
+/// Each stream the model sees; the process owner keeps only the end of a long log.
 const MAX_STREAM_CHARACTERS: usize = 32 * 1024;
 
 const FAILED: DriverError = DriverError::new(
@@ -53,7 +53,7 @@ pub(crate) fn schema() -> Value {
     let (_, _, label) = shell();
     json!({"type":"function","function":{
         "name": NAME,
-        "description": format!("Run one {label} command in the selected workspace after the owner approves it. Use it for builds, tests and inspection the file tools cannot do, and say in your message why it is needed."),
+        "description": format!("Run one {label} command in the selected workspace after the owner approves it. Use it for builds, tests and inspection the file tools cannot do, and say in your message why it is needed. It returns when the command finishes; programs it leaves running in the background are stopped then."),
         "parameters":{"type":"object","properties":{
             "command":{"type":"string"},
             "timeout_seconds":{"type":"integer","minimum":1,"description":"Optional. Without it the command runs until it finishes; set it only when a command might hang."}

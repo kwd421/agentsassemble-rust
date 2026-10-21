@@ -153,7 +153,7 @@ pub(crate) async fn start(
         incoming,
         outgoing: Box::pin(outgoing),
     };
-    let channel_message_cursors = client.channel_message_cursors();
+    let wire = client.wire();
     let task = async move {
         if output
             .send(json!({"op":"socket_open", "id":id}))
@@ -162,15 +162,7 @@ pub(crate) async fn start(
         {
             return;
         }
-        crate::room_socket_session::run(
-            socket,
-            state,
-            grant,
-            Some(revocations),
-            lease,
-            channel_message_cursors,
-        )
-        .await;
+        crate::room_socket_session::run(socket, state, grant, Some(revocations), lease, wire).await;
         let _ = output.send(json!({"op":"socket_close", "id":id})).await;
     };
     Ok((input, task))

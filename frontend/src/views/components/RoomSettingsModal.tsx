@@ -323,7 +323,7 @@ export default function RoomSettingsModal({
                   <select className="dc-select dc-select--compact" aria-label="AI끼리 이어 부르기"
                     value={agentChainSettings.limit ?? ""} disabled={!routingSettingsReady || agentChainSettings.limit === null}
                     onChange={(event) => agentChainSettings.onChange(Number(event.target.value))}>
-                    {AGENT_CHAIN_LIMITS.map((limit) => (
+                    {[...AGENT_CHAIN_LIMITS, ...(agentChainSettings.limit !== null && !(AGENT_CHAIN_LIMITS as readonly number[]).includes(agentChainSettings.limit) ? [agentChainSettings.limit] : [])].map((limit) => (
                       <option key={limit} value={limit}>{limit === 0 ? "제한 없음" : `${limit}개`}</option>
                     ))}
                   </select>

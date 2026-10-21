@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import AgentHandoffTrustSetting from "./AgentHandoffTrustSetting";
 import type { RoomAgentSession } from "../../api";
+import { OwnerRouteHost } from "../../app/ownerRouteHost";
 
 const api = vi.hoisted(() => ({ fetchAgentHandoffTrust: vi.fn(), setAgentHandoffTrust: vi.fn() }));
 vi.mock("../../api/agentHandoffTrust", () => api);
@@ -19,7 +20,7 @@ it("starts off and turns on only after the host confirms", async () => {
   expect(toggle.getAttribute("aria-checked")).toBe("false");
   fireEvent.click(toggle);
   await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("true"));
-  expect(api.setAgentHandoffTrust).toHaveBeenCalledWith("room", "agent", true);
+  expect(api.setAgentHandoffTrust).toHaveBeenCalledWith("room", "agent", true, null);
 });
 
 it("keeps the switch off and says so when the host cannot be read", async () => {
@@ -27,4 +28,10 @@ it("keeps the switch off and says so when the host cannot be read", async () => 
   render(<AgentHandoffTrustSetting session={session} />);
   expect(await screen.findByRole("status")).toBeTruthy();
   expect(screen.getByRole("switch").hasAttribute("disabled")).toBe(true);
+});
+
+it("talks to the room's own server, never another owner workspace", async () => {
+  api.fetchAgentHandoffTrust.mockResolvedValue(false);
+  render(<OwnerRouteHost.Provider value="server-b"><AgentHandoffTrustSetting session={session} /></OwnerRouteHost.Provider>);
+  await waitFor(() => expect(api.fetchAgentHandoffTrust).toHaveBeenCalledWith("room", "agent", "server-b"));
 });

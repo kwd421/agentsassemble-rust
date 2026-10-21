@@ -227,7 +227,7 @@ async fn fixture() -> Fixture {
         client_nonce: "resume-nonce".into(),
         client_public_key: client_public_key.clone(),
     };
-    let secure = crate::secure_client::SecureClient::new(hello, "c".repeat(43), false)
+    let secure = crate::secure_client::SecureClient::new(hello, "c".repeat(43), crate::client_wire::ClientWire::default())
         .unwrap_or_else(|()| panic!("fixture secure channel"));
     Fixture {
         state,

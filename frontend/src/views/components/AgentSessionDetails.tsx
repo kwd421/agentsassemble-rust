@@ -15,6 +15,7 @@ import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
 import AgentActivitySettings from "./AgentActivitySettings";
 import AgentMemorySettings, { keepsMemory } from "./AgentMemorySettings";
 import AgentHandoffTrustSetting from "./AgentHandoffTrustSetting";
+import { useOwnerRouteHost } from "../../app/ownerRouteHost";
 import ProviderModelRefresh from "./ProviderModelRefresh";
 import { refreshLocalProviderCatalog } from "../../api/providerOperations";
 import { isDesktopWebview } from "../../lib/desktopBridge";
@@ -232,6 +233,9 @@ export default function AgentSessionDetails({
   const [settingsBusy, setSettingsBusy] = useState(false);
   const status = session.runtime_status;
   const serverOwned = !session.external_owned && session.process_ownership === "server";
+  // Owner-only settings need the room's own server; an unknown one hides them.
+  const ownerHost = useOwnerRouteHost();
+  const ownerRoutes = serverOwned && Boolean(onConfigure) && ownerHost !== undefined;
   const hasRunBefore = Boolean(
     session.turn_count ||
       session.last_seen_event_id
@@ -520,8 +524,8 @@ export default function AgentSessionDetails({
           onStatus={setActionStatus}
         />
       )}
-      {serverOwned && onConfigure && keepsMemory(session) && <AgentMemorySettings session={session} />}
-      {serverOwned && onConfigure && session.permission_mode === "full_access" && <AgentHandoffTrustSetting session={session} />}
+      {ownerRoutes && keepsMemory(session) && <AgentMemorySettings session={session} />}
+      {ownerRoutes && session.permission_mode === "full_access" && <AgentHandoffTrustSetting session={session} />}
       <AgentActivitySettings
         session={session}
         activityVisible={activityVisible}

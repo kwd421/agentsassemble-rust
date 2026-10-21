@@ -163,11 +163,12 @@ async fn free_access_with_no_chain_limit_keeps_routing_ai_mentions() -> TestResu
     ai.principal_id = SECOND_AGENT_ID.into();
     ai.participant_id = SECOND_AGENT_ID.into();
     ai.display_name = "Flash".into();
-    for index in 1..20 {
+    // Past the largest finite choice (100), so only "no limit" still routes.
+    for index in 1..=105 {
         send_message(&store, &ai, &format!("ai-{index}"), "ordinary AI speech").await;
     }
-    let twentieth = send_message(&store, &ai, "ai-20", "@Terra respond").await;
-    assert_eq!(twentieth.assignments.len(), 1);
+    let called = send_message(&store, &ai, "ai-call", "@Terra respond").await;
+    assert_eq!(called.assignments.len(), 1);
     Ok(())
 }
 

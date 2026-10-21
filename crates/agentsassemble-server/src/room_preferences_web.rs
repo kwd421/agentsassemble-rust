@@ -341,6 +341,9 @@ fn project_settings(
         .as_object_mut()
         .ok_or_else(RoomPreferencesHttpError::internal)?;
     object.insert("room_id".to_owned(), Value::String(room_id.to_owned()));
+    // Older clients check these keys exactly and this route's query takes no
+    // advertisement; clients read the chain limit from the room socket.
+    object.remove(crate::client_wire::AGENT_CHAIN_LIMIT_QUERY);
     object.insert(
         "short_label".to_owned(),
         Value::String(room_settings.appearance.icon_label.clone()),

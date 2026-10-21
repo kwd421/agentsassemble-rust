@@ -107,6 +107,8 @@ function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
   // channel_message_cursors field on this pair; absence is tolerated either
   // way, so this never breaks a version-skewed peer.
   url.searchParams.set("channel_message_cursors", "1");
+  // This build also reads `agent_chain_limit` in room settings.
+  url.searchParams.set("agent_chain_limit", "1");
   return url.toString();
 }
 

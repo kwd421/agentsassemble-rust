@@ -146,9 +146,9 @@ pub(crate) async fn probe_output(
     })
 }
 
-/// Runs one bounded command in `directory` with the same environment, tree
-/// custody, timeout and cancellation as a probe. A non-zero exit is returned,
-/// not treated as a failure: the caller reports it.
+/// Runs one command in `directory` with the same environment, tree custody
+/// and cancellation as a probe, and the timeout the caller asked for, if any.
+/// A non-zero exit is returned, not treated as a failure: the caller reports it.
 pub(crate) async fn run_in_directory(
     program: &str,
     args: &[&str],
@@ -176,8 +176,28 @@ pub(crate) async fn run_in_directory(
     };
     // A long build runs to the end unless a timeout was asked for; the turn
     // interrupt (the cancellation) still stops it. Only the end of a long
-    // log is kept, where a build or test failure usually is.
-    let run = async { tokio::try_join!(read_tail(stdout), read_tail(stderr), child.wait()) };
+    // log is kept, where a build or test failure usually is. The command is
+    // over when its shell exits: anything it left running in the background
+    // may hold the pipes open forever, so its output is read only briefly
+    // after that, and the process group is killed when this returns.
+    let (out, err) = (TailBuffer::default(), TailBuffer::default());
+    let mut readers = [
+        tokio::spawn(read_tail_into(stdout, out.clone())),
+        tokio::spawn(read_tail_into(stderr, err.clone())),
+    ];
+    let run = async {
+        let status = child.wait().await?;
+        let drained = tokio::time::timeout(AFTER_EXIT_DRAIN, async {
+            for reader in &mut readers {
+                let _ = reader.await;
+            }
+        })
+        .await;
+        if drained.is_err() {
+            readers.iter().for_each(tokio::task::JoinHandle::abort);
+        }
+        Ok::<_, io::Error>((out.take(), err.take(), status))
+    };
     let collected = tokio::select! {
         () = cancellation.cancelled() => None,
         collected = Box::pin(async {
@@ -342,18 +362,43 @@ async fn read_limited<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>
     }
 }
 
-/// The last `MAX_PROBE_STREAM_BYTES` of a stream, read to its end.
-async fn read_tail<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>> {
-    let mut output = std::collections::VecDeque::new();
+/// How long a command's output is still read after its shell exits.
+const AFTER_EXIT_DRAIN: Duration = Duration::from_secs(2);
+
+/// The last `MAX_PROBE_STREAM_BYTES` of a stream, shared with its reader task.
+#[derive(Clone, Default)]
+struct TailBuffer(std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<u8>>>);
+
+impl TailBuffer {
+    fn push(&self, bytes: &[u8]) {
+        let mut output = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        output.extend(bytes);
+        let excess = output.len().saturating_sub(MAX_PROBE_STREAM_BYTES);
+        output.drain(..excess);
+    }
+
+    fn take(&self) -> Vec<u8> {
+        std::mem::take(
+            &mut *self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+        .into()
+    }
+}
+
+async fn read_tail_into<R: AsyncRead + Unpin>(mut reader: R, output: TailBuffer) -> io::Result<()> {
     let mut chunk = vec![0_u8; 16 * 1024];
     loop {
         let count = reader.read(&mut chunk).await?;
         if count == 0 {
-            return Ok(output.into());
+            return Ok(());
         }
-        output.extend(&chunk[..count]);
-        let excess = output.len().saturating_sub(MAX_PROBE_STREAM_BYTES);
-        output.drain(..excess);
+        output.push(&chunk[..count]);
     }
 }
 

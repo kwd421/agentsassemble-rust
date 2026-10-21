@@ -1,6 +1,6 @@
 import { delegatedActionRequestsAreValid, delegatedActionEventIsValid, delegatedActionAckIsValid } from "./delegatedActionProjection";
 import { roomAttachmentPolicyIsValid } from "./roomAttachmentPolicy";
-import { AGENT_CHAIN_LIMITS } from "./agentChainLimit";
+import { agentChainLimitIsValid } from "./agentChainLimit";
 import { providerRequestEventIsValid } from "./providerRequestProjection";
 import { anonymizedParticipant } from "./participantAnonymization";
 import { channelMessageFieldsAreValid } from "./channelMessageContract";
@@ -128,7 +128,7 @@ function publicRoomSettingsIsValid(value: unknown): value is PublicRoomSettings 
     assertExactKeys(appearance, APPEARANCE_KEYS, "room settings appearance");
     if (
       !roomAttachmentPolicyIsValid(settings) ||
-      (settings.agent_chain_limit !== undefined && !(AGENT_CHAIN_LIMITS as readonly unknown[]).includes(settings.agent_chain_limit)) ||
+      (settings.agent_chain_limit !== undefined && !agentChainLimitIsValid(settings.agent_chain_limit)) ||
       ["settings_revision", "label", "topic", "conversation_mode", "tool_mode"]
         .some((key) => typeof settings[key] !== "string") ||
       (settings.lobby_name !== undefined && (typeof settings.lobby_name !== "string" || !settings.lobby_name.trim())) ||

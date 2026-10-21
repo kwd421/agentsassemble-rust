@@ -3,6 +3,7 @@ import { Trash2 } from "../../ui/icons";
 import type { RoomAgentSession } from "../../api";
 import { deleteAgentMemory, fetchAgentMemory, type AgentMemoryPiece } from "../../api/agentMemory";
 import { userFacingError } from "../../lib/apiErrors";
+import { useOwnerRouteHost } from "../../app/ownerRouteHost";
 import "./AgentMemorySettings.css";
 
 /** Only API agents on the built-in harness keep memory pieces. */
@@ -14,7 +15,8 @@ export function keepsMemory(session: RoomAgentSession): boolean {
  * The memory tab: what this agent summarized from conversation older than the
  * 50 messages it sees, with a two-press delete like the card library.
  */
-export default function AgentMemorySettings({ session, serverId }: { session: RoomAgentSession; serverId?: string }) {
+export default function AgentMemorySettings({ session }: { session: RoomAgentSession }) {
+  const serverId = useOwnerRouteHost() ?? null;
   const [open, setOpen] = useState(false);
   const [pieces, setPieces] = useState<AgentMemoryPiece[] | null>(null);
   const [status, setStatus] = useState("");

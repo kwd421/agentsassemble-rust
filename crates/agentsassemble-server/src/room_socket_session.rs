@@ -6,7 +6,7 @@ use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandResolution, ProtocolError, RoomAction, ServerFrame,
 };
 use axum::extract::ws::Message;
-use futures_util::StreamExt;
+use futures_util::{SinkExt, StreamExt};
 use tokio::sync::broadcast;
 
 use crate::{
@@ -29,13 +29,17 @@ pub(crate) async fn run<S>(
     grant: ConsumedSocketTicket,
     mut revocations: Option<broadcast::Receiver<crate::SessionRevocation>>,
     _lease: ConnectionLease,
-    channel_message_cursors: bool,
+    wire: crate::client_wire::ClientWire,
 ) where
     S: futures_util::Sink<Message, Error = axum::Error>
         + futures_util::Stream<Item = Result<Message, axum::Error>>
         + Unpin,
 {
-    let (mut sender, mut receiver) = socket.split();
+    let (sender, mut receiver) = socket.split();
+    // Every frame leaves in the shape this client build reads.
+    let mut sender = sender.with(move |message| {
+        futures_util::future::ready(Ok::<_, axum::Error>(wire.adapt(message)))
+    });
     let Some(EstablishedSubscription {
         mut owner_lease,
         room_uid,
@@ -50,7 +54,7 @@ pub(crate) async fn run<S>(
         &mut receiver,
         &state,
         grant,
-        channel_message_cursors,
+        wire.channel_message_cursors,
     )
     .await
     else {
