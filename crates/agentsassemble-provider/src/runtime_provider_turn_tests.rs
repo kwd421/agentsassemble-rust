@@ -44,6 +44,7 @@ async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
         context_tokens: None,
+        owner_started: false,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
@@ -148,6 +149,7 @@ async fn nullable_hook_turn_identity_does_not_poison_an_active_turn() {
             &active,
             &ProviderTurnRequest {
                 context_tokens: None,
+                owner_started: false,
                 session_instructions: None,
                 request_ingress: None,
                 turn_id: "room-turn-1".to_owned(),
@@ -194,6 +196,7 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
         context_tokens: None,
+        owner_started: false,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
@@ -261,6 +264,7 @@ async fn verify_exact_codex_interrupt(terminal_receipt: bool) {
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
         context_tokens: None,
+        owner_started: false,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
@@ -349,6 +353,7 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
         context_tokens: None,
+        owner_started: false,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
@@ -495,6 +500,7 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
             &first,
             &ProviderTurnRequest {
                 context_tokens: None,
+                owner_started: false,
                 session_instructions: None,
                 request_ingress: None,
                 turn_id: "room-turn-1".to_owned(),
@@ -509,6 +515,7 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
     let second = active_session(&session, &started, "room-turn-2");
     let request = ProviderTurnRequest {
         context_tokens: None,
+        owner_started: false,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-2".to_owned(),
@@ -573,6 +580,7 @@ async fn assert_turn_error(
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
         context_tokens: None,
+        owner_started: false,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
@@ -794,6 +802,7 @@ for line in sys.stdin:
             active.public.active_turn_id = format!("room-turn-{index}");
             let request = ProviderTurnRequest {
                 context_tokens: None,
+                owner_started: false,
                 session_instructions: Some((*fixed).to_owned()),
                 request_ingress: None,
                 turn_id: active.public.active_turn_id.clone(),

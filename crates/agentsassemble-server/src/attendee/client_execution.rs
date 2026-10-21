@@ -96,6 +96,7 @@ impl AttendeeRuntime {
         }
         let request = ProviderTurnRequest {
             context_tokens: None,
+            owner_started: false,
             session_instructions: Some(COMPANION_INSTRUCTIONS.into()),
             request_ingress: requests,
             turn_id: start.turn_id.clone(),

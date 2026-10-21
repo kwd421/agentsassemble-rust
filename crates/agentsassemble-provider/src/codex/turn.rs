@@ -718,6 +718,7 @@ mod tests {
         session.public.permission_mode = "full_access".into();
         let request = crate::ProviderTurnRequest {
             context_tokens: None,
+            owner_started: false,
             input: "hello".into(),
             turn_id: "turn".into(),
             turn_generation: 1,

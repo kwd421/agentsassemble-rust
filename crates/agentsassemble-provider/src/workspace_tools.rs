@@ -87,9 +87,13 @@ impl WorkspaceTools {
         arguments: &str,
         effect_uncertain: &mut bool,
     ) -> Result<String, DriverError> {
-        if session.public.permission_mode != "workspace_write" {
+        if !matches!(
+            session.public.permission_mode.as_str(),
+            "workspace_write" | "full_access"
+        ) {
             return Err(FAILED);
         }
+        let unasked = session.public.permission_mode == "full_access" && request.owner_started;
         let mut arguments: serde_json::Map<String, Value> =
             serde_json::from_str(arguments).map_err(|_| FAILED)?;
         if arguments
@@ -121,7 +125,7 @@ impl WorkspaceTools {
             serde_json::from_value(prepared["operation"].clone()).map_err(|_| FAILED)?;
         let before = prepared["before"].as_str().map(str::to_owned);
         let path = operation.path().to_owned();
-        if operation.writes() && !self.allowed_paths.contains(&path) {
+        if operation.writes() && !unasked && !self.allowed_paths.contains(&path) {
             match approve(session, request, name, &path).await? {
                 Approval::Denied => return Err(FAILED),
                 Approval::Once => {}

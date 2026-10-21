@@ -253,7 +253,7 @@ fn ready(provider: ProviderAvailability) -> ProviderAvailability {
                 "default",
             ),
             remote_output_token_control(),
-            permission_control(true, false),
+            permission_control(true, true),
         ],
     )
 }

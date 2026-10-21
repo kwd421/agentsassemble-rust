@@ -677,8 +677,9 @@ export default function AgentCreateModal({
                 <WorkspacePickerField
                   value={workspacePath}
                   description={
-                    settings.permission_mode === "workspace_write" && providerGroup !== "harness"
-                      ? "명령 실행·파일 수정은 할 때마다 승인해요"
+                    providerGroup === "harness" ? ""
+                      : settings.permission_mode === "workspace_write" ? "명령 실행·파일 수정은 할 때마다 승인해요"
+                      : settings.permission_mode === "full_access" ? "내 메시지에 답할 때는 묻지 않고 실행해요. 다른 사람 메시지에는 승인을 받아요"
                       : ""
                   }
                   onChange={setWorkspacePath}

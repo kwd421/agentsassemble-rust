@@ -137,7 +137,8 @@ pub(crate) async fn execute(
     effect_uncertain: &mut bool,
     cancellation: &CancellationToken,
 ) -> Result<String, DriverError> {
-    if session.public.permission_mode != "workspace_write" {
+    let mode = session.public.permission_mode.as_str();
+    if !matches!(mode, "workspace_write" | "full_access") {
         return Err(FAILED);
     }
     let arguments: Arguments = serde_json::from_str(arguments).map_err(|_| FAILED)?;
@@ -166,8 +167,11 @@ pub(crate) async fn execute(
     // The stored identity proves this is still the folder the owner chose.
     bind_workspace(session).await?;
     let description = format!("작업 폴더에서 이 명령을 실행합니다: {command}");
-    // 앞으로도 허용 covers this exact command text while the agent runs.
-    if !allowed.contains(command) {
+    // Full access in a turn its owner started runs without asking. Otherwise
+    // the owner approves this exact command; 앞으로도 허용 covers it while the
+    // agent runs.
+    let unasked = mode == "full_access" && request.owner_started;
+    if !unasked && !allowed.contains(command) {
         let always = "이 에이전트가 멈출 때까지 같은 명령은 묻지 않아요.";
         match owner_allows(session, request, "명령 실행", description, always).await? {
             Approval::Denied => {

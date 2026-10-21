@@ -35,7 +35,7 @@ use crate::{
 const MAX_TOOL_RESULT_BYTES: usize = 128 * 1024;
 const MAX_TOOL_ROUNDS: usize = 16;
 /// Short coding rules for an agent that may change its workspace (pi-style).
-const WORKSPACE_RULES: &str = "Workspace rules: read a file before changing it; make the smallest change that does the job and prefer replace_workspace_text over rewriting a whole file; run run_workspace_command only when a build, test or inspection needs it, and say why, because the owner approves every command and every file change; name the files you changed when you finish.";
+const WORKSPACE_RULES: &str = "Workspace rules: read a file before changing it; make the smallest change that does the job and prefer replace_workspace_text over rewriting a whole file; run run_workspace_command only when a build, test or inspection needs it, and say why, because the owner may be asked to approve it; name the files you changed when you finish.";
 const PORTAL_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 
 type PortalClient = RunningService<RoleClient, ()>;
@@ -455,7 +455,10 @@ impl RemoteOpenAiDriver {
             .map_or_else(Vec::new, |observation| {
                 api_tools(&self.tools, observation.tabletop_tools)
             });
-        if session.public.permission_mode == "workspace_write" {
+        if matches!(
+            session.public.permission_mode.as_str(),
+            "workspace_write" | "full_access"
+        ) {
             tools.extend(crate::workspace_tools::schemas());
             tools.push(crate::workspace_command::schema());
         }
@@ -531,7 +534,7 @@ impl RemoteOpenAiDriver {
             || session.public.transport != self.spec.endpoint.transport()
             || !matches!(
                 session.public.permission_mode.as_str(),
-                "meeting_read_only" | "workspace_write"
+                "meeting_read_only" | "workspace_write" | "full_access"
             )
             || self.workspace_tools.pending()
             || !endpoint_matches
@@ -770,8 +773,11 @@ impl RemoteOpenAiApi {
 /// The turn's opening: room rules stay the one system message, a workspace
 /// agent's rules follow them, then the turn input.
 fn opening_messages(session: &DurableAgentSession, request: &ProviderTurnRequest) -> Vec<Value> {
-    let workspace_rules =
-        (session.public.permission_mode == "workspace_write").then_some(WORKSPACE_RULES);
+    let workspace_rules = matches!(
+        session.public.permission_mode.as_str(),
+        "workspace_write" | "full_access"
+    )
+    .then_some(WORKSPACE_RULES);
     let system = match (request.session_instructions.as_deref(), workspace_rules) {
         (Some(instructions), Some(rules)) => Some(format!("{instructions}\n\n{rules}")),
         (Some(instructions), None) => Some(instructions.to_owned()),

@@ -29,6 +29,7 @@ pub(super) struct PreparedRoomInput {
     pub(super) source_event_id: String,
     pub(super) input_up_to_seq: i64,
     pub(super) room_agent_ids: Vec<String>,
+    pub(super) owner_started: bool,
 }
 
 pub(super) async fn prepare_room_input(
@@ -130,7 +131,17 @@ pub(super) async fn prepare_room_input(
             "The canonical room observation exceeds its provider-visible bound.",
         ));
     }
+    // Full access runs without asking only in a turn the agent's owner started:
+    // every message this turn answers is the owner's own.
+    let owner = load_participant(transaction, &room.room_id, &session.public.participant_id)
+        .await?
+        .owner_id;
+    let owner_started = !owner.is_empty()
+        && inflight
+            .iter()
+            .all(|pending| pending.event.actor.participant_id == owner);
     Ok(PreparedRoomInput {
+        owner_started,
         session_instructions,
         provider_input,
         room_view,

@@ -109,6 +109,7 @@ async fn check_native_permissions(
         let (ingress, mut commands) = ProviderRequestIngress::channel(1);
         let request = ProviderTurnRequest {
             context_tokens: None,
+            owner_started: false,
             session_instructions: instructions.map(str::to_owned),
             request_ingress: Some(ingress),
             turn_id: active.public.active_turn_id.clone(),

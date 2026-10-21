@@ -342,7 +342,7 @@ pub(crate) async fn discover_custom_api(
         String::new(),
         vec![
             remote_output_token_control(),
-            permission_control(true, false),
+            permission_control(true, true),
         ],
     )
 }
@@ -382,7 +382,7 @@ fn ready_gateway(
     controls.extend(provider_control);
     controls.extend([
         remote_output_token_control(),
-        permission_control(true, false),
+        permission_control(true, true),
     ]);
     ready_provider(provider, default_model.clone(), controls)
 }

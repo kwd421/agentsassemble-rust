@@ -312,3 +312,34 @@ async fn picker_mentions_identify_self_independently_of_provider_identity_and_fl
         }
     }
 }
+
+async fn first_turn_started_by(other_asks: bool) -> Result<bool, Box<dyn std::error::Error>> {
+    let (store, owner, _directory) = fixture().await;
+    sqlx::query(
+        "UPDATE participants SET participant_json=json_set(participant_json, '$.owner_id', ?) WHERE room_id='general' AND participant_id=?",
+    )
+    .bind(&owner.participant_id)
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await?;
+    let other = add_human(&store, "human-other", "Other").await?;
+    let asker = if other_asks { &other } else { &owner };
+    let assigned = store
+        .execute_message_with_turn(
+            asker,
+            "ask",
+            "message.send",
+            &json!({"content": "@Terra run it"}),
+        )
+        .await?;
+    Ok(assigned.assignments[0].owner_started)
+}
+
+/// Full access runs unasked only in a turn that answers the agent's owner.
+#[tokio::test]
+async fn only_a_turn_answering_the_owner_is_owner_started() -> Result<(), Box<dyn std::error::Error>>
+{
+    assert!(first_turn_started_by(false).await?);
+    assert!(!first_turn_started_by(true).await?);
+    Ok(())
+}

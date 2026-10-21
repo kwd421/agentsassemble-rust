@@ -129,6 +129,11 @@ pub struct ProviderTurnAssignmentEnvelope {
     pub attachment_ids: Vec<String>,
     pub room_agent_ids: Vec<String>,
     pub tabletop_tools: bool,
+    /// Executions stored before this field recover as not owner-started, so
+    /// a full-access agent asks instead of running unasked. Left out when
+    /// false, so an older app can still read the row.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub owner_started: bool,
 }
 
 pub(crate) async fn insert_assigned_execution(

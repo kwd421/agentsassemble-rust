@@ -160,7 +160,7 @@ fn ready(
                 "default",
             ),
             remote_output_token_control(),
-            permission_control(true, false),
+            permission_control(true, true),
         ],
     )
 }

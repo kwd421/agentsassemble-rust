@@ -173,6 +173,7 @@ fn provider_request(
     );
     ProviderTurnRequest {
         context_tokens,
+        owner_started: assignment.owner_started,
         request_ingress: Some(ingress.requests),
         turn_id: assignment.turn_id.clone(),
         turn_generation: assignment.turn_generation,

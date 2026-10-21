@@ -120,6 +120,7 @@ async fn writes_require_exact_owner_response_and_delivery_receipt() -> Result<()
     let (ingress, mut commands) = ProviderRequestIngress::channel(1);
     let request = ProviderTurnRequest {
         context_tokens: None,
+        owner_started: false,
         session_instructions: None,
         request_ingress: Some(ingress),
         turn_id: "turn".to_owned(),
@@ -197,6 +198,35 @@ async fn writes_require_exact_owner_response_and_delivery_receipt() -> Result<()
         std::fs::read_to_string(directory.path().join("approved.txt"))?,
         "owner-approved"
     );
+    // Full access runs unasked only in a turn its owner started.
+    session.public.permission_mode = "full_access".to_owned();
+    let owner_turn = ProviderTurnRequest {
+        owner_started: true,
+        ..request.clone()
+    };
+    tools
+        .execute(
+            &session,
+            &owner_turn,
+            "write_workspace_file",
+            r#"{"path":"full.txt","content":"owner turn"}"#,
+            &mut false,
+        )
+        .await
+        .map_err(|_| "owner-started full-access write")?;
+    assert!(commands.try_recv().is_err());
+    let mut asked_uncertain = false;
+    let other_turn = tools.execute(
+        &session,
+        &request,
+        "write_workspace_file",
+        r#"{"path":"full-other.txt","content":"someone else's turn"}"#,
+        &mut asked_uncertain,
+    );
+    let asked = async { commands.recv().await.is_some() };
+    let (other_turn, asked) = tokio::join!(other_turn, asked);
+    assert!(asked && other_turn.is_err());
+    assert!(!directory.path().join("full-other.txt").exists());
     session.public.permission_mode = "meeting_read_only".to_owned();
     assert!(
         tools
@@ -263,6 +293,7 @@ async fn file_result_budget_preserves_unicode_and_escaped_partial_results()
             .map_err(|_| "workspace")?;
     let request = ProviderTurnRequest {
         context_tokens: None,
+        owner_started: false,
         session_instructions: None,
         request_ingress: None,
         turn_id: "turn".to_owned(),

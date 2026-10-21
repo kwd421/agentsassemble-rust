@@ -96,7 +96,7 @@ fn ready(
                 "thinking",
             ),
             remote_output_token_control(),
-            permission_control(true, false),
+            permission_control(true, true),
         ],
     )
 }
@@ -184,8 +184,8 @@ mod tests {
             assert!(!updated[0].metadata.contains_key(key));
         }
         // A documented model carries its window from DeepSeek's models table.
-        let documented = model_options(payload(&["deepseek-flash"]))
-            .unwrap_or_else(|error| panic!("{error:?}"));
+        let documented =
+            model_options(payload(&["deepseek-flash"])).unwrap_or_else(|error| panic!("{error:?}"));
         assert_eq!(documented[0].metadata["context_length"], json!(1_000_000));
         assert!(model_options(payload(&["duplicate", "duplicate"])).is_err());
         assert!(model_options(payload(&["bad\nidentifier"])).is_err());

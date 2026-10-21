@@ -30,6 +30,8 @@ pub struct AgentTurnAssignment {
     pub attachment_ids: Vec<String>,
     pub room_agent_ids: Vec<String>,
     pub tabletop_tools: bool,
+    /// Every message this turn answers came from the agent's owner.
+    pub owner_started: bool,
 }
 
 #[derive(Debug, Clone)]
