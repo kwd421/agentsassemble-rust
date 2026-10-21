@@ -1,4 +1,4 @@
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMemberHosts } from "./useMemberHosts";
 import { saveMemberAnchor } from "../lib/central/memberAnchors";
@@ -97,15 +97,12 @@ describe("useMemberHosts startup abort", () => {
     vi.clearAllMocks();
   });
 
-  it("mount -> immediate identity flap spends exactly one connect grant", async () => {
+  it("mount -> immediate identity flap spends no central, and 다시 연결 spends exactly one grant", async () => {
     // StrictMode-like: the first reconcile's attach flight is aborted by the
-    // identityKey effect cleanup (dev double-effects, or a quick identity
-    // flap in production) while its attach still runs. The aborted flight
-    // must not spend central after abort and must never delete or overwrite
-    // the newer flight's bookkeeping.
+    // identityKey effect cleanup while its attach still runs. Automatic
+    // attaches never spend central (owner decision 2026-10-21): the probe miss
+    // leaves the host disconnected until the person asks to reconnect.
     const directory = directoryFor();
-    // A saved anchor forces the attach through the async probe first, so the
-    // flap below aborts the first flight before its central preview is sent.
     saveMemberAnchor("person", {
       server_id: "friend",
       registration_epoch: "epoch",
@@ -122,9 +119,13 @@ describe("useMemberHosts startup abort", () => {
       { initialProps: { sessionToken: "token-1" } },
     );
     rerender({ sessionToken: "token-2" });
+    await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("disconnected"), { timeout: 5000 });
+    expect(counters.previews).toBe(0);
+    expect(counters.grants).toBe(0);
+    // The person's own retry runs the central path once: one preview, one
+    // transport open, one connect grant and one live admission.
+    act(() => result.current.retryHost("friend"));
     await waitFor(() => expect(result.current.snapshots[0]?.phase).toBe("connected"), { timeout: 5000 });
-    // Exactly one preview, one transport open, one connect grant and one
-    // live admission: the aborted flight spends nothing after abort.
     expect(counters.previews).toBe(1);
     expect(counters.opens).toBe(1);
     expect(counters.grants).toBe(1);

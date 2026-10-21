@@ -47,6 +47,9 @@ export const MEMBER_HOST_RECONNECT_SLOW_STEADY_MAX_MS = 3_600_000;
 // cap the host parks until the next 00:00 UTC (or an explicit user action:
 // 다시 연결 / opening the room).
 export const MEMBER_HOST_OFFLINE_DAILY_PREVIEW_CAP = 8;
+// Automatic reconnects never call central (owner decision 2026-10-21): they
+// try the stored address and this device's resume key directly on this ladder.
+export const MEMBER_HOST_DIRECT_RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 300_000];
 // Unsigned origin probe budget before any preview: short enough to keep the
 // slow schedule responsive, long enough for a public tunnel origin.
 export const MEMBER_HOST_ORIGIN_PROBE_TIMEOUT_MS = 5_000;
@@ -71,7 +74,7 @@ export function memberHostLiveLossFastDelay(random: () => number = Math.random):
 export const MEMBER_HOST_RECONNECT_RATE_LIMIT_MS = 300_000;
 export const MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS = 600_000;
 
-export type MemberHostReconnectCause = "offline" | "rate_limited" | "transient";
+export type MemberHostReconnectCause = "offline" | "rate_limited" | "transient" | "direct";
 
 // 409 incarnation_conflict is the host being offline (central revoked its
 // endpoint row or the epoch moved on); 429 is central asking for quiet.
@@ -84,6 +87,8 @@ export function memberHostReconnectCause(error: unknown): MemberHostReconnectCau
   const code = (error as { code?: unknown } | null)?.code;
   if (status === 429) return "rate_limited";
   if (status === 409 && code === "incarnation_conflict") return "offline";
+  // An automatic attempt that stopped before spending central.
+  if ((error as { name?: unknown } | null)?.name === "MemberCentralRequiredError") return "direct";
   return "transient";
 }
 
@@ -110,6 +115,12 @@ export function memberHostReconnectDelay(
     // below it. Without a header, rest a long default with jitter.
     if (retryAfterMs !== null) return Math.min(Math.max(Math.ceil(retryAfterMs), 1_000), MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS);
     return withJitter(MEMBER_HOST_RECONNECT_RATE_LIMIT_MS, MEMBER_HOST_RECONNECT_RATE_LIMIT_MAX_MS, random);
+  }
+  if (cause === "direct") {
+    // Direct-only retries cost no central; they still back off so a friend's
+    // closed app is checked every few minutes, not every few seconds.
+    const delay = MEMBER_HOST_DIRECT_RETRY_DELAYS_MS[Math.min(step, MEMBER_HOST_DIRECT_RETRY_DELAYS_MS.length - 1)];
+    return withJitter(delay, 360_000, random);
   }
   if (cause === "offline") {
     if (step < MEMBER_HOST_RECONNECT_SLOW_DELAYS_MS.length) {

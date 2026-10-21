@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError } from "./memberAutoAttach";
+import { attachMemberHost, detachMemberHost, MemberAnchorMismatchError, MemberCentralRequiredError } from "./memberAutoAttach";
 import { loadMemberAnchor, saveMemberAnchor } from "./memberAnchors";
 
 const server = { server_id: "server", registration_epoch: "epoch" };
@@ -121,5 +121,33 @@ describe("member auto-attach", () => {
     await attachMemberHost(server, "central-token", "person", new AbortController().signal, deps as never);
     expect(loadMemberAnchor("person", "server")?.hidden).toBe(true);
     expect(loadMemberAnchor("person", "server")?.rooms).toEqual(rooms);
+  });
+
+  it("an automatic attach never spends central: a probe miss stops before the preview", async () => {
+    saveMemberAnchor("person", {
+      server_id: "server", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://host.test", endpoint_generation: 3, rooms, hidden: false, updated_at: 1,
+    });
+    const { deps } = depsWith({});
+    await expect(attachMemberHost(server, "central-token", "person", new AbortController().signal,
+      { ...deps, probe: vi.fn().mockResolvedValue(null) } as never, { central: false }))
+      .rejects.toBeInstanceOf(MemberCentralRequiredError);
+    expect(deps.preview).not.toHaveBeenCalled();
+    expect(deps.open).not.toHaveBeenCalled();
+  });
+
+  it("an automatic attach that cannot resume closes the channel instead of taking a connect grant", async () => {
+    saveMemberAnchor("person", {
+      server_id: "server", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://host.test", endpoint_generation: 3, rooms, hidden: false, updated_at: 1,
+    });
+    const { close, deps } = depsWith({});
+    const probe = vi.fn().mockResolvedValue({ host_key_fingerprint: "fingerprint", host_public_key_jwk: {} });
+    await expect(attachMemberHost(server, "central-token", "person", new AbortController().signal,
+      { ...deps, probe } as never, { central: false })).rejects.toBeInstanceOf(MemberCentralRequiredError);
+    const admission = await deps.open.mock.results[0].value;
+    expect(admission.admit).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
+    expect(deps.preview).not.toHaveBeenCalled();
   });
 });

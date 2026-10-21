@@ -7,6 +7,19 @@ import { probeMemberHostOrigin, type MemberHostOriginProbeResult } from "./membe
 // the preview both raise it.
 export { MemberAnchorMismatchError };
 
+/**
+ * An automatic re-entry that would need central (no stored origin, the host
+ * did not answer there, or this device cannot resume) stops here instead of
+ * spending the account's daily allowance; the person's own 다시 연결 or room
+ * open runs the central path.
+ */
+export class MemberCentralRequiredError extends Error {
+  constructor() {
+    super("다시 연결을 눌러 주세요.");
+    this.name = "MemberCentralRequiredError";
+  }
+}
+
 export type MemberAttachDeps = {
   preview: (entry: SecureMemberEntry, signal?: AbortSignal) => ReturnType<typeof previewSecureMember>;
   open: (entry: SecureMemberEntry, target: Parameters<typeof SecureMemberAdmission.open>[1], sessionToken: string, signal: AbortSignal) => Promise<SecureMemberAdmission>;
@@ -39,7 +52,9 @@ export async function attachMemberHost(
   personId: string,
   signal: AbortSignal,
   deps: MemberAttachDeps = liveDeps,
+  options: { central?: boolean } = {},
 ): Promise<{ admission: SecureMemberAdmission; rooms: { room_id: string; name: string }[]; anchor: MemberHostAnchor }> {
+  const central = options.central ?? true;
   if (!server.registration_epoch) throw new Error("서버 등록 정보를 확인하지 못했어요.");
   const stored = loadMemberAnchor(personId, server.server_id);
   if (stored && (stored.registration_epoch !== server.registration_epoch)) {
@@ -77,6 +92,7 @@ export async function attachMemberHost(
       // same channel. A host that cannot resume it, an expired key or an
       // unknown key falls back to the central grant on the same channel.
       const direct = await resumedRooms(admission, signal);
+      if (!direct && !central) throw new MemberCentralRequiredError();
       // The connect grant below spends central: an aborted flight never
       // reaches it.
       signal.throwIfAborted();
@@ -101,8 +117,10 @@ export async function attachMemberHost(
       // probe and open lands on the same preview path as a probe miss.
       if (signal.aborted) throw error;
       detachMemberHost(admission);
+      if (error instanceof MemberCentralRequiredError) throw error;
     }
   }
+  if (!central) throw new MemberCentralRequiredError();
   // The select deadline owns this signal: a hung central preview aborts with
   // the select instead of stranding the rail selection forever.
   // An already-aborted flight never spends central: StrictMode remount (or an

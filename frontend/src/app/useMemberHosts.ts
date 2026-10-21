@@ -178,6 +178,9 @@ export function useMemberHosts({
   }, [clearReconnectTimer]);
 
   const reattachHostRef = useRef<(serverId: string) => void>(() => undefined);
+  // Hosts the person asked to reconnect (다시 연결): only that attempt may
+  // spend central; automatic ones stay direct-only.
+  const manualIntent = useRef(new Set<string>());
   const confirmedLossRef = useRef(onConfirmedMembershipLost);
   confirmedLossRef.current = onConfirmedMembershipLost;
 
@@ -261,7 +264,7 @@ export function useMemberHosts({
     reconnectTimers.current.set(serverId, window.setTimeout(fire, delay));
   }, [clearReconnectTimer]);
 
-  const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal, options?: { internal?: boolean }) => {
+  const attach = useCallback(async (serverId: string, epoch: string, origin: string, signal?: AbortSignal, options?: { internal?: boolean; central?: boolean }) => {
     const { personId: activePerson, sessionToken: activeToken } = identityRef.current;
     if (!activePerson || !activeToken || flights.current.has(serverId) || signal?.aborted) return;
     const controller = new AbortController();
@@ -269,10 +272,11 @@ export function useMemberHosts({
     signal?.addEventListener("abort", onAbort, { once: true });
     flights.current.set(serverId, controller);
     const previousAnchor = loadMemberAnchor(activePerson, serverId);
+    const central = options?.central ?? manualIntent.current.delete(serverId);
     setPhase(serverId, "connecting", previousAnchor?.rooms ?? null, origin, null);
     try {
       const attached = await attachMemberHost({ server_id: serverId, registration_epoch: epoch },
-        activeToken, activePerson, controller.signal);
+        activeToken, activePerson, controller.signal, undefined, { central });
       // An aborted (StrictMode cleanup, identity flap, timed-out select)
       // flight must never land: it closes its admission instead of spending
       // another central request or clobbering a newer flight. Late completion
@@ -785,6 +789,7 @@ export function useMemberHosts({
     reconnectAttempts.current.delete(serverId);
     reconnectCauses.current.delete(serverId);
     reconnectRetryAfter.current.delete(serverId);
+    manualIntent.current.add(serverId);
     reattachHost(serverId);
   }, [reattachHost]);
   reattachHostRef.current = reattachHost;
@@ -848,7 +853,7 @@ export function useMemberHosts({
       // Internal re-attach for this tap only: it must not bump the external
       // host generation, or the fresh admission would retrigger the automatic
       // re-select into an unbounded grant-burning loop.
-      await attach(serverId, tuple.epoch, anchorOrigin() || tuple.origin, timeout.signal, { internal: true });
+      await attach(serverId, tuple.epoch, anchorOrigin() || tuple.origin, timeout.signal, { internal: true, central: true });
       markAttempted();
       return admissions.current.get(serverId);
     };
@@ -887,7 +892,7 @@ export function useMemberHosts({
             try {
               attempted.current.delete(serverId);
               await attach(serverId, refreshTuple.epoch,
-                anchorOrigin() || refreshTuple.origin, timeout.signal, { internal: true });
+                anchorOrigin() || refreshTuple.origin, timeout.signal, { internal: true, central: true });
               markAttempted();
             } catch {
               // The refresh is best-effort; the original refusal below is
