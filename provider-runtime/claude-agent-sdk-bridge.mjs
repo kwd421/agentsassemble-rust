@@ -288,7 +288,9 @@ async function session(sdk, claudePath, command, commands) {
   let hasCompletedTurn = false;
   let instructions;
   let current;
-  const fail = () => {
+  const fail = (reason = "owner request custody failed") => {
+    // The reason reaches the owner's error details through stderr; never secrets.
+    console.error(`[bridge] ${reason}`);
     state.failed = true;
     emitFatal("claude_sdk_request_failed").catch(() => {});
     process.stdin.destroy();
@@ -316,7 +318,7 @@ async function session(sdk, claudePath, command, commands) {
         if (state.failed || state.shuttingDown || !state.active?.initialized ||
             input.hook_event_name !== "Stop" || input.session_id !== state.id ||
             input.agent_id !== undefined || input.effort?.level !== state.effort) {
-          fail();
+          fail(`invalid SDK applied effort receipt (agent ${input.agent_id ?? "main"}, effort ${input.effort?.level ?? "none"})`);
           throw new Error("invalid SDK applied effort receipt");
         }
         state.active.effortVerified = true;
@@ -335,7 +337,20 @@ async function session(sdk, claudePath, command, commands) {
           state.active.initialized = true;
         } else if (message?.type === "result") {
           const active = state.active;
-          if (!validResult(message, active, state)) throw new Error("invalid SDK result");
+          if (message.is_error === true) {
+            // Claude answered with an error (signed out, quota, outage): say
+            // which, so the owner sees "log in again" rather than a format error.
+            const text = typeof message.result === "string" ? message.result.slice(0, 300) : "";
+            console.error(`[bridge] Claude API error: ${text}`);
+            await emitFatal(/\b401\b|authenticat/i.test(text) ? "claude_auth_failed" : "claude_api_failed")
+              .catch(() => {});
+            throw new Error("Claude API error");
+          }
+          if (!validResult(message, active, state)) {
+            throw new Error(`invalid SDK result (subtype ${message.subtype}, terminal ${message.terminal_reason}, ` +
+              `error ${message.is_error}, models ${Object.keys(message.modelUsage ?? {}).join("+")}, ` +
+              `effort ${active?.effortVerified === true}, queued ${message.queued_turn_count ?? 0})`);
+          }
           active.closing = true;
           await requests.finishTurn();
           if (state.failed || state.shuttingDown) throw new Error("request custody ended");
@@ -351,8 +366,9 @@ async function session(sdk, claudePath, command, commands) {
         }
       }
       if (!state.shuttingDown && !closing) throw new Error("SDK stream ended");
-    })().catch(async () => {
+    })().catch(async (error) => {
       if (closing) return;
+      console.error(`[bridge] ${error?.message ?? "SDK reader failed"}`);
       state.failed = true;
       await emitFatal("claude_sdk_protocol_failed").catch(() => {});
       process.stdin.destroy();
@@ -427,7 +443,8 @@ async function main() {
   await session(sdk, claudePath, command, commands);
 }
 
-main().catch(async () => {
+main().catch(async (error) => {
+  console.error(`[bridge] ${error?.message ?? "bridge failed"}`);
   process.stdin.destroy();
   await emitFatal("claude_sdk_bridge_failed").catch(() => {});
   process.exitCode = 1;

@@ -127,6 +127,9 @@ function sessionErrorText(session: RoomAgentSession): { summary: string; detail:
   if (session.last_error_code === "provider_context_limit") {
     return { summary: "AI에게 보낼 대화 내용이 너무 커요. 다시 시도해 주세요.", detail: "" };
   }
+  if (session.last_error_code === "provider_login_required") {
+    return { summary: "AI 서비스 로그인이 풀렸어요. 다시 로그인한 뒤 중지하고 재개해 주세요.", detail: "" };
+  }
   if (session.last_error_code === "provider_credential_rejected") {
     return { summary: "AI 서비스가 API 키를 거절했어요. 키를 다시 확인해 주세요.", detail: "" };
   }

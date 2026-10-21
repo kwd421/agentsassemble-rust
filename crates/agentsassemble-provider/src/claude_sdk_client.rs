@@ -207,9 +207,17 @@ where
             return self.poison(protocol_error());
         };
         if let HostMessage::Fatal { code } = &message {
-            let _ = code;
             self.poisoned = true;
-            return Err(protocol_error());
+            return Err(match code.as_str() {
+                "claude_auth_failed" => {
+                    DriverError::new("provider_login_required", "Claude Code is not signed in.")
+                }
+                "claude_api_failed" => DriverError::new(
+                    "provider_api_unavailable",
+                    "Claude could not process the request.",
+                ),
+                _ => protocol_error(),
+            });
         }
         Ok(message)
     }

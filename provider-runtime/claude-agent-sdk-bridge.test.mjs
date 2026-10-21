@@ -186,6 +186,26 @@ for (const receipt of ["missing", "mismatch", "foreign"]) {
   });
 }
 
+for (const [apiError, code] of [
+  ["Failed to authenticate. API Error: 401 Invalid bearer token", "claude_auth_failed"],
+  ["API Error: 529 Overloaded", "claude_api_failed"],
+]) {
+  test(`session reports a Claude API error as ${code}`, async () => {
+    const runtime = start("session", undefined, undefined, undefined, { AA_FAKE_API_ERROR: apiError });
+    const exit = closed(runtime.child);
+    runtime.child.stdin.write(`${JSON.stringify({
+      type: "initialize", workspace: "/fixture/workspace", model: "claude-sonnet-5",
+      reasoning_effort: "high", service_tier: "default", permission_mode: "meeting_read_only",
+      resume_session_id: "",
+      room_portal: { url: "http://127.0.0.1:43210/mcp", bearer_token: "fixture-token" },
+    })}\n`);
+    assert.equal((await runtime.next()).type, "ready");
+    runtime.child.stdin.write(`${JSON.stringify({ type: "turn", turn_id: "turn-1", input: "hello" })}\n`);
+    assert.deepEqual(await runtime.next(), { type: "fatal", code });
+    assert.equal(await exit, 1);
+  });
+}
+
 test("persistent append reaches fresh, reused, changed-card and restarted queries", async () => {
   let id = "";
   for (const restart of [false, true]) {

@@ -89,6 +89,19 @@ async fn check_authentication(
     authentication_status(output.status.code(), &output.stdout)
 }
 
+/// Discovery is cached, and a login can expire after it: an agent start asks
+/// again, so a signed-out Claude fails here with a clear reason instead of on
+/// its first turn. A status that cannot be read does not block the start.
+pub(crate) async fn require_login(executable: &str) -> Result<(), DriverError> {
+    match check_authentication(executable, &CancellationToken::new()).await {
+        Err(ProbeFailure::Authentication) => Err(DriverError::new(
+            "provider_login_required",
+            "Claude Code is not signed in.",
+        )),
+        _ => Ok(()),
+    }
+}
+
 fn authentication_status(code: Option<i32>, output: &[u8]) -> Result<(), ProbeFailure> {
     #[derive(Deserialize)]
     struct Status {

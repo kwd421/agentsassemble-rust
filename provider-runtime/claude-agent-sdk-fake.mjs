@@ -107,6 +107,14 @@ class FakeQuery {
           }
         }
       }
+      if (process.env.AA_FAKE_API_ERROR) {
+        yield {
+          type: "result", subtype: "success", is_error: true, terminal_reason: "api_error",
+          uuid: "sdk-result-id", session_id: session, user_message_uuid: input.uuid,
+          result: process.env.AA_FAKE_API_ERROR, modelUsage: {},
+        };
+        return;
+      }
       yield {
         type: "result",
         subtype: "success",

@@ -730,6 +730,8 @@ fn launch_claude<'a>(
     #[cfg(not(any(unix, windows)))]
     let _ = (factory, session);
     Box::pin(async move {
+        #[cfg(any(unix, windows))]
+        crate::claude::require_login(&session.executable).await?;
         #[cfg(unix)]
         let driver =
             ClaudeAgentSdkDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
