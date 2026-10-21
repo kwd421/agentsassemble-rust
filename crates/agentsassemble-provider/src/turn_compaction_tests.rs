@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::{cut_point, fold, summary_request, threshold, used_tokens};
+use super::{bounded_summary, cut_point, fold, summary_request, threshold, used_tokens};
 
 fn round(index: usize, output: &str) -> [Value; 2] {
     [
@@ -72,5 +72,24 @@ fn folding_keeps_rules_input_and_whole_recent_rounds() {
 #[test]
 fn a_single_round_has_nothing_older_to_fold() {
     let messages = turn(1, &"x".repeat(200_000));
+    assert_eq!(cut_point(&messages, 2, 100_000), None);
+}
+
+#[test]
+fn a_long_summary_is_kept_from_its_start_and_an_empty_one_is_refused() {
+    let long = format!("goal{}", "x".repeat(20_000));
+    let kept = bounded_summary(&long).unwrap_or_default();
+    assert_eq!(kept.chars().count(), 12_000);
+    assert!(kept.starts_with("goal"));
+    assert_eq!(bounded_summary("  \n "), None);
+}
+
+#[test]
+fn an_earlier_summary_alone_is_not_folded_again() {
+    let mut messages = turn(1, &"x".repeat(200_000));
+    messages.insert(
+        2,
+        json!({"role": "user", "content": "Summary of the earlier work"}),
+    );
     assert_eq!(cut_point(&messages, 2, 100_000), None);
 }

@@ -58,7 +58,9 @@ pub(crate) fn cut_point(messages: &[Value], opening: usize, threshold: u64) -> O
         kept += size;
         cut = start;
     }
-    (cut > opening).then_some(cut)
+    // Folding must take at least one round; refolding a lone earlier summary
+    // would spend a model call without freeing room.
+    (starts[0] < cut).then_some(cut)
 }
 
 /// The request that asks the model for a summary of `messages[opening..cut]`.
@@ -94,6 +96,14 @@ pub(crate) fn summary_request(messages: &[Value], opening: usize, cut: usize) ->
         json!({"role": "system", "content": SUMMARY_INSTRUCTIONS}),
         json!({"role": "user", "content": format!("Task:\n{task}\n\nWork so far:\n{work}")}),
     ]
+}
+
+/// At most this much of a summary is kept, from its start.
+const MAX_SUMMARY_CHARACTERS: usize = 12_000;
+
+pub(crate) fn bounded_summary(content: &str) -> Option<String> {
+    let summary = content.trim();
+    (!summary.is_empty()).then(|| summary.chars().take(MAX_SUMMARY_CHARACTERS).collect())
 }
 
 /// Replaces `messages[opening..cut]` with the model's summary of them.

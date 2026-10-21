@@ -366,18 +366,22 @@ impl RemoteOpenAiDriver {
             .api
             .complete(session, credential, &summary_request, None, false)
             .await?;
-        validate_completion(&response, &session.public.model, self.spec)?;
-        let summary = response
-            .message
-            .content
-            .as_deref()
-            .and_then(canonical_content)
-            .ok_or_else(|| {
-                provider_error(
-                    "provider_protocol_invalid",
-                    self.spec.errors.invalid_response,
-                )
-            })?;
+        // A long or length-cut summary still serves; only a wrong model, a tool
+        // call or an empty reply fails the turn.
+        let wrong_model = self.spec.response_model == ResponseModelIdentity::Requested
+            && response.model != session.public.model;
+        let summary = (!wrong_model
+            && response.message.tool_calls.is_empty()
+            && matches!(response.finish_reason.as_str(), "stop" | "length"))
+        .then(|| response.message.content.as_deref())
+        .flatten()
+        .and_then(turn_compaction::bounded_summary)
+        .ok_or_else(|| {
+            provider_error(
+                "provider_protocol_invalid",
+                self.spec.errors.invalid_response,
+            )
+        })?;
         turn_compaction::fold(messages, opening, cut, &summary);
         Ok(true)
     }
