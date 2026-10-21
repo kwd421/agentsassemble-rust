@@ -447,3 +447,95 @@ async fn a_reply_calls_its_author_only_with_reply_mention() -> Result<(), Box<dy
     );
     Ok(())
 }
+
+/// A memory fold is stored once, never overlaps an earlier piece, and goes
+/// away with any message it summarized.
+#[tokio::test]
+async fn a_memory_fold_is_stored_once_and_forgotten_with_its_messages()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, _owner, _directory) = fixture().await;
+    let session = stored_session(&store).await;
+    let (room, id) = (
+        session.public.room_id.clone(),
+        session.public.session_id.clone(),
+    );
+    let mut tx = store.pool.begin().await?;
+    assert!(crate::agent_memory::store(&mut tx, &room, &id, (5, 20), "등대 이야기", 1).await?);
+    assert!(!crate::agent_memory::store(&mut tx, &room, &id, (5, 20), "again", 2).await?);
+    assert!(!crate::agent_memory::store(&mut tx, &room, &id, (15, 30), "overlap", 3).await?);
+    assert!(crate::agent_memory::store(&mut tx, &room, &id, (21, 30), "next", 4).await?);
+    crate::agent_memory::forget_message(&mut tx, &room, 25).await?;
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_memory_pieces")
+        .fetch_one(&mut *tx)
+        .await?;
+    assert_eq!(left, 1);
+    tx.commit().await?;
+    // The owner's delete empties the piece, and its messages stay unfolded.
+    assert!(store.delete_agent_memory(&room, &id, 5).await?);
+    assert!(store.agent_memory(&room, &id).await?.is_empty());
+    assert!(
+        !store
+            .store_agent_memory(&room, &id, (5, 20), "again")
+            .await?
+    );
+    Ok(())
+}
+
+/// An API agent's turn carries a fold once ten older messages wait, and
+/// related memory and pinned messages ride along.
+#[tokio::test]
+async fn an_api_agent_turn_folds_older_messages_and_carries_related_memory()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, owner, _directory) = fixture().await;
+    let mut session = stored_session(&store).await;
+    session.public.enabled = false;
+    session.public.status = agentsassemble_domain::AgentSessionStatus::Unavailable;
+    session.public.runtime_status = agentsassemble_domain::AgentRuntimeStatus::Stopped;
+    session.public.provider_session_active = false;
+    session.public.runtime_kind = "api".to_owned();
+    session.public.execution_harness = "builtin".to_owned();
+    save_stored_session(&store, &session).await;
+    let mut seqs = Vec::new();
+    for index in 0..15 {
+        let sent = store
+            .execute_message_with_turn(
+                &owner,
+                &format!("note-{index}"),
+                "message.send",
+                &json!({"content": format!("등대 기록 {index}")}),
+            )
+            .await?;
+        seqs.push(sent.outcome.event.seq);
+    }
+    let session = stored_session(&store).await;
+    let (room, id) = (
+        session.public.room_id.clone(),
+        session.public.session_id.clone(),
+    );
+    let mut tx = store.pool.begin().await?;
+    // The newest three are on screen; the twelve before them are due.
+    let memory = crate::agent_memory::prepare(&mut tx, &room, &session, seqs[12], "등대")
+        .await?
+        .ok_or("memory")?;
+    let fold = memory.fold.ok_or("fold")?;
+    assert_eq!((fold.from_seq, fold.to_seq), (seqs[0], seqs[11]));
+    assert!(fold.text.contains("등대 기록 0") && !fold.text.contains("등대 기록 12"));
+    crate::agent_memory::store(
+        &mut tx,
+        &room,
+        &id,
+        (fold.from_seq, fold.to_seq),
+        "등대지기와 나눈 기록",
+        1,
+    )
+    .await?;
+    let memory = crate::agent_memory::prepare(&mut tx, &room, &session, seqs[12], "등대지기")
+        .await?
+        .ok_or("memory")?;
+    assert!(
+        memory.fold.is_none(),
+        "the covered messages are not folded again"
+    );
+    assert!(memory.context.contains("등대지기와 나눈 기록"));
+    Ok(())
+}

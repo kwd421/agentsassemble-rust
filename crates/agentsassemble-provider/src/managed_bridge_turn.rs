@@ -17,6 +17,8 @@ pub(super) struct TurnInput {
     pub(super) context_tokens: Option<u64>,
     #[serde(default)]
     pub(super) owner_started: bool,
+    #[serde(default)]
+    pub(super) memory: Option<crate::driver::ProviderTurnMemory>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -37,6 +39,7 @@ impl TurnInput {
         ProviderTurnRequest {
             context_tokens: self.context_tokens,
             owner_started: self.owner_started,
+            memory: self.memory,
             request_ingress: self.requests.then(|| relay.requests.clone()),
             turn_id: self.turn_id,
             turn_generation: self.turn_generation,
@@ -68,6 +71,7 @@ impl From<&ProviderTurnRequest> for TurnInput {
             requests: request.request_ingress.is_some(),
             context_tokens: request.context_tokens,
             owner_started: request.owner_started,
+            memory: request.memory.clone(),
             observation: request
                 .room_observation
                 .as_ref()
@@ -90,12 +94,17 @@ mod tests {
     use super::TurnInput;
     use crate::driver::ProviderTurnRequest;
 
-    /// The window and the owner-started flag survive the pipe to the child.
+    /// The window, the owner-started flag and memory survive the pipe.
     #[test]
     fn the_child_receives_the_window_and_owner_started() {
+        let memory = crate::driver::ProviderTurnMemory {
+            context: "Pinned messages".to_owned(),
+            fold: Some("#3 A: hello".to_owned()),
+        };
         let request = ProviderTurnRequest {
             context_tokens: Some(131_072),
             owner_started: true,
+            memory: Some(memory.clone()),
             request_ingress: None,
             turn_id: "turn".to_owned(),
             turn_generation: 1,
@@ -110,5 +119,6 @@ mod tests {
             serde_json::from_str(&encoded).unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(decoded.context_tokens, Some(131_072));
         assert!(decoded.owner_started);
+        assert_eq!(decoded.memory, Some(memory));
     }
 }

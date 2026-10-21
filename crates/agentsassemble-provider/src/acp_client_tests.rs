@@ -638,6 +638,7 @@ fn turn(id: &str, input: &str, observed: bool) -> crate::driver::ProviderTurnReq
     crate::driver::ProviderTurnRequest {
         context_tokens: None,
         owner_started: false,
+        memory: None,
         session_instructions: None,
         turn_id: id.to_owned(),
         turn_generation: 7,

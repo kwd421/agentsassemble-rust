@@ -191,6 +191,7 @@ async fn completed_turn_remains_exactly_owned_until_durable_terminal_release() {
     let request = ProviderTurnRequest {
         context_tokens: None,
         owner_started: false,
+        memory: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
@@ -252,6 +253,7 @@ async fn post_io_panic_returns_driver_before_stopping_the_exact_runtime() {
     let request = ProviderTurnRequest {
         context_tokens: None,
         owner_started: false,
+        memory: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "panic-room-turn".to_owned(),
@@ -304,6 +306,7 @@ async fn definitive_driver_failure_does_not_quarantine_or_discard_the_runtime() 
     let request = ProviderTurnRequest {
         context_tokens: None,
         owner_started: false,
+        memory: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "definitive-room-turn".to_owned(),
@@ -345,6 +348,7 @@ async fn failed_observation_abort_stops_instead_of_reusing_the_runtime() {
     let request = ProviderTurnRequest {
         context_tokens: None,
         owner_started: false,
+        memory: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "abort-failure-room-turn".to_owned(),
@@ -400,6 +404,7 @@ async fn driver_without_retained_interrupt_capability_is_rejected_before_control
     let request = ProviderTurnRequest {
         context_tokens: None,
         owner_started: false,
+        memory: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "capability-room-turn".to_owned(),
@@ -478,6 +483,7 @@ async fn exact_control_freezes_provider_entry_before_durable_interrupt_wait() {
     let request = ProviderTurnRequest {
         context_tokens: None,
         owner_started: false,
+        memory: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),

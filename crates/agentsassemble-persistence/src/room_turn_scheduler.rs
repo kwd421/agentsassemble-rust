@@ -652,6 +652,7 @@ async fn prepare_assignment(
         room_agent_ids: prepared_input.room_agent_ids,
         tabletop_tools: settings.tool_mode == "tabletop",
         owner_started: prepared_input.owner_started,
+        memory: prepared_input.memory,
     };
     let execution = crate::provider_turn_execution::insert_assigned_execution(
         transaction,
@@ -677,6 +678,7 @@ async fn prepare_assignment(
             room_agent_ids: assignment_envelope.room_agent_ids,
             tabletop_tools: assignment_envelope.tabletop_tools,
             owner_started: assignment_envelope.owner_started,
+            memory: assignment_envelope.memory,
         },
         events: vec![started, state, session_event],
     })

@@ -98,6 +98,31 @@ pub(crate) fn summary_request(messages: &[Value], opening: usize, cut: usize) ->
     ]
 }
 
+const MEMORY_INSTRUCTIONS: &str = "You keep memory for a participant of a group chat who will no longer see these messages. Summarize them so the participant can continue naturally: who said what, decisions, promises, facts, names, numbers and open questions. Write in the language of the conversation, at most about 1,500 characters, with no commentary.";
+
+/// The request that turns older room messages into one memory piece.
+pub(crate) fn memory_request(fold: &str) -> Vec<Value> {
+    vec![
+        json!({"role": "system", "content": MEMORY_INSTRUCTIONS}),
+        json!({"role": "user", "content": fold}),
+    ]
+}
+
+/// Memory as the room rules' last part: what the room provided plus the piece
+/// written this turn, which the room shows from the next turn on.
+pub(crate) fn memory_context(context: &str, new_piece: Option<&str>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !context.trim().is_empty() {
+        parts.push(context.to_owned());
+    }
+    if let Some(piece) = new_piece {
+        parts.push(format!(
+            "Memory of the messages just before what you see:\n- {piece}"
+        ));
+    }
+    parts.join("\n\n")
+}
+
 /// At most this much of a summary is kept, from its start.
 const MAX_SUMMARY_CHARACTERS: usize = 12_000;
 

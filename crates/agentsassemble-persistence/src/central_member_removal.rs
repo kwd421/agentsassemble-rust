@@ -120,7 +120,8 @@ impl SqliteStore {
             .bind(&principal.request_id).execute(&mut *tx).await?;
         // The fence and the direct reconnect credential die together: a removed
         // person keeps no resume key on this host.
-        crate::member_resume::delete_for_person(&mut tx, &principal.issuer, &principal.person_id).await?;
+        crate::member_resume::delete_for_person(&mut tx, &principal.issuer, &principal.person_id)
+            .await?;
         tx.commit().await?;
         self.notify_room_directory_changed();
         Ok(MemberRemovalKey {
@@ -140,7 +141,7 @@ pub(crate) async fn require_schema(
     // v88/v89 add companion provenance and mention delivery; removal retains the v87 protocol.
     if !matches!(
         version.as_str(),
-        "87" | "88" | "89" | "90" | "91" | "92" | "93" | "94" | "95" | "96" | "97"
+        "87" | "88" | "89" | "90" | "91" | "92" | "93" | "94" | "95" | "96" | "97" | "98"
     ) {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }
@@ -229,7 +230,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             .await?;
     } else if !matches!(
         version.as_str(),
-        "87" | "88" | "89" | "90" | "91" | "92" | "93" | "94" | "95" | "96" | "97"
+        "87" | "88" | "89" | "90" | "91" | "92" | "93" | "94" | "95" | "96" | "97" | "98"
     ) {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }

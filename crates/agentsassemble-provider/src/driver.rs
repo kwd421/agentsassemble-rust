@@ -129,6 +129,17 @@ pub struct ProviderTurnRequest {
     /// Every message this turn answers came from the agent's owner; full
     /// access runs without asking only then.
     pub owner_started: bool,
+    /// Memory for an API agent on the built-in harness.
+    pub memory: Option<ProviderTurnMemory>,
+}
+
+/// Pinned messages and related memory to show, and older messages to fold
+/// into a new memory piece this turn.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ProviderTurnMemory {
+    pub context: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fold: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,4 +160,7 @@ pub struct ProviderTurnCompleted {
     pub provider_turn_id: String,
     pub provider_session_id: Option<String>,
     pub outcome: ProviderTurnOutcome,
+    /// The summary of this turn's memory fold, when the harness wrote one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_summary: Option<String>,
 }

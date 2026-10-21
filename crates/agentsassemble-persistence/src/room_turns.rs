@@ -32,6 +32,8 @@ pub struct AgentTurnAssignment {
     pub tabletop_tools: bool,
     /// Every message this turn answers came from the agent's owner.
     pub owner_started: bool,
+    /// Pinned messages, related memory and any fold due this turn.
+    pub memory: Option<crate::agent_memory::TurnMemoryInput>,
 }
 
 #[derive(Debug, Clone)]

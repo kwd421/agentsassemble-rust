@@ -341,6 +341,7 @@ impl ProviderDriver for ClaudeAgentSdkDriver {
                 return Err(protocol_error());
             }
             Ok(ProviderTurnCompleted {
+                memory_summary: None,
                 turn_id: request.turn_id.clone(),
                 provider_turn_id: turn.provider_turn_id,
                 provider_session_id: Some(turn.session_id),

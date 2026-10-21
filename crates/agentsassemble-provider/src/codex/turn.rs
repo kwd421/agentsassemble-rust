@@ -591,6 +591,7 @@ fn finish_turn(driver: &mut CodexDriver) -> Result<ProviderTurnCompleted, Driver
         return poison(driver, output_missing());
     }
     let outcome = ProviderTurnCompleted {
+        memory_summary: None,
         turn_id: active.request.turn_id.clone(),
         provider_turn_id: active.provider_turn_id,
         provider_session_id: None,
@@ -719,6 +720,7 @@ mod tests {
         let request = crate::ProviderTurnRequest {
             context_tokens: None,
             owner_started: false,
+            memory: None,
             input: "hello".into(),
             turn_id: "turn".into(),
             turn_generation: 1,

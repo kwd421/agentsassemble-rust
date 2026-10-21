@@ -9,7 +9,9 @@ use uuid::Uuid;
 pub(crate) use crate::driver::{
     DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
 };
-pub use crate::driver::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};
+pub use crate::driver::{
+    ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnMemory, ProviderTurnRequest,
+};
 use crate::{
     credentials::ProviderCredentialStore,
     provider_factory::{DriverFactory, ProductionDriverFactory},

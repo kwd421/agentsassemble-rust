@@ -89,5 +89,12 @@
       "CREATE TABLE IF NOT EXISTS member_resume_keys (\n    issuer TEXT NOT NULL,\n    person_id TEXT NOT NULL,\n    registration_epoch TEXT NOT NULL,\n    browser_credential_fingerprint BLOB NOT NULL CHECK(length(browser_credential_fingerprint) = 32),\n    resume_public_key BLOB NOT NULL CHECK(length(resume_public_key) = 65),\n    issued_at INTEGER NOT NULL,\n    expires_at INTEGER NOT NULL,\n    PRIMARY KEY(issuer, person_id, browser_credential_fingerprint)\n) STRICT",
       "CREATE INDEX IF NOT EXISTS member_resume_keys_lookup_idx ON member_resume_keys(browser_credential_fingerprint, resume_public_key)"
     ]
+  },
+  {
+    "version": 98,
+    "remove": [],
+    "add": [
+      "CREATE TABLE IF NOT EXISTS agent_memory_pieces (room_id TEXT NOT NULL, session_id TEXT NOT NULL, from_seq INTEGER NOT NULL CHECK(from_seq > 0), to_seq INTEGER NOT NULL CHECK(to_seq >= from_seq), summary TEXT NOT NULL CHECK(length(summary) BETWEEN 1 AND 12000), created_at INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0, 1)), PRIMARY KEY(room_id, session_id, from_seq), FOREIGN KEY(room_id, session_id) REFERENCES agent_sessions(room_id, session_id) ON DELETE CASCADE) STRICT"
+    ]
   }
 ]

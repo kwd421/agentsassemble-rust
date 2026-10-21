@@ -134,6 +134,9 @@ pub struct ProviderTurnAssignmentEnvelope {
     /// false, so an older app can still read the row.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub owner_started: bool,
+    /// Memory for an API agent; the fold range is stored with its summary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<crate::agent_memory::TurnMemoryInput>,
 }
 
 pub(crate) async fn insert_assigned_execution(

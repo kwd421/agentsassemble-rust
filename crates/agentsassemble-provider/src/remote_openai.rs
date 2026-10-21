@@ -197,6 +197,8 @@ impl RemoteOpenAiDriver {
         })
     }
 
+    /// One turn. An API agent's memory fold is summarized first, then its
+    /// memory joins the room rules for every round of the turn.
     async fn run_turn(
         &mut self,
         session: &DurableAgentSession,
@@ -205,6 +207,42 @@ impl RemoteOpenAiDriver {
         self.validate_session(session)?;
         self.turn_effect_uncertain = false;
         let credential = self.load_credential().await?;
+        let memory_summary = match request
+            .memory
+            .as_ref()
+            .and_then(|memory| memory.fold.as_deref())
+        {
+            Some(fold) => Some(
+                self.summarize(
+                    session,
+                    credential.as_ref(),
+                    &turn_compaction::memory_request(fold),
+                )
+                .await?,
+            ),
+            None => None,
+        };
+        let memory = request
+            .memory
+            .as_ref()
+            .map(|memory| {
+                turn_compaction::memory_context(&memory.context, memory_summary.as_deref())
+            })
+            .filter(|text| !text.is_empty());
+        let mut completed = self
+            .run_turn_rounds(session, request, credential, memory.as_deref())
+            .await?;
+        completed.memory_summary = memory_summary;
+        Ok(completed)
+    }
+
+    async fn run_turn_rounds(
+        &mut self,
+        session: &DurableAgentSession,
+        request: &ProviderTurnRequest,
+        credential: Option<ProviderCredential>,
+        memory: Option<&str>,
+    ) -> Result<ProviderTurnCompleted, DriverError> {
         let observation = request.room_observation.as_ref();
         if observation.is_some() {
             self.tools = self
@@ -216,7 +254,7 @@ impl RemoteOpenAiDriver {
                 .map_err(|_| ROOM_PORTAL_UNAVAILABLE)?;
         }
         let tools = self.turn_tools(session, request);
-        let mut messages = opening_messages(session, request);
+        let mut messages = opening_messages(session, request, memory);
         let opening = messages.len();
         let context_tokens = request
             .context_tokens
@@ -224,19 +262,15 @@ impl RemoteOpenAiDriver {
         // The provider's own usage report for messages[..covered].
         let mut measured: Option<(usize, u64)> = None;
         for round in 0..=MAX_TOOL_ROUNDS {
-            if self
-                .compact(
-                    session,
-                    credential.as_ref(),
-                    &mut messages,
-                    opening,
-                    context_tokens,
-                    measured,
-                )
-                .await?
-            {
-                measured = None;
-            }
+            self.compact(
+                session,
+                credential.as_ref(),
+                &mut messages,
+                opening,
+                context_tokens,
+                measured,
+            )
+            .await?;
             let response = self
                 .api
                 .complete(
@@ -339,51 +373,6 @@ impl RemoteOpenAiDriver {
             "provider_protocol_invalid",
             self.spec.errors.invalid_response,
         ))
-    }
-
-    /// pi-style compaction: past 75% of what the window leaves after the reply
-    /// limit, the older tool rounds of this turn are replaced by the model's own
-    /// summary of them. Returns whether it folded.
-    async fn compact(
-        &self,
-        session: &DurableAgentSession,
-        credential: Option<&ProviderCredential>,
-        messages: &mut Vec<Value>,
-        opening: usize,
-        context_tokens: u64,
-        measured: Option<(usize, u64)>,
-    ) -> Result<bool, DriverError> {
-        let threshold =
-            turn_compaction::threshold(context_tokens, session.public.max_output_tokens);
-        if turn_compaction::used_tokens(messages, measured) <= threshold {
-            return Ok(false);
-        }
-        let Some(cut) = turn_compaction::cut_point(messages, opening, threshold) else {
-            return Ok(false);
-        };
-        let summary_request = turn_compaction::summary_request(messages, opening, cut);
-        let response = self
-            .api
-            .complete(session, credential, &summary_request, None, false)
-            .await?;
-        // A long or length-cut summary still serves; only a wrong model, a tool
-        // call or an empty reply fails the turn.
-        let wrong_model = self.spec.response_model == ResponseModelIdentity::Requested
-            && response.model != session.public.model;
-        let summary = (!wrong_model
-            && response.message.tool_calls.is_empty()
-            && matches!(response.finish_reason.as_str(), "stop" | "length"))
-        .then(|| response.message.content.as_deref())
-        .flatten()
-        .and_then(turn_compaction::bounded_summary)
-        .ok_or_else(|| {
-            provider_error(
-                "provider_protocol_invalid",
-                self.spec.errors.invalid_response,
-            )
-        })?;
-        turn_compaction::fold(messages, opening, cut, &summary);
-        Ok(true)
     }
 
     async fn load_credential(&self) -> Result<Option<ProviderCredential>, DriverError> {
@@ -776,17 +765,25 @@ impl RemoteOpenAiApi {
 
 /// The turn's opening: room rules stay the one system message, a workspace
 /// agent's rules follow them, then the turn input.
-fn opening_messages(session: &DurableAgentSession, request: &ProviderTurnRequest) -> Vec<Value> {
+fn opening_messages(
+    session: &DurableAgentSession,
+    request: &ProviderTurnRequest,
+    memory: Option<&str>,
+) -> Vec<Value> {
     let workspace_rules = matches!(
         session.public.permission_mode.as_str(),
         "workspace_write" | "full_access"
     )
     .then_some(WORKSPACE_RULES);
-    let system = match (request.session_instructions.as_deref(), workspace_rules) {
-        (Some(instructions), Some(rules)) => Some(format!("{instructions}\n\n{rules}")),
-        (Some(instructions), None) => Some(instructions.to_owned()),
-        (None, rules) => rules.map(str::to_owned),
-    };
+    let parts: Vec<&str> = [
+        request.session_instructions.as_deref(),
+        workspace_rules,
+        memory,
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let system = (!parts.is_empty()).then(|| parts.join("\n\n"));
     system
         .map(|system| json!({"role": "system", "content": system}))
         .into_iter()
@@ -937,6 +934,7 @@ fn completed(
     content: String,
 ) -> ProviderTurnCompleted {
     ProviderTurnCompleted {
+        memory_summary: None,
         turn_id: request.turn_id.clone(),
         provider_turn_id,
         provider_session_id: None,
@@ -953,6 +951,9 @@ fn canonical_content(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty() && value.chars().count() <= MAX_MESSAGE_CHARACTERS).then(|| value.to_owned())
 }
+
+#[path = "remote_openai_summaries.rs"]
+mod summaries;
 
 #[cfg(test)]
 #[path = "deepseek_tests.rs"]

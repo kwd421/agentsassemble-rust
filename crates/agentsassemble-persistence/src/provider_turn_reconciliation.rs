@@ -275,6 +275,7 @@ impl SqliteStore {
             room_agent_ids: assignment.room_agent_ids,
             tabletop_tools: assignment.tabletop_tools,
             owner_started: assignment.owner_started,
+            memory: assignment.memory,
         })
     }
 

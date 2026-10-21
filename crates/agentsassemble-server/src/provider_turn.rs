@@ -174,6 +174,12 @@ fn provider_request(
     ProviderTurnRequest {
         context_tokens,
         owner_started: assignment.owner_started,
+        memory: assignment.memory.as_ref().map(|memory| {
+            agentsassemble_provider::ProviderTurnMemory {
+                context: memory.context.clone(),
+                fold: memory.fold.as_ref().map(|fold| fold.text.clone()),
+            }
+        }),
         request_ingress: Some(ingress.requests),
         turn_id: assignment.turn_id.clone(),
         turn_generation: assignment.turn_generation,
@@ -211,7 +217,35 @@ async fn commit_provider_result(
             message: "Provider turn start authorization remains unresolved.".to_owned(),
         });
     };
-    commit_exact_provider_result(store, provider_adapter, &start_authority, result).await
+    let fold = completed
+        .assignment
+        .memory
+        .as_ref()
+        .and_then(|memory| memory.fold.as_ref())
+        .map(|fold| (fold.from_seq, fold.to_seq));
+    let summary = result
+        .as_ref()
+        .ok()
+        .and_then(|completed| completed.memory_summary.clone());
+    let commit =
+        commit_exact_provider_result(store, provider_adapter, &start_authority, result).await?;
+    if let (Some(fold), Some(summary)) = (fold, summary) {
+        // Memory is kept beside the turn, not as part of it: a failure to
+        // store it leaves the turn committed and the fold due again.
+        if let Err(error) = store
+            .store_agent_memory(
+                &start_authority.room_id,
+                &start_authority.session_id,
+                fold,
+                &summary,
+            )
+            .await
+        {
+            tracing::warn!(%error, room_id = %start_authority.room_id,
+                session_id = %start_authority.session_id, "agent memory piece was not stored");
+        }
+    }
+    Ok(commit)
 }
 
 pub(crate) async fn commit_exact_provider_result(

@@ -30,6 +30,7 @@ pub(super) struct PreparedRoomInput {
     pub(super) input_up_to_seq: i64,
     pub(super) room_agent_ids: Vec<String>,
     pub(super) owner_started: bool,
+    pub(super) memory: Option<crate::agent_memory::TurnMemoryInput>,
 }
 
 pub(super) async fn prepare_room_input(
@@ -140,8 +141,21 @@ pub(super) async fn prepare_room_input(
         && inflight
             .iter()
             .all(|pending| pending.event.actor.participant_id == owner);
+    // Memory reaches back before the oldest message this turn shows.
+    let oldest_shown = context.first().map_or(source.event.seq, |event| event.seq);
+    let recent = context
+        .iter()
+        .rev()
+        .take(10)
+        .map(message_visible_text)
+        .collect::<Result<Vec<_>, _>>()?
+        .join("\n");
+    let memory =
+        crate::agent_memory::prepare(transaction, &room.room_id, session, oldest_shown, &recent)
+            .await?;
     Ok(PreparedRoomInput {
         owner_started,
+        memory,
         session_instructions,
         provider_input,
         room_view,

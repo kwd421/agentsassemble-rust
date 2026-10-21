@@ -62,6 +62,7 @@ async fn correlates_session_and_turn_receipts() {
             &crate::driver::ProviderTurnRequest {
                 context_tokens: None,
                 owner_started: false,
+                memory: None,
                 session_instructions: Some("fixed card".to_owned()),
                 request_ingress: None,
                 turn_id: "turn-1".to_owned(),
@@ -109,6 +110,7 @@ async fn owner_answers_wait_for_native_delivery_and_durable_receipts() {
         let request = crate::driver::ProviderTurnRequest {
             context_tokens: None,
             owner_started: false,
+            memory: None,
             session_instructions: None,
             request_ingress: Some(ingress),
             turn_id: "turn-1".to_owned(),

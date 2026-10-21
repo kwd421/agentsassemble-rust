@@ -567,7 +567,10 @@ pub(crate) fn product_tables() -> impl Iterator<Item = &'static TableDefinition>
 }
 
 pub(crate) fn tables() -> impl Iterator<Item = &'static TableDefinition> {
-    TABLES.iter().chain(crate::schema_votes::TABLES.iter())
+    TABLES
+        .iter()
+        .chain(crate::schema_votes::TABLES.iter())
+        .chain(crate::agent_memory::TABLES.iter())
 }
 
 #[cfg(test)]

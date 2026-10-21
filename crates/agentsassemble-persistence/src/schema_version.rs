@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 97;
+pub const CURRENT_SCHEMA_VERSION: i64 = 98;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -270,6 +270,10 @@ async fn upgrade_member_schema(pool: &SqlitePool, version: &str) -> Result<(), P
         // v97 adds the host-owned member resume keys. The table is empty on
         // upgrade: every row is re-issued by a fresh central admission.
         crate::member_resume::upgrade(pool).await?;
+    }
+    if current.parse::<i64>().is_ok_and(|v| v < 98) {
+        // v98 adds API agents' memory pieces, refolded from room messages.
+        crate::agent_memory::upgrade(pool).await?;
     }
     Ok(())
 }
