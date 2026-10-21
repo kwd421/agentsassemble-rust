@@ -13,6 +13,10 @@ pub(super) struct TurnInput {
     pub(super) session_instructions: Option<String>,
     pub(super) requests: bool,
     pub(super) observation: Option<Observation>,
+    #[serde(default)]
+    pub(super) context_tokens: Option<u64>,
+    #[serde(default)]
+    pub(super) owner_started: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -31,8 +35,8 @@ pub(super) struct Observation {
 impl TurnInput {
     pub(super) fn into_request(self, relay: &super::callbacks::Callbacks) -> ProviderTurnRequest {
         ProviderTurnRequest {
-            context_tokens: None,
-            owner_started: false,
+            context_tokens: self.context_tokens,
+            owner_started: self.owner_started,
             request_ingress: self.requests.then(|| relay.requests.clone()),
             turn_id: self.turn_id,
             turn_generation: self.turn_generation,
@@ -62,6 +66,8 @@ impl From<&ProviderTurnRequest> for TurnInput {
             input: request.input.clone(),
             session_instructions: request.session_instructions.clone(),
             requests: request.request_ingress.is_some(),
+            context_tokens: request.context_tokens,
+            owner_started: request.owner_started,
             observation: request
                 .room_observation
                 .as_ref()
@@ -76,5 +82,33 @@ impl From<&ProviderTurnRequest> for TurnInput {
                     tools: observation.room_tool_ingress.is_some(),
                 }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TurnInput;
+    use crate::driver::ProviderTurnRequest;
+
+    /// The window and the owner-started flag survive the pipe to the child.
+    #[test]
+    fn the_child_receives_the_window_and_owner_started() {
+        let request = ProviderTurnRequest {
+            context_tokens: Some(131_072),
+            owner_started: true,
+            request_ingress: None,
+            turn_id: "turn".to_owned(),
+            turn_generation: 1,
+            execution_id: "execution".to_owned(),
+            input: "input".to_owned(),
+            session_instructions: None,
+            room_observation: None,
+        };
+        let encoded = serde_json::to_string(&TurnInput::from(&request))
+            .unwrap_or_else(|error| panic!("{error}"));
+        let decoded: TurnInput =
+            serde_json::from_str(&encoded).unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(decoded.context_tokens, Some(131_072));
+        assert!(decoded.owner_started);
     }
 }
