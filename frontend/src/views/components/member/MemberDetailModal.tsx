@@ -113,7 +113,7 @@ export default function MemberDetailModal({
               <h2 className="truncate preserve-words">{entry.displayName}</h2>
               <p className="truncate preserve-words">{entry.fullDetail || entry.detail}</p>
             </div>
-            <button type="button" className="dc-modal-close" onClick={onClose} aria-label="멤버 정보 닫기"><X size={24} /></button>
+            <button type="button" className="dc-dialog-close" onClick={onClose} aria-label="멤버 정보 닫기"><X size={24} /></button>
           </header>
           <MemberUsage key={usageProvider?.id || entry.id} displayName={entry.displayName} provider={usageProvider} />
         </>}

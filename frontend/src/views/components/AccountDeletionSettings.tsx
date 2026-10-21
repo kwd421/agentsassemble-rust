@@ -112,7 +112,7 @@ export function AccountDeletionFlow({ disabled, onClose, onDeleted }: { disabled
   const receiptOnly = retainedReceipt && retainedReceipt.expires_at > Date.now() / 1000 && (!session || retainedReceipt.person_id === session.person.person_id);
   return <section aria-label="계정 탈퇴" className="dc-account-deletion-flow" aria-busy={busy}>
     <header><h4 className="dc-dialog-title">{deleted ? "탈퇴했어요" : "계정 탈퇴"}</h4>
-      {onClose && <button type="button" className="dc-modal-close" aria-label="계정 탈퇴 닫기" onClick={close}><X size={24} /></button>}
+      {onClose && <button type="button" className="dc-dialog-close" aria-label="계정 탈퇴 닫기" onClick={close}><X size={24} /></button>}
     </header>
     {!deleted && <>
       <ul className="dc-account-deletion-notice">

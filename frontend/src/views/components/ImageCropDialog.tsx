@@ -41,7 +41,7 @@ export default function ImageCropDialog({
     >
       <header className="dc-image-crop-dialog-head">
         <h2 className="dc-dialog-title">{title}</h2>
-        <button type="button" className="dc-modal-close"
+        <button type="button" className="dc-dialog-close"
           aria-label={`${title} 닫기`} disabled={busy} onClick={onCancel}>
           <X size={24} />
         </button>

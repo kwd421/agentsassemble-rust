@@ -132,7 +132,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
           }} /> : <h2 className="truncate preserve-words">{session.display_name}</h2>}
         {detail && <p className="truncate preserve-words">{detail}</p>}
       </div>
-      {onClose && <button type="button" className="dc-modal-close" aria-label="멤버 정보 닫기" onClick={onClose}><X size={24} /></button>}
+      {onClose && <button type="button" className="dc-dialog-close" aria-label="멤버 정보 닫기" onClick={onClose}><X size={24} /></button>}
     </header>
     {nameFocused && !nameValid && <p className="dc-channel-composer-error preserve-words" role="alert">이름은 1~{AGENT_PROFILE_NAME_CHARACTER_LIMIT}자까지 입력할 수 있어요.</p>}
     {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}

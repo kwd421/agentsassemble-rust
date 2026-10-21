@@ -11,7 +11,7 @@ dialog.dc-account-deletion-dialog {
 .dc-account-deletion-flow header, .dc-account-deletion-flow footer,
 .dc-account-deletion-account, .dc-account-deletion-servers li { display: flex; align-items: center; gap: 12px; }
 .dc-account-deletion-flow header, .dc-account-deletion-servers li { justify-content: space-between; }
-.dc-account-deletion-flow header .dc-modal-close { width: 44px; height: 44px; }
+.dc-account-deletion-flow header .dc-dialog-close { width: 44px; height: 44px; }
 .dc-account-deletion-notice { padding-left: 20px; list-style: disc; color: var(--color-text-secondary); }
 .dc-account-deletion-account { padding: 12px; border-radius: 8px; background: var(--color-sidebar); }
 .dc-account-deletion-account .dc-member-avatar { width: 40px; height: 40px; flex-shrink: 0; display: grid; place-items: center; font-size: 14px; color: #fff; }
