@@ -62,6 +62,7 @@ pub(crate) async fn removal_in(
     {
         let mut session = load_session(transaction, &principal.room_id, target_id).await?;
         request_runtime_cleanup(transaction, &mut session).await?;
+        crate::agent_memory::forget_session(transaction, &principal.room_id, target_id).await?;
         events.push(session_state_event(transaction, &session).await?);
         Some(RoomRuntimeCleanupKey {
             room_id: principal.room_id.clone(),

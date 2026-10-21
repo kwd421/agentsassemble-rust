@@ -31,6 +31,8 @@ const LINE_MAX_CHARACTERS: usize = 600;
 const MEMORY_MAX_CHARACTERS: usize = 6_000;
 const PINNED_MAX_CHARACTERS: usize = 3_000;
 pub(crate) const SUMMARY_MAX_CHARACTERS: usize = 12_000;
+/// Only the newest pieces are weighed each turn.
+const MEMORY_MAX_PIECES: i64 = 200;
 
 /// What one turn carries: memory to show and, when due, a batch to summarize.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -76,7 +78,7 @@ pub(crate) async fn prepare(
     let floor = covered.max(session.public.bootstrap_cutoff_seq);
     let fold = load_fold(tx, room_id, floor, oldest_shown_seq).await?;
     let mut sections = Vec::new();
-    let pinned = load_pinned(tx, room_id).await?;
+    let pinned = load_pinned(tx, room_id, session.public.bootstrap_cutoff_seq).await?;
     if !pinned.is_empty() {
         sections.push(format!("Pinned messages (important):\n{pinned}"));
     }
@@ -95,6 +97,31 @@ pub(crate) async fn prepare(
     }))
 }
 
+/// The fold text of exactly `from_seq..=to_seq`, as `load_fold` renders it.
+async fn render_range(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    from_seq: i64,
+    to_seq: i64,
+) -> Result<String, PersistenceError> {
+    let rows = sqlx::query(
+        "SELECT event_json FROM room_events WHERE room_id = ? AND seq >= ? AND seq <= ? AND json_extract(event_json, '$.type') = 'message_final' AND COALESCE(json_extract(event_json, '$.message_deleted'), 0) = 0 ORDER BY seq",
+    )
+    .bind(room_id)
+    .bind(from_seq)
+    .bind(to_seq)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut lines = Vec::new();
+    for row in rows {
+        let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
+        if message_has_visible_payload(&event)? {
+            lines.push(render_line(&event)?);
+        }
+    }
+    Ok(lines.join("\n"))
+}
+
 async fn load_fold(
     tx: &mut Transaction<'_, Sqlite>,
     room_id: &str,
@@ -102,7 +129,7 @@ async fn load_fold(
     oldest_shown_seq: i64,
 ) -> Result<Option<MemoryFold>, PersistenceError> {
     let rows = sqlx::query(
-        "SELECT event_json FROM room_events WHERE room_id = ? AND seq > ? AND seq < ? AND json_extract(event_json, '$.type') = 'message_final' ORDER BY seq LIMIT ?",
+        "SELECT event_json FROM room_events WHERE room_id = ? AND seq > ? AND seq < ? AND json_extract(event_json, '$.type') = 'message_final' AND COALESCE(json_extract(event_json, '$.message_deleted'), 0) = 0 ORDER BY seq LIMIT ?",
     )
     .bind(room_id)
     .bind(floor)
@@ -153,14 +180,17 @@ fn render_line(event: &RoomEvent) -> Result<String, PersistenceError> {
     Ok(format!("#{} {name}: {text}", event.seq))
 }
 
+/// Pins from after the agent joined, the same horizon as its message window.
 async fn load_pinned(
     tx: &mut Transaction<'_, Sqlite>,
     room_id: &str,
+    joined_after_seq: i64,
 ) -> Result<String, PersistenceError> {
     let rows = sqlx::query(
-        "SELECT e.event_json FROM room_message_pins p JOIN room_events e ON e.room_id = p.room_id AND e.seq = p.event_seq WHERE p.room_id = ? AND json_extract(e.event_json, '$.type') = 'message_final' ORDER BY p.event_seq",
+        "SELECT e.event_json FROM room_message_pins p JOIN room_events e ON e.room_id = p.room_id AND e.seq = p.event_seq WHERE p.room_id = ? AND p.event_seq > ? AND json_extract(e.event_json, '$.type') = 'message_final' ORDER BY p.event_seq",
     )
     .bind(room_id)
+    .bind(joined_after_seq)
     .fetch_all(&mut **tx)
     .await?;
     let mut lines = Vec::new();
@@ -189,12 +219,15 @@ async fn related_pieces(
     recent_text: &str,
 ) -> Result<String, PersistenceError> {
     let rows = sqlx::query(
-        "SELECT from_seq, to_seq, summary FROM agent_memory_pieces WHERE room_id = ? AND session_id = ? AND hidden = 0 ORDER BY from_seq",
+        "SELECT from_seq, to_seq, summary FROM agent_memory_pieces WHERE room_id = ? AND session_id = ? AND hidden = 0 ORDER BY from_seq DESC LIMIT ?",
     )
     .bind(room_id)
     .bind(session_id)
+    .bind(MEMORY_MAX_PIECES)
     .fetch_all(&mut **tx)
     .await?;
+    // The newest pieces were read; rank them in the order they happened.
+    let rows: Vec<_> = rows.into_iter().rev().collect();
     let recent = words(recent_text);
     let mut scored: Vec<(usize, usize, String)> = rows
         .iter()
@@ -236,13 +269,16 @@ fn words(text: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// Stores the summary of a fold the harness completed. A fold that no longer
-/// lines up (another piece covered it meanwhile) is dropped.
+/// Stores the summary of a fold the harness completed. The fold must still
+/// read exactly as it did when summarized: a message deleted or edited
+/// meanwhile could survive in the summary, so that summary is dropped (and
+/// the range is folded again). A fold another piece covered is dropped too.
 pub(crate) async fn store(
     tx: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     session_id: &str,
     fold: (i64, i64),
+    folded_text: &str,
     summary: &str,
     now: i64,
 ) -> Result<bool, PersistenceError> {
@@ -253,6 +289,9 @@ pub(crate) async fn store(
         .collect();
     let (from_seq, to_seq) = fold;
     if summary.is_empty() || from_seq <= 0 || to_seq < from_seq {
+        return Ok(false);
+    }
+    if render_range(tx, room_id, from_seq, to_seq).await? != folded_text {
         return Ok(false);
     }
     let inserted = sqlx::query(
@@ -298,6 +337,7 @@ impl crate::SqliteStore {
         room_id: &str,
         session_id: &str,
         fold: (i64, i64),
+        folded_text: &str,
         summary: &str,
     ) -> Result<bool, PersistenceError> {
         let mut tx = self.pool.begin().await?;
@@ -306,6 +346,7 @@ impl crate::SqliteStore {
             room_id,
             session_id,
             fold,
+            folded_text,
             summary,
             chrono::Utc::now().timestamp(),
         )
@@ -365,14 +406,29 @@ impl crate::SqliteStore {
     }
 }
 
-/// A deleted message takes every piece that summarized it.
+/// A removed agent takes its memory with it.
+pub(crate) async fn forget_session(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    session_id: &str,
+) -> Result<(), PersistenceError> {
+    sqlx::query("DELETE FROM agent_memory_pieces WHERE room_id = ? AND session_id = ?")
+        .bind(room_id)
+        .bind(session_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+/// A deleted or edited message takes every piece that summarized it, except
+/// pieces the owner already deleted (their range stays out of memory).
 pub(crate) async fn forget_message(
     tx: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     seq: i64,
 ) -> Result<(), PersistenceError> {
     sqlx::query(
-        "DELETE FROM agent_memory_pieces WHERE room_id = ? AND from_seq <= ? AND to_seq >= ?",
+        "DELETE FROM agent_memory_pieces WHERE room_id = ? AND from_seq <= ? AND to_seq >= ? AND hidden = 0",
     )
     .bind(room_id)
     .bind(seq)

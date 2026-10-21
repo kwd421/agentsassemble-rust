@@ -460,10 +460,11 @@ async fn a_memory_fold_is_stored_once_and_forgotten_with_its_messages()
         session.public.session_id.clone(),
     );
     let mut tx = store.pool.begin().await?;
-    assert!(crate::agent_memory::store(&mut tx, &room, &id, (5, 20), "등대 이야기", 1).await?);
-    assert!(!crate::agent_memory::store(&mut tx, &room, &id, (5, 20), "again", 2).await?);
-    assert!(!crate::agent_memory::store(&mut tx, &room, &id, (15, 30), "overlap", 3).await?);
-    assert!(crate::agent_memory::store(&mut tx, &room, &id, (21, 30), "next", 4).await?);
+    // These ranges hold no lobby messages, so each fold read as empty text.
+    assert!(crate::agent_memory::store(&mut tx, &room, &id, (5, 20), "", "등대 이야기", 1).await?);
+    assert!(!crate::agent_memory::store(&mut tx, &room, &id, (5, 20), "", "again", 2).await?);
+    assert!(!crate::agent_memory::store(&mut tx, &room, &id, (15, 30), "", "overlap", 3).await?);
+    assert!(crate::agent_memory::store(&mut tx, &room, &id, (21, 30), "", "next", 4).await?);
     crate::agent_memory::forget_message(&mut tx, &room, 25).await?;
     let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_memory_pieces")
         .fetch_one(&mut *tx)
@@ -473,9 +474,13 @@ async fn a_memory_fold_is_stored_once_and_forgotten_with_its_messages()
     // The owner's delete empties the piece, and its messages stay unfolded.
     assert!(store.delete_agent_memory(&room, &id, 5).await?);
     assert!(store.agent_memory(&room, &id).await?.is_empty());
+    // Someone else's delete inside that range does not bring it back.
+    let mut tx = store.pool.begin().await?;
+    crate::agent_memory::forget_message(&mut tx, &room, 12).await?;
+    tx.commit().await?;
     assert!(
         !store
-            .store_agent_memory(&room, &id, (5, 20), "again")
+            .store_agent_memory(&room, &id, (5, 20), "", "again")
             .await?
     );
     Ok(())
@@ -520,15 +525,32 @@ async fn an_api_agent_turn_folds_older_messages_and_carries_related_memory()
     let fold = memory.fold.ok_or("fold")?;
     assert_eq!((fold.from_seq, fold.to_seq), (seqs[0], seqs[11]));
     assert!(fold.text.contains("등대 기록 0") && !fold.text.contains("등대 기록 12"));
-    crate::agent_memory::store(
-        &mut tx,
-        &room,
-        &id,
-        (fold.from_seq, fold.to_seq),
-        "등대지기와 나눈 기록",
-        1,
-    )
-    .await?;
+    // A summary of text that no longer reads the same is refused.
+    let stale = format!("{}\n#999 someone: deleted later", fold.text);
+    assert!(
+        !crate::agent_memory::store(
+            &mut tx,
+            &room,
+            &id,
+            (fold.from_seq, fold.to_seq),
+            &stale,
+            "x",
+            1
+        )
+        .await?
+    );
+    assert!(
+        crate::agent_memory::store(
+            &mut tx,
+            &room,
+            &id,
+            (fold.from_seq, fold.to_seq),
+            &fold.text,
+            "등대지기와 나눈 기록",
+            1,
+        )
+        .await?
+    );
     let memory = crate::agent_memory::prepare(&mut tx, &room, &session, seqs[12], "등대지기")
         .await?
         .ok_or("memory")?;

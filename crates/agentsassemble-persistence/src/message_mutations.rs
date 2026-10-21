@@ -160,6 +160,10 @@ async fn edit_message(
     }
     let updated = prepare_updated_message(target, edit.content.clone(), now);
     replace_event(transaction, &updated).await?;
+    if target.event_type == "message_final" {
+        // Memory that summarized the old text goes with it.
+        crate::agent_memory::forget_message(transaction, &principal.room_id, target.seq).await?;
+    }
     replace_room_message_index(transaction, &updated).await?;
     let mutation = prepare_message_updated_event(principal, target, edit.content, sequence, now);
     let result = json!({"message": updated, "event": mutation, "event_seq": sequence});
@@ -187,8 +191,10 @@ async fn delete_message(
         delete_vote_projection(transaction, &principal.room_id, &target.id, target.seq).await?;
     }
     remove_pending_input_reference(transaction, &principal.room_id, &target.id).await?;
-    // Memory that summarized the message goes with it.
-    crate::agent_memory::forget_message(transaction, &principal.room_id, target.seq).await?;
+    if target.event_type == "message_final" {
+        // Memory that summarized the message goes with it.
+        crate::agent_memory::forget_message(transaction, &principal.room_id, target.seq).await?;
+    }
     let updated = prepare_deleted_message(target, kind, now);
     replace_event(transaction, &updated).await?;
     let mutation = prepare_message_deleted_event(principal, target, sequence, now);

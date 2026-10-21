@@ -222,21 +222,22 @@ async fn commit_provider_result(
         .memory
         .as_ref()
         .and_then(|memory| memory.fold.as_ref())
-        .map(|fold| (fold.from_seq, fold.to_seq));
+        .map(|fold| (fold.from_seq, fold.to_seq, fold.text.clone()));
     let summary = result
         .as_ref()
         .ok()
         .and_then(|completed| completed.memory_summary.clone());
     let commit =
         commit_exact_provider_result(store, provider_adapter, &start_authority, result).await?;
-    if let (Some(fold), Some(summary)) = (fold, summary) {
+    if let (Some((from_seq, to_seq, folded_text)), Some(summary)) = (fold, summary) {
         // Memory is kept beside the turn, not as part of it: a failure to
         // store it leaves the turn committed and the fold due again.
         if let Err(error) = store
             .store_agent_memory(
                 &start_authority.room_id,
                 &start_authority.session_id,
-                fold,
+                (from_seq, to_seq),
+                &folded_text,
                 &summary,
             )
             .await
