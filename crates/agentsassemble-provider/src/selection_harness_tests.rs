@@ -271,3 +271,24 @@ async fn missing_unready_or_changed_opencode_is_refused() {
         .unwrap_or_else(|| panic!("stale OpenCode identity must fail"));
     assert_eq!(error.code, "catalog_changed");
 }
+
+/// OpenCode allows everything for the whole session, so it cannot keep the
+/// built-in harness's rule that turns answering someone else ask first.
+#[tokio::test]
+async fn full_access_is_refused_behind_the_opencode_harness() {
+    let opencode = opencode().await;
+    let mut provider = gemini();
+    provider
+        .controls
+        .retain(|control| control.key != "permission_mode");
+    provider.controls.push(permission_control(true, true));
+    let authority = catalog(vec![provider, opencode]);
+    let mut payload = gemini_payload("opencode");
+    payload["permission_mode"] = json!("full_access");
+    payload["full_access_acknowledged"] = json!(true);
+    let error = select(&payload, &authority)
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("full access behind OpenCode must be refused"));
+    assert_eq!(error.code, "full_access_unsupported_harness");
+}

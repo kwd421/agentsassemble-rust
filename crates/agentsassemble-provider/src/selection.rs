@@ -141,6 +141,14 @@ impl ProviderSelection {
             (reasoning_effort, service_tier, variant)
         };
         let permission_mode = selected_value(provider, "permission_mode", input.permission_mode)?;
+        // OpenCode applies full access to every turn of its session, so the
+        // built-in harness's owner-turn rule could not hold behind it.
+        if permission_mode == "full_access" && opencode_harness {
+            return Err(ProviderSelectionError::new(
+                "full_access_unsupported_harness",
+                "OpenCode 하네스에서는 전체 액세스를 쓸 수 없어요. 기본 하네스를 고르거나 작업 폴더 쓰기를 써 주세요.",
+            ));
+        }
         if permission_mode == "full_access"
             && payload.get("full_access_acknowledged") != Some(&Value::Bool(true))
         {

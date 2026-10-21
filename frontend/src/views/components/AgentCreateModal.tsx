@@ -588,9 +588,12 @@ export default function AgentCreateModal({
                         { value: "opencode", label: "OpenCode" },
                       ]}
                       value={executionHarness}
-                      onChange={(value) =>
-                        setExecutionHarness(value === "opencode" ? "opencode" : "builtin")
-                      }
+                      onChange={(value) => {
+                        setExecutionHarness(value === "opencode" ? "opencode" : "builtin");
+                        if (value === "opencode" && settings.permission_mode === "full_access") {
+                          updateProviderControl("permission_mode", "workspace_write");
+                        }
+                      }}
                     />
                     {executionHarness === "opencode" && (
                       <p className="dc-agent-hint preserve-words">
@@ -608,13 +611,17 @@ export default function AgentCreateModal({
                   const providerSupportsControl = selectedProvider.controls.some(
                     (candidate) => candidate.key === control.key
                   );
-                  const options = providerSupportsControl
+                  const allOptions = providerSupportsControl
                     ? effectiveProviderControlOptions(
                         selectedProvider,
                         control,
                         settings
                       )
                     : control.options;
+                  // OpenCode would apply full access to every turn; the server refuses it.
+                  const options = executionHarness === "opencode" && control.key === "permission_mode"
+                    ? allOptions.filter((option) => option.value !== "full_access")
+                    : allOptions;
                   return (
                     <ProviderControlField
                       key={`${selectedProvider.id}:${control.key}`}
