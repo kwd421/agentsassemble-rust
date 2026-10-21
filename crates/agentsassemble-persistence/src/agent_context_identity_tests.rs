@@ -684,6 +684,8 @@ async fn the_owners_ai_speaks_for_the_owner_only_in_an_owner_started_turn()
     set_owner(&owner.participant_id)
         .execute(&store.pool)
         .await?;
+    // Someone else is in the room, so only a traced owner turn counts.
+    add_human(&store, "human-guest", "Guest").await?;
     let record = |started: bool| {
         sqlx::query("INSERT OR REPLACE INTO provider_turn_executions(room_id, session_id, turn_generation, execution_id, participant_id, turn_id, assignment_json, phase, runtime_handle_id, runtime_owner_id, runtime_lease_token, created_at, updated_at) VALUES (?, ?, 1, 'exec-1', ?, 'turn-1', ?, 'completed', 'h', 'o', 'l', 't', 't')")
             .bind(session.public.room_id.clone())
@@ -836,6 +838,56 @@ async fn an_agent_trusts_only_the_people_its_owner_picked() -> Result<(), Box<dy
         Some(vec![])
     );
     assert_eq!(store.agent_trusted_ai_owners(&room, "missing").await?, None);
+    Ok(())
+}
+
+/// In a room only the owner and the owner's AIs were ever in, any of those AIs
+/// speaks for the owner, even one whose turn the server cannot trace.
+#[tokio::test]
+async fn owner_only_room_trusts_every_owner_ai() -> Result<(), Box<dyn std::error::Error>> {
+    let (store, owner, _directory) = fixture().await;
+    let session = stored_session(&store).await;
+    sqlx::query("UPDATE participants SET participant_json=json_set(participant_json, '$.owner_id', ?) WHERE participant_id=?")
+        .bind(&owner.participant_id)
+        .bind(&session.public.participant_id)
+        .execute(&store.pool)
+        .await?;
+    let mut untraced = store
+        .execute_message_with_turn(&owner, "seed", "message.send", &json!({"content": "seed"}))
+        .await?
+        .outcome
+        .event;
+    untraced.actor.participant_id = session.public.participant_id.clone();
+    untraced.actor.participant_type = "agent".to_owned();
+    let others = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM participants WHERE room_id = ? AND participant_id NOT IN (?, ?)",
+    )
+    .bind(&session.public.room_id)
+    .bind(&owner.participant_id)
+    .bind(&session.public.participant_id)
+    .fetch_one(&store.pool)
+    .await?;
+    assert_eq!(
+        others, 0,
+        "the fixture room holds only the owner and the agent"
+    );
+    let mut tx = store.pool.begin().await?;
+    assert!(
+        super::super::context::speaks_for_owner(&mut tx, &owner.participant_id, &[], &untraced)
+            .await?
+    );
+    drop(tx);
+    let guest = add_human(&store, "human-guest", "Guest").await?;
+    sqlx::query("UPDATE participants SET participant_json=json_set(participant_json, '$.status', 'left') WHERE participant_id=?")
+        .bind(&guest.participant_id)
+        .execute(&store.pool)
+        .await?;
+    let mut tx = store.pool.begin().await?;
+    assert!(
+        !super::super::context::speaks_for_owner(&mut tx, &owner.participant_id, &[], &untraced)
+            .await?,
+        "someone else was in the room, so the owner's AI needs a traced owner turn"
+    );
     Ok(())
 }
 

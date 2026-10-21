@@ -223,6 +223,19 @@ pub(super) async fn speaks_for_owner(
     if actor_owner.as_deref() != Some(owner) {
         return Ok(false);
     }
+    // With no one else ever in the room, nothing foreign can steer the owner's
+    // AIs, including an external one whose turns the server cannot trace.
+    let others = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM participants WHERE room_id = ? AND participant_id != ? AND COALESCE(json_extract(participant_json, '$.owner_id'), '') != ?",
+    )
+    .bind(&event.room_id)
+    .bind(owner)
+    .bind(owner)
+    .fetch_one(&mut **transaction)
+    .await?;
+    if others == 0 {
+        return Ok(true);
+    }
     let text = |key: &str| event.extra.get(key).and_then(serde_json::Value::as_str);
     let (Some(session_id), Some(turn_id)) = (text("session_id"), text("turn_id")) else {
         return Ok(false);
