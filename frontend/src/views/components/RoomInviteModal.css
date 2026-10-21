@@ -4,7 +4,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 16px 0 24px;
+  padding: 20px 24px 0;
 }
 
 .dc-invite-header h2 {

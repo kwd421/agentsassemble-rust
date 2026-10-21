@@ -555,6 +555,7 @@ dialog.dc-user-settings-dialog {
 @media (pointer: coarse) {
   .dc-user-settings-nav button,
   .dc-user-settings-grid select,
+  .dc-user-settings-grid input[type="color"],
   .dc-user-settings-close {
     min-height: 44px;
     min-width: 44px;

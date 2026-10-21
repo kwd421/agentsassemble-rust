@@ -499,7 +499,7 @@ export default function StartupIdentityGate({
         <main className="grid w-full max-w-[480px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-8 shadow-2xl">
           <div className="flex justify-end empty:hidden"><AppUpdateIndicator /></div>
           <header className="grid gap-2">
-            <h1 className="text-2xl font-bold text-text-primary">어떻게 사용할까요?</h1>
+            <h1 className="preserve-words text-2xl font-bold text-text-primary">어떻게 사용할까요?</h1>
             <p className="text-sm leading-5 text-text-muted">
               로그인 서버가 설정되지 않았어요. 이 컴퓨터에서 쓸 이름을 입력해 주세요.
             </p>
@@ -567,7 +567,7 @@ export default function StartupIdentityGate({
           <CentralAccountSettings disabled={busy} showEntryLink={false} />
         </> : <>
         <header className={screen === "choice" && !centralPerson ? "grid gap-2 text-center" : "grid gap-2"}>
-          <h1 className="text-2xl font-bold leading-[28px] text-text-primary">
+          <h1 className="preserve-words text-2xl font-bold leading-[28px] text-text-primary">
             {screen === "recovery-code"
               ? "복구 코드를 보관하세요"
               : screen === "servers"

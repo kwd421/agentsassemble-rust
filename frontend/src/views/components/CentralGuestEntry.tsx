@@ -137,7 +137,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 spellCheck={false}
                 value={recoveryInput}
                 placeholder="XXXX-XXXX-…"
-                className="dc-input font-mono"
+                className="dc-input dc-input--code"
                 onChange={(event) =>
                   setRecoveryInput(event.currentTarget.value.toUpperCase())
                 }
@@ -167,7 +167,7 @@ export default function CentralGuestEntry({ screen, setScreen, disabled = false,
                 readOnly
                 value={issuedRecoveryCode}
                 onFocus={(event) => event.currentTarget.select()}
-                className="dc-input font-mono tracking-wide"
+                className="dc-input dc-input--code"
               />
             </label>
             <button

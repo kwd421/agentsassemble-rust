@@ -135,6 +135,14 @@ textarea {
   opacity: 0.55;
 }
 
+/* Codes people copy by hand (recovery codes) keep a fixed-width face so
+   0/O and 1/l stay apart. */
+.dc-input--code {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
 /* The one dropdown: the text field's frame with the shared arrow. Compact
    for dense settings rows. */
 .dc-select {
@@ -257,6 +265,7 @@ textarea {
 .dc-checkbox:disabled,
 .dc-radio:disabled {
   cursor: not-allowed;
+  opacity: 0.5;
 }
 
 /* Touch screens keep 44px targets. */

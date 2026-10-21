@@ -97,7 +97,7 @@ export default function GuestIdentityRecoveryPanel({
         <label className="dc-guest-recovery-code">
           {recovered ? "새 복구 코드" : "복구 코드"}
           <input
-            className="dc-input font-mono"
+            className="dc-input dc-input--code"
             value={recoveryCode}
             readOnly={busy || Boolean(recovered)}
             autoComplete="one-time-code"
