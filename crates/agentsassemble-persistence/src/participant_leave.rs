@@ -136,6 +136,12 @@ async fn execute_leave_in(
     let mut participant =
         load_participant(transaction, &principal.room_id, &principal.participant_id).await?;
     require_exact_joined_human(&participant, principal)?;
+    crate::agent_handoff_trust::forget_person(
+        transaction,
+        &principal.room_id,
+        &principal.participant_id,
+    )
+    .await?;
     participant.status = ParticipantStatus::Left;
     participant.updated_at = Utc::now();
     let revoked_session_fingerprints = match session_fingerprint {

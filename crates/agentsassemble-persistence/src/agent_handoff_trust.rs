@@ -87,3 +87,25 @@ impl SqliteStore {
         Ok(updated.rows_affected() == 1)
     }
 }
+
+/// A person who leaves or is removed stops being trusted by every agent in
+/// the room: coming back later (even as the same id) must be picked again.
+pub(crate) async fn forget_person(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<(), PersistenceError> {
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = CASE \
+         WHEN (SELECT COUNT(*) FROM json_each(session_json, '$.trusted_ai_owners') WHERE value != ?1) = 0 \
+         THEN json_remove(session_json, '$.trusted_ai_owners') \
+         ELSE json_set(session_json, '$.trusted_ai_owners', \
+           (SELECT json_group_array(value) FROM json_each(session_json, '$.trusted_ai_owners') WHERE value != ?1)) END \
+         WHERE room_id = ?2 AND EXISTS (SELECT 1 FROM json_each(session_json, '$.trusted_ai_owners') WHERE value = ?1)",
+    )
+    .bind(participant_id)
+    .bind(room_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}

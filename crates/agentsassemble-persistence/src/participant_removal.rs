@@ -73,6 +73,7 @@ pub(crate) async fn removal_in(
     };
     let revoked_session_fingerprints =
         revoke_participant_access(transaction, &principal.room_id, target_id).await?;
+    crate::agent_handoff_trust::forget_person(transaction, &principal.room_id, target_id).await?;
     participant.status = status;
     participant.updated_at = Utc::now();
     save_participant_exact(transaction, &principal.room_id, target_id, &participant).await?;

@@ -815,6 +815,20 @@ async fn an_agent_trusts_only_the_people_its_owner_picked() -> Result<(), Box<dy
         !super::super::context::speaks_for_owner(&mut tx, &owner.participant_id, &[], &friends_ai)
             .await?
     );
+    // Someone who left the room is no longer trusted.
+    sqlx::query("UPDATE participants SET participant_json=json_set(participant_json, '$.status', 'kicked') WHERE participant_id=?")
+        .bind(&friend.participant_id)
+        .execute(&mut *tx)
+        .await?;
+    assert!(
+        !super::super::context::speaks_for_owner(
+            &mut tx,
+            &owner.participant_id,
+            &picked,
+            &friends_ai
+        )
+        .await?
+    );
     drop(tx);
     assert!(store.set_agent_trusted_ai_owners(&room, &id, &[]).await?);
     assert_eq!(
@@ -822,5 +836,34 @@ async fn an_agent_trusts_only_the_people_its_owner_picked() -> Result<(), Box<dy
         Some(vec![])
     );
     assert_eq!(store.agent_trusted_ai_owners(&room, "missing").await?, None);
+    Ok(())
+}
+
+/// Removing a trusted person takes them off every agent's list, so coming
+/// back later never restores the trust by itself.
+#[tokio::test]
+async fn a_removed_person_is_no_longer_trusted() -> Result<(), Box<dyn std::error::Error>> {
+    let (store, owner, _directory) = fixture().await;
+    let session = stored_session(&store).await;
+    let (room, id) = (
+        session.public.room_id.clone(),
+        session.public.session_id.clone(),
+    );
+    let friend = add_human(&store, "human-friend", "Friend").await?;
+    let other = add_human(&store, "human-other", "Other").await?;
+    let both = [friend.participant_id.clone(), other.participant_id.clone()];
+    assert!(store.set_agent_trusted_ai_owners(&room, &id, &both).await?);
+    store
+        .execute_participant_removal(
+            TrustedPrincipal(&owner),
+            "kick-friend",
+            "participant.kick",
+            &json!({"participant_id": friend.participant_id}),
+        )
+        .await?;
+    assert_eq!(
+        store.agent_trusted_ai_owners(&room, &id).await?,
+        Some(vec![other.participant_id.clone()])
+    );
     Ok(())
 }

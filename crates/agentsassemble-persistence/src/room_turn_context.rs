@@ -204,11 +204,21 @@ pub(super) async fn speaks_for_owner(
     .bind(actor)
     .fetch_optional(&mut **transaction)
     .await?;
-    if actor_owner
+    if let Some(actor_owner) = actor_owner
         .as_ref()
-        .is_some_and(|actor_owner| !actor_owner.is_empty() && trusted_owners.contains(actor_owner))
+        .filter(|actor_owner| !actor_owner.is_empty() && trusted_owners.contains(actor_owner))
     {
-        return Ok(true);
+        // Trust lasts only while that person is still in the room.
+        let present = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM participants WHERE room_id = ? AND participant_id = ? AND json_extract(participant_json, '$.participant_type') = 'human' AND json_extract(participant_json, '$.status') = 'joined'",
+        )
+        .bind(&event.room_id)
+        .bind(actor_owner)
+        .fetch_one(&mut **transaction)
+        .await?;
+        if present == 1 {
+            return Ok(true);
+        }
     }
     if actor_owner.as_deref() != Some(owner) {
         return Ok(false);
