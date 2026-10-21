@@ -119,9 +119,10 @@ impl PersonaCard {
 
 #[must_use]
 pub fn canonical_persona_id(value: &str) -> String {
+    let source = trim_persona_card_text(value);
     let mut normalized = String::new();
     let mut replacing = false;
-    for character in trim_persona_card_text(value).chars() {
+    for character in source.chars() {
         if character.is_ascii_alphanumeric() || matches!(character, '_' | '.' | '-') {
             normalized.push(character);
             replacing = false;
@@ -130,15 +131,32 @@ pub fn canonical_persona_id(value: &str) -> String {
             replacing = true;
         }
     }
+    // A name in another script (Korean, Japanese, ...) loses its letters in the ASCII id, so
+    // two such cards would share one id and the second import would replace the first. A short
+    // digest of the whole name keeps them apart while the id stays ASCII.
+    let lossy = source.chars().any(|character| !character.is_ascii());
+    let digest_suffix = lossy.then(|| {
+        let digest = Sha256::digest(source.as_bytes());
+        digest[..5]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    });
+    let limit =
+        MAX_PERSONA_ID_CHARACTERS - digest_suffix.as_ref().map_or(0, |suffix| suffix.len() + 1);
     let output = normalized
         .trim_matches(['.', '-'])
         .chars()
-        .take(MAX_PERSONA_ID_CHARACTERS)
+        .take(limit)
         .collect::<String>();
-    if output.is_empty() {
+    let base = if output.is_empty() {
         "persona".to_owned()
     } else {
         output
+    };
+    match digest_suffix {
+        Some(suffix) => format!("{}-{suffix}", base.trim_end_matches(['.', '-'])),
+        None => base,
     }
 }
 
@@ -604,6 +622,12 @@ mod tests {
     fn canonical_id_matches_reachable_ascii_contract() {
         assert_eq!(canonical_persona_id("  Mina / Guide  "), "Mina-Guide");
         assert_eq!(canonical_persona_id("..."), "persona");
+        let lighthouse = canonical_persona_id("등대지기 해솔");
+        let klukai = canonical_persona_id("클루카이");
+        assert_ne!(lighthouse, klukai);
+        assert!(lighthouse.starts_with("persona-") && lighthouse.is_ascii());
+        assert_eq!(canonical_persona_id(&lighthouse), lighthouse);
+        assert!(canonical_persona_id("Mina 해솔").starts_with("Mina-"));
     }
 
     #[test]
