@@ -661,7 +661,8 @@
 }
 
 .dc-markdown table {
-  width: max-content;
+  /* Fit the message and wrap cell text; only unbreakable content scrolls. */
+  width: auto;
   min-width: min(100%, 520px);
   border-collapse: collapse;
   font-size: 0.95em;
