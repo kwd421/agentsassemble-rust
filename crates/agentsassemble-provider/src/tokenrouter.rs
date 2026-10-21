@@ -50,7 +50,6 @@ pub(crate) static TOKENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "TokenRouter session authority changed after attachment.",
         already_bound: "TokenRouter driver is already bound to another Agent Session.",
         room_action_missing: "TokenRouter ended without the required room action.",
-        tool_round_limit: "TokenRouter exceeded the bounded room-tool rounds.",
         room_read_missing: "TokenRouter did not perform the required room read.",
         interrupt_uncertain: "The TokenRouter room action may have completed before interruption.",
     },

@@ -54,7 +54,6 @@ pub(crate) static LLM_GATEWAY_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "LLM Gateway session authority changed after attachment.",
         already_bound: "LLM Gateway driver is already bound to another Agent Session.",
         room_action_missing: "LLM Gateway ended without the required room action.",
-        tool_round_limit: "LLM Gateway exceeded the bounded room-tool rounds.",
         room_read_missing: "LLM Gateway did not perform the required room read.",
         interrupt_uncertain: "The LLM Gateway room action may have completed before interruption.",
     },

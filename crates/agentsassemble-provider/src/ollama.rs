@@ -71,7 +71,6 @@ static SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "Ollama session authority changed after attachment.",
         already_bound: "Ollama driver is already bound to another Agent Session.",
         room_action_missing: "Ollama ended without the required room action.",
-        tool_round_limit: "Ollama exceeded the bounded room-tool rounds.",
         room_read_missing: "Ollama did not perform the required room read.",
         interrupt_uncertain: "The Ollama room action may have completed before interruption.",
     },

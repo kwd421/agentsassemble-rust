@@ -19,7 +19,6 @@ pub(crate) struct RemoteOpenAiErrors {
     pub(crate) session_changed: &'static str,
     pub(crate) already_bound: &'static str,
     pub(crate) room_action_missing: &'static str,
-    pub(crate) tool_round_limit: &'static str,
     pub(crate) room_read_missing: &'static str,
     pub(crate) interrupt_uncertain: &'static str,
 }

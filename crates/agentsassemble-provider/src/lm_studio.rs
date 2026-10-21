@@ -71,7 +71,6 @@ static SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "LM Studio session authority changed after attachment.",
         already_bound: "LM Studio driver is already bound to another Agent Session.",
         room_action_missing: "LM Studio ended without the required room action.",
-        tool_round_limit: "LM Studio exceeded the bounded room-tool rounds.",
         room_read_missing: "LM Studio did not perform the required room read.",
         interrupt_uncertain: "The LM Studio room action may have completed before interruption.",
     },

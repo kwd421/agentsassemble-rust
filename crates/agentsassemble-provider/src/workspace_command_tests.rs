@@ -59,7 +59,7 @@ async fn a_command_runs_in_the_given_folder() {
         "/bin/sh",
         &["-c", "pwd"],
         folder.path(),
-        std::time::Duration::from_secs(10),
+        Some(std::time::Duration::from_secs(10)),
         &tokio_util::sync::CancellationToken::new(),
     )
     .await
@@ -91,7 +91,7 @@ async fn a_dropped_run_takes_the_programs_it_started_with_it() {
         "/bin/sh",
         &["-c", "sleep 30 & echo $! > child; wait"],
         folder.path(),
-        std::time::Duration::from_mins(1),
+        None,
         &cancellation,
     ));
     let started = folder.path().join("child");
@@ -122,4 +122,23 @@ async fn a_dropped_run_takes_the_programs_it_started_with_it() {
         );
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
+}
+
+/// A long log no longer stops the command; its end is what comes back.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_long_log_runs_to_the_end_and_keeps_its_tail() {
+    let folder = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+    let output = crate::process::run_in_directory(
+        "/bin/sh",
+        &["-c", "yes building | head -c 3000000; echo; echo finished"],
+        folder.path(),
+        None,
+        &tokio_util::sync::CancellationToken::new(),
+    )
+    .await
+    .unwrap_or_else(|_| panic!("run failed"));
+    assert!(output.status.success());
+    assert!(output.stdout.len() <= 2 * 1024 * 1024);
+    assert!(String::from_utf8_lossy(&output.stdout).ends_with("finished\n"));
 }

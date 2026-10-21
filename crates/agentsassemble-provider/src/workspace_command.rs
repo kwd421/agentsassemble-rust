@@ -17,8 +17,6 @@ use crate::{
 pub(crate) const NAME: &str = "run_workspace_command";
 /// The approval prompt shows the whole command on one line within its 1,200 characters.
 const MAX_COMMAND_CHARACTERS: usize = 1_000;
-const DEFAULT_TIMEOUT_SECONDS: u64 = 60;
-const MAX_TIMEOUT_SECONDS: u64 = 300;
 /// Each stream the model sees; the whole run is still bounded by the process owner.
 const MAX_STREAM_CHARACTERS: usize = 32 * 1024;
 
@@ -58,7 +56,7 @@ pub(crate) fn schema() -> Value {
         "description": format!("Run one {label} command in the selected workspace after the owner approves it. Use it for builds, tests and inspection the file tools cannot do, and say in your message why it is needed."),
         "parameters":{"type":"object","properties":{
             "command":{"type":"string"},
-            "timeout_seconds":{"type":"integer","minimum":1,"maximum":MAX_TIMEOUT_SECONDS}
+            "timeout_seconds":{"type":"integer","minimum":1,"description":"Optional. Without it the command runs until it finishes; set it only when a command might hang."}
         },"required":["command"],"additionalProperties":false}
     }})
 }
@@ -160,10 +158,7 @@ pub(crate) async fn execute(
             "This command could erase a disk or a home folder and is never run.",
         ));
     }
-    let timeout = arguments
-        .timeout_seconds
-        .unwrap_or(DEFAULT_TIMEOUT_SECONDS)
-        .clamp(1, MAX_TIMEOUT_SECONDS);
+    let timeout = arguments.timeout_seconds.map(|seconds| seconds.max(1));
     // The stored identity proves this is still the folder the owner chose.
     bind_workspace(session).await?;
     let description = format!("작업 폴더에서 이 명령을 실행합니다: {command}");
@@ -198,7 +193,7 @@ pub(crate) async fn execute(
         program,
         &args,
         std::path::Path::new(&session.workspace),
-        Duration::from_secs(timeout),
+        timeout.map(Duration::from_secs),
         cancellation,
     )
     .await
@@ -208,12 +203,6 @@ pub(crate) async fn execute(
             return Ok(
                 json!({"error": "command_timed_out", "timeout_seconds": timeout}).to_string(),
             );
-        }
-        Err(ProbeFailure::CatalogTooLarge) => {
-            return Ok(refused(
-                "command_output_too_large",
-                "The command printed more than 2 MB.",
-            ));
         }
         Err(ProbeFailure::Missing) => {
             return Ok(refused(

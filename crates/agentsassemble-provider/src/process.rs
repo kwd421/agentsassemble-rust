@@ -153,7 +153,7 @@ pub(crate) async fn run_in_directory(
     program: &str,
     args: &[&str],
     directory: &std::path::Path,
-    timeout: Duration,
+    timeout: Option<Duration>,
     cancellation: &CancellationToken,
 ) -> Result<ProbeOutput, ProbeFailure> {
     if cancellation.is_cancelled() {
@@ -174,11 +174,18 @@ pub(crate) async fn run_in_directory(
         terminate_probe_tree(child.as_mut()).await?;
         return Err(ProbeFailure::Failed);
     };
+    // A long build runs to the end unless a timeout was asked for; the turn
+    // interrupt (the cancellation) still stops it. Only the end of a long
+    // log is kept, where a build or test failure usually is.
+    let run = async { tokio::try_join!(read_tail(stdout), read_tail(stderr), child.wait()) };
     let collected = tokio::select! {
         () = cancellation.cancelled() => None,
-        collected = Box::pin(tokio::time::timeout(timeout, async {
-            tokio::try_join!(read_limited(stdout), read_limited(stderr), child.wait())
-        })) => Some(collected),
+        collected = Box::pin(async {
+            match timeout {
+                Some(timeout) => tokio::time::timeout(timeout, run).await,
+                None => Ok(run.await),
+            }
+        }) => Some(collected),
     };
     match collected {
         Some(Ok(Ok((stdout, stderr, status)))) => Ok(ProbeOutput {
@@ -192,7 +199,7 @@ pub(crate) async fn run_in_directory(
         }
         Some(Ok(Err(_))) => {
             terminate_probe_tree(child.as_mut()).await?;
-            Err(ProbeFailure::CatalogTooLarge)
+            Err(ProbeFailure::Failed)
         }
         Some(Err(_)) => {
             terminate_probe_tree(child.as_mut()).await?;
@@ -332,6 +339,21 @@ async fn read_limited<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>
             return Err(io::Error::other("provider probe output exceeded its limit"));
         }
         output.extend_from_slice(&chunk[..count]);
+    }
+}
+
+/// The last `MAX_PROBE_STREAM_BYTES` of a stream, read to its end.
+async fn read_tail<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>> {
+    let mut output = std::collections::VecDeque::new();
+    let mut chunk = vec![0_u8; 16 * 1024];
+    loop {
+        let count = reader.read(&mut chunk).await?;
+        if count == 0 {
+            return Ok(output.into());
+        }
+        output.extend(&chunk[..count]);
+        let excess = output.len().saturating_sub(MAX_PROBE_STREAM_BYTES);
+        output.drain(..excess);
     }
 }
 

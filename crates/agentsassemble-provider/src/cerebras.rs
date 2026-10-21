@@ -42,7 +42,6 @@ pub(crate) static CEREBRAS_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "Cerebras session authority changed after attachment.",
         already_bound: "Cerebras driver is already bound to another Agent Session.",
         room_action_missing: "Cerebras ended without the required room action.",
-        tool_round_limit: "Cerebras exceeded the bounded room-tool rounds.",
         room_read_missing: "Cerebras did not perform the required room read.",
         interrupt_uncertain: "The Cerebras room action may have completed before interruption.",
     },

@@ -48,7 +48,6 @@ pub(crate) static CUSTOM_API_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "Custom API session authority changed after attachment.",
         already_bound: "Custom API driver is already bound to another Agent Session.",
         room_action_missing: "Custom API ended without the required room action.",
-        tool_round_limit: "Custom API exceeded the bounded room-tool rounds.",
         room_read_missing: "Custom API did not perform the required room read.",
         interrupt_uncertain: "The Custom API room action may have completed before interruption.",
     },

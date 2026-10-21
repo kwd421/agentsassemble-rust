@@ -41,7 +41,6 @@ pub(crate) static VERCEL_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "Vercel AI Gateway session authority changed after attachment.",
         already_bound: "Vercel AI Gateway driver is already bound to another Agent Session.",
         room_action_missing: "Vercel AI Gateway ended without the required room action.",
-        tool_round_limit: "Vercel AI Gateway exceeded the bounded room-tool rounds.",
         room_read_missing: "Vercel AI Gateway did not perform the required room read.",
         interrupt_uncertain: "The Vercel AI Gateway room action may have completed before interruption.",
     },

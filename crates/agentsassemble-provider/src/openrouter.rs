@@ -79,7 +79,6 @@ pub(crate) static OPENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "OpenRouter session authority changed after attachment.",
         already_bound: "OpenRouter driver is already bound to another Agent Session.",
         room_action_missing: "OpenRouter ended without the required room action.",
-        tool_round_limit: "OpenRouter exceeded the bounded room-tool rounds.",
         room_read_missing: "OpenRouter did not perform the required room read.",
         interrupt_uncertain: "The OpenRouter room action may have completed before interruption.",
     },

@@ -39,7 +39,6 @@ pub(crate) static DEEPSEEK_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "DeepSeek session authority changed after attachment.",
         already_bound: "DeepSeek driver is already bound to another Agent Session.",
         room_action_missing: "DeepSeek ended without the required room action.",
-        tool_round_limit: "DeepSeek exceeded the bounded room-tool rounds.",
         room_read_missing: "DeepSeek did not perform the required room read.",
         interrupt_uncertain: "The DeepSeek room action may have completed before interruption.",
     },

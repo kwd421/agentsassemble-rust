@@ -64,7 +64,6 @@ pub(crate) static GEMINI_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "Gemini session authority changed after attachment.",
         already_bound: "Gemini driver is already bound to another Agent Session.",
         room_action_missing: "Gemini ended without the required room action.",
-        tool_round_limit: "Gemini exceeded the bounded room-tool rounds.",
         room_read_missing: "Gemini did not perform the required room read.",
         interrupt_uncertain: "The Gemini room action may have completed before interruption.",
     },

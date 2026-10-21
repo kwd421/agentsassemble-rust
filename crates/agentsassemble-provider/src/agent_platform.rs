@@ -68,7 +68,6 @@ pub(crate) static AGENT_PLATFORM_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         session_changed: "Agent Platform session authority changed after attachment.",
         already_bound: "Agent Platform driver is already bound to another Agent Session.",
         room_action_missing: "Agent Platform ended without the required room action.",
-        tool_round_limit: "Agent Platform exceeded the bounded room-tool rounds.",
         room_read_missing: "Agent Platform did not perform the required room read.",
         interrupt_uncertain: "The Agent Platform room action may have completed before interruption.",
     },
