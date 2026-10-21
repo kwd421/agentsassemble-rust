@@ -134,13 +134,13 @@ pub fn canonical_persona_id(value: &str) -> String {
     // A name in another script (Korean, Japanese, ...) loses its letters in the ASCII id, so
     // two such cards would share one id and the second import would replace the first. A short
     // digest of the whole name keeps them apart while the id stays ASCII.
-    let lossy = source.chars().any(|character| !character.is_ascii());
-    let digest_suffix = lossy.then(|| {
+    let digest_suffix = (!source.is_ascii()).then(|| {
         let digest = Sha256::digest(source.as_bytes());
-        digest[..5]
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>()
+        digest[..5].iter().fold(String::new(), |mut hex, byte| {
+            use std::fmt::Write as _;
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
     });
     let limit =
         MAX_PERSONA_ID_CHARACTERS - digest_suffix.as_ref().map_or(0, |suffix| suffix.len() + 1);
