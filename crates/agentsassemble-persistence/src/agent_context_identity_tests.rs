@@ -668,3 +668,53 @@ async fn an_unchanged_edit_keeps_memory_and_pieces_fit_the_budget()
     );
     Ok(())
 }
+
+/// Work one of the owner's AIs hands on keeps the owner's word only when that
+/// AI's own turn was owner-started; another person's AI or chain never gains it.
+#[tokio::test]
+async fn the_owners_ai_speaks_for_the_owner_only_in_an_owner_started_turn()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, owner, _directory) = fixture().await;
+    let session = stored_session(&store).await;
+    let set_owner = |id: &str| {
+        sqlx::query("UPDATE participants SET participant_json=json_set(participant_json, '$.owner_id', ?) WHERE participant_id=?")
+            .bind(id.to_owned())
+            .bind(session.public.participant_id.clone())
+    };
+    set_owner(&owner.participant_id)
+        .execute(&store.pool)
+        .await?;
+    let record = |started: bool| {
+        sqlx::query("INSERT OR REPLACE INTO provider_turn_executions(room_id, session_id, turn_generation, execution_id, participant_id, turn_id, assignment_json, phase, runtime_handle_id, runtime_owner_id, runtime_lease_token, created_at, updated_at) VALUES (?, ?, 1, 'exec-1', ?, 'turn-1', ?, 'completed', 'h', 'o', 'l', 't', 't')")
+            .bind(session.public.room_id.clone())
+            .bind(session.public.session_id.clone())
+            .bind(session.public.participant_id.clone())
+            .bind(if started { r#"{"owner_started":true}"# } else { "{}" })
+    };
+    let mut handed = store
+        .execute_message_with_turn(&owner, "seed", "message.send", &json!({"content": "seed"}))
+        .await?
+        .outcome
+        .event;
+    handed.actor.participant_id = session.public.participant_id.clone();
+    handed.actor.participant_type = "agent".to_owned();
+    handed
+        .extra
+        .insert("session_id".to_owned(), json!(session.public.session_id));
+    handed.extra.insert("turn_id".to_owned(), json!("turn-1"));
+    let speaks = |event: agentsassemble_domain::RoomEvent| {
+        let (store, owner) = (&store, owner.participant_id.clone());
+        async move {
+            let mut tx = store.pool.begin().await?;
+            super::super::context::speaks_for_owner(&mut tx, &owner, &event).await
+        }
+    };
+    record(true).execute(&store.pool).await?;
+    assert!(speaks(handed.clone()).await?);
+    record(false).execute(&store.pool).await?;
+    assert!(!speaks(handed.clone()).await?);
+    record(true).execute(&store.pool).await?;
+    set_owner("someone-else").execute(&store.pool).await?;
+    assert!(!speaks(handed.clone()).await?);
+    Ok(())
+}

@@ -133,14 +133,16 @@ pub(super) async fn prepare_room_input(
         ));
     }
     // Full access runs without asking only in a turn the agent's owner started:
-    // every message this turn answers is the owner's own.
+    // every message this turn answers speaks for the owner.
     let owner = load_participant(transaction, &room.room_id, &session.public.participant_id)
         .await?
         .owner_id;
-    let owner_started = !owner.is_empty()
-        && inflight
-            .iter()
-            .all(|pending| pending.event.actor.participant_id == owner);
+    let mut owner_started = !owner.is_empty();
+    for pending in &inflight {
+        if owner_started {
+            owner_started = speaks_for_owner(transaction, &owner, &pending.event).await?;
+        }
+    }
     // Memory reaches back before the oldest message this turn shows.
     let oldest_shown = context.first().map_or(source.event.seq, |event| event.seq);
     let recent = context
@@ -173,6 +175,42 @@ pub(super) async fn prepare_room_input(
 /// Attachments the turn may read: those of the messages that started it, then those of
 /// the other messages shown in its room view, newest first, up to the per-turn limit. A
 /// message that only asks about an attachment posted just before it must still reach it.
+/// The owner's own message, or one from another of the owner's AIs written
+/// in a turn that was itself owner-started. Work handed between the owner's
+/// AIs keeps the owner's word; a chain anyone else began never gains it.
+pub(super) async fn speaks_for_owner(
+    transaction: &mut Transaction<'_, Sqlite>,
+    owner: &str,
+    event: &RoomEvent,
+) -> Result<bool, PersistenceError> {
+    let actor = &event.actor.participant_id;
+    if actor == owner {
+        return Ok(true);
+    }
+    let text = |key: &str| event.extra.get(key).and_then(serde_json::Value::as_str);
+    let (Some(session_id), Some(turn_id)) = (text("session_id"), text("turn_id")) else {
+        return Ok(false);
+    };
+    if event.actor.participant_type != "agent"
+        || load_participant(transaction, &event.room_id, actor)
+            .await?
+            .owner_id
+            != owner
+    {
+        return Ok(false);
+    }
+    let started = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(json_extract(assignment_json, '$.owner_started'), 0) FROM provider_turn_executions WHERE room_id = ? AND session_id = ? AND participant_id = ? AND turn_id = ?",
+    )
+    .bind(&event.room_id)
+    .bind(session_id)
+    .bind(actor)
+    .bind(turn_id)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    Ok(started == Some(1))
+}
+
 fn readable_attachment_ids(
     inflight: &[&PendingRoomEvent],
     context: &[RoomEvent],
