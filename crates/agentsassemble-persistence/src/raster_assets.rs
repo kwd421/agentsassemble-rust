@@ -64,27 +64,31 @@ fn card_thumbnail_blocking(
     declared_format: ImageFormat,
     content: Vec<u8>,
 ) -> Result<Vec<u8>, PersistenceError> {
-    let mut reader = ImageReader::new(Cursor::new(content))
-        .with_guessed_format()
-        .map_err(|_| invalid_image())?;
     let mut limits = decode_limits();
     limits.max_image_width = Some(MAX_CARD_ART_DIMENSION);
     limits.max_image_height = Some(MAX_CARD_ART_DIMENSION);
-    reader.limits(limits);
+    let mut reader = ImageReader::new(Cursor::new(content.as_slice()))
+        .with_guessed_format()
+        .map_err(|_| invalid_image())?;
+    reader.limits(limits.clone());
     if reader.format() != Some(declared_format) {
         return Err(invalid_image());
     }
-    let decoded = reader.decode().map_err(|_| invalid_image())?;
-    let pixels = u64::from(decoded.width()).saturating_mul(u64::from(decoded.height()));
+    let (width, height) = reader.into_dimensions().map_err(|_| invalid_image())?;
+    let pixels = u64::from(width).saturating_mul(u64::from(height));
     if pixels == 0 || pixels > MAX_IMAGE_PIXELS {
         return Err(invalid_image());
     }
+    let decoded = ImageReader::new(Cursor::new(content.as_slice()))
+        .with_guessed_format()
+        .map_err(|_| invalid_image())
+        .and_then(|mut reader| {
+            reader.limits(limits);
+            reader.decode().map_err(|_| invalid_image())
+        })?;
+    // The integer box filter allocates only the output, unlike resize's float buffer.
     let thumbnail = if decoded.width().max(decoded.height()) > CARD_THUMBNAIL_DIMENSION {
-        decoded.resize(
-            CARD_THUMBNAIL_DIMENSION,
-            CARD_THUMBNAIL_DIMENSION,
-            image::imageops::FilterType::Triangle,
-        )
+        decoded.thumbnail(CARD_THUMBNAIL_DIMENSION, CARD_THUMBNAIL_DIMENSION)
     } else {
         decoded
     };

@@ -144,8 +144,9 @@ fn parse_png_card(
     content: &[u8],
 ) -> Result<(Value, BTreeMap<String, Vec<u8>>), PersonaImportError> {
     let mut png_decoder = png::Decoder::new(BufReader::new(Cursor::new(content)));
+    // png charges a text chunk once while its read buffer doubles and again when parsed.
     png_decoder.set_limits(png::Limits {
-        bytes: MAX_PERSONA_UPLOAD_BYTES.saturating_mul(2),
+        bytes: MAX_PERSONA_UPLOAD_BYTES.next_power_of_two() + MAX_PERSONA_UPLOAD_BYTES,
     });
     let mut reader = png_decoder
         .read_info()
@@ -628,6 +629,38 @@ mod tests {
         )
         .unwrap_or_else(|error| panic!("decode thumbnail: {error}"));
         assert_eq!(thumbnail.width(), 1024);
+    }
+
+    #[tokio::test]
+    async fn imports_one_embedded_asset_chunk_near_the_card_limit() {
+        let card =
+            json!({"spec": "chara_card_v3", "spec_version": "3.0", "data": {"name": "Big Asset"}});
+        let asset = STANDARD.encode(vec![7_u8; 21 * 1024 * 1024 + 512 * 1024]);
+        assert!(asset.len() > 28 * 1024 * 1024);
+        let mut png_bytes = Cursor::new(Vec::new());
+        {
+            let mut png_encoder = png::Encoder::new(&mut png_bytes, 1, 1);
+            png_encoder.set_color(png::ColorType::Rgba);
+            png_encoder.set_depth(png::BitDepth::Eight);
+            png_encoder
+                .add_text_chunk("ccv3".to_owned(), STANDARD.encode(card.to_string()))
+                .unwrap_or_else(|error| panic!("add card chunk: {error}"));
+            png_encoder
+                .add_text_chunk("chara-ext-asset_:0".to_owned(), asset)
+                .unwrap_or_else(|error| panic!("add asset chunk: {error}"));
+            let mut writer = png_encoder
+                .write_header()
+                .unwrap_or_else(|error| panic!("write PNG header: {error}"));
+            writer
+                .write_image_data(&[0, 0, 0, 255])
+                .unwrap_or_else(|error| panic!("write PNG pixel: {error}"));
+        }
+        let content = png_bytes.into_inner();
+        assert!(content.len() <= agentsassemble_domain::MAX_PERSONA_UPLOAD_BYTES);
+        let imported = import_ccv3_asset("asset.png", content)
+            .await
+            .unwrap_or_else(|error| panic!("import PNG card with a large asset chunk: {error}"));
+        assert_eq!(imported.card.display_name, "Big Asset");
     }
 
     #[tokio::test]
