@@ -218,16 +218,24 @@ impl RemoteOpenAiDriver {
         let tools = self.turn_tools(session, request);
         let mut messages = opening_messages(session, request);
         let opening = messages.len();
+        let context_tokens = request
+            .context_tokens
+            .unwrap_or(turn_compaction::UNKNOWN_CONTEXT_TOKENS);
+        // The provider's own usage report for messages[..covered].
+        let mut measured: Option<(usize, u64)> = None;
         for round in 0..=MAX_TOOL_ROUNDS {
-            if let Some(context_tokens) = request.context_tokens {
-                self.compact(
+            if self
+                .compact(
                     session,
                     credential.as_ref(),
                     &mut messages,
                     opening,
                     context_tokens,
+                    measured,
                 )
-                .await?;
+                .await?
+            {
+                measured = None;
             }
             let response = self
                 .api
@@ -240,6 +248,12 @@ impl RemoteOpenAiDriver {
                 )
                 .await?;
             validate_completion(&response, &session.public.model, self.spec)?;
+            let reported = response.usage.map(|usage| {
+                (
+                    messages.len() + 1,
+                    usage.prompt.saturating_add(usage.completion),
+                )
+            });
             let provider_turn_id = response.id.clone();
             let mut message = response.message;
             if message.tool_calls.is_empty() {
@@ -290,6 +304,7 @@ impl RemoteOpenAiDriver {
                 }
                 messages.push(assistant_value(&message, self.spec.retain_reasoning));
                 messages.push(tool_value(&executed));
+                measured = reported;
                 continue;
             }
             let mut executed = Vec::new();
@@ -311,6 +326,7 @@ impl RemoteOpenAiDriver {
             message.tool_calls = executed.iter().map(|item| item.call.clone()).collect();
             messages.push(assistant_value(&message, self.spec.retain_reasoning));
             messages.extend(executed.iter().map(tool_value));
+            measured = reported;
             if executed.last().is_some_and(|item| item.terminal) {
                 return Ok(completed(
                     request,
@@ -325,8 +341,9 @@ impl RemoteOpenAiDriver {
         ))
     }
 
-    /// pi-style compaction: near the model's context window, the older tool
-    /// rounds of this turn are replaced by the model's own summary of them.
+    /// pi-style compaction: past 75% of what the window leaves after the reply
+    /// limit, the older tool rounds of this turn are replaced by the model's own
+    /// summary of them. Returns whether it folded.
     async fn compact(
         &self,
         session: &DurableAgentSession,
@@ -334,16 +351,15 @@ impl RemoteOpenAiDriver {
         messages: &mut Vec<Value>,
         opening: usize,
         context_tokens: u64,
-    ) -> Result<(), DriverError> {
-        if !turn_compaction::needs_compaction(
-            messages,
-            context_tokens,
-            session.public.max_output_tokens,
-        ) {
-            return Ok(());
+        measured: Option<(usize, u64)>,
+    ) -> Result<bool, DriverError> {
+        let threshold =
+            turn_compaction::threshold(context_tokens, session.public.max_output_tokens);
+        if turn_compaction::used_tokens(messages, measured) <= threshold {
+            return Ok(false);
         }
-        let Some(cut) = turn_compaction::cut_point(messages, opening) else {
-            return Ok(());
+        let Some(cut) = turn_compaction::cut_point(messages, opening, threshold) else {
+            return Ok(false);
         };
         let summary_request = turn_compaction::summary_request(messages, opening, cut);
         let response = self
@@ -363,7 +379,7 @@ impl RemoteOpenAiDriver {
                 )
             })?;
         turn_compaction::fold(messages, opening, cut, &summary);
-        Ok(())
+        Ok(true)
     }
 
     async fn load_credential(&self) -> Result<Option<ProviderCredential>, DriverError> {

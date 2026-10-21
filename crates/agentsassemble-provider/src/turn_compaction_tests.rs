@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::{cut_point, fold, needs_compaction, summary_request};
+use super::{cut_point, fold, summary_request, threshold, used_tokens};
 
 fn round(index: usize, output: &str) -> [Value; 2] {
     [
@@ -22,19 +22,30 @@ fn turn(rounds: usize, output: &str) -> Vec<Value> {
 }
 
 #[test]
-fn a_turn_compacts_only_near_the_context_window() {
-    let small = turn(2, "ok");
-    assert!(!needs_compaction(&small, 131_072, 4_096));
-    let large = turn(40, &"x".repeat(12_000));
-    assert!(needs_compaction(&large, 131_072, 4_096));
-    // A long reply limit reserves more room than pi's default.
-    assert!(needs_compaction(&small, 1_000, 65_536));
+fn compaction_starts_at_three_quarters_of_the_room_left_after_the_reply() {
+    assert_eq!(threshold(32_768, 4_096), 21_504);
+    assert_eq!(threshold(1_000, 65_536), 0);
+}
+
+#[test]
+fn usage_reported_by_the_provider_counts_and_only_later_parts_are_estimated() {
+    let messages = turn(3, &"x".repeat(3_000));
+    let estimated = used_tokens(&messages, None);
+    // The report covers everything up to the last assistant message.
+    let covered = messages.len() - 1;
+    let measured = used_tokens(&messages, Some((covered, 50_000)));
+    assert!(measured > 50_000 && measured < 50_000 + estimated);
+    // A report from before a fold no longer lines up and is ignored.
+    assert_eq!(
+        used_tokens(&messages, Some((messages.len() + 5, 50_000))),
+        estimated
+    );
 }
 
 #[test]
 fn folding_keeps_rules_input_and_whole_recent_rounds() {
     let mut messages = turn(40, &"x".repeat(12_000));
-    let cut = cut_point(&messages, 2).unwrap_or_else(|| panic!("old rounds to fold"));
+    let cut = cut_point(&messages, 2, 100_000).unwrap_or_else(|| panic!("old rounds to fold"));
     assert_eq!(messages[cut]["role"], "assistant");
     assert!(
         cut < messages.len() - 2,
@@ -61,5 +72,5 @@ fn folding_keeps_rules_input_and_whole_recent_rounds() {
 #[test]
 fn a_single_round_has_nothing_older_to_fold() {
     let messages = turn(1, &"x".repeat(200_000));
-    assert_eq!(cut_point(&messages, 2), None);
+    assert_eq!(cut_point(&messages, 2, 100_000), None);
 }

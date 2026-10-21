@@ -101,6 +101,14 @@ fn ready(
     )
 }
 
+/// DeepSeek's model list carries no context window; these come from the
+/// models table at api-docs.deepseek.com/quick_start/pricing (2026-10-21).
+/// A model missing here gets no window rather than a guessed one.
+const DOCUMENTED_CONTEXT: [(&str, u64); 2] = [
+    ("deepseek-flash", 1_000_000),
+    ("deepseek-v4-pro", 1_000_000),
+];
+
 #[derive(Deserialize)]
 struct ModelList {
     object: String,
@@ -136,6 +144,11 @@ fn model_options(payload: Value) -> Result<Vec<ProviderControlOption>, RemoteCat
         model
             .metadata
             .insert("reasoning_efforts".to_owned(), json!(EFFORTS));
+        if let Some((_, context)) = DOCUMENTED_CONTEXT.iter().find(|(name, _)| *name == id) {
+            model
+                .metadata
+                .insert("context_length".to_owned(), json!(context));
+        }
         options.push(model);
     }
     bound_catalog_options(options)
@@ -170,6 +183,10 @@ mod tests {
         ] {
             assert!(!updated[0].metadata.contains_key(key));
         }
+        // A documented model carries its window from DeepSeek's models table.
+        let documented = model_options(payload(&["deepseek-flash"]))
+            .unwrap_or_else(|error| panic!("{error:?}"));
+        assert_eq!(documented[0].metadata["context_length"], json!(1_000_000));
         assert!(model_options(payload(&["duplicate", "duplicate"])).is_err());
         assert!(model_options(payload(&["bad\nidentifier"])).is_err());
         assert!(model_options(json!({"data":[]})).is_err());

@@ -267,16 +267,16 @@ fn price_per_million(value: &Value) -> Option<String> {
     )
 }
 
-/// The model's context window as its provider's catalog published it.
+/// The model's context window as its provider's catalog records it.
 pub fn model_context_tokens(
     catalog: &agentsassemble_domain::ProviderCatalog,
-    provider_id: &str,
+    provider_kind: &str,
     model: &str,
 ) -> Option<u64> {
     catalog
         .providers
         .iter()
-        .find(|provider| provider.id == provider_id)?
+        .find(|provider| provider.provider_kind == provider_kind)?
         .controls
         .iter()
         .find(|control| control.key == "model")?

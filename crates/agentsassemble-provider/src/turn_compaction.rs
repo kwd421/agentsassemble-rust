@@ -4,9 +4,10 @@
 //! turn input and the latest rounds stay exactly as they were.
 use serde_json::{Value, json};
 
-/// Room left for the reply and the next tool round (pi's `reserveTokens`).
-const RESERVE_TOKENS: u64 = 16_384;
-/// Recent rounds kept word for word (pi's `keepRecentTokens`).
+/// The window assumed when neither the catalog nor the provider's documents
+/// give one: small, so an unknown model is compacted early rather than late.
+pub(crate) const UNKNOWN_CONTEXT_TOKENS: u64 = 32_768;
+/// Recent rounds kept word for word, at most (pi's `keepRecentTokens`).
 const KEEP_RECENT_TOKENS: u64 = 20_000;
 
 const SUMMARY_INSTRUCTIONS: &str = "You summarize an agent's work in progress so it can continue in a smaller context. Write a concise summary of the work so far: what was done, what the tools returned that still matters, exact file paths, names, values and error codes, and what remains to do for the task. Do not invent anything and do not continue the work yourself.";
@@ -21,15 +22,29 @@ pub(crate) fn estimate_tokens(messages: &[Value]) -> u64 {
     u64::try_from(bytes).unwrap_or(u64::MAX) / 3
 }
 
-pub(crate) fn needs_compaction(messages: &[Value], context_tokens: u64, max_output: u32) -> bool {
-    let reserve = RESERVE_TOKENS.max(u64::from(max_output));
-    estimate_tokens(messages) > context_tokens.saturating_sub(reserve)
+/// Compaction starts at 75% of what the window leaves after the reply limit.
+pub(crate) fn threshold(context_tokens: u64, max_output: u32) -> u64 {
+    context_tokens.saturating_sub(u64::from(max_output)) / 4 * 3
+}
+
+/// What the next request costs: the provider-reported usage of the last reply
+/// (prompt and completion, covering `messages[..covered]`) plus an estimate of
+/// what was added after it. Without a report everything is estimated.
+pub(crate) fn used_tokens(messages: &[Value], measured: Option<(usize, u64)>) -> u64 {
+    match measured {
+        Some((covered, tokens)) if covered <= messages.len() => {
+            tokens.saturating_add(estimate_tokens(&messages[covered..]))
+        }
+        _ => estimate_tokens(messages),
+    }
 }
 
 /// Where the kept messages start. A round is one assistant message and the
 /// tool results that answer it, so a tool call never loses its result. The
 /// latest round is always kept; `None` means nothing older can be folded.
-pub(crate) fn cut_point(messages: &[Value], opening: usize) -> Option<usize> {
+pub(crate) fn cut_point(messages: &[Value], opening: usize, threshold: u64) -> Option<usize> {
+    // A small window keeps less, so folding still frees room.
+    let keep = KEEP_RECENT_TOKENS.min(threshold / 3);
     let starts: Vec<usize> = (opening..messages.len())
         .filter(|&index| messages[index]["role"] == "assistant")
         .collect();
@@ -37,7 +52,7 @@ pub(crate) fn cut_point(messages: &[Value], opening: usize) -> Option<usize> {
     let mut kept = estimate_tokens(&messages[cut..]);
     for &start in starts.iter().rev().skip(1) {
         let size = estimate_tokens(&messages[start..cut]);
-        if kept + size > KEEP_RECENT_TOKENS {
+        if kept + size > keep {
             break;
         }
         kept += size;
