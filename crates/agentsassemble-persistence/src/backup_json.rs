@@ -192,6 +192,8 @@ pub(crate) fn stop_agent(session: &mut DurableAgentSession) {
         field.clear();
     }
     session.schedule_requested = false;
+    // Trusting other people's AIs belongs to the computer it was set on.
+    session.trusts_ai_handoffs = false;
     session.lifecycle_intent_action = agentsassemble_domain::AgentLifecycleAction::default();
     session.lifecycle_intent_status = agentsassemble_domain::AgentLifecycleIntentStatus::default();
     session.public.turn_phase = agentsassemble_domain::AgentTurnPhase::default();

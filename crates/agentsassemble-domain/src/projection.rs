@@ -49,6 +49,7 @@ const PRIVATE_PUBLIC_KEYS: &[&str] = &[
     "terminal_tail",
     "ticket",
     "token",
+    "trusts_ai_handoffs",
     "workspace",
     "workspace_identity",
     "write_budget_stream_bytes",

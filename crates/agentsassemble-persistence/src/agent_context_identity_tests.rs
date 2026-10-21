@@ -718,3 +718,42 @@ async fn the_owners_ai_speaks_for_the_owner_only_in_an_owner_started_turn()
     assert!(!speaks(handed.clone()).await?);
     Ok(())
 }
+
+/// Trusting other people's AIs is the owner's private switch, off by default,
+/// and a backup carried to another computer drops it.
+#[tokio::test]
+async fn trusting_other_peoples_ais_is_private_and_off_by_default()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, _owner, _directory) = fixture().await;
+    let session = stored_session(&store).await;
+    let (room, id) = (
+        session.public.room_id.clone(),
+        session.public.session_id.clone(),
+    );
+    assert_eq!(
+        store.agent_trusts_ai_handoffs(&room, &id).await?,
+        Some(false)
+    );
+    assert!(store.set_agent_trusts_ai_handoffs(&room, &id, true).await?);
+    let trusted = stored_session(&store).await;
+    assert!(trusted.trusts_ai_handoffs);
+    let public = serde_json::to_value(trusted.public())?;
+    assert!(public.get("trusts_ai_handoffs").is_none());
+    let mut restored = trusted.clone();
+    crate::backup_json::stop_agent(&mut restored);
+    assert!(!restored.trusts_ai_handoffs);
+    assert!(
+        store
+            .set_agent_trusts_ai_handoffs(&room, &id, false)
+            .await?
+    );
+    assert_eq!(
+        store.agent_trusts_ai_handoffs(&room, &id).await?,
+        Some(false)
+    );
+    assert_eq!(
+        store.agent_trusts_ai_handoffs(&room, "missing").await?,
+        None
+    );
+    Ok(())
+}

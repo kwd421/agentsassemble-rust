@@ -140,7 +140,8 @@ pub(super) async fn prepare_room_input(
     let mut owner_started = !owner.is_empty();
     for pending in &inflight {
         if owner_started {
-            owner_started = speaks_for_owner(transaction, &owner, &pending.event).await?;
+            owner_started = speaks_for_owner(transaction, &owner, &pending.event).await?
+                || (session.trusts_ai_handoffs && pending.event.actor.participant_type == "agent");
         }
     }
     // Memory reaches back before the oldest message this turn shows.
@@ -178,6 +179,7 @@ pub(super) async fn prepare_room_input(
 /// The owner's own message, or one from another of the owner's AIs written
 /// in a turn that was itself owner-started. Work handed between the owner's
 /// AIs keeps the owner's word; a chain anyone else began never gains it.
+/// (An owner who trusts other people's AIs lets any AI's message count.)
 pub(super) async fn speaks_for_owner(
     transaction: &mut Transaction<'_, Sqlite>,
     owner: &str,

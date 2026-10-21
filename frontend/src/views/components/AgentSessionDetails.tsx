@@ -14,6 +14,7 @@ import {
 import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
 import AgentActivitySettings from "./AgentActivitySettings";
 import AgentMemorySettings, { keepsMemory } from "./AgentMemorySettings";
+import AgentHandoffTrustSetting from "./AgentHandoffTrustSetting";
 import ProviderModelRefresh from "./ProviderModelRefresh";
 import { refreshLocalProviderCatalog } from "../../api/providerOperations";
 import { isDesktopWebview } from "../../lib/desktopBridge";
@@ -520,6 +521,7 @@ export default function AgentSessionDetails({
         />
       )}
       {serverOwned && onConfigure && keepsMemory(session) && <AgentMemorySettings session={session} />}
+      {serverOwned && onConfigure && session.permission_mode === "full_access" && <AgentHandoffTrustSetting session={session} />}
       <AgentActivitySettings
         session={session}
         activityVisible={activityVisible}
