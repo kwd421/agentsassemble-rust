@@ -3,7 +3,7 @@ import type { CanonicalParticipantProfile } from "../../lib/canonicalRoomProject
 import type { MentionLabels } from "./DiscordText";
 import DiscordText from "./DiscordText";
 import { buildLobbyRows } from "../lobby/lobbyRows";
-import { MessageReply, type ReplySource } from "./MessageReply";
+import { MessageReply, replyCallText, type ReplySource } from "./MessageReply";
 import MessageRow, { MessageActions } from "./MessageRow";
 
 export default function ChannelMessageRows({ events, profiles, mentionLabels, selectedId, pinnedIds,
@@ -11,7 +11,7 @@ export default function ChannelMessageRows({ events, profiles, mentionLabels, se
   events: RoomEvent[]; profiles: Record<string, CanonicalParticipantProfile>; mentionLabels: MentionLabels;
   selectedId?: string; pinnedIds: Set<string>; canReply: boolean; replyDisabled: boolean;
   canPin: boolean; pinDisabled: boolean; onReply: (eventId: string) => void;
-  onTogglePin: (eventId: string) => void; replyTargetId?: string; replySource: (eventId: string, replyText?: string, called?: string) => ReplySource;
+  onTogglePin: (eventId: string) => void; replyTargetId?: string; replySource: (eventId: string, replyText?: string) => ReplySource;
   onNavigate: (eventId: string) => void;
 }) {
   const byId = new Map(events.map((event) => [event.id, event]));
@@ -28,6 +28,8 @@ export default function ChannelMessageRows({ events, profiles, mentionLabels, se
     const profile = profiles[event.actor.participant_id];
     const deleted = event.message_deleted === true;
     const replyId = typeof event.reply_to_event_id === "string" ? event.reply_to_event_id : undefined;
+    const replyAuthor = replyId ? events.find((candidate) => candidate.id === replyId)?.actor.participant_id : undefined;
+    const body = replyCallText(event.content || "", replyAuthor).text;
     return <MessageRow key={row.key} eventId={event.id} author={row.event.name} createdAt={event.created_at}
         participantType={event.actor.participant_type} avatarLabel={profile?.avatarLabel}
         avatarImage={profile?.avatarImageUrl} providerKind={profile?.providerKind} role={profile?.role}
@@ -35,9 +37,9 @@ export default function ChannelMessageRows({ events, profiles, mentionLabels, se
         actions={<MessageActions onReply={canReply && !deleted ? () => onReply(event.id) : undefined}
           replyDisabled={replyDisabled} pinned={pinnedIds.has(event.id)} pinDisabled={pinDisabled}
           onTogglePin={canPin && !deleted ? () => onTogglePin(event.id) : undefined} />}
-        reply={!deleted && replyId ? <MessageReply source={replySource(replyId, event.content ?? undefined, typeof event.reply_mention_participant_id === "string" ? event.reply_mention_participant_id : undefined)} onOpen={() => onNavigate(replyId)} /> : undefined}>
+        reply={!deleted && replyId ? <MessageReply source={replySource(replyId, event.content ?? undefined)} onOpen={() => onNavigate(replyId)} /> : undefined}>
         <div className={`dc-message-body preserve-words ${deleted ? "italic text-text-muted" : ""}`}>
-          {deleted ? "삭제된 메시지예요" : <DiscordText text={event.content || ""} mentionLabels={mentionLabels} />}
+          {deleted ? "삭제된 메시지예요" : <DiscordText text={body} mentionLabels={mentionLabels} />}
         </div>
       </MessageRow>;
   })}</>;

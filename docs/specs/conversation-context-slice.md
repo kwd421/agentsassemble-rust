@@ -219,11 +219,11 @@ mentions and the structured handoff. An AI reply whose text opens with the
 replied-to author's `<@ID>` is stored as an "@ on" reply without that text, and
 mentions wrapped in escaped brackets (`&lt;<@ID>&gt;`) are unwrapped; a connected
 AI's lobby `message.send` gets the same shaping. Deleting a
-reply removes the call with the other reply metadata. Text-channel replies
-(`channel.message.send`) take the same `reply_mention` under their own
-capability `channel.reply_mention`; the channel client accepts the recorded field
-and binds it in the send receipt. Channels have no AI turns, so the call only
-reaches people (the rail mention badge).
+reply removes the call with the other reply metadata. Channel messages keep
+their strict wire shape (older web clients validate it with exact keys), so a
+text-channel reply's "@ on" is the client putting the replied-to author's
+`<@ID>` at the front of the text; the channel view hides that leading mention on
+a reply and shows the call marker instead. Older clients see an ordinary mention.
 
 Owners: `room_turn_context.rs`, `room_turn_routing.rs`, `conversation_status.rs`
 and its domain projection. All additions share the existing observation budget.

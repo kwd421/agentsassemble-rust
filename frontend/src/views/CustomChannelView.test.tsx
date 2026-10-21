@@ -184,31 +184,28 @@ it("shows stored mentions as names in search results and pins", async () => {
   expect(document.body.textContent).not.toContain("<@agent-1>");
 });
 
-it("offers Discord's reply @ switch only where the host carries it, and never for your own message", async () => {
+it("calls the replied-to author with a leading mention and shows it as Discord's reply @", async () => {
   const options = props();
   const theirs = { ...channelMessage(4), actor: { participant_id: "guest", participant_type: "human" }, actor_id: "guest", participant_id: "guest", display_name: "Guest" };
   options.transcript.events = [channelMessage(3), theirs];
-  const { rerender } = render(<CustomChannelView {...options} viewerParticipantId="operator-local" replyMentionSupported />);
+  const { rerender } = render(<CustomChannelView {...options} viewerParticipantId="operator-local" />);
   const reply = (index: number) => fireEvent.click(screen.getAllByRole("button", { name: "메시지에 답장" })[index]);
   const input = () => screen.getByRole("textbox", { name: "채널 메시지 입력" });
+  const send = () => fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
   reply(1);
-  const toggle = screen.getByRole("button", { name: "@ 켜짐" });
   fireEvent.change(input(), { target: { value: "called" } });
-  fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
-  await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("called", undefined, theirs.id, true));
-  rerender(<CustomChannelView {...options} viewerParticipantId="operator-local" replyMentionSupported
-    transcript={{ ...options.transcript, events: [...options.transcript.events, { ...channelMessage(5), content: "called", reply_to_event_id: theirs.id, reply_mention_participant_id: "guest" }] }} />);
-  expect(screen.getByText("@Guest")).toBeTruthy();
+  send();
+  await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("<@guest> called", undefined, theirs.id));
   reply(1);
   fireEvent.click(screen.getByRole("button", { name: "@ 켜짐" }));
-  expect(screen.getByRole("button", { name: "@ 꺼짐" })).toBeTruthy();
   fireEvent.change(input(), { target: { value: "quiet" } });
-  fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
-  await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("quiet", undefined, theirs.id, false));
+  send();
+  await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("quiet", undefined, theirs.id));
   reply(0);
   expect(screen.queryByRole("button", { name: /^@ / })).toBeNull();
-  rerender(<CustomChannelView {...options} viewerParticipantId="operator-local" />);
-  reply(1);
-  expect(screen.queryByRole("button", { name: /^@ / })).toBeNull();
-  expect(toggle).toBeTruthy();
+  const sent = { ...channelMessage(5), content: "<@guest> called", reply_to_event_id: theirs.id };
+  rerender(<CustomChannelView {...options} viewerParticipantId="operator-local"
+    transcript={{ ...options.transcript, events: [...options.transcript.events, sent] }} />);
+  expect(screen.getByText("@Guest")).toBeTruthy();
+  expect(screen.getByText("called")).toBeTruthy();
 });

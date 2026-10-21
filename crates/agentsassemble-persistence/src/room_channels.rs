@@ -85,7 +85,7 @@ pub(crate) async fn transition_channels(
                 .execute(&mut **tx)
                 .await?;
         }
-        sqlx::query("UPDATE room_events SET event_json = json_set(json_remove(event_json, '$.reply_mention_participant_id'), '$.content', '', '$.message_deleted', json('true')) WHERE room_id = ? AND json_extract(event_json, '$.channel_id') = ? AND json_extract(event_json, '$.type') = 'channel_message_final'")
+        sqlx::query("UPDATE room_events SET event_json = json_set(event_json, '$.content', '', '$.message_deleted', json('true')) WHERE room_id = ? AND json_extract(event_json, '$.channel_id') = ? AND json_extract(event_json, '$.type') = 'channel_message_final'")
             .bind(room_id).bind(&removed.id).execute(&mut **tx).await?;
     }
     Ok(())

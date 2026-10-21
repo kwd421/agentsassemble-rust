@@ -53,7 +53,7 @@ impl SqliteStore {
             return Ok(outcome);
         }
         let sequence = next_sequence(&mut tx, &principal.room_id).await?;
-        let reply_author = crate::message_replies::validate_reply_target(
+        crate::message_replies::validate_reply_target(
             &mut tx,
             &principal.room_id,
             &command.channel_id,
@@ -61,14 +61,9 @@ impl SqliteStore {
             sequence,
         )
         .await?;
-        let mut event =
+        let event =
             prepare_channel_message_event(&principal, &participant, &command, sequence, Utc::now())
                 .map_err(rejection)?;
-        crate::message_replies::record_reply_mention(
-            &mut event,
-            reply_author,
-            command.reply_mention,
-        );
         insert_event(&mut tx, &event).await?;
         let result =
             json!({"channel_id": command.channel_id, "event": event, "event_seq": event.seq});

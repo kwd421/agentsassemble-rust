@@ -144,9 +144,6 @@ pub struct CapabilitySet {
     /// from older hosts, so a newer client never sends the field to them.
     #[serde(rename = "message.reply_mention", default)]
     pub message_reply_mention: bool,
-    /// The same "@ on" for text-channel replies (`channel.message.send`).
-    #[serde(rename = "channel.reply_mention", default)]
-    pub channel_reply_mention: bool,
 }
 
 impl CapabilitySet {
@@ -175,7 +172,6 @@ impl CapabilitySet {
             agent_control: is_operator,
             bridge_publish: bridge && writable,
             message_reply_mention: writable && !bridge,
-            channel_reply_mention: writable && !bridge,
         }
     }
 }

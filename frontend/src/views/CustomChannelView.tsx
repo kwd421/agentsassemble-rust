@@ -26,8 +26,7 @@ export default function CustomChannelView({
   canPost, canPin, participantProfiles = {}, mentionables = [], searchLabel,
   membersOpen, onToggleMembers, onOpenMobileSidebar, onOpenMobileInfo, headerActions,
   messageSearchScope = "channel", onMessageSearchScopeChange, messageSearchChannelLabels = {},
-  pendingSearchTargetEventId = "", onSearchTargetHandled, onOpenCrossChannelSearchResult,
-  viewerParticipantId = "", replyMentionSupported = false,
+  pendingSearchTargetEventId = "", onSearchTargetHandled, onOpenCrossChannelSearchResult, viewerParticipantId = "",
 }: {
   channel: RoomChannel | null; channelId: string; roomId: string; roomUid: string;
   transcript: Transcript; authority?: MessagePinsAuthority; messageSearch: RoomMessageSearchController;
@@ -39,8 +38,6 @@ export default function CustomChannelView({
   messageSearchChannelLabels?: Record<string, string>; pendingSearchTargetEventId?: string;
   onSearchTargetHandled?: () => void; onOpenCrossChannelSearchResult: (result: RoomSearchResult) => void;
   viewerParticipantId?: string;
-  /** The host advertises `channel.reply_mention` (Discord's reply "@ on"). */
-  replyMentionSupported?: boolean;
 }) {
   const identity = JSON.stringify([roomId, roomUid, channelId, authority]);
   const selection = useMemo(() => ({ identity }), [identity]);
@@ -48,7 +45,10 @@ export default function CustomChannelView({
   const scopeRef = useRef(transcript.scope); scopeRef.current = transcript.scope;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const [draft, setDraft] = useState<{ identity: string; value: string; replyTo?: string; mentionOff?: boolean; retry?: RoomSocketSayError["retry"] }>({ identity, value: "" });
+  // `callable`: the replied-to author, fixed when the reply starts; absent for
+  // your own message or one not loaded, so "@ on" is never offered blind.
+  const [draft, setDraft] = useState<{ identity: string; value: string; replyTo?: string; callable?: string; mentionOff?: boolean;
+    retry?: RoomSocketSayError["retry"] }>({ identity, value: "" });
   const [sendError, setSendError] = useState({ identity, message: "" });
   const [selected, setSelected] = useState<{ scope: object; id: string } | null>(null);
   const pendingFocus = useRef<typeof selected>(null);
@@ -63,21 +63,21 @@ export default function CustomChannelView({
   const value = draft.identity === identity ? draft.value : "";
   const replyTo = draft.identity === identity ? draft.replyTo : undefined;
   useReplyBarScroll(scrollRef, replyTo);
-  function replySource(eventId: string, replyText?: string, called?: string) {
+  function replySource(eventId: string, replyText?: string) {
     const source = transcript.events.find((event) => event.id === eventId);
     return { eventId, author: source ? participantProfiles[source.actor.participant_id]?.displayName || source.display_name || undefined : undefined,
       text: source?.content ? plainMentionText(source.content, mentionLabels) : undefined, deleted: source?.message_deleted === true,
-      mentioned: Boolean(called) || replyMentions(replyText, source?.actor.participant_id),
-      own: Boolean(viewerParticipantId) && source?.actor.participant_id === viewerParticipantId,
+      mentioned: replyMentions(replyText, source?.actor.participant_id),
       avatar: source && { image: participantProfiles[source.actor.participant_id]?.avatarImageUrl,
         label: participantProfiles[source.actor.participant_id]?.avatarLabel, participantType: source.actor.participant_type,
         providerKind: participantProfiles[source.actor.participant_id]?.providerKind } };
   }
-  // Discord's "@ on" is the default for each new reply; never offered for replying to yourself.
-  const replyMentionOffered = replyMentionSupported && Boolean(replyTo) && !replySource(replyTo ?? "").own;
-  const replyMention = replyMentionOffered && !draft.mentionOff;
+  const callable = draft.identity === identity && replyTo ? draft.callable : undefined;
+  const replyMention = Boolean(callable) && !draft.mentionOff;
+  // Discord's "@ on" in a channel: the text opens with the author's mention.
+  const outgoing = (text: string) => replyMention && !text.trimStart().startsWith(`<@${callable}>`) ? `<@${callable}> ${text}` : text;
   const error = sendError.identity === identity ? sendError.message : "";
-  const tooLong = [...value].length > MAX_TEXT_CHAT_CHARACTERS;
+  const tooLong = [...outgoing(value)].length > MAX_TEXT_CHAT_CHARACTERS;
   const disabled = !channel || !canPost || !transcript.ready || transcript.sending;
 
   useLayoutEffect(() => {
@@ -129,7 +129,7 @@ export default function CustomChannelView({
     if (disabled || !value.trim() || tooLong) return;
     setSendError({ identity, message: "" });
     try {
-      if (replyTo) await transcript.send(resolveMentionMarkup(value, mentionables), draft.retry, replyTo, replyMention);
+      if (replyTo) await transcript.send(outgoing(resolveMentionMarkup(value, mentionables)), draft.retry, replyTo);
       else if (draft.retry) await transcript.send(resolveMentionMarkup(value, mentionables), draft.retry);
       else await transcript.send(resolveMentionMarkup(value, mentionables));
       if (!mounted.current || selectionRef.current !== selection) return;
@@ -180,7 +180,11 @@ export default function CustomChannelView({
         selectedId={selected?.scope === transcript.scope ? selected.id : undefined} pinnedIds={pinnedIds}
         canReply={canPost} replyDisabled={disabled} canPin={Boolean(canPin && authority)}
         pinDisabled={pins.pinsLoading || pins.pinBusyIds.size > 0}
-        onReply={(id) => { setDraft({ identity, value, replyTo: id }); inputRef.current?.focus(); }}
+        onReply={(id) => {
+          const author = transcript.events.find((event) => event.id === id)?.actor.participant_id;
+          setDraft({ identity, value, replyTo: id, callable: author && author !== viewerParticipantId ? author : undefined });
+          inputRef.current?.focus();
+        }}
         onTogglePin={(id) => void pins.setPinned(id, !pinnedIds.has(id))}
         replyTargetId={replyTo} replySource={replySource} onNavigate={(id) => void navigate(id)} />
     </div>
@@ -197,14 +201,14 @@ export default function CustomChannelView({
       <section className="dc-composer-shell">
         {replyTo && <ReplyDraft source={replySource(replyTo)} onCancel={() => setDraft({ identity, value })}
           mention={replyMention}
-          onToggleMention={replyMentionOffered ? () => setDraft({ identity, value, replyTo, mentionOff: replyMention }) : undefined} />}
+          onToggleMention={callable ? () => setDraft({ identity, value, replyTo, callable, mentionOff: replyMention }) : undefined} />}
         {(error || pins.pinsError || tooLong) && <p role="alert" className="dc-channel-notice">{error || pins.pinsError || `메시지는 ${MAX_TEXT_CHAT_CHARACTERS}자까지 보낼 수 있어요.`}</p>}
         {channel && transcript.ready && !canPost && <p className="dc-composer-readonly">이 채널에서는 보기만 할 수 있어요.</p>}
         <div className="dc-composer-bar">
           <MentionInput inputRef={inputRef} className="dc-composer-input" ariaLabel="채널 메시지 입력"
             placeholder={!channel || !transcript.ready ? "채널 연결을 기다리고 있어요" : canPost ? `#${channel.name}에 메시지 보내기` : "이 채널에서는 보기만 할 수 있어요"}
             value={value} disabled={disabled} maxLength={MAX_TEXT_CHAT_CHARACTERS * 2} mentionables={mentionables}
-            onChange={(text) => setDraft({ identity, value: text, replyTo, mentionOff: draft.mentionOff })}
+            onChange={(text) => setDraft({ identity, value: text, replyTo, callable, mentionOff: draft.mentionOff })}
             onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
           <button type="button" className="dc-composer-button send" data-role="send" aria-label="채널 메시지 보내기" title="메시지 보내기"
             disabled={disabled || !value.trim() || tooLong} onClick={() => void send()}><Send size={17} /></button>

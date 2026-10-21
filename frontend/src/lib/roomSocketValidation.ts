@@ -350,8 +350,9 @@ function messageSendAckMatches(event: Record<string, unknown>, payload: Record<s
   if (event.message_kind !== kind || !Array.isArray(attachments) || !Array.isArray(ids) ||
       attachments.length !== ids.length || attachments.some((attachment, index) => !isRecord(attachment) || attachment.id !== ids[index]) ||
       (event.reply_to_event_id ?? undefined) !== payload.reply_to_event_id ||
-      // An "@ on" reply must come back recording whom it calls; otherwise none.
-      (payload.reply_mention === true) !== (typeof event.reply_mention_participant_id === "string" && Boolean(event.reply_mention_participant_id))) return false;
+      // A recorded call needs an "@ on" request. The host drops the call on a
+      // reply to yourself, so an "@ on" request may come back without one.
+      (payload.reply_mention !== true && event.reply_mention_participant_id !== undefined)) return false;
   // Cast/withdraw/close deliberately remove the actor and ballot choice before
   // persistence and public projection; publicRoomEventIsValid checks that marker.
   // Vote ACKs are not bound further to the command: the host owns its rooms and can
@@ -400,8 +401,7 @@ export function commandAckResultIsValid(
     try {
       assertExactKeys(result, ["channel_id", "event", "event_seq"], "channel message ACK");
       return Boolean(hasDurableEvent && event?.type === CHANNEL_MESSAGE_EVENT_TYPE &&
-        event.message_deleted !== true && event.channel_id === payload.channel_id && result.channel_id === payload.channel_id && event.participant_id === expectedParticipantId &&
-        (payload.reply_mention === true) === (typeof event.reply_mention_participant_id === "string" && Boolean(event.reply_mention_participant_id)));
+        event.message_deleted !== true && event.channel_id === payload.channel_id && result.channel_id === payload.channel_id && event.participant_id === expectedParticipantId);
     } catch { return false; }
   }
   if (action === "message.send") {

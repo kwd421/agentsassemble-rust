@@ -562,55 +562,6 @@ async fn an_api_agent_turn_folds_older_messages_and_carries_related_memory()
     Ok(())
 }
 
-#[tokio::test]
-async fn a_channel_reply_calls_its_author_only_with_reply_mention()
--> Result<(), Box<dyn std::error::Error>> {
-    let (store, owner, _directory) = fixture().await;
-    let other = add_human(&store, "human-other", "Other").await?;
-    let revision = public_settings(&RoomSettings::defaults("General"))?.settings_revision;
-    store
-        .execute_room_settings_update(
-            TrustedPrincipal(&owner),
-            "channels",
-            &json!({"expected_revision": revision, "channels": [{"id": "c0123456789ab", "name": "notes", "type": "text", "position": 0, "created_at": "2026-09-08T00:00:00Z"}]}),
-        )
-        .await?;
-    let send = |principal, request: &'static str, payload: serde_json::Value| {
-        let store = &store;
-        async move {
-            store
-                .execute_channel_message(TrustedPrincipal(principal), request, &payload)
-                .await
-        }
-    };
-    let source = send(
-        &owner,
-        "source",
-        json!({"channel_id": "c0123456789ab", "content": "first"}),
-    )
-    .await?;
-    let reply = |content: &str, mention: bool| json!({"channel_id": "c0123456789ab", "content": content, "reply_to_event_id": source.event.id, "reply_mention": mention});
-    let called = send(&other, "called", reply("answer", true)).await?;
-    assert_eq!(
-        called.event.reply_mention(),
-        Some(owner.participant_id.as_str())
-    );
-    let quiet = send(&other, "quiet", reply("answer", false)).await?;
-    assert_eq!(quiet.event.reply_mention(), None);
-    let own = send(&owner, "own", reply("again", true)).await?;
-    assert_eq!(own.event.reply_mention(), None);
-    assert!(
-        send(
-            &other,
-            "no-target",
-            json!({"channel_id": "c0123456789ab", "content": "x", "reply_mention": true})
-        )
-        .await
-        .is_err()
-    );
-    Ok(())
-}
-
 /// Poll ballots carry no text, so they never fill the fold window.
 #[tokio::test]
 async fn poll_ballots_do_not_fill_the_memory_fold() -> Result<(), Box<dyn std::error::Error>> {
@@ -661,5 +612,59 @@ async fn poll_ballots_do_not_fill_the_memory_fold() -> Result<(), Box<dyn std::e
     let fold = memory.fold.ok_or("fold")?;
     assert_eq!((fold.from_seq, fold.to_seq), (template.seq, last));
     assert_eq!(fold.text.lines().count(), 13);
+    Ok(())
+}
+
+/// Saving an edit without changing the text keeps the memory of it, and a
+/// stored piece is capped so it always fits the memory shown to the model.
+#[tokio::test]
+async fn an_unchanged_edit_keeps_memory_and_pieces_fit_the_budget()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, owner, _directory) = fixture().await;
+    let session = stored_session(&store).await;
+    let (room, id) = (
+        session.public.room_id.clone(),
+        session.public.session_id.clone(),
+    );
+    let sent = store
+        .execute_message_with_turn(&owner, "kept", "message.send", &json!({"content": "등대"}))
+        .await?
+        .outcome
+        .event;
+    sqlx::query("INSERT INTO agent_memory_pieces(room_id, session_id, from_seq, to_seq, summary, created_at) VALUES (?, ?, ?, ?, '요약', 1)")
+        .bind(&room)
+        .bind(&id)
+        .bind(sent.seq)
+        .bind(sent.seq)
+        .execute(&store.pool)
+        .await?;
+    let edit = |request: &'static str, content: &'static str| {
+        let (store, owner, event_id) = (&store, &owner, sent.id.clone());
+        async move {
+            store
+                .execute_message_mutation(
+                    owner,
+                    request,
+                    "message.edit",
+                    &json!({"event_id": event_id, "content": content}),
+                )
+                .await
+        }
+    };
+    edit("same", "등대").await?;
+    assert_eq!(store.agent_memory(&room, &id).await?.len(), 1);
+    edit("changed", "등대지기").await?;
+    assert!(store.agent_memory(&room, &id).await?.is_empty());
+    let far = sent.seq + 100;
+    assert!(
+        store
+            .store_agent_memory(&room, &id, (far, far + 10), "", &"가".repeat(5_000))
+            .await?
+    );
+    let pieces = store.agent_memory(&room, &id).await?;
+    assert_eq!(
+        pieces.last().map(|piece| piece.summary.chars().count()),
+        Some(3_000)
+    );
     Ok(())
 }

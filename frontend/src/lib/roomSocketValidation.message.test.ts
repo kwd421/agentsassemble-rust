@@ -18,10 +18,10 @@ test("publication ACK binds canonical command identity while preserving vote pri
     { ...delivered, attachments: [{ id: ids[0] }, { id: "ma_" + "c".repeat(32) }] },
     { ...delivered, attachments: delivered.attachments.slice(0, 1) },
   ]) expect(valid(bad)).toBe(false);
-  // An "@ on" reply comes back naming whom it calls, and only then.
+  // A recorded call needs an "@ on" request; a reply to yourself comes back without one.
   const calling = { ...payload, reply_mention: true };
   expect(valid({ ...delivered, reply_mention_participant_id: "author" }, calling)).toBe(true);
-  expect(valid(delivered, calling)).toBe(false);
+  expect(valid(delivered, calling)).toBe(true);
   expect(valid({ ...delivered, reply_mention_participant_id: "author" })).toBe(false);
   expect(valid({ ...event(1), content: "🦀".repeat(12000) }, { content: "🦀".repeat(12001) })).toBe(true);
   const poll = { ...event(1), content: "", message_kind: "vote", vote_question: "Ship?", vote_options: ["Yes", "No"], attachments: delivered.attachments };

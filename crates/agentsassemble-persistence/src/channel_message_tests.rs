@@ -347,13 +347,6 @@ async fn channel_retirement_closes_history_replay_and_old_identity_reuse_atomica
             .execute_channel_message(TrustedPrincipal(&principal), "retire", &payload)
             .await,
     );
-    // As if it were a reply with @ on: retiring the channel must drop the call.
-    checked(
-        sqlx::query("UPDATE room_events SET event_json = json_set(event_json, '$.reply_mention_participant_id', 'someone') WHERE seq = ?")
-            .bind(message.event.seq)
-            .execute(&store.pool)
-            .await,
-    );
     checked(
         set_channels(
             &store,
@@ -393,7 +386,6 @@ async fn channel_retirement_closes_history_replay_and_old_identity_reuse_atomica
     );
     assert_eq!(retired.content.as_deref(), Some(""));
     assert_eq!(retired.extra.get("message_deleted"), Some(&json!(true)));
-    assert_eq!(retired.reply_mention(), None);
     let reused = set_channels(
         &store,
         &principal,

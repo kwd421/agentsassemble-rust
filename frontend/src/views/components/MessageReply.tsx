@@ -12,6 +12,19 @@ export function replyMentions(replyText: string | undefined, authorId: string | 
   return Boolean(replyText && authorId && replyText.includes(`<@${authorId}>`));
 }
 
+/**
+ * A text-channel reply calls its author by opening with their `<@ID>` (the
+ * channel wire has no call field). Returns the text to show without that
+ * leading mention, and whether it called.
+ */
+export function replyCallText(content: string, authorId?: string): { text: string; called: boolean } {
+  const lead = authorId ? `<@${authorId}>` : "";
+  const trimmed = content.trimStart();
+  if (!lead || !trimmed.startsWith(lead)) return { text: content, called: false };
+  const rest = trimmed.slice(lead.length).replace(/^[\s,:]+/u, "");
+  return rest.trim() ? { text: rest, called: true } : { text: content, called: false };
+}
+
 export function MessageReply({ source, onOpen }: { source: ReplySource; onOpen?: () => void }) {
   return <button type="button" onClick={onOpen} disabled={!onOpen || source.deleted}
     className="dc-reply-preview"

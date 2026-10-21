@@ -578,7 +578,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               onSearchTargetHandled={() => setPendingMessageSearchTarget(null)}
               onOpenCrossChannelSearchResult={openCrossChannelSearchResult}
               viewerParticipantId={activeRoomSession?.agentId || "operator-local"}
-              replyMentionSupported={Boolean(canonicalRoom.capabilities["channel.reply_mention"])}
             />
           ) : (
             <DeferredViewFallback />

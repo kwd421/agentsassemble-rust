@@ -57,6 +57,7 @@ it("shows loading, then drops the old list when a reload fails", async () => {
   toggle(false);
   memoryApi.fetchAgentMemory.mockRejectedValueOnce(new Error("offline"));
   toggle(true);
+  expect(screen.getByText("기억을 불러오는 중이에요.")).toBeTruthy();
   expect(await screen.findByRole("status")).toBeTruthy();
   expect(screen.queryByText("등대 이야기")).toBeNull();
 });
