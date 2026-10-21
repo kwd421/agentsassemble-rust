@@ -409,3 +409,45 @@ async fn connector_moderation_controls_membership_without_claiming_a_provider_pr
     assert!(exported.cleanup.is_none());
     Ok(())
 }
+
+#[tokio::test]
+async fn a_connected_ai_reply_takes_discords_shape() -> TestResult {
+    let (store, manager) = fixture().await?;
+    let now = Utc::now();
+    let invite = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, now)
+        .await?;
+    let fingerprint = Sha256::digest(invite.invite_bearer.as_bytes()).into();
+    let admitted = store
+        .admit_connector(&fingerprint, &[5; 32], Uuid::new_v4(), "Reply AI", now)
+        .await?;
+    let local = crate::room_user_identity::test_authority(&store).await;
+    let mut tx = store.pool.begin().await?;
+    let host = local.resolve(&mut tx).await?;
+    tx.commit().await?;
+    let source = store
+        .execute_message_with_turn(
+            &host,
+            "source",
+            "message.send",
+            &serde_json::json!({"content":"question"}),
+        )
+        .await?;
+    let reply = store
+        .execute_authorized_message_with_turn(
+            crate::RoomMutationAuthority::ConnectorSession(&admitted.authorization),
+            "reply",
+            "message.send",
+            &serde_json::json!({
+                "content": format!("&lt;<@{}>&gt; answer", host.participant_id),
+                "reply_to_event_id": source.outcome.event.id,
+            }),
+        )
+        .await?;
+    assert_eq!(reply.outcome.event.content.as_deref(), Some("answer"));
+    assert_eq!(
+        reply.outcome.event.reply_mention(),
+        Some(host.participant_id.as_str())
+    );
+    Ok(())
+}

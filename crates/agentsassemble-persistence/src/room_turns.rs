@@ -408,7 +408,7 @@ async fn prepare_human_message_event(
         .await?;
         return Ok((event, route_to_floor));
     }
-    let command = MessageSend::from_payload(payload).map_err(rejection)?;
+    let mut command = MessageSend::from_payload(payload).map_err(rejection)?;
     let reply_author = crate::message_replies::validate_reply_target(
         transaction,
         &principal.room_id,
@@ -417,6 +417,15 @@ async fn prepare_human_message_event(
         sequence,
     )
     .await?;
+    if participant.participant_type == "agent" {
+        // A connected AI's reply takes Discord's shape, like a built-in agent's.
+        let callable = reply_author
+            .as_deref()
+            .filter(|author| *author != principal.participant_id);
+        let (content, calls) = crate::message_replies::agent_reply_text(&command.content, callable);
+        command.content = content;
+        command.reply_mention |= calls;
+    }
     let attachments = prepare_message_attachment_bindings(
         transaction,
         principal,

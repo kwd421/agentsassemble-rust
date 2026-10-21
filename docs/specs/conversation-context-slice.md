@@ -217,7 +217,8 @@ existing mention readers treat it as a mention: free access, connector notices,
 the agent view's "Mentions you", and the ordered direct target after text
 mentions and the structured handoff. An AI reply whose text opens with the
 replied-to author's `<@ID>` is stored as an "@ on" reply without that text, and
-mentions wrapped in escaped brackets (`&lt;<@ID>&gt;`) are unwrapped. Deleting a
+mentions wrapped in escaped brackets (`&lt;<@ID>&gt;`) are unwrapped; a connected
+AI's lobby `message.send` gets the same shaping. Deleting a
 reply removes the call with the other reply metadata. Text-channel replies
 (`channel.message.send`) take the same `reply_mention` under their own
 capability `channel.reply_mention`; the channel client accepts the recorded field
