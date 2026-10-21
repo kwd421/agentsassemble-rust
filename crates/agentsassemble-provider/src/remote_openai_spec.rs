@@ -176,6 +176,10 @@ impl RemoteOpenAiSpec {
             OpenAiStreamError::Transport => {
                 provider_error("provider_api_unavailable", self.errors.api_unavailable)
             }
+            OpenAiStreamError::Stalled => provider_error(
+                "provider_api_busy",
+                "The AI service kept the request waiting without answering.",
+            ),
         }
     }
 }

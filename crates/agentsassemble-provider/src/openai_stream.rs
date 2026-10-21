@@ -15,6 +15,9 @@ const MAX_TOOL_ARGUMENT_BYTES: usize = 64 * 1024;
 const MAX_EXTRA_CONTENT_BYTES: usize = 64 * 1024;
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_FINISH_REASON_BYTES: usize = 64;
+/// Keep-alive comments are not events: a queue that only sends them for this
+/// long is reported instead of waited on.
+const EVENT_IDLE: std::time::Duration = std::time::Duration::from_mins(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub(crate) enum OpenAiStreamError {
@@ -34,6 +37,8 @@ pub(crate) enum OpenAiStreamError {
     ResponseTooLarge,
     #[error("the provider returned an invalid streaming response")]
     InvalidResponse,
+    #[error("the provider sent no response content for minutes")]
+    Stalled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -209,7 +214,10 @@ where
     futures_util::pin_mut!(events);
     let mut accumulator = CompletionAccumulator::default();
     let mut done = false;
-    while let Some(event) = events.next().await {
+    while let Some(event) = tokio::time::timeout(EVENT_IDLE, events.next())
+        .await
+        .map_err(|_| OpenAiStreamError::Stalled)?
+    {
         let event = event.map_err(|error| match error {
             EventStreamError::Transport(error) => error,
             EventStreamError::Utf8(_) | EventStreamError::Parser(_) => {
@@ -622,6 +630,21 @@ mod tests {
                 .unwrap_or_else(|| panic!("invalid extra_content must fail"));
             assert_eq!(error, OpenAiStreamError::InvalidResponse);
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn keep_alive_comments_alone_end_as_stalled() {
+        let alive = futures_util::StreamExt::chain(
+            stream::iter([Ok::<_, OpenAiStreamError>(Bytes::from_static(
+                b": PROCESSING\n\n",
+            ))]),
+            stream::pending(),
+        );
+        let error = decode_events(alive)
+            .await
+            .err()
+            .unwrap_or_else(|| panic!("a stream of keep-alives must not wait forever"));
+        assert_eq!(error, OpenAiStreamError::Stalled);
     }
 
     #[tokio::test]
