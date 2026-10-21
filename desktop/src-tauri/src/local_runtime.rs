@@ -329,7 +329,7 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
     command
         .command_mut()
         .arg("--bind")
-        .arg("127.0.0.1:0")
+        .arg(crate::runtime_port::bind_address(&data_root))
         .arg("--database")
         .arg(&database)
         .arg("--frontend")
@@ -367,6 +367,7 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
     let record = match wait_for_startup(&mut child, &output) {
         Ok(record) => record,
         Err(error) => {
+            crate::runtime_port::forget(&data_root);
             abort_startup(&mut child, Some(control));
             return Err(format!("{error} Details: {}", stderr_path.display()));
         }
@@ -381,6 +382,9 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
     if let Err(error) = prove_listening(&address) {
         abort_startup(&mut child, Some(control));
         return Err(error);
+    }
+    if let Some(port) = address.port() {
+        crate::runtime_port::remember(&data_root, port);
     }
     Ok(RuntimeProcess {
         child,

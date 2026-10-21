@@ -16,6 +16,7 @@ mod message_attachment_save;
 #[cfg(windows)]
 mod private_fs;
 mod room_directory_cache;
+mod runtime_port;
 mod runtime_supervisor;
 
 use agentsassemble_protocol::{HostProductSurface, LocalBootstrapGrant};
