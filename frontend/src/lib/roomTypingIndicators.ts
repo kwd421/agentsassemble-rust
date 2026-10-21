@@ -5,6 +5,8 @@ type RoomTypingIndicatorsOptions = {
   members: RoomMember[];
   sessions: RoomAgentSession[];
   progress: AgentSessionProgress | null;
+  /** External AIs the server says are working; they have no session. */
+  working?: readonly string[];
 };
 
 export type RoomTypingIndicator = {
@@ -20,6 +22,7 @@ export function roomTypingIndicators({
   members,
   sessions,
   progress,
+  working = [],
 }: RoomTypingIndicatorsOptions): RoomTypingIndicator[] {
   const indicators: RoomTypingIndicator[] = [];
   const indicatorIndex = new Map<string, number>();
@@ -82,6 +85,11 @@ export function roomTypingIndicators({
         members.find((member) => member.participant_id === session.participant_id)?.role || ""
       );
     }
+  });
+  working.forEach((participantId) => {
+    if (sessionByParticipant.has(participantId)) return;
+    const member = members.find((candidate) => candidate.participant_id === participantId);
+    if (member) add(participantId, member.display_name || participantId, "", "", "typing", member.role || "");
   });
   if (activeProgress) {
     const session = sessions.find(

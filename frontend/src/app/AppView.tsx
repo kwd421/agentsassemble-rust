@@ -1,4 +1,5 @@
 import { OwnerRouteHost, RoomPeople, ownerRouteHostFor } from "./ownerRouteHost";
+import { RoomActivity } from "./roomActivity";
 import { userFacingError } from "../lib/apiErrors";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import { centralAccountSelf, shouldShowOwnServerMismatch } from "../lib/central/localOwnership";
@@ -225,6 +226,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     <RoomSocketProvider socket={roomSocket}>
     <OwnerRouteHost.Provider value={ownerRouteHostFor(activeRoom)}>
     <RoomPeople.Provider value={roomPeople}>
+    <RoomActivity.Provider value={canonicalRoom.activeParticipantIds}>
     <KnownChannels names={channelNames}>
     <div className="dc-app-layout">
       {ownServerMismatch && (
@@ -692,6 +694,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     </div>
     </div>
     </KnownChannels>
+    </RoomActivity.Provider>
     </RoomPeople.Provider>
     </OwnerRouteHost.Provider>
     </RoomSocketProvider>

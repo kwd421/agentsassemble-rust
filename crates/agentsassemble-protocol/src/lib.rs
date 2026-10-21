@@ -386,6 +386,10 @@ pub enum ServerFrame {
     ProviderCatalogUpdated {
         catalog: ProviderCatalog,
     },
+    /// Sent only to clients that advertised `participant_activity=1`.
+    ParticipantActivity {
+        active: Vec<String>,
+    },
     Ack(CommandAck),
     Nack(CommandNack),
     ResyncRequired {

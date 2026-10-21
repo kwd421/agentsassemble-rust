@@ -109,6 +109,8 @@ function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
   url.searchParams.set("channel_message_cursors", "1");
   // This build also reads `agent_chain_limit` in room settings.
   url.searchParams.set("agent_chain_limit", "1");
+  // And `participant_activity` frames: which external AIs are working.
+  url.searchParams.set("participant_activity", "1");
   return url.toString();
 }
 
@@ -542,6 +544,14 @@ export function openRoomSocket(
             );
           }
           handlers.onProviderCatalog?.(msg.catalog);
+          return;
+        }
+        if (msg.op === "participant_activity") {
+          assertExactKeys(msg, ["op", "active"], "participant activity");
+          if (!Array.isArray(msg.active) || !msg.active.every((id) => typeof id === "string" && id)) {
+            throw new RoomSocketSayError("Participant activity frame was invalid.", "frame_schema_invalid");
+          }
+          handlers.onParticipantActivity?.(msg.active as string[]);
           return;
         }
         if (msg.op === "side_chat_updated" || msg.op === "side_chat_resync_required") {

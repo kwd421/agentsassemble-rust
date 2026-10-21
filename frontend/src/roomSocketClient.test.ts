@@ -113,6 +113,7 @@ describe("bounded canonical room socket", () => {
     expect(url.pathname).toBe("/ws");
     expect(url.searchParams.get("ticket")).toBe("a".repeat(64));
     expect(url.searchParams.get("channel_message_cursors")).toBe("1");
+    expect(url.searchParams.get("participant_activity")).toBe("1");
     handle.close();
   });
 
@@ -637,6 +638,28 @@ describe("bounded canonical room socket", () => {
     await vi.waitFor(() => expect(sockets[0].readyState).toBe(WebSocket.CLOSED));
     await vi.advanceTimersByTimeAsync(500);
     expect(sockets).toHaveLength(2);
+    handle.close();
+  });
+
+  it("reports which external AIs are working and rejects a malformed activity frame", async () => {
+    const onParticipantActivity = vi.fn();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = openHarness({
+      onParticipantActivity,
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await flushPromises();
+    receiveServerFrame(sockets[0], { op: "participant_activity", active: ["connector-a"] });
+    await vi.waitFor(() => expect(onParticipantActivity).toHaveBeenCalledWith(["connector-a"]));
+    receiveServerFrame(sockets[0], { op: "participant_activity", active: [7] });
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("frame_schema_invalid"));
     handle.close();
   });
 

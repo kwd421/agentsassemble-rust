@@ -62,6 +62,24 @@ pub(crate) async fn run<S>(
     };
     let mut principal = principal;
     let mut room_session = room_session;
+    let mut activity = wire
+        .participant_activity
+        .then(|| state.participant_activity.subscribe(&principal.room_id));
+    if let Some(activity) = &mut activity {
+        let frame = activity_frame(activity);
+        if send_authorized_frame(
+            &state,
+            &mut principal,
+            &mut room_session,
+            &mut sender,
+            &frame,
+        )
+        .await
+        .is_none()
+        {
+            return;
+        }
+    }
     let mut revocation_principal = principal.clone();
     let mut revocation_session = room_session.clone();
     let (final_leave_tx, final_leave_rx) = tokio::sync::watch::channel(None::<String>);
@@ -289,6 +307,11 @@ pub(crate) async fn run<S>(
                 update = crate::side_chat_socket::receive_update(&mut side_chat), if side_chat.is_some() => {
                     if crate::side_chat_socket::deliver_update(&state, &mut principal, &mut room_session, room_uid, &mut sender, update).await.is_none() { return; }
                 }
+                changed = activity_changed(&mut activity) => {
+                    let Some(activity) = activity.as_mut().filter(|_| changed) else { return; };
+                    let frame = activity_frame(activity);
+                    if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
+                }
                 changed = catalog_updates.changed() => {
                     if changed.is_err() {
                         return;
@@ -308,6 +331,22 @@ pub(crate) async fn run<S>(
         () = owner_ended(&mut owner_lease) => {},
         () = revoked => {},
         () = connected => {},
+    }
+}
+
+type ActivityReceiver = tokio::sync::watch::Receiver<std::collections::BTreeSet<String>>;
+
+/// Never resolves for a client that did not ask for activity.
+async fn activity_changed(activity: &mut Option<ActivityReceiver>) -> bool {
+    match activity {
+        Some(activity) => activity.changed().await.is_ok(),
+        None => std::future::pending().await,
+    }
+}
+
+fn activity_frame(activity: &mut ActivityReceiver) -> ServerFrame {
+    ServerFrame::ParticipantActivity {
+        active: activity.borrow_and_update().iter().cloned().collect(),
     }
 }
 

@@ -7,6 +7,8 @@ use serde_json::Value;
 
 /// Room settings may carry `agent_chain_limit`.
 pub(crate) const AGENT_CHAIN_LIMIT_QUERY: &str = "agent_chain_limit";
+/// The client reads `participant_activity` frames.
+const PARTICIPANT_ACTIVITY_QUERY: &str = "participant_activity";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ClientWire {
@@ -14,6 +16,8 @@ pub(crate) struct ClientWire {
     pub(crate) channel_message_cursors: bool,
     /// `agent_chain_limit` in room settings, wherever they appear.
     pub(crate) agent_chain_limit: bool,
+    /// Which external AIs are working, as `participant_activity` frames.
+    pub(crate) participant_activity: bool,
 }
 
 impl ClientWire {
@@ -23,6 +27,7 @@ impl ClientWire {
                 query,
             ),
             agent_chain_limit: advertises(query, AGENT_CHAIN_LIMIT_QUERY),
+            participant_activity: advertises(query, PARTICIPANT_ACTIVITY_QUERY),
         }
     }
 
@@ -103,5 +108,14 @@ mod tests {
             &frame,
         );
         assert_eq!(new, frame);
+    }
+
+    #[test]
+    fn only_an_advertising_client_gets_activity_frames() {
+        assert!(!ClientWire::from_query(Some("ticket=t&agent_chain_limit=1")).participant_activity);
+        assert!(!ClientWire::from_query(Some("participant_activity=0")).participant_activity);
+        assert!(
+            ClientWire::from_query(Some("ticket=t&participant_activity=1")).participant_activity
+        );
     }
 }

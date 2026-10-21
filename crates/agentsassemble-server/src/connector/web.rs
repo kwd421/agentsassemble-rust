@@ -161,11 +161,21 @@ async fn command(
         .authorize_connector_session(&fingerprint, chrono::Utc::now())
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
+    let action = body.action;
     let outcome = state
         .rooms
-        .execute_connector(&authority, body.request_id, body.action, body.payload)
+        .execute_connector(&authority, body.request_id, action, body.payload)
         .await
         .map_err(|failure| ConnectorHttpError::from_failure(&failure))?;
+    if matches!(
+        action,
+        RoomAction::MessageSend | RoomAction::ChannelMessageSend | RoomAction::ParticipantLeave
+    ) {
+        let principal = authority.principal();
+        state
+            .participant_activity
+            .end(&principal.room_id, &principal.participant_id);
+    }
     Ok(Json(
         json!({"resolution":"committed","result":outcome.result,"deduplicated":outcome.deduplicated}),
     ))

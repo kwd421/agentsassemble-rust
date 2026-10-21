@@ -61,6 +61,7 @@ pub struct AppState {
     pub(crate) downloads: crate::download_budget::Budget,
     pub(crate) uploads: crate::message_upload::Service,
     pub(crate) upload_bodies: crate::upload_body_budget::Budget,
+    pub(crate) participant_activity: crate::participant_activity::ParticipantActivity,
     pub(crate) avatar_reads: Arc<tokio::sync::Semaphore>,
     pub(crate) avatar_uploads: Arc<tokio::sync::Semaphore>,
     pub(crate) recovery_attempts: Arc<crate::guest_recovery_attempts::GuestRecoveryAttempts>,
@@ -209,6 +210,7 @@ impl AppState {
             downloads,
             uploads,
             upload_bodies: crate::upload_body_budget::Budget::default(),
+            participant_activity: crate::participant_activity::ParticipantActivity::default(),
             avatar_reads: Arc::new(tokio::sync::Semaphore::new(6)),
             avatar_uploads: Arc::new(tokio::sync::Semaphore::new(2)),
             recovery_attempts: Arc::new(

@@ -94,8 +94,9 @@ export function useAgentPresentation({
         members: activeRoomMembers,
         sessions: activeRoomAgentSessions,
         progress: canonicalRoom.agentSessionProgress,
+        working: canonicalRoom.activeParticipantIds,
       }),
-    [canonicalRoom.agentSessionProgress, activeRoomAgentSessions, activeRoomMembers]
+    [canonicalRoom.agentSessionProgress, canonicalRoom.activeParticipantIds, activeRoomAgentSessions, activeRoomMembers]
   );
 
   return {

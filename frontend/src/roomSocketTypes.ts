@@ -27,6 +27,7 @@ export interface RoomSocketHandlers {
   onProviderCatalog?: (catalog: ProviderCatalogSnapshot) => void;
   onRoomEvents?: (events: RoomEvent[]) => void;
   onSideChat?: (update: SideChatUpdate) => void;
+  onParticipantActivity?: (active: string[]) => void;
   onPlugin?: (events: PluginEnvelope[], snapshot: boolean) => void;
   onOpen?: () => void;
   onClose?: () => void;

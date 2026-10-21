@@ -23,12 +23,16 @@ import {
 } from "./memberHelpers";
 import type { MemberEntry } from "./memberTypes";
 
+const NOT_WORKING: readonly string[] = [];
+
 type MemberEntriesOptions = {
   agents: LiveAgent[];
   members: RoomMember[];
   viewerParticipantId: string;
   agentSessions: RoomAgentSession[];
   displayResourceBase: string;
+  /** External AIs working on a message; they have no session status. */
+  working?: readonly string[];
 };
 
 export function useMemberEntries({
@@ -37,6 +41,7 @@ export function useMemberEntries({
   viewerParticipantId,
   agentSessions,
   displayResourceBase,
+  working = NOT_WORKING,
 }: MemberEntriesOptions): {
   entries: MemberEntry[];
   contextBadges: ReturnType<typeof roomContextSummaryBadges>;
@@ -180,7 +185,9 @@ export function useMemberEntries({
           fullDetail: [fullDetail, agentSession?.runtime_kind].filter(Boolean).join(" · "),
           statusLabel: agentSession
             ? agentSessionStatusLabel(agentSession.runtime_status || agentSession.status, agentSession.recovery_required)
-            : memberStatusLabel(member),
+            : working.includes(member.participant_id)
+              ? "응답 중"
+              : memberStatusLabel(member),
           role,
           owner: false,
           active: agentSession
@@ -211,6 +218,7 @@ export function useMemberEntries({
     displayResourceBase,
     members,
     viewerParticipantId,
+    working,
   ]);
 
   return { entries, contextBadges };

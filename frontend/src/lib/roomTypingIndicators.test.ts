@@ -29,6 +29,23 @@ const progress = {
 };
 
 describe("roomTypingNames", () => {
+  it("shows a working external AI that has no session, once", () => {
+    const connector = participantFixture({
+      room_id: "room-a",
+      participant_id: "connector-a",
+      display_name: "아쎄이",
+      role: "agent",
+      participant_type: "agent",
+      owner_id: "operator-local",
+    });
+    expect(
+      roomTypingNames({ members: [member, connector], sessions: [session], progress: null, working: ["connector-a", "agent-a"] })
+    ).toEqual(["Agent A", "아쎄이"]);
+    expect(
+      roomTypingNames({ members: [connector], sessions: [], progress: null, working: ["connector-gone"] })
+    ).toEqual([]);
+  });
+
   it("derives one typing signal from the busy Agent Session", () => {
     expect(
       roomTypingNames({ members: [member], sessions: [session], progress: null })

@@ -176,6 +176,10 @@ pub(super) async fn wait(
         .cloned();
     let authorization = authorize_read(&state, request, SNAPSHOT_EVENTS).await?;
     let principal = authorization.principal();
+    // Waiting again means the AI is done with what it received last.
+    state
+        .participant_activity
+        .end(&principal.room_id, &principal.participant_id);
     let _lease = state
         .connection_admission
         .acquire(principal)
@@ -202,7 +206,7 @@ pub(super) async fn wait(
         )
     };
     if let Some(value) = wait_result(&state, &authorization, pending, delivered).await? {
-        return Ok(Json(value));
+        return Ok(Json(received(&state, principal, value)));
     }
     let duration = (authorization.expires_at() - chrono::Utc::now())
         .to_std()
@@ -230,10 +234,28 @@ pub(super) async fn wait(
                 if event.seq != delivered.saturating_add(1) { return Err(rejected(StatusCode::CONFLICT,"connector_resync_required")); }
                 delivered = event.seq;
                 let pending = messages(vec![event], principal, true);
-                if let Some(value) = wait_result(&state, &authorization, pending, delivered).await? { return Ok(Json(value)); }
+                if let Some(value) = wait_result(&state, &authorization, pending, delivered).await? { return Ok(Json(received(&state, principal, value))); }
             }
         }
     }
+}
+
+/// Someone else's message reached the AI, so it is working until it posts,
+/// waits again or leaves.
+fn received(
+    state: &AppState,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+    value: Value,
+) -> Value {
+    if value["messages"]
+        .as_array()
+        .is_some_and(|messages| !messages.is_empty())
+    {
+        state
+            .participant_activity
+            .start(&principal.room_id, &principal.participant_id);
+    }
+    value
 }
 
 async fn enrich(

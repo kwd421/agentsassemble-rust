@@ -263,3 +263,22 @@ Owners and affected entry points: `room_turn_context.rs` (`load_room_roster`,
 provider and server library tests pass, including same-name humans, the People
 line, and a newline-containing display name; `make architecture-check` passes.
 No schema, routing, frontend or provider-call change.
+
+## External AI activity (2026-10-22, required behavior)
+
+An external AI in a room (Room Connector) used to show no state at all: the member list had no
+chip and the typing line stayed empty while it worked for minutes. The host now derives its
+activity from the connector requests it already serves, without a connector protocol change:
+a `wait` that returns someone else's message starts "working"; the connector's next `wait`, a
+`message.send` / `channel.message.send` it posts, or its `participant.leave` ends it; work that
+never reports back stops showing after 15 minutes. The registry is in memory only and a restart
+forgets it.
+
+Delivery is gated like `agent_chain_limit`: a client that adds `participant_activity=1` to the
+WebSocket URL query receives `{"op":"participant_activity","active":[participant ids]}` once
+after subscribing and on every change. Older clients never see the frame, and a room stream
+was not added because older clients reject a server surface whose stream list differs. The
+client shows a working external AI in the typing line and as "응답 중" in the member list.
+
+Non-goal for this slice: a durable "차례 넘김" row for an external AI that reads and stays silent,
+which would need a new durable event type across history and backups.

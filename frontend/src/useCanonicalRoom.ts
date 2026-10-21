@@ -59,6 +59,7 @@ type OpenRoomSocket = (
 ) => RoomSocketHandle;
 
 const NO_STREAMS: RoomStream[] = [];
+const NO_ACTIVITY: string[] = [];
 type CanonicalRoomCallbacks = {
   onRoomEvents?: (events: RoomEvent[]) => void;
   onSideChat?: (update: import("./types/generated/SideChatUpdate").SideChatUpdate) => void;
@@ -133,6 +134,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   const [sessionsByRoom, setSessionsByRoom] = useState<Record<string, RoomAgentSession[]>>({});
   const [participantsByRoom, setParticipantsByRoom] = useState<Record<string, RoomMember[]>>({});
   const [capabilitiesByRoom, setCapabilitiesByRoom] = useState<Record<string, Record<string, boolean>>>({});
+  const [activityByRoom, setActivityByRoom] = useState<Record<string, string[]>>({});
   const [providerCatalogByRoom, setProviderCatalogByRoom] = useState<
     Record<string, ProviderCatalogSnapshot>
   >({});
@@ -448,6 +450,11 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       onSideChat: (update) => {
         if (connectionIsCurrent() && socketIsAccepted(currentSocket)) callbacksRef.current.onSideChat?.(update);
       },
+      onParticipantActivity: (active) => {
+        if (connectionIsCurrent() && socketIsAccepted(currentSocket)) {
+          setActivityByRoom((previous) => ({ ...previous, [roomId]: active }));
+        }
+      },
       onOpen: () => {
         if (!connectionIsCurrent()) return;
         setConnectionState("connected");
@@ -456,6 +463,8 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       onClose: () => {
         if (connectionIsCurrent()) {
           setConnectionState("connecting");
+          // A new connection reports the current activity again.
+          setActivityByRoom((previous) => ({ ...previous, [roomId]: [] }));
           callbacksRef.current.onSideChatClose?.();
         }
       },
@@ -797,6 +806,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       ? providerCatalogByRoom[roomId] || EMPTY_PROVIDER_CATALOG
       : EMPTY_PROVIDER_CATALOG,
     agentSessionProgress: projectionIsCurrent ? progressByRoom[roomId] || null : null,
+    activeParticipantIds: projectionIsCurrent ? activityByRoom[roomId] || NO_ACTIVITY : NO_ACTIVITY,
     pluginEnvelopes: projectionIsCurrent ? pluginEnvelopesByRoom[roomId] || [] : [],
     history: projectionIsCurrent
       ? historyByRoom[roomId] || EMPTY_CANONICAL_HISTORY
