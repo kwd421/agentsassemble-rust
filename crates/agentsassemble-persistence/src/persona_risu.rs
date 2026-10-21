@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    MAX_ATTACHMENT_BYTES, PersonaAssetKind, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
+    MAX_PERSONA_UPLOAD_BYTES, PersonaAssetKind, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
     canonical_persona_id,
 };
 use serde_json::{Map, Value};
@@ -69,7 +69,7 @@ pub async fn import_risum_asset(
 pub(super) fn decode_risum_payload(
     content: &[u8],
 ) -> Result<DecodedRisuPayload, PersonaImportError> {
-    if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
+    if content.is_empty() || content.len() > MAX_PERSONA_UPLOAD_BYTES {
         return Err(PersonaImportError::InvalidSize);
     }
     if content.len() < 7 || content[0] != RISU_MAGIC {

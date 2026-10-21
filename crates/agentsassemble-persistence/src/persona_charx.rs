@@ -4,7 +4,7 @@ use std::{
 };
 
 use agentsassemble_domain::{
-    MAX_ATTACHMENT_BYTES, PersonaLoreEntry, PersonaLoreSettings, persona_card_keywords,
+    MAX_PERSONA_UPLOAD_BYTES, PersonaLoreEntry, PersonaLoreSettings, persona_card_keywords,
 };
 use serde_json::{Map, Value};
 use zip::ZipArchive;
@@ -85,7 +85,7 @@ struct PreparedCharx {
 }
 
 fn prepare_charx(content: Vec<u8>) -> Result<PreparedCharx, PersonaImportError> {
-    if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
+    if content.is_empty() || content.len() > MAX_PERSONA_UPLOAD_BYTES {
         return Err(PersonaImportError::InvalidSize);
     }
     let mut archive =
@@ -99,14 +99,14 @@ fn prepare_charx(content: Vec<u8>) -> Result<PreparedCharx, PersonaImportError> 
         if archive.index_for_name(&path).is_some() {
             embedded.insert(
                 path.clone(),
-                read_member(&mut archive, &path, MAX_ATTACHMENT_BYTES)?,
+                read_member(&mut archive, &path, MAX_PERSONA_UPLOAD_BYTES)?,
             );
         }
     }
     let module = if archive.index_for_name("module.risum").is_none() {
         PreparedModule::Absent
     } else {
-        match read_member(&mut archive, "module.risum", MAX_ATTACHMENT_BYTES)
+        match read_member(&mut archive, "module.risum", MAX_PERSONA_UPLOAD_BYTES)
             .and_then(|bytes| decode_risum_payload(&bytes))
         {
             Ok(module) => {
@@ -210,8 +210,8 @@ fn validate_archive(archive: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<(), Per
             return Err(invalid("encrypted entries are unsupported"));
         }
         let size = usize::try_from(entry.size()).map_err(|_| invalid("entry size is invalid"))?;
-        if size > MAX_ATTACHMENT_BYTES {
-            return Err(invalid("entry exceeds 10 MiB"));
+        if size > MAX_PERSONA_UPLOAD_BYTES {
+            return Err(invalid("entry exceeds 30 MiB"));
         }
         let size_u64 = u64::try_from(size).map_err(|_| invalid("entry size is invalid"))?;
         total_expanded = total_expanded

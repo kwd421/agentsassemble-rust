@@ -1,4 +1,4 @@
-use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
+use agentsassemble_domain::MAX_PERSONA_UPLOAD_BYTES;
 use agentsassemble_persistence::{
     PersistenceError, PersonaImportError, import_ccv3_asset, import_charx_asset, import_risum_asset,
 };
@@ -19,12 +19,13 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, MAX_BASE64_ENCODED_BYTES, MAX_BASE64_UPLOAD_BODY_BYTES, PRIVATE_NO_STORE,
-        consume_local_operator, decode_upload_body, ensure_empty_body, exact_tauri_cors,
+        BodyDecodeError, PRIVATE_NO_STORE, base64_upload_body_limit, consume_local_operator,
+        decode_upload_body, ensure_empty_body, exact_tauri_cors,
     },
 };
 
 const MAX_EMPTY_BODY_BYTES: usize = 4 * 1024;
+const MAX_ENCODED_PERSONA_BYTES: usize = MAX_PERSONA_UPLOAD_BYTES.div_ceil(3) * 4;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -90,7 +91,7 @@ async fn import_persona(
     .await?;
     let (payload, reservation): (PersonaImportRequest, _) = decode_upload_body(
         request,
-        MAX_BASE64_UPLOAD_BODY_BYTES,
+        base64_upload_body_limit(MAX_PERSONA_UPLOAD_BYTES),
         &policy,
         &state.upload_bodies,
         agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
@@ -258,7 +259,7 @@ fn decode_upload(value: &str) -> Result<Vec<u8>, PersonaHttpError> {
     {
         encoded = remainder;
     }
-    if encoded.len() > MAX_BASE64_ENCODED_BYTES {
+    if encoded.len() > MAX_ENCODED_PERSONA_BYTES {
         return Err(PersonaHttpError::bad_request("Persona file is too large."));
     }
     let content = STANDARD
@@ -269,7 +270,7 @@ fn decode_upload(value: &str) -> Result<Vec<u8>, PersonaHttpError> {
             "Persona file data is required.",
         ));
     }
-    if content.len() > MAX_ATTACHMENT_BYTES {
+    if content.len() > MAX_PERSONA_UPLOAD_BYTES {
         return Err(PersonaHttpError::bad_request("Persona file is too large."));
     }
     Ok(content)

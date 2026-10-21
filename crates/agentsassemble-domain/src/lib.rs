@@ -123,6 +123,7 @@ pub use model::{
 };
 pub use persona::{
     MAX_PERSONA_CONTEXT_CHARACTERS, MAX_PERSONA_ID_CHARACTERS, MAX_PERSONA_LORE_CHARACTERS,
+    MAX_PERSONA_UPLOAD_BYTES,
     PersonaAssetKind, PersonaAssetSummary, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
     canonical_persona_id, render_persona_context, render_persona_context_parts,
 };

@@ -11,6 +11,8 @@ use crate::persona_text::{
 };
 
 pub const MAX_PERSONA_ID_CHARACTERS: usize = 80;
+/// Risu cards often carry full-size art; a card file may exceed one attachment.
+pub const MAX_PERSONA_UPLOAD_BYTES: usize = 30 * 1024 * 1024;
 pub const MAX_PERSONA_CONTEXT_CHARACTERS: usize = 8_000;
 pub const MAX_PERSONA_LORE_CHARACTERS: usize = 3_600;
 const MAX_RECURSIVE_SCAN_DEPTH: usize = 8;

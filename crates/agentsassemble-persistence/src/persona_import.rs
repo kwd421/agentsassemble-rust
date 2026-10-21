@@ -4,17 +4,17 @@ use std::{
 };
 
 use agentsassemble_domain::{
-    MAX_ATTACHMENT_BYTES, PersonaAssetKind, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
+    MAX_PERSONA_UPLOAD_BYTES, PersonaAssetKind, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
     canonical_persona_id, trim_persona_card_text,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use crate::raster_assets::{PNG_SIGNATURE, prepare_raster};
+use crate::raster_assets::{PNG_SIGNATURE, prepare_card_thumbnail};
 
 pub(super) const MAX_CARD_JSON_BYTES: usize = 5 * 1024 * 1024;
-const MAX_PNG_TEXT_BYTES: usize = 5 * 1024 * 1024;
+const MAX_PNG_TEXT_BYTES: usize = MAX_PERSONA_UPLOAD_BYTES.div_ceil(3) * 4;
 type ThumbnailCandidate = (String, &'static str, Vec<u8>);
 
 struct CardAssets<'a> {
@@ -24,7 +24,7 @@ struct CardAssets<'a> {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PersonaImportError {
-    #[error("persona file is empty or exceeds the 10 MiB import limit")]
+    #[error("persona file is empty or exceeds the 30 MiB import limit")]
     InvalidSize,
     #[error("persona filename or format is unsupported")]
     UnsupportedFormat,
@@ -56,7 +56,7 @@ pub async fn import_ccv3_asset(
     let filename = filename.to_owned();
     let parsing_filename = filename.clone();
     let (payload, embedded, source_thumbnail) = blocking_import(move || {
-        if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
+        if content.is_empty() || content.len() > MAX_PERSONA_UPLOAD_BYTES {
             return Err(PersonaImportError::InvalidSize);
         }
         let extension = parsing_filename
@@ -96,9 +96,9 @@ pub(super) async fn finish_ccv3_import(
         Ok((normalized, candidate, asset_count, ignored))
     })
     .await?;
-    let thumbnail = if let Some((candidate_name, content_type, content)) = candidate {
-        if let Ok((canonical, _)) = prepare_raster(&candidate_name, content_type, content).await {
-            Some(canonical.content)
+    let thumbnail = if let Some((_, content_type, content)) = candidate {
+        if let Ok(thumbnail) = prepare_card_thumbnail(content_type, content).await {
+            Some(thumbnail)
         } else {
             add_count(&mut ignored, "invalid_thumbnail", 1);
             None
@@ -145,7 +145,7 @@ fn parse_png_card(
 ) -> Result<(Value, BTreeMap<String, Vec<u8>>), PersonaImportError> {
     let mut png_decoder = png::Decoder::new(BufReader::new(Cursor::new(content)));
     png_decoder.set_limits(png::Limits {
-        bytes: MAX_ATTACHMENT_BYTES.saturating_mul(2),
+        bytes: MAX_PERSONA_UPLOAD_BYTES.saturating_mul(2),
     });
     let mut reader = png_decoder
         .read_info()
@@ -186,7 +186,7 @@ fn png_asset_index(keyword: &str) -> Option<&str> {
 }
 
 fn decode_base64_bounded(value: &str) -> Result<Vec<u8>, PersonaImportError> {
-    if value.len() > MAX_ATTACHMENT_BYTES.div_ceil(3).saturating_mul(4) {
+    if value.len() > MAX_PNG_TEXT_BYTES {
         return Err(PersonaImportError::InvalidCard(
             "embedded payload is too large",
         ));
@@ -194,7 +194,7 @@ fn decode_base64_bounded(value: &str) -> Result<Vec<u8>, PersonaImportError> {
     let decoded = STANDARD
         .decode(value)
         .map_err(|_| PersonaImportError::InvalidCard("embedded base64 is invalid"))?;
-    if decoded.len() > MAX_ATTACHMENT_BYTES {
+    if decoded.len() > MAX_PERSONA_UPLOAD_BYTES {
         return Err(PersonaImportError::InvalidCard(
             "embedded payload is too large",
         ));
@@ -585,6 +585,58 @@ mod tests {
         assert_eq!(imported.card.ignored_features["mcp"], 1);
         assert_eq!(imported.card.ignored_features["lorebook_regex_matching"], 1);
         assert!(imported.thumbnail.is_some());
+    }
+
+    #[tokio::test]
+    async fn imports_card_art_beyond_one_attachment_as_a_bounded_thumbnail() {
+        let card =
+            json!({"spec": "chara_card_v3", "spec_version": "3.0", "data": {"name": "Big Art"}});
+        let (width, height) = (5000_u32, 640_u32);
+        let mut seed = 0x9e37_79b9_u32;
+        let pixels: Vec<u8> = (0..width * height * 4)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed.to_le_bytes()[0]
+            })
+            .collect();
+        let mut png_bytes = Cursor::new(Vec::new());
+        {
+            let mut png_encoder = png::Encoder::new(&mut png_bytes, width, height);
+            png_encoder.set_color(png::ColorType::Rgba);
+            png_encoder.set_depth(png::BitDepth::Eight);
+            png_encoder
+                .add_text_chunk("ccv3".to_owned(), STANDARD.encode(card.to_string()))
+                .unwrap_or_else(|error| panic!("add card chunk: {error}"));
+            let mut writer = png_encoder
+                .write_header()
+                .unwrap_or_else(|error| panic!("write PNG header: {error}"));
+            writer
+                .write_image_data(&pixels)
+                .unwrap_or_else(|error| panic!("write PNG pixels: {error}"));
+        }
+        let content = png_bytes.into_inner();
+        assert!(content.len() > agentsassemble_domain::MAX_ATTACHMENT_BYTES);
+        let imported = import_ccv3_asset("big.png", content)
+            .await
+            .unwrap_or_else(|error| panic!("import large PNG card: {error}"));
+        let thumbnail = image::load_from_memory(
+            &imported
+                .thumbnail
+                .unwrap_or_else(|| panic!("large card art keeps a thumbnail")),
+        )
+        .unwrap_or_else(|error| panic!("decode thumbnail: {error}"));
+        assert_eq!(thumbnail.width(), 1024);
+    }
+
+    #[tokio::test]
+    async fn rejects_card_files_over_the_card_limit() {
+        let content = vec![0; agentsassemble_domain::MAX_PERSONA_UPLOAD_BYTES + 1];
+        assert_eq!(
+            import_ccv3_asset("huge.png", content).await,
+            Err(super::PersonaImportError::InvalidSize)
+        );
     }
 
     #[tokio::test]

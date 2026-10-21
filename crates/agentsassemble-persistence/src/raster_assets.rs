@@ -1,6 +1,6 @@
 use std::{io::Cursor, sync::OnceLock};
 
-use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
+use agentsassemble_domain::{MAX_ATTACHMENT_BYTES, MAX_PERSONA_UPLOAD_BYTES};
 use chrono::DateTime;
 use image::{DynamicImage, ImageFormat, ImageReader, Limits};
 use tokio::sync::Semaphore;
@@ -9,6 +9,8 @@ use crate::PersistenceError;
 
 const MAX_IMAGE_DIMENSION: u32 = 4096;
 const MAX_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
+const MAX_CARD_ART_DIMENSION: u32 = 8192;
+const CARD_THUMBNAIL_DIMENSION: u32 = 1024;
 pub const MAX_RASTER_DECODE_ALLOC_BYTES: u64 = 72 * 1024 * 1024;
 pub(crate) const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 
@@ -38,6 +40,59 @@ pub(crate) async fn prepare_raster(
         )
     })?;
     Ok((canonical, size))
+}
+
+/// Card art may be larger than an attachment; only a bounded PNG thumbnail is kept.
+pub(crate) async fn prepare_card_thumbnail(
+    content_type: &str,
+    content: Vec<u8>,
+) -> Result<Vec<u8>, PersistenceError> {
+    if content.is_empty() || content.len() > MAX_PERSONA_UPLOAD_BYTES {
+        return Err(invalid_image());
+    }
+    let declared_format = declared_image_format(content_type)?;
+    let permit = decode_permit().await?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        card_thumbnail_blocking(declared_format, content)
+    })
+    .await
+    .map_err(|_| decode_task_failed())?
+}
+
+fn card_thumbnail_blocking(
+    declared_format: ImageFormat,
+    content: Vec<u8>,
+) -> Result<Vec<u8>, PersistenceError> {
+    let mut reader = ImageReader::new(Cursor::new(content))
+        .with_guessed_format()
+        .map_err(|_| invalid_image())?;
+    let mut limits = decode_limits();
+    limits.max_image_width = Some(MAX_CARD_ART_DIMENSION);
+    limits.max_image_height = Some(MAX_CARD_ART_DIMENSION);
+    reader.limits(limits);
+    if reader.format() != Some(declared_format) {
+        return Err(invalid_image());
+    }
+    let decoded = reader.decode().map_err(|_| invalid_image())?;
+    let pixels = u64::from(decoded.width()).saturating_mul(u64::from(decoded.height()));
+    if pixels == 0 || pixels > MAX_IMAGE_PIXELS {
+        return Err(invalid_image());
+    }
+    let thumbnail = if decoded.width().max(decoded.height()) > CARD_THUMBNAIL_DIMENSION {
+        decoded.resize(
+            CARD_THUMBNAIL_DIMENSION,
+            CARD_THUMBNAIL_DIMENSION,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        decoded
+    };
+    let mut encoded = Cursor::new(Vec::new());
+    thumbnail
+        .write_to(&mut encoded, ImageFormat::Png)
+        .map_err(|_| invalid_image())?;
+    Ok(encoded.into_inner())
 }
 
 pub(crate) fn validate_stored_raster(
