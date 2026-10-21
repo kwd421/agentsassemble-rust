@@ -146,6 +146,31 @@ async fn free_access_thirteenth_ai_message_cannot_route_and_human_resets_chain()
     Ok(())
 }
 
+/// The room can let AIs call each other without a limit.
+#[tokio::test]
+async fn free_access_with_no_chain_limit_keeps_routing_ai_mentions() -> TestResult {
+    let (store, principal, _directory) = fixture().await;
+    insert_second_agent(&store).await;
+    let revision = public_settings(&RoomSettings::defaults("General"))?.settings_revision;
+    store
+        .execute_room_settings_update(
+            TrustedPrincipal(&principal),
+            "free",
+            &json!({"expected_revision": revision, "conversation_mode": "free_access", "agent_chain_limit": 0}),
+        )
+        .await?;
+    let mut ai = principal.clone();
+    ai.principal_id = SECOND_AGENT_ID.into();
+    ai.participant_id = SECOND_AGENT_ID.into();
+    ai.display_name = "Flash".into();
+    for index in 1..20 {
+        send_message(&store, &ai, &format!("ai-{index}"), "ordinary AI speech").await;
+    }
+    let twentieth = send_message(&store, &ai, "ai-20", "@Terra respond").await;
+    assert_eq!(twentieth.assignments.len(), 1);
+    Ok(())
+}
+
 #[tokio::test]
 async fn free_access_companion_is_silent_until_addressed() -> TestResult {
     let (store, session, now) = crate::attendee::connection_tests::fixture().await?;

@@ -12,6 +12,7 @@ import {
   type RoomSettings,
   type RoomToolMode,
 } from "../api";
+import { AGENT_CHAIN_LIMITS } from "../lib/agentChainLimit";
 import {
   completeRoomAppearance,
   type RoomAppearance,
@@ -37,6 +38,7 @@ export type RoomPreferenceAuthority =
 type PersistedRoomSettingsOverrides = RoomGlobalSettingsUpdate;
 
 export type AuthoritativeRoomSettings = {
+  agentChainLimit: number;
   attachmentFileLimitBytes: number;
   attachmentStorageLimitBytes: number | null;
   conversationMode: ConversationMode;
@@ -76,10 +78,11 @@ function settingsError(errorValue: unknown, fallback: string): Error {
 function authoritativeSettings(
   settings: Pick<
     RoomGlobalSettings,
-    "conversationMode" | "toolMode" | "orderedExcludePreviousSpeaker" | "attachmentFileLimitBytes" | "attachmentStorageLimitBytes"
+    "conversationMode" | "toolMode" | "orderedExcludePreviousSpeaker" | "attachmentFileLimitBytes" | "attachmentStorageLimitBytes" | "agentChainLimit"
   >
 ): AuthoritativeRoomSettings {
   return {
+    agentChainLimit: settings.agentChainLimit ?? AGENT_CHAIN_LIMITS[0],
     attachmentFileLimitBytes: settings.attachmentFileLimitBytes ?? MAX_ATTACHMENT_BYTES,
     attachmentStorageLimitBytes: settings.attachmentStorageLimitBytes ?? null,
     conversationMode: settings.conversationMode,
@@ -490,6 +493,7 @@ export function useRoomSettingsController({
       const currentValue = settingsStateFor(room).value;
       const nextValue = currentValue
         ? {
+            agentChainLimit: overrides.agentChainLimit ?? currentValue.agentChainLimit,
             attachmentFileLimitBytes: overrides.attachmentFileLimitBytes ?? currentValue.attachmentFileLimitBytes,
             attachmentStorageLimitBytes: overrides.attachmentStorageLimitBytes === undefined ? currentValue.attachmentStorageLimitBytes : overrides.attachmentStorageLimitBytes,
             conversationMode: overrides.conversationMode ?? currentValue.conversationMode,

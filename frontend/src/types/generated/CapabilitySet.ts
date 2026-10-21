@@ -5,4 +5,9 @@ export type CapabilitySet = { "room.history": boolean, "room.vote.summary": bool
  * The host accepts `reply_mention` (Discord's "@ on" for a reply). Absent
  * from older hosts, so a newer client never sends the field to them.
  */
-"message.reply_mention": boolean, };
+"message.reply_mention": boolean, 
+/**
+ * The host reads `agent_chain_limit` in room settings. Absent from older
+ * hosts, so a newer client never sends that setting to them.
+ */
+"room.agent_chain_limit": boolean, };

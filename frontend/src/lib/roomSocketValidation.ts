@@ -1,5 +1,6 @@
 import { delegatedActionRequestsAreValid, delegatedActionEventIsValid, delegatedActionAckIsValid } from "./delegatedActionProjection";
 import { roomAttachmentPolicyIsValid } from "./roomAttachmentPolicy";
+import { AGENT_CHAIN_LIMITS } from "./agentChainLimit";
 import { providerRequestEventIsValid } from "./providerRequestProjection";
 import { anonymizedParticipant } from "./participantAnonymization";
 import { channelMessageFieldsAreValid } from "./channelMessageContract";
@@ -57,6 +58,7 @@ const GENERATED_ROOM_SETTINGS_KEYS = [
   "lobby_name",
   "attachment_file_limit_bytes",
   "attachment_storage_limit_bytes",
+  "agent_chain_limit",
 ] as const;
 const ROOM_SETTINGS_KEYS: ExactGeneratedKeys<
   PublicRoomSettings,
@@ -120,12 +122,13 @@ export { isSequence } from "./roomSequence";
 function publicRoomSettingsIsValid(value: unknown): value is PublicRoomSettings {
   try {
     const settings = strictRecord(value, "room settings");
-    const optional = ["lobby_name", "attachment_file_limit_bytes", "attachment_storage_limit_bytes"];
+    const optional = ["lobby_name", "attachment_file_limit_bytes", "attachment_storage_limit_bytes", "agent_chain_limit"];
     assertExactKeys(settings, ROOM_SETTINGS_KEYS.filter(key => !optional.includes(key)), "room settings", optional);
     const appearance = strictRecord(settings.appearance, "room settings appearance");
     assertExactKeys(appearance, APPEARANCE_KEYS, "room settings appearance");
     if (
       !roomAttachmentPolicyIsValid(settings) ||
+      (settings.agent_chain_limit !== undefined && !(AGENT_CHAIN_LIMITS as readonly unknown[]).includes(settings.agent_chain_limit)) ||
       ["settings_revision", "label", "topic", "conversation_mode", "tool_mode"]
         .some((key) => typeof settings[key] !== "string") ||
       (settings.lobby_name !== undefined && (typeof settings.lobby_name !== "string" || !settings.lobby_name.trim())) ||

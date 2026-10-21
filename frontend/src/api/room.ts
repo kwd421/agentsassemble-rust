@@ -1,3 +1,5 @@
+import { AGENT_CHAIN_LIMITS } from "../lib/agentChainLimit";
+export { AGENT_CHAIN_LIMITS };
 import { roomAttachmentPolicyIsValid } from "../lib/roomAttachmentPolicy";
 import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 import { fetchProductTransport, hasRemoteWorkspace, remoteSessionTransport, sessionHostOrigin } from "../lib/remote/remoteWorkspace";
@@ -47,7 +49,9 @@ export type RoomToolMode = "chat" | "tabletop";
 
 export type RoomGlobalAppearance = Omit<RoomAppearance, "notifications">;
 
+
 export interface RoomGlobalSettings {
+  agentChainLimit?: number;
   attachmentFileLimitBytes?: number;
   attachmentStorageLimitBytes?: number | null;
   lobbyName?: string;
@@ -64,6 +68,7 @@ export interface RoomGlobalSettings {
 }
 
 export type RoomGlobalSettingsUpdate = {
+  agentChainLimit?: number;
   attachmentFileLimitBytes?: number;
   attachmentStorageLimitBytes?: number | null;
   label?: string;
@@ -131,6 +136,7 @@ type ApiRoomAppearance = {
 };
 
 type ApiRoomSettings = {
+  agent_chain_limit?: number;
   attachment_file_limit_bytes?: number;
   attachment_storage_limit_bytes?: number | null;
   lobby_name?: string;
@@ -253,8 +259,11 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
       "channels",
     ],
     "방 preference.settings",
-    ["lobby_name", "attachment_file_limit_bytes", "attachment_storage_limit_bytes"]
+    ["lobby_name", "attachment_file_limit_bytes", "attachment_storage_limit_bytes", "agent_chain_limit"]
   );
+  if (payload.agent_chain_limit !== undefined && !(AGENT_CHAIN_LIMITS as readonly unknown[]).includes(payload.agent_chain_limit)) {
+    throw new Error("방 preference settings 값이 올바르지 않습니다.");
+  }
   if (stringField(payload, "room_id", "방 preference.settings") !== expectedRoomId) {
     throw new Error("방 preference settings의 방 권위가 일치하지 않습니다.");
   }
@@ -367,7 +376,9 @@ export function normalizeRoomGlobalSettings(
   ) {
     return null;
   }
+  if (payload.agent_chain_limit !== undefined && !(AGENT_CHAIN_LIMITS as readonly unknown[]).includes(payload.agent_chain_limit)) return null;
   return {
+    agentChainLimit: payload.agent_chain_limit ?? AGENT_CHAIN_LIMITS[0],
     attachmentFileLimitBytes: payload.attachment_file_limit_bytes ?? MAX_ATTACHMENT_BYTES,
     attachmentStorageLimitBytes: payload.attachment_storage_limit_bytes ?? null,
     lobbyName: payload.lobby_name,
@@ -394,6 +405,7 @@ export function roomGlobalSettingsUpdateToApi(
   updates: RoomGlobalSettingsUpdate
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
+  if (updates.agentChainLimit !== undefined) payload.agent_chain_limit = updates.agentChainLimit;
   if (updates.attachmentFileLimitBytes !== undefined) payload.attachment_file_limit_bytes = updates.attachmentFileLimitBytes;
   if (updates.attachmentStorageLimitBytes !== undefined) payload.attachment_storage_limit_bytes = updates.attachmentStorageLimitBytes;
   if (updates.label !== undefined) payload.label = updates.label;

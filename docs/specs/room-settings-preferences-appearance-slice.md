@@ -182,6 +182,13 @@ and later AI messages cannot schedule further mentions. Messages remain visible;
 a human public message resets the chain. Count canonical public messages across
 managed, attendee and Connector writers. System events do not reset the chain.
 
+The chain length is the room setting `agent_chain_limit` (2026-10-21, owner
+request): 12 (default), 50, 100 or 0 for no limit, changed by `room.manage` in
+room settings under 자유 접속 as "AI끼리 이어 부르기". The default is omitted on the
+wire so existing revisions and older clients are unchanged; hosts advertise
+capability `room.agent_chain_limit`, and clients offer the control only there.
+Ordered and ambient modes have no chain limit.
+
 External mention notification is durable per participant and survives reconnects.
 A pending `room_wait_next` wakes only for that participant's mention in free access;
 an unread mention also makes a later wait return immediately. Join/status/read/wait

@@ -19,6 +19,19 @@ pub const ROOM_APPEARANCE_ASSET_HEX_LENGTH: usize = 32;
 pub const ROOM_APPEARANCE_REFERENCE_PREFIX: &str = "/api/attachments/";
 pub const ROOM_APPEARANCE_REFERENCE_QUERY: &str = "view=1";
 pub const ROOM_APPEARANCE_REFERENCE_SUFFIX: &str = "?view=1";
+/// How many AI messages in a row free access lets AIs call each other
+/// before a person speaks again; 0 means no limit.
+pub const AGENT_CHAIN_LIMITS: [u32; 4] = [12, 50, 100, 0];
+const DEFAULT_AGENT_CHAIN_LIMIT: u32 = 12;
+
+const fn default_agent_chain_limit() -> u32 {
+    DEFAULT_AGENT_CHAIN_LIMIT
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+const fn is_default_agent_chain_limit(value: &u32) -> bool {
+    *value == DEFAULT_AGENT_CHAIN_LIMIT
+}
 
 static CHANNEL_ID: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^c[0-9a-f]{12}$").unwrap_or_else(|error| panic!("valid channel regex: {error}"))
@@ -59,6 +72,12 @@ pub struct RoomSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub attachment_storage_limit_bytes: Option<u64>,
+    #[serde(
+        default = "default_agent_chain_limit",
+        skip_serializing_if = "is_default_agent_chain_limit"
+    )]
+    #[ts(as = "Option<u32>", optional)]
+    pub agent_chain_limit: u32,
     pub label: String,
     pub topic: String,
     pub appearance: RoomAppearance,
@@ -88,6 +107,12 @@ pub struct PublicRoomSettings {
     )]
     #[ts(optional, type = "number")]
     pub attachment_storage_limit_bytes: Option<u64>,
+    #[serde(
+        default = "default_agent_chain_limit",
+        skip_serializing_if = "is_default_agent_chain_limit"
+    )]
+    #[ts(as = "Option<u32>", optional)]
+    pub agent_chain_limit: u32,
     pub settings_revision: String,
     pub label: String,
     pub topic: String,
@@ -105,6 +130,7 @@ pub struct PublicRoomSettings {
 pub struct RoomSettingsPatch {
     pub attachment_file_limit_bytes: Option<usize>,
     pub attachment_storage_limit_bytes: Option<Option<u64>>,
+    pub agent_chain_limit: Option<u32>,
     pub label: Option<String>,
     pub topic: Option<String>,
     pub appearance: RoomAppearancePatch,
@@ -163,6 +189,8 @@ struct RawRoomSettings {
     attachment_file_limit_bytes: usize,
     #[serde(default)]
     attachment_storage_limit_bytes: Option<u64>,
+    #[serde(default = "default_agent_chain_limit")]
+    agent_chain_limit: u32,
     label: String,
     topic: String,
     appearance: RawRoomAppearance,
@@ -200,6 +228,7 @@ impl RoomSettings {
         Self {
             attachment_file_limit_bytes: crate::MAX_ATTACHMENT_BYTES,
             attachment_storage_limit_bytes: None,
+            agent_chain_limit: DEFAULT_AGENT_CHAIN_LIMIT,
             label: clean_single_line(label, ROOM_LABEL_LIMIT),
             topic: String::new(),
             appearance: RoomAppearance {
@@ -231,6 +260,7 @@ impl RoomSettings {
             &[
                 "attachment_file_limit_bytes",
                 "attachment_storage_limit_bytes",
+                "agent_chain_limit",
                 "expected_revision",
                 "label",
                 "topic",
@@ -270,6 +300,7 @@ impl RoomSettingsPatch {
                 object,
                 "attachment_storage_limit_bytes",
             )?,
+            agent_chain_limit: optional_typed(object, "agent_chain_limit")?,
             label: optional_string(object, "label")?,
             topic: optional_string(object, "topic")?,
             appearance: object.get("appearance").map_or_else(
@@ -289,6 +320,7 @@ impl RoomSettingsPatch {
     fn is_empty(&self) -> bool {
         self.attachment_file_limit_bytes.is_none()
             && self.attachment_storage_limit_bytes.is_none()
+            && self.agent_chain_limit.is_none()
             && self.label.is_none()
             && self.topic.is_none()
             && self.appearance.is_empty()
@@ -319,6 +351,7 @@ impl RoomSettingsPatch {
             attachment_storage_limit_bytes: self
                 .attachment_storage_limit_bytes
                 .unwrap_or(current.attachment_storage_limit_bytes),
+            agent_chain_limit: self.agent_chain_limit.unwrap_or(current.agent_chain_limit),
             label: self.label.clone().unwrap_or_else(|| current.label.clone()),
             topic: self.topic.clone().unwrap_or_else(|| current.topic.clone()),
             appearance: self.appearance.apply(&current.appearance),
@@ -412,6 +445,7 @@ impl From<RoomSettings> for RawRoomSettings {
         Self {
             attachment_file_limit_bytes: value.attachment_file_limit_bytes,
             attachment_storage_limit_bytes: value.attachment_storage_limit_bytes,
+            agent_chain_limit: value.agent_chain_limit,
             label: value.label,
             topic: value.topic,
             appearance: RawRoomAppearance {
@@ -438,6 +472,11 @@ fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsE
     {
         return Err(RoomSettingsError::bad_request(
             "Unsupported attachment limit.",
+        ));
+    }
+    if !AGENT_CHAIN_LIMITS.contains(&raw.agent_chain_limit) {
+        return Err(RoomSettingsError::bad_request(
+            "Unsupported agent_chain_limit.",
         ));
     }
     require_canonical_text(&raw.label, "label", ROOM_LABEL_LIMIT)?;
@@ -493,6 +532,7 @@ fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsE
     Ok(RoomSettings {
         attachment_file_limit_bytes: raw.attachment_file_limit_bytes,
         attachment_storage_limit_bytes: raw.attachment_storage_limit_bytes,
+        agent_chain_limit: raw.agent_chain_limit,
         label: raw.label,
         topic: raw.topic,
         appearance: validate_appearance(raw.appearance)?,
@@ -662,6 +702,7 @@ pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, se
     Ok(PublicRoomSettings {
         attachment_file_limit_bytes: settings.attachment_file_limit_bytes,
         attachment_storage_limit_bytes: settings.attachment_storage_limit_bytes,
+        agent_chain_limit: settings.agent_chain_limit,
         settings_revision: revision,
         label: settings.label.clone(),
         topic: settings.topic.clone(),
@@ -876,5 +917,31 @@ mod tests {
             .unwrap_or_else(|error| panic!("settings value: {error}"));
         value["appearance"]["continuous"] = json!(true);
         assert!(serde_json::from_value::<RoomSettings>(value).is_err());
+    }
+
+    #[test]
+    fn agent_chain_limit_is_strict_and_omitted_at_its_default()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let current = RoomSettings::defaults("General");
+        let public = public_settings(&current)?;
+        assert!(
+            serde_json::to_value(&public)?
+                .get("agent_chain_limit")
+                .is_none()
+        );
+        let revision = public.settings_revision;
+        let (_, unlimited) = current
+            .strict_update(&json!({"expected_revision": revision, "agent_chain_limit": 0}))?;
+        assert_eq!(unlimited.agent_chain_limit, 0);
+        assert_eq!(
+            serde_json::to_value(public_settings(&unlimited)?)?["agent_chain_limit"],
+            0
+        );
+        assert!(
+            current
+                .strict_update(&json!({"expected_revision": revision, "agent_chain_limit": 7}))
+                .is_err()
+        );
+        Ok(())
     }
 }

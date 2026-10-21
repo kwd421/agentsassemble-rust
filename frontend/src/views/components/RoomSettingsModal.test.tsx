@@ -334,3 +334,26 @@ describe("RoomSettingsModal conversation mode", () => {
     expect(screen.getAllByRole("alert")[0]?.textContent).toContain("확인할 수 없어");
   });
 });
+
+describe("RoomSettingsModal agent chain", () => {
+  it("offers the AI-to-AI chain length in free access, up to no limit", () => {
+    const onChange = vi.fn();
+    const props = (conversationMode: "free_access" | "ordered") => (
+      <RoomSettingsModal channelOptions={[]} room={room} appearance={DEFAULT_ROOM_APPEARANCE} appearanceAssetError=""
+        channelSettings={{}} settingsStatus="ready" settingsError="" preferenceStatus="ready" preferenceError=""
+        conversationMode={conversationMode} toolMode="chat" orderedExcludePreviousSpeaker
+        agentChainSettings={{ limit: 12, onChange }} canInvite onClose={() => undefined} onInvite={() => undefined}
+        onRoomChange={() => undefined} onAppearanceChange={async () => undefined} onAppearanceUpload={async () => true}
+        onChannelSettingChange={async () => undefined} onConversationModeChange={() => undefined}
+        onToolModeChange={() => undefined} onOrderedExcludePreviousSpeakerChange={() => undefined}
+        onRetrySettings={() => undefined} onRetryAppearance={() => undefined} />
+    );
+    const { rerender } = render(props("free_access"));
+    const select = screen.getByRole("combobox", { name: "AI끼리 이어 부르기" });
+    expect(screen.getByRole("option", { name: "제한 없음" })).toBeTruthy();
+    fireEvent.change(select, { target: { value: "0" } });
+    expect(onChange).toHaveBeenCalledWith(0);
+    rerender(props("ordered"));
+    expect(screen.queryByRole("combobox", { name: "AI끼리 이어 부르기" })).toBeNull();
+  });
+});

@@ -1,3 +1,4 @@
+import { AGENT_CHAIN_LIMITS } from "../../lib/agentChainLimit";
 import { ROOM_FILE_LIMITS, ROOM_STORAGE_LIMITS } from "../../types/generated/ASSET_SAFETY_WIRE";
 import { ROOM_LABEL_LIMIT } from "../../types/generated/ROOM_SETTINGS_WIRE";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
@@ -52,6 +53,7 @@ export default function RoomSettingsModal({
   conversationMode,
   toolMode,
   orderedExcludePreviousSpeaker,
+  agentChainSettings,
   storageSettings,
   canInvite,
   lifecycleController,
@@ -81,6 +83,8 @@ export default function RoomSettingsModal({
   conversationMode: ConversationMode | null;
   toolMode: RoomToolMode | null;
   orderedExcludePreviousSpeaker: boolean | null;
+  /** How many AI messages in a row free access allows; offered where the host reads it. */
+  agentChainSettings?: { limit: number | null; onChange: (limit: number) => void };
   storageSettings?: {
     attachmentFileLimitBytes: number | null;
     attachmentStorageLimitBytes: number | null;
@@ -312,6 +316,21 @@ export default function RoomSettingsModal({
                   </span>
                 </label>
               </div>
+              {conversationMode === "free_access" && agentChainSettings && (
+                <div className="dc-channel-settings-list" style={{ marginTop: 12 }}>
+                <label className="dc-channel-settings-row">
+                  <strong>AI끼리 이어 부르기</strong>
+                  <select className="dc-select dc-select--compact" aria-label="AI끼리 이어 부르기"
+                    value={agentChainSettings.limit ?? ""} disabled={!routingSettingsReady || agentChainSettings.limit === null}
+                    onChange={(event) => agentChainSettings.onChange(Number(event.target.value))}>
+                    {AGENT_CHAIN_LIMITS.map((limit) => (
+                      <option key={limit} value={limit}>{limit === 0 ? "제한 없음" : `${limit}개`}</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="mt-1 text-[12px] text-text-muted preserve-words">사람이 말하기 전까지 AI끼리 @로 부르며 이어갈 수 있는 메시지 수예요.</p>
+                </div>
+              )}
               {conversationMode === "ordered" && (
                 // The row sits in a radio stack so `.dc-settings-section label`'s grid does not
                 // stretch the box across the column; the stack's own rule lays the row out.

@@ -57,7 +57,7 @@ pub(super) async fn route_message(
         "ambient" => ambient_targets(event, &sessions),
         "free_access" => {
             crate::connector_mentions::record(transaction, event).await?;
-            if !chain_allows_turn(transaction, event).await? {
+            if !chain_allows_turn(transaction, settings.agent_chain_limit, event).await? {
                 return Ok(());
             }
             sessions
@@ -177,16 +177,19 @@ pub(super) async fn assign_available_pending(
 }
 
 // Count speech, not turns or routing events. System activity does not reset the chain.
+// The room's `agent_chain_limit` sets the length; 0 lets AIs go on until a person stops them.
 async fn chain_allows_turn(
     tx: &mut Transaction<'_, Sqlite>,
+    limit: u32,
     event: &RoomEvent,
 ) -> Result<bool, PersistenceError> {
-    if event.actor.participant_type != "agent" {
+    if event.actor.participant_type != "agent" || limit == 0 {
         return Ok(true);
     }
-    let actors = sqlx::query_scalar::<_, String>("SELECT json_extract(event_json,'$.actor.participant_type') FROM room_events WHERE room_id=? AND seq<? AND json_extract(event_json,'$.type')='message_final' AND json_extract(event_json,'$.actor.participant_type') IN ('agent','human') ORDER BY seq DESC LIMIT 12")
-        .bind(&event.room_id).bind(event.seq).fetch_all(&mut **tx).await?;
-    Ok(actors.len() < 12 || actors.iter().any(|actor| actor == "human"))
+    let actors = sqlx::query_scalar::<_, String>("SELECT json_extract(event_json,'$.actor.participant_type') FROM room_events WHERE room_id=? AND seq<? AND json_extract(event_json,'$.type')='message_final' AND json_extract(event_json,'$.actor.participant_type') IN ('agent','human') ORDER BY seq DESC LIMIT ?")
+        .bind(&event.room_id).bind(event.seq).bind(limit).fetch_all(&mut **tx).await?;
+    Ok(actors.len() < usize::try_from(limit).unwrap_or(usize::MAX)
+        || actors.iter().any(|actor| actor == "human"))
 }
 
 fn is_routable_message(event: &RoomEvent) -> Result<bool, PersistenceError> {

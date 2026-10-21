@@ -131,6 +131,10 @@ export default function AppOverlays({ controller, companionInvites, friendAuthor
             orderedExcludePreviousSpeaker={
               roomSettings.orderedExcludePreviousSpeakerFor(settingsModalRoom)
             }
+            agentChainSettings={controller.canManageActiveRoom && controller.activeRoomCapabilities["room.agent_chain_limit"] ? {
+              limit: roomSettings.settingsStateFor(settingsModalRoom).value?.agentChainLimit ?? null,
+              onChange: (agentChainLimit) => { void roomSettings.persist(settingsModalRoom, { agentChainLimit }).catch(() => undefined); },
+            } : undefined}
             storageSettings={controller.canManageActiveRoom ? {
               attachmentFileLimitBytes: roomSettings.settingsStateFor(settingsModalRoom).value?.attachmentFileLimitBytes ?? null,
               attachmentStorageLimitBytes: roomSettings.settingsStateFor(settingsModalRoom).value?.attachmentStorageLimitBytes ?? null,
