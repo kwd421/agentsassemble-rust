@@ -596,8 +596,11 @@
 }
 
 .dc-inline-code {
-  border-radius: 3px;
-  background: #121214;
+  /* Measured on Discord (2026-10-22): a fill just above the chat background
+     with a 1px edge, so the chip reads on dark backgrounds. */
+  border: 1px solid #34343e;
+  border-radius: 4px;
+  background: #222130;
   padding: 1px 4px;
   color: #dbdee1;
   font-family: var(--font-mono);
