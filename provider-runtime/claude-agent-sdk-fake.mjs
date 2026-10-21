@@ -9,6 +9,17 @@ const MODELS = [
     supportedEffortLevels: ["low", "medium", "high", "xhigh"],
     supportsFastMode: true,
   },
+  {
+    value: "opus[1m]",
+    resolvedModel: "claude-opus-5[1m]",
+    displayName: "Opus (1M context)",
+    supportedEffortLevels: ["high"],
+  },
+  {
+    value: "haiku",
+    resolvedModel: "claude-haiku-4-5-20251001",
+    displayName: "Haiku",
+  },
 ];
 
 class FakeQuery {

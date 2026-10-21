@@ -3,10 +3,10 @@ use serde_json::Value;
 #[test]
 fn catalog_preserves_exact_per_model_relations() {
     let catalog = super::parse_catalog(
-        r#"{"type":"catalog","models":[{"id":"claude-haiku-4-5","label":"Haiku","efforts":["low","medium"],"fast":false},{"id":"claude-opus-5","label":"Opus","efforts":["high","xhigh"],"fast":true}]}"#,
+        r#"{"type":"catalog","models":[{"id":"claude-haiku-4-5","label":"Haiku","efforts":["low","medium"],"fast":false},{"id":"claude-opus-5","label":"Opus","efforts":["high","xhigh"],"fast":true},{"id":"claude-haiku-5-5","label":"Haiku 5.5","efforts":["low"],"fast":false}]}"#,
     )
     .unwrap_or_else(|| panic!("parse Claude catalog"));
-    assert_eq!(catalog.default_model, "claude-haiku-4-5");
+    assert_eq!(catalog.default_model, "claude-haiku-5-5");
     // Ultracode rides on xhigh: offered for Opus (xhigh), not for Haiku.
     assert_eq!(
         catalog.efforts,

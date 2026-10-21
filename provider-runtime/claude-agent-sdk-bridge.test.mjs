@@ -44,6 +44,7 @@ test("catalog emits exact model authority outside the caller workspace", async (
   assert.deepEqual(await runtime.next(), {
     type: "catalog",
     models: [
+      { id: "claude-opus-5", label: "Opus 5", efforts: ["high"], fast: false },
       {
         id: "claude-sonnet-5",
         label: "Sonnet 5",

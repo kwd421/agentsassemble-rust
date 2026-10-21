@@ -99,18 +99,23 @@ function modelLabel(id) {
   return `${family[0].toUpperCase()}${family.slice(1)} ${version.join(".")}`;
 }
 
+// Claude Code may name a model with its context window ("claude-opus-5[1m]") or a dated
+// snapshot ("claude-haiku-4-5-20251001"); both run under the plain model id.
+function exactModelId(value) {
+  const id = String(value ?? "").replace(/\[1m\]$/i, "").replace(/-\d{8}$/, "");
+  return MODEL_ID.test(id) ? id : "";
+}
+
 function exactModels(models) {
   const exact = new Map();
   for (const model of Array.isArray(models) ? models : []) {
-    const id = MODEL_ID.test(model?.resolvedModel ?? "")
-      ? model.resolvedModel
-      : MODEL_ID.test(model?.value ?? "")
-        ? model.value
-        : "";
+    const id = exactModelId(model?.resolvedModel) || exactModelId(model?.value);
     if (!id || exact.has(id)) continue;
     const efforts = Array.isArray(model.supportedEffortLevels)
       ? model.supportedEffortLevels.filter((effort) => EFFORTS.has(effort))
       : [];
+    // Every catalog model carries a reasoning effort; one without any is not offered.
+    if (efforts.length === 0) continue;
     exact.set(id, {
       id,
       label: modelLabel(id),

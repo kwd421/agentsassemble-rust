@@ -30,7 +30,6 @@ use crate::{
 #[cfg(unix)]
 use crate::{guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease};
 
-const PREFERRED_MODEL: &str = "claude-haiku-4-5";
 const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 // Ultracode is a Claude Code session setting (xhigh plus dynamic-workflow
 // orchestration), offered only on models that support xhigh.
@@ -263,10 +262,12 @@ fn parse_catalog(output: &str) -> Option<ClaudeCatalog> {
         .filter(|effort| observed_efforts.contains(*effort))
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
+    // The cheapest family is the default: the newest Haiku this Claude Code offers.
     let default_model = models
         .iter()
-        .find(|model| model.value == PREFERRED_MODEL)
-        .map_or_else(String::new, |model| model.value.clone());
+        .filter_map(|model| haiku_version(&model.value).map(|version| (version, model)))
+        .max_by_key(|(version, _)| *version)
+        .map_or_else(String::new, |(_, model)| model.value.clone());
     Some(ClaudeCatalog {
         models,
         efforts,
@@ -406,6 +407,13 @@ fn validate_profile(session: &DurableAgentSession) -> Result<(), DriverError> {
         return Err(profile_error());
     }
     Ok(())
+}
+
+fn haiku_version(id: &str) -> Option<(u32, u32)> {
+    let mut parts = id.strip_prefix("claude-haiku-")?.split('-');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().map_or(Some(0), |part| part.parse().ok())?;
+    Some((major, minor))
 }
 
 fn valid_model_id(value: &str) -> bool {
