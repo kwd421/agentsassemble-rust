@@ -27,8 +27,9 @@ const CLEANUP: DriverError = DriverError::new(
 pub(crate) struct WorkspaceTools {
     task: Option<JoinHandle<io::Result<Value>>>,
     cancellation: CancellationToken,
-    /// The owner chose 앞으로도 허용 for file changes; lasts while this agent runs.
-    files_allowed: bool,
+    /// Paths the owner allowed with 앞으로도 허용, exactly as the card showed
+    /// them; gone when this agent stops.
+    allowed_paths: std::collections::HashSet<String>,
 }
 
 /// The owner's answer to one approval request.
@@ -120,11 +121,13 @@ impl WorkspaceTools {
             serde_json::from_value(prepared["operation"].clone()).map_err(|_| FAILED)?;
         let before = prepared["before"].as_str().map(str::to_owned);
         let path = operation.path().to_owned();
-        if operation.writes() && !self.files_allowed {
+        if operation.writes() && !self.allowed_paths.contains(&path) {
             match approve(session, request, name, &path).await? {
                 Approval::Denied => return Err(FAILED),
                 Approval::Once => {}
-                Approval::Always => self.files_allowed = true,
+                Approval::Always => {
+                    self.allowed_paths.insert(path.clone());
+                }
             }
         }
         if operation.writes() {
@@ -162,7 +165,7 @@ async fn approve(
         request,
         "작업 폴더 파일 변경",
         description,
-        "이 에이전트가 멈출 때까지 파일 변경은 묻지 않아요.",
+        "이 에이전트가 멈출 때까지 이 파일 변경은 묻지 않아요.",
     )
     .await
 }

@@ -166,20 +166,33 @@ async fn writes_require_exact_owner_response_and_delivery_receipt() -> Result<()
         assert_eq!(uncertain, success);
         assert_eq!(directory.path().join("approved.txt").exists(), success);
     }
-    // 앞으로도 허용 stands for later writes: no new request reaches the owner.
+    // 앞으로도 허용 stands for later writes to the same file only.
     let mut uncertain = false;
     tools
         .execute(
             &session,
             &request,
             "write_workspace_file",
-            r#"{"path":"later.txt","content":"owner-approved"}"#,
+            r#"{"path":"approved.txt","content":"owner-approved"}"#,
             &mut uncertain,
         )
         .await
         .map_err(|_| "later write")?;
     assert!(uncertain);
     assert!(commands.try_recv().is_err());
+    let mut other_uncertain = false;
+    let other = tools.execute(
+        &session,
+        &request,
+        "write_workspace_file",
+        r#"{"path":"other.txt","content":"not shown to the owner"}"#,
+        &mut other_uncertain,
+    );
+    let asked = async { commands.recv().await.is_some() };
+    let (other, asked) = tokio::join!(other, asked);
+    assert!(asked, "a different file asks again");
+    assert!(other.is_err());
+    assert!(!directory.path().join("other.txt").exists());
     assert_eq!(
         std::fs::read_to_string(directory.path().join("approved.txt"))?,
         "owner-approved"
