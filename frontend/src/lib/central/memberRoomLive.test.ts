@@ -73,6 +73,8 @@ describe("projectMemberRoomBadge", () => {
       .toEqual({ unread: true, mention: true });
     expect(projectMemberRoomBadge({ events: [message({ seq: 4, reply_mention_participant_id: "other-person" })], floorSeq: 3, viewer }).badge)
       .toEqual({ unread: true, mention: false });
+    expect(projectMemberRoomBadge({ events: [message({ seq: 4, content: "", message_deleted: true, reply_mention_participant_id: "me" })], floorSeq: 3, viewer }).badge.mention)
+      .toBe(false);
   });
 
   it("sets the mention flag for structured and plain mentions", () => {

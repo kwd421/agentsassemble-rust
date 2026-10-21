@@ -196,6 +196,9 @@ it("offers Discord's reply @ switch only where the host carries it, and never fo
   fireEvent.change(input(), { target: { value: "called" } });
   fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
   await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("called", undefined, theirs.id, true));
+  rerender(<CustomChannelView {...options} viewerParticipantId="operator-local" replyMentionSupported
+    transcript={{ ...options.transcript, events: [...options.transcript.events, { ...channelMessage(5), content: "called", reply_to_event_id: theirs.id, reply_mention_participant_id: "guest" }] }} />);
+  expect(screen.getByText("@Guest")).toBeTruthy();
   reply(1);
   fireEvent.click(screen.getByRole("button", { name: "@ 켜짐" }));
   expect(screen.getByRole("button", { name: "@ 꺼짐" })).toBeTruthy();

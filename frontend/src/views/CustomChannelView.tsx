@@ -63,11 +63,11 @@ export default function CustomChannelView({
   const value = draft.identity === identity ? draft.value : "";
   const replyTo = draft.identity === identity ? draft.replyTo : undefined;
   useReplyBarScroll(scrollRef, replyTo);
-  function replySource(eventId: string, replyText?: string) {
+  function replySource(eventId: string, replyText?: string, called?: string) {
     const source = transcript.events.find((event) => event.id === eventId);
     return { eventId, author: source ? participantProfiles[source.actor.participant_id]?.displayName || source.display_name || undefined : undefined,
       text: source?.content ? plainMentionText(source.content, mentionLabels) : undefined, deleted: source?.message_deleted === true,
-      mentioned: replyMentions(replyText, source?.actor.participant_id),
+      mentioned: Boolean(called) || replyMentions(replyText, source?.actor.participant_id),
       own: Boolean(viewerParticipantId) && source?.actor.participant_id === viewerParticipantId,
       avatar: source && { image: participantProfiles[source.actor.participant_id]?.avatarImageUrl,
         label: participantProfiles[source.actor.participant_id]?.avatarLabel, participantType: source.actor.participant_type,
