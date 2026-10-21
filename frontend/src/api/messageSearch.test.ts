@@ -284,6 +284,34 @@ describe("lobby message-search HTTP authority", () => {
     ]);
   });
 
+  it("accepts replies, reply calls, edits and agent files around the target", async () => {
+    const replyTo = "0b5ad1c4-2f6e-4f61-9a0e-3c2d8f1e7a90";
+    const context = await localContextResponse({
+      channel_id: "lobby",
+      event_id: "event-1",
+      events: [
+        {
+          ...contextEvent(),
+          reply_to_event_id: replyTo,
+          reply_mention_participant_id: "agent-1",
+          edited_at: "2026-08-29T01:05:00.123456Z",
+        },
+        { ...agentContextEvent(), reply_to_event_id: replyTo, reply_mention_participant_id: "operator-local" },
+      ],
+    });
+
+    expect(context.events[0]).toMatchObject({ reply_to_event_id: replyTo, edited_at: "2026-08-29T01:05:00.123456Z" });
+    expect(context.events[1]).toMatchObject({ reply_mention_participant_id: "operator-local" });
+    for (const event of [
+      { ...contextEvent(), reply_to_event_id: "not-an-id" },
+      { ...contextEvent(), edited_at: "yesterday" },
+      { ...agentContextEvent("event-1", 7), edited_at: "2026-08-29T01:05:00Z" },
+    ]) {
+      await expect(localContextResponse({ channel_id: "lobby", event_id: "event-1", events: [event] })).rejects.toThrow("응답 계약");
+    }
+    await expect(localContextResponse({ channel_id: "lobby", event_id: "event-1", events: [agentContextEvent("event-1", 7)] })).resolves.toBeTruthy();
+  });
+
   it("accepts canonical newest-first nanosecond ordering", async () => {
     const results = [
       { ...result("event-3", 9), created_at: "2026-08-29T01:00:01.000000001Z" },

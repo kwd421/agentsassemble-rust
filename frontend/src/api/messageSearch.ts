@@ -106,6 +106,10 @@ const ROOM_TOOL_KEYS = [
   "source_participant_id",
   "details",
 ] as const;
+// Fields a current lobby message may carry: replies, reply calls, edits and files.
+const MESSAGE_OPTIONAL_KEYS = ["attachments", "reply_to_event_id", "reply_mention_participant_id", "edited_at"] as const;
+const AGENT_MESSAGE_OPTIONAL_KEYS = ["attachments", "reply_to_event_id", "reply_mention_participant_id"] as const;
+const EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const VOTE_EVENT_KEYS = [
   "vote_question",
   "vote_options",
@@ -346,10 +350,10 @@ function parseContextEvent(value: unknown, roomId: string, channelId: string): R
         ? [...CONTEXT_EVENT_KEYS, ...VOTE_EVENT_KEYS]
         : CONTEXT_EVENT_KEYS,
       "메시지 검색 컨텍스트 이벤트",
-      ["attachments"]
+      MESSAGE_OPTIONAL_KEYS
     );
   } else if (source === "room_portal") {
-    assertExactKeys(event, [...CONTEXT_EVENT_KEYS, ...ROOM_PORTAL_KEYS], "메시지 검색 컨텍스트 이벤트");
+    assertExactKeys(event, [...CONTEXT_EVENT_KEYS, ...ROOM_PORTAL_KEYS], "메시지 검색 컨텍스트 이벤트", AGENT_MESSAGE_OPTIONAL_KEYS);
   } else if (source === "room_tool_result") {
     assertExactKeys(event, [...CONTEXT_EVENT_KEYS, ...ROOM_TOOL_KEYS], "메시지 검색 컨텍스트 이벤트");
   } else {
@@ -365,6 +369,9 @@ function parseContextEvent(value: unknown, roomId: string, channelId: string): R
   const participantId = boundedString(event.participant_id, 256);
   const participantType = boundedString(event.participant_type, 64);
   const createdAt = timestamp(event.created_at);
+  if (event.reply_to_event_id !== undefined && !EVENT_ID.test(String(event.reply_to_event_id))) invalidResponse();
+  if (event.reply_mention_participant_id !== undefined) boundedString(event.reply_mention_participant_id, 256);
+  if (event.edited_at !== undefined) timestamp(event.edited_at);
   if (
     event.v !== 1 ||
     event.room_id !== roomId ||
@@ -390,8 +397,7 @@ function parseContextEvent(value: unknown, roomId: string, channelId: string): R
     if (
       participantType !== "agent" ||
       messageKind !== "message" ||
-      attachments.length ||
-      !hasVisibleText(content)
+      (!hasVisibleText(content) && attachments.length === 0)
     ) invalidResponse();
     ["session_id", "turn_id", "source_event_id"].forEach((key) =>
       boundedString(event[key], 256)
