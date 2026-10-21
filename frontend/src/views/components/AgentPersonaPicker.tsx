@@ -1,5 +1,6 @@
 import ResourceImage from "./ResourceImage";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, FileUser, PackageOpen, Search, Upload } from "../../ui/icons";
 import {
   fetchPersonaAssets,
@@ -8,8 +9,10 @@ import {
 } from "../../api/personas";
 import { usePersonaThumbnails } from "./usePersonaThumbnails";
 import { userFacingError } from "../../lib/apiErrors";
+import { overlayHost } from "../../lib/overlayHost";
 
 const VISIBLE_RESULT_LIMIT = 8;
+const POPOVER_MAX_HEIGHT = 360;
 
 export default function AgentPersonaPicker({
   value,
@@ -32,6 +35,58 @@ export default function AgentPersonaPicker({
   const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState("");
   const [importGeneration, setImportGeneration] = useState(0);
+  // The library floats over the dialog instead of pushing the settings below it down.
+  const [menuPosition, setMenuPosition] = useState<CSSProperties | null>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  function openLibrary() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const openAbove = spaceBelow < Math.min(POPOVER_MAX_HEIGHT, 200) && spaceAbove > spaceBelow;
+    const maxHeight = Math.min(POPOVER_MAX_HEIGHT, openAbove ? spaceAbove - 6 : spaceBelow - 6);
+    setMenuPosition({
+      left: rect.left,
+      width: rect.width,
+      maxHeight,
+      ...(openAbove ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+    });
+    setLibraryOpen(true);
+  }
+
+  useEffect(() => {
+    if (!libraryOpen) return;
+    const close = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && (pickerRef.current?.contains(target) || menuRef.current?.contains(target))) return;
+      setLibraryOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // The library closes; the dialog around it stays open.
+      event.preventDefault();
+      event.stopPropagation();
+      setLibraryOpen(false);
+      triggerRef.current?.focus();
+    };
+    const closeOnScroll = (event: Event) => {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      setLibraryOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", closeOnEscape, true);
+    window.addEventListener("resize", closeOnScroll);
+    window.addEventListener("scroll", closeOnScroll, true);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", closeOnEscape, true);
+      window.removeEventListener("resize", closeOnScroll);
+      window.removeEventListener("scroll", closeOnScroll, true);
+    };
+  }, [libraryOpen]);
 
   useEffect(() => {
     if (!libraryOpen || loaded) return;
@@ -108,7 +163,7 @@ export default function AgentPersonaPicker({
   }
 
   return (
-    <div className="dc-persona-picker">
+    <div className="dc-persona-picker" ref={pickerRef}>
       <div className="dc-persona-picker-head">
         <div>
           <strong>캐릭터 카드</strong>
@@ -132,13 +187,15 @@ export default function AgentPersonaPicker({
       </div>
 
       <button
+        ref={triggerRef}
         type="button"
         className="dc-persona-current"
         aria-expanded={libraryOpen}
         disabled={disabled}
         onClick={() => {
-          setLibraryOpen((current) => !current);
           setQuery("");
+          if (libraryOpen) setLibraryOpen(false);
+          else openLibrary();
         }}
       >
         <span className="dc-persona-symbol" data-kind={selectedItem?.asset_kind || "none"}>
@@ -168,8 +225,16 @@ export default function AgentPersonaPicker({
         </span>
       </button>
 
-      {libraryOpen && (
-        <div className="dc-persona-library">
+      {libraryOpen && menuPosition && createPortal(
+        <div
+          ref={menuRef}
+          className="dc-persona-library dc-persona-popover"
+          style={menuPosition}
+          onMouseDown={(event) => {
+            // Keep focus where it is while pressing a row; a blur re-render would swallow the click.
+            if (event.target instanceof Element && event.target.closest("button")) event.preventDefault();
+          }}
+        >
           {emptyLibrary ? (
             <p className="dc-persona-empty preserve-words">
               아직 가져온 봇카드나 Risu 모듈이 없어요. 위의 <strong>파일 가져오기</strong>로
@@ -256,7 +321,8 @@ export default function AgentPersonaPicker({
               )}
             </>
           )}
-        </div>
+        </div>,
+        overlayHost(pickerRef.current)
       )}
       {status && <p className="dc-persona-status preserve-words">{status}</p>}
       {failedThumbnailIds.size > 0 && (

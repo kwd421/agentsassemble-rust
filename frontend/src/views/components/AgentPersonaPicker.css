@@ -113,6 +113,46 @@
   gap: 8px;
 }
 
+/* The library is a menu over the dialog, like the model picker. */
+.dc-persona-popover {
+  position: fixed;
+  z-index: 220;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-panel-separator);
+  border-radius: 8px;
+  background: #24242a;
+  padding: 4px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.48);
+}
+
+.dc-persona-popover .dc-persona-grid {
+  gap: 2px;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.dc-persona-popover .dc-persona-grid > button {
+  min-height: 48px;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.dc-persona-popover .dc-persona-grid > button:hover:not(:disabled) {
+  background: rgba(151, 151, 159, 0.12);
+}
+
+.dc-persona-popover .dc-persona-grid > button[data-selected="true"] {
+  border-color: transparent;
+  background: color-mix(in srgb, #5865f2 18%, transparent);
+}
+
+.dc-persona-popover .dc-persona-empty {
+  border: 0;
+}
+
 .dc-persona-empty {
   margin: 0;
   padding: 14px 12px;
