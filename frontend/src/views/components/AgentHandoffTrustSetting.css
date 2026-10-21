@@ -1,0 +1,14 @@
+/* "함께 작업할 사람": the activity-setting header, then one row per person. */
+.dc-agent-trust-setting {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.dc-agent-trust-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+}

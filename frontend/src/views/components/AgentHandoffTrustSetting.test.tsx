@@ -2,36 +2,44 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import AgentHandoffTrustSetting from "./AgentHandoffTrustSetting";
 import type { RoomAgentSession } from "../../api";
-import { OwnerRouteHost } from "../../app/ownerRouteHost";
+import { OwnerRouteHost, RoomPeople } from "../../app/ownerRouteHost";
 
-const api = vi.hoisted(() => ({ fetchAgentHandoffTrust: vi.fn(), setAgentHandoffTrust: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchAgentTrustedOwners: vi.fn(), setAgentTrustedOwners: vi.fn() }));
 vi.mock("../../api/agentHandoffTrust", () => api);
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 const session = { room_id: "room", session_id: "agent", permission_mode: "full_access" } as RoomAgentSession;
+const people = [{ id: "human-bob", name: "Bob" }, { id: "human-eve", name: "Eve" }];
 
-it("starts off and turns on only after the host confirms", async () => {
-  api.fetchAgentHandoffTrust.mockResolvedValue(false);
-  api.setAgentHandoffTrust.mockResolvedValue(true);
-  render(<AgentHandoffTrustSetting session={session} />);
-  const toggle = screen.getByRole("switch", { name: "다른 사람 AI가 넘긴 일도 묻지 않기" });
-  expect(toggle.hasAttribute("disabled")).toBe(true);
-  await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(false));
-  expect(toggle.getAttribute("aria-checked")).toBe("false");
-  fireEvent.click(toggle);
-  await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("true"));
-  expect(api.setAgentHandoffTrust).toHaveBeenCalledWith("room", "agent", true, null);
-});
+function renderTrust(host: string | null = null) {
+  return render(
+    <OwnerRouteHost.Provider value={host}>
+      <RoomPeople.Provider value={people}><AgentHandoffTrustSetting session={session} /></RoomPeople.Provider>
+    </OwnerRouteHost.Provider>
+  );
+}
 
-it("keeps the switch off and says so when the host cannot be read", async () => {
-  api.fetchAgentHandoffTrust.mockRejectedValue(new Error("offline"));
-  render(<AgentHandoffTrustSetting session={session} />);
-  expect(await screen.findByRole("status")).toBeTruthy();
-  expect(screen.getByRole("switch").hasAttribute("disabled")).toBe(true);
+it("trusts only the people the owner turns on, after the host confirms", async () => {
+  api.fetchAgentTrustedOwners.mockResolvedValue([]);
+  api.setAgentTrustedOwners.mockResolvedValue(["human-bob"]);
+  renderTrust();
+  const bob = screen.getByRole("switch", { name: "Bob의 AI가 넘긴 일은 묻지 않기" });
+  await waitFor(() => expect(bob.hasAttribute("disabled")).toBe(false));
+  fireEvent.click(bob);
+  await waitFor(() => expect(bob.getAttribute("aria-checked")).toBe("true"));
+  expect(api.setAgentTrustedOwners).toHaveBeenCalledWith("room", "agent", ["human-bob"], null);
+  expect(screen.getByRole("switch", { name: "Eve의 AI가 넘긴 일은 묻지 않기" }).getAttribute("aria-checked")).toBe("false");
 });
 
 it("talks to the room's own server, never another owner workspace", async () => {
-  api.fetchAgentHandoffTrust.mockResolvedValue(false);
-  render(<OwnerRouteHost.Provider value="server-b"><AgentHandoffTrustSetting session={session} /></OwnerRouteHost.Provider>);
-  await waitFor(() => expect(api.fetchAgentHandoffTrust).toHaveBeenCalledWith("room", "agent", "server-b"));
+  api.fetchAgentTrustedOwners.mockResolvedValue([]);
+  renderTrust("server-b");
+  await waitFor(() => expect(api.fetchAgentTrustedOwners).toHaveBeenCalledWith("room", "agent", "server-b"));
+});
+
+it("keeps every switch off and says so when the host cannot be read", async () => {
+  api.fetchAgentTrustedOwners.mockRejectedValue(new Error("offline"));
+  renderTrust();
+  expect(await screen.findByRole("status")).toBeTruthy();
+  expect(screen.getByRole("switch", { name: "Bob의 AI가 넘긴 일은 묻지 않기" }).hasAttribute("disabled")).toBe(true);
 });

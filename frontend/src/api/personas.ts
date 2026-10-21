@@ -22,10 +22,12 @@ export type { PersonaAssetSummary };
 type PersonaHost = { owner: CentralOwnerWorkspace; deviceToken: string; transport: RemoteTransport | null };
 
 // The persona library lives on the account's own server. Its workspace is
-// resolved explicitly per call: the room's own server_id when given, else the
-// single live owner workspace. With several hosts live an omitted server never
+// resolved explicitly per call: null is this computer's own server, a server_id
+// is that room's server, and only an omitted server falls back to the single
+// live owner workspace. With several hosts live an omitted server never
 // falls back to "most recent" — a member host's transport is never used.
-export function resolvePersonaHost(serverId?: string): PersonaHost | null {
+export function resolvePersonaHost(serverId?: string | null): PersonaHost | null {
+  if (serverId === null) return null;
   if (serverId) {
     const workspace = remoteWorkspaceFor(serverId);
     if (!workspace?.owner || !workspace.transport.active) {
@@ -42,7 +44,7 @@ export function resolvePersonaHost(serverId?: string): PersonaHost | null {
   throw new Error("서버를 확인하지 못했어요. 방의 서버에서 다시 시도해 주세요.");
 }
 
-export async function fetchPersonaAssets(serverId?: string): Promise<PersonaAssetSummary[]> {
+export async function fetchPersonaAssets(serverId?: string | null): Promise<PersonaAssetSummary[]> {
   const host = resolvePersonaHost(serverId);
   const payload = host
     ? await (await remotePersona(host, "", { method: "GET" })).json() as { items?: PersonaAssetSummary[] }
@@ -50,7 +52,7 @@ export async function fetchPersonaAssets(serverId?: string): Promise<PersonaAsse
   return Array.isArray(payload.items) ? payload.items : [];
 }
 
-export async function importPersonaAsset(file: File, serverId?: string): Promise<PersonaAssetSummary> {
+export async function importPersonaAsset(file: File, serverId?: string | null): Promise<PersonaAssetSummary> {
   const host = resolvePersonaHost(serverId);
   const dataBase64 = await fileToBase64(file);
   if (host && !isCurrentPersonaHost(host)) throw new Error("서버가 바뀌었어요. 현재 서버에서 다시 시도해 주세요.");
@@ -61,7 +63,7 @@ export async function importPersonaAsset(file: File, serverId?: string): Promise
   return payload.persona;
 }
 
-export async function deletePersonaAsset(personaId: string, serverId?: string): Promise<void> {
+export async function deletePersonaAsset(personaId: string, serverId?: string | null): Promise<void> {
   const host = resolvePersonaHost(serverId);
   const suffix = `/${encodeURIComponent(personaId)}`;
   if (host) await remotePersona(host, suffix, { method: "DELETE" });
@@ -71,7 +73,7 @@ export async function deletePersonaAsset(personaId: string, serverId?: string): 
 export async function fetchPersonaThumbnail(
   personaId: string,
   signal?: AbortSignal,
-  serverId?: string
+  serverId?: string | null
 ): Promise<Blob> {
   if (signal?.aborted) {
     throw signal.reason || new DOMException("Persona thumbnail read aborted.", "AbortError");

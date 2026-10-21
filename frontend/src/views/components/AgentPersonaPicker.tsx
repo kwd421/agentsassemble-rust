@@ -1,4 +1,5 @@
 import ResourceImage from "./ResourceImage";
+import { useOwnerRouteHost } from "../../app/ownerRouteHost";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, FileUser, PackageOpen, Search, Trash2, Upload } from "../../ui/icons";
@@ -19,16 +20,19 @@ export default function AgentPersonaPicker({
   value,
   applied,
   disabled = false,
-  serverId,
+  serverId: requestedServerId,
   onChange,
 }: {
   value: string;
   applied?: PersonaAssetSummary;
   disabled?: boolean;
   /** The room's own host: the persona library is read from that host only. */
-  serverId?: string;
+  /** The library's server: null for this computer, omitted for the active room's. */
+  serverId?: string | null;
   onChange: (personaId: string) => void;
 }) {
+  const roomHost = useOwnerRouteHost();
+  const serverId = requestedServerId === undefined ? roomHost : requestedServerId;
   const [items, setItems] = useState<PersonaAssetSummary[]>([]);
   const [status, setStatus] = useState("");
   const [importing, setImporting] = useState(false);

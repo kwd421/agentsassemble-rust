@@ -213,7 +213,7 @@ mod tests {
             lifecycle_intent_action: AgentLifecycleAction::None,
             lifecycle_intent_id: String::new(),
             lifecycle_intent_status: AgentLifecycleIntentStatus::None,
-            trusts_ai_handoffs: false,
+            trusted_ai_owners: Vec::new(),
         };
         assert!(active_turn_authority(&session).is_err());
         session.public.runtime_status = AgentRuntimeStatus::Idle;

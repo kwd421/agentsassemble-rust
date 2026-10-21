@@ -472,10 +472,10 @@ pub struct DurableAgentSession {
     pub lifecycle_intent_action: AgentLifecycleAction,
     pub lifecycle_intent_id: String,
     pub lifecycle_intent_status: AgentLifecycleIntentStatus,
-    /// The owner lets other people's AIs hand this agent work that full
-    /// access runs unasked. Off unless the owner turns it on; never public.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub trusts_ai_handoffs: bool,
+    /// People whose AIs may hand this agent work that full access runs
+    /// unasked. Empty unless the owner picks someone; never public.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trusted_ai_owners: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -504,7 +504,7 @@ struct RawDurableAgentSession {
     lifecycle_intent_id: String,
     lifecycle_intent_status: AgentLifecycleIntentStatus,
     #[serde(default)]
-    trusts_ai_handoffs: bool,
+    trusted_ai_owners: Vec<String>,
     #[serde(flatten)]
     unknown: BTreeMap<String, Value>,
 }
@@ -556,7 +556,7 @@ impl<'de> Deserialize<'de> for DurableAgentSession {
             lifecycle_intent_action: raw.lifecycle_intent_action,
             lifecycle_intent_id: raw.lifecycle_intent_id,
             lifecycle_intent_status: raw.lifecycle_intent_status,
-            trusts_ai_handoffs: raw.trusts_ai_handoffs,
+            trusted_ai_owners: raw.trusted_ai_owners,
         })
     }
 }

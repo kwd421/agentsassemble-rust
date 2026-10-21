@@ -16,3 +16,11 @@ export function ownerRouteHostFor(room: { roomOrigin?: string; serverId?: string
 export function useOwnerRouteHost(): string | null | undefined {
   return useContext(OwnerRouteHost);
 }
+
+/** The other people in the active room, for choices an agent card offers about them. */
+export type RoomPerson = { id: string; name: string };
+export const RoomPeople = createContext<RoomPerson[]>([]);
+
+export function useRoomPeople(): RoomPerson[] {
+  return useContext(RoomPeople);
+}

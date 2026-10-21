@@ -1,5 +1,6 @@
-//! The agent card's "다른 사람 AI가 넘긴 일도 묻지 않기": only the server owner
-//! reads or changes it, on the same owner routes as the memory tab.
+//! The agent card's "이 사람의 AI가 넘긴 일은 묻지 않기": the people whose AIs
+//! this agent trusts. Only the server owner reads or changes it, on the same
+//! owner routes as the memory tab.
 use axum::{
     Json, Router,
     extract::{Path, Request, State},
@@ -37,7 +38,7 @@ registered_routes! {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TrustBody {
-    trusted: bool,
+    trusted_owners: Vec<String>,
 }
 
 /// Checks the owner on the request head, then hands the request back whole.
@@ -65,11 +66,11 @@ async fn read_trust(
         .map_err(|_| bad_request())?;
     let trusted = state
         .store
-        .agent_trusts_ai_handoffs(&room_id, &session_id)
+        .agent_trusted_ai_owners(&room_id, &session_id)
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(missing)?;
-    Ok(Json(json!({"trusted": trusted})))
+    Ok(Json(json!({"trusted_owners": trusted})))
 }
 
 async fn write_trust(
@@ -81,15 +82,25 @@ async fn write_trust(
     let body: TrustBody = decode_json_body(request, MAX_BODY_BYTES)
         .await
         .map_err(|_| bad_request())?;
-    if !state
+    match state
         .store
-        .set_agent_trusts_ai_handoffs(&room_id, &session_id, body.trusted)
+        .set_agent_trusted_ai_owners(&room_id, &session_id, &body.trusted_owners)
+        .await
+    {
+        Ok(true) => {}
+        Ok(false) => return Err(missing()),
+        Err(agentsassemble_persistence::PersistenceError::CommandRejected { message, .. }) => {
+            return Err(error(StatusCode::BAD_REQUEST, "bad_request", &message));
+        }
+        Err(_) => return Err(unavailable()),
+    }
+    let trusted = state
+        .store
+        .agent_trusted_ai_owners(&room_id, &session_id)
         .await
         .map_err(|_| unavailable())?
-    {
-        return Err(missing());
-    }
-    Ok(Json(json!({"trusted": body.trusted})))
+        .ok_or_else(missing)?;
+    Ok(Json(json!({"trusted_owners": trusted})))
 }
 
 fn bad_request() -> Response {

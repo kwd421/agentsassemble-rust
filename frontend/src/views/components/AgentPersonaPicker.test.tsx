@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AgentPersonaPicker from "./AgentPersonaPicker";
+import { OwnerRouteHost } from "../../app/ownerRouteHost";
 
 const personaApi = vi.hoisted(() => ({
   fetchPersonaAssets: vi.fn(),
@@ -89,7 +90,7 @@ describe("AgentPersonaPicker", () => {
       expect(personaApi.fetchPersonaThumbnail).toHaveBeenCalledWith(
         "guide",
         expect.any(AbortSignal),
-        undefined
+        null
       )
     );
     await waitFor(() =>
@@ -127,6 +128,16 @@ describe("AgentPersonaPicker", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       "봇카드 썸네일을 불러오지 못했어요."
     );
+  });
+
+  it("reads the library of the room's own server, or this computer's when asked", async () => {
+    const view = render(<OwnerRouteHost.Provider value="server-b"><AgentPersonaPicker value="" onChange={vi.fn()} /></OwnerRouteHost.Provider>);
+    await userEvent.click(screen.getByRole("button"));
+    await waitFor(() => expect(personaApi.fetchPersonaAssets).toHaveBeenLastCalledWith("server-b"));
+    view.unmount();
+    render(<OwnerRouteHost.Provider value="server-b"><AgentPersonaPicker value="" serverId={null} onChange={vi.fn()} /></OwnerRouteHost.Provider>);
+    await userEvent.click(screen.getByRole("button"));
+    await waitFor(() => expect(personaApi.fetchPersonaAssets).toHaveBeenLastCalledWith(null));
   });
 
   it("distinguishes cards from modules and reports the applied selection", async () => {
@@ -194,7 +205,7 @@ describe("AgentPersonaPicker", () => {
     await userEvent.click(screen.getByRole("button", { name: "Weather Module 카드 지우기" }));
     expect(personaApi.deletePersonaAsset).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "지우기" }));
-    expect(personaApi.deletePersonaAsset).toHaveBeenCalledWith("weather-module", undefined);
+    expect(personaApi.deletePersonaAsset).toHaveBeenCalledWith("weather-module", null);
     await waitFor(() => expect(screen.queryByText("Weather Module")).toBeNull());
     // Deleting another card never clears the agent's own selection.
     expect(onChange).not.toHaveBeenCalledWith("");

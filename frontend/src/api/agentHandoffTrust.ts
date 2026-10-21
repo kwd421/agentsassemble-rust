@@ -1,33 +1,33 @@
 import { fetchJsonServerOperator, postJsonServerOperator } from "./http";
 import { remoteOwnerRoute, resolvePersonaHost } from "./personas";
 
-/** "다른 사람 AI가 넘긴 일도 묻지 않기" on one agent, as the server owner sees it. */
+/** The people whose AIs one agent trusts, as the server owner sees it. */
 function trustPath(roomId: string, sessionId: string): string {
   return `/${encodeURIComponent(roomId)}/${encodeURIComponent(sessionId)}`;
 }
 
-function trusted(payload: { trusted?: unknown }): boolean {
-  if (typeof payload.trusted !== "boolean") throw new Error("설정 응답이 올바르지 않아요.");
-  return payload.trusted;
+function owners(payload: { trusted_owners?: unknown }): string[] {
+  const list = payload.trusted_owners;
+  if (!Array.isArray(list) || !list.every((id) => typeof id === "string")) throw new Error("설정 응답이 올바르지 않아요.");
+  return list;
 }
 
-export async function fetchAgentHandoffTrust(roomId: string, sessionId: string, remoteServerId: string | null): Promise<boolean> {
+export async function fetchAgentTrustedOwners(roomId: string, sessionId: string, remoteServerId: string | null): Promise<string[]> {
   // null is this computer's server; a remote room names its own server.
   const host = remoteServerId === null ? null : resolvePersonaHost(remoteServerId);
   const suffix = trustPath(roomId, sessionId);
-  return trusted(host
-    ? await (await remoteOwnerRoute(host, `/api/central-owner/agent-handoff-trust${suffix}`, { method: "GET" })).json() as { trusted?: unknown }
-    : await fetchJsonServerOperator<{ trusted?: unknown }>(`/api/agent-handoff-trust${suffix}`));
+  return owners(host
+    ? await (await remoteOwnerRoute(host, `/api/central-owner/agent-handoff-trust${suffix}`, { method: "GET" })).json() as { trusted_owners?: unknown }
+    : await fetchJsonServerOperator<{ trusted_owners?: unknown }>(`/api/agent-handoff-trust${suffix}`));
 }
 
-export async function setAgentHandoffTrust(roomId: string, sessionId: string, value: boolean, remoteServerId: string | null): Promise<boolean> {
-  // null is this computer's server; a remote room names its own server.
+export async function setAgentTrustedOwners(roomId: string, sessionId: string, trusted: string[], remoteServerId: string | null): Promise<string[]> {
   const host = remoteServerId === null ? null : resolvePersonaHost(remoteServerId);
   const suffix = trustPath(roomId, sessionId);
-  const body = { trusted: value };
-  return trusted(host
+  const body = { trusted_owners: trusted };
+  return owners(host
     ? await (await remoteOwnerRoute(host, `/api/central-owner/agent-handoff-trust${suffix}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    })).json() as { trusted?: unknown }
-    : await postJsonServerOperator<{ trusted?: unknown }>(`/api/agent-handoff-trust${suffix}`, body));
+    })).json() as { trusted_owners?: unknown }
+    : await postJsonServerOperator<{ trusted_owners?: unknown }>(`/api/agent-handoff-trust${suffix}`, body));
 }

@@ -9,7 +9,7 @@ type ThumbnailRequest = {
 export function usePersonaThumbnails(
   personaIds: readonly string[],
   importGeneration: number,
-  serverId?: string
+  serverId?: string | null
 ) {
   const desiredKey = [...new Set(personaIds)].sort().join("\0");
   const activeRef = useRef(true);

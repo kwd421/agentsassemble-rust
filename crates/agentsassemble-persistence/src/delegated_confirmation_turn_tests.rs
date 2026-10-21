@@ -129,7 +129,7 @@ async fn provider_store() -> Result<
         lifecycle_intent_action: AgentLifecycleAction::None,
         lifecycle_intent_id: String::new(),
         lifecycle_intent_status: AgentLifecycleIntentStatus::None,
-        trusts_ai_handoffs: false,
+        trusted_ai_owners: Vec::new(),
     };
     sqlx::query("INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES (?, ?, ?)")
         .bind("general")

@@ -80,7 +80,7 @@ pub(crate) fn durable_session(
         lifecycle_intent_action: AgentLifecycleAction::None,
         lifecycle_intent_id: String::new(),
         lifecycle_intent_status: AgentLifecycleIntentStatus::None,
-        trusts_ai_handoffs: false,
+        trusted_ai_owners: Vec::new(),
     }
 }
 

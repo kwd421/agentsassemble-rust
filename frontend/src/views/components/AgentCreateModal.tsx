@@ -56,7 +56,7 @@ type AgentCreateModalProps = {
   localProviderActions?: boolean;
   openCodeFreePermissionHint?: string;
   /** The room's own host: persona library reads stay on that host. */
-  serverId?: string;
+  serverId?: string | null;
   initialSelection?: { providerId: string; displayName: string };
   onCatalogChange?: (catalog: ProviderCatalog) => void;
   onClose: () => void;

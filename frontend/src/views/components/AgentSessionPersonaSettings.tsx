@@ -18,7 +18,7 @@ export default function AgentSessionPersonaSettings({
   provider: NativeCliProviderAvailability;
   canConfigure: boolean;
   /** The room's own host: persona library reads stay on that host. */
-  serverId?: string;
+  serverId?: string | null;
   onConfigure: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onStatus: (status: string) => void;
 }) {

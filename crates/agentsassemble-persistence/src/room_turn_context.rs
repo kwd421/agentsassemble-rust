@@ -140,8 +140,13 @@ pub(super) async fn prepare_room_input(
     let mut owner_started = !owner.is_empty();
     for pending in &inflight {
         if owner_started {
-            owner_started = speaks_for_owner(transaction, &owner, &pending.event).await?
-                || (session.trusts_ai_handoffs && pending.event.actor.participant_type == "agent");
+            owner_started = speaks_for_owner(
+                transaction,
+                &owner,
+                &session.trusted_ai_owners,
+                &pending.event,
+            )
+            .await?;
         }
     }
     // Memory reaches back before the oldest message this turn shows.
@@ -176,20 +181,20 @@ pub(super) async fn prepare_room_input(
 /// The owner's own message, or one from another of the owner's AIs written
 /// in a turn that was itself owner-started. Work handed between the owner's
 /// AIs keeps the owner's word; a chain anyone else began never gains it.
-/// (An owner who trusts other people's AIs lets any AI's message count.)
+/// An AI added by a person the owner trusts for this agent counts too.
 pub(super) async fn speaks_for_owner(
     transaction: &mut Transaction<'_, Sqlite>,
     owner: &str,
+    trusted_owners: &[String],
     event: &RoomEvent,
 ) -> Result<bool, PersistenceError> {
     let actor = &event.actor.participant_id;
     if actor == owner {
         return Ok(true);
     }
-    let text = |key: &str| event.extra.get(key).and_then(serde_json::Value::as_str);
-    let (Some(session_id), Some(turn_id)) = (text("session_id"), text("turn_id")) else {
+    if event.actor.participant_type != "agent" {
         return Ok(false);
-    };
+    }
     // Only a decision about asking: an actor without a participant row is
     // simply not the owner's.
     let actor_owner = sqlx::query_scalar::<_, String>(
@@ -199,9 +204,19 @@ pub(super) async fn speaks_for_owner(
     .bind(actor)
     .fetch_optional(&mut **transaction)
     .await?;
-    if event.actor.participant_type != "agent" || actor_owner.as_deref() != Some(owner) {
+    if actor_owner
+        .as_ref()
+        .is_some_and(|actor_owner| !actor_owner.is_empty() && trusted_owners.contains(actor_owner))
+    {
+        return Ok(true);
+    }
+    if actor_owner.as_deref() != Some(owner) {
         return Ok(false);
     }
+    let text = |key: &str| event.extra.get(key).and_then(serde_json::Value::as_str);
+    let (Some(session_id), Some(turn_id)) = (text("session_id"), text("turn_id")) else {
+        return Ok(false);
+    };
     let started = sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(json_extract(assignment_json, '$.owner_started'), 0) FROM provider_turn_executions WHERE room_id = ? AND session_id = ? AND participant_id = ? AND turn_id = ?",
     )

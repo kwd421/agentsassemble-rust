@@ -106,7 +106,7 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
         lifecycle_intent_action: AgentLifecycleAction::None,
         lifecycle_intent_id: String::new(),
         lifecycle_intent_status: AgentLifecycleIntentStatus::None,
-        trusts_ai_handoffs: false,
+        trusted_ai_owners: Vec::new(),
     }
 }
 

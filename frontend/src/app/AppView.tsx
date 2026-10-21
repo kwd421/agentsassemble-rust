@@ -1,4 +1,4 @@
-import { OwnerRouteHost, ownerRouteHostFor } from "./ownerRouteHost";
+import { OwnerRouteHost, RoomPeople, ownerRouteHostFor } from "./ownerRouteHost";
 import { userFacingError } from "../lib/apiErrors";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import { centralAccountSelf, shouldShowOwnServerMismatch } from "../lib/central/localOwnership";
@@ -217,9 +217,14 @@ export default function AppView({ controller }: { controller: AppController }) {
   const centralQuotaNotice = quotaPersonId && !activeRoomWaitsForQuota && !quotaNoticeDismissed(quotaPersonId, centralQuotaResetAt)
     ? centralDailyQuotaNotice(quotaPersonId)
     : null;
+  const viewerId = activeRoomSession?.agentId || "operator-local";
+  const roomPeople = Object.entries(canonicalRoom.participantProfiles ?? {})
+    .filter(([id, profile]) => profile.participantType === "human" && id !== viewerId)
+    .map(([id, profile]) => ({ id, name: profile.displayName || id }));
   return (
     <RoomSocketProvider socket={roomSocket}>
     <OwnerRouteHost.Provider value={ownerRouteHostFor(activeRoom)}>
+    <RoomPeople.Provider value={roomPeople}>
     <KnownChannels names={channelNames}>
     <div className="dc-app-layout">
       {ownServerMismatch && (
@@ -687,6 +692,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     </div>
     </div>
     </KnownChannels>
+    </RoomPeople.Provider>
     </OwnerRouteHost.Provider>
     </RoomSocketProvider>
   );

@@ -706,7 +706,7 @@ async fn the_owners_ai_speaks_for_the_owner_only_in_an_owner_started_turn()
         let (store, owner) = (&store, owner.participant_id.clone());
         async move {
             let mut tx = store.pool.begin().await?;
-            super::super::context::speaks_for_owner(&mut tx, &owner, &event).await
+            super::super::context::speaks_for_owner(&mut tx, &owner, &[], &event).await
         }
     };
     record(true).execute(&store.pool).await?;
@@ -732,41 +732,95 @@ async fn the_owners_ai_speaks_for_the_owner_only_in_an_owner_started_turn()
     Ok(())
 }
 
-/// Trusting other people's AIs is the owner's private switch, off by default,
-/// and a backup carried to another computer drops it.
+/// The people whose AIs an agent trusts are the owner's private choice, people
+/// in the room only, and a backup carried to another computer drops them.
+/// An AI one of them added then speaks for the owner without a turn record.
 #[tokio::test]
-async fn trusting_other_peoples_ais_is_private_and_off_by_default()
--> Result<(), Box<dyn std::error::Error>> {
-    let (store, _owner, _directory) = fixture().await;
+async fn an_agent_trusts_only_the_people_its_owner_picked() -> Result<(), Box<dyn std::error::Error>>
+{
+    let (store, owner, _directory) = fixture().await;
     let session = stored_session(&store).await;
     let (room, id) = (
         session.public.room_id.clone(),
         session.public.session_id.clone(),
     );
+    sqlx::query("UPDATE participants SET participant_json=json_set(participant_json, '$.owner_id', ?) WHERE participant_id=?")
+        .bind(&owner.participant_id)
+        .bind(&session.public.participant_id)
+        .execute(&store.pool)
+        .await?;
+    let friend = add_human(&store, "human-friend", "Friend").await?;
     assert_eq!(
-        store.agent_trusts_ai_handoffs(&room, &id).await?,
-        Some(false)
+        store.agent_trusted_ai_owners(&room, &id).await?,
+        Some(vec![])
     );
-    assert!(store.set_agent_trusts_ai_handoffs(&room, &id, true).await?);
-    let trusted = stored_session(&store).await;
-    assert!(trusted.trusts_ai_handoffs);
-    let public = serde_json::to_value(trusted.public())?;
-    assert!(public.get("trusts_ai_handoffs").is_none());
-    let mut restored = trusted.clone();
-    crate::backup_json::stop_agent(&mut restored);
-    assert!(!restored.trusts_ai_handoffs);
     assert!(
         store
-            .set_agent_trusts_ai_handoffs(&room, &id, false)
+            .set_agent_trusted_ai_owners(&room, &id, &[session.public.participant_id.clone()])
+            .await
+            .is_err(),
+        "an AI is not a person"
+    );
+    assert!(
+        store
+            .set_agent_trusted_ai_owners(
+                &room,
+                &id,
+                &[
+                    friend.participant_id.clone(),
+                    friend.participant_id.clone(),
+                    owner.participant_id.clone()
+                ],
+            )
             .await?
     );
     assert_eq!(
-        store.agent_trusts_ai_handoffs(&room, &id).await?,
-        Some(false)
+        store.agent_trusted_ai_owners(&room, &id).await?,
+        Some(vec![friend.participant_id.clone()])
     );
+    let trusted = stored_session(&store).await;
+    assert!(
+        serde_json::to_value(trusted.public())?
+            .get("trusted_ai_owners")
+            .is_none()
+    );
+    let mut restored = trusted.clone();
+    crate::backup_json::stop_agent(&mut restored);
+    assert!(restored.trusted_ai_owners.is_empty());
+    // The friend's AI (any agent participant the friend added) now counts.
+    let mut friends_ai = store
+        .execute_message_with_turn(&owner, "seed", "message.send", &json!({"content": "seed"}))
+        .await?
+        .outcome
+        .event;
+    friends_ai.actor.participant_id = session.public.participant_id.clone();
+    friends_ai.actor.participant_type = "agent".to_owned();
+    sqlx::query("UPDATE participants SET participant_json=json_set(participant_json, '$.owner_id', ?) WHERE participant_id=?")
+        .bind(&friend.participant_id)
+        .bind(&session.public.participant_id)
+        .execute(&store.pool)
+        .await?;
+    let mut tx = store.pool.begin().await?;
+    let picked = [friend.participant_id.clone()];
+    assert!(
+        super::super::context::speaks_for_owner(
+            &mut tx,
+            &owner.participant_id,
+            &picked,
+            &friends_ai
+        )
+        .await?
+    );
+    assert!(
+        !super::super::context::speaks_for_owner(&mut tx, &owner.participant_id, &[], &friends_ai)
+            .await?
+    );
+    drop(tx);
+    assert!(store.set_agent_trusted_ai_owners(&room, &id, &[]).await?);
     assert_eq!(
-        store.agent_trusts_ai_handoffs(&room, "missing").await?,
-        None
+        store.agent_trusted_ai_owners(&room, &id).await?,
+        Some(vec![])
     );
+    assert_eq!(store.agent_trusted_ai_owners(&room, "missing").await?, None);
     Ok(())
 }
