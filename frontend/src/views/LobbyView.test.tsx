@@ -300,7 +300,7 @@ describe("LobbyView active provider turn", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
-  it("does not count an answered provider request as unread", () => {
+  it("hides an answered provider request and never counts it as unread", () => {
     render(
       <LobbyView
         activeRoom={room}
@@ -333,6 +333,7 @@ describe("LobbyView active provider turn", () => {
     );
 
     expect(screen.queryByRole("region", { name: "안 읽은 메시지" })).toBeNull();
+    expect(screen.queryByText("응답을 전달했어요.")).toBeNull();
   });
 
   it("does not count the viewer's own new message as unread", () => {

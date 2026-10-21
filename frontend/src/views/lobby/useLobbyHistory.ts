@@ -188,6 +188,8 @@ export function useLobbyHistory({
       .filter(
         (event) =>
           !isVoteTransitionKind(event.kind) &&
+          // An answered request has nothing left to show or do.
+          !(event.kind === "provider_request" && event.provider_request_state === "resolved") &&
           (!event.flow_meeting_id ||
             event.flow_meeting_id === activeRoom.meetingId)
       );
