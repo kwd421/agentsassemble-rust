@@ -25,7 +25,7 @@ type PersonaHost = { owner: CentralOwnerWorkspace; deviceToken: string; transpor
 // resolved explicitly per call: the room's own server_id when given, else the
 // single live owner workspace. With several hosts live an omitted server never
 // falls back to "most recent" — a member host's transport is never used.
-function resolvePersonaHost(serverId?: string): PersonaHost | null {
+export function resolvePersonaHost(serverId?: string): PersonaHost | null {
   if (serverId) {
     const workspace = remoteWorkspaceFor(serverId);
     if (!workspace?.owner || !workspace.transport.active) {
@@ -99,10 +99,15 @@ function isCurrentPersonaHost(host: PersonaHost): boolean {
 }
 
 async function remotePersona(host: PersonaHost, suffix: string, init: RequestInit): Promise<Response> {
+  return remoteOwnerRoute(host, `/api/central-owner/personas${suffix}`, init);
+}
+
+/** One server-owner route on the resolved host's secure channel. */
+export async function remoteOwnerRoute(host: PersonaHost, path: string, init: RequestInit): Promise<Response> {
   if (!isCurrentPersonaHost(host)) throw new Error("서버 소유자로 다시 연결해 주세요.");
   const headers = new Headers(init.headers);
   for (const [key, value] of Object.entries(serverOwnerSessionHeaders(host.owner, host.deviceToken))) headers.set(key, value);
-  const response = await fetchOwnerSession(host.owner.sessionToken, `/api/central-owner/personas${suffix}`, { ...init, headers, cache: "no-store", credentials: "omit", redirect: "error" });
+  const response = await fetchOwnerSession(host.owner.sessionToken, path, { ...init, headers, cache: "no-store", credentials: "omit", redirect: "error" });
   if (!response.ok) throw await responseError(response);
   return response;
 }

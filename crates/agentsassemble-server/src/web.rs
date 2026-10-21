@@ -164,6 +164,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::message_search_web::routes())
         .merge(crate::side_chat_web::routes())
         .merge(crate::persona_web::routes())
+        .merge(crate::agent_memory_web::routes())
         .merge(crate::profile_web::routes())
         .merge(crate::account_web::routes())
         .merge(crate::guest_identity_recovery_web::routes())

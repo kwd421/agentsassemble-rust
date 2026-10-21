@@ -198,22 +198,39 @@ async fn authorize(
     origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
     remote: bool,
 ) -> Result<(), PersonaHttpError> {
+    authorize_server_owner(state, headers, origin, remote)
+        .await
+        .map_err(|(status, code, message)| PersonaHttpError {
+            status,
+            code,
+            message,
+        })
+}
+
+/// The server owner's own routes: a one-use local operator ticket, or a
+/// central owner session over the secure channel (`remote`).
+pub(crate) async fn authorize_server_owner(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
+    remote: bool,
+) -> Result<(), (StatusCode, &'static str, String)> {
+    let unauthorized = || {
+        let error = PersonaHttpError::unauthorized();
+        (error.status, error.code, error.message)
+    };
     if remote {
         if origin.is_none_or(|origin| origin.secure.is_none()) {
-            return Err(PersonaHttpError::unauthorized());
+            return Err(unauthorized());
         }
         crate::central::owner_web::owner_from_session_headers(state, headers, origin)
             .await
-            .map_err(|error| PersonaHttpError {
-                status: error.status,
-                code: error.code,
-                message: error.message.to_owned(),
-            })?;
+            .map_err(|error| (error.status, error.code, error.message.to_owned()))?;
         return Ok(());
     }
     consume_local_operator(state, headers)
         .await
-        .ok_or_else(PersonaHttpError::unauthorized)?;
+        .ok_or_else(unauthorized)?;
     Ok(())
 }
 

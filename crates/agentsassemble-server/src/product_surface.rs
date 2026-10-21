@@ -87,6 +87,7 @@ fn registered_routes(
         crate::message_search_web::HTTP_ROUTES,
         crate::side_chat_web::HTTP_ROUTES,
         crate::persona_web::HTTP_ROUTES,
+        crate::agent_memory_web::HTTP_ROUTES,
         crate::profile_web::HTTP_ROUTES,
         crate::account_web::HTTP_ROUTES,
         crate::guest_identity_recovery_web::HTTP_ROUTES,

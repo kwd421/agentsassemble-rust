@@ -149,6 +149,7 @@ mod message_search_web;
 mod operational_web;
 mod operator_pairing_web;
 mod owned_command;
+mod agent_memory_web;
 mod persona_web;
 mod principal_mutation_admission;
 mod product_surface;

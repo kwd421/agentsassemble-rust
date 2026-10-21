@@ -1,0 +1,66 @@
+/* The memory tab sits with the agent's other settings: a disclosure like
+   실행 설정, rows like the card library. */
+.dc-agent-memory > summary {
+  cursor: pointer;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dc-agent-memory-lead,
+.dc-agent-memory-empty,
+.dc-agent-memory-status {
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.dc-agent-memory-list {
+  display: grid;
+  gap: 4px;
+  max-height: 280px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+.dc-agent-memory-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.dc-agent-memory-row:hover {
+  background: rgba(151, 151, 159, 0.12);
+}
+
+.dc-agent-memory-range {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.dc-agent-memory-summary {
+  margin-top: 2px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.dc-agent-memory-delete {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.dc-agent-memory-delete:hover,
+.dc-agent-memory-delete:focus-visible {
+  background: rgba(218, 55, 60, 0.16);
+  color: #f23f43;
+}

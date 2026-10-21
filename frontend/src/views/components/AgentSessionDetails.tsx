@@ -13,6 +13,7 @@ import {
 } from "../../lib/providerControlSettings";
 import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
 import AgentActivitySettings from "./AgentActivitySettings";
+import AgentMemorySettings, { keepsMemory } from "./AgentMemorySettings";
 import ProviderModelRefresh from "./ProviderModelRefresh";
 import { refreshLocalProviderCatalog } from "../../api/providerOperations";
 import { isDesktopWebview } from "../../lib/desktopBridge";
@@ -518,6 +519,7 @@ export default function AgentSessionDetails({
           onStatus={setActionStatus}
         />
       )}
+      {serverOwned && keepsMemory(session) && <AgentMemorySettings session={session} />}
       <AgentActivitySettings
         session={session}
         activityVisible={activityVisible}
