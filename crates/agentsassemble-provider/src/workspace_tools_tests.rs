@@ -228,6 +228,35 @@ async fn writes_require_exact_owner_response_and_delivery_receipt() -> Result<()
     let (other_turn, asked) = tokio::join!(other_turn, asked);
     assert!(asked && other_turn.is_err());
     assert!(!directory.path().join("full-other.txt").exists());
+    // 이번 차례는 모두 허용 covers the rest of that turn only.
+    session.public.permission_mode = "workspace_write".to_owned();
+    *tools.turn_grant() = Some(request.execution_id.clone());
+    tools
+        .execute(
+            &session,
+            &request,
+            "write_workspace_file",
+            r#"{"path":"turn.txt","content":"same turn"}"#,
+            &mut false,
+        )
+        .await
+        .map_err(|_| "turn-allowed write")?;
+    assert!(commands.try_recv().is_err());
+    let next_turn = ProviderTurnRequest {
+        execution_id: "next-execution".to_owned(),
+        ..request.clone()
+    };
+    let mut next_uncertain = false;
+    let next = tools.execute(
+        &session,
+        &next_turn,
+        "write_workspace_file",
+        r#"{"path":"turn-next.txt","content":"next turn"}"#,
+        &mut next_uncertain,
+    );
+    let asked = async { commands.recv().await.is_some() };
+    let (next, asked) = tokio::join!(next, asked);
+    assert!(asked && next.is_err(), "the next turn asks again");
     session.public.permission_mode = "meeting_read_only".to_owned();
     assert!(
         tools

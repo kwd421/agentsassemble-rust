@@ -11,7 +11,7 @@ use crate::{
     driver::{DriverError, ProviderTurnRequest},
     process::{ProbeFailure, run_in_directory},
     workspace_files,
-    workspace_tools::{Approval, owner_allows},
+    workspace_tools::{Approval, owner_allows, turn_allowed},
 };
 
 pub(crate) const NAME: &str = "run_workspace_command";
@@ -132,6 +132,7 @@ pub(crate) async fn execute(
     request: &ProviderTurnRequest,
     arguments: &str,
     allowed: &mut HashSet<String>,
+    allowed_turn: &mut Option<String>,
     effect_uncertain: &mut bool,
     cancellation: &CancellationToken,
 ) -> Result<String, DriverError> {
@@ -165,7 +166,8 @@ pub(crate) async fn execute(
     // Full access in a turn its owner started runs without asking. Otherwise
     // the owner approves this exact command; 앞으로도 허용 covers it while the
     // agent runs.
-    let unasked = mode == "full_access" && request.owner_started;
+    let unasked = (mode == "full_access" && request.owner_started)
+        || turn_allowed(allowed_turn.as_ref(), request);
     if !unasked && !allowed.contains(command) {
         let always = "이 에이전트가 멈출 때까지 같은 명령은 묻지 않아요.";
         match owner_allows(session, request, "명령 실행", description, always).await? {
@@ -176,6 +178,7 @@ pub(crate) async fn execute(
                 ));
             }
             Approval::Once => {}
+            Approval::Turn => *allowed_turn = Some(request.execution_id.clone()),
             Approval::Always => {
                 allowed.insert(command.to_owned());
             }

@@ -30,6 +30,9 @@ pub(crate) struct WorkspaceTools {
     /// Paths the owner allowed with 앞으로도 허용, exactly as the card showed
     /// them; gone when this agent stops.
     allowed_paths: std::collections::HashSet<String>,
+    /// The turn execution the owner allowed with 이번 차례는 모두 허용; its
+    /// commands and file changes are not asked again.
+    allowed_turn: Option<String>,
 }
 
 /// The owner's answer to one approval request.
@@ -37,7 +40,13 @@ pub(crate) struct WorkspaceTools {
 pub(crate) enum Approval {
     Denied,
     Once,
+    Turn,
     Always,
+}
+
+/// Whether the owner already allowed everything in this turn.
+pub(crate) fn turn_allowed(grant: Option<&String>, request: &ProviderTurnRequest) -> bool {
+    grant.is_some_and(|execution| *execution == request.execution_id)
 }
 
 impl Drop for WorkspaceTools {
@@ -79,6 +88,11 @@ impl WorkspaceTools {
         self.task.is_some()
     }
 
+    /// The same turn grant also covers workspace commands.
+    pub(crate) fn turn_grant(&mut self) -> &mut Option<String> {
+        &mut self.allowed_turn
+    }
+
     pub(crate) async fn execute(
         &mut self,
         session: &DurableAgentSession,
@@ -93,7 +107,8 @@ impl WorkspaceTools {
         ) {
             return Err(FAILED);
         }
-        let unasked = session.public.permission_mode == "full_access" && request.owner_started;
+        let unasked = (session.public.permission_mode == "full_access" && request.owner_started)
+            || turn_allowed(self.allowed_turn.as_ref(), request);
         let mut arguments: serde_json::Map<String, Value> =
             serde_json::from_str(arguments).map_err(|_| FAILED)?;
         if arguments
@@ -129,6 +144,7 @@ impl WorkspaceTools {
             match approve(session, request, name, &path).await? {
                 Approval::Denied => return Err(FAILED),
                 Approval::Once => {}
+                Approval::Turn => self.allowed_turn = Some(request.execution_id.clone()),
                 Approval::Always => {
                     self.allowed_paths.insert(path.clone());
                 }
@@ -199,6 +215,12 @@ pub(crate) async fn owner_allows(
                     description: String::new(),
                 },
                 ProviderRequestOption {
+                    id: "allow_turn".to_owned(),
+                    label: "이번 차례는 모두 허용".to_owned(),
+                    kind: "allow_turn".to_owned(),
+                    description: "이 차례가 끝날 때까지 명령과 파일 변경을 묻지 않아요.".to_owned(),
+                },
+                ProviderRequestOption {
                     id: "allow_always".to_owned(),
                     label: "앞으로도 허용".to_owned(),
                     kind: "allow_always".to_owned(),
@@ -229,6 +251,9 @@ pub(crate) async fn owner_allows(
     let approval = match response {
         ProviderRequestResolution::Option { option_id } if option_id == "allow_once" => {
             Approval::Once
+        }
+        ProviderRequestResolution::Option { option_id } if option_id == "allow_turn" => {
+            Approval::Turn
         }
         ProviderRequestResolution::Option { option_id } if option_id == "allow_always" => {
             Approval::Always

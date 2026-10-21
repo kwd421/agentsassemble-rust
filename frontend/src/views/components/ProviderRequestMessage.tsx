@@ -16,7 +16,7 @@ const terminalLabels: Record<string, string> = {
 // Option labels come from the structured option kind, never the provider's English label.
 // An unknown kind (a newer host may add one) still renders a neutral Korean label.
 const optionKindLabels: Record<string, string> = {
-  allow_once: "이번만 허용", allow_always: "앞으로도 허용", allow_session: "이번 세션 동안 허용",
+  allow_once: "이번만 허용", allow_turn: "이번 차례는 모두 허용", allow_always: "앞으로도 허용", allow_session: "이번 세션 동안 허용",
   reject_once: "거부", reject_always: "항상 거부",
   deny: "거부", decline: "거부하고 계속", cancel: "거부하고 중단", allow_policy: "규칙을 추가하고 허용",
   deny_policy: "규칙을 추가하고 거부",

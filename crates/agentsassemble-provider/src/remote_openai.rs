@@ -395,6 +395,7 @@ impl RemoteOpenAiDriver {
                 request,
                 &call.function.arguments,
                 &mut self.allowed_commands,
+                self.workspace_tools.turn_grant(),
                 &mut self.turn_effect_uncertain,
                 &cancellation,
             )
