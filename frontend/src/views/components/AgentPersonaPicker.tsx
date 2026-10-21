@@ -385,10 +385,13 @@ export default function AgentPersonaPicker({
               )}
             </>
           )}
+          {/* While the menu is open it covers the line under the trigger, so
+              loading and delete results show here instead. */}
+          {status && <p className="dc-persona-status preserve-words" role="status">{status}</p>}
         </div>,
         overlayHost(pickerRef.current)
       )}
-      {status && <p className="dc-persona-status preserve-words">{status}</p>}
+      {status && !libraryOpen && <p className="dc-persona-status preserve-words">{status}</p>}
       {failedThumbnailIds.size > 0 && (
         <p className="dc-persona-status preserve-words" role="alert">
           봇카드 썸네일을 불러오지 못했어요.
