@@ -186,10 +186,18 @@ describe("AgentPersonaPicker", () => {
     expect(screen.queryByRole("button", { name: "Night Guide 카드 지우기" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Weather Module 카드 지우기" }));
     expect(personaApi.deletePersonaAsset).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toContain("한 번 더 누르면");
+    // Pressing elsewhere in the menu disarms it; the next press only arms again.
+    await userEvent.click(screen.getByRole("radio", { name: /Night Guide/ }));
+    await userEvent.click(screen.getByRole("button", { name: /선택|변경/ }));
+    await screen.findByText("Weather Module");
+    await userEvent.click(screen.getByRole("button", { name: "Weather Module 카드 지우기" }));
+    expect(personaApi.deletePersonaAsset).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "지우기" }));
     expect(personaApi.deletePersonaAsset).toHaveBeenCalledWith("weather-module", undefined);
     await waitFor(() => expect(screen.queryByText("Weather Module")).toBeNull());
-    expect(onChange).not.toHaveBeenCalled();
+    // Deleting another card never clears the agent's own selection.
+    expect(onChange).not.toHaveBeenCalledWith("");
   });
 
   it("selects a newly imported supported file", async () => {

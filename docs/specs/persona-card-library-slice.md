@@ -605,8 +605,12 @@ current slice is reopened only for the separate D-04 fixed-host network-policy d
   meeting artifacts, work/artifact persona surface, or meeting-specific persona mode.
 - No execution of imported scripts, regex replacements, triggers, CJS, MCP, HTML,
   low-level access, or remote asset retrieval.
-- No persona deletion/editor/marketplace, operating quota configuration, generic import
+- No persona editor/marketplace, operating quota configuration, generic import
   framework, provider plugin framework, or PostgreSQL migration in this slice.
+  Deletion was added later (2026-10-21): `DELETE /api/personas/{id}` and its
+  central-owner twin remove a card unless an agent still in its room (joined or
+  detached) selects it (`persona_in_use`); agents that left or were removed lose
+  the reference in the same transaction.
 - No compatibility read of the Python persona directory and no legacy fallback.
 
 ## Acceptance criteria

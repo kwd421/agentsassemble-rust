@@ -98,15 +98,20 @@ function RequestForm({ entry, socket, enabled, providerName, providerKind }: { e
   }
   const options = request.prompt.response_kind === "option" ? request.prompt.options.filter((option) => !(providerKind === "opencode_server" && request.request_kind === "permission" && (option.id === "always" || option.kind === "allow_always"))) : [];
   const primary = options.find((option) => option.kind === "allow_once") ?? options[0];
+  // What a lasting grant covers is shown, not left to a tooltip phones never show.
+  const lasting = options.find((option) => option.kind === "allow_always" && option.description);
+  const lastingId = `${request.provider_request_id}-lasting`;
   return <form onSubmit={(event) => { event.preventDefault(); void submit(); }} style={{ display: "grid", gap: 8 }}>
     <div><p><strong>{requestHeadline(request.request_kind, providerName)}</strong>
       <span style={{ color: "var(--color-text-muted)" }}> · <time dateTime={entry.expires_at}>{remainingLabel(entry.expires_at, now)}</time></span></p>
       {request.description && <p style={{ whiteSpace: "pre-wrap" }}>{request.description}</p>}</div>
     {options.length > 0 && <div role="group" aria-label="응답" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
       {options.map((option) => <button key={option.id} type="button" disabled={locked} title={option.description || undefined}
+        aria-describedby={option === lasting ? lastingId : undefined}
         className={`dc-button ${option === primary ? "dc-button--primary" : "dc-button--secondary"}`}
         onClick={() => void submit({ response_kind: "option", option_id: option.id })}>{providerRequestOptionLabel(option)}</button>)}
     </div>}
+    {lasting && <p id={lastingId} style={{ color: "var(--color-text-muted)", fontSize: 12 }}>앞으로도 허용: {lasting.description}</p>}
     {request.prompt.response_kind !== "option" && <fieldset disabled={locked} style={{ display: "grid", gap: 8, minWidth: 0 }}>
       {request.prompt.response_kind === "answers" && request.prompt.questions.map((question) => <QuestionInput key={question.id}
         question={question} values={answers[question.id] ?? []} group={`${request.provider_request_id}-${question.id}`}

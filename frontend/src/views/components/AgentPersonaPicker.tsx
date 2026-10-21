@@ -179,6 +179,7 @@ export default function AgentPersonaPicker({
   async function handleDelete(item: PersonaAssetSummary) {
     if (confirmDelete !== item.id) {
       setConfirmDelete(item.id);
+      setStatus(`한 번 더 누르면 ${item.display_name} 카드를 지워요.`);
       return;
     }
     setDeleting(true);
@@ -286,6 +287,11 @@ export default function AgentPersonaPicker({
           onMouseDown={(event) => {
             // Keep focus where it is while pressing a row; a blur re-render would swallow the click.
             if (event.target instanceof Element && event.target.closest("button")) event.preventDefault();
+            // Pressing anything but a delete control disarms a pending delete.
+            if (confirmDelete && !(event.target instanceof Element && event.target.closest(".dc-persona-delete"))) {
+              setConfirmDelete("");
+              setStatus("");
+            }
           }}
         >
           {emptyLibrary ? (

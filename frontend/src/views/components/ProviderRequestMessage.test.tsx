@@ -91,5 +91,8 @@ it("offers 앞으로도 허용 from the built-in harness and shows time left, no
   render(<ProviderRequestMessage entry={entry} providerKind="deepseek" socket={socket(vi.fn())} connected canPost />);
   expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["이번만 허용", "앞으로도 허용", "거부"]);
   expect(screen.getByText("10분 남음")).toBeTruthy();
+  const lasting = screen.getByRole("button", { name: "앞으로도 허용" });
+  expect(document.getElementById(lasting.getAttribute("aria-describedby") ?? "")?.textContent)
+    .toBe("앞으로도 허용: 이 에이전트가 멈출 때까지 같은 명령은 묻지 않아요.");
   expect(screen.queryByText(/응답 기한/)).toBeNull();
 });
