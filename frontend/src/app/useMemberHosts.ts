@@ -275,8 +275,14 @@ export function useMemberHosts({
     const central = options?.central ?? manualIntent.current.delete(serverId);
     setPhase(serverId, "connecting", previousAnchor?.rooms ?? null, origin, null);
     try {
+      // The directory's current endpoint lets a restarted host be found at
+      // its new address without central; the stored host key still pins it.
+      const listed = directoryRef.current?.status === "connected"
+        ? directoryRef.current.live?.servers.find((entry) => entry.server_id === serverId)?.endpoint ?? null
+        : null;
+      const endpoint = listed?.origin && listed.generation ? { origin: listed.origin, generation: listed.generation } : undefined;
       const attached = await attachMemberHost({ server_id: serverId, registration_epoch: epoch },
-        activeToken, activePerson, controller.signal, undefined, { central });
+        activeToken, activePerson, controller.signal, undefined, { central, endpoint });
       // An aborted (StrictMode cleanup, identity flap, timed-out select)
       // flight must never land: it closes its admission instead of spending
       // another central request or clobbering a newer flight. Late completion
@@ -791,6 +797,10 @@ export function useMemberHosts({
     reconnectRetryAfter.current.delete(serverId);
     manualIntent.current.add(serverId);
     reattachHost(serverId);
+    // An attach this retry started read the intent synchronously; an early
+    // exit (live channel, flight in progress, no epoch) must not leave it for
+    // a later automatic attempt to spend central on.
+    manualIntent.current.delete(serverId);
   }, [reattachHost]);
   reattachHostRef.current = reattachHost;
 

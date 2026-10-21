@@ -150,4 +150,19 @@ describe("member auto-attach", () => {
     expect(close).toHaveBeenCalled();
     expect(deps.preview).not.toHaveBeenCalled();
   });
+
+  it("finds a restarted host at the directory's new address, still pinned to the stored key", async () => {
+    saveMemberAnchor("person", {
+      server_id: "server", registration_epoch: "epoch", host_key_fingerprint: "fingerprint",
+      endpoint_origin: "https://old.test", endpoint_generation: 3, rooms, hidden: false, updated_at: 1,
+    });
+    const { deps } = depsWith({});
+    const probe = vi.fn().mockResolvedValue({ host_key_fingerprint: "fingerprint", host_public_key_jwk: {} });
+    await attachMemberHost(server, "central-token", "person", new AbortController().signal,
+      { ...deps, probe } as never, { endpoint: { origin: "https://moved.test", generation: 4 } });
+    expect(probe).toHaveBeenCalledWith("https://moved.test", { server_id: "server", host_key_fingerprint: "fingerprint" });
+    expect(deps.open.mock.calls[0][1]).toMatchObject({ origin: "https://moved.test", generation: 4 });
+    expect(loadMemberAnchor("person", "server")?.endpoint_origin).toBe("https://moved.test");
+    expect(deps.preview).not.toHaveBeenCalled();
+  });
 });

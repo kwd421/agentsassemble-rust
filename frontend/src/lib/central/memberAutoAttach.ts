@@ -52,7 +52,7 @@ export async function attachMemberHost(
   personId: string,
   signal: AbortSignal,
   deps: MemberAttachDeps = liveDeps,
-  options: { central?: boolean } = {},
+  options: { central?: boolean; endpoint?: { origin: string; generation: number } } = {},
 ): Promise<{ admission: SecureMemberAdmission; rooms: { room_id: string; name: string }[]; anchor: MemberHostAnchor }> {
   const central = options.central ?? true;
   if (!server.registration_epoch) throw new Error("서버 등록 정보를 확인하지 못했어요.");
@@ -68,18 +68,20 @@ export async function attachMemberHost(
   // admission still takes its central grant through the existing path.
   // A silent probe miss (down / moved / foreign host) falls through to the
   // single preview below, still gated by the slow schedule outside.
-  const probeHit = stored && deps.probe && stored.endpoint_origin
-    ? await deps.probe(stored.endpoint_origin, {
+  const endpoint = options.endpoint ??
+    (stored ? { origin: stored.endpoint_origin, generation: stored.endpoint_generation } : null);
+  const probeHit = stored && deps.probe && endpoint?.origin
+    ? await deps.probe(endpoint.origin, {
         server_id: stored.server_id,
         host_key_fingerprint: stored.host_key_fingerprint,
       }).catch(() => null)
     : null;
-  if (probeHit && stored) {
+  if (probeHit && stored && endpoint) {
     const directTarget = {
       server_id: stored.server_id,
       registration_epoch: stored.registration_epoch,
-      origin: stored.endpoint_origin,
-      generation: stored.endpoint_generation,
+      origin: endpoint.origin,
+      generation: endpoint.generation,
       host_key_fingerprint: probeHit.host_key_fingerprint,
       host_public_key_jwk: probeHit.host_public_key_jwk,
     };
