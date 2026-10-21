@@ -11,7 +11,7 @@ export default function ChannelMessageRows({ events, profiles, mentionLabels, se
   events: RoomEvent[]; profiles: Record<string, CanonicalParticipantProfile>; mentionLabels: MentionLabels;
   selectedId?: string; pinnedIds: Set<string>; canReply: boolean; replyDisabled: boolean;
   canPin: boolean; pinDisabled: boolean; onReply: (eventId: string) => void;
-  onTogglePin: (eventId: string) => void; replyTargetId?: string; replySource: (eventId: string) => ReplySource;
+  onTogglePin: (eventId: string) => void; replyTargetId?: string; replySource: (eventId: string, replyText?: string) => ReplySource;
   onNavigate: (eventId: string) => void;
 }) {
   const byId = new Map(events.map((event) => [event.id, event]));
@@ -35,7 +35,7 @@ export default function ChannelMessageRows({ events, profiles, mentionLabels, se
         actions={<MessageActions onReply={canReply && !deleted ? () => onReply(event.id) : undefined}
           replyDisabled={replyDisabled} pinned={pinnedIds.has(event.id)} pinDisabled={pinDisabled}
           onTogglePin={canPin && !deleted ? () => onTogglePin(event.id) : undefined} />}
-        reply={!deleted && replyId ? <MessageReply source={replySource(replyId)} onOpen={() => onNavigate(replyId)} /> : undefined}>
+        reply={!deleted && replyId ? <MessageReply source={replySource(replyId, event.content ?? undefined)} onOpen={() => onNavigate(replyId)} /> : undefined}>
         <div className={`dc-message-body preserve-words ${deleted ? "italic text-text-muted" : ""}`}>
           {deleted ? "삭제된 메시지예요" : <DiscordText text={event.content || ""} mentionLabels={mentionLabels} />}
         </div>

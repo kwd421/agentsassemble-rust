@@ -3,7 +3,13 @@ import ParticipantAvatarContent from "./ParticipantAvatarContent";
 import ResourceImage from "./ResourceImage";
 
 export type ReplyAvatar = { image?: string; label?: string; participantType?: string; providerKind?: string };
-export type ReplySource = { eventId: string; author?: string; text?: string; deleted?: boolean; avatar?: ReplyAvatar };
+/** `mentioned`: the reply calls the original author, which Discord marks with `@`. */
+export type ReplySource = { eventId: string; author?: string; text?: string; deleted?: boolean; avatar?: ReplyAvatar; mentioned?: boolean };
+
+/** Whether a reply's own text mentions the author of the message it answers. */
+export function replyMentions(replyText: string | undefined, authorId: string | undefined): boolean {
+  return Boolean(replyText && authorId && replyText.includes(`<@${authorId}>`));
+}
 
 export function MessageReply({ source, onOpen }: { source: ReplySource; onOpen?: () => void }) {
   return <button type="button" onClick={onOpen} disabled={!onOpen || source.deleted}
@@ -15,7 +21,7 @@ export function MessageReply({ source, onOpen }: { source: ReplySource; onOpen?:
         : <ParticipantAvatarContent participantType={source.avatar.participantType} displayName={source.author}
             avatarLabel={source.avatar.label} providerKind={source.avatar.providerKind} size={12} fallback={<Bot size={10} />} />}
     </span>}
-    {source.author && <span className="dc-reply-preview-author">@{source.author}</span>}
+    {source.author && <span className="dc-reply-preview-author">{source.mentioned ? "@" : ""}{source.author}</span>}
     <span className={`dc-reply-preview-text truncate ${source.deleted ? "italic" : ""}`}>{source.deleted ? "삭제된 메시지예요" : source.text || "원문 보기"}</span>
   </button>;
 }

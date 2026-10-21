@@ -61,6 +61,7 @@ import type { MessageAttachmentReadOwner } from "../lib/messageAttachmentReadSch
 import { isVoteTransitionKind } from "../lib/voteEventKind";
 import { userFacingError } from "../lib/apiErrors";
 import { plainMentionText } from "./components/DiscordText";
+import { replyMentions } from "./components/MessageReply";
 
 export default function LobbyView({
   activeRoom,
@@ -190,11 +191,12 @@ export default function LobbyView({
   const [replyTarget, setReplyTarget] = useState({ scope: "", id: "" });
   const replyId = replyTarget.scope === replyScope ? replyTarget.id : "";
   useReplyBarScroll(scrollRef, replyId);
-  const replySource = (id: string) => {
+  const replySource = (id: string, replyText?: string) => {
     const source = visibleEvents.find((event) => (event.record_id || event.id) === id);
     const message = source?.message && plainMentionText(source.message, mentionLabels);
     return { eventId: id, author: source?.name, text: message || source?.vote_question ||
       (source?.attachments?.length ? "첨부파일 메시지" : undefined), deleted: source?.message_deleted,
+      mentioned: replyMentions(replyText, source?.actor_id),
       avatar: source && { image: source.avatar_image_url, label: source.avatar_label, participantType: source.actor_type,
         providerKind: source.provider_kind || providerKindByParticipant.get(source.actor_id || "") } };
   };
@@ -622,7 +624,7 @@ export default function LobbyView({
                 onReply={canPostMessages && !event.message_deleted && ["message", "vote"].includes(event.kind) && event.flow_action !== "message_delta"
                   ? () => setReplyTarget({ scope: replyScope, id: event.record_id || event.id }) : undefined}
                 replyTarget={Boolean(replyId) && replyId === (event.record_id || event.id)}
-                replySource={event.reply_to_event_id ? replySource(event.reply_to_event_id) : undefined}
+                replySource={event.reply_to_event_id ? replySource(event.reply_to_event_id, event.message) : undefined}
                 onOpenReply={() => {
                   const id = event.reply_to_event_id;
                   if (!id) return;
