@@ -43,7 +43,9 @@ fn shell() -> (&'static str, &'static [&'static str], &'static str) {
             "Windows PowerShell",
         )
     } else if cfg!(target_os = "macos") {
-        ("/bin/zsh", &["-c"], "zsh (macOS)")
+        // -f: no ~/.zshenv, which could put the owner's secrets back into
+        // the cleaned environment or redefine the commands they approved.
+        ("/bin/zsh", &["-f", "-c"], "zsh (macOS)")
     } else {
         ("/bin/sh", &["-c"], "sh")
     }
@@ -92,6 +94,24 @@ fn obviously_destructive(command: &str) -> bool {
     PATTERNS.iter().any(|pattern| padded.contains(pattern))
 }
 
+async fn bind_workspace(session: &DurableAgentSession) -> Result<(), DriverError> {
+    let workspace = session.workspace.clone();
+    let identity = session.workspace_identity.clone();
+    tokio::task::spawn_blocking(move || workspace_files::bind(&workspace, &identity).map(drop))
+        .await
+        .map_err(|_| FAILED)?
+        .map_err(|_| FAILED)
+}
+
+/// Direction overrides and invisible characters can make the approval card
+/// read differently from what the shell runs.
+fn hidden_format(character: char) -> bool {
+    matches!(
+        character,
+        '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}'
+    )
+}
+
 fn bounded(bytes: &[u8]) -> (String, bool) {
     let text = String::from_utf8_lossy(bytes);
     let count = text.chars().count();
@@ -123,7 +143,9 @@ pub(crate) async fn execute(
     let command = arguments.command.trim();
     if command.is_empty()
         || command.chars().count() > MAX_COMMAND_CHARACTERS
-        || command.chars().any(char::is_control)
+        || command
+            .chars()
+            .any(|character| character.is_control() || hidden_format(character))
     {
         return Ok(refused(
             "command_invalid",
@@ -141,12 +163,7 @@ pub(crate) async fn execute(
         .unwrap_or(DEFAULT_TIMEOUT_SECONDS)
         .clamp(1, MAX_TIMEOUT_SECONDS);
     // The stored identity proves this is still the folder the owner chose.
-    let workspace = session.workspace.clone();
-    let identity = session.workspace_identity.clone();
-    tokio::task::spawn_blocking(move || workspace_files::bind(&workspace, &identity).map(drop))
-        .await
-        .map_err(|_| FAILED)?
-        .map_err(|_| FAILED)?;
+    bind_workspace(session).await?;
     let description = format!("작업 폴더에서 이 명령을 실행합니다: {command}");
     if !owner_allows(session, request, "명령 실행", description).await? {
         return Ok(refused(
@@ -154,6 +171,9 @@ pub(crate) async fn execute(
             "The owner did not allow this command.",
         ));
     }
+    // The approval can wait minutes; the folder must still be the same one
+    // when the command starts, not only when the owner was asked.
+    bind_workspace(session).await?;
     // An allowed command may change files before its result is observed.
     *effect_uncertain = true;
     let (program, flags, _) = shell();

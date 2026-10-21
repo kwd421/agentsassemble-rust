@@ -163,6 +163,13 @@ pub(crate) async fn run_in_directory(
     return Err(ProbeFailure::Failed);
 
     let mut child = spawn_probe(program, args, &[], Stdio::null(), Some(directory))?;
+    #[cfg(unix)]
+    let _group = GroupKill(
+        child
+            .id()
+            .and_then(|id| i32::try_from(id).ok())
+            .and_then(rustix::process::Pid::from_raw),
+    );
     let (Some(stdout), Some(stderr)) = (child.stdout().take(), child.stderr().take()) else {
         terminate_probe_tree(child.as_mut()).await?;
         return Err(ProbeFailure::Failed);
@@ -190,6 +197,22 @@ pub(crate) async fn run_in_directory(
         Some(Err(_)) => {
             terminate_probe_tree(child.as_mut()).await?;
             Err(ProbeFailure::Timeout)
+        }
+    }
+}
+
+/// Kills a command's whole process group when its run ends or is dropped by a
+/// turn interrupt. `KillOnDrop` reaches only the shell, so without this the
+/// programs it started (and anything it left in the background) would outlive it.
+#[cfg(unix)]
+struct GroupKill(Option<rustix::process::Pid>);
+
+#[cfg(unix)]
+impl Drop for GroupKill {
+    fn drop(&mut self) {
+        if let Some(group) = self.0 {
+            // An already empty group is the normal case after a clean exit.
+            let _gone = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
         }
     }
 }

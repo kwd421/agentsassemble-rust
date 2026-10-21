@@ -71,3 +71,55 @@ async fn a_command_runs_in_the_given_folder() {
         "{text}"
     );
 }
+
+#[test]
+fn direction_overrides_and_invisible_characters_are_refused() {
+    for character in ['\u{202E}', '\u{2066}', '\u{200B}', '\u{FEFF}'] {
+        assert!(super::hidden_format(character), "{character:?}");
+    }
+    assert!(!super::hidden_format('가'));
+    assert!(!super::hidden_format('|'));
+}
+
+/// A turn interrupt drops the run; what the shell started must not outlive it.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_dropped_run_takes_the_programs_it_started_with_it() {
+    let folder = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+    let cancellation = tokio_util::sync::CancellationToken::new();
+    let mut run = Box::pin(crate::process::run_in_directory(
+        "/bin/sh",
+        &["-c", "sleep 30 & echo $! > child; wait"],
+        folder.path(),
+        std::time::Duration::from_mins(1),
+        &cancellation,
+    ));
+    let started = folder.path().join("child");
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    let pid = loop {
+        tokio::select! {
+            _ = &mut run => panic!("the run ended before it was dropped"),
+            () = tokio::time::sleep(std::time::Duration::from_millis(20)) => {}
+        }
+        if let Some(pid) = std::fs::read_to_string(&started)
+            .ok()
+            .and_then(|text| text.trim().parse::<i32>().ok())
+            .and_then(rustix::process::Pid::from_raw)
+        {
+            break pid;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the shell never started its child"
+        );
+    };
+    drop(run);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while rustix::process::test_kill_process(pid).is_ok() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the started program outlived its run"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
