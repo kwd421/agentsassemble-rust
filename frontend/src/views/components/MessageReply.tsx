@@ -4,7 +4,8 @@ import ResourceImage from "./ResourceImage";
 
 export type ReplyAvatar = { image?: string; label?: string; participantType?: string; providerKind?: string };
 /** `mentioned`: the reply calls the original author, which Discord marks with `@`. */
-export type ReplySource = { eventId: string; author?: string; text?: string; deleted?: boolean; avatar?: ReplyAvatar; mentioned?: boolean };
+/** `own`: the viewer wrote it; Discord offers no "@ on" for replying to yourself. */
+export type ReplySource = { eventId: string; author?: string; text?: string; deleted?: boolean; avatar?: ReplyAvatar; mentioned?: boolean; own?: boolean };
 
 /** Whether a reply's own text mentions the author of the message it answers. */
 export function replyMentions(replyText: string | undefined, authorId: string | undefined): boolean {

@@ -349,7 +349,9 @@ function messageSendAckMatches(event: Record<string, unknown>, payload: Record<s
   const ids = payload.attachment_ids ?? [];
   if (event.message_kind !== kind || !Array.isArray(attachments) || !Array.isArray(ids) ||
       attachments.length !== ids.length || attachments.some((attachment, index) => !isRecord(attachment) || attachment.id !== ids[index]) ||
-      (event.reply_to_event_id ?? undefined) !== payload.reply_to_event_id) return false;
+      (event.reply_to_event_id ?? undefined) !== payload.reply_to_event_id ||
+      // An "@ on" reply must come back recording whom it calls; otherwise none.
+      (payload.reply_mention === true) !== (typeof event.reply_mention_participant_id === "string" && Boolean(event.reply_mention_participant_id))) return false;
   // Cast/withdraw/close deliberately remove the actor and ballot choice before
   // persistence and public projection; publicRoomEventIsValid checks that marker.
   // Vote ACKs are not bound further to the command: the host owns its rooms and can

@@ -51,6 +51,9 @@ type LobbyComposerDraft = {
   pendingAttachments: StagedFile[];
   retry?: () => Promise<unknown>;
   retryReplyToEventId?: string;
+  /** What the unresolved send carried; a retry replays it only for the same intent. */
+  retryReplyMention?: boolean;
+  retryMessage?: string;
 };
 
 type LocalAttachmentPreview = {
@@ -131,9 +134,12 @@ export default function LobbyComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (replyTo) inputRef.current?.focus(); }, [replyTo?.eventId]);
-  // Each new reply starts with "@ on", as in Discord.
+  // Each new reply starts with "@ on", as in Discord; switching it off lasts
+  // only while this same reply is open.
   const [replyMentionOff, setReplyMentionOff] = useState({ eventId: "", off: false });
-  const replyMention = replyMentionSupported &&
+  useEffect(() => { setReplyMentionOff({ eventId: "", off: false }); }, [replyTo?.eventId]);
+  const replyMentionOffered = replyMentionSupported && !replyTo?.own;
+  const replyMention = replyMentionOffered &&
     !(replyMentionOff.eventId === replyTo?.eventId && replyMentionOff.off);
   const restoreFocusAfterSubmitRef = useRef(false);
   const commandListId = useId();
@@ -411,7 +417,10 @@ export default function LobbyComposer({
         if (sayRequest.replyToEventId) onReplySent?.(sayRequest.replyToEventId);
         return;
       }
-      const payload = activeDraft.retry && activeDraft.retryReplyToEventId === sayRequest.replyToEventId
+      const sameIntent = activeDraft.retryReplyToEventId === sayRequest.replyToEventId &&
+        Boolean(activeDraft.retryReplyMention) === sayRequest.replyMention &&
+        activeDraft.retryMessage === sayRequest.message;
+      const payload = activeDraft.retry && sameIntent
         ? (await activeDraft.retry(), { events: [] })
         : submitMessage && !sayRequest.replyToEventId && sayRequest.kind === "message"
           ? { events: await submitMessage(sayRequest.message) }
@@ -448,6 +457,8 @@ export default function LobbyComposer({
           retry: errorValue instanceof RoomSocketSayError && errorValue.retry
             ? errorValue.retry : activeDraft.retryReplyToEventId === replyToEventId ? activeDraft.retry : undefined,
           retryReplyToEventId: replyToEventId,
+          retryReplyMention: Boolean(replyToEventId) && replyMention,
+          retryMessage: trimmed,
         },
       }));
       setError(restored.error);
@@ -569,7 +580,7 @@ export default function LobbyComposer({
       <section className="dc-composer-shell">
       {replyTo && onCancelReply && <ReplyDraft source={replyTo} onCancel={onCancelReply}
         mention={replyMention}
-        onToggleMention={replyMentionSupported
+        onToggleMention={replyMentionOffered
           ? () => setReplyMentionOff({ eventId: replyTo.eventId, off: replyMention })
           : undefined} />}
       {shownError && (

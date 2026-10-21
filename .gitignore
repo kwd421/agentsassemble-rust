@@ -6,3 +6,6 @@
 /desktop/src-tauri/target/
 *.log
 .DS_Store
+
+# Local Playwright/Lighthouse output and test fixtures
+frontend/test-results/

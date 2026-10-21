@@ -67,6 +67,14 @@ describe("projectMemberRoomBadge", () => {
     expect(badge.unread).toBe(false);
   });
 
+  it("counts a reply with @ on as a mention of the replied-to author", () => {
+    const viewer = { participantId: "me", displayName: "나" };
+    expect(projectMemberRoomBadge({ events: [message({ seq: 4, reply_mention_participant_id: "me" })], floorSeq: 3, viewer }).badge)
+      .toEqual({ unread: true, mention: true });
+    expect(projectMemberRoomBadge({ events: [message({ seq: 4, reply_mention_participant_id: "other-person" })], floorSeq: 3, viewer }).badge)
+      .toEqual({ unread: true, mention: false });
+  });
+
   it("sets the mention flag for structured and plain mentions", () => {
     const viewer = { participantId: "me", displayName: "나" };
     expect(messageMentionsViewer("hey <@me> look", viewer)).toBe(true);

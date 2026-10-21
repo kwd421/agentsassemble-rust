@@ -200,6 +200,7 @@ export default function LobbyView({
     return { eventId: id, author: source?.name, text: message || source?.vote_question ||
       (source?.attachments?.length ? "첨부파일 메시지" : undefined), deleted: source?.message_deleted,
       mentioned: Boolean(called) || replyMentions(replyText, source?.actor_id),
+      own: Boolean(source?.actor_id) && source?.actor_id === viewerParticipantId,
       avatar: source && { image: source.avatar_image_url, label: source.avatar_label, participantType: source.actor_type,
         providerKind: source.provider_kind || providerKindByParticipant.get(source.actor_id || "") } };
   };

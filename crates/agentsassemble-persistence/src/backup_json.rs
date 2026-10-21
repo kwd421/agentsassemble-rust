@@ -114,6 +114,7 @@ pub(crate) fn event(value: Value) -> Result<RoomEvent, PersistenceError> {
             | "provider_turn_id"
             | "reason_code"
             | "reply_to_event_id"
+            | "reply_mention_participant_id"
             | "source_event_id"
             | "status"
             | "target_agent_id"

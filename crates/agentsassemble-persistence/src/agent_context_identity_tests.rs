@@ -408,6 +408,14 @@ async fn a_reply_calls_its_author_only_with_reply_mention() -> Result<(), Box<dy
             .addressed_content()
             .starts_with(&format!("<@{}>", owner.participant_id))
     );
+    // Backups carry the call, and deleting the reply forgets it.
+    crate::backup_json::event(serde_json::to_value(&called.outcome.event)?)?;
+    let deleted = agentsassemble_domain::prepare_deleted_message(
+        &called.outcome.event,
+        agentsassemble_domain::MutableMessageKind::Message,
+        chrono::Utc::now(),
+    );
+    assert_eq!(deleted.reply_mention(), None);
     let quiet = store
         .execute_message_with_turn(
             &other,

@@ -74,8 +74,12 @@ pub(super) async fn complete_message(
         session.input_up_to_seq.saturating_add(1),
     )
     .await?;
+    // Replying to its own message calls nobody, so its mention stays text.
+    let callable_author = reply_author
+        .as_deref()
+        .filter(|author| *author != session.public.participant_id);
     let (content, calls_author) =
-        crate::message_replies::agent_reply_text(&content, reply_author.as_deref());
+        crate::message_replies::agent_reply_text(&content, callable_author);
     let reply_mention = reply_author.filter(|_| calls_author);
     let final_event = agent_final_event(
         transaction,

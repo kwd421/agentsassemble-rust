@@ -339,6 +339,7 @@ export function projectRoomEventsToTimeline(
       };
       if (projected.message_deleted) {
         projected.reply_to_event_id = undefined;
+        projected.reply_mention_participant_id = undefined;
         projected.message = "삭제된 메시지예요";
         projected.attachments = [];
         if (messageKind === "vote") deletedVoteIds.add(String(event.id));

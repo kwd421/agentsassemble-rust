@@ -173,6 +173,8 @@ pub fn prepare_deleted_message(
     deleted.content = Some(String::new());
     deleted.extra.remove("target_agent_id");
     deleted.extra.remove("reply_to_event_id");
+    // A deleted reply no longer calls anyone.
+    deleted.extra.remove(crate::REPLY_MENTION_FIELD);
     deleted.extra.insert("attachments".to_owned(), json!([]));
     deleted
         .extra

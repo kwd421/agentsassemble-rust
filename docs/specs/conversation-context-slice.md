@@ -207,6 +207,20 @@ of provider-session identity. Instructions distinguish content `<@ID>` addressin
 handoff in three plain sentences. Passing remains available. No ID migration,
 new alias fallback, routing changes, capabilities changes or provider calls.
 
+Reply calls (2026-10-21, Discord parity): a reply only points at a message;
+calling its author is separate. A lobby `message.send` reply may carry
+`reply_mention: true` (Discord's "@ on"), accepted only with a reply target and
+advertised as capability `message.reply_mention` so newer clients never send it
+to older hosts. The event records `reply_mention_participant_id` (the replied-to
+author; a self-reply records nothing), and `RoomEvent::addressed_content` lets the
+existing mention readers treat it as a mention: free access, connector notices,
+the agent view's "Mentions you", and the ordered direct target after text
+mentions and the structured handoff. An AI reply whose text opens with the
+replied-to author's `<@ID>` is stored as an "@ on" reply without that text, and
+mentions wrapped in escaped brackets (`&lt;<@ID>&gt;`) are unwrapped. Deleting a
+reply removes the call with the other reply metadata. Channel messages keep
+their strict wire shape and do not carry the call yet.
+
 Owners: `room_turn_context.rs`, `room_turn_routing.rs`, `conversation_status.rs`
 and its domain projection. All additions share the existing observation budget.
 Acceptance: two regression invariants exercise promotion/demotion through next

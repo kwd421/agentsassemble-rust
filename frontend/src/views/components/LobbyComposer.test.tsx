@@ -393,6 +393,20 @@ describe("LobbyComposer", () => {
       </RoomSocketProvider>
     );
     expect(screen.queryByRole("button", { name: /^@ / })).toBeNull();
+
+    // A new reply starts on again; replying to yourself offers no call.
+    rerender(
+      <RoomSocketProvider socket={socket}>
+        <LobbyComposer meetingId="room-a" onPosted={vi.fn()} replyTo={{ ...reply, eventId: "other" }} onCancelReply={vi.fn()} replyMentionSupported />
+      </RoomSocketProvider>
+    );
+    expect(screen.getByRole("button", { name: "@ 켜짐" })).toBeTruthy();
+    rerender(
+      <RoomSocketProvider socket={socket}>
+        <LobbyComposer meetingId="room-a" onPosted={vi.fn()} replyTo={{ ...reply, eventId: "mine", own: true }} onCancelReply={vi.fn()} replyMentionSupported />
+      </RoomSocketProvider>
+    );
+    expect(screen.queryByRole("button", { name: /^@ / })).toBeNull();
   });
 
   it("keeps the text and the staged files when the outgoing owner refuses the message", async () => {

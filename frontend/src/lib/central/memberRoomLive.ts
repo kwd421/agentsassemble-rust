@@ -234,7 +234,9 @@ export function projectMemberRoomBadge({
     if (seq > latestSeq) latestSeq = seq;
     if (seq <= floorSeq || !isLiveRealMessage(event, viewer.participantId)) continue;
     badge.unread = true;
-    if (messageMentionsViewer(event.content, viewer)) badge.mention = true;
+    // A reply with Discord's "@ on" calls its author without any text mention.
+    if (messageMentionsViewer(event.content, viewer) ||
+        (Boolean(viewer.participantId) && event.reply_mention_participant_id === viewer.participantId)) badge.mention = true;
   }
   return { badge, latestSeq };
 }
