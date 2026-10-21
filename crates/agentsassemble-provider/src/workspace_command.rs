@@ -15,7 +15,8 @@ use crate::{
 };
 
 pub(crate) const NAME: &str = "run_workspace_command";
-const MAX_COMMAND_CHARACTERS: usize = 4_000;
+/// The approval prompt shows the whole command on one line within its 1,200 characters.
+const MAX_COMMAND_CHARACTERS: usize = 1_000;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 60;
 const MAX_TIMEOUT_SECONDS: u64 = 300;
 /// Each stream the model sees; the whole run is still bounded by the process owner.
@@ -122,13 +123,11 @@ pub(crate) async fn execute(
     let command = arguments.command.trim();
     if command.is_empty()
         || command.chars().count() > MAX_COMMAND_CHARACTERS
-        || command
-            .chars()
-            .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
+        || command.chars().any(char::is_control)
     {
         return Ok(refused(
             "command_invalid",
-            "The command is empty, too long or has control characters.",
+            "The command must be one line of at most 1000 characters; join steps with && or ;.",
         ));
     }
     if obviously_destructive(command) {
@@ -148,7 +147,7 @@ pub(crate) async fn execute(
         .await
         .map_err(|_| FAILED)?
         .map_err(|_| FAILED)?;
-    let description = format!("작업 폴더에서 이 명령을 실행합니다.\n\n{command}");
+    let description = format!("작업 폴더에서 이 명령을 실행합니다: {command}");
     if !owner_allows(session, request, "명령 실행", description).await? {
         return Ok(refused(
             "command_denied",
