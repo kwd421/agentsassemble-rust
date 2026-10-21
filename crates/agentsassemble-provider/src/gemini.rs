@@ -178,6 +178,8 @@ struct Model {
     display_name: String,
     #[serde(default)]
     supported_generation_methods: Vec<String>,
+    #[serde(default)]
+    input_token_limit: Option<u64>,
 }
 
 fn model_options(payload: Value) -> Result<Vec<ProviderControlOption>, RemoteCatalogError> {
@@ -204,6 +206,11 @@ fn model_options(payload: Value) -> Result<Vec<ProviderControlOption>, RemoteCat
         option
             .metadata
             .insert("relation_scope".to_owned(), json!("global"));
+        if let Some(context) = model.input_token_limit.filter(|limit| *limit > 0) {
+            option
+                .metadata
+                .insert("context_length".to_owned(), json!(context));
+        }
         options.push(option);
     }
     bound_catalog_options(options)

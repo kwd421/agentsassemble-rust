@@ -19,6 +19,8 @@ pub(crate) struct ProviderTurnIngress {
     pub(crate) tools: ProviderRoomToolIngress,
     pub(crate) attachments: ProviderAttachmentReadIngress,
     pub(crate) requests: ProviderRequestIngress,
+    /// Read per turn for the model's context window.
+    pub(crate) catalog: agentsassemble_provider::ProviderCatalogService,
 }
 
 pub(crate) struct ProviderTurnTaskResult {
@@ -164,7 +166,13 @@ fn provider_request(
         tabletop_tools: assignment.tabletop_tools,
         room_tool_ingress: Some(ingress.tools),
     });
+    let context_tokens = agentsassemble_provider::model_context_tokens(
+        &ingress.catalog.snapshot(),
+        &assignment.session.public.provider_kind,
+        &assignment.session.public.model,
+    );
     ProviderTurnRequest {
+        context_tokens,
         request_ingress: Some(ingress.requests),
         turn_id: assignment.turn_id.clone(),
         turn_generation: assignment.turn_generation,

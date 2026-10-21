@@ -76,6 +76,7 @@ mod registration_tests;
 mod remote_catalog;
 mod remote_https;
 mod remote_openai;
+mod turn_compaction;
 mod remote_openai_spec;
 mod room_attachment;
 mod room_file_workspace;
@@ -122,6 +123,7 @@ pub use provider_request_exchange::{
     ProviderRequestResponder,
 };
 pub use provider_request_ingress::{ProviderRequestCommand, ProviderRequestIngress};
+pub use remote_catalog::model_context_tokens;
 pub use registration::{registered_provider_id, registered_provider_kind};
 pub use room_attachment::{
     ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,

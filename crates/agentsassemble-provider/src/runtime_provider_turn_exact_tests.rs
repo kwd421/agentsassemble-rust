@@ -189,6 +189,7 @@ async fn completed_turn_remains_exactly_owned_until_durable_terminal_release() {
         .unwrap_or_else(|error| panic!("start retained-result fixture: {error}"));
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
+        context_tokens: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
@@ -248,6 +249,7 @@ async fn post_io_panic_returns_driver_before_stopping_the_exact_runtime() {
         .unwrap_or_else(|error| panic!("start panic-custody fixture: {error}"));
     let active = active_session(&session, &started, "panic-room-turn");
     let request = ProviderTurnRequest {
+        context_tokens: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "panic-room-turn".to_owned(),
@@ -298,6 +300,7 @@ async fn definitive_driver_failure_does_not_quarantine_or_discard_the_runtime() 
         .unwrap_or_else(|error| panic!("start definitive-failure fixture: {error}"));
     let active = active_session(&session, &started, "definitive-room-turn");
     let request = ProviderTurnRequest {
+        context_tokens: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "definitive-room-turn".to_owned(),
@@ -337,6 +340,7 @@ async fn failed_observation_abort_stops_instead_of_reusing_the_runtime() {
         .unwrap_or_else(|error| panic!("start abort-failure fixture: {error}"));
     let active = active_session(&session, &started, "abort-failure-room-turn");
     let request = ProviderTurnRequest {
+        context_tokens: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "abort-failure-room-turn".to_owned(),
@@ -390,6 +394,7 @@ async fn driver_without_retained_interrupt_capability_is_rejected_before_control
         .unwrap_or_else(|error| panic!("start interrupt-capability fixture: {error}"));
     let active = active_session(&session, &started, "capability-room-turn");
     let request = ProviderTurnRequest {
+        context_tokens: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "capability-room-turn".to_owned(),
@@ -466,6 +471,7 @@ async fn exact_control_freezes_provider_entry_before_durable_interrupt_wait() {
         .unwrap_or_else(|error| panic!("start unstarted-turn fixture: {error}"));
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
+        context_tokens: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),

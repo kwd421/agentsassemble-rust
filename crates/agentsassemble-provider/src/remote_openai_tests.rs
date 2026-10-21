@@ -140,6 +140,7 @@ async fn api_fixture(
 
 fn room_request(session_id: &str) -> ProviderTurnRequest {
     ProviderTurnRequest {
+        context_tokens: None,
         session_instructions: None,
         request_ingress: None,
         turn_id: "turn".to_owned(),

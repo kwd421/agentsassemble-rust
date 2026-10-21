@@ -267,6 +267,27 @@ fn price_per_million(value: &Value) -> Option<String> {
     )
 }
 
+/// The model's context window as its provider's catalog published it.
+pub fn model_context_tokens(
+    catalog: &agentsassemble_domain::ProviderCatalog,
+    provider_id: &str,
+    model: &str,
+) -> Option<u64> {
+    catalog
+        .providers
+        .iter()
+        .find(|provider| provider.id == provider_id)?
+        .controls
+        .iter()
+        .find(|control| control.key == "model")?
+        .options
+        .iter()
+        .find(|option| option.value == model)?
+        .metadata
+        .get("context_length")?
+        .as_u64()
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

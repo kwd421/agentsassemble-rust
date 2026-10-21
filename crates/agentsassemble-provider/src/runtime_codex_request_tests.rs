@@ -27,6 +27,7 @@ async fn run_request(interrupt: bool) -> Result<(), Box<dyn std::error::Error>> 
     let active = active_session(&session, &started, "room-turn-1");
     let (ingress, mut commands) = ProviderRequestIngress::channel(1);
     let request = ProviderTurnRequest {
+        context_tokens: None,
         session_instructions: None,
         request_ingress: Some(ingress),
         turn_id: "room-turn-1".to_owned(),

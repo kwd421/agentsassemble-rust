@@ -123,6 +123,9 @@ pub struct ProviderTurnRequest {
     pub input: String,
     pub session_instructions: Option<String>,
     pub room_observation: Option<ProviderRoomObservation>,
+    /// The model's context window from the provider catalog, when published;
+    /// the built-in harness compacts a long turn to fit it.
+    pub context_tokens: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

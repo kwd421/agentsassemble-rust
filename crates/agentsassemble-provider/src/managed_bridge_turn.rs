@@ -31,6 +31,7 @@ pub(super) struct Observation {
 impl TurnInput {
     pub(super) fn into_request(self, relay: &super::callbacks::Callbacks) -> ProviderTurnRequest {
         ProviderTurnRequest {
+            context_tokens: None,
             request_ingress: self.requests.then(|| relay.requests.clone()),
             turn_id: self.turn_id,
             turn_generation: self.turn_generation,

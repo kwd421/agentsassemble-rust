@@ -29,6 +29,7 @@ use crate::{
         provider_error,
     },
     room_portal::{ProviderTurnOutcome, RoomPortal},
+    turn_compaction,
 };
 
 const MAX_TOOL_RESULT_BYTES: usize = 128 * 1024;
@@ -216,7 +217,18 @@ impl RemoteOpenAiDriver {
         }
         let tools = self.turn_tools(session, request);
         let mut messages = opening_messages(session, request);
+        let opening = messages.len();
         for round in 0..=MAX_TOOL_ROUNDS {
+            if let Some(context_tokens) = request.context_tokens {
+                self.compact(
+                    session,
+                    credential.as_ref(),
+                    &mut messages,
+                    opening,
+                    context_tokens,
+                )
+                .await?;
+            }
             let response = self
                 .api
                 .complete(
@@ -311,6 +323,47 @@ impl RemoteOpenAiDriver {
             "provider_protocol_invalid",
             self.spec.errors.invalid_response,
         ))
+    }
+
+    /// pi-style compaction: near the model's context window, the older tool
+    /// rounds of this turn are replaced by the model's own summary of them.
+    async fn compact(
+        &self,
+        session: &DurableAgentSession,
+        credential: Option<&ProviderCredential>,
+        messages: &mut Vec<Value>,
+        opening: usize,
+        context_tokens: u64,
+    ) -> Result<(), DriverError> {
+        if !turn_compaction::needs_compaction(
+            messages,
+            context_tokens,
+            session.public.max_output_tokens,
+        ) {
+            return Ok(());
+        }
+        let Some(cut) = turn_compaction::cut_point(messages, opening) else {
+            return Ok(());
+        };
+        let summary_request = turn_compaction::summary_request(messages, opening, cut);
+        let response = self
+            .api
+            .complete(session, credential, &summary_request, None, false)
+            .await?;
+        validate_completion(&response, &session.public.model, self.spec)?;
+        let summary = response
+            .message
+            .content
+            .as_deref()
+            .and_then(canonical_content)
+            .ok_or_else(|| {
+                provider_error(
+                    "provider_protocol_invalid",
+                    self.spec.errors.invalid_response,
+                )
+            })?;
+        turn_compaction::fold(messages, opening, cut, &summary);
+        Ok(())
     }
 
     async fn load_credential(&self) -> Result<Option<ProviderCredential>, DriverError> {

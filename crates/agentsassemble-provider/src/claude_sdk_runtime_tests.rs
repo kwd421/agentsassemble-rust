@@ -22,6 +22,7 @@ async fn fatal_protocol_does_not_mask_confirmed_owned_cleanup() {
         .turn(
             "room-session",
             &crate::driver::ProviderTurnRequest {
+                context_tokens: None,
                 session_instructions: None,
                 request_ingress: None,
                 turn_id: "failed-turn".to_owned(),
@@ -41,6 +42,7 @@ async fn fatal_protocol_does_not_mask_confirmed_owned_cleanup() {
             .turn(
                 "room-session",
                 &crate::driver::ProviderTurnRequest {
+                    context_tokens: None,
                     session_instructions: None,
                     request_ingress: None,
                     turn_id: "retry".to_owned(),
