@@ -67,16 +67,22 @@ it("does not acknowledge hidden, unfocused, modal-covered, or historical feeds",
   expect(onMarkRead).toHaveBeenCalledExactlyOnceWith("seq:12");
 });
 
-it("still acknowledges while the view's typing line covers the feed's last pixels", () => {
+it("acknowledges under the view's typing line but not under another overlay", () => {
   vi.spyOn(document, "hasFocus").mockReturnValue(true);
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
   const feed = viewport(); feed.scrollTop = 600;
-  const typingLine = document.createElement("div");
-  feed.parentElement!.append(typingLine);
-  vi.mocked(document.elementFromPoint).mockReturnValue(typingLine);
+  const popover = document.createElement("div");
+  feed.parentElement!.append(popover);
+  vi.mocked(document.elementFromPoint).mockReturnValue(popover);
   const onMarkRead = vi.fn();
   renderHook(useVisibleReadCursor, { initialProps: { roomId: "room-a", enabled: true, latestSequence: 12,
     lastReadSequence: 10, scrollRef: { current: feed }, onMarkRead } });
+  expect(onMarkRead).not.toHaveBeenCalled();
+  const typingLine = document.createElement("div");
+  typingLine.className = "dc-typing-line";
+  feed.parentElement!.append(typingLine);
+  vi.mocked(document.elementFromPoint).mockReturnValue(typingLine);
+  act(() => feed.dispatchEvent(new Event("scroll")));
   expect(onMarkRead).toHaveBeenCalledExactlyOnceWith("seq:12");
 });
 

@@ -230,7 +230,28 @@ async fn writes_require_exact_owner_response_and_delivery_receipt() -> Result<()
     assert!(!directory.path().join("full-other.txt").exists());
     // 이번 차례는 모두 허용 covers the rest of that turn only.
     session.public.permission_mode = "workspace_write".to_owned();
-    *tools.turn_grant() = Some(request.execution_id.clone());
+    let mut first_uncertain = false;
+    let first = tools.execute(
+        &session,
+        &request,
+        "write_workspace_file",
+        r#"{"path":"turn-first.txt","content":"asked once"}"#,
+        &mut first_uncertain,
+    );
+    let broker = async {
+        let command = commands.recv().await.ok_or("request missing")?;
+        let (exchange, mut response, mut completion) = ProviderRequestExchange::channel();
+        command.complete(Ok(exchange));
+        response.respond(ProviderRequestResolution::Option {
+            option_id: "allow_turn".to_owned(),
+        })?;
+        assert!(completion.completion().await);
+        completion.finish(Ok(()));
+        Ok::<_, Box<dyn Error>>(())
+    };
+    let (first, broker) = tokio::join!(first, broker);
+    broker?;
+    first.map_err(|_| "turn-allowing write")?;
     tools
         .execute(
             &session,

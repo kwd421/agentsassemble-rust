@@ -336,6 +336,41 @@ describe("LobbyView active provider turn", () => {
     expect(screen.queryByText("응답을 전달했어요.")).toBeNull();
   });
 
+  it("counts a request still waiting for an answer as unread", () => {
+    render(
+      <LobbyView
+        activeRoom={room}
+        agents={[]}
+        canonicalEvents={[
+          {
+            id: "read-message",
+            seq: 10,
+            kind: "message",
+            name: "Agent A",
+            message: "이미 읽은 메시지",
+            side: "other",
+            created_at: "2026-07-26T01:00:00Z",
+          },
+          {
+            id: "provider-request:answered",
+            seq: 11,
+            kind: "provider_request",
+            name: "Agent A",
+            message: "",
+            side: "other",
+            created_at: "2026-07-26T01:01:00Z",
+            provider_request_id: "answered",
+            provider_request_state: "open",
+          },
+        ]}
+        canonicalHasMoreHistory={false}
+        headerActions={{ lastReadCursor: "seq:10", onMarkRead: vi.fn() }}
+      />
+    );
+
+    expect(screen.getByRole("region", { name: "안 읽은 메시지" })).toBeTruthy();
+  });
+
   it("does not count the viewer's own new message as unread", () => {
     render(
       <LobbyView

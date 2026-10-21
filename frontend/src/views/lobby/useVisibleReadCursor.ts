@@ -1,6 +1,8 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { feedIsNearBottom } from "./useLobbyHistory";
 
+const FEED_OVERLAYS = ".dc-typing-line, .dc-old-history-notice";
+
 const openModal = () => document.querySelector('dialog[open], [aria-modal="true"]:not(dialog)');
 
 // Acknowledgement belongs to the existing preference owner. This hook only
@@ -49,10 +51,9 @@ export function useVisibleReadCursor({
       const pointX = (bounds.left + bounds.right) / 2;
       const pointY = Math.min(bounds.bottom, window.innerHeight) - 1;
       const visibleTarget = document.elementFromPoint(pointX, pointY);
-      // The view's own typing line sits over the feed's last pixels while an
-      // AI writes; only something outside the view hides the feed.
-      const view = feed.parentElement ?? feed;
-      if (!visibleTarget || !view.contains(visibleTarget)) return;
+      // The typing line and the history notice sit over the feed's last pixels;
+      // anything else on top, such as a popover, hides the feed.
+      if (!visibleTarget || !(feed.contains(visibleTarget) || visibleTarget.closest(FEED_OVERLAYS))) return;
       if (attempted.current?.roomId === roomId && attempted.current.sequence === latestSequence) return;
       attempted.current = { roomId, sequence: latestSequence };
       onMarkRead(`seq:${latestSequence}`);

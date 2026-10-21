@@ -361,7 +361,8 @@ export default function LobbyView({
               Number(event.seq) > lastReadSequence &&
               event.kind !== "thinking" &&
               event.kind !== "system" &&
-              !(event.kind === "provider_request" && event.provider_request_state !== "open") &&
+              // A request with no projected state may still need an answer.
+              !(event.kind === "provider_request" && event.provider_request_state && event.provider_request_state !== "open") &&
               event.side !== "mine"
           )
         : [],
