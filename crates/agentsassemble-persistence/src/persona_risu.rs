@@ -16,7 +16,6 @@ const RISU_VERSION: u8 = 0;
 const ASSET_MARKER: u8 = 1;
 const EOF_MARKER: u8 = 0;
 const MAX_MAIN_BYTES: usize = 5 * 1024 * 1024;
-const MAX_ASSET_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ASSET_COUNT: usize = 256;
 
 // RPack v0's byte permutation is wire-format data. Its inverse was verified against the
@@ -130,8 +129,8 @@ fn validate_asset_records(content: &[u8], offset: &mut usize) -> Result<usize, P
         asset_bytes = asset_bytes
             .checked_add(length)
             .ok_or_else(|| invalid("asset sizes overflow"))?;
-        if asset_bytes > MAX_ASSET_BYTES {
-            return Err(invalid("asset records exceed 8 MiB"));
+        if asset_bytes > MAX_PERSONA_UPLOAD_BYTES {
+            return Err(invalid("asset records exceed 30 MiB"));
         }
         let _ = read_record(content, offset, length)?;
         asset_count += 1;

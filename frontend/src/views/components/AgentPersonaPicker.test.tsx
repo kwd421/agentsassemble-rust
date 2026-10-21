@@ -234,6 +234,19 @@ describe("AgentPersonaPicker", () => {
     expect(screen.getByText(/New Module 가져오기 완료/)).toBeTruthy();
   });
 
+  it("refuses a card file over 30MB before uploading it", async () => {
+    render(<AgentPersonaPicker value="" onChange={vi.fn()} />);
+    const file = new File(["card"], "huge.png");
+    Object.defineProperty(file, "size", { value: 30 * 1024 * 1024 + 1 });
+
+    const input = screen.getByLabelText("파일 가져오기").querySelector("input") ||
+      screen.getByLabelText("파일 가져오기");
+    await userEvent.upload(input as HTMLInputElement, file);
+
+    expect(await screen.findByText("캐릭터 카드는 30MB까지 가져올 수 있어요.")).toBeTruthy();
+    expect(personaApi.importPersonaAsset).not.toHaveBeenCalled();
+  });
+
   it("replaces the rendered thumbnail after reimporting the same persona", async () => {
     personaApi.importPersonaAsset.mockResolvedValue({
       id: "guide",

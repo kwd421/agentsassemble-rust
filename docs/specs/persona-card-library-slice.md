@@ -36,7 +36,7 @@ The authority baseline is reachable code at original commit
 
 - the local operator can list, import, and read thumbnails for `.json`, `.png`,
   `.apng`, `.charx`, and `.risum` assets through the copied picker;
-- one upload is at most 10 MiB and resolves to a normalized card or Risu module;
+- one upload is at most 30 MiB and resolves to a normalized card or Risu module;
 - CCv3 and CHARX card fields, literal lore entries, and Risu module fields are
   normalized before selection; remote/file/unknown asset URIs are not fetched;
 - scripts, triggers, custom regex execution, CJS, MCP declarations, and low-level
@@ -124,9 +124,12 @@ substitution, and inert-regex behavior. No wall-time or CPU reduction is claimed
 real-turn measurement.
 
 The `CCv3` import boundary now parses PNG text chunks through the maintained PNG decoder
-instead of owning chunk framing or CRC handling. The reachable upload is bounded to 10 MiB,
-card JSON to 5 MiB, and decoder metadata allocation to 20 MiB. Only the one thumbnail needed
-by the copied picker crosses the existing shared raster admission and is re-encoded as PNG;
+instead of owning chunk framing or CRC handling. The reachable upload is bounded to 30 MiB,
+card JSON to 5 MiB, and decoder metadata allocation to 60 MiB. Card files are larger than one
+message attachment because Risu cards often carry full-size art; attachments keep 10 MiB. Only
+the one thumbnail needed by the copied picker crosses the existing shared raster admission; art up
+to 8192 px per side and 16 Mi pixels is scaled to fit 1024 px and re-encoded as PNG (at most
+10 MiB), and larger art is counted as an invalid thumbnail;
 the prior Python path copied the source plus every resolved asset into permanent custody.
 This removes the duplicate source copy and arbitrary unused asset disk cost while preserving
 the normalized card, safe asset count, preferred icon/avatar/portrait choice, and inert
@@ -138,7 +141,7 @@ executable or unverified image; malformed card/container data still rejects the 
 Standalone `.risum` parsing owns the RPack v0 byte permutation as fixed wire-format data,
 verified against the official 512-byte encode/decode map hash, instead of searching operator
 home folders, `/tmp`, or an environment-selected RisuAI checkout as the Python path did. The
-10-MiB upload, 5-MiB decoded main body, 8-MiB aggregate asset-record body, 256-record, exact
+30-MiB upload, 5-MiB decoded main body, 30-MiB aggregate asset-record body, 256-record, exact
 length, marker, and terminal-EOF bounds are enforced before normalization. Since the current
 product uses module text and lore but does not expose its arbitrary media bundle, asset record
 bodies are range-checked without a second decoded copy or durable write; only the larger of
@@ -150,7 +153,7 @@ that regex, trigger, CJS, MCP, and regex-lore declarations remain inert.
 `CHARX` uses the maintained ZIP reader with only the stored/deflate/Bzip2/LZMA methods
 reachable in the original standard-library reader. Before any selected member is expanded,
 the archive owner rejects more than 512 entries, unsafe or duplicate normalized paths,
-encryption, overlapping compressed ranges, entries above 10 MiB, aggregate expansion above
+encryption, overlapping compressed ranges, entries above 30 MiB, aggregate expansion above
 80 MiB, and ratios above 200:1. Only card-declared embedded assets are read and no archive
 path is ever resolved onto the host filesystem; the shared card owner still selects and
 canonicalizes one preferred thumbnail while continuing to validate and count every later

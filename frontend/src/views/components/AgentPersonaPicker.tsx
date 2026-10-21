@@ -15,6 +15,8 @@ import { overlayHost } from "../../lib/overlayHost";
 
 const VISIBLE_RESULT_LIMIT = 8;
 const POPOVER_MAX_HEIGHT = 360;
+// The server owns the card limit; this only fails fast before reading the file.
+const MAX_CARD_FILE_BYTES = 30 * 1024 * 1024;
 
 export default function AgentPersonaPicker({
   value,
@@ -201,6 +203,10 @@ export default function AgentPersonaPicker({
   }
 
   async function handleImport(file: File) {
+    if (file.size > MAX_CARD_FILE_BYTES) {
+      setStatus("캐릭터 카드는 30MB까지 가져올 수 있어요.");
+      return;
+    }
     setImporting(true);
     setStatus("가져오는 중...");
     try {

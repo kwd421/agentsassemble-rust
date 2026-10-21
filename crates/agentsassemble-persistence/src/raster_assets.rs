@@ -92,7 +92,11 @@ fn card_thumbnail_blocking(
     thumbnail
         .write_to(&mut encoded, ImageFormat::Png)
         .map_err(|_| invalid_image())?;
-    Ok(encoded.into_inner())
+    let encoded = encoded.into_inner();
+    if encoded.len() > MAX_ATTACHMENT_BYTES {
+        return Err(invalid_image());
+    }
+    Ok(encoded)
 }
 
 pub(crate) fn validate_stored_raster(
