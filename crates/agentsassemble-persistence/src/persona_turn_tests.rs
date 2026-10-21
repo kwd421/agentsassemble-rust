@@ -240,6 +240,16 @@ async fn persistent_instruction_provider_matrix() {
                 .provider_input
                 .contains("Post-history instruction: last persona instruction")
         );
+        // Card instructions never get the last word over the room tools.
+        let card_end = assigned
+            .provider_input
+            .rfind("last persona instruction")
+            .unwrap_or_else(|| panic!("card text is present"));
+        let room_turn = assigned
+            .provider_input
+            .rfind("[Room turn]")
+            .unwrap_or_else(|| panic!("a card turn restates the room tools"));
+        assert!(room_turn > card_end);
         if persistent {
             assert!(!rules.contains("harbor lore"));
             assert!(!rules.contains("last persona instruction"));

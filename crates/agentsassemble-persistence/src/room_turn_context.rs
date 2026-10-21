@@ -660,6 +660,9 @@ fn render_recent_messages(context: &[RoomEvent]) -> Result<String, PersistenceEr
 
 const ADDRESSING_AND_ROLES: &str = "Reply and call like a Discord user. Set `reply_to_event_id` when it helps to show which message you answer; it shows as a quote. A reply calls that message's author only when your content starts with their `<@ID>`: that mention becomes the reply's notification and is not shown as text. Put `<@ID>` anywhere else only to call someone you are not replying to, and do not open messages with a mention out of habit. A reply that calls nobody does not hand over the floor. Set `next_agent_id` to hand over the floor; you may still use `pass_turn` instead of posting. Your current role is in the room view: a director AI may pin/unpin, create/rename text channels, mute/unmute participants, stop agents, and start conversation-only agents on behalf of its owner within that owner's current authority. Other starts need the owner's confirmation. Director grants no operator rights and cannot assign roles or answer provider approvals.";
 
+// Card text sits closest to the model's reply; restate the room contract after it.
+const PERSONA_ROOM_TURN: &str = "[Room turn]\nSpeak as this character only through room tools: call `read_discussion` first, then `publish_message` to speak or `pass_turn` to stay silent. Plain reply text is not shown in the room. Card display commands such as image tags are not rendered here; leave them out of messages.";
+
 fn render_observation_input(
     room: &Room,
     session: &DurableAgentSession,
@@ -673,7 +676,7 @@ fn render_observation_input(
             format!("[{mode} shared-room observation]")
         } else {
             format!(
-                "[{mode} shared-room observation]\n\n[Applied bot card or Risu module]\n{persona_context}"
+                "[{mode} shared-room observation]\n\n[Applied bot card or Risu module]\n{persona_context}\n\n{PERSONA_ROOM_TURN}"
             )
         };
     }
@@ -697,6 +700,7 @@ fn render_observation_input(
         sections.push(format!(
             "[Applied bot card or Risu module]\n{persona_context}"
         ));
+        sections.push(PERSONA_ROOM_TURN.to_owned());
     }
     sections.join("\n\n")
 }
