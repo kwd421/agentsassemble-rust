@@ -1,5 +1,5 @@
 import ResourceImage from "./ResourceImage";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, FileUser, PackageOpen, Search, Upload } from "../../ui/icons";
 import {
@@ -87,6 +87,32 @@ export default function AgentPersonaPicker({
       window.removeEventListener("scroll", closeOnScroll, true);
     };
   }, [libraryOpen]);
+
+  // Keyboard users land in the menu: the chosen row, or the first one. A long
+  // library's search field takes focus itself.
+  useEffect(() => {
+    if (!libraryOpen || !menuPosition) return;
+    const menu = menuRef.current;
+    if (!menu || menu.querySelector("input")) return;
+    (menu.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
+      menu.querySelector<HTMLElement>('[role="radio"]'))?.focus({ preventScroll: true });
+  }, [libraryOpen, menuPosition, loaded]);
+
+  function choose(personaId: string) {
+    onChange(personaId);
+    setLibraryOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  }
+
+  function moveFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const rows = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="radio"]') ?? [])];
+    if (!rows.length) return;
+    event.preventDefault();
+    const index = rows.indexOf(document.activeElement as HTMLElement);
+    const next = event.key === "ArrowDown" ? index + 1 : index - 1;
+    rows[(next + rows.length) % rows.length]?.focus();
+  }
 
   useEffect(() => {
     if (!libraryOpen || loaded) return;
@@ -230,6 +256,7 @@ export default function AgentPersonaPicker({
           ref={menuRef}
           className="dc-persona-library dc-persona-popover"
           style={menuPosition}
+          onKeyDown={moveFocus}
           onMouseDown={(event) => {
             // Keep focus where it is while pressing a row; a blur re-render would swallow the click.
             if (event.target instanceof Element && event.target.closest("button")) event.preventDefault();
@@ -262,10 +289,7 @@ export default function AgentPersonaPicker({
                     role="radio"
                     aria-checked={false}
                     data-selected="false"
-                    onClick={() => {
-                      onChange("");
-                      setLibraryOpen(false);
-                    }}
+                    onClick={() => choose("")}
                   >
                     <span className="dc-persona-symbol" data-kind="none">—</span>
                     <span className="dc-persona-copy">
@@ -284,10 +308,7 @@ export default function AgentPersonaPicker({
                       role="radio"
                       aria-checked={selected}
                       data-selected={selected ? "true" : "false"}
-                      onClick={() => {
-                        onChange(item.id);
-                        setLibraryOpen(false);
-                      }}
+                      onClick={() => choose(item.id)}
                     >
                       <span className="dc-persona-symbol" data-kind={item.asset_kind}>
                         {item.thumbnail_url && thumbnailUrls[item.id] ? (

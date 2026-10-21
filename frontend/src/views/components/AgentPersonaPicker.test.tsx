@@ -159,6 +159,19 @@ describe("AgentPersonaPicker", () => {
     expect(onChange).toHaveBeenCalledWith("weather-module");
   });
 
+  it("takes keyboard focus into the menu and hands it back after a choice", async () => {
+    const onChange = vi.fn();
+    render(<AgentPersonaPicker value="guide" onChange={onChange} />);
+    const trigger = screen.getByRole("button", { name: /선택|변경/ });
+    await userEvent.click(trigger);
+    await waitFor(() => expect(document.activeElement?.textContent).toContain("Night Guide"));
+    await userEvent.keyboard("{ArrowDown}");
+    expect(document.activeElement?.textContent).toContain("Weather Module");
+    await userEvent.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledWith("weather-module");
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("selects a newly imported supported file", async () => {
     const onChange = vi.fn();
     personaApi.importPersonaAsset.mockResolvedValue({

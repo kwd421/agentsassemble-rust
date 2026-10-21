@@ -153,7 +153,15 @@ export default function AgentCreateModal({
           (option) => option.value === (settings[control.key] ?? "")
         )
       );
-  const canCreate = Boolean(
+  // The OpenCode harness runs this API key through the OpenCode provider, which the catalog
+  // only knows once it has been discovered. Choosing the harness asks for that once per
+  // opening, and adding waits until the catalog has it.
+  const openCodeUndiscovered =
+    providers.find((provider) => provider.id === "opencode")?.discovery_status !== "ready";
+  const [openCodeCheck, setOpenCodeCheck] = useState<"idle" | "checking" | "failed">("idle");
+  const waitingForOpenCode =
+    executionHarness === "opencode" && openCodeUndiscovered && openCodeCheck === "checking";
+  const canCreate = !waitingForOpenCode && Boolean(
     meetingId && selectedProvider && !updatingProviders.has(selectedProvider.id) && (
       existingSessionId
         ? existingSession && (!startNow || selectedProvider.startable)
@@ -163,8 +171,12 @@ export default function AgentCreateModal({
           (!workspaceRequired || workspacePath.trim())
     )
   );
+  const openCodeNotice = executionHarness === "opencode" && openCodeUndiscovered
+    ? openCodeCheck === "checking" ? "OpenCode를 확인하고 있어요."
+      : openCodeCheck === "failed" ? "OpenCode를 쓸 수 없어요. 이 컴퓨터에 OpenCode가 설치돼 있고 로그인돼 있는지 확인해 주세요." : ""
+    : "";
   const statusMessage = deriveAgentCreateStatus({
-    status: status || (selectedProvider?.credential_available && credentialStatus?.configured === false
+    status: status || openCodeNotice || (selectedProvider?.credential_available && credentialStatus?.configured === false
       ? "API 키를 연결하면 모델 목록을 확인할 수 있어요." : ""),
     workspacePath,
     selectedProvider,
@@ -240,22 +252,24 @@ export default function AgentCreateModal({
     return () => { current = false; };
   }, [open, localProviderActions, selectedProvider?.id, selectedProvider?.credential_available]);
 
-  // The OpenCode harness runs this API key through the OpenCode provider, which the catalog
-  // only knows once it has been discovered; choosing the harness asks for that once.
-  const openCodeUndiscovered =
-    providers.find((provider) => provider.id === "opencode")?.discovery_status !== "ready";
-  const openCodeDiscoveryAsked = useRef(false);
   const catalogChanged = useRef(onCatalogChange);
   catalogChanged.current = onCatalogChange;
   useEffect(() => {
-    if (!open) openCodeDiscoveryAsked.current = false;
-    if (!open || executionHarness !== "opencode" || !openCodeUndiscovered ||
-        openCodeDiscoveryAsked.current || !localProviderActions || !isDesktopWebview()) return;
-    openCodeDiscoveryAsked.current = true;
+    if (!open) {
+      setOpenCodeCheck("idle");
+      return;
+    }
+    if (executionHarness !== "opencode" || !openCodeUndiscovered || openCodeCheck !== "idle" ||
+        !localProviderActions || !isDesktopWebview()) return;
+    setOpenCodeCheck("checking");
     void refreshLocalProviderCatalog("opencode", false)
-      .then((catalog) => catalogChanged.current?.(catalog))
-      .catch(() => undefined);
-  }, [open, executionHarness, openCodeUndiscovered, localProviderActions]);
+      .then((catalog) => {
+        catalogChanged.current?.(catalog);
+        const ready = catalog.providers.find((provider) => provider.id === "opencode")?.discovery_status === "ready";
+        if (!ready) setOpenCodeCheck("failed");
+      })
+      .catch(() => setOpenCodeCheck("failed"));
+  }, [open, executionHarness, openCodeUndiscovered, openCodeCheck, localProviderActions]);
 
   function applyProvider(provider: NativeCliProviderAvailability) {
     setExistingSessionId("");
