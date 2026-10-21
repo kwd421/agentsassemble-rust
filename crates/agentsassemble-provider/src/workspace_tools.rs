@@ -136,21 +136,37 @@ async fn approve(
     name: &str,
     path: &str,
 ) -> Result<(), DriverError> {
+    let description = if name == "replace_workspace_text" {
+        format!("{path} 파일의 지정한 텍스트를 바꿉니다.")
+    } else {
+        format!("{path} 파일을 생성하거나 덮어씁니다.")
+    };
+    if owner_allows(session, request, "작업 폴더 파일 변경", description).await? {
+        Ok(())
+    } else {
+        Err(FAILED)
+    }
+}
+
+/// Asks the agent's owner once, bound to this turn's execution, and reports
+/// whether they allowed it. A missing ingress or broken exchange is a failure.
+pub(crate) async fn owner_allows(
+    session: &DurableAgentSession,
+    request: &ProviderTurnRequest,
+    title: &str,
+    description: String,
+) -> Result<bool, DriverError> {
     let prompt = ProviderRequest {
         provider_request_id: uuid::Uuid::new_v4(),
         request_kind: ProviderRequestKind::Permission,
-        title: "작업 폴더 파일 변경".to_owned(),
-        description: if name == "replace_workspace_text" {
-            format!("{path} 파일의 지정한 텍스트를 바꿉니다.")
-        } else {
-            format!("{path} 파일을 생성하거나 덮어씁니다.")
-        },
+        title: title.to_owned(),
+        description,
         timeout_seconds: 600,
         prompt: ProviderRequestPrompt::Option {
             options: vec![
                 ProviderRequestOption {
                     id: "allow_once".to_owned(),
-                    label: "이번 변경 허용".to_owned(),
+                    label: "이번만 허용".to_owned(),
                     kind: "allow_once".to_owned(),
                     description: String::new(),
                 },
@@ -178,7 +194,7 @@ async fn approve(
     let response = exchange.receive().await.map_err(|_| FAILED)?;
     let allowed = matches!(response, ProviderRequestResolution::Option {option_id} if option_id == "allow_once");
     exchange.complete(true).await.map_err(|_| FAILED)?;
-    if allowed { Ok(()) } else { Err(FAILED) }
+    Ok(allowed)
 }
 
 pub(crate) fn names() -> [&'static str; 5] {

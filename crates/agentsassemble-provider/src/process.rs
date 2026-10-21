@@ -112,7 +112,7 @@ pub(crate) async fn probe_output(
     #[cfg(not(any(unix, windows)))]
     return Err(ProbeFailure::Failed);
 
-    let mut child = spawn_probe(program, args, environment, Stdio::null())?;
+    let mut child = spawn_probe(program, args, environment, Stdio::null(), None)?;
     let (Some(stdout), Some(stderr)) = (child.stdout().take(), child.stderr().take()) else {
         terminate_probe_tree(child.as_mut()).await?;
         return Err(ProbeFailure::Failed);
@@ -146,11 +146,60 @@ pub(crate) async fn probe_output(
     })
 }
 
+/// Runs one bounded command in `directory` with the same environment, tree
+/// custody, timeout and cancellation as a probe. A non-zero exit is returned,
+/// not treated as a failure: the caller reports it.
+pub(crate) async fn run_in_directory(
+    program: &str,
+    args: &[&str],
+    directory: &std::path::Path,
+    timeout: Duration,
+    cancellation: &CancellationToken,
+) -> Result<ProbeOutput, ProbeFailure> {
+    if cancellation.is_cancelled() {
+        return Err(ProbeFailure::Cancelled);
+    }
+    #[cfg(not(any(unix, windows)))]
+    return Err(ProbeFailure::Failed);
+
+    let mut child = spawn_probe(program, args, &[], Stdio::null(), Some(directory))?;
+    let (Some(stdout), Some(stderr)) = (child.stdout().take(), child.stderr().take()) else {
+        terminate_probe_tree(child.as_mut()).await?;
+        return Err(ProbeFailure::Failed);
+    };
+    let collected = tokio::select! {
+        () = cancellation.cancelled() => None,
+        collected = Box::pin(tokio::time::timeout(timeout, async {
+            tokio::try_join!(read_limited(stdout), read_limited(stderr), child.wait())
+        })) => Some(collected),
+    };
+    match collected {
+        Some(Ok(Ok((stdout, stderr, status)))) => Ok(ProbeOutput {
+            status,
+            stdout,
+            stderr,
+        }),
+        None => {
+            terminate_probe_tree(child.as_mut()).await?;
+            Err(ProbeFailure::Cancelled)
+        }
+        Some(Ok(Err(_))) => {
+            terminate_probe_tree(child.as_mut()).await?;
+            Err(ProbeFailure::CatalogTooLarge)
+        }
+        Some(Err(_)) => {
+            terminate_probe_tree(child.as_mut()).await?;
+            Err(ProbeFailure::Timeout)
+        }
+    }
+}
+
 fn spawn_probe(
     program: &str,
     args: &[&str],
     environment: &[(String, String)],
     stdin: Stdio,
+    current_dir: Option<&std::path::Path>,
 ) -> Result<Box<dyn process_wrap::tokio::ChildWrapper>, ProbeFailure> {
     let mut command = CommandWrap::with_new(program, |command| {
         command
@@ -158,6 +207,9 @@ fn spawn_probe(
             .stdin(stdin)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if let Some(directory) = current_dir {
+            command.current_dir(directory);
+        }
     });
     sanitize_environment(command.command_mut());
     command
@@ -198,7 +250,7 @@ where
     }
     #[cfg(not(any(unix, windows)))]
     return Err(ProbeFailure::Failed);
-    let mut child = spawn_probe(program, args, environment, Stdio::piped())?;
+    let mut child = spawn_probe(program, args, environment, Stdio::piped(), None)?;
     let (Some(stdin), Some(stdout), Some(stderr)) = (
         child.stdin().take(),
         child.stdout().take(),

@@ -33,6 +33,8 @@ use crate::{
 
 const MAX_TOOL_RESULT_BYTES: usize = 128 * 1024;
 const MAX_TOOL_ROUNDS: usize = 16;
+/// Short coding rules for an agent that may change its workspace (pi-style).
+const WORKSPACE_RULES: &str = "Workspace rules: read a file before changing it; make the smallest change that does the job and prefer replace_workspace_text over rewriting a whole file; run run_workspace_command only when a build, test or inspection needs it, and say why, because the owner approves every command and every file change; name the files you changed when you finish.";
 const PORTAL_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 
 type PortalClient = RunningService<RoleClient, ()>;
@@ -210,10 +212,7 @@ impl RemoteOpenAiDriver {
                 .map_err(|_| ROOM_PORTAL_UNAVAILABLE)?;
         }
         let tools = self.turn_tools(session, request);
-        let mut messages = vec![json!({"role": "user", "content": request.input})];
-        if let Some(instructions) = &request.session_instructions {
-            messages.insert(0, json!({"role": "system", "content": instructions}));
-        }
+        let mut messages = opening_messages(session, request);
         for round in 0..=MAX_TOOL_ROUNDS {
             let response = self
                 .api
@@ -328,6 +327,23 @@ impl RemoteOpenAiDriver {
         session: &DurableAgentSession,
         request: &ProviderTurnRequest,
     ) -> Result<ExecutedTool, DriverError> {
+        if call.function.name == crate::workspace_command::NAME {
+            let cancellation = tokio_util::sync::CancellationToken::new();
+            let result = crate::workspace_command::execute(
+                session,
+                request,
+                &call.function.arguments,
+                &mut self.turn_effect_uncertain,
+                &cancellation,
+            )
+            .await
+            .unwrap_or_else(|error| json!({"error": error.code}).to_string());
+            return Ok(ExecutedTool {
+                call,
+                result,
+                terminal: false,
+            });
+        }
         if crate::workspace_tools::names().contains(&call.function.name.as_str()) {
             let result = self
                 .workspace_tools
@@ -368,6 +384,7 @@ impl RemoteOpenAiDriver {
             });
         if session.public.permission_mode == "workspace_write" {
             tools.extend(crate::workspace_tools::schemas());
+            tools.push(crate::workspace_command::schema());
         }
         (!tools.is_empty()).then_some(tools)
     }
@@ -675,6 +692,23 @@ impl RemoteOpenAiApi {
             .await
             .map_err(|error| self.spec.stream_error(error))
     }
+}
+
+/// The turn's opening: room rules stay the one system message, a workspace
+/// agent's rules follow them, then the turn input.
+fn opening_messages(session: &DurableAgentSession, request: &ProviderTurnRequest) -> Vec<Value> {
+    let workspace_rules =
+        (session.public.permission_mode == "workspace_write").then_some(WORKSPACE_RULES);
+    let system = match (request.session_instructions.as_deref(), workspace_rules) {
+        (Some(instructions), Some(rules)) => Some(format!("{instructions}\n\n{rules}")),
+        (Some(instructions), None) => Some(instructions.to_owned()),
+        (None, rules) => rules.map(str::to_owned),
+    };
+    system
+        .map(|system| json!({"role": "system", "content": system}))
+        .into_iter()
+        .chain([json!({"role": "user", "content": request.input})])
+        .collect()
 }
 
 fn api_tools(tools: &[Tool], random_tools: bool) -> Vec<Value> {

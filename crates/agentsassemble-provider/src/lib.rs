@@ -102,6 +102,7 @@ mod unix_custody;
 #[cfg(unix)]
 mod unix_process_tree;
 mod vercel;
+mod workspace_command;
 mod workspace_files;
 pub use room_file_workspace::{WorkspaceAttachmentSink, open_workspace_attachment};
 mod workspace_tools;

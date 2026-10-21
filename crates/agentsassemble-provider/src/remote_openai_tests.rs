@@ -345,9 +345,12 @@ async fn room_turn_with_observation(
     while let Ok(body) = captured.try_recv() {
         assert_eq!(body["model"], requested_model);
         assert_eq!(body["max_tokens"], 4096);
-        assert_eq!(
-            body["messages"][0],
-            json!({"role": "system", "content": "room rules and fixed card"})
+        assert_eq!(body["messages"][0]["role"], "system");
+        // Room rules come first; a workspace agent's rules may follow them.
+        assert!(
+            body["messages"][0]["content"]
+                .as_str()
+                .is_some_and(|content| content.starts_with("room rules and fixed card"))
         );
         assert_eq!(body["messages"][1]["role"], "user");
         bodies.push(body);
@@ -579,8 +582,9 @@ async fn builtin_workspace_tool_reaches_api_and_preserves_room_terminal_flow() {
     for name in crate::workspace_tools::names() {
         assert!(tools.iter().any(|tool| tool["function"]["name"] == name));
     }
+    // The owner-approved workspace command is offered with the file tools.
     assert!(
-        !tools
+        tools
             .iter()
             .any(|tool| tool["function"]["name"] == "run_workspace_command")
     );
