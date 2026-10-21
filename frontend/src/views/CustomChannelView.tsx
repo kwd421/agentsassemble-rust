@@ -139,7 +139,7 @@ export default function CustomChannelView({
   const searchItems = messageSearch.results.map((result) => ({
     id: result.event_id, author: participantProfiles[result.participant_id]?.displayName || result.author,
     avatarImage: participantProfiles[result.participant_id]?.avatarImageUrl,
-    body: result.content || result.attachment_filenames.join(", "),
+    body: plainMentionText(result.content, mentionLabels) || result.attachment_filenames.join(", "),
     meta: `${messageSearchScope === "all" ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ` : ""}${new Date(result.created_at).toLocaleString("ko-KR")}`,
     onSelect: () => result.channel_id === channelId ? void navigate(result.event_id, true) : onOpenCrossChannelSearchResult(result),
   }));
@@ -147,7 +147,7 @@ export default function CustomChannelView({
   return <div className="dc-custom-channel flex min-h-0 min-w-0 flex-1 flex-col">
     <ChannelHeader icon={<Hash size={20} />} title={channel?.name ?? "채널 연결 중"} searchLabel={searchLabel}
       membersOpen={membersOpen} onToggleMembers={onToggleMembers} onOpenMobileSidebar={onOpenMobileSidebar} onOpenMobileInfo={onOpenMobileInfo}
-      headerActions={{ ...headerActions, pinnedItems: pins.pinnedItems, pinsLoading: pins.pinsLoading, pinsError: pins.pinsError, latestReadCursor: latestSeq ? `seq:${latestSeq}` : "",
+      headerActions={{ ...headerActions, pinnedItems: pins.pinnedItems.map((pin) => ({ ...pin, content: plainMentionText(pin.content, mentionLabels) })), pinsLoading: pins.pinsLoading, pinsError: pins.pinsError, latestReadCursor: latestSeq ? `seq:${latestSeq}` : "",
         onOpenPins: authority ? () => void pins.reloadPins() : undefined,
         onSelectPin: (pin) => void navigate(pin.event_id),
         onUnpin: canPin && authority && !pins.pinBusyIds.size ? (pin) => void pins.setPinned(pin.event_id, false) : undefined }}

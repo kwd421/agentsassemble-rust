@@ -296,7 +296,7 @@ export default function LobbyView({
           author: participantProfile?.displayName || result.author || "Room",
           avatarImage: participantProfile?.avatarImageUrl,
           providerKind: participantProfile?.providerKind,
-          body: result.content || result.attachment_filenames.join(", "),
+          body: plainMentionText(result.content, mentionLabels) || result.attachment_filenames.join(", "),
           meta: messageSearchScope === "all"
             ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ${timeLabel}`
             : timeLabel,
@@ -326,6 +326,7 @@ export default function LobbyView({
     },
     [
       messageSearch.query,
+      mentionLabels,
       messageSearch.results,
       messageSearchChannelLabels,
       messageSearchScope,
@@ -434,7 +435,7 @@ export default function LobbyView({
   const effectiveHeaderActions = {
     ...(headerActions || {}),
     latestReadCursor: latestReadSequence ? `seq:${latestReadSequence}` : "",
-    pinnedItems,
+    pinnedItems: pinnedItems.map((pin) => ({ ...pin, content: plainMentionText(pin.content, mentionLabels) })),
     pinsLoading,
     pinsError,
     pinnedSummary: messagePinsAuthority

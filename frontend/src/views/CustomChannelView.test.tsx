@@ -168,3 +168,18 @@ it("introduces the named channel only at the start, inviting only empty historie
   expect(screen.queryByText("#Notes 채널의 시작이에요.")).toBeNull();
   await act(async () => {});
 });
+
+it("shows stored mentions as names in search results and pins", async () => {
+  const options = props();
+  options.messageSearch.query = "plan";
+  options.messageSearch.results = [{ event_id: "channel-event-9", channel_id: channelId, seq: 9, created_at: "2026-09-08T00:00:00Z",
+    author: "Host", participant_id: "host", content: "<@agent-1> plan it", attachment_filenames: [], attachment_ids: [] }];
+  api.read.mockResolvedValue([{ event_id: "channel-event-3", channel_id: channelId, seq: 3, pinned_at: "2026-09-08T00:00:00Z",
+    created_at: "2026-09-08T00:00:00Z", author: "Host", content: "ask <@agent-1>", attachment_filenames: [] }]);
+  render(<CustomChannelView {...options} mentionables={[{ token: "agent-1", label: "Terra" }]} />);
+  fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
+  expect(await screen.findByRole("button", { name: /ask @Terra/ })).toBeTruthy();
+  fireEvent.focus(screen.getByRole("searchbox"));
+  expect(await screen.findByText("@Terra plan it")).toBeTruthy();
+  expect(document.body.textContent).not.toContain("<@agent-1>");
+});
