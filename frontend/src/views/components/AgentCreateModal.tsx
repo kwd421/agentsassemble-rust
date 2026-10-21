@@ -240,6 +240,23 @@ export default function AgentCreateModal({
     return () => { current = false; };
   }, [open, localProviderActions, selectedProvider?.id, selectedProvider?.credential_available]);
 
+  // The OpenCode harness runs this API key through the OpenCode provider, which the catalog
+  // only knows once it has been discovered; choosing the harness asks for that once.
+  const openCodeUndiscovered =
+    providers.find((provider) => provider.id === "opencode")?.discovery_status !== "ready";
+  const openCodeDiscoveryAsked = useRef(false);
+  const catalogChanged = useRef(onCatalogChange);
+  catalogChanged.current = onCatalogChange;
+  useEffect(() => {
+    if (!open) openCodeDiscoveryAsked.current = false;
+    if (!open || executionHarness !== "opencode" || !openCodeUndiscovered ||
+        openCodeDiscoveryAsked.current || !localProviderActions || !isDesktopWebview()) return;
+    openCodeDiscoveryAsked.current = true;
+    void refreshLocalProviderCatalog("opencode", false)
+      .then((catalog) => catalogChanged.current?.(catalog))
+      .catch(() => undefined);
+  }, [open, executionHarness, openCodeUndiscovered, localProviderActions]);
+
   function applyProvider(provider: NativeCliProviderAvailability) {
     setExistingSessionId("");
     const initialSettings = initializeProviderSettings(provider);
