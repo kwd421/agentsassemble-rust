@@ -300,6 +300,41 @@ describe("LobbyView active provider turn", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
+  it("does not count an answered provider request as unread", () => {
+    render(
+      <LobbyView
+        activeRoom={room}
+        agents={[]}
+        canonicalEvents={[
+          {
+            id: "read-message",
+            seq: 10,
+            kind: "message",
+            name: "Agent A",
+            message: "이미 읽은 메시지",
+            side: "other",
+            created_at: "2026-07-26T01:00:00Z",
+          },
+          {
+            id: "provider-request:answered",
+            seq: 11,
+            kind: "provider_request",
+            name: "Agent A",
+            message: "",
+            side: "other",
+            created_at: "2026-07-26T01:01:00Z",
+            provider_request_id: "answered",
+            provider_request_state: "resolved",
+          },
+        ]}
+        canonicalHasMoreHistory={false}
+        headerActions={{ lastReadCursor: "seq:10", onMarkRead: vi.fn() }}
+      />
+    );
+
+    expect(screen.queryByRole("region", { name: "안 읽은 메시지" })).toBeNull();
+  });
+
   it("does not count the viewer's own new message as unread", () => {
     render(
       <LobbyView
