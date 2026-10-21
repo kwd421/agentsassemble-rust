@@ -422,6 +422,7 @@
 
 .dc-agent-runtime-settings label {
   display: grid;
+  align-content: start;
   min-width: 0;
   gap: 5px;
   color: var(--color-text-muted);
