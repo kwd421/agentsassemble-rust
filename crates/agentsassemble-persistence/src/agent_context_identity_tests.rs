@@ -610,3 +610,56 @@ async fn a_channel_reply_calls_its_author_only_with_reply_mention()
     );
     Ok(())
 }
+
+/// Poll ballots carry no text, so they never fill the fold window.
+#[tokio::test]
+async fn poll_ballots_do_not_fill_the_memory_fold() -> Result<(), Box<dyn std::error::Error>> {
+    let (store, owner, _directory) = fixture().await;
+    let mut session = stored_session(&store).await;
+    session.public.runtime_kind = "api".to_owned();
+    session.public.execution_harness = "builtin".to_owned();
+    save_stored_session(&store, &session).await;
+    let send = |index: usize| {
+        let (store, owner) = (&store, &owner);
+        async move {
+            store
+                .execute_message_with_turn(
+                    owner,
+                    &format!("note-{index}"),
+                    "message.send",
+                    &json!({"content": format!("등대 기록 {index}")}),
+                )
+                .await
+        }
+    };
+    let template = send(0).await?.outcome.event;
+    let mut tx = store.pool.begin().await?;
+    for _ in 0..70 {
+        let mut ballot = template.clone();
+        ballot.id = uuid::Uuid::new_v4().to_string();
+        ballot.seq = crate::room_event_sequence::next_sequence(&mut tx, &template.room_id).await?;
+        ballot.content = Some(String::new());
+        ballot.message_kind = Some("vote_cast".to_owned());
+        sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
+            .bind(&ballot.room_id)
+            .bind(ballot.seq)
+            .bind(serde_json::to_string(&ballot)?)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    let mut last = 0;
+    for index in 1..=12 {
+        last = send(index).await?.outcome.event.seq;
+    }
+    let session = stored_session(&store).await;
+    let mut tx = store.pool.begin().await?;
+    let memory =
+        crate::agent_memory::prepare(&mut tx, &session.public.room_id, &session, last + 1, "등대")
+            .await?
+            .ok_or("memory")?;
+    let fold = memory.fold.ok_or("fold")?;
+    assert_eq!((fold.from_seq, fold.to_seq), (template.seq, last));
+    assert_eq!(fold.text.lines().count(), 13);
+    Ok(())
+}

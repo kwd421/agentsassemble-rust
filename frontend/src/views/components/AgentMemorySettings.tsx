@@ -25,6 +25,8 @@ export default function AgentMemorySettings({ session, serverId }: { session: Ro
     if (!open) return;
     let active = true;
     setStatus("");
+    setPieces(null);
+    setConfirm(null);
     fetchAgentMemory(session.room_id, session.session_id, serverId)
       .then((loaded) => { if (active) setPieces(loaded); })
       .catch((error) => { if (active) setStatus(userFacingError(error, "기억을 불러오지 못했어요.")); });
@@ -54,8 +56,9 @@ export default function AgentMemorySettings({ session, serverId }: { session: Ro
     <details className="dc-agent-memory" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>기억</summary>
       <p className="dc-agent-memory-lead preserve-words">
-        최근 50개보다 오래된 대화를 이 에이전트가 직접 요약해 둔 거예요. 고정한 메시지는 요약하지 않고 그대로 기억해요.
+        최근 50개보다 오래된 대화를 이 에이전트가 직접 요약해 둔 거예요. 고정한 메시지는 오래돼도 원문 그대로 함께 기억해요.
       </p>
+      {open && !pieces && !status && <p className="dc-agent-memory-empty preserve-words">기억을 불러오는 중이에요.</p>}
       {pieces && pieces.length === 0 && (
         <p className="dc-agent-memory-empty preserve-words">아직 기억이 없어요. 대화가 길어지면 오래된 부분부터 요약해 둬요.</p>
       )}

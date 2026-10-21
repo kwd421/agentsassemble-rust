@@ -45,3 +45,18 @@ it("explains an empty memory", async () => {
   fireEvent(details, new Event("toggle"));
   expect(await screen.findByText(/아직 기억이 없어요/)).toBeTruthy();
 });
+
+it("shows loading, then drops the old list when a reload fails", async () => {
+  memoryApi.fetchAgentMemory.mockResolvedValueOnce([{ from_seq: 5, to_seq: 20, summary: "등대 이야기", created_at: 1_790_000_000 }]);
+  const { container } = render(<AgentMemorySettings session={session} />);
+  const details = container.querySelector("details")!;
+  const toggle = (open: boolean) => { details.open = open; fireEvent(details, new Event("toggle")); };
+  toggle(true);
+  expect(screen.getByText("기억을 불러오는 중이에요.")).toBeTruthy();
+  expect(await screen.findByText("등대 이야기")).toBeTruthy();
+  toggle(false);
+  memoryApi.fetchAgentMemory.mockRejectedValueOnce(new Error("offline"));
+  toggle(true);
+  expect(await screen.findByRole("status")).toBeTruthy();
+  expect(screen.queryByText("등대 이야기")).toBeNull();
+});

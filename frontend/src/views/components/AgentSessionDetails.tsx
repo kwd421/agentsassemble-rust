@@ -519,7 +519,7 @@ export default function AgentSessionDetails({
           onStatus={setActionStatus}
         />
       )}
-      {serverOwned && keepsMemory(session) && <AgentMemorySettings session={session} />}
+      {serverOwned && onConfigure && keepsMemory(session) && <AgentMemorySettings session={session} />}
       <AgentActivitySettings
         session={session}
         activityVisible={activityVisible}

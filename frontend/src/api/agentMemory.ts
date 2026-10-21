@@ -15,7 +15,8 @@ export async function fetchAgentMemory(roomId: string, sessionId: string, server
   const payload = host
     ? await (await remoteOwnerRoute(host, `/api/central-owner/agent-memory${suffix}`, { method: "GET" })).json() as { pieces?: AgentMemoryPiece[] }
     : await fetchJsonServerOperator<{ pieces?: AgentMemoryPiece[] }>(`/api/agent-memory${suffix}`);
-  return Array.isArray(payload.pieces) ? payload.pieces : [];
+  if (!Array.isArray(payload.pieces)) throw new Error("기억 응답이 올바르지 않아요.");
+  return payload.pieces;
 }
 
 export async function deleteAgentMemory(roomId: string, sessionId: string, fromSeq: number, serverId?: string): Promise<void> {

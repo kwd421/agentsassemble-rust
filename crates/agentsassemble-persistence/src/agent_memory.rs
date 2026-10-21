@@ -30,7 +30,8 @@ const FOLD_MAX_CHARACTERS: usize = 20_000;
 const LINE_MAX_CHARACTERS: usize = 600;
 const MEMORY_MAX_CHARACTERS: usize = 6_000;
 const PINNED_MAX_CHARACTERS: usize = 3_000;
-pub(crate) const SUMMARY_MAX_CHARACTERS: usize = 12_000;
+/// A stored piece always fits the memory budget beside others.
+const PIECE_MAX_CHARACTERS: usize = 3_000;
 /// Only the newest pieces are weighed each turn.
 const MEMORY_MAX_PIECES: i64 = 200;
 
@@ -105,7 +106,7 @@ async fn render_range(
     to_seq: i64,
 ) -> Result<String, PersistenceError> {
     let rows = sqlx::query(
-        "SELECT event_json FROM room_events WHERE room_id = ? AND seq >= ? AND seq <= ? AND json_extract(event_json, '$.type') = 'message_final' AND COALESCE(json_extract(event_json, '$.message_deleted'), 0) = 0 ORDER BY seq",
+        "SELECT event_json FROM room_events WHERE room_id = ? AND seq >= ? AND seq <= ? AND json_extract(event_json, '$.type') = 'message_final' AND COALESCE(json_extract(event_json, '$.message_deleted'), 0) = 0 AND COALESCE(json_extract(event_json, '$.message_kind'), '') NOT IN ('vote_cast', 'vote_withdraw', 'vote_close') ORDER BY seq",
     )
     .bind(room_id)
     .bind(from_seq)
@@ -129,7 +130,7 @@ async fn load_fold(
     oldest_shown_seq: i64,
 ) -> Result<Option<MemoryFold>, PersistenceError> {
     let rows = sqlx::query(
-        "SELECT event_json FROM room_events WHERE room_id = ? AND seq > ? AND seq < ? AND json_extract(event_json, '$.type') = 'message_final' AND COALESCE(json_extract(event_json, '$.message_deleted'), 0) = 0 ORDER BY seq LIMIT ?",
+        "SELECT event_json FROM room_events WHERE room_id = ? AND seq > ? AND seq < ? AND json_extract(event_json, '$.type') = 'message_final' AND COALESCE(json_extract(event_json, '$.message_deleted'), 0) = 0 AND COALESCE(json_extract(event_json, '$.message_kind'), '') NOT IN ('vote_cast', 'vote_withdraw', 'vote_close') ORDER BY seq LIMIT ?",
     )
     .bind(room_id)
     .bind(floor)
@@ -159,7 +160,10 @@ async fn load_fold(
         to_seq = event.seq;
         lines.push(line);
     }
-    Ok((!lines.is_empty()).then(|| MemoryFold {
+    if i64::try_from(lines.len()).unwrap_or(0) < FOLD_MIN_MESSAGES {
+        return Ok(None);
+    }
+    Ok(Some(MemoryFold {
         from_seq,
         to_seq,
         text: lines.join("\n"),
@@ -202,7 +206,7 @@ async fn load_pinned(
         }
         let line = format!("- {}", render_line(&event)?);
         if used + line.chars().count() > PINNED_MAX_CHARACTERS {
-            break;
+            continue;
         }
         used += line.chars().count();
         lines.push(line);
@@ -282,11 +286,7 @@ pub(crate) async fn store(
     summary: &str,
     now: i64,
 ) -> Result<bool, PersistenceError> {
-    let summary: String = summary
-        .trim()
-        .chars()
-        .take(SUMMARY_MAX_CHARACTERS)
-        .collect();
+    let summary: String = summary.trim().chars().take(PIECE_MAX_CHARACTERS).collect();
     let (from_seq, to_seq) = fold;
     if summary.is_empty() || from_seq <= 0 || to_seq < from_seq {
         return Ok(false);
