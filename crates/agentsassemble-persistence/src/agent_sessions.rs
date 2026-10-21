@@ -667,6 +667,11 @@ mod tests {
         let projection = &created.result["agent_session"];
         assert_eq!(projection["persona_card_id"], "guide");
         assert_eq!(projection["persona_card"]["display_name"], "Guide");
+        // Every turn loads the selected card, so a used card cannot be deleted.
+        assert!(matches!(
+            store.delete_persona_asset("guide").await,
+            Err(PersistenceError::CommandRejected { code, .. }) if code.as_ref() == "persona_in_use"
+        ));
         assert!(projection["persona_card"].get("description").is_none());
 
         let mut missing = selected.clone();
@@ -723,6 +728,15 @@ mod tests {
             .unwrap_or_else(|error| panic!("clear persona: {error}"));
         assert_eq!(outcome.result["agent_session"]["persona_card_id"], "");
         assert!(outcome.result["agent_session"]["persona_card"].is_null());
+        // Once no agent uses the card it can be deleted, exactly once.
+        store
+            .delete_persona_asset("guide")
+            .await
+            .unwrap_or_else(|error| panic!("delete unused persona: {error}"));
+        assert!(matches!(
+            store.delete_persona_asset("guide").await,
+            Err(PersistenceError::PersonaAssetMissing)
+        ));
     }
 
     #[tokio::test]

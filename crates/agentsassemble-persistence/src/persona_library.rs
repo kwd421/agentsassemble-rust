@@ -41,6 +41,42 @@ impl SqliteStore {
         Ok(summary)
     }
 
+    /// Deletes one card the owner no longer wants. A card an agent still uses
+    /// stays: every turn loads the selected card, so removing it would break them.
+    ///
+    /// # Errors
+    ///
+    /// `PersonaAssetMissing` for an invalid or absent ID, `persona_in_use` while
+    /// any agent session selects it, or a database failure.
+    pub async fn delete_persona_asset(&self, persona_id: &str) -> Result<(), PersistenceError> {
+        if !valid_persona_id(persona_id) {
+            return Err(PersistenceError::PersonaAssetMissing);
+        }
+        let mut transaction = self.pool.begin().await?;
+        let in_use: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM agent_sessions WHERE json_extract(session_json, '$.persona_card_id') = ?",
+        )
+        .bind(persona_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if in_use > 0 {
+            return Err(PersistenceError::CommandRejected {
+                code: "persona_in_use".into(),
+                message: "An agent still uses this bot card or module.".to_owned(),
+            });
+        }
+        let deleted = sqlx::query("DELETE FROM persona_assets WHERE persona_id = ?")
+            .bind(persona_id)
+            .execute(&mut *transaction)
+            .await?
+            .rows_affected();
+        if deleted == 0 {
+            return Err(PersistenceError::PersonaAssetMissing);
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
+
     /// Lists safe summaries without loading optional thumbnail BLOBs.
     ///
     /// # Errors

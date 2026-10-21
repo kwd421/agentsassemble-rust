@@ -1,8 +1,9 @@
 import ResourceImage from "./ResourceImage";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, FileUser, PackageOpen, Search, Upload } from "../../ui/icons";
+import { ChevronDown, FileUser, PackageOpen, Search, Trash2, Upload } from "../../ui/icons";
 import {
+  deletePersonaAsset,
   fetchPersonaAssets,
   importPersonaAsset,
   type PersonaAssetSummary,
@@ -35,6 +36,9 @@ export default function AgentPersonaPicker({
   const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState("");
   const [importGeneration, setImportGeneration] = useState(0);
+  // A card waiting for the second press that deletes it.
+  const [confirmDelete, setConfirmDelete] = useState("");
+  const [deleting, setDeleting] = useState(false);
   // The library floats over the dialog instead of pushing the settings below it down.
   const [menuPosition, setMenuPosition] = useState<CSSProperties | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -58,7 +62,10 @@ export default function AgentPersonaPicker({
   }
 
   useEffect(() => {
-    if (!libraryOpen) return;
+    if (!libraryOpen) {
+      setConfirmDelete("");
+      return;
+    }
     const close = (event: Event) => {
       const target = event.target;
       if (target instanceof Node && (pickerRef.current?.contains(target) || menuRef.current?.contains(target))) return;
@@ -168,6 +175,25 @@ export default function AgentPersonaPicker({
   // named on the trigger. Showing a search field, a repeat of that one row and
   // a "no results" line for it made an empty library look like a busy one.
   const emptyLibrary = loaded && libraryItems.length === 0;
+
+  async function handleDelete(item: PersonaAssetSummary) {
+    if (confirmDelete !== item.id) {
+      setConfirmDelete(item.id);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deletePersonaAsset(item.id, serverId);
+      setItems((current) => current.filter((entry) => entry.id !== item.id));
+      if (value === item.id) onChange("");
+      setStatus(`${item.display_name} 카드를 지웠어요.`);
+    } catch (error) {
+      setStatus(userFacingError(error, "카드를 지우지 못했어요."));
+    } finally {
+      setConfirmDelete("");
+      setDeleting(false);
+    }
+  }
 
   async function handleImport(file: File) {
     setImporting(true);
@@ -284,6 +310,7 @@ export default function AgentPersonaPicker({
                 {/* Clearing the selection is only an option when something is
                     selected; otherwise it repeats what the trigger already says. */}
                 {value && !searching && (
+                  <div className="dc-persona-row">
                   <button
                     type="button"
                     role="radio"
@@ -297,13 +324,17 @@ export default function AgentPersonaPicker({
                       <small>모델 기본 성격 그대로</small>
                     </span>
                   </button>
+                  </div>
                 )}
                 {visibleItems.map((item) => {
                   const selected = value === item.id;
                   const Icon = item.asset_kind === "module" ? PackageOpen : FileUser;
+                  // The card the agent uses now cannot go; the server also refuses
+                  // any card another agent still uses.
+                  const removable = applied?.id !== item.id;
                   return (
+                    <div key={item.id} className="dc-persona-row" data-removable={removable ? "true" : "false"}>
                     <button
-                      key={item.id}
                       type="button"
                       role="radio"
                       aria-checked={selected}
@@ -326,6 +357,18 @@ export default function AgentPersonaPicker({
                       </span>
                       {selected && <em>{applied?.id === item.id ? "적용됨" : "선택됨"}</em>}
                     </button>
+                    {removable && (confirmDelete === item.id ? (
+                      <button type="button" className="dc-button dc-button--danger dc-persona-delete" disabled={deleting}
+                        onClick={() => void handleDelete(item)}>
+                        {deleting ? "지우는 중" : "지우기"}
+                      </button>
+                    ) : (
+                      <button type="button" className="dc-persona-delete dc-persona-delete-icon" aria-label={`${item.display_name} 카드 지우기`}
+                        onClick={() => void handleDelete(item)}>
+                        <Trash2 size={16} aria-hidden="true" />
+                      </button>
+                    ))}
+                    </div>
                   );
                 })}
               </div>

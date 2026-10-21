@@ -39,16 +39,22 @@ pub(crate) fn routes() -> Router<AppState> {
             header::CACHE_CONTROL,
             PRIVATE_NO_STORE.clone(),
         ))
-        .layer(exact_tauri_cors([Method::GET, Method::POST]))
+        .layer(exact_tauri_cors([
+            Method::GET,
+            Method::POST,
+            Method::DELETE,
+        ]))
 }
 
 registered_routes! {
     fn persona_routes<AppState>() {
         private "/api/personas" => get(list_personas),
         private "/api/personas/import" => post(import_persona),
+        private "/api/personas/{persona_id}" => delete(delete_persona),
         private "/api/personas/{persona_id}/thumbnail" => get(persona_thumbnail),
         secure_remote "/api/central-owner/personas" => get(list_personas),
         secure_remote "/api/central-owner/personas/import" => post(import_persona),
+        secure_remote "/api/central-owner/personas/{persona_id}" => delete(delete_persona),
         secure_remote "/api/central-owner/personas/{persona_id}/thumbnail" => get(persona_thumbnail),
     }
 }
@@ -167,6 +173,25 @@ async fn persona_thumbnail(
     Ok(response)
 }
 
+async fn delete_persona(
+    State(state): State<AppState>,
+    Path(persona_id): Path<String>,
+    request: Request,
+) -> Result<Json<Value>, PersonaHttpError> {
+    authorize(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        request.uri().path().starts_with("/api/central-owner/"),
+    )
+    .await?;
+    ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
+        .await
+        .map_err(PersonaHttpError::from_body)?;
+    state.store.delete_persona_asset(&persona_id).await?;
+    Ok(Json(json!({"deleted": true})))
+}
+
 async fn authorize(
     state: &AppState,
     headers: &axum::http::HeaderMap,
@@ -275,7 +300,7 @@ impl PersonaHttpError {
             },
             BodyDecodeError::InvalidJson => Self::bad_request("Request JSON is invalid."),
             BodyDecodeError::NonEmpty => {
-                Self::bad_request("GET persona requests must not contain a body.")
+                Self::bad_request("This persona request must not contain a body.")
             }
         }
     }
@@ -284,7 +309,7 @@ impl PersonaHttpError {
         Self {
             status: StatusCode::NOT_FOUND,
             code: "persona_not_found",
-            message: "Persona thumbnail is unavailable.".to_owned(),
+            message: "The persona is unavailable.".to_owned(),
         }
     }
 
@@ -316,6 +341,13 @@ impl From<PersistenceError> for PersonaHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
             PersistenceError::PersonaAssetMissing => Self::not_found(),
+            PersistenceError::CommandRejected { code, message } if code == "persona_in_use" => {
+                Self {
+                    status: StatusCode::CONFLICT,
+                    code: "persona_in_use",
+                    message,
+                }
+            }
             internal => {
                 tracing::error!(error = ?internal, "persona HTTP persistence operation failed");
                 Self::internal()

@@ -3,6 +3,7 @@ import { hasRemoteWorkspace, remoteWorkspaceFor, remoteWorkspacesSnapshot, fetch
 import type { RemoteTransport } from "../lib/remote/remoteTransport";
 import type { CentralOwnerWorkspace } from "../lib/central/ownerWorkspace";
 import {
+  deleteJsonServerOperator,
   fetchJsonServerOperator,
   serverOwnerSessionHeaders,
   fileToBase64,
@@ -58,6 +59,13 @@ export async function importPersonaAsset(file: File, serverId?: string): Promise
     ? await (await remotePersona(host, "/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json() as { persona: PersonaAssetSummary }
     : await postJsonServerOperator<{ persona: PersonaAssetSummary }>("/api/personas/import", body);
   return payload.persona;
+}
+
+export async function deletePersonaAsset(personaId: string, serverId?: string): Promise<void> {
+  const host = resolvePersonaHost(serverId);
+  const suffix = `/${encodeURIComponent(personaId)}`;
+  if (host) await remotePersona(host, suffix, { method: "DELETE" });
+  else await deleteJsonServerOperator(`/api/personas${suffix}`);
 }
 
 export async function fetchPersonaThumbnail(

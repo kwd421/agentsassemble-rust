@@ -7,12 +7,14 @@ import AgentPersonaPicker from "./AgentPersonaPicker";
 const personaApi = vi.hoisted(() => ({
   fetchPersonaAssets: vi.fn(),
   importPersonaAsset: vi.fn(),
+  deletePersonaAsset: vi.fn(),
   fetchPersonaThumbnail: vi.fn(),
 }));
 
 vi.mock("../../api/personas", () => ({
   fetchPersonaAssets: personaApi.fetchPersonaAssets,
   importPersonaAsset: personaApi.importPersonaAsset,
+  deletePersonaAsset: personaApi.deletePersonaAsset,
   fetchPersonaThumbnail: personaApi.fetchPersonaThumbnail,
 }));
 
@@ -21,6 +23,7 @@ afterEach(cleanup);
 beforeEach(() => {
   personaApi.fetchPersonaAssets.mockReset();
   personaApi.importPersonaAsset.mockReset();
+  personaApi.deletePersonaAsset.mockReset();
   personaApi.fetchPersonaThumbnail.mockReset();
   personaApi.fetchPersonaThumbnail.mockResolvedValue(new Blob(["png"]));
   Object.defineProperty(URL, "createObjectURL", {
@@ -170,6 +173,23 @@ describe("AgentPersonaPicker", () => {
     await userEvent.keyboard("{Enter}");
     expect(onChange).toHaveBeenCalledWith("weather-module");
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("deletes a card on the second press and keeps the applied one", async () => {
+    const onChange = vi.fn();
+    personaApi.deletePersonaAsset.mockResolvedValue(undefined);
+    const applied = { id: "guide", display_name: "Night Guide", asset_kind: "card" as const, source_kind: "ccv3" as const,
+      lorebook_count: 2, asset_count: 1, ignored_feature_count: 0, tag_count: 0, thumbnail_url: "" };
+    render(<AgentPersonaPicker value="guide" applied={applied} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: /선택|변경/ }));
+    await screen.findByText("Weather Module");
+    expect(screen.queryByRole("button", { name: "Night Guide 카드 지우기" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Weather Module 카드 지우기" }));
+    expect(personaApi.deletePersonaAsset).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "지우기" }));
+    expect(personaApi.deletePersonaAsset).toHaveBeenCalledWith("weather-module", undefined);
+    await waitFor(() => expect(screen.queryByText("Weather Module")).toBeNull());
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("selects a newly imported supported file", async () => {
