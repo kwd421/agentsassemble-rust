@@ -407,7 +407,7 @@ async fn prepare_human_message_event(
         return Ok((event, route_to_floor));
     }
     let command = MessageSend::from_payload(payload).map_err(rejection)?;
-    crate::message_replies::validate_reply_target(
+    let reply_author = crate::message_replies::validate_reply_target(
         transaction,
         &principal.room_id,
         "lobby",
@@ -424,6 +424,7 @@ async fn prepare_human_message_event(
     .await?;
     let mut event = prepare_message_event(principal, participant, &command, sequence, now)
         .map_err(rejection)?;
+    crate::message_replies::record_reply_mention(&mut event, reply_author, command.reply_mention);
     if !attachments.is_empty() {
         event
             .extra

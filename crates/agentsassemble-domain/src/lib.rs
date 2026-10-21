@@ -118,7 +118,8 @@ pub use model::{
     DEPARTED_USER_NAME, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID, PARTICIPANT_ANONYMIZED_EVENT_TYPE, Participant, ParticipantRole,
     ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
-    ProviderControlOption, ProviderTurnInterrupt, Room, RoomEvent, RoomStatus, SnapshotMode,
+    ProviderControlOption, ProviderTurnInterrupt, REPLY_MENTION_FIELD, Room, RoomEvent, RoomStatus,
+    SnapshotMode,
 };
 pub use persona::{
     MAX_PERSONA_CONTEXT_CHARACTERS, MAX_PERSONA_ID_CHARACTERS, MAX_PERSONA_LORE_CHARACTERS,

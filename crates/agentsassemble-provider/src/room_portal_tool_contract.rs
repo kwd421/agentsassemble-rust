@@ -70,6 +70,7 @@ pub(super) struct PublishMessage {
     #[serde(default)]
     pub(super) attachment_ids: Vec<String>,
     /// Optionally reply to an earlier lobby event UUID from discussion or context.
+    /// Starting content with that message author's `<@ID>` calls them with the reply.
     #[serde(default)]
     pub(super) reply_to_event_id: Option<String>,
     #[serde(default)]

@@ -66,7 +66,7 @@ pub(super) async fn complete_message(
     .await?;
     validate_publication_target(transaction, &session, target_agent_id).await?;
     apply_provider_session_transition(&mut session, provider_session_id)?;
-    crate::message_replies::validate_reply_target(
+    let reply_author = crate::message_replies::validate_reply_target(
         transaction,
         room_id,
         "lobby",
@@ -74,6 +74,9 @@ pub(super) async fn complete_message(
         session.input_up_to_seq.saturating_add(1),
     )
     .await?;
+    let (content, calls_author) =
+        crate::message_replies::agent_reply_text(&content, reply_author.as_deref());
+    let reply_mention = reply_author.filter(|_| calls_author);
     let final_event = agent_final_event(
         transaction,
         &session,
@@ -81,7 +84,7 @@ pub(super) async fn complete_message(
         provider_turn_id,
         content,
         target_agent_id,
-        reply_to_event_id,
+        (reply_to_event_id, reply_mention),
         attachment_ids,
     )
     .await?;

@@ -373,3 +373,69 @@ async fn a_card_used_only_by_an_agent_that_left_can_be_deleted()
     assert_eq!(reference, "");
     Ok(())
 }
+
+/// Discord's "@ on": a reply calls its author only when asked, never yourself.
+#[tokio::test]
+async fn a_reply_calls_its_author_only_with_reply_mention() -> Result<(), Box<dyn std::error::Error>>
+{
+    let (store, owner, _directory) = fixture().await;
+    let other = add_human(&store, "human-other", "Other").await?;
+    let source = store
+        .execute_message_with_turn(
+            &owner,
+            "source",
+            "message.send",
+            &json!({"content": "first"}),
+        )
+        .await?;
+    let source_id = source.outcome.event.id.clone();
+    let called = store
+        .execute_message_with_turn(
+            &other,
+            "called",
+            "message.send",
+            &json!({"content": "answer", "reply_to_event_id": source_id, "reply_mention": true}),
+        )
+        .await?;
+    assert_eq!(
+        called.outcome.event.reply_mention(),
+        Some(owner.participant_id.as_str())
+    );
+    assert!(
+        called
+            .outcome
+            .event
+            .addressed_content()
+            .starts_with(&format!("<@{}>", owner.participant_id))
+    );
+    let quiet = store
+        .execute_message_with_turn(
+            &other,
+            "quiet",
+            "message.send",
+            &json!({"content": "answer", "reply_to_event_id": source_id}),
+        )
+        .await?;
+    assert_eq!(quiet.outcome.event.reply_mention(), None);
+    let own = store
+        .execute_message_with_turn(
+            &owner,
+            "own",
+            "message.send",
+            &json!({"content": "again", "reply_to_event_id": source_id, "reply_mention": true}),
+        )
+        .await?;
+    assert_eq!(own.outcome.event.reply_mention(), None);
+    assert!(
+        store
+            .execute_message_with_turn(
+                &other,
+                "no-target",
+                "message.send",
+                &json!({"content": "x", "reply_mention": true})
+            )
+            .await
+            .is_err()
+    );
+    Ok(())
+}

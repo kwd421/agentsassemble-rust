@@ -38,6 +38,8 @@ pub struct MessageSend {
     pub content: String,
     pub attachment_ids: Vec<String>,
     pub reply_to_event_id: Option<String>,
+    /// Discord's "@ on": the reply also calls the replied-to author.
+    pub reply_mention: bool,
 }
 
 impl MessageSend {
@@ -54,13 +56,13 @@ impl MessageSend {
             || object.keys().any(|key| {
                 !matches!(
                     key.as_str(),
-                    "content" | "attachment_ids" | "reply_to_event_id"
+                    "content" | "attachment_ids" | "reply_to_event_id" | "reply_mention"
                 )
             })
         {
             return Err(CommandRejection::new(
                 "bad_request",
-                "message.send accepts content, optional attachment_ids and reply_to_event_id.",
+                "message.send accepts content, optional attachment_ids, reply_to_event_id and reply_mention.",
             ));
         }
         let raw = object["content"].as_str().ok_or_else(|| {
@@ -74,10 +76,15 @@ impl MessageSend {
                 "Message content or an attachment is required.",
             ));
         }
+        let reply_to_event_id = parse_reply_to_event_id(object.get("reply_to_event_id"))?;
         Ok(Self {
             content,
             attachment_ids,
-            reply_to_event_id: parse_reply_to_event_id(object.get("reply_to_event_id"))?,
+            reply_mention: parse_reply_mention(
+                object.get("reply_mention"),
+                reply_to_event_id.is_some(),
+            )?,
+            reply_to_event_id,
         })
     }
 }
@@ -98,6 +105,21 @@ pub(crate) fn parse_reply_to_event_id(
             )
         })?;
     Ok(Some(id.to_owned()))
+}
+
+/// `reply_mention` is a boolean and only means something on a reply.
+pub(crate) fn parse_reply_mention(
+    value: Option<&Value>,
+    is_reply: bool,
+) -> Result<bool, CommandRejection> {
+    match value {
+        None => Ok(false),
+        Some(Value::Bool(mention)) if is_reply || !mention => Ok(*mention),
+        Some(_) => Err(CommandRejection::new(
+            "bad_request",
+            "reply_mention is a boolean that needs reply_to_event_id.",
+        )),
+    }
 }
 
 pub(crate) fn parse_attachment_ids(value: Option<&Value>) -> Result<Vec<String>, CommandRejection> {

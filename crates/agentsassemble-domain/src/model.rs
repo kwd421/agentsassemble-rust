@@ -140,6 +140,10 @@ pub struct CapabilitySet {
     pub agent_control: bool,
     #[serde(rename = "bridge.publish")]
     pub bridge_publish: bool,
+    /// The host accepts `reply_mention` (Discord's "@ on" for a reply). Absent
+    /// from older hosts, so a newer client never sends the field to them.
+    #[serde(rename = "message.reply_mention", default)]
+    pub message_reply_mention: bool,
 }
 
 impl CapabilitySet {
@@ -167,6 +171,7 @@ impl CapabilitySet {
             participant_mute: is_operator,
             agent_control: is_operator,
             bridge_publish: bridge && writable,
+            message_reply_mention: writable && !bridge,
         }
     }
 }
@@ -256,7 +261,27 @@ impl RoomEvent {
         self.event_type == "message_final"
             && self.extra.get("message_deleted") != Some(&Value::Bool(true))
     }
+
+    /// Who a reply calls with Discord's "@ on": the replied-to message's author.
+    #[must_use]
+    pub fn reply_mention(&self) -> Option<&str> {
+        self.extra.get(REPLY_MENTION_FIELD).and_then(Value::as_str)
+    }
+
+    /// The text mention routing reads: a reply that calls its author counts as
+    /// mentioning them, although the text itself carries no `@`.
+    #[must_use]
+    pub fn addressed_content(&self) -> std::borrow::Cow<'_, str> {
+        let content = self.content.as_deref().unwrap_or_default();
+        self.reply_mention()
+            .map_or(std::borrow::Cow::Borrowed(content), |id| {
+                std::borrow::Cow::Owned(format!("<@{id}> {content}"))
+            })
+    }
 }
+
+/// Event field naming the participant a reply calls ("@ on").
+pub const REPLY_MENTION_FIELD: &str = "reply_mention_participant_id";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]

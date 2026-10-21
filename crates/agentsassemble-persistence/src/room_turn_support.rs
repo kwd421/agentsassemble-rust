@@ -343,7 +343,7 @@ pub(super) async fn agent_final_event(
     provider_turn_id: &str,
     content: String,
     target_agent_id: &str,
-    reply_to_event_id: Option<&str>,
+    (reply_to_event_id, reply_mention): (Option<&str>, Option<String>),
     attachment_ids: &[String],
 ) -> Result<RoomEvent, PersistenceError> {
     session.inflight_inputs.first().ok_or_else(|| {
@@ -387,6 +387,7 @@ pub(super) async fn agent_final_event(
             .extra
             .insert("reply_to_event_id".to_owned(), json!(id));
     }
+    crate::message_replies::record_reply_mention(&mut event, reply_mention, true);
     let participant = load_participant(
         transaction,
         &session.public.room_id,

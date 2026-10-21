@@ -67,7 +67,7 @@ pub(super) async fn route_message(
                         && participant.status != ParticipantStatus::Kicked
                         && !participant.muted
                         && super::routing::mentions_target(
-                            event.content.as_deref().unwrap_or_default(),
+                            &event.addressed_content(),
                             sessions
                                 .iter()
                                 .filter(|(s, _)| !is_actor(s, event))
@@ -375,7 +375,18 @@ fn direct_target(
         .map(str::to_owned);
     // The structured handoff is the earliest direct target. A later explicit
     // mention in the message body owns the floor, matching the product's
-    // final-mention rule for model recaps followed by a next-speaker call.
+    // final-mention rule for model recaps followed by a next-speaker call. A
+    // reply's "@ on" calls its author only when nothing else names a target.
+    let reply_mention = event
+        .reply_mention()
+        .filter(|target| {
+            sessions.iter().any(|(session, _)| {
+                session.public.session_id == *target
+                    && !is_actor(session, event)
+                    && !excluded.contains(&session.public.session_id)
+            })
+        })
+        .map(str::to_owned);
     last_direct_target(
         content,
         sessions
@@ -386,6 +397,7 @@ fn direct_target(
             .map(|(session, _)| session),
     )
     .or(structured_target)
+    .or(reply_mention)
 }
 
 fn ambient_targets(

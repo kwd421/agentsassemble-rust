@@ -27,7 +27,7 @@ pub(crate) async fn record(
     for participant in &participants {
         if participant.participant_id != event.actor.participant_id
             && crate::room_turns::routing::mentions_target(
-                event.content.as_deref().unwrap_or_default(),
+                &event.addressed_content(),
                 participants
                     .iter()
                     .filter(|p| {
