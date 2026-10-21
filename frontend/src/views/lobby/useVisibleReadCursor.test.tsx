@@ -5,8 +5,10 @@ import { useVisibleReadCursor } from "./useVisibleReadCursor";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); document.body.innerHTML = ""; });
 
 function viewport() {
+  const view = document.createElement("div");
   const feed = document.createElement("div");
-  document.body.append(feed);
+  view.append(feed);
+  document.body.append(view);
   Object.defineProperties(feed, {
     clientHeight: { configurable: true, value: 400 },
     scrollHeight: { configurable: true, value: 1000 },
@@ -62,6 +64,19 @@ it("does not acknowledge hidden, unfocused, modal-covered, or historical feeds",
   act(() => feed.dispatchEvent(new Event("scroll")));
   expect(onMarkRead).not.toHaveBeenCalled();
   rerender(props);
+  expect(onMarkRead).toHaveBeenCalledExactlyOnceWith("seq:12");
+});
+
+it("still acknowledges while the view's typing line covers the feed's last pixels", () => {
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  const feed = viewport(); feed.scrollTop = 600;
+  const typingLine = document.createElement("div");
+  feed.parentElement!.append(typingLine);
+  vi.mocked(document.elementFromPoint).mockReturnValue(typingLine);
+  const onMarkRead = vi.fn();
+  renderHook(useVisibleReadCursor, { initialProps: { roomId: "room-a", enabled: true, latestSequence: 12,
+    lastReadSequence: 10, scrollRef: { current: feed }, onMarkRead } });
   expect(onMarkRead).toHaveBeenCalledExactlyOnceWith("seq:12");
 });
 

@@ -49,7 +49,10 @@ export function useVisibleReadCursor({
       const pointX = (bounds.left + bounds.right) / 2;
       const pointY = Math.min(bounds.bottom, window.innerHeight) - 1;
       const visibleTarget = document.elementFromPoint(pointX, pointY);
-      if (!visibleTarget || !feed.contains(visibleTarget)) return;
+      // The view's own typing line sits over the feed's last pixels while an
+      // AI writes; only something outside the view hides the feed.
+      const view = feed.parentElement ?? feed;
+      if (!visibleTarget || !view.contains(visibleTarget)) return;
       if (attempted.current?.roomId === roomId && attempted.current.sequence === latestSequence) return;
       attempted.current = { roomId, sequence: latestSequence };
       onMarkRead(`seq:${latestSequence}`);
