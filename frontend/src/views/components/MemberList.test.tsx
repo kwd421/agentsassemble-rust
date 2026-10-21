@@ -4,6 +4,7 @@ import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import { agentSessionFixture } from "../../test/agentSession";
 import { participantFixture } from "../../test/participant";
 import MemberList from "./MemberList";
+import { RoomActivity } from "../../app/roomActivity";
 
 
 const AGENT: LiveAgent = {
@@ -40,6 +41,20 @@ afterEach(() => {
 });
 
 describe("MemberList component wiring", () => {
+  it("shows 응답 중 for a working external AI, whichever list it comes from", () => {
+    const connector = participantFixture({ participant_id: "connector-1", display_name: "아쎄이", participant_type: "agent", role: "agent" });
+    const asAgent: LiveAgent = { ...AGENT, agent_id: "connector-1", display_name: "아쎄이", provider_kind: "", connection_kind: "room_connector", engagement_mode: "" };
+    for (const agents of [[], [asAgent]]) {
+      render(
+        <RoomActivity.Provider value={["connector-1"]}>
+          <MemberList agents={agents} members={[participantFixture(), connector]} viewerParticipantId="operator-local" roomId="general" roomName="General" />
+        </RoomActivity.Provider>
+      );
+      expect(screen.getByText("응답 중")).toBeTruthy();
+      cleanup();
+    }
+  });
+
   it.each([true, false])("marks the host as 방장, the viewer as 나, and ordinary members with no badge (host=%s)", (host) => {
     render(<MemberList agents={[]} members={[participantFixture(), participantFixture({ participant_id: "central-member", display_name: "Hihi" })]}
       viewerParticipantId={host ? "operator-local" : "central-member"} canEditRoles={host} roomId="general" roomName="General" />);

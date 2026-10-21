@@ -131,9 +131,11 @@ export function useMemberEntries({
         fullDetail: [detail, agentSession?.runtime_kind].filter(Boolean).join(" · "),
         statusLabel: agentSession
           ? agentSessionStatusLabel(runtimeStatus, agentSession.recovery_required)
-          : member
-            ? memberStatusLabel(member)
-            : undefined,
+          : working.includes(agent.agent_id)
+            ? "응답 중"
+            : member
+              ? memberStatusLabel(member)
+              : undefined,
         role,
         owner: false,
         active: agentSession ? agentSessionIsPresent(runtimeStatus) : isActive(agent),
