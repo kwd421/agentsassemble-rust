@@ -5,4 +5,8 @@ export type CapabilitySet = { "room.history": boolean, "room.vote.summary": bool
  * The host accepts `reply_mention` (Discord's "@ on" for a reply). Absent
  * from older hosts, so a newer client never sends the field to them.
  */
-"message.reply_mention": boolean, };
+"message.reply_mention": boolean, 
+/**
+ * The same "@ on" for text-channel replies (`channel.message.send`).
+ */
+"channel.reply_mention": boolean, };

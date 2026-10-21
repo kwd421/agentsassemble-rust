@@ -561,3 +561,52 @@ async fn an_api_agent_turn_folds_older_messages_and_carries_related_memory()
     assert!(memory.context.contains("등대지기와 나눈 기록"));
     Ok(())
 }
+
+#[tokio::test]
+async fn a_channel_reply_calls_its_author_only_with_reply_mention()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, owner, _directory) = fixture().await;
+    let other = add_human(&store, "human-other", "Other").await?;
+    let revision = public_settings(&RoomSettings::defaults("General"))?.settings_revision;
+    store
+        .execute_room_settings_update(
+            TrustedPrincipal(&owner),
+            "channels",
+            &json!({"expected_revision": revision, "channels": [{"id": "c0123456789ab", "name": "notes", "type": "text", "position": 0, "created_at": "2026-09-08T00:00:00Z"}]}),
+        )
+        .await?;
+    let send = |principal, request: &'static str, payload: serde_json::Value| {
+        let store = &store;
+        async move {
+            store
+                .execute_channel_message(TrustedPrincipal(principal), request, &payload)
+                .await
+        }
+    };
+    let source = send(
+        &owner,
+        "source",
+        json!({"channel_id": "c0123456789ab", "content": "first"}),
+    )
+    .await?;
+    let reply = |content: &str, mention: bool| json!({"channel_id": "c0123456789ab", "content": content, "reply_to_event_id": source.event.id, "reply_mention": mention});
+    let called = send(&other, "called", reply("answer", true)).await?;
+    assert_eq!(
+        called.event.reply_mention(),
+        Some(owner.participant_id.as_str())
+    );
+    let quiet = send(&other, "quiet", reply("answer", false)).await?;
+    assert_eq!(quiet.event.reply_mention(), None);
+    let own = send(&owner, "own", reply("again", true)).await?;
+    assert_eq!(own.event.reply_mention(), None);
+    assert!(
+        send(
+            &other,
+            "no-target",
+            json!({"channel_id": "c0123456789ab", "content": "x", "reply_mention": true})
+        )
+        .await
+        .is_err()
+    );
+    Ok(())
+}

@@ -183,3 +183,29 @@ it("shows stored mentions as names in search results and pins", async () => {
   expect(await screen.findByText("@Terra plan it")).toBeTruthy();
   expect(document.body.textContent).not.toContain("<@agent-1>");
 });
+
+it("offers Discord's reply @ switch only where the host carries it, and never for your own message", async () => {
+  const options = props();
+  const theirs = { ...channelMessage(4), actor: { participant_id: "guest", participant_type: "human" }, actor_id: "guest", participant_id: "guest", display_name: "Guest" };
+  options.transcript.events = [channelMessage(3), theirs];
+  const { rerender } = render(<CustomChannelView {...options} viewerParticipantId="operator-local" replyMentionSupported />);
+  const reply = (index: number) => fireEvent.click(screen.getAllByRole("button", { name: "메시지에 답장" })[index]);
+  const input = () => screen.getByRole("textbox", { name: "채널 메시지 입력" });
+  reply(1);
+  const toggle = screen.getByRole("button", { name: "@ 켜짐" });
+  fireEvent.change(input(), { target: { value: "called" } });
+  fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
+  await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("called", undefined, theirs.id, true));
+  reply(1);
+  fireEvent.click(screen.getByRole("button", { name: "@ 켜짐" }));
+  expect(screen.getByRole("button", { name: "@ 꺼짐" })).toBeTruthy();
+  fireEvent.change(input(), { target: { value: "quiet" } });
+  fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
+  await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("quiet", undefined, theirs.id, false));
+  reply(0);
+  expect(screen.queryByRole("button", { name: /^@ / })).toBeNull();
+  rerender(<CustomChannelView {...options} viewerParticipantId="operator-local" />);
+  reply(1);
+  expect(screen.queryByRole("button", { name: /^@ / })).toBeNull();
+  expect(toggle).toBeTruthy();
+});

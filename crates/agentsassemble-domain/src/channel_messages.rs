@@ -49,6 +49,10 @@ pub struct ChannelMessageSend {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub reply_to_event_id: Option<String>,
+    /// Discord's "@ on": the reply also calls the replied-to author.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(as = "Option<bool>", optional)]
+    pub reply_mention: bool,
 }
 
 impl ChannelMessageSend {
@@ -72,6 +76,10 @@ impl ChannelMessageSend {
         command.content = clean_message(&command.content, MAX_TEXT_CHAT_CHARACTERS);
         command.reply_to_event_id =
             crate::command::parse_reply_to_event_id(payload.get("reply_to_event_id"))?;
+        command.reply_mention = crate::command::parse_reply_mention(
+            payload.get("reply_mention"),
+            command.reply_to_event_id.is_some(),
+        )?;
         if !has_visible_text(&command.content) {
             return Err(CommandRejection::new(
                 "empty",

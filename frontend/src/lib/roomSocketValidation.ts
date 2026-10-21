@@ -400,7 +400,8 @@ export function commandAckResultIsValid(
     try {
       assertExactKeys(result, ["channel_id", "event", "event_seq"], "channel message ACK");
       return Boolean(hasDurableEvent && event?.type === CHANNEL_MESSAGE_EVENT_TYPE &&
-        event.message_deleted !== true && event.channel_id === payload.channel_id && result.channel_id === payload.channel_id && event.participant_id === expectedParticipantId);
+        event.message_deleted !== true && event.channel_id === payload.channel_id && result.channel_id === payload.channel_id && event.participant_id === expectedParticipantId &&
+        (payload.reply_mention === true) === (typeof event.reply_mention_participant_id === "string" && Boolean(event.reply_mention_participant_id)));
     } catch { return false; }
   }
   if (action === "message.send") {

@@ -218,8 +218,11 @@ the agent view's "Mentions you", and the ordered direct target after text
 mentions and the structured handoff. An AI reply whose text opens with the
 replied-to author's `<@ID>` is stored as an "@ on" reply without that text, and
 mentions wrapped in escaped brackets (`&lt;<@ID>&gt;`) are unwrapped. Deleting a
-reply removes the call with the other reply metadata. Channel messages keep
-their strict wire shape and do not carry the call yet.
+reply removes the call with the other reply metadata. Text-channel replies
+(`channel.message.send`) take the same `reply_mention` under their own
+capability `channel.reply_mention`; the channel client accepts the recorded field
+and binds it in the send receipt. Channels have no AI turns, so the call only
+reaches people (the rail mention badge).
 
 Owners: `room_turn_context.rs`, `room_turn_routing.rs`, `conversation_status.rs`
 and its domain projection. All additions share the existing observation budget.
