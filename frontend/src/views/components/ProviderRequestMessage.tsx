@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PendingProviderRequest } from "../../types/generated/PendingProviderRequest";
 import type { ProviderRequestKind } from "../../types/generated/ProviderRequestKind";
 import type { ProviderRequestOption } from "../../types/generated/ProviderRequestOption";
@@ -16,8 +16,8 @@ const terminalLabels: Record<string, string> = {
 // Option labels come from the structured option kind, never the provider's English label.
 // An unknown kind (a newer host may add one) still renders a neutral Korean label.
 const optionKindLabels: Record<string, string> = {
-  allow_once: "한 번만 허용", allow_always: "항상 허용", allow_session: "이번 세션 동안 허용",
-  reject_once: "한 번만 거부", reject_always: "항상 거부",
+  allow_once: "이번만 허용", allow_always: "앞으로도 허용", allow_session: "이번 세션 동안 허용",
+  reject_once: "거부", reject_always: "항상 거부",
   deny: "거부", decline: "거부하고 계속", cancel: "거부하고 중단", allow_policy: "규칙을 추가하고 허용",
   deny_policy: "규칙을 추가하고 거부",
 };
@@ -38,6 +38,22 @@ export function providerRequestOptionLabel(option: ProviderRequestOption): strin
   return optionKindLabels[option.kind] || neutralOptionLabel;
 }
 
+export function remainingLabel(expiresAt: string, now: number): string {
+  const seconds = Math.ceil((Date.parse(expiresAt) - now) / 1000);
+  if (!(seconds > 0)) return "시간이 지났어요";
+  return seconds < 60 ? `${seconds}초 남음` : `${Math.ceil(seconds / 60)}분 남음`;
+}
+
+// Ticks only while a request is waiting on screen, so its remaining time stays true.
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
 export default function ProviderRequestMessage({ entry, state, socket, connected, canPost, providerKind }: {
   entry?: PendingProviderRequest; title?: string; state?: string; providerKind?: string;
   socket: RoomSocketHandle | null; connected: boolean; canPost: boolean;
@@ -54,7 +70,7 @@ export default function ProviderRequestMessage({ entry, state, socket, connected
 function RequestForm({ entry, socket, enabled, providerName, providerKind }: { entry: PendingProviderRequest; socket: RoomSocketHandle | null; enabled: boolean; providerName: string; providerKind?: string }) {
   const { request, state } = entry;
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
-  const [optionId, setOptionId] = useState("");
+  const now = useNow();
   const [busy, setBusy] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
@@ -62,43 +78,46 @@ function RequestForm({ entry, socket, enabled, providerName, providerKind }: { e
   const inFlight = useRef(false);
   const blocked = !enabled || !socket || busy || accepted || state === "resolving";
   const locked = blocked || attempt.current !== null;
-  const complete = request.prompt.response_kind === "option" ? Boolean(optionId) :
+  const complete = request.prompt.response_kind === "option" ? false :
     request.prompt.response_kind === "answers" ? request.prompt.questions.every((question) => (answers[question.id]?.length ?? 0) > 0) : true;
-  async function submit() {
-    if (blocked || (!complete && !attempt.current) || inFlight.current || !socket) return;
-    const resolution: ProviderRequestResolution = attempt.current ?? (
-      request.prompt.response_kind === "option" ? { response_kind: "option", option_id: optionId } :
+  async function submit(chosen?: ProviderRequestResolution) {
+    if (blocked || (!chosen && !complete && !attempt.current) || inFlight.current || !socket) return;
+    const resolution: ProviderRequestResolution = attempt.current ?? chosen ?? (
       request.prompt.response_kind === "answers" ? { response_kind: "answers", answers } : { response_kind: "acknowledge" }
     );
     inFlight.current = true; attempt.current = resolution; setBusy(true); setError("");
     try {
       await socket.resolveProviderRequest(request.provider_request_id, resolution);
       setAccepted(true);
-      setAnswers({}); setOptionId(""); attempt.current = null;
+      setAnswers({}); attempt.current = null;
     } catch (failure) {
       const unknown = failure instanceof RoomSocketSayError && failure.category === "outcome_unknown";
       setError(unknown ? "응답 결과를 확인하지 못했어요. 같은 응답으로 다시 확인할 수 있어요." : userFacingError(failure, "응답을 보내지 못했어요."));
       if (!unknown) attempt.current = null;
     } finally { inFlight.current = false; setBusy(false); }
   }
-  return <form onSubmit={(event) => { event.preventDefault(); void submit(); }} style={{ display: "grid", gap: 16 }}>
-    <div><h3 style={{ fontWeight: 700 }}>{requestHeadline(request.request_kind, providerName)}</h3>
+  const options = request.prompt.response_kind === "option" ? request.prompt.options.filter((option) => !(providerKind === "opencode_server" && request.request_kind === "permission" && (option.id === "always" || option.kind === "allow_always"))) : [];
+  const primary = options.find((option) => option.kind === "allow_once") ?? options[0];
+  return <form onSubmit={(event) => { event.preventDefault(); void submit(); }} style={{ display: "grid", gap: 8 }}>
+    <div><p><strong>{requestHeadline(request.request_kind, providerName)}</strong>
+      <span style={{ color: "var(--color-text-muted)" }}> · <time dateTime={entry.expires_at}>{remainingLabel(entry.expires_at, now)}</time></span></p>
       {request.description && <p style={{ whiteSpace: "pre-wrap" }}>{request.description}</p>}</div>
-    <p>응답 기한: <time dateTime={entry.expires_at}>{new Date(entry.expires_at).toLocaleString("ko-KR")}</time></p>
-    <fieldset disabled={locked} style={{ display: "grid", gap: 12, minWidth: 0 }}>
-      {request.prompt.response_kind === "option" && request.prompt.options.filter((option) => !(providerKind === "opencode_server" && request.request_kind === "permission" && (option.id === "always" || option.kind === "allow_always"))).map((option) => <label key={option.id} style={{ ...controlStyle, display: "flex", alignItems: "center", gap: 12 }}>
-        <input type="radio" className="dc-radio" name={request.provider_request_id} required checked={optionId === option.id} onChange={() => setOptionId(option.id)} />
-        <span>{providerRequestOptionLabel(option)}{option.description && <small style={{ display: "block" }}>{option.description}</small>}</span>
-      </label>)}
+    {options.length > 0 && <div role="group" aria-label="응답" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {options.map((option) => <button key={option.id} type="button" disabled={locked} title={option.description || undefined}
+        className={`dc-button ${option === primary ? "dc-button--primary" : "dc-button--secondary"}`}
+        onClick={() => void submit({ response_kind: "option", option_id: option.id })}>{providerRequestOptionLabel(option)}</button>)}
+    </div>}
+    {request.prompt.response_kind !== "option" && <fieldset disabled={locked} style={{ display: "grid", gap: 8, minWidth: 0 }}>
       {request.prompt.response_kind === "answers" && request.prompt.questions.map((question) => <QuestionInput key={question.id}
         question={question} values={answers[question.id] ?? []} group={`${request.provider_request_id}-${question.id}`}
         onChange={(value) => setAnswers((previous) => ({ ...previous, [question.id]: value }))} />)}
       {request.prompt.response_kind === "acknowledge" && request.prompt.action_url &&
-        <a href={request.prompt.action_url} target="_blank" rel="noopener noreferrer" style={controlStyle}>요청 페이지 열기</a>}
-    </fieldset>
+        <a href={request.prompt.action_url} target="_blank" rel="noopener noreferrer" className="dc-button dc-button--secondary" style={{ justifySelf: "start" }}>요청 페이지 열기</a>}
+    </fieldset>}
     {error && <p role="alert">{error}</p>}
     {accepted || state === "resolving" ? <p role="status">응답을 접수했어요. 에이전트로 전달한 결과를 기다리고 있어요.</p> :
-      <button type="submit" disabled={blocked || (!complete && !attempt.current)} style={{ ...controlStyle, background: "var(--color-accent)", justifySelf: "start" }}>
+      (attempt.current || request.prompt.response_kind !== "option") &&
+      <button type="submit" className="dc-button dc-button--primary" disabled={blocked || (!complete && !attempt.current)} style={{ justifySelf: "start" }}>
         {busy ? "응답 전송 중…" : attempt.current ? "같은 응답으로 다시 확인" : request.prompt.response_kind === "acknowledge" ? "작업 완료 알리기" : "응답 보내기"}
       </button>}
   </form>;

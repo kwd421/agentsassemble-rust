@@ -64,6 +64,8 @@ pub(crate) struct RemoteOpenAiDriver {
     credentials: ProviderCredentialStore,
     attached_session_id: Option<String>,
     turn_effect_uncertain: bool,
+    /// Commands the owner allowed with 앞으로도 허용; gone when the agent stops.
+    allowed_commands: std::collections::HashSet<String>,
     stopped: bool,
     portal_failed: bool,
 }
@@ -188,6 +190,7 @@ impl RemoteOpenAiDriver {
             credentials,
             attached_session_id: None,
             turn_effect_uncertain: false,
+            allowed_commands: std::collections::HashSet::new(),
             stopped: false,
             portal_failed: false,
         })
@@ -333,6 +336,7 @@ impl RemoteOpenAiDriver {
                 session,
                 request,
                 &call.function.arguments,
+                &mut self.allowed_commands,
                 &mut self.turn_effect_uncertain,
                 &cancellation,
             )

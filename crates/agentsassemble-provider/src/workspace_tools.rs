@@ -27,6 +27,16 @@ const CLEANUP: DriverError = DriverError::new(
 pub(crate) struct WorkspaceTools {
     task: Option<JoinHandle<io::Result<Value>>>,
     cancellation: CancellationToken,
+    /// The owner chose 앞으로도 허용 for file changes; lasts while this agent runs.
+    files_allowed: bool,
+}
+
+/// The owner's answer to one approval request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Approval {
+    Denied,
+    Once,
+    Always,
 }
 
 impl Drop for WorkspaceTools {
@@ -110,8 +120,14 @@ impl WorkspaceTools {
             serde_json::from_value(prepared["operation"].clone()).map_err(|_| FAILED)?;
         let before = prepared["before"].as_str().map(str::to_owned);
         let path = operation.path().to_owned();
+        if operation.writes() && !self.files_allowed {
+            match approve(session, request, name, &path).await? {
+                Approval::Denied => return Err(FAILED),
+                Approval::Once => {}
+                Approval::Always => self.files_allowed = true,
+            }
+        }
         if operation.writes() {
-            approve(session, request, name, &path).await?;
             // A write may commit before its result or turn completion is observed.
             // Preserve replay uncertainty even when later filesystem/API work fails.
             *effect_uncertain = true;
@@ -135,27 +151,32 @@ async fn approve(
     request: &ProviderTurnRequest,
     name: &str,
     path: &str,
-) -> Result<(), DriverError> {
+) -> Result<Approval, DriverError> {
     let description = if name == "replace_workspace_text" {
         format!("{path} 파일의 지정한 텍스트를 바꿉니다.")
     } else {
         format!("{path} 파일을 생성하거나 덮어씁니다.")
     };
-    if owner_allows(session, request, "작업 폴더 파일 변경", description).await? {
-        Ok(())
-    } else {
-        Err(FAILED)
-    }
+    owner_allows(
+        session,
+        request,
+        "작업 폴더 파일 변경",
+        description,
+        "이 에이전트가 멈출 때까지 파일 변경은 묻지 않아요.",
+    )
+    .await
 }
 
 /// Asks the agent's owner once, bound to this turn's execution, and reports
-/// whether they allowed it. A missing ingress or broken exchange is a failure.
+/// their answer. `always` says what 앞으로도 허용 covers. A missing ingress or
+/// broken exchange is a failure.
 pub(crate) async fn owner_allows(
     session: &DurableAgentSession,
     request: &ProviderTurnRequest,
     title: &str,
     description: String,
-) -> Result<bool, DriverError> {
+    always: &str,
+) -> Result<Approval, DriverError> {
     let prompt = ProviderRequest {
         provider_request_id: uuid::Uuid::new_v4(),
         request_kind: ProviderRequestKind::Permission,
@@ -169,6 +190,12 @@ pub(crate) async fn owner_allows(
                     label: "이번만 허용".to_owned(),
                     kind: "allow_once".to_owned(),
                     description: String::new(),
+                },
+                ProviderRequestOption {
+                    id: "allow_always".to_owned(),
+                    label: "앞으로도 허용".to_owned(),
+                    kind: "allow_always".to_owned(),
+                    description: always.to_owned(),
                 },
                 ProviderRequestOption {
                     id: "deny".to_owned(),
@@ -192,9 +219,17 @@ pub(crate) async fn owner_allows(
         .await
         .map_err(|_| FAILED)?;
     let response = exchange.receive().await.map_err(|_| FAILED)?;
-    let allowed = matches!(response, ProviderRequestResolution::Option {option_id} if option_id == "allow_once");
+    let approval = match response {
+        ProviderRequestResolution::Option { option_id } if option_id == "allow_once" => {
+            Approval::Once
+        }
+        ProviderRequestResolution::Option { option_id } if option_id == "allow_always" => {
+            Approval::Always
+        }
+        _ => Approval::Denied,
+    };
     exchange.complete(true).await.map_err(|_| FAILED)?;
-    Ok(allowed)
+    Ok(approval)
 }
 
 pub(crate) fn names() -> [&'static str; 5] {

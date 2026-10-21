@@ -1,6 +1,6 @@
 //! The built-in harness's one command tool: a shell command in the agent's
 //! workspace, run only after the owner allows that exact command.
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use agentsassemble_domain::DurableAgentSession;
 use serde::Deserialize;
@@ -11,7 +11,7 @@ use crate::{
     driver::{DriverError, ProviderTurnRequest},
     process::{ProbeFailure, run_in_directory},
     workspace_files,
-    workspace_tools::owner_allows,
+    workspace_tools::{Approval, owner_allows},
 };
 
 pub(crate) const NAME: &str = "run_workspace_command";
@@ -133,6 +133,7 @@ pub(crate) async fn execute(
     session: &DurableAgentSession,
     request: &ProviderTurnRequest,
     arguments: &str,
+    allowed: &mut HashSet<String>,
     effect_uncertain: &mut bool,
     cancellation: &CancellationToken,
 ) -> Result<String, DriverError> {
@@ -165,11 +166,21 @@ pub(crate) async fn execute(
     // The stored identity proves this is still the folder the owner chose.
     bind_workspace(session).await?;
     let description = format!("작업 폴더에서 이 명령을 실행합니다: {command}");
-    if !owner_allows(session, request, "명령 실행", description).await? {
-        return Ok(refused(
-            "command_denied",
-            "The owner did not allow this command.",
-        ));
+    // 앞으로도 허용 covers this exact command text while the agent runs.
+    if !allowed.contains(command) {
+        let always = "이 에이전트가 멈출 때까지 같은 명령은 묻지 않아요.";
+        match owner_allows(session, request, "명령 실행", description, always).await? {
+            Approval::Denied => {
+                return Ok(refused(
+                    "command_denied",
+                    "The owner did not allow this command.",
+                ));
+            }
+            Approval::Once => {}
+            Approval::Always => {
+                allowed.insert(command.to_owned());
+            }
+        }
     }
     // The approval can wait minutes; the folder must still be the same one
     // when the command starts, not only when the owner was asked.

@@ -59,13 +59,12 @@ it("hides pre-upgrade OpenCode remembered grants and submits only a one-time cho
   } };
   render(<ProviderRequestMessage entry={entry} providerKind="opencode_server" socket={socket(resolve)} connected canPost />);
   // Labels come from the structured kind; the provider's English label and title never render.
-  expect(screen.getByLabelText(/한 번만 허용/)).toBeTruthy();
-  expect(screen.queryByLabelText(/Allow once/)).toBeNull();
+  expect(screen.queryByText(/Allow once/)).toBeNull();
   expect(screen.queryByText(/OpenCode requests bash/)).toBeNull();
   expect(screen.getByText(/OpenCode 실행 권한 요청/)).toBeTruthy();
-  expect(screen.queryByLabelText(/Always allow/)).toBeNull();
-  fireEvent.click(screen.getByLabelText(/한 번만 허용/));
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "응답 보내기" })); });
+  // One row of buttons, one click answers; OpenCode's remembered grant stays hidden.
+  expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["이번만 허용", "거부"]);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "이번만 허용" })); });
   expect(resolve).toHaveBeenCalledWith(entry.request.provider_request_id, { response_kind: "option", option_id: "once" });
 });
 
@@ -77,6 +76,20 @@ it("renders a neutral Korean label for an option kind it does not know", () => {
     ] },
   } };
   render(<ProviderRequestMessage entry={entry} providerKind="codex_live_session" socket={socket(vi.fn())} connected canPost />);
-  expect(screen.queryByLabelText(/Allow from orbit/)).toBeNull();
-  expect(screen.getByLabelText(/선택/)).toBeTruthy();
+  expect(screen.queryByText(/Allow from orbit/)).toBeNull();
+  expect(screen.getByRole("button", { name: "선택" })).toBeTruthy();
+});
+
+it("offers 앞으로도 허용 from the built-in harness and shows time left, not a deadline", () => {
+  const entry = { ...pendingRequest, expires_at: new Date(Date.now() + 9.5 * 60_000).toISOString(),
+    request: { ...pendingRequest.request, request_kind: "permission" as const,
+      prompt: { response_kind: "option" as const, options: [
+        { id: "allow_once", kind: "allow_once", label: "이번만 허용", description: "" },
+        { id: "allow_always", kind: "allow_always", label: "앞으로도 허용", description: "이 에이전트가 멈출 때까지 같은 명령은 묻지 않아요." },
+        { id: "deny", kind: "reject_once", label: "거부", description: "" },
+      ] } } };
+  render(<ProviderRequestMessage entry={entry} providerKind="deepseek" socket={socket(vi.fn())} connected canPost />);
+  expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["이번만 허용", "앞으로도 허용", "거부"]);
+  expect(screen.getByText("10분 남음")).toBeTruthy();
+  expect(screen.queryByText(/응답 기한/)).toBeNull();
 });
