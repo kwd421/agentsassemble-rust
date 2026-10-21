@@ -482,9 +482,10 @@ describe("LobbyComposer", () => {
     input.selectionStart = input.value.length;
     fireEvent.keyUp(input);
     fireEvent.click(await screen.findByRole("option", { name: "claude-haiku-5-5" }));
-    // The pick carries the participant id through send, so a duplicate or
-    // normalized-equal display name never resolves to another participant.
-    expect(input.value).toBe("<@opencode-87a106c9-test> ");
+    // The box reads like Discord; the pick still carries the participant id
+    // through send, so a duplicate or normalized-equal display name never
+    // resolves to another participant.
+    expect(input.value).toBe("@claude-haiku-5-5 ");
     fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
     await waitFor(() => expect(say).toHaveBeenCalledTimes(1));
     expect(say).toHaveBeenCalledWith(expect.objectContaining({ message: "<@opencode-87a106c9-test>" }));

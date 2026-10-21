@@ -37,3 +37,15 @@ describe("MentionInput", () => {
     );
   });
 });
+
+it("shows a picked mention as its name and deletes it as one piece", () => {
+  const onChange = vi.fn();
+  render(<MentionInput ariaLabel="입력" value="hi <@agent-1> there" onChange={onChange}
+    mentionables={[{ token: "agent-1", label: "리뷰-AI", participantKind: "agent" }]} />);
+  const input = screen.getByLabelText("입력") as HTMLTextAreaElement;
+  expect(input.value).toBe("hi @리뷰-AI there");
+  fireEvent.change(input, { target: { value: "hi @리뷰-A there" } });
+  expect(onChange).toHaveBeenLastCalledWith("hi  there");
+  fireEvent.change(input, { target: { value: "hi @리뷰-AI there!" } });
+  expect(onChange).toHaveBeenLastCalledWith("hi <@agent-1> there!");
+});

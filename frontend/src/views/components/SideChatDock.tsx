@@ -1,3 +1,4 @@
+import { draftDisplay, mentionLabels as draftMentionLabels, replaceDisplayRange } from "../../lib/mentionDraftDisplay";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AtSign, MessageSquare, Send, Smile, X } from "../../ui/icons";
 import type { useRoomSideChat } from "../../app/useRoomSideChat";
@@ -58,11 +59,14 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
   }, [open, chat.snapshot?.latest_seq]);
   function insert(text: string) {
     if (disabled) return;
+    // The box shows mentions as names: its caret is mapped onto the draft.
     const input = inputRef.current;
-    const start = input?.selectionStart ?? value.length;
-    const end = input?.selectionEnd ?? value.length;
-    selectionAfterInsert.current = start + text.length;
-    setValue(`${value.slice(0, start)}${text}${value.slice(end)}`);
+    const labels = draftMentionLabels(mentionables);
+    const shownLength = draftDisplay(value, labels).text.length;
+    const next = replaceDisplayRange(value, labels, input?.selectionStart ?? shownLength,
+      input?.selectionEnd ?? shownLength, text);
+    selectionAfterInsert.current = next.cursor;
+    setValue(next.markup);
     input?.focus();
   }
   async function send() {

@@ -18,6 +18,13 @@ import {
   type Mentionable,
 } from "../../lib/mentionComposerModel";
 import ProviderLogo from "./ProviderLogo";
+import {
+  applyDisplayEdit,
+  cursorInMention,
+  draftDisplay,
+  mentionLabels,
+  replaceDisplayRange,
+} from "../../lib/mentionDraftDisplay";
 
 type MentionInputProps = {
   value: string;
@@ -55,13 +62,17 @@ export default function MentionInput({
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const targetRef = inputRef || internalRef;
   const mentionListId = useId();
+  // `value` keeps each picked mention as `<@id>`; the box shows `@Name`.
+  const labels = useMemo(() => mentionLabels(mentionables), [mentionables]);
+  const display = useMemo(() => draftDisplay(value, labels), [labels, value]);
+  const shown = display.text;
   const [activeOptionIndex, setActiveOptionIndex] = useState(0);
-  const [mentionCursor, setMentionCursor] = useState(value.length);
+  const [mentionCursor, setMentionCursor] = useState(shown.length);
   const [dismissedMentionKey, setDismissedMentionKey] = useState("");
   const [suppressMentionSuggestions, setSuppressMentionSuggestions] = useState(false);
   const mentionMatch = useMemo(
-    () => mentionQueryAtCursor(value, mentionCursor),
-    [mentionCursor, value]
+    () => (cursorInMention(display, mentionCursor) ? null : mentionQueryAtCursor(shown, mentionCursor)),
+    [display, mentionCursor, shown]
   );
   const mentionQueryKey = mentionMatch ? `${mentionMatch.start}:${mentionMatch.query}` : "";
   const options = useMemo(
@@ -83,8 +94,8 @@ export default function MentionInput({
   }, [mentionQueryKey]);
 
   useEffect(() => {
-    setMentionCursor((current) => Math.min(current, value.length));
-  }, [value.length]);
+    setMentionCursor((current) => Math.min(current, shown.length));
+  }, [shown.length]);
 
   useEffect(() => {
     setActiveOptionIndex((current) => {
@@ -94,29 +105,42 @@ export default function MentionInput({
   }, [options.length]);
 
   function syncMentionCursor() {
-    setMentionCursor(targetRef.current?.selectionStart ?? value.length);
+    setMentionCursor(targetRef.current?.selectionStart ?? shown.length);
+  }
+
+  function placeCaret(cursor: number) {
+    window.setTimeout(() => {
+      targetRef.current?.focus();
+      targetRef.current?.setSelectionRange(cursor, cursor);
+      setMentionCursor(cursor);
+    }, 0);
   }
 
   function chooseMention(mentionable: Mentionable) {
-    const cursor = targetRef.current?.selectionStart ?? value.length;
-    const query = mentionQueryAtCursor(value, cursor);
-    const next = insertMentionText(value, cursor, query, mentionable);
+    const cursor = targetRef.current?.selectionStart ?? shown.length;
+    const query = mentionQueryAtCursor(shown, cursor);
+    if (!query) return;
+    // The typed `@query` becomes the bound token; the box shows `@Name `.
+    const token = insertMentionText("", 0, { start: 0, query: query.query }, mentionable).message;
+    const next = replaceDisplayRange(value, labels, query.start, cursor, token);
+    const caret = draftDisplay(next.markup, mentionLabels([...mentionables, mentionable]))
+      .text.length - (shown.length - cursor);
     setDismissedMentionKey("");
     setSuppressMentionSuggestions(true);
-    setMentionCursor(next.cursor);
-    onChange(next.message);
-    window.setTimeout(() => {
-      targetRef.current?.focus();
-      targetRef.current?.setSelectionRange(next.cursor, next.cursor);
-      setMentionCursor(next.cursor);
-    }, 0);
+    setMentionCursor(caret);
+    onChange(next.markup);
+    placeCaret(caret);
   }
 
   function handleInputChange(event: ChangeEvent<HTMLTextAreaElement>) {
     setDismissedMentionKey("");
     setSuppressMentionSuggestions(false);
-    setMentionCursor(event.target.selectionStart ?? event.target.value.length);
-    onChange(event.target.value);
+    const typed = event.target.selectionStart ?? event.target.value.length;
+    const next = applyDisplayEdit(value, labels, event.target.value);
+    setMentionCursor(next.cursor);
+    onChange(next.markup);
+    // Removing a whole mention changes more than the box did; keep the caret.
+    if (next.cursor !== typed) placeCaret(next.cursor);
   }
 
   function handleMentionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -202,7 +226,7 @@ export default function MentionInput({
       )}
       <textarea
         ref={targetRef}
-        value={value}
+        value={shown}
         onChange={handleInputChange}
         onKeyDown={handleMentionKeyDown}
         onPaste={onPaste}

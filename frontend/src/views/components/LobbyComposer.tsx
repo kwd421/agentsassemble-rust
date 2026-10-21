@@ -1,3 +1,4 @@
+import { draftDisplay, mentionLabels, replaceDisplayRange } from "../../lib/mentionDraftDisplay";
 import { createResourceUrl, revokeResourceUrl } from "../../lib/remote/remoteResources";
 import ResourceImage from "./ResourceImage";
 import UploadLimitDialog from "./UploadLimitDialog";
@@ -287,14 +288,16 @@ export default function LobbyComposer({
   }, [busy]);
 
   function insertText(text: string) {
+    // The box shows mentions as names: its caret is mapped onto the draft.
     const input = inputRef.current;
-    const start = input?.selectionStart ?? message.length;
-    const end = input?.selectionEnd ?? message.length;
-    const next = `${message.slice(0, start)}${text}${message.slice(end)}`;
-    setMessage(next);
+    const labels = mentionLabels(mentionables);
+    const shownLength = draftDisplay(message, labels).text.length;
+    const next = replaceDisplayRange(message, labels, input?.selectionStart ?? shownLength,
+      input?.selectionEnd ?? shownLength, text);
+    setMessage(next.markup);
     window.setTimeout(() => {
       inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(start + text.length, start + text.length);
+      inputRef.current?.setSelectionRange(next.cursor, next.cursor);
     }, 0);
   }
 
