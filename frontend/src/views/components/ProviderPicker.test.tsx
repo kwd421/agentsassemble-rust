@@ -26,7 +26,9 @@ it("shows the chosen AI with how it runs", () => {
   render(<ProviderPicker providers={[codexProvider(), deepSeekProvider()]} selectedId="deepseek" view="card" onSelect={vi.fn()} />);
   const chosen = screen.getByRole("region", { name: "고른 AI" });
   expect(chosen.textContent).toContain("DeepSeek");
-  expect(within(chosen).getByRole("radio", { name: "API" }).getAttribute("aria-checked")).toBe("true");
+  // DeepSeek runs one way only, so that is a tag rather than a lone toggle.
+  expect(within(chosen).getByText("API")).toBeTruthy();
+  expect(within(chosen).queryByRole("radio")).toBeNull();
   // Going back to the list belongs to the dialog's back button, not the card.
   expect(within(chosen).queryByRole("button", { name: "바꾸기" })).toBeNull();
   expect(screen.queryByRole("searchbox", { name: "AI 검색" })).toBeNull();

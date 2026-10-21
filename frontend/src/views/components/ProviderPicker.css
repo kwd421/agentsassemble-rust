@@ -75,6 +75,16 @@
   font-weight: 600;
 }
 
+.dc-provider-mode-tag {
+  margin-left: auto;
+  border-radius: 4px;
+  background: rgba(151, 151, 159, 0.12);
+  padding: 2px 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .dc-provider-modes {
   display: inline-flex;
   gap: 2px;

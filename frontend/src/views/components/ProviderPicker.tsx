@@ -111,7 +111,10 @@ export default function ProviderPicker({ providers, selectedId, onSelect, view, 
   return <section className="dc-provider-selected" aria-label="고른 AI">
     <ProviderLogo providerId={selectedId} providerKind={current?.provider.provider_kind} size={32} />
     <span className="dc-provider-selected-name">{selected.name}</span>
-    {selected.modes.some(({ mode }) => mode) && <span className="dc-provider-modes" role="radiogroup" aria-label="실행 방식">
+    {/* One way to run it is a fact, not a choice: a tag, not a lone toggle button. */}
+    {selected.modes.filter(({ mode }) => mode).length === 1 && current?.mode &&
+      <span className="dc-provider-mode-tag">{RUN_MODE_LABEL[current.mode]}</span>}
+    {selected.modes.filter(({ mode }) => mode).length > 1 && <span className="dc-provider-modes" role="radiogroup" aria-label="실행 방식">
       {selected.modes.map(({ mode, provider }) => mode && <button key={mode} type="button" role="radio"
         aria-checked={provider.id === selectedId} disabled={disabled} onClick={() => onSelect(provider)}>
         {RUN_MODE_LABEL[mode]}
