@@ -202,6 +202,32 @@ fn relative(path: &str) -> io::Result<PathBuf> {
     Ok(result)
 }
 
+/// What serializes writers of one folder across agent processes. On Unix the
+/// folder itself is locked, so nothing is left in the owner's project (a lock
+/// file there would show up in their git status). Windows cannot lock a
+/// folder handle, so it keeps a persistent lock file: removing it would let
+/// another worker lock a different inode.
+#[cfg(unix)]
+fn commit_lock(parent: &Dir) -> io::Result<std::fs::File> {
+    Ok(parent.try_clone()?.into_std_file())
+}
+
+#[cfg(not(unix))]
+fn commit_lock(parent: &Dir) -> io::Result<std::fs::File> {
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .write(true)
+        .create(true)
+        .nonblock(true)
+        .follow(FollowSymlinks::No);
+    let lock = parent.open_with(WRITE_LOCK, &options)?.into_std();
+    if !lock.metadata()?.is_file() {
+        return Err(invalid());
+    }
+    Ok(lock)
+}
+
 fn directory(root: &Dir, path: &Path, create: bool) -> io::Result<Dir> {
     let mut dir = root.try_clone()?;
     for name in path.components() {
@@ -330,24 +356,7 @@ fn write(
         return Err(invalid());
     }
     let parent = directory(root, path.parent().ok_or_else(invalid)?, true)?;
-    // Persistent inode: removing it would let another worker lock a different inode.
-    // The parent capability also gives nested workspace selections the same lock.
-    let mut lock_options = OpenOptions::new();
-    lock_options
-        .read(true)
-        .write(true)
-        .create(true)
-        .nonblock(true)
-        .follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        lock_options.mode(0o600);
-    }
-    let commit_lock = parent.open_with(WRITE_LOCK, &lock_options)?.into_std();
-    if !commit_lock.metadata()?.is_file() {
-        return Err(invalid());
-    }
+    let commit_lock = commit_lock(&parent)?;
     fs2::FileExt::try_lock_exclusive(&commit_lock)?;
     if let Some(before) = before
         && read_at(&parent, name, FILE_BYTES)? != before

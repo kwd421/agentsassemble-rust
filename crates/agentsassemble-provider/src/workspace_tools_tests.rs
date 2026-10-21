@@ -387,10 +387,16 @@ fn workspace_commit_child() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn workspace_commit_excludes_other_processes_and_stale_approvals() -> Result<(), Box<dyn Error>> {
+    #[cfg(not(unix))]
     use std::fs::OpenOptions;
     let workspace = tempfile::tempdir()?;
     std::fs::write(workspace.path().join("file.txt"), "alpha=0 beta=0")?;
     let root = cap_std::fs::Dir::open_ambient_dir(workspace.path(), cap_std::ambient_authority())?;
+    // The folder itself on Unix (nothing is left in the project), a lock file
+    // on Windows.
+    #[cfg(unix)]
+    let lock = std::fs::File::open(workspace.path())?;
+    #[cfg(not(unix))]
     let lock = OpenOptions::new()
         .read(true)
         .write(true)
@@ -441,6 +447,10 @@ fn workspace_commit_excludes_other_processes_and_stale_approvals() -> Result<(),
         std::fs::read_to_string(workspace.path().join("file.txt"))?,
         "alpha=1 beta=0"
     );
-    assert_eq!(std::fs::read_dir(workspace.path())?.count(), 2);
+    // Only the edited file: Unix leaves no lock file; Windows keeps its one.
+    assert_eq!(
+        std::fs::read_dir(workspace.path())?.count(),
+        if cfg!(unix) { 1 } else { 2 }
+    );
     Ok(())
 }
