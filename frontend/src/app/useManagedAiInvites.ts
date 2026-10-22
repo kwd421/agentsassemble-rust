@@ -12,7 +12,7 @@ type OriginProof = Origins & { isCurrent: () => boolean };
 type Pending = { authority: DesktopManagerRoomAuthority; requestId: string };
 export type ConnectorInvitePresentation = { key: string; expiresAt: string; copyable: boolean; local: boolean; seatName?: string };
 /** An external AI seat a reconnect invitation can take back. */
-export type ConnectorSeat = { id: string; name: string };
+export type ConnectorSeat = { id: string; name: string; away?: boolean };
 export type AttendeeInvitePresentation = ConnectorInvitePresentation & { displayName: string; provider: string };
 type ManagedAiInvite = (ConnectorInviteCustody & { kind: "connector"; seatName?: string }) | (AttendeePacketCustody & { kind: "attendee"; authority: DesktopManagerRoomAuthority });
 

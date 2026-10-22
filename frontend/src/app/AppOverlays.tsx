@@ -87,7 +87,7 @@ export default function AppOverlays({ controller, companionInvites, friendAuthor
             connectorSeats={inviteModalRoom.id === activeRoom.id ? canonicalRoom.participantRecords
               .filter((participant) => participant.participant_type === "agent" && participant.participant_id.startsWith(EXTERNAL_AI_ID_PREFIX) &&
                 participant.status !== "kicked" && participant.status !== "exported")
-              .map((participant) => ({ id: participant.participant_id, name: participant.display_name || participant.participant_id })) : []}
+              .map((participant) => ({ id: participant.participant_id, name: participant.display_name || participant.participant_id, away: participant.status === "detached" })) : []}
             attendeeInvites={roomInvite.attendeeInvites}
             operatorPairings={roomInvite.pairings}
             pairingCreating={roomInvite.pairingCreating}

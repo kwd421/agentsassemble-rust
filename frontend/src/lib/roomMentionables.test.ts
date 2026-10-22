@@ -87,8 +87,8 @@ describe("roomMentionables", () => {
         ],
       }).map(({ token, label }) => ({ token, label }))
     ).toEqual([
-      { token: "alpha", label: "동일 이름 · alpha" },
-      { token: "bravo", label: "동일 이름 · bravo" },
+      { token: "alpha", label: "동일 이름 (1)" },
+      { token: "bravo", label: "동일 이름 (2)" },
       { token: "charlie", label: "charlie" },
     ]);
   });

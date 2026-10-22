@@ -36,6 +36,8 @@ export function roomMentionables({
     memberById.get(viewerId)?.display_name
   );
   const displayNameCounts = new Map<string, number>();
+  // Members sharing a name are told apart by a number, never their internal ID.
+  const displayNameOrdinal = new Map<string, number>();
   participantIds.forEach((participantId) => {
     const session = sessionByParticipantId.get(participantId);
     const displayName = clean(
@@ -45,6 +47,7 @@ export function roomMentionables({
     );
     const key = displayName.toLowerCase();
     if (key) displayNameCounts.set(key, (displayNameCounts.get(key) || 0) + 1);
+    if (key) displayNameOrdinal.set(participantId, displayNameCounts.get(key) || 1);
   });
 
   function mentionableFor(participantId: string): Mentionable {
@@ -71,7 +74,7 @@ export function roomMentionables({
       label: uniqueDisplayName
         ? displayName
         : displayName
-          ? `${displayName} · ${participantId}`
+          ? `${displayName} (${displayNameOrdinal.get(participantId) || 1})`
           : participantId,
       avatarImage: session
         ? resolveAttachmentReference(session.avatar_image_url, displayResourceBase)

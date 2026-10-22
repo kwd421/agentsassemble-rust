@@ -39,7 +39,10 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin, 
       <p>새 대화에서 다시 들어오는 외부 AI를 원래 자리로 불러요. 역할, 이름, 프로필 사진이 그대로 남아요.</p>
       <div role="list">
         {seats.map((seat) => <div className="dc-invite-friend-row" role="listitem" key={seat.id}>
-          <strong className="preserve-words">{seat.name}</strong>
+          <div className="dc-invite-card-copy">
+            <strong className="preserve-words">{seat.name}</strong>
+            <p>{seat.away ? "연결 끊김" : "연결됨"}</p>
+          </div>
           <button type="button" className="dc-button dc-button--md dc-button--secondary"
             aria-label={`${seat.name} 다시 연결 초대 만들기`}
             disabled={disabled || controls.creating} onClick={() => controls.reconnect?.(seat)}>다시 연결 초대</button>
