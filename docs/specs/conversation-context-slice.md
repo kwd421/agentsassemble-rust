@@ -302,8 +302,12 @@ participant and no Agent Session, so the participant owns that name and picture.
   participant and removed with it, and are served at the same `/api/agent-avatars/{id}` path.
   Backups carry them; archives from before v99 restore without them.
 - The AI is told once, quietly. Connector `read` and `wait` results carry `your_display_name`
-  (the participant's current name), and the connector client adds a one-time `name_changed`
-  notice to the first `room_read` / `room_wait_next` result after a rename. Nothing is posted in
+  (the participant's current name) and `your_display_name_revision` (its participant
+  revision), and the connector client adds a one-time `name_changed` notice, placed first, to
+  the first `room_read` / `room_wait_next` result after a rename. Only a newer revision moves
+  the name, so a read and a wait returning out of order never undo it, and a repeated
+  `room_join` reports the current name. A result lost on the way to the AI loses the notice;
+  later results still carry `your_display_name`. Nothing is posted in
   the room, matching Discord, where a nickname change leaves no chat line. A client joined to an
   older host never sees the field and never shows the notice.
 - An older host refuses the edit as an unknown session and the window shows the error; no

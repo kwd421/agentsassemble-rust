@@ -275,6 +275,7 @@ async fn enrich(
     value["role"] = json!(participant.role);
     // The owner can rename an external AI; its client tells the AI once.
     value["your_display_name"] = json!(participant.display_name);
+    value["your_display_name_revision"] = json!(participant.updated_at);
     let allowed = state
         .store
         .delegated_direct_actions(
@@ -351,6 +352,7 @@ async fn wait_result(
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
     metadata["your_display_name"] = json!(participant.display_name);
+    metadata["your_display_name_revision"] = json!(participant.updated_at);
     let pending = json!(messages);
     metadata["messages"] = pending;
     metadata["last_seq"] = json!(delivered);

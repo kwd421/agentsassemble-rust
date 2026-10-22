@@ -128,8 +128,8 @@ async fn normal_connector_silence_outlives_the_http_connection_deadline()
 }
 
 #[tokio::test]
-async fn a_renamed_external_ai_is_told_its_new_name_once()
--> Result<(), Box<dyn std::error::Error>> {
+async fn a_renamed_external_ai_is_told_its_new_name_once() -> Result<(), Box<dyn std::error::Error>>
+{
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, LOCAL_OPERATOR_PARTICIPANT_ID,
         LOCAL_OPERATOR_USER_ID,
@@ -137,10 +137,16 @@ async fn a_renamed_external_ai_is_told_its_new_name_once()
     let (store, manager) = fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let invite = store
-        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, chrono::Utc::now())
+        .create_connector_invite(
+            &manager,
+            Uuid::new_v4(),
+            InviteScope::ReadWrite,
+            chrono::Utc::now(),
+        )
         .await?;
     let link = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
-    let client = RoomConnectorClient::new(&link, "Ace", Some(&[url::Url::parse(&server.base_url)?]))?;
+    let client =
+        RoomConnectorClient::new(&link, "Ace", Some(&[url::Url::parse(&server.base_url)?]))?;
     let joined = client.join().await?;
     assert!(client.read().await?.get("name_changed").is_none());
     let owner = AuthenticatedPrincipal {
@@ -160,10 +166,25 @@ async fn a_renamed_external_ai_is_told_its_new_name_once()
             &json!({"agent_id": joined.participant_id, "display_name": "Ace 2"}),
         )
         .await?;
-    let told = client.read().await?;
+    // A wait that brings a message carries the notice the first time.
+    let pending = client.wait_next();
+    let hello = json!({"content": "hello"});
+    let said = store.execute_message_with_turn(&owner, "say-after-rename", "message.send", &hello);
+    let (told, _) = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        tokio::try_join!(async { pending.await.map_err(|error| error.code) }, async {
+            said.await.map_err(|error| error.to_string())
+        })
+    })
+    .await??;
     assert_eq!(told["your_display_name"], "Ace 2");
-    assert!(told["name_changed"].as_str().is_some_and(|notice| notice.contains("\"Ace 2\"")));
+    assert!(
+        told["name_changed"]
+            .as_str()
+            .is_some_and(|notice| notice.contains("\"Ace 2\""))
+    );
     assert!(client.read().await?.get("name_changed").is_none());
+    // A rejoin reports the current name.
+    assert_eq!(client.join().await?.display_name, "Ace 2");
     server.stop().await;
     Ok(())
 }

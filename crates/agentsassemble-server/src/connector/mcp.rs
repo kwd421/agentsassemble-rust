@@ -94,19 +94,23 @@ impl ConnectorMcp {
 
 fn encode(value: &Value) -> Result<String, String> {
     let mut value = value.clone();
-    let mentions = value
-        .as_object_mut()
-        .and_then(|object| object.remove("unread_mentions"));
+    // Keep what the AI must notice at the front of a long result.
+    let mut front = Vec::new();
+    for key in ["name_changed", "unread_mentions"] {
+        if let Some(field) = value.as_object_mut().and_then(|object| object.remove(key)) {
+            front.push(format!("{}:{field}", json!(key)));
+        }
+    }
     let encoded =
         serde_json::to_string(&value).map_err(|_| "connector_result_encoding_failed".to_owned())?;
-    if let Some(mentions) = mentions {
-        Ok(format!(
-            "{{\"unread_mentions\":{mentions},{}",
-            &encoded[1..]
-        ))
-    } else {
-        Ok(encoded)
+    if front.is_empty() {
+        return Ok(encoded);
     }
+    let rest = &encoded[1..encoded.len() - 1];
+    if !rest.is_empty() {
+        front.push(rest.to_owned());
+    }
+    Ok(format!("{{{}}}", front.join(",")))
 }
 
 #[tool_router]
@@ -696,5 +700,26 @@ impl ServerHandler for ConnectorMcp {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Tools for taking part in an AgentsAssemble room from this conversation. room_join takes the user's invite URL and makes this conversation itself a participant; room_read shows the room, room_say posts, room_wait_next follows the current conversation mode; in free_access only mentions wake it. Leave a wait pending when you want to be reachable. connection_id is private and is passed unchanged to later tools."
         )
+    }
+}
+
+#[cfg(test)]
+mod encode_tests {
+    use super::encode;
+    use serde_json::{Value, json};
+
+    #[test]
+    fn notices_come_first_and_the_result_stays_valid_json() {
+        let encoded = encode(&json!({"messages": [], "name_changed": "n", "unread_mentions": 2}))
+            .unwrap_or_else(|error| panic!("encode: {error}"));
+        assert!(encoded.starts_with(r#"{"name_changed":"n","unread_mentions":2,"#));
+        let parsed: Value =
+            serde_json::from_str(&encoded).unwrap_or_else(|error| panic!("json: {error}"));
+        assert_eq!(parsed["messages"], json!([]));
+        let alone =
+            encode(&json!({"unread_mentions": 1})).unwrap_or_else(|error| panic!("encode: {error}"));
+        assert_eq!(alone, r#"{"unread_mentions":1}"#);
+        let plain = encode(&json!({"a": 1})).unwrap_or_else(|error| panic!("encode: {error}"));
+        assert_eq!(plain, r#"{"a":1}"#);
     }
 }

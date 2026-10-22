@@ -88,13 +88,26 @@ struct TerminalLeave {
     response: Value,
 }
 
+struct KnownName {
+    name: String,
+    revision: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+fn name_revision(response: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
+    response["your_display_name_revision"]
+        .as_str()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&chrono::Utc))
+}
+
 pub struct RoomConnectorClient {
     http: Client,
     server: Url,
     invite_fingerprint: [u8; 32],
     pub(crate) display_name: String,
-    /// The name this AI was last told it has in the room.
-    known_name: parking_lot::Mutex<String>,
+    /// The name this AI was last told it has in the room, with the host's
+    /// participant revision it came from.
+    known_name: parking_lot::Mutex<KnownName>,
     state: Mutex<JoinState>,
     pending_command: Mutex<Option<PendingCommand>>,
     terminal_leave: parking_lot::Mutex<Option<TerminalLeave>>,
@@ -131,7 +144,10 @@ impl RoomConnectorClient {
             server,
             invite_fingerprint: fingerprint,
             display_name: name.to_owned(),
-            known_name: parking_lot::Mutex::new(name.to_owned()),
+            known_name: parking_lot::Mutex::new(KnownName {
+                name: name.to_owned(),
+                revision: None,
+            }),
             state: Mutex::new(JoinState::Pending(PendingJoin {
                 request_id: Uuid::new_v4(),
                 client_secret: URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>()),
@@ -185,6 +201,10 @@ impl RoomConnectorClient {
             let mut joined = session.joined.clone();
             joined.last_seq = sequence(&snapshot)?;
             joined.room_state = room_state(&snapshot);
+            // The rejoin reply itself tells the AI its current name.
+            let mut fresh = snapshot;
+            self.note_rename(&mut fresh);
+            joined.display_name.clone_from(&self.known_name.lock().name);
             return Ok(joined);
         }
         if let JoinState::Pending(pending) = &mut *state {
@@ -205,14 +225,17 @@ impl RoomConnectorClient {
                 .await?;
             let last_seq = sequence(&snapshot)?;
             if let Some(current) = snapshot["your_display_name"].as_str() {
-                current.clone_into(&mut self.known_name.lock());
+                *self.known_name.lock() = KnownName {
+                    name: current.to_owned(),
+                    revision: name_revision(&snapshot),
+                };
             }
             let joined = ConnectorJoined {
                 room_state: room_state(&snapshot),
                 room_id: admission.room_id.clone(),
                 room_uid: admission.room_uid,
                 participant_id: admission.participant_id.clone(),
-                display_name: self.known_name.lock().clone(),
+                display_name: self.known_name.lock().name.clone(),
                 last_seq,
                 attachment_transfers: admission.attachment_transfers,
             };
@@ -223,7 +246,12 @@ impl RoomConnectorClient {
             }));
         }
         match &*state {
-            JoinState::Ready(session) => Ok(session.joined.clone()),
+            JoinState::Ready(session) => {
+                // A rejoin reports the name the AI was last told, not the first one.
+                let mut joined = session.joined.clone();
+                joined.display_name.clone_from(&self.known_name.lock().name);
+                Ok(joined)
+            }
             _ => Err(ConnectorClientError::local("connector_not_ready")),
         }
     }
@@ -427,14 +455,26 @@ impl RoomConnectorClient {
         let Some(current) = response["your_display_name"].as_str() else {
             return;
         };
+        let revision = name_revision(response);
         let mut known = self.known_name.lock();
-        if *known == current {
+        // A read and a wait can return out of order; only a newer participant
+        // revision may move the name, so an older result never undoes a newer one.
+        if known
+            .revision
+            .is_some_and(|known| revision.is_none_or(|revision| revision <= known))
+        {
             return;
         }
-        current.clone_into(&mut known);
-        response["name_changed"] = json!(format!(
-            "Your display name in this room was changed to \"{current}\". Use it when you refer to yourself."
-        ));
+        let changed = known.name != current;
+        *known = KnownName {
+            name: current.to_owned(),
+            revision,
+        };
+        if changed {
+            response["name_changed"] = json!(format!(
+                "Your display name in this room was changed to {current:?}. Use it when you refer to yourself."
+            ));
+        }
     }
 
     /// Pins under the current director and owner authority; exact UUID retries are safe.
