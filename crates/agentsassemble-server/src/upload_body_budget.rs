@@ -3,8 +3,9 @@ use crate::http_api::BodyDecodeError;
 use axum::{extract::Request, http::header};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
+use parking_lot::Mutex;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 const HOST_BYTES: usize = 512 * 1024 * 1024;
@@ -47,7 +48,7 @@ impl Drop for Reservation {
         let Some(principal) = &self.principal else {
             return;
         };
-        let mut principals = self.principals.lock().expect("upload budget lock");
+        let mut principals = self.principals.lock();
         if let Some(count) = principals.get_mut(principal) {
             *count -= 1;
             if *count == 0 {
@@ -93,7 +94,7 @@ impl Budget {
             .checked_mul(COPIES)
             .and_then(|n| u32::try_from(n).ok())
             .ok_or(Error::Exhausted)?;
-        let mut principals = self.principals.lock().expect("upload budget lock");
+        let mut principals = self.principals.lock();
         if principal.is_some_and(|principal| {
             principals.get(principal).copied().unwrap_or(0) >= PER_PRINCIPAL
         }) {

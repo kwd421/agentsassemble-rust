@@ -297,7 +297,7 @@ async fn send_input(
     human.subscribe(0).await;
     let snapshot = human.receive_json().await;
     human.send_json(&json!({"op":"command", "request_id":"native-tools-mode", "action":"room.settings.update", "payload":{
-        "expected_revision":snapshot["room_settings"]["settings_revision"], "tool_mode":"tabletop", "attachment_file_limit_bytes":26214400
+        "expected_revision":snapshot["room_settings"]["settings_revision"], "tool_mode":"tabletop", "attachment_file_limit_bytes":26_214_400
     }})).await;
     loop {
         let frame = human
@@ -325,7 +325,7 @@ async fn send_input(
             agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
             "large.bin",
             "application/octet-stream",
-            vec![42; 10485761],
+            vec![42; 10_485_761],
         )
         .await?;
     human.send_json(&json!({"op":"command", "request_id":"external-execution-input", "action":"message.send", "payload":{"content":"Reply through the external runtime", "attachment_ids":[attachment.id,large.id]}})).await;

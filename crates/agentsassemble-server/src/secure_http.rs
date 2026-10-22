@@ -83,7 +83,7 @@ impl Input {
     }
     pub(crate) fn push_binary(
         &mut self,
-        record: secure_body_record::Record<'_>,
+        record: &secure_body_record::Record<'_>,
         budget: &Budget,
     ) -> Result<(), ()> {
         if !self.binary {
@@ -101,11 +101,11 @@ impl Input {
                 Some((
                     self.body_window
                         .clone()
-                        .try_acquire_many_owned(record.bytes.len() as u32)
+                        .try_acquire_many_owned(u32::try_from(record.bytes.len()).map_err(|_| ())?)
                         .map_err(|_| ())?,
                     window
                         .clone()
-                        .try_acquire_many_owned(record.bytes.len() as u32)
+                        .try_acquire_many_owned(u32::try_from(record.bytes.len()).map_err(|_| ())?)
                         .map_err(|_| ())?,
                 )),
             )

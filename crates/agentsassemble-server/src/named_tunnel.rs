@@ -37,11 +37,6 @@ impl ProvisionedTunnel {
     }
 
     #[must_use]
-    pub(crate) fn origin(&self) -> &str {
-        &self.origin
-    }
-
-    #[must_use]
     pub(crate) fn tunnel_id(&self) -> &str {
         &self.tunnel_id
     }
@@ -178,13 +173,10 @@ pub(crate) async fn ensure_named_tunnel(
     identity: &CentralHostIdentity,
 ) -> TunnelPlan {
     let now_secs = chrono::Utc::now().timestamp();
-    let live_epoch = match store.registration_epoch().await {
-        Ok(epoch) => epoch,
-        Err(_) => {
-            return TunnelPlan::Quick {
-                reason: "registration_unavailable",
-            };
-        }
+    let Ok(live_epoch) = store.registration_epoch().await else {
+        return TunnelPlan::Quick {
+            reason: "registration_unavailable",
+        };
     };
     let Some(live_epoch) = live_epoch else {
         return TunnelPlan::Quick {
@@ -198,8 +190,7 @@ pub(crate) async fn ensure_named_tunnel(
         Ok(Some(_)) => {
             let _ = store.clear_named_tunnel().await;
         }
-        Ok(None) => {}
-        Err(_) => {}
+        Ok(None) | Err(_) => {}
     }
     if !directory.status().enabled {
         return TunnelPlan::Quick {
@@ -327,7 +318,7 @@ mod tests {
             "https://h-0123456789ab.agentsassemble.uk"
         );
         assert_eq!(ok.tunnel_id(), "tunnel-id-one");
-        assert_eq!(ok.origin(), "https://h-0123456789ab.agentsassemble.uk");
+        assert_eq!(ok.origin, "https://h-0123456789ab.agentsassemble.uk");
         let credentials: serde_json::Value = serde_json::from_str(ok.credentials())
             .unwrap_or_else(|error| panic!("stored credentials JSON: {error}"));
         assert_eq!(credentials["TunnelID"], "tunnel-id-one");

@@ -40,7 +40,7 @@ async fn upload_progress_outlives_control_deadline_but_not_idle_or_trickle_bound
     let started = Instant::now();
     let slow = wrap(Request::new(paced(20, 16 * 1024, 12)));
     assert_eq!(upload(slow, 1024 * 1024).await, Ok(Value::Null));
-    assert!(started.elapsed() > Duration::from_secs(240));
+    assert!(started.elapsed() > Duration::from_mins(4));
 
     for (body, elapsed) in [
         (

@@ -270,12 +270,12 @@ async fn assert_ready_after_current_ack(
     restored
         .finish_central_endpoint_event(&endpoint, true)
         .await?;
-    let stage = target
+    let staging = target
         .parent()
         .ok_or("missing parent")?
         .join(format!(".server-move-{}", initial.operation_id));
-    if stage.exists() {
-        let unexpected = stage.join("unrelated");
+    if staging.exists() {
+        let unexpected = staging.join("unrelated");
         std::fs::write(&unexpected, b"keep")?;
         assert!(
             restored

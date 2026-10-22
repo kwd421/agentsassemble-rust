@@ -40,7 +40,7 @@ pub(super) async fn upload(
         Err(RoomSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
         Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
     };
-    let _permit = avatar_admission::acquire(&state.avatar_uploads)?;
+    let permit = avatar_admission::acquire(&state.avatar_uploads)?;
     let principal = match &authority {
         RoomManagerAuthority::Local(binding) => &binding.manager.user_id,
         RoomManagerAuthority::Operator(session) => &session.principal().principal_id,
@@ -58,7 +58,7 @@ pub(super) async fn upload(
         .clone()
         .spawn(async move {
             let _reservation = reservation;
-            let _permit = _permit;
+            let _permit = permit;
             let content = decode_attachment_content(&payload.data_base64)?;
             let attachment = state
                 .store

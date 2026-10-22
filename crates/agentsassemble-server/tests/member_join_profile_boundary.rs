@@ -332,9 +332,9 @@ async fn member_join_refuses_invalid_or_oversize_avatar_without_storing_profile(
 }
 
 fn avatar_png_base64(width: u32, height: u32) -> String {
-    let mut encoded = Vec::new();
+    let mut png_bytes = Vec::new();
     {
-        let mut encoder = png::Encoder::new(&mut encoded, width, height);
+        let mut encoder = png::Encoder::new(&mut png_bytes, width, height);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder
@@ -349,5 +349,5 @@ fn avatar_png_base64(width: u32, height: u32) -> String {
             .write_image_data(&pixels)
             .unwrap_or_else(|error| panic!("write avatar PNG pixels: {error}"));
     }
-    STANDARD.encode(encoded)
+    STANDARD.encode(png_bytes)
 }

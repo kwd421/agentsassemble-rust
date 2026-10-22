@@ -50,7 +50,7 @@ async fn download_refusal_and_oversized_ai_reads_never_select_the_blob()
     let (store, principal, _directory) = super::super::fixture().await;
     let settings = store.snapshot("general", 0, 100).await?.settings;
     store.execute_room_settings_update(RoomMutationAuthority::TrustedPrincipal(&principal), "large-policy",
-        &json!({"expected_revision":public_settings(&settings)?.settings_revision,"attachment_file_limit_bytes":52428800})).await?;
+        &json!({"expected_revision":public_settings(&settings)?.settings_revision,"attachment_file_limit_bytes":52_428_800})).await?;
     let attachment = store
         .store_message_attachment(
             &principal,
@@ -93,7 +93,7 @@ async fn download_refusal_and_oversized_ai_reads_never_select_the_blob()
             &attachment.id,
             |id, size| {
                 assert_eq!(id, principal.principal_id);
-                assert_eq!(size, 52428800);
+                assert_eq!(size, 52_428_800);
                 Err::<(), _>(PersistenceError::CommandRejected {
                     code: "attachment_download_budget_exhausted".into(),
                     message: "Busy".into(),
@@ -183,7 +183,7 @@ async fn download_refusal_and_oversized_ai_reads_never_select_the_blob()
         )
         .instrument(span)
         .await?;
-    assert_eq!(read.content.len(), 52428800);
+    assert_eq!(read.content.len(), 52_428_800);
     assert!(read.content.iter().all(|byte| *byte == 42));
     assert_eq!(
         queries.load(Ordering::SeqCst),

@@ -6,12 +6,12 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 pub(crate) fn large_png(alpha: bool, oriented: bool) -> Result<Vec<u8>, image::ImageError> {
     let image = RgbaImage::from_fn(1600, 800, |x, y| {
         let noise = x
-            .wrapping_mul(1664525)
-            .wrapping_add(y.wrapping_mul(1013904223));
+            .wrapping_mul(1_664_525)
+            .wrapping_add(y.wrapping_mul(1_013_904_223));
         Rgba([
             if x < 800 { 240 } else { 10 },
-            (noise >> 8) as u8,
-            noise as u8,
+            noise.to_le_bytes()[1],
+            noise.to_le_bytes()[0],
             if alpha { 128 } else { 255 },
         ])
     });

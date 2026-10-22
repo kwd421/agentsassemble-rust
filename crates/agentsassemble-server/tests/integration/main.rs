@@ -1,3 +1,5 @@
+// Every item here is test code: long scenarios and unwrap are how tests read.
+#![allow(clippy::too_many_lines, clippy::unwrap_used, clippy::expect_used)]
 // Keep suite names as module filters while linking the server only once.
 // Run one suite with: cargo test -p agentsassemble-server --test integration runtime_boundary::
 

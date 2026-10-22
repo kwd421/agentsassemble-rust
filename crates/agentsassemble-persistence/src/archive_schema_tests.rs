@@ -76,7 +76,7 @@ pub(crate) async fn archive(
         &mut encoded,
         &manifest,
         None,
-        Default::default(),
+        crate::backup_codec::KdfParameters::default(),
     )?;
     encoded.set_position(0);
     let decoded = directory.join("decoded.sqlite");
@@ -277,7 +277,7 @@ pub(crate) async fn assert_product_rows(
                     .and_then(Cell::text)
                     .ok_or("id")?;
                 let size = match before.get("size") {
-                    Some(Cell::Integer(size)) => *size as usize,
+                    Some(Cell::Integer(size)) => usize::try_from(*size).unwrap(),
                     _ => return Err("size".into()),
                 };
                 assert_eq!(

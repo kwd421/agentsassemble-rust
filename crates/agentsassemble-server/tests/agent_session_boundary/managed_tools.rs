@@ -15,6 +15,7 @@ pub(super) async fn prepare<S>(
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
+    use std::io::Write;
     send_command(socket, "managed-tools-mode", "room.settings.update", &json!({
         "expected_revision":snapshot["room_settings"]["settings_revision"], "tool_mode":"tabletop", "attachment_file_limit_bytes":50*1024*1024
     })).await;
@@ -33,9 +34,8 @@ where
         .await
         .unwrap_or_else(|error| panic!("managed attachment: {error}"));
     let mut source = std::fs::File::create(workspace.join("managed-large.bin")).unwrap();
-    use std::io::Write;
     for _ in 0..480 {
-        source.write_all(&[71; 65536]).unwrap();
+        source.write_all(&vec![71; 65536]).unwrap();
     }
     let large = server
         .state
@@ -63,6 +63,7 @@ pub(super) async fn verify(
     events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
     owner: (&str, &agentsassemble_server::AppState),
 ) -> String {
+    use std::io::Read;
     let client = ()
         .serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
@@ -129,11 +130,10 @@ pub(super) async fn verify(
     let output: Value = serde_json::from_str(&large.content[1].as_text().unwrap().text).unwrap();
     let saved = output["path"].as_str().unwrap();
     let mut file = std::fs::File::open(saved).unwrap();
-    use std::io::Read;
-    let mut piece = [0; 65536];
+    let mut piece = vec![0; 65536];
     for _ in 0..480 {
         file.read_exact(&mut piece).unwrap();
-        assert_eq!(piece, [71; 65536]);
+        assert!(piece.iter().all(|&byte| byte == 71));
     }
     assert_eq!(file.read(&mut piece).unwrap(), 0);
     let uploaded = room_portal_fixture::call_tool(

@@ -1,3 +1,5 @@
+// Test scenarios may run long; production functions stay under the line limit.
+#![cfg_attr(test, allow(clippy::too_many_lines))]
 mod delegated_agent_control;
 mod delegated_direct;
 mod delegated_event_attribution;

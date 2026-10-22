@@ -66,6 +66,9 @@ pub(crate) async fn apply(
     tracker: &crate::lifecycle_command_tracker::LifecycleCommandTracker,
     reserved: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> DirectExecution {
+    use crate::room_agent_lifecycle_runtime::{
+        LifecycleCommand, execute_agent_start, execute_agent_stop,
+    };
     let _inflight = match admission.acquire_inflight() {
         Ok(permit) => permit,
         Err(error) => return CommandExecution::transactional_failure(error).into(),
@@ -97,9 +100,6 @@ pub(crate) async fn apply(
                         .into(),
             })
             .into();
-        };
-        use crate::room_agent_lifecycle_runtime::{
-            LifecycleCommand, execute_agent_start, execute_agent_stop,
         };
         let action = if matches!(request, DirectRoomAction::StartAgent(_)) {
             agentsassemble_protocol::RoomAction::AgentStart

@@ -150,7 +150,7 @@ async fn run_named_generation(
     // the public hostname, so the ingress trust decision is identical for both
     // and no local process can reach the loopback port with the public Host.
     let origin_host = generated_origin_host();
-    let spawned = if let Ok(spawned) = spawn_cloudflared_named(
+    let Ok(spawned) = spawn_cloudflared_named(
         cloudflared,
         &config.local_url,
         &origin_host,
@@ -158,9 +158,7 @@ async fn run_named_generation(
         credentials,
     )
     .await
-    {
-        spawned
-    } else {
+    else {
         tracing::warn!(
             %generation,
             "named tunnel spawn failed; using quick tunnel"

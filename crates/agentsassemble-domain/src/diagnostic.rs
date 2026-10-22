@@ -4,8 +4,6 @@ use std::sync::OnceLock;
 
 use regex::{Captures, Regex};
 
-const DEFAULT_DIAGNOSTIC_LIMIT: usize = 16_000;
-
 fn regex(pattern: &'static str, slot: &'static OnceLock<Regex>) -> &'static Regex {
     slot.get_or_init(|| {
         Regex::new(pattern)
@@ -196,12 +194,6 @@ pub fn redact_persisted_diagnostic_text(value: &str, limit: usize) -> String {
     text = replace_preserving(&text, home_path(), "[local path]");
     text = replace_preserving(&text, unix_path(), "[local path]");
     tail_chars(&text, bounded_limit).trim().to_owned()
-}
-
-/// Uses the original application's default durable diagnostic bound.
-#[must_use]
-pub fn redact_persisted_diagnostic(value: &str) -> String {
-    redact_persisted_diagnostic_text(value, DEFAULT_DIAGNOSTIC_LIMIT)
 }
 
 #[cfg(test)]

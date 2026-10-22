@@ -63,7 +63,7 @@ impl Writer {
             let record = self.records.recv().await.expect("writer record");
             match record {
                 Message::Binary(bytes) => return bytes.to_vec(),
-                Message::Ping(_) | Message::Pong(_) => continue,
+                Message::Ping(_) | Message::Pong(_) => {}
                 _ => panic!("binary record"),
             }
         }
@@ -223,14 +223,14 @@ async fn local_ack_backlog_before_emission_preserves_the_full_peer_allowance() {
         .await
         .unwrap();
     for sequence in 0..3 {
-        tokio::time::advance(IDLE - Duration::from_secs(1)).await;
+        tokio::time::advance(IDLE.checked_sub(Duration::from_secs(1)).unwrap()).await;
         assert!(!writer.closed.is_cancelled());
         writer.ack(sequence).await;
         writer.record().await;
     }
     writer.ack(3).await;
     writer.record().await;
-    tokio::time::advance(IDLE - Duration::from_secs(1)).await;
+    tokio::time::advance(IDLE.checked_sub(Duration::from_secs(1)).unwrap()).await;
     assert!(!writer.closed.is_cancelled());
     writer.credit(1, 5).await;
     drop(download);

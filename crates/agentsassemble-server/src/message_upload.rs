@@ -242,18 +242,15 @@ impl Service {
         let mut stream = body.into_data_stream();
         while let Some(next) = tokio::select! { ()=transfer.cancel.cancelled()=>return Err(error("upload_cancelled")), next=stream.next()=>next }
         {
-            let bytes = match next {
-                Ok(bytes) => bytes,
-                // An interrupted body is an explicit recoverable result, including its
-                // durably accepted offset. Unaccepted input is never reported as received.
-                Err(_) => {
-                    return Err(ProfileHttpError::new(
-                        StatusCode::REQUEST_TIMEOUT,
-                        "upload_interrupted",
-                        "Upload body interrupted; query status to resume.",
-                    )
-                    .with_offset(entry.status.accepted_offset));
-                }
+            // An interrupted body is an explicit recoverable result, including its
+            // durably accepted offset. Unaccepted input is never reported as received.
+            let Ok(bytes) = next else {
+                return Err(ProfileHttpError::new(
+                    StatusCode::REQUEST_TIMEOUT,
+                    "upload_interrupted",
+                    "Upload body interrupted; query status to resume.",
+                )
+                .with_offset(entry.status.accepted_offset));
             };
             for piece in bytes.chunks(MESSAGE_UPLOAD_PIECE_BYTES) {
                 let _server_wait = policy.server_wait();

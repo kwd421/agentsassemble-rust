@@ -166,21 +166,19 @@ async fn mint_and_drive(
         return Ok(None);
     };
     let base_participant_id = format!("guest-{}", uuid::Uuid::new_v4().simple());
-    let credentials = if let Ok(credentials) =
-        state
-            .human_invite_credentials
-            .issue(&HumanInviteCredentialDraft {
-                room_url: ingress.local_url.clone(),
-                public_room_url: ingress.public_url.clone(),
-                room_id: room_id.to_owned(),
-                base_participant_id: base_participant_id.clone(),
-                display_name: policy.display_name.clone(),
-                invite_scope: policy.invite_scope,
-                issued_at: created_at,
-                expires_at,
-            }) {
-        credentials
-    } else {
+    let Ok(credentials) = state
+        .human_invite_credentials
+        .issue(&HumanInviteCredentialDraft {
+            room_url: ingress.local_url.clone(),
+            public_room_url: ingress.public_url.clone(),
+            room_id: room_id.to_owned(),
+            base_participant_id: base_participant_id.clone(),
+            display_name: policy.display_name.clone(),
+            invite_scope: policy.invite_scope,
+            issued_at: created_at,
+            expires_at,
+        })
+    else {
         state
             .store
             .fail_approved_human_invite(

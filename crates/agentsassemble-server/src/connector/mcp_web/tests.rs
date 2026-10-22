@@ -35,7 +35,9 @@ fn request(body: Body) -> Request {
 }
 
 fn tool_body(name: &str, arguments: Value) -> String {
-    json!({"jsonrpc":"2.0", "id":1, "method":"tools/call", "params":{"name":name, "arguments":arguments}}).to_string()
+    let mut body = json!({"jsonrpc":"2.0", "id":1, "method":"tools/call", "params":{"name":name}});
+    body["params"]["arguments"] = arguments;
+    body.to_string()
 }
 
 async fn call(connector: &ConnectorMcp, name: &str, arguments: Value) -> Value {
@@ -156,6 +158,7 @@ async fn chunked_waits_release_envelopes_and_leave_all_upload_capacity_available
     let mut waits = Vec::new();
     let mut connections = Vec::new();
     for _ in 0..16 {
+        use futures_util::StreamExt;
         let (sent, received) = oneshot::channel();
         let bytes = axum::body::Bytes::from(tool_body(
             "room_wait_next",
@@ -166,7 +169,6 @@ async fn chunked_waits_release_envelopes_and_leave_all_upload_capacity_available
             let _ = sent.send(());
             Ok::<_, Infallible>(axum::body::Bytes::new())
         });
-        use futures_util::StreamExt;
         let request = request(Body::from_stream(stream.chain(eof)));
         connections.push(
             request
@@ -188,7 +190,7 @@ async fn chunked_waits_release_envelopes_and_leave_all_upload_capacity_available
             .envelopes
             .small
             .clone()
-            .acquire_many_owned(SMALL_ENVELOPE_BYTES as u32)
+            .acquire_many_owned(u32::try_from(SMALL_ENVELOPE_BYTES).unwrap())
             .await
             .expect("dispatch released");
         drop(available);
@@ -223,7 +225,7 @@ async fn chunked_waits_release_envelopes_and_leave_all_upload_capacity_available
             .envelopes
             .small
             .clone()
-            .try_acquire_many_owned(SMALL_ENVELOPE_BYTES as u32)
+            .try_acquire_many_owned(u32::try_from(SMALL_ENVELOPE_BYTES).unwrap())
             .is_ok()
     );
     fixture.stop().await;
@@ -231,6 +233,7 @@ async fn chunked_waits_release_envelopes_and_leave_all_upload_capacity_available
 
 #[tokio::test]
 async fn hosted_upload_uses_resolved_principal_limit_and_releases_after_storage() {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     let fixture = Fixture::new().await;
     let joined = fixture.join().await;
     // Connector authority owns principal_id = participant_id; the private MCP
@@ -246,7 +249,6 @@ async fn hosted_upload_uses_resolved_principal_limit_and_releases_after_storage(
         .upload_bodies
         .reserve_length(Some(principal), 1, 1)
         .expect("second");
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
     let content = vec![42; 10 * 1024 * 1024];
     let args = json!({"connection_id":joined["connection_id"], "filename":"proof.bin", "content_type":"application/octet-stream", "data_base64":STANDARD.encode(&content)});
     let refused = call(&fixture.connector, "room_upload_attachment", args.clone()).await;
@@ -284,7 +286,7 @@ async fn stalled_envelopes_leave_other_clients_capacity_and_expire_without_progr
         .envelopes
         .large
         .clone()
-        .try_acquire_many_owned(LARGE_ENVELOPE_BYTES as u32)
+        .try_acquire_many_owned(u32::try_from(LARGE_ENVELOPE_BYTES).unwrap())
         .expect("large pool");
     let mut requests = Vec::new();
     for _ in 0..126 {
@@ -321,7 +323,7 @@ async fn stalled_envelopes_leave_other_clients_capacity_and_expire_without_progr
         .envelopes
         .small
         .clone()
-        .try_acquire_many_owned(SMALL_ENVELOPE_BYTES as u32)
+        .try_acquire_many_owned(u32::try_from(SMALL_ENVELOPE_BYTES).unwrap())
         .expect("all bytes returned");
     // A refused envelope never polls its body; no request waits for capacity.
     let body = futures_util::stream::poll_fn(
@@ -348,7 +350,7 @@ async fn stalled_envelopes_leave_other_clients_capacity_and_expire_without_progr
             .envelopes
             .small
             .clone()
-            .try_acquire_many_owned(SMALL_ENVELOPE_BYTES as u32)
+            .try_acquire_many_owned(u32::try_from(SMALL_ENVELOPE_BYTES).unwrap())
             .is_ok()
     );
 }

@@ -37,7 +37,7 @@ async fn cache_upload_lazy_concurrency_restore_and_cascade_share_original_author
     .bind(&attachment.id)
     .fetch_one(&store.pool)
     .await?;
-    assert!((1..=crate::raster_preview::MAX_BYTES as i64).contains(&size));
+    assert!((1..=i64::try_from(crate::raster_preview::MAX_BYTES).unwrap()).contains(&size));
     assert!(
         store
             .open_message_attachment_preview_reader(
@@ -113,7 +113,7 @@ async fn cache_upload_lazy_concurrency_restore_and_cascade_share_original_author
     barrier.wait().await;
     for task in tasks {
         let (reader, ()) = task.await??;
-        assert_eq!(reader.metadata().size, size as usize);
+        assert_eq!(reader.metadata().size, usize::try_from(size).unwrap());
         assert!(!reader.read_piece(0).await?.is_empty());
     }
     assert_eq!(generated.load(Ordering::SeqCst), 1);
@@ -160,7 +160,7 @@ async fn cache_upload_lazy_concurrency_restore_and_cascade_share_original_author
             |_, _| Ok(()),
         )
         .await?;
-    assert_eq!(reader.metadata().size, size as usize);
+    assert_eq!(reader.metadata().size, usize::try_from(size).unwrap());
     let (full, ()) = restored
         .open_message_attachment_reader(authority(&principal), &attachment.id, |_| Ok(()))
         .await?;

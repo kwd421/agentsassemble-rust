@@ -1,3 +1,5 @@
+// Test scenarios may run long; production functions stay under the line limit.
+#![cfg_attr(test, allow(clippy::too_many_lines))]
 pub mod server_restore;
 macro_rules! http_method {
     (get) => {

@@ -161,21 +161,18 @@ pub(crate) async fn drive_approved_reconfigure(
         });
     };
     let owner_principal_id = owner_principal(&owner_reference)?;
-    let current = match store
+    let Ok(current) = store
         .delegated_reconfigure_session(room_id, &reconfigure.agent_id)
         .await
-    {
-        Ok(session) => session,
-        Err(_) => {
-            return store
-                .fail_approved_agent_reconfigure(
-                    room_id,
-                    confirmation_id,
-                    "target_changed",
-                    "The target agent no longer exists.",
-                )
-                .await;
-        }
+    else {
+        return store
+            .fail_approved_agent_reconfigure(
+                room_id,
+                confirmation_id,
+                "target_changed",
+                "The target agent no longer exists.",
+            )
+            .await;
     };
     if current.runtime_profile_key != reconfigure.expected_configuration_revision {
         return store

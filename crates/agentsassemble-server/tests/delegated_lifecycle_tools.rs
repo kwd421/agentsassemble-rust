@@ -22,7 +22,7 @@ pub(super) async fn verify(
         permissions.options.push(ProviderControlOption {
             value: mode.into(),
             label: mode.into(),
-            metadata: Default::default(),
+            metadata: std::collections::BTreeMap::default(),
         });
     }
     let catalog = ProviderCatalogService::fixed(catalog);

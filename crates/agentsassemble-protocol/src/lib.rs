@@ -1,3 +1,5 @@
+// Test scenarios may run long; production functions stay under the line limit.
+#![cfg_attr(test, allow(clippy::too_many_lines))]
 mod attendee_entry;
 mod central_owner;
 use agentsassemble_domain::{

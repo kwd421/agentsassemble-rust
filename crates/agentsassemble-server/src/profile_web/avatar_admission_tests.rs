@@ -232,6 +232,7 @@ async fn retained_body_saturation_is_retryable_before_the_authorized_route_reads
 
 #[tokio::test]
 async fn large_download_responses_enforce_host_and_principal_budgets_until_last_clone_drops() {
+    use futures_util::StreamExt;
     use agentsassemble_domain::{CapabilitySet, ClientKind, InviteScope, public_settings};
     use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
     let fixture = HumanSessionFixture::new(1).await;
@@ -260,7 +261,7 @@ async fn large_download_responses_enforce_host_and_principal_budgets_until_last_
         .unwrap()
         .settings;
     state.store.execute_room_settings_update(TrustedPrincipal(&principal), "large-policy", &json!({
-        "expected_revision":public_settings(&settings).unwrap().settings_revision, "attachment_file_limit_bytes":52428800
+        "expected_revision":public_settings(&settings).unwrap().settings_revision, "attachment_file_limit_bytes":52_428_800
     })).await.unwrap();
     let attachment = state
         .store
@@ -268,7 +269,7 @@ async fn large_download_responses_enforce_host_and_principal_budgets_until_last_
             &principal,
             "large.bin",
             "application/octet-stream",
-            vec![42; 52428800],
+            vec![42; 52_428_800],
         )
         .await
         .unwrap();
@@ -282,7 +283,6 @@ async fn large_download_responses_enforce_host_and_principal_budgets_until_last_
         )
         .await
         .unwrap();
-    use futures_util::StreamExt;
     let mut responses = Vec::new();
     for _ in 0..32 {
         let response = read_message(&state, &attachment.id, &principal).await;
@@ -295,7 +295,7 @@ async fn large_download_responses_enforce_host_and_principal_budgets_until_last_
     assert_eq!(other_response.status(), StatusCode::OK);
     let mut body = responses.pop().unwrap().into_body().into_data_stream();
     let bytes = body.next().await.unwrap().unwrap();
-    assert_eq!(bytes.as_ref(), &[42; 65536]);
+    assert!(bytes.len() == 65536 && bytes.iter().all(|&byte| byte == 42));
     let clone = bytes.clone();
     drop((bytes, body));
     assert_download_busy(read_message(&state, &attachment.id, &principal).await).await;
@@ -333,7 +333,7 @@ async fn read_message(
     read_attachment(
         State(state.clone()),
         Path(id.into()),
-        Query(Default::default()),
+        Query(std::collections::HashMap::default()),
         RawQuery(Some("download=1".into())),
         request,
     )

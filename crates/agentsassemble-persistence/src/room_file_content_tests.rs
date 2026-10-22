@@ -31,10 +31,10 @@ async fn pieces_preserve_bytes_at_unaligned_sizes_and_ceiling_with_atomic_failur
                 "INSERT INTO {} VALUES('file',?)",
                 kind.parent()
             )))
-            .bind(size as i64)
+            .bind(i64::try_from(size).unwrap())
             .execute(&mut db)
             .await?;
-            let bytes: Vec<u8> = (0..size).map(|i| (i % 251) as u8).collect();
+            let bytes: Vec<u8> = (0..size).map(|i| u8::try_from(i % 251).unwrap()).collect();
             for (sequence, piece) in bytes.chunks(PIECE_BYTES).enumerate() {
                 let mut tx = db.begin().await?;
                 if sequence == 0 {

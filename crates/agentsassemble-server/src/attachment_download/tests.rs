@@ -54,7 +54,7 @@ pub(crate) async fn fixture(
             &principal,
             "stream.bin",
             "application/octet-stream",
-            (0..size).map(|n| (n % 251) as u8).collect(),
+            (0..size).map(|n| u8::try_from(n % 251).unwrap()).collect(),
         )
         .await
         .expect("file");
@@ -103,7 +103,7 @@ pub(crate) fn assert_piece(bytes: &[u8], offset: usize) {
         bytes
             .iter()
             .enumerate()
-            .all(|(i, byte)| *byte == ((offset + i) % 251) as u8)
+            .all(|(i, byte)| *byte == u8::try_from((offset + i) % 251).unwrap())
     );
 }
 

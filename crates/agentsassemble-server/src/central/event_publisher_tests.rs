@@ -378,7 +378,7 @@ async fn quota_refusal_parks_all_delivery_until_utc_midnight()
     // No 60 s polling: an hour passes with no further request (the name
     // publication never fires while parked).
     tokio::time::pause();
-    tokio::time::advance(Duration::from_secs(3600)).await;
+    tokio::time::advance(Duration::from_hours(1)).await;
     tokio::task::yield_now().await;
     assert!(
         requests.try_recv().is_err(),
@@ -467,7 +467,7 @@ async fn per_minute_rate_limit_honours_retry_after_without_quota_park()
     assert_eq!(status_reader.status().quota_parked_until, 0);
     // The short 2 s backoff would already have fired; Retry-After holds it.
     tokio::time::pause();
-    tokio::time::advance(Duration::from_secs(60)).await;
+    tokio::time::advance(Duration::from_mins(1)).await;
     tokio::task::yield_now().await;
     assert!(
         requests.try_recv().is_err(),

@@ -6,6 +6,10 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 #[tokio::test]
 async fn connector_attachments_keep_pending_custody_and_revalidate_leave()
 -> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
+    use agentsassemble_domain::{
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, public_settings,
+    };
     let (store, manager) = fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let mut clients = Vec::new();
@@ -74,10 +78,6 @@ async fn connector_attachments_keep_pending_custody_and_revalidate_leave()
     assert!(observer.read_attachment(image_id).await?.is_image);
     // Humans may retain larger files; connector reads still fail with a specific
     // metadata-only refusal that survives the real HTTP client mapping.
-    use agentsassemble_domain::{
-        AuthenticatedPrincipal, CapabilitySet, ClientKind, public_settings,
-    };
-    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
     let principal = AuthenticatedPrincipal {
         principal_id: super::LOCAL_OPERATOR_USER_ID.into(),
         participant_id: super::LOCAL_OPERATOR_PARTICIPANT_ID.into(),
@@ -90,14 +90,14 @@ async fn connector_attachments_keep_pending_custody_and_revalidate_leave()
     };
     let settings = store.snapshot("general", 0, 100).await?.settings;
     store.execute_room_settings_update(TrustedPrincipal(&principal), "large-policy", &json!({
-        "expected_revision":public_settings(&settings)?.settings_revision,"attachment_file_limit_bytes":26214400
+        "expected_revision":public_settings(&settings)?.settings_revision,"attachment_file_limit_bytes":26_214_400
     })).await?;
     let large = store
         .store_message_attachment(
             &principal,
             "large.bin",
             "application/octet-stream",
-            vec![42; 10485761],
+            vec![42; 10_485_761],
         )
         .await?;
     store

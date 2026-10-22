@@ -199,10 +199,7 @@ pub fn router(state: AppState) -> Router {
     app = app
         .layer(SetResponseHeaderLayer::overriding(
             axum::http::HeaderName::from_static("x-agentsassemble-message-attachment-limit"),
-            axum::http::HeaderValue::from_str(
-                &agentsassemble_domain::MAX_MESSAGE_ATTACHMENTS_PER_EVENT.to_string(),
-            )
-            .expect("attachment limit header"),
+            axum::http::HeaderValue::from(agentsassemble_domain::MAX_MESSAGE_ATTACHMENTS_PER_EVENT),
         ))
         .layer(SetResponseHeaderLayer::overriding(
             axum::http::HeaderName::from_static("x-agentsassemble-upload-transfer"),

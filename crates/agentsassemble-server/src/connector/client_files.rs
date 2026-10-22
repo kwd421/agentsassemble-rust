@@ -31,6 +31,10 @@ fn invalid_response() -> ConnectorClientError {
 /// Uploads one regular file from the CLI working folder through the host's
 /// transfer owner: size and quota are accepted before any byte is read, and
 /// bytes stream in bounded pieces without being held whole in memory.
+///
+/// # Errors
+/// Fails when the path leaves the working folder, is not a regular file, or
+/// the host refuses or drops the transfer.
 pub async fn upload_path(
     client: &RoomConnectorClient,
     files: &ConnectorFileContext,
@@ -111,6 +115,10 @@ pub async fn upload_path(
 
 /// Streams one large published attachment into the CLI working-folder
 /// subfolder; a truncated stream never publishes a partial file.
+///
+/// # Errors
+/// Fails when the host refuses the download, the stream ends early, or the
+/// file cannot be written into the working folder.
 pub async fn download_to_workspace(
     client: &RoomConnectorClient,
     files: &ConnectorFileContext,

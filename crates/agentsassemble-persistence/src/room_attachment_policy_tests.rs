@@ -9,8 +9,8 @@ async fn policy_changes_require_manager_revision_and_survive_backup_validation()
     let (store, manager) = super::fixture().await;
     let settings = RoomSettings::defaults("General");
     let revision = public_settings(&settings)?.settings_revision;
-    let patch = json!({"expected_revision": revision, "attachment_file_limit_bytes": 26214400,
-        "attachment_storage_limit_bytes": 524288000});
+    let patch = json!({"expected_revision": revision, "attachment_file_limit_bytes": 26_214_400,
+        "attachment_storage_limit_bytes": 524_288_000});
     let mut member = manager.clone();
     member.capabilities.room_manage = false;
     super::assert_rejected_code(
@@ -76,13 +76,14 @@ async fn policy_changes_require_manager_revision_and_survive_backup_validation()
     );
     assert_eq!(
         next.result["room_settings"]["attachment_file_limit_bytes"],
-        26214400
+        26_214_400
     );
     Ok(())
 }
 
 #[tokio::test]
 async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> TestResult {
+    use sha2::{Digest, Sha256};
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("quota.sqlite");
     let store = SqliteStore::open(path.to_str().ok_or("path")?).await?;
@@ -99,7 +100,7 @@ async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> Te
     let (_, manager) = super::fixture().await;
     store.execute_room_settings_update(TrustedPrincipal(&manager), "quota", &json!({
         "expected_revision": public_settings(&RoomSettings::defaults("General"))?.settings_revision,
-        "attachment_storage_limit_bytes": 524288000,
+        "attachment_storage_limit_bytes": 524_288_000,
     })).await?;
     // Retained file metadata at the already supported schema ceiling. Nine pending
     // message files plus one connector file leave exactly one byte of room quota.
@@ -110,7 +111,7 @@ async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> Te
             &store,
             crate::room_file_content::RoomFileContent::Message,
             &format!("ma_{index:032x}"),
-            52428800,
+            52_428_800,
         )
         .await?;
     }
@@ -119,10 +120,9 @@ async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> Te
         &store,
         crate::room_file_content::RoomFileContent::Connector,
         &format!("ma_{:032x}", 9),
-        52428799,
+        52_428_799,
     )
     .await?;
-    use sha2::{Digest, Sha256};
     let authority =
         crate::RoomManagerAuthority::Local(crate::room_user_identity::test_authority(&store).await);
     let now = chrono::Utc::now();
@@ -187,7 +187,7 @@ async fn concurrent_uploads_count_pending_bound_and_connector_bytes_once() -> Te
         )
         .await?;
     let bytes: i64 = sqlx::query_scalar("SELECT SUM(size) FROM (SELECT size FROM room_message_attachments UNION ALL SELECT size FROM room_connector_uploads)").fetch_one(&store.pool).await?;
-    assert_eq!(bytes, 524288000);
+    assert_eq!(bytes, 524_288_000);
     super::assert_rejected_code(
         store
             .store_message_attachment(&manager, "extra.bin", "application/octet-stream", vec![1])

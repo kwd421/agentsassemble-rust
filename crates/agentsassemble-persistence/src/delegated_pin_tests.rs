@@ -77,10 +77,10 @@ async fn pin_receipt_attribution_budget_and_atomic_replay_share_human_core() -> 
     let (first, _) = store
         .set_delegated_message_pin(&authority, &request, charge)
         .await?;
-    let (retry, charged) = store
+    let (retry, retry_charge) = store
         .set_delegated_message_pin(&authority, &request, charge)
         .await?;
-    assert!(retry.deduplicated && charged.is_none());
+    assert!(retry.deduplicated && retry_charge.is_none());
     assert_eq!(first.result, retry.result);
     assert_eq!(charges.load(Ordering::SeqCst), 1);
     assert_eq!(

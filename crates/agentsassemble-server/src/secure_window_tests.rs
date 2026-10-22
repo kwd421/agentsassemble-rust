@@ -126,7 +126,7 @@ async fn advertised_ingress_is_reserved_before_bytes_and_cannot_exceed_shared_wi
             window
                 .available
                 .clone()
-                .try_acquire_many_owned(CHUNK_BYTES as u32)
+                .try_acquire_many_owned(u32::try_from(CHUNK_BYTES).unwrap())
                 .unwrap()
         })
         .collect::<Vec<_>>();
@@ -134,6 +134,20 @@ async fn advertised_ingress_is_reserved_before_bytes_and_cannot_exceed_shared_wi
     drop(leases);
     drop(window);
     assert_eq!(global.available_permits(), GLOBAL_BYTES);
+}
+
+// Idle keepalive Pings share the sink; application assertions skip them
+// so timed tests stay focused on encrypted records.
+async fn recv_data(
+    records: &mut tokio::sync::mpsc::UnboundedReceiver<axum::extract::ws::Message>,
+) -> axum::extract::ws::Message {
+    loop {
+        let message = records.recv().await.unwrap();
+        match &message {
+            axum::extract::ws::Message::Ping(_) | axum::extract::ws::Message::Pong(_) => {}
+            _ => return message,
+        }
+    }
 }
 
 #[tokio::test(start_paused = true)]
@@ -167,21 +181,6 @@ async fn stalled_body_releases_share_while_healthy_consumers_and_control_continu
         .unwrap();
     records.recv().await.unwrap();
     let mut error_handled = false;
-    // Idle keepalive Pings share the sink; application assertions skip them
-    // so timed tests stay focused on encrypted records.
-    async fn recv_data(
-        records: &mut tokio::sync::mpsc::UnboundedReceiver<axum::extract::ws::Message>,
-    ) -> axum::extract::ws::Message {
-        loop {
-            let message = records.recv().await.unwrap();
-            match &message {
-                axum::extract::ws::Message::Ping(_) | axum::extract::ws::Message::Pong(_) => {
-                    continue;
-                }
-                _ => return message,
-            }
-        }
-    }
     for id in 2..5 {
         tokio::time::advance(std::time::Duration::from_secs(10)).await;
         output
@@ -202,7 +201,7 @@ async fn stalled_body_releases_share_while_healthy_consumers_and_control_continu
                 })
                 .await
                 .unwrap();
-            feedback.send(Feedback::Ack(id as u64 - 1)).await.unwrap();
+            feedback.send(Feedback::Ack(u64::from(id) - 1)).await.unwrap();
             error_handled = true;
             piece = recv_data(&mut records).await;
         }

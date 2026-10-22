@@ -216,7 +216,7 @@ pub(super) async fn download(
     let stream = futures_util::stream::unfold(
         (reader, 0usize, pieces, Some(lease)),
         |(reader, sequence, total, lease)| async move {
-            let Some(lease) = lease else { return None };
+            let lease = lease?;
             if sequence >= total {
                 return None;
             }

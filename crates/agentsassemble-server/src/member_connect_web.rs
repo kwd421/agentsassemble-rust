@@ -557,6 +557,7 @@ mod tests {
         }))
         .unwrap_or_else(|error| panic!("legacy redeem body: {error}"));
         assert_eq!(body.challenge_id, "challenge");
+        assert_eq!(body.grant_token, "aamc1.connect");
     }
 
     /// Host coverage for the channel-bound lapse path drives the real `select`
@@ -980,8 +981,7 @@ mod tests {
         age_completed(&fixture, &challenge_id, "general").await;
         let error = select(&fixture, query, &challenge_id, "general", true)
             .await
-            .err()
-            .expect("past-window reselect after kick must be refused");
+            .expect_err("past-window reselect after kick must be refused");
         assert!(error.code == "member_membership_ended" || error.code == "session_unavailable");
     }
 

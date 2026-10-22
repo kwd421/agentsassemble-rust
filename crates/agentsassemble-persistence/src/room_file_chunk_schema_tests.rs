@@ -18,14 +18,14 @@ async fn genuine_v92_converts_exact_bytes_and_refuses_hostile_shapes_atomically(
                 .foreign_keys(true),
         )
         .await?;
-    let message = (0..65553).map(|i| (i % 251) as u8).collect::<Vec<_>>();
+    let message = (0..65553).map(|i| u8::try_from(i % 251).unwrap()).collect::<Vec<_>>();
     let connector = (0..agentsassemble_domain::MAX_ROOM_FILE_BYTES)
-        .map(|i| (i % 239) as u8)
+        .map(|i| u8::try_from(i % 239).unwrap())
         .collect::<Vec<_>>();
     sqlx::query("INSERT INTO room_message_attachments SELECT 'ma_'||printf('%032x',2),room_id,user_id,NULL,'pending.bin','application/octet-stream',?,?,0,1,'pending',9223372036854775807 FROM rooms CROSS JOIN user_profiles LIMIT 1")
-        .bind(&message).bind(message.len() as i64).execute(&pool).await?;
+        .bind(&message).bind(i64::try_from(message.len()).unwrap()).execute(&pool).await?;
     sqlx::query("INSERT INTO room_connector_uploads SELECT 'ma_'||printf('%032x',3),room_id,participant_id,'connector.bin','application/octet-stream',?,?,0,1,9223372036854775807 FROM participants LIMIT 1")
-        .bind(&connector).bind(connector.len() as i64).execute(&pool).await?;
+        .bind(&connector).bind(i64::try_from(connector.len()).unwrap()).execute(&pool).await?;
     let expected_quota: i64 = sqlx::query_scalar("SELECT sum(size) FROM (SELECT size FROM room_message_attachments UNION ALL SELECT size FROM room_connector_uploads)").fetch_one(&pool).await?;
     let objects: Vec<(String, String)> =
         sqlx::query_as("SELECT name,sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name")

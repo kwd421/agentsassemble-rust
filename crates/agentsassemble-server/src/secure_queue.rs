@@ -190,9 +190,10 @@ impl Output {
                     .try_acquire_many_owned(0)
                     .map_err(|_| ())?
             } else {
+                let permits = u32::try_from(length).map_err(|_| ())?;
                 tokio::select! {
                     () = self.cancel.cancelled() => return Err(()),
-                    permit = self.body_data.clone().acquire_many_owned(length as u32) => permit.map_err(|_| ())?,
+                    permit = self.body_data.clone().acquire_many_owned(permits) => permit.map_err(|_| ())?,
                 }
             };
             let _source_wait = self
@@ -210,9 +211,10 @@ impl Output {
                     .try_acquire_many_owned(0)
                     .map_err(|_| ())?
             } else {
+                let permits = u32::try_from(length).map_err(|_| ())?;
                 tokio::select! {
                     () = self.cancel.cancelled() => return Err(()),
-                    permit = self.data.clone().acquire_many_owned(length as u32) => permit.map_err(|_| ())?,
+                    permit = self.data.clone().acquire_many_owned(permits) => permit.map_err(|_| ())?,
                 }
             };
             self.enqueue(
@@ -305,8 +307,9 @@ mod tests {
         loop {
             match records.recv().await {
                 None => break,
-                Some(axum::extract::ws::Message::Ping(_))
-                | Some(axum::extract::ws::Message::Pong(_)) => continue,
+                Some(
+                    axum::extract::ws::Message::Ping(_) | axum::extract::ws::Message::Pong(_),
+                ) => {}
                 Some(_) => panic!("expected close after keepalive-aware idle cleanup"),
             }
         }
@@ -337,7 +340,7 @@ mod tests {
                 .await
                 .unwrap();
             records.recv().await.unwrap();
-            tokio::time::advance(crate::http_body_policy::IDLE - std::time::Duration::from_secs(1))
+            tokio::time::advance(crate::http_body_policy::IDLE.checked_sub(std::time::Duration::from_secs(1)).unwrap())
                 .await;
             assert!(!closed.is_cancelled());
             ack.send(Feedback::Ack(sequence)).await.unwrap();

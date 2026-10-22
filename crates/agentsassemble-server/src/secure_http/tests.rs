@@ -142,7 +142,7 @@ async fn cancellation_releases_only_its_request_queue() {
     );
     let released = budget
         .charge(4 * CHUNK_BYTES)
-        .unwrap_or_else(|_| panic!("cancelled queue released"));
+        .unwrap_or_else(|()| panic!("cancelled queue released"));
     assert!(
         budget.charge(1).is_err(),
         "other request still owns its queue"
@@ -197,7 +197,7 @@ async fn virtual_upload_timeout_drops_its_queue_and_ignores_late_data() {
     .0;
     let other_request = budget
         .charge(CHUNK_BYTES)
-        .unwrap_or_else(|_| panic!("independent request"));
+        .unwrap_or_else(|()| panic!("independent request"));
     let router = axum::Router::new()
         .route(
             "/",
@@ -486,7 +486,7 @@ async fn binary_offsets_and_legacy_shape_cannot_mix_and_cancel_releases_bytes() 
     let push = |input: &mut Input, offset, end| {
         let plaintext = secure_body_record::encode(1, offset, if end { &[] } else { b"abc" }, end);
         input.push_binary(
-            secure_body_record::decode(&plaintext, secure_body_record::RESPONSE).expect("body"),
+            &secure_body_record::decode(&plaintext, secure_body_record::RESPONSE).expect("body"),
             &budget,
         )
     };

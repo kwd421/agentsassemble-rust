@@ -155,9 +155,8 @@ async fn unconfirmed_create_changes_nothing_and_only_owner_approves() -> TestRes
     assert_eq!(create_results(&store, &params.request_id).await, 0);
     // The drive creates one stopped agent owned by the owner, attributed to the AI.
     let (request, owner_reference, _) = store.approved_create_snapshot("general", id).await?;
-    let bound = match bound_create(&request) {
-        ConfirmedRoomAction::CreateAgent(create) => create,
-        _ => return Err("bound creation missing".into()),
+    let ConfirmedRoomAction::CreateAgent(bound) = bound_create(&request) else {
+        return Err("bound creation missing".into());
     };
     assert_eq!(bound.params, params);
     assert_eq!(bound.draft, draft);

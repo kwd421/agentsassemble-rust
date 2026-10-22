@@ -251,11 +251,11 @@ impl Fixture {
         base64(&self.browser)
     }
 
-    fn request(&self, body: Value) -> Request {
+    fn request(&self, body: &Value) -> Request {
         let mut request = Request::builder()
             .method("POST")
             .header("x-device-token", &self.device)
-            .body(axum::body::Body::from(serde_json::to_vec(&body).unwrap_or_else(
+            .body(axum::body::Body::from(serde_json::to_vec(body).unwrap_or_else(
                 |error| panic!("encode resume body: {error}"),
             )))
             .unwrap_or_else(|error| panic!("build resume request: {error}"));
@@ -268,7 +268,7 @@ impl Fixture {
     async fn nonce(&self) -> String {
         let response = super::issue_nonce(
             axum::extract::State(self.state.clone()),
-            self.request(json!({})),
+            self.request(&json!({})),
         )
         .await
         .unwrap_or_else(|error| panic!("issue resume nonce: {error:?}"));
@@ -340,7 +340,7 @@ async fn a_signed_resume_lists_the_joined_rooms() {
     let nonce = fixture.nonce().await;
     let response = super::resume(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(fixture.signed_body(&nonce)),
+        fixture.request(&fixture.signed_body(&nonce)),
     )
     .await
     .unwrap_or_else(|error| panic!("a valid resume must succeed: {error:?}"));
@@ -374,14 +374,14 @@ async fn a_nonce_is_consumed_once_and_a_replay_is_refused() {
     let body = fixture.signed_body(&nonce);
     let first = super::resume(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(body.clone()),
+        fixture.request(&body),
     )
     .await
     .unwrap_or_else(|error| panic!("the first resume must succeed: {error:?}"));
     assert!(first.0["rooms"].as_array().is_some());
     let replay = super::resume(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(body),
+        fixture.request(&body),
     )
     .await;
     assert!(
@@ -480,7 +480,7 @@ async fn a_signature_never_works_on_another_channel_origin_or_generation() {
         tampered[field] = value;
         let refused = super::resume(
             axum::extract::State(fixture.state.clone()),
-            fixture.request(tampered),
+            fixture.request(&tampered),
         )
         .await;
         assert!(refused.is_err(), "a changed {field} must be refused");
@@ -492,7 +492,7 @@ async fn a_signature_never_works_on_another_channel_origin_or_generation() {
     assert!(
         super::resume(
             axum::extract::State(fixture.state.clone()),
-            fixture.request(foreign),
+            fixture.request(&foreign),
         )
         .await
         .is_err()
@@ -510,7 +510,7 @@ async fn the_channel_key_never_stands_in_for_the_stored_resume_key() {
     assert!(
         super::resume(
             axum::extract::State(fixture.state.clone()),
-            fixture.request(body),
+            fixture.request(&body),
         )
         .await
         .is_err(),
@@ -522,7 +522,7 @@ async fn the_channel_key_never_stands_in_for_the_stored_resume_key() {
     assert!(
         super::resume(
             axum::extract::State(fixture.state.clone()),
-            fixture.request(unknown),
+            fixture.request(&unknown),
         )
         .await
         .is_err(),
@@ -544,7 +544,7 @@ async fn a_resume_body_of_another_registration_epoch_never_opens_the_direct_path
     assert!(
         super::resume(
             axum::extract::State(fixture.state.clone()),
-            fixture.request(body),
+            fixture.request(&body),
         )
         .await
         .is_err(),
@@ -555,7 +555,7 @@ async fn a_resume_body_of_another_registration_epoch_never_opens_the_direct_path
     assert!(
         super::resume(
             axum::extract::State(fixture.state.clone()),
-            fixture.request(fixture.signed_body(&nonce)),
+            fixture.request(&fixture.signed_body(&nonce)),
         )
         .await
         .is_ok()
@@ -568,7 +568,7 @@ async fn an_unknown_or_expired_key_never_opens_the_direct_path() {    let fixtur
     // No key was issued for this browser credential.
     let refused = super::resume(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(fixture.signed_body(&nonce)),
+        fixture.request(&fixture.signed_body(&nonce)),
     )
     .await;
     assert!(refused.is_err(), "an unknown key must be refused");
@@ -592,7 +592,7 @@ async fn an_unknown_or_expired_key_never_opens_the_direct_path() {    let fixtur
     assert!(
         super::resume(
             axum::extract::State(fixture.state.clone()),
-            fixture.request(fixture.signed_body(&nonce)),
+            fixture.request(&fixture.signed_body(&nonce)),
         )
         .await
         .is_err(),
@@ -613,7 +613,7 @@ async fn another_person_cannot_use_this_key_on_the_same_browser_credential() {
     let body = fixture.signed_body_with(&other, &nonce);
     let refused = super::resume(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(body),
+        fixture.request(&body),
     )
     .await;
     assert!(
@@ -639,7 +639,7 @@ async fn the_key_is_issued_only_after_a_central_admission_on_the_same_channel() 
     assert!(
         super::issue_key(
             axum::extract::State(fixture.state.clone()),
-            fixture.request(body.clone()),
+            fixture.request(&body),
         )
         .await
         .is_err(),
@@ -676,7 +676,7 @@ async fn the_key_is_issued_only_after_a_central_admission_on_the_same_channel() 
         .unwrap_or_else(|error| panic!("issue the redeemed challenge: {error:?}"));
     let response = super::issue_key(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(body),
+        fixture.request(&body),
     )
     .await
     .unwrap_or_else(|error| panic!("a central admission must issue a resume key: {error:?}"));
@@ -692,7 +692,7 @@ async fn the_key_is_issued_only_after_a_central_admission_on_the_same_channel() 
     // the same channel is refused and never moves the stored expiry.
     let again = super::issue_key(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
+        fixture.request(&json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
     )
     .await;
     assert!(
@@ -726,7 +726,7 @@ async fn a_direct_resume_never_issues_or_refreshes_the_resume_key() {
     let nonce = fixture.nonce().await;
     let resumed = super::resume(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(fixture.signed_body(&nonce)),
+        fixture.request(&fixture.signed_body(&nonce)),
     )
     .await
     .unwrap_or_else(|error| panic!("a valid resume must succeed: {error:?}"));
@@ -738,7 +738,7 @@ async fn a_direct_resume_never_issues_or_refreshes_the_resume_key() {
     // never issues a key of its own.
     let refused = super::issue_key(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
+        fixture.request(&json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
     )
     .await;
     assert!(
@@ -791,13 +791,17 @@ fn an_old_client_keeps_the_current_redeem_and_select_bodies() {
     }))
     .unwrap_or_else(|error| panic!("legacy redeem body: {error}"));
     assert_eq!(redeem.challenge_id, "challenge");
+    assert_eq!(redeem.grant_token, "aamc1.connect");
     let select: LegacySelectRequest = serde_json::from_value(serde_json::json!({
         "challenge_id": "challenge",
         "room_id": "general",
         "client_id": "client",
     }))
     .unwrap_or_else(|error| panic!("legacy select body: {error}"));
-    assert_eq!(select.room, "general");
+    assert_eq!(
+        (select.challenge.as_str(), select.room.as_str(), select.client.as_str()),
+        ("challenge", "general", "client")
+    );
     assert!(
         serde_json::from_value::<LegacySelectRequest>(serde_json::json!({
             "challenge_id": "challenge",

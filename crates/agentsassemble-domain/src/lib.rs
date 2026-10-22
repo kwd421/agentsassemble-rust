@@ -1,3 +1,5 @@
+// Test scenarios may run long; production functions stay under the line limit.
+#![cfg_attr(test, allow(clippy::too_many_lines))]
 mod execution_os;
 pub use execution_os::ExecutionOs;
 mod agent_avatar;
@@ -87,7 +89,7 @@ pub use command::{
     AGENT_CONTROL_ID_KEYS, CommandRejection, MessageSend, canonical_payload_hash,
     prepare_message_event, require_message_write_authority,
 };
-pub use diagnostic::{redact_persisted_diagnostic, redact_persisted_diagnostic_text};
+pub use diagnostic::redact_persisted_diagnostic_text;
 pub use identity::{
     codex_bundle_identity, codex_code_mode_host_name, stable_bundle_identity,
     stable_content_identity, stable_identity_hash,

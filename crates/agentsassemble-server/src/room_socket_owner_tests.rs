@@ -285,7 +285,7 @@ async fn snapshot_with_capability_carries_cursors() -> Result<(), Box<dyn std::e
     assert!(
         snapshot
             .get("channel_message_cursors")
-            .is_some_and(|cursors| cursors.is_array()),
+            .is_some_and(serde_json::Value::is_array),
         "advertised peer must receive the cursor field"
     );
     Ok(())

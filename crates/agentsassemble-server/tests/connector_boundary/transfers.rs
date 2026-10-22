@@ -82,7 +82,7 @@ async fn connector_cli_path_uploads_and_saved_reads_match_room_limits()
 
     // A 30 MiB workspace file uploads byte-exact through the transfer owner.
     let size = 30 * 1024 * 1024;
-    let expected: Vec<u8> = (0..size).map(|i| (i % 251) as u8).collect();
+    let expected: Vec<u8> = (0..size).map(|i| u8::try_from(i % 251).unwrap()).collect();
     std::fs::write(directory.path().join("thirty.bin"), &expected)?;
     let uploaded = upload_path(&client, &files, "thirty.bin", "application/octet-stream").await?;
     let id = uploaded["id"]
@@ -265,9 +265,8 @@ async fn connector_cli_path_uploads_and_saved_reads_match_room_limits()
         .await
         .expect_err("read-only upload refused");
     assert_eq!(readonly.code, "permission_denied");
-    let overflow = match observer.download_attachment(&id).await {
-        Ok(_) => return Err("read-only download refused".into()),
-        Err(error) => error,
+    let Err(overflow) = observer.download_attachment(&id).await else {
+        return Err("read-only download refused".into());
     };
     assert_eq!(overflow.code, "attachment_too_large");
     server.stop().await;

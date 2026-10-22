@@ -107,7 +107,7 @@ async fn invite_fixture()
     Ok((store, owner, delegate))
 }
 
-async fn minted() -> Result<MintedHumanInvite, Box<dyn std::error::Error>> {
+fn minted() -> Result<MintedHumanInvite, Box<dyn std::error::Error>> {
     let created_at = chrono::DateTime::from_timestamp_micros(chrono::Utc::now().timestamp_micros())
         .ok_or("time")?;
     Ok(MintedHumanInvite {
@@ -195,7 +195,7 @@ async fn unconfirmed_invite_binds_policy_and_only_the_owner_approves() -> TestRe
     assert!(replay.deduplicated);
     assert!(replay.result.get("invite").is_none());
     // The drive mints through the owner's own core, binding the stored policy exactly.
-    let minted = minted().await?;
+    let minted = minted()?;
     let drive = store
         .drive_approved_human_invite("general", &id, &minted)
         .await?;
@@ -448,7 +448,7 @@ async fn a_central_owner_session_approves_and_the_mint_binds_that_session() -> T
     assert!(ack.result.get("invite").is_none());
     assert_eq!(invite_rows(&store).await?, baseline);
     let drive = store
-        .drive_approved_human_invite("general", &id, &minted().await?)
+        .drive_approved_human_invite("general", &id, &minted()?)
         .await?;
     assert!(drive.invite.is_some());
     assert_eq!(drive.state, ConfirmationState::Succeeded);
@@ -477,7 +477,7 @@ async fn a_session_revoked_after_approval_mints_no_invite() -> TestResult {
         .execute(&store.pool)
         .await?;
     let drive = store
-        .drive_approved_human_invite("general", &id, &minted().await?)
+        .drive_approved_human_invite("general", &id, &minted()?)
         .await?;
     assert!(drive.invite.is_none());
     assert_eq!(drive.state, ConfirmationState::Cancelled);

@@ -6,7 +6,7 @@ use agentsassemble_domain::{
 
 #[tokio::test]
 async fn confirmation_is_immutable_owner_private_and_executes_once() -> TestResult {
-    let (store, authority, _, _dir) = fixture().await?;
+    let (store, authority, _, dir) = fixture().await?;
     let local = crate::human_session_authority_tests::local_operator_principal();
     let created = store
         .execute_delegated_atomic(
@@ -60,7 +60,7 @@ async fn confirmation_is_immutable_owner_private_and_executes_once() -> TestResu
     assert!(
         matches!(store.request_delegated_channel_delete::<()>(&authority,&changed,|_,_,_|Ok(())).await,Err(PersistenceError::CommandRejected{code,..}) if code=="request_conflict")
     );
-    let payload = _dir.path().join("payload.sqlite");
+    let payload = dir.path().join("payload.sqlite");
     let mut backup = crate::backup_database::create_payload(&payload).await?;
     let mut live = store.pool.acquire().await?;
     crate::backup_database::reconstruct(
@@ -146,7 +146,7 @@ async fn confirmation_is_immutable_owner_private_and_executes_once() -> TestResu
             );
             let archived = crate::backup_json::event(serde_json::to_value(event)?)?;
             assert_eq!(archived.event_type, "event_hidden");
-            assert!(archived.extra.get("delegated_action_request").is_none());
+            assert!(!archived.extra.contains_key("delegated_action_request"));
         }
     }
     assert!(
@@ -502,7 +502,7 @@ async fn two_pending_deletes_from_one_turn_approve_in_sequence() -> TestResult {
             .iter()
             .map(|channel| channel.id.clone())
             .collect::<Vec<_>>(),
-        [second.clone()]
+        std::slice::from_ref(&second)
     );
     assert_eq!(
         approve(&store, &second_confirmation).await?.result["state"],

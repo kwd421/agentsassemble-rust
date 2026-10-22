@@ -404,10 +404,10 @@ mod tests {
             hello_is_live(&state, "https://handshake-host.test", &hello).await,
             "the live incarnation must be served"
         );
-        let mut stale = hello.clone();
-        stale.registration_epoch = "old-epoch".into();
+        let mut old_epoch = hello.clone();
+        old_epoch.registration_epoch = "old-epoch".into();
         assert!(
-            !hello_is_live(&state, "https://handshake-host.test", &stale).await,
+            !hello_is_live(&state, "https://handshake-host.test", &old_epoch).await,
             "a hello of another registration epoch must never get a ServerHello"
         );
         let mut moved = hello.clone();

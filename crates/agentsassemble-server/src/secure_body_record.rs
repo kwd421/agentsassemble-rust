@@ -44,7 +44,8 @@ pub(crate) fn encode(id: u32, offset: u64, bytes: &[u8], end: bool) -> Vec<u8> {
     plaintext.extend_from_slice(&[RESPONSE, u8::from(end)]);
     plaintext.extend_from_slice(&id.to_be_bytes());
     plaintext.extend_from_slice(&offset.to_be_bytes());
-    plaintext.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+    // A record carries at most one chunk, far below u32::MAX.
+    plaintext.extend_from_slice(&u32::try_from(bytes.len()).unwrap_or(u32::MAX).to_be_bytes());
     plaintext.extend_from_slice(bytes);
     plaintext
 }
@@ -54,7 +55,9 @@ mod tests {
     use super::*;
     #[test]
     fn raw_body_round_trip_and_malformed_boundary() {
-        let bytes = (0..CHUNK_BYTES).map(|i| i as u8).collect::<Vec<_>>();
+        let bytes = (0..CHUNK_BYTES)
+            .map(|i| u8::try_from(i % 256).unwrap())
+            .collect::<Vec<_>>();
         let plaintext = encode(7, 123, &bytes, false);
         let record = decode(&plaintext, RESPONSE).expect("body");
         assert_eq!((record.id, record.offset, record.end), (7, 123, false));

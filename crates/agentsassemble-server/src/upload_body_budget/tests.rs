@@ -51,7 +51,7 @@ async fn slow_bodies_are_bounded_across_principals_and_refusal_does_not_consume(
         budget.bytes.available_permits(),
         HOST_BYTES - admitted * maximum * COPIES
     );
-    assert_eq!(budget.principals.lock().expect("lock").get("one"), Some(&2));
+    assert_eq!(budget.principals.lock().get("one"), Some(&2));
     let before = budget.bytes.available_permits();
     assert!(matches!(
         budget.reserve(Some("refused"), &Request::new(Body::empty()), maximum),
@@ -63,11 +63,12 @@ async fn slow_bodies_are_bounded_across_principals_and_refusal_does_not_consume(
         let _ = task.await;
     }
     assert_eq!(budget.bytes.available_permits(), HOST_BYTES);
-    assert!(budget.principals.lock().expect("lock").is_empty());
+    assert!(budget.principals.lock().is_empty());
 }
 
 #[tokio::test(start_paused = true)]
 async fn reservations_survive_decode_and_return_on_success_error_timeout_and_cancellation() {
+    use tower::ServiceExt;
     let budget = Budget::default();
     let (value, held) = decode_upload_body::<Value>(
         Request::new(Body::from("null")),
@@ -121,7 +122,6 @@ async fn reservations_survive_decode_and_return_on_success_error_timeout_and_can
             }),
         )
         .layer(axum::middleware::from_fn(crate::http_body_policy::apply));
-    use tower::ServiceExt;
     let body = Body::from_stream(futures_util::stream::pending::<Result<Bytes, Infallible>>());
     router
         .oneshot(
@@ -134,7 +134,7 @@ async fn reservations_survive_decode_and_return_on_success_error_timeout_and_can
         .await
         .expect("response");
     assert_eq!(budget.bytes.available_permits(), HOST_BYTES);
-    assert!(budget.principals.lock().expect("lock").is_empty());
+    assert!(budget.principals.lock().is_empty());
 }
 
 #[tokio::test]
@@ -156,11 +156,11 @@ async fn storage_work_retains_capacity_after_request_cancellation() {
             .await
             .expect("decode");
             tokio::spawn(async move {
-                let _reservation = reservation;
+                let held = reservation;
                 let _value = value;
                 started.send(()).expect("start");
                 finished.await.expect("storage completion");
-                drop(_reservation);
+                drop(held);
                 released.send(()).expect("released");
             })
             .await

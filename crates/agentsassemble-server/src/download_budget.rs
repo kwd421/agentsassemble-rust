@@ -18,11 +18,14 @@ const PER_PRINCIPAL: usize = 16;
 const PER_PRINCIPAL_BYTES: usize = 400 * 1024 * 1024;
 pub(crate) const ERROR_CODE: &str = "attachment_download_budget_exhausted";
 
+/// Per principal: buffered downloads, bytes held, and open streams.
+type PrincipalUsage = Arc<parking_lot::Mutex<HashMap<String, (usize, usize, usize)>>>;
+
 #[derive(Clone)]
 pub(crate) struct Budget {
     bytes: Arc<Semaphore>,
     encoded: Arc<Semaphore>,
-    principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize, usize)>>>,
+    principals: PrincipalUsage,
 }
 impl Default for Budget {
     fn default() -> Self {
@@ -36,7 +39,7 @@ impl Default for Budget {
 pub(crate) struct Lease {
     _bytes: OwnedSemaphorePermit,
     _encoded: Option<OwnedSemaphorePermit>,
-    principals: Arc<parking_lot::Mutex<HashMap<String, (usize, usize, usize)>>>,
+    principals: PrincipalUsage,
     principal: Option<String>,
     weight: usize,
     streamed: bool,
@@ -47,9 +50,10 @@ impl Drop for Lease {
             return;
         };
         let mut principals = self.principals.lock();
-        let count = principals
-            .get_mut(principal)
-            .expect("live download principal");
+        // Every lease with a principal was counted when it was reserved.
+        let Some(count) = principals.get_mut(principal) else {
+            return;
+        };
         if self.streamed {
             count.2 -= 1;
         } else {
@@ -81,6 +85,7 @@ impl Budget {
             principal,
             size.checked_mul(COPIES).ok_or_else(exhausted)?,
             false,
+            None,
         )
     }
 
@@ -99,13 +104,11 @@ impl Budget {
             .clone()
             .try_acquire_many_owned(u32::try_from(weight).map_err(|_| exhausted())?)
             .map_err(|_| exhausted())?;
-        let mut lease = self.reserve_weight(Some(principal), weight, false)?;
-        lease._encoded = Some(encoded);
-        Ok(lease)
+        self.reserve_weight(Some(principal), weight, false, Some(encoded))
     }
 
     pub(crate) fn reserve_stream(&self, principal: &str) -> Result<Lease, PersistenceError> {
-        self.reserve_weight(Some(principal), STREAM_BYTES, true)
+        self.reserve_weight(Some(principal), STREAM_BYTES, true, None)
     }
 
     pub(crate) fn reserve_preview_generation(
@@ -115,16 +118,13 @@ impl Budget {
     ) -> Result<Lease, PersistenceError> {
         // Whole encoded input/driver copies, bounded decoder/rotation buffers,
         // plus <=1100px resize and temporary encoding. Held by the blocking task.
+        let decode = usize::try_from(agentsassemble_persistence::MAX_RASTER_DECODE_ALLOC_BYTES)
+            .map_err(|_| exhausted())?;
         let weight = size
             .checked_mul(2)
-            .and_then(|n| {
-                n.checked_add(
-                    2 * agentsassemble_persistence::MAX_RASTER_DECODE_ALLOC_BYTES as usize
-                        + 16 * 1024 * 1024,
-                )
-            })
+            .and_then(|n| n.checked_add(2 * decode + 16 * 1024 * 1024))
             .ok_or_else(exhausted)?;
-        self.reserve_weight(Some(principal), weight, false)
+        self.reserve_weight(Some(principal), weight, false, None)
     }
 
     fn reserve_weight(
@@ -132,6 +132,7 @@ impl Budget {
         principal: Option<&str>,
         weight: usize,
         streamed: bool,
+        encoded: Option<OwnedSemaphorePermit>,
     ) -> Result<Lease, PersistenceError> {
         let weight = u32::try_from(weight).map_err(|_| exhausted())?;
         let mut principals = self.principals.lock();
@@ -161,7 +162,7 @@ impl Budget {
         }
         Ok(Lease {
             _bytes: bytes,
-            _encoded: None,
+            _encoded: encoded,
             principals: self.principals.clone(),
             principal: principal.map(str::to_owned),
             weight: weight as usize,

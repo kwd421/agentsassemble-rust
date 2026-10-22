@@ -34,7 +34,8 @@ struct Begin {
 
 #[derive(Deserialize)]
 pub(super) struct Offset {
-    offset: usize,
+    #[serde(rename = "offset")]
+    at: usize,
     turn_generation: u64,
     execution_id: String,
 }
@@ -159,7 +160,7 @@ pub(super) async fn data(
         .data(
             authority,
             handle,
-            offset.offset,
+            offset.at,
             request.into_body(),
             policy.0,
         )
@@ -363,7 +364,7 @@ pub(super) async fn download(
     let stream = futures_util::stream::unfold(
         (reader, 0usize, pieces, Some(lease)),
         |(reader, sequence, total, lease)| async move {
-            let Some(lease) = lease else { return None };
+            let lease = lease?;
             if sequence >= total {
                 return None;
             }

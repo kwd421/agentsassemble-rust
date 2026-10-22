@@ -308,7 +308,7 @@ async fn reservations_exclusion_cleanup_policy_change_and_restart() -> TestResul
                 &auth,
                 &first.handle,
                 sequence * MESSAGE_UPLOAD_PIECE_BYTES,
-                &[1; MESSAGE_UPLOAD_PIECE_BYTES],
+                &vec![1; MESSAGE_UPLOAD_PIECE_BYTES],
             )
             .await?;
     }
@@ -383,12 +383,12 @@ async fn reservations_exclusion_cleanup_policy_change_and_restart() -> TestResul
 #[tokio::test]
 async fn raster_preview_matches_legacy_and_invalid_raster_never_commits() -> TestResult {
     let (store, auth) = fixture(None).await?;
-    let mut noise = 0x12345678_u32;
+    let mut noise = 0x1234_5678_u32;
     let image = image::DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(500, 500, |_, _| {
         noise ^= noise << 13;
         noise ^= noise >> 17;
         noise ^= noise << 5;
-        image::Rgba([(noise >> 16) as u8, (noise >> 8) as u8, noise as u8, 255])
+        image::Rgba([noise.to_le_bytes()[2], noise.to_le_bytes()[1], noise.to_le_bytes()[0], 255])
     }));
     let mut output = std::io::Cursor::new(Vec::new());
     image.write_to(&mut output, image::ImageFormat::Png)?;

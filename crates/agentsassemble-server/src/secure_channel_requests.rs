@@ -101,7 +101,7 @@ impl Requests {
         let record =
             crate::secure_body_record::decode(plaintext, crate::secure_body_record::REQUEST)?;
         match self.inputs.get_mut(&record.id) {
-            Some(Input::Http(input)) => input.push_binary(record, &self.budget),
+            Some(Input::Http(input)) => input.push_binary(&record, &self.budget),
             None if record.id <= self.last_id => Ok(()),
             _ => Err(()),
         }

@@ -171,9 +171,9 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
         .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "general", "Room")
         .await?;
     let bytes: Vec<u8> = (0..agentsassemble_domain::MAX_ROOM_FILE_BYTES)
-        .map(|i| (i % 251) as u8)
+        .map(|i| u8::try_from(i % 251).unwrap())
         .collect();
-    sqlx::query("INSERT INTO room_message_attachments SELECT 'ma_'||printf('%032x',1),'general',user_id,NULL,'large.bin','application/octet-stream',?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1").bind(bytes.len() as i64).execute(&store.pool).await?;
+    sqlx::query("INSERT INTO room_message_attachments SELECT 'ma_'||printf('%032x',1),'general',user_id,NULL,'large.bin','application/octet-stream',?,0,1,'pending',9223372036854775807 FROM user_profiles LIMIT 1").bind(i64::try_from(bytes.len()).unwrap()).execute(&store.pool).await?;
     crate::room_file_content::RoomFileContent::Message
         .write(
             &mut *store.pool.acquire().await?,
@@ -225,7 +225,7 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
         &mut encoded,
         &manifest,
         None,
-        Default::default(),
+        crate::backup_codec::KdfParameters::default(),
     )?;
     std::io::Seek::rewind(&mut encoded)?;
     let decoded = directory.path().join("decoded.sqlite");
@@ -250,7 +250,7 @@ async fn ceiling_file_exports_and_restores_without_relaxing_other_assets() -> Te
             .await?,
         bytes
     );
-    assert_eq!(row.get::<i64, _>("size"), 52428800);
+    assert_eq!(row.get::<i64, _>("size"), 52_428_800);
     connection.close().await?;
     // New chunk archives retain the ordinary cell and aggregate metadata limits.
     let mut hostile =
@@ -298,7 +298,7 @@ pub(crate) async fn restore_v91(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Err
                 .await?;
         for (id, size) in files {
             let bytes = kind
-                .collect(&mut tx, &id, size as usize)
+                .collect(&mut tx, &id, usize::try_from(size).unwrap())
                 .await
                 .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
             sqlx::query("UPDATE fixture_rows SET content=? WHERE attachment_id=?")

@@ -120,7 +120,7 @@ pub(super) async fn verify(
         let saved: Value = serde_json::from_str(&saved).expect("saved path JSON");
         let bytes = std::fs::read(saved["path"].as_str().expect("saved path missing"))
             .expect("saved file readable");
-        assert_eq!(bytes, vec![42u8; 10485761]);
+        assert_eq!(bytes, vec![42u8; 10_485_761]);
         let escape = client
             .call_tool(
                 CallToolRequestParams::new("upload_attachment").with_arguments(
@@ -186,10 +186,10 @@ pub(super) async fn verify(
         .read_provider_attachment(connection, &command, &files)
         .await?;
     let path = result.path.clone().ok_or("large read must save a path")?;
-    assert_eq!(std::fs::read(&path)?, vec![42u8; 10485761]);
+    assert_eq!(std::fs::read(&path)?, vec![42u8; 10_485_761]);
     command.complete(Ok(result));
     // A 12 MiB file exceeds the inline bound but fits the 25 MiB room: same limit as humans.
-    let upload_bytes: Vec<u8> = (0..12 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
+    let upload_bytes: Vec<u8> = (0..12 * 1024 * 1024).map(|i| u8::try_from(i % 251).unwrap()).collect();
     std::fs::write(
         std::path::Path::new(workspace).join("twelve.bin"),
         &upload_bytes,

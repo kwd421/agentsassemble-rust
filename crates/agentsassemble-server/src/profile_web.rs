@@ -179,7 +179,7 @@ async fn upload_attachment(
             "Read-only room sessions cannot upload profile avatars.",
         ));
     }
-    let _permit = avatar_admission::acquire(&state.avatar_uploads)?;
+    let permit = avatar_admission::acquire(&state.avatar_uploads)?;
     let principal = match &authority {
         AttachmentUploadAuthority::Profile(ProfileAuthority::HumanSession(session)) => {
             session.principal().principal_id.as_str()
@@ -230,7 +230,7 @@ async fn upload_attachment(
         .clone()
         .spawn(async move {
             let _reservation = reservation;
-            let _permit = _permit;
+            let _permit = permit;
             let content = decode_attachment_content(&payload.data_base64)?;
             store_uploaded_attachment(&state, authority, &payload, content).await
         })
@@ -400,6 +400,7 @@ async fn read_attachment(
     request: Request,
 ) -> Result<Response, ProfileHttpError> {
     if attachment_id.starts_with(agentsassemble_domain::MESSAGE_ATTACHMENT_ID_PREFIX) {
+        use agentsassemble_persistence::MessageAttachmentReadAuthority;
         let inline_requested = attachment_inline_query(raw_query.as_deref())?;
         let preview_requested = raw_query.as_deref() == Some("preview=1");
         let authority = resolve_message_attachment_read_authority(
@@ -409,7 +410,6 @@ async fn read_attachment(
             &attachment_id,
         )
         .await?;
-        use agentsassemble_persistence::MessageAttachmentReadAuthority;
         let authority = match authority {
             RoomSessionHttpAuthority::LocalTicket(grant) => MessageAttachmentReadAuthority::Local {
                 room_id: grant.room_id,
@@ -913,11 +913,10 @@ impl From<PersistenceError> for ProfileHttpError {
 
 impl IntoResponse for ProfileHttpError {
     fn into_response(self) -> Response {
-        let mut payload = json!({"error":self.message,"code":self.code});
-        payload
-            .as_object_mut()
-            .expect("error object")
-            .extend(self.extra);
+        let mut payload = serde_json::Map::new();
+        payload.insert("error".into(), self.message.into());
+        payload.insert("code".into(), self.code.into());
+        payload.extend(self.extra);
         (self.status, Json(payload)).into_response()
     }
 }

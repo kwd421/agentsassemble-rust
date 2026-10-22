@@ -506,7 +506,7 @@ impl RoomConnectorClient {
             return;
         }
         let changed = known.name != current;
-        known.name = current.to_owned();
+        current.clone_into(&mut known.name);
         known.revision = revision;
         if changed {
             response["name_changed"] = json!(format!(

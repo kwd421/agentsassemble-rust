@@ -684,12 +684,12 @@ async fn local_tcp_preview_is_private_bounded_and_preserves_original_download()
     let width = 1600_u32;
     let height = 800_u32;
     let mut pixels = Vec::with_capacity((width * height * 4) as usize);
-    let mut noise = 0x12345678_u32;
+    let mut noise = 0x1234_5678_u32;
     for _ in 0..width * height {
         noise ^= noise << 13;
         noise ^= noise >> 17;
         noise ^= noise << 5;
-        pixels.extend_from_slice(&[(noise >> 16) as u8, (noise >> 8) as u8, noise as u8, 128]);
+        pixels.extend_from_slice(&[noise.to_le_bytes()[2], noise.to_le_bytes()[1], noise.to_le_bytes()[0], 128]);
     }
     let mut original = Vec::new();
     {

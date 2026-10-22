@@ -343,7 +343,7 @@ async fn verify_room_turn_publication(first_status: &str) {
             .push(agentsassemble_domain::ProviderControlOption {
                 value: "workspace_write".into(),
                 label: "Workspace write".into(),
-                metadata: Default::default(),
+                metadata: std::collections::BTreeMap::default(),
             });
         // Delegated creation binds full-access selections on this completed path.
         permissions
@@ -351,7 +351,7 @@ async fn verify_room_turn_publication(first_status: &str) {
             .push(agentsassemble_domain::ProviderControlOption {
                 value: "full_access".into(),
                 label: "Full access".into(),
-                metadata: Default::default(),
+                metadata: std::collections::BTreeMap::default(),
             });
     }
     let server = start(store, catalog).await;

@@ -11,7 +11,7 @@ async fn ten_plain_large_downloads_are_exact_and_deletion_interrupts_a_stalled_b
     set_limit(&server, 50 * 1024 * 1024, "stream-limit").await?;
     let client = Client::new();
     for size in [65536 + 19, 50 * 1024 * 1024] {
-        let bytes: Vec<u8> = (0..size).map(|n| (n % 251) as u8).collect();
+        let bytes: Vec<u8> = (0..size).map(|n| u8::try_from(n % 251).unwrap()).collect();
         let attachment = server
             .store
             .store_message_attachment(
@@ -153,7 +153,7 @@ async fn room_limit_bounds_plain_bodies_and_grandfathers_bound_downloads() -> Te
             if writer.write_all(b"10000\r\n").await.is_err() {
                 return;
             }
-            if writer.write_all(&[b' '; 65536]).await.is_err() {
+            if writer.write_all(&vec![b' '; 65536]).await.is_err() {
                 return;
             }
             if writer.write_all(b"\r\n").await.is_err() {
@@ -194,7 +194,7 @@ async fn room_limit_bounds_plain_bodies_and_grandfathers_bound_downloads() -> Te
     );
 
     set_limit(&server, 50 * 1024 * 1024, "raise").await?;
-    let bytes: Vec<u8> = (0..size).map(|index| (index % 251) as u8).collect();
+    let bytes: Vec<u8> = (0..size).map(|index| u8::try_from(index % 251).unwrap()).collect();
     let uploaded = upload_local(
         &client,
         &server,

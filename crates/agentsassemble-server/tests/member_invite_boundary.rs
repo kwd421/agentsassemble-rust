@@ -312,6 +312,30 @@ async fn select_member_room(
         .await
 }
 
+async fn listed_rooms(
+    client: &reqwest::Client,
+    base: &str,
+    device: &str,
+    query: &str,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let challenge: Value = client
+        .post(format!("{base}/api/member-connect/challenge"))
+        .header("x-device-token", device)
+        .json(&json!({}))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let listed = client
+        .post(format!("{base}/api/member-connect/rooms{query}"))
+        .header("x-device-token", device)
+        .json(&json!({"challenge_id":challenge["challenge_id"],"grant_token":"aamc1.connect"}))
+        .send()
+        .await?;
+    assert_eq!(listed.status(), StatusCode::OK);
+    Ok(listed.json().await?)
+}
+
 #[tokio::test]
 async fn member_connect_advertises_channel_bound_select_only_to_opted_in_clients() -> TestResult {
     let (store, invite) = fixture(InviteScope::ReadWrite).await;
@@ -351,29 +375,6 @@ async fn member_connect_advertises_channel_bound_select_only_to_opted_in_clients
     assert_admission(&client, &base, invite.join_code(), &mut received).await?;
     let device = format!("aad1_{}", URL_SAFE_NO_PAD.encode([9_u8; 32]));
 
-    async fn listed_rooms(
-        client: &reqwest::Client,
-        base: &str,
-        device: &str,
-        query: &str,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
-        let challenge: Value = client
-            .post(format!("{base}/api/member-connect/challenge"))
-            .header("x-device-token", device)
-            .json(&json!({}))
-            .send()
-            .await?
-            .json()
-            .await?;
-        let listed = client
-            .post(format!("{base}/api/member-connect/rooms{query}"))
-            .header("x-device-token", device)
-            .json(&json!({"challenge_id":challenge["challenge_id"],"grant_token":"aamc1.connect"}))
-            .send()
-            .await?;
-        assert_eq!(listed.status(), StatusCode::OK);
-        Ok(listed.json().await?)
-    }
     let keys_of = |listed: &Value| {
         let mut keys: Vec<String> = listed
             .as_object()

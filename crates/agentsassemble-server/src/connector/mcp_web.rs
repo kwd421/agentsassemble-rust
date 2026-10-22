@@ -143,7 +143,7 @@ async fn collect_envelope(
     let small = budget
         .small
         .clone()
-        .try_acquire_many_owned((ENVELOPE_CHUNK * ENVELOPE_COPIES) as u32)
+        .try_acquire_many_owned(u32::try_from(ENVELOPE_CHUNK * ENVELOPE_COPIES).unwrap_or(u32::MAX))
         .map_err(|_| {
             envelope_error(
                 StatusCode::TOO_MANY_REQUESTS,
@@ -194,7 +194,7 @@ async fn collect_envelope(
             let extra = budget
                 .large
                 .clone()
-                .try_acquire_many_owned((weight - held) as u32)
+                .try_acquire_many_owned(u32::try_from(weight - held).unwrap_or(u32::MAX))
                 .map_err(|_| {
                     envelope_error(
                         StatusCode::TOO_MANY_REQUESTS,

@@ -187,7 +187,7 @@ async fn server_storage_wait_is_excluded_but_the_hard_ceiling_and_client_idle_re
     let mut body = request.into_body().into_data_stream();
     assert_eq!(body.next().await.ok_or("first")??, b"first".as_slice());
     let server = policy.server_wait();
-    tokio::time::advance(Duration::from_secs(240)).await;
+    tokio::time::advance(Duration::from_mins(4)).await;
     drop(server);
     assert_eq!(body.next().await.ok_or("second")??, b"second".as_slice());
     tokio::time::advance(Duration::from_secs(31)).await;
@@ -377,7 +377,7 @@ impl tokio::io::AsyncRead for BoundedSource {
             "whole-file source buffer"
         );
         let count = self.remaining.min(buffer.remaining());
-        let piece = [17; MESSAGE_UPLOAD_PIECE_BYTES];
+        let piece = vec![17; MESSAGE_UPLOAD_PIECE_BYTES];
         buffer.put_slice(&piece[..count]);
         self.remaining -= count;
         std::task::Poll::Ready(Ok(()))

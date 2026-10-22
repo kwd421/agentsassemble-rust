@@ -249,7 +249,7 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
                     };
                     // Credits acknowledge whole emitted records, never queued capacity.
                     if offset <= body.consumed || !body.records.iter().any(|r| r.item.window.as_ref().is_some_and(|window| window.1 == offset)) { break; }
-                    if let Some(progress) = body.records.front().and_then(|r| r.item.progress.as_ref()) { progress.accept((offset - body.consumed) as usize); }
+                    if let Some(progress) = body.records.front().and_then(|r| r.item.progress.as_ref()) { progress.accept(usize::try_from(offset - body.consumed).unwrap_or(usize::MAX)); }
                     while body.records.front().is_some_and(|r| r.item.window.as_ref().is_some_and(|window| window.1 <= offset)) { body.records.pop_front(); }
                     body.consumed = offset;
                     last_credit = Instant::now();

@@ -1,0 +1,4 @@
+# Tests may unwrap: a panic is how a test reports failure. Production code
+# keeps `unwrap_used` and `expect_used` denied (see [workspace.lints]).
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
