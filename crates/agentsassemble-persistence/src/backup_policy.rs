@@ -32,6 +32,7 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "room_appearance_assets"
         | "agent_sessions"
         | "agent_avatar_assets"
+        | "connector_avatar_assets"
         | "room_events"
         | "room_message_attachments"
         | "room_message_attachment_chunks"

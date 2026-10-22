@@ -310,3 +310,78 @@ async fn paired_image_uploads_revalidate_revocation_before_storage()
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn the_owner_renames_an_external_ai_and_sets_its_picture()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, principal, _directory) = fixture().await;
+    let now = chrono::Utc::now();
+    let connector = agentsassemble_domain::Participant {
+        room_id: "general".to_owned(),
+        participant_id: "connector-0123456789abcdef".to_owned(),
+        display_name: "Ace".to_owned(),
+        avatar_image_url: String::new(),
+        avatar_label: None,
+        participant_type: "agent".to_owned(),
+        status: agentsassemble_domain::ParticipantStatus::Joined,
+        role: agentsassemble_domain::ParticipantRole::Agent,
+        owner_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        muted: false,
+        created_at: now,
+        updated_at: now,
+    };
+    sqlx::query("INSERT INTO participants(room_id,participant_id,participant_json) VALUES(?,?,?)")
+        .bind("general")
+        .bind(&connector.participant_id)
+        .bind(serde_json::to_string(&connector)?)
+        .execute(&store.pool)
+        .await?;
+    let manager = store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await?;
+    let upload = crate::RoomManagerAuthority::Local(manager);
+    let picture = store
+        .store_agent_avatar(&upload, &connector.participant_id, "ace.png", "image/png", png()?)
+        .await?;
+    let outcome = store
+        .execute_agent_profile_update(
+            TrustedPrincipal(&principal),
+            "connector-profile",
+            &json!({"agent_id": connector.participant_id, "display_name": "Ace 2", "avatar_image_url": picture.url}),
+        )
+        .await?;
+    assert_eq!(outcome.result["participant"]["display_name"], "Ace 2");
+    assert_eq!(outcome.result["participant"]["avatar_image_url"], picture.url);
+    assert!(outcome.result.get("agent_session").is_none());
+    assert_eq!(outcome.result["event"]["type"], "participant_updated");
+    assert_eq!(outcome.result["event"]["avatar_image_url"], picture.url);
+    assert_eq!(
+        store.agent_avatar(&picture.id, |_| Ok(())).await?.0.metadata,
+        picture
+    );
+    // Clearing the picture removes the stored image.
+    store
+        .execute_agent_profile_update(
+            TrustedPrincipal(&principal),
+            "connector-clear",
+            &json!({"agent_id": connector.participant_id, "avatar_image_url": ""}),
+        )
+        .await?;
+    assert!(store.agent_avatar(&picture.id, |_| Ok(())).await.is_err());
+    // A person is not an AI profile target.
+    assert!(
+        store
+            .execute_agent_profile_update(
+                TrustedPrincipal(&principal),
+                "person-profile",
+                &json!({"agent_id": LOCAL_OPERATOR_PARTICIPANT_ID, "display_name": "x"}),
+            )
+            .await
+            .is_err()
+    );
+    Ok(())
+}

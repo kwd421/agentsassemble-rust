@@ -24,7 +24,10 @@ pub(super) async fn validate(
     }
     let column = match table {
         "persona_assets" => "thumbnail_png",
-        "profile_avatar_assets" | "agent_avatar_assets" | "room_appearance_assets" => "content",
+        "profile_avatar_assets"
+        | "agent_avatar_assets"
+        | "connector_avatar_assets"
+        | "room_appearance_assets" => "content",
         _ => return Ok(()),
     };
     if table == "persona_assets" {

@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 98;
+pub const CURRENT_SCHEMA_VERSION: i64 = 99;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -274,6 +274,10 @@ async fn upgrade_member_schema(pool: &SqlitePool, version: &str) -> Result<(), P
     if current.parse::<i64>().is_ok_and(|v| v < 98) {
         // v98 adds API agents' memory pieces, refolded from room messages.
         crate::agent_memory::upgrade(pool).await?;
+    }
+    if current.parse::<i64>().is_ok_and(|v| v < 99) {
+        // v99 adds pictures for external AIs, which have no Agent Session.
+        crate::agent_avatar_assets::upgrade(pool).await?;
     }
     Ok(())
 }

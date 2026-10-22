@@ -228,9 +228,21 @@ pub(crate) async fn counts(
         "room_message_attachments",
         "profile_avatar_assets",
         "agent_avatar_assets",
+        "connector_avatar_assets",
         "room_appearance_assets",
         "persona_assets",
     ] {
+        // Archives from before v99 have no external AI pictures.
+        if table == "connector_avatar_assets"
+            && !sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)",
+            )
+            .bind(table)
+            .fetch_one(&mut *connection)
+            .await?
+        {
+            continue;
+        }
         assets += sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
             "SELECT count(*) FROM {table}"
         )))

@@ -21,7 +21,7 @@ pub(crate) async fn enforce_storage_replacement(
         return Err(invalid_storage_usage());
     }
     let row = sqlx::query(
-        "SELECT COUNT(*) AS asset_count, COALESCE(SUM(size), 0) AS asset_bytes FROM (SELECT size FROM profile_avatar_assets UNION ALL SELECT size FROM prejoin_avatar_assets UNION ALL SELECT size FROM room_appearance_assets UNION ALL SELECT size FROM room_message_attachments UNION ALL SELECT size FROM agent_avatar_assets UNION ALL SELECT size FROM room_connector_uploads UNION ALL SELECT size FROM temp.message_uploads WHERE finished=0)",
+        "SELECT COUNT(*) AS asset_count, COALESCE(SUM(size), 0) AS asset_bytes FROM (SELECT size FROM profile_avatar_assets UNION ALL SELECT size FROM prejoin_avatar_assets UNION ALL SELECT size FROM room_appearance_assets UNION ALL SELECT size FROM room_message_attachments UNION ALL SELECT size FROM agent_avatar_assets UNION ALL SELECT size FROM connector_avatar_assets UNION ALL SELECT size FROM room_connector_uploads UNION ALL SELECT size FROM temp.message_uploads WHERE finished=0)",
     )
     .fetch_one(&mut **transaction)
     .await?;
@@ -68,6 +68,7 @@ impl SqliteStore {
                 UNION ALL SELECT room_id, size FROM room_connector_uploads
                 UNION ALL SELECT room_id, size FROM room_appearance_assets
                 UNION ALL SELECT room_id, size FROM agent_avatar_assets
+                UNION ALL SELECT room_id, size FROM connector_avatar_assets
                 UNION ALL SELECT room_id, size FROM prejoin_avatar_assets
                 UNION ALL SELECT NULL, size FROM profile_avatar_assets
             ), usage AS (

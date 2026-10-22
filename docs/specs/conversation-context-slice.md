@@ -282,3 +282,21 @@ client shows a working external AI in the typing line and as "응답 중" in the
 
 Non-goal for this slice: a durable "차례 넘김" row for an external AI that reads and stays silent,
 which would need a new durable event type across history and backups.
+
+## External AI profile (2026-10-22, required behavior)
+
+The owner edits an external AI's name and picture the way they edit an app AI's, from the
+same profile window (desktop member list and mobile room info). An external AI has a room
+participant and no Agent Session, so the participant owns that name and picture.
+
+- `agent.profile.update` takes the external AI's participant id as `agent_id` and keeps the
+  `agent.control` requirement. Its result is `{participant, events, event}` with one
+  `participant_updated` event carrying `display_name` and `avatar_image_url`; there is no
+  `agent_session`. A person's participant id is refused.
+- Pictures upload through the same `/api/agent-avatars/upload/{id}` route with the
+  participant id, under the same raster rules, 15-minute pending lifetime and room storage
+  quota. They live in their own table, `connector_avatar_assets` (schema v99), keyed by room
+  participant and removed with it, and are served at the same `/api/agent-avatars/{id}` path.
+  Backups carry them; archives from before v99 restore without them.
+- The AI is not told about the change. It keeps the name it joined with in its own context;
+  the room shows the new one.
