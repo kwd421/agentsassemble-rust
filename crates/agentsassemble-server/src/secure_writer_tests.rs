@@ -1,4 +1,4 @@
-use super::send_response;
+use super::{BodyMode, send_response};
 use crate::{
     http_body_policy::{IDLE, Progress},
     secure_body_record,
@@ -103,10 +103,12 @@ async fn body_failure_before_data_or_after_every_record_was_credited_keeps_chann
             1,
             writer.output.with_http(1, true).with_cancel(cancel.clone()),
             cancel,
-            true,
-            None,
-            true,
-            None,
+            BodyMode {
+                binary: true,
+                confirm: None,
+                window: true,
+                confirm_window: None,
+            },
         ));
         let header: serde_json::Value = serde_json::from_slice(&writer.record().await).unwrap();
         assert_eq!(header["op"], "response");

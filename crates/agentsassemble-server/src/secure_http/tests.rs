@@ -534,12 +534,13 @@ async fn quiet_event_stream_uses_a_fresh_credit_deadline_when_data_returns() {
         response,
         1,
         output.with_http(1, true),
-        closed.child_token(),
-        closed.clone(),
-        true,
-        None,
-        true,
-        None,
+        (closed.child_token(), closed.clone()),
+        BodyMode {
+            binary: true,
+            confirm: None,
+            window: true,
+            confirm_window: None,
+        },
     ));
     records.recv().await.unwrap();
     feedback.send(Feedback::Ack(0)).await.unwrap();

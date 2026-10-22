@@ -1,5 +1,5 @@
 use super::{
-    AgentTurnCommit, ProviderTurnAuthority, apply_provider_session_transition,
+    AgentFinalMessage, AgentTurnCommit, ProviderTurnAuthority, apply_provider_session_transition,
     finalization::{ProviderTurnDisposition, ProviderTurnFinalization},
     scheduler::assign_available_pending,
     support::{
@@ -26,10 +26,7 @@ pub(super) async fn complete_message(
     room_id: &str,
     session_id: &str,
     authority: ProviderTurnAuthority<'_>,
-    content: &str,
-    target_agent_id: &str,
-    reply_to_event_id: Option<&str>,
-    attachment_ids: &[String],
+    message: AgentFinalMessage<'_>,
 ) -> Result<AgentTurnCommit, PersistenceError> {
     let ProviderTurnAuthority {
         turn_id,
@@ -37,6 +34,12 @@ pub(super) async fn complete_message(
         provider_session_id,
         ..
     } = authority;
+    let AgentFinalMessage {
+        content,
+        target_agent_id,
+        reply_to_event_id,
+        attachment_ids,
+    } = message;
     validate_identifier(provider_turn_id, "provider_turn_invalid")?;
     let content = clean_message(content, agentsassemble_domain::MAX_MESSAGE_CHARACTERS);
     if !has_visible_text(&content) && attachment_ids.is_empty() {
@@ -84,8 +87,7 @@ pub(super) async fn complete_message(
     let final_event = agent_final_event(
         transaction,
         &session,
-        turn_id,
-        provider_turn_id,
+        (turn_id, provider_turn_id),
         content,
         target_agent_id,
         (reply_to_event_id, reply_mention),

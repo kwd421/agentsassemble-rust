@@ -281,8 +281,7 @@ async fn commit_new_admission(
         room,
         &identity.participant_id,
         &identity.profile,
-        expires_at,
-        store.human_room_session_ttl(),
+        (expires_at, store.human_room_session_ttl()),
     )
     .await?;
     let key = store.host_key.session_hmac_key();
@@ -581,8 +580,7 @@ pub(crate) async fn admission_result(
     room: &agentsassemble_domain::Room,
     participant_id: &str,
     profile: &UserProfile,
-    expires_at: DateTime<Utc>,
-    session_ttl: Duration,
+    (expires_at, session_ttl): (DateTime<Utc>, Duration),
 ) -> Result<HumanAdmissionResult, PersistenceError> {
     let settings_json =
         sqlx::query_scalar::<_, String>("SELECT settings_json FROM rooms WHERE room_id = ?")

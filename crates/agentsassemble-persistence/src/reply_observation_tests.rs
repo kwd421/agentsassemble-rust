@@ -22,10 +22,12 @@ async fn reply_observation_resolves_old_sources_after_edit_or_delete() {
                 "general",
                 AGENT_ID,
                 authority(&running, "first", None),
-                "Acknowledged",
-                "",
-                None,
-                &[],
+                crate::AgentFinalMessage {
+                    content: "Acknowledged",
+                    target_agent_id: "",
+                    reply_to_event_id: None,
+                    attachment_ids: &[],
+                },
             )
             .await
             .unwrap_or_else(|error| panic!("complete: {error}"));

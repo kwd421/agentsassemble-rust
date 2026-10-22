@@ -157,10 +157,12 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             "general",
             AGENT_ID,
             authority(&first_start, "provider-turn-1", None),
-            "First provider final",
-            "",
-            Some(&first.outcome.event.id),
-            &[],
+            crate::AgentFinalMessage {
+                content: "First provider final",
+                target_agent_id: "",
+                reply_to_event_id: Some(&first.outcome.event.id),
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|error| panic!("complete first provider turn: {error}"));
@@ -200,10 +202,12 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             "general",
             AGENT_ID,
             authority(&first_start, "provider-turn-stale", None),
-            "must not publish",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "must not publish",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
     else {
@@ -275,10 +279,12 @@ async fn completed_turn_keeps_the_attached_provider_session_identity() {
                 "provider-turn-identity-1",
                 Some(&session.provider_session_id),
             ),
-            "Native session attached",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Native session attached",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|error| panic!("commit first provider final: {error}"));
@@ -310,10 +316,12 @@ async fn completed_turn_keeps_the_attached_provider_session_identity() {
                 "provider-turn-identity-2",
                 Some("conversation-2"),
             ),
-            "must roll back",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "must roll back",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
     else {

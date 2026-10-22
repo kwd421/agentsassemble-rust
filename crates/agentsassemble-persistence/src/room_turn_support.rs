@@ -339,8 +339,7 @@ pub(crate) async fn session_state_event(
 pub(super) async fn agent_final_event(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
-    turn_id: &str,
-    provider_turn_id: &str,
+    (turn_id, provider_turn_id): (&str, &str),
     content: String,
     target_agent_id: &str,
     (reply_to_event_id, reply_mention): (Option<&str>, Option<String>),

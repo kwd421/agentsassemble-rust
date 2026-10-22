@@ -25,32 +25,36 @@ const RESUME_NONCE_TTL: chrono::Duration = chrono::Duration::seconds(300);
 /// `client_public_key` is the ephemeral key of the channel the request
 /// arrived on, so the signature is bound to that channel; the device's own
 /// resume public key travels beside it and selects the stored row.
-pub(crate) fn resume_transcript(
-    server_id: &str,
-    registration_epoch: &str,
-    origin: &str,
-    generation: i64,
-    host_key_fingerprint: &str,
-    browser_credential_fingerprint: &str,
-    client_public_key: &str,
-    channel_id: &str,
-    nonce: &str,
-) -> Vec<u8> {
-    json!([
-        RESUME_PROTOCOL,
-        server_id,
-        registration_epoch,
-        origin,
-        generation,
-        host_key_fingerprint,
-        browser_credential_fingerprint,
-        client_public_key,
-        channel_id,
-        RESUME_PURPOSE,
-        nonce
-    ])
-    .to_string()
-    .into_bytes()
+pub(crate) struct ResumeTranscript<'a> {
+    pub(crate) server_id: &'a str,
+    pub(crate) registration_epoch: &'a str,
+    pub(crate) origin: &'a str,
+    pub(crate) generation: i64,
+    pub(crate) host_key_fingerprint: &'a str,
+    pub(crate) browser_credential_fingerprint: &'a str,
+    pub(crate) client_public_key: &'a str,
+    pub(crate) channel_id: &'a str,
+    pub(crate) nonce: &'a str,
+}
+
+impl ResumeTranscript<'_> {
+    pub(crate) fn bytes(&self) -> Vec<u8> {
+        json!([
+            RESUME_PROTOCOL,
+            self.server_id,
+            self.registration_epoch,
+            self.origin,
+            self.generation,
+            self.host_key_fingerprint,
+            self.browser_credential_fingerprint,
+            self.client_public_key,
+            self.channel_id,
+            RESUME_PURPOSE,
+            self.nonce
+        ])
+        .to_string()
+        .into_bytes()
+    }
 }
 
 /// Host-issued single-use nonces, each bound to one secure channel.
@@ -299,7 +303,9 @@ pub(crate) async fn resume(
         return Err(invalid_resume());
     }
     let public_key = decode_public_key(&body.resume_public_key)?;
-    let nonce: [u8; 32] = decode_fixed(&body.nonce, 32)?.try_into().map_err(|_| invalid_resume())?;
+    let nonce: [u8; 32] = decode_fixed(&body.nonce, 32)?
+        .try_into()
+        .map_err(|_| invalid_resume())?;
     let signature = decode_fixed(&body.signature, 64)?;
     let epoch = state
         .store
@@ -320,17 +326,18 @@ pub(crate) async fn resume(
     if key.expires_at <= now {
         return Err(invalid_resume());
     }
-    let transcript = resume_transcript(
-        &body.server_id,
-        &body.registration_epoch,
-        &body.origin,
-        body.generation,
-        &body.host_key_fingerprint,
-        &body.browser_credential_fingerprint,
-        &body.client_public_key,
-        &body.channel_id,
-        &body.nonce,
-    );
+    let transcript = ResumeTranscript {
+        server_id: &body.server_id,
+        registration_epoch: &body.registration_epoch,
+        origin: &body.origin,
+        generation: body.generation,
+        host_key_fingerprint: &body.host_key_fingerprint,
+        browser_credential_fingerprint: &body.browser_credential_fingerprint,
+        client_public_key: &body.client_public_key,
+        channel_id: &body.channel_id,
+        nonce: &body.nonce,
+    }
+    .bytes();
     UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, key.resume_public_key.as_slice())
         .verify(&transcript, &signature)
         .map_err(|_| invalid_resume())?;

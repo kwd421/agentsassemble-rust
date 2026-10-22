@@ -48,6 +48,15 @@ pub struct AgentTurnCommit {
     pub next_assignments: Vec<AgentTurnAssignment>,
 }
 
+/// The room-visible final message a provider turn publishes.
+#[derive(Debug, Clone, Copy)]
+pub struct AgentFinalMessage<'a> {
+    pub content: &'a str,
+    pub target_agent_id: &'a str,
+    pub reply_to_event_id: Option<&'a str>,
+    pub attachment_ids: &'a [String],
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ProviderTurnAuthority<'a> {
     pub room_id: &'a str,
@@ -219,23 +228,12 @@ impl SqliteStore {
         room_id: &str,
         session_id: &str,
         authority: ProviderTurnAuthority<'_>,
-        content: &str,
-        target_agent_id: &str,
-        reply_to_event_id: Option<&str>,
-        attachment_ids: &[String],
+        message: AgentFinalMessage<'_>,
     ) -> Result<AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let commit = completion::complete_message(
-            &mut transaction,
-            room_id,
-            session_id,
-            authority,
-            content,
-            target_agent_id,
-            reply_to_event_id,
-            attachment_ids,
-        )
-        .await?;
+        let commit =
+            completion::complete_message(&mut transaction, room_id, session_id, authority, message)
+                .await?;
         transaction.commit().await?;
         Ok(commit)
     }

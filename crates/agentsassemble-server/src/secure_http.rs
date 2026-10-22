@@ -241,12 +241,13 @@ pub(crate) fn start(
             response,
             id,
             output,
-            cancel,
-            channel,
-            binary,
-            confirm,
-            windowed,
-            confirm_window,
+            (cancel, channel),
+            BodyMode {
+                binary,
+                confirm,
+                window: windowed,
+                confirm_window,
+            },
         )
         .await;
     };
@@ -261,38 +262,34 @@ async fn respond(
     cancel: CancellationToken,
     channel: CancellationToken,
 ) {
-    respond_mode(
-        response, id, output, cancel, channel, false, None, false, None,
-    )
-    .await;
+    respond_mode(response, id, output, (cancel, channel), BodyMode::default()).await;
 }
 
-async fn respond_mode(
-    response: axum::response::Response,
-    id: u32,
-    output: Output,
-    cancel: CancellationToken,
-    channel: CancellationToken,
+/// How a response body travels: as binary records and/or under a credit
+/// window, each optionally confirmed to the client when the header goes out.
+#[derive(Default)]
+struct BodyMode {
     binary: bool,
     confirm: Option<Arc<AtomicBool>>,
     window: bool,
     confirm_window: Option<Arc<AtomicBool>>,
+}
+
+/// `cancel` ends this response; `channel` closes the whole secure channel.
+async fn respond_mode(
+    response: axum::response::Response,
+    id: u32,
+    output: Output,
+    (cancel, channel): (CancellationToken, CancellationToken),
+    mode: BodyMode,
 ) {
+    let window = mode.window;
     let progress = response
         .extensions()
         .get::<crate::http_body_policy::Progress>()
         .cloned();
     let output = output.with_progress(progress.clone());
-    let response = send_response(
-        response,
-        id,
-        output,
-        cancel.clone(),
-        binary,
-        confirm,
-        window,
-        confirm_window,
-    );
+    let response = send_response(response, id, output, cancel.clone(), mode);
     if let Some(progress) = progress.filter(|_| !window) {
         tokio::select! {
             // Stop-and-wait is channel-wide: a withheld ACK can prevent an error
@@ -311,11 +308,14 @@ async fn send_response(
     id: u32,
     output: Output,
     cancel: CancellationToken,
-    binary: bool,
-    confirm: Option<Arc<AtomicBool>>,
-    window: bool,
-    confirm_window: Option<Arc<AtomicBool>>,
+    mode: BodyMode,
 ) {
+    let BodyMode {
+        binary,
+        confirm,
+        window,
+        confirm_window,
+    } = mode;
     let mut headers = response
         .headers()
         .iter()

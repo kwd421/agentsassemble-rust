@@ -524,10 +524,12 @@ async fn provider_pending_survives_runtime_detach_and_owner_approval_executes() 
             "general",
             PROVIDER_DELEGATE,
             completion_authority,
-            "Finished the requested work.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Finished the requested work.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     // The managed bridge ending while idle detaches the participant through the
@@ -608,10 +610,12 @@ async fn detached_reconciliation_still_cancels_real_authority_loss_with_cause() 
             "general",
             PROVIDER_DELEGATE,
             completion_authority,
-            "Finished the requested work.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Finished the requested work.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     let candidate = store
@@ -699,10 +703,12 @@ async fn provider_detached_start_agent_approval_executes() -> TestResult {
             "general",
             PROVIDER_DELEGATE,
             completion_authority,
-            "Finished the requested work.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Finished the requested work.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     let candidate = store

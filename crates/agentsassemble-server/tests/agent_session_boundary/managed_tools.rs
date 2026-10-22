@@ -54,10 +54,8 @@ where
 }
 
 pub(super) async fn verify(
-    endpoint: &str,
-    token: &str,
-    attachment_id: &str,
-    large_attachment_id: &str,
+    (endpoint, token): (&str, &str),
+    (attachment_id, large_attachment_id): (&str, &str),
     store: &SqliteStore,
     delegate: &str,
     events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,

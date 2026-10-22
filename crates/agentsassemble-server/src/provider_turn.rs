@@ -327,10 +327,12 @@ async fn commit_completed_provider_result(
                     &start.room_id,
                     &start.session_id,
                     turn_authority(start, result),
-                    content,
-                    target_agent_id,
-                    reply_to_event_id.as_deref(),
-                    attachment_ids,
+                    agentsassemble_persistence::AgentFinalMessage {
+                        content,
+                        target_agent_id,
+                        reply_to_event_id: reply_to_event_id.as_deref(),
+                        attachment_ids,
+                    },
                 )
                 .await
         }

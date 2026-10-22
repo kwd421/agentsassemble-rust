@@ -173,10 +173,12 @@ async fn apply_report(
                 room,
                 session_id,
                 authority,
-                content,
-                target_agent_id,
-                reply_to_event_id.as_deref(),
-                attachment_ids,
+                crate::AgentFinalMessage {
+                    content,
+                    target_agent_id,
+                    reply_to_event_id: reply_to_event_id.as_deref(),
+                    attachment_ids,
+                },
             )
             .await
         }

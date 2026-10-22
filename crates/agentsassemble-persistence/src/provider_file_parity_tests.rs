@@ -69,10 +69,12 @@ async fn managed_upload_uses_current_limits_participant_custody_and_streamed_rea
             "general",
             AGENT_ID,
             super::authority(&start, "file-result", None),
-            "attached",
-            "",
-            None,
-            std::slice::from_ref(&completed.attachment_id),
+            crate::AgentFinalMessage {
+                content: "attached",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: std::slice::from_ref(&completed.attachment_id),
+            },
         )
         .await?;
     assert_eq!(

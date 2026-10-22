@@ -343,10 +343,12 @@ async fn prepared_stop_suppresses_a_late_ordinary_provider_final() {
                 provider_turn_id: "provider-turn-late-final",
                 provider_session_id: None,
             },
-            "This final lost the stop linearization race.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "This final lost the stop linearization race.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await;
     assert!(matches!(

@@ -217,10 +217,12 @@ async fn role_changes_reach_live_status_and_next_api_context_without_authority_c
                 "general",
                 AGENT_ID,
                 authority(&start, &provider_turn, None),
-                "Acknowledged.",
-                "",
-                None,
-                &[],
+                crate::AgentFinalMessage {
+                    content: "Acknowledged.",
+                    target_agent_id: "",
+                    reply_to_event_id: None,
+                    attachment_ids: &[],
+                },
             )
             .await?;
         assert!(completed.next_assignments.is_empty());

@@ -89,10 +89,12 @@ async fn deletion_removes_only_pending_ordered_and_ambient_inputs_atomically() {
             "general",
             AGENT_ID,
             authority(&start, "delete-queue-provider-turn", None),
-            "The active provider turn still completes once.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "The active provider turn still completes once.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|error| panic!("complete provider turn after deletions: {error}"));

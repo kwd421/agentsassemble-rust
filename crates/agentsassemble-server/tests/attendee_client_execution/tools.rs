@@ -13,20 +13,19 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub(super) async fn verify(
-    client: &RoomAttendeeClient,
-    connection: Uuid,
-    endpoint: &str,
-    token: &str,
-    store: &agentsassemble_persistence::SqliteStore,
-    events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+    (client, connection): (&RoomAttendeeClient, Uuid),
+    (endpoint, token): (&str, &str),
+    (store, events): (
+        &agentsassemble_persistence::SqliteStore,
+        tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+    ),
     receiver: &mut mpsc::Receiver<ProviderRoomToolCommand>,
     attachment: (
         &str,
         &str,
         &mut mpsc::Receiver<agentsassemble_provider::ProviderAttachmentReadCommand>,
     ),
-    workspace: &str,
-    identity: &str,
+    (workspace, identity): (&str, &str),
     owner: (&str, &agentsassemble_server::AppState),
 ) -> TestResult {
     let files = AttendeeFileContext {

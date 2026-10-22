@@ -102,10 +102,12 @@ async fn ordered_quarantine_hands_off_once_and_late_success_does_not_publish() {
             "general",
             &start.session_id,
             authority(&start, "late-result", None),
-            "DUPLICATE LATE ANSWER",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "DUPLICATE LATE ANSWER",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|error| panic!("test operation: {error}"));
@@ -125,10 +127,12 @@ async fn ordered_quarantine_hands_off_once_and_late_success_does_not_publish() {
             "general",
             &next_start.session_id,
             authority(&next_start, "next-result", None),
-            "@Host the answer",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "@Host the answer",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|error| panic!("test operation: {error}"));
@@ -298,10 +302,12 @@ async fn ordered_recovery_stop_resume_uses_fresh_generation_without_reusing_hand
                 "general",
                 &start.session_id,
                 authority(&start, "resume-result", None),
-                "stale answer",
-                "",
-                None,
-                &[],
+                crate::AgentFinalMessage {
+                    content: "stale answer",
+                    target_agent_id: "",
+                    reply_to_event_id: None,
+                    attachment_ids: &[],
+                },
             )
             .await
             .is_err()
@@ -435,10 +441,12 @@ async fn ordered_recovery_mixed_observation_keeps_addressed_input_after_late_suc
             "general",
             AGENT_ID,
             authority(&initial, "initial", None),
-            "Initial answer",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Initial answer",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     assert_eq!(batch.next_assignments[0].session.inflight_inputs.len(), 2);
@@ -453,10 +461,12 @@ async fn ordered_recovery_mixed_observation_keeps_addressed_input_after_late_suc
             "general",
             AGENT_ID,
             authority(&start, "mixed", None),
-            "Mixed late answer",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Mixed late answer",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     assert!(!event_types(&late.events).contains(&"message_final"));

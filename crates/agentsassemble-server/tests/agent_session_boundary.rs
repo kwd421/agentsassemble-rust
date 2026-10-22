@@ -426,10 +426,8 @@ async fn verify_room_turn_publication(first_status: &str) {
         return;
     }
     let uploaded = Box::pin(managed_tools::verify(
-        &endpoint,
-        &token,
-        &attachment_ids[0],
-        &attachment_ids[1],
+        (&endpoint, &token),
+        (&attachment_ids[0], &attachment_ids[1]),
         &server.state.store,
         session_id,
         server.state.rooms.subscribe("general").await,

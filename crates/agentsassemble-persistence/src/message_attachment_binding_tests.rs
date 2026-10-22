@@ -243,10 +243,12 @@ async fn provider_reads_an_attachment_shown_before_the_message_that_asks_about_i
             "general",
             super::SECOND_AGENT_ID,
             super::authority(&flash_start, "provider-turn-flash", None),
-            "A text file.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "A text file.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|error| panic!("finish Flash turn: {error}"));
@@ -315,10 +317,12 @@ async fn provider_reads_an_older_attachment_outside_its_room_view() {
             "general",
             super::AGENT_ID,
             super::authority(&first_start, "provider-turn-old-1", None),
-            "Kept.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Kept.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|error| panic!("finish first turn: {error}"));
@@ -602,10 +606,12 @@ async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
             "general",
             super::AGENT_ID,
             super::authority(&started, "held-native", None),
-            "held complete",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "held complete",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     let first = &committed.next_assignments[0];
@@ -621,10 +627,12 @@ async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
             "general",
             super::AGENT_ID,
             super::authority(&started, "first-attachments", None),
-            "first complete",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "first complete",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     let second = &committed.next_assignments[0];

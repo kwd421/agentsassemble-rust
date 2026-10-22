@@ -92,16 +92,12 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     let identity =
         agentsassemble_domain::stable_identity_hash(&same_file::Handle::from_path(&canonical)?);
     tool_relay::verify(
-        &client,
-        replacement.connection_id(),
-        &endpoint,
-        &token,
-        &store,
-        server.state().rooms.subscribe("general").await,
+        (&client, replacement.connection_id()),
+        (&endpoint, &token),
+        (&store, server.state().rooms.subscribe("general").await),
         &mut tools_rx,
         (&attachment_id, &large_id, &mut attachments_rx),
-        &workspace,
-        &identity,
+        (&workspace, &identity),
         (&server.base_url, server.state()),
     )
     .await?;

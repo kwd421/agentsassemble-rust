@@ -119,7 +119,16 @@ pub(crate) async fn admit(
             now,
         )
         .await?;
-        let decision = reenter(store, tx, request, &invite, input_hash, row, identity, now).await?;
+        let decision = reenter(
+            store,
+            tx,
+            (request, input_hash),
+            &invite,
+            row,
+            identity,
+            now,
+        )
+        .await?;
         let admitted = matches!(&decision, HumanAdmissionDecision::Admitted(_));
         sqlx::query(if admitted {
             "RELEASE SAVEPOINT member_reentry_profile"
@@ -169,8 +178,7 @@ pub(crate) async fn admit(
         &room,
         participant,
         profile,
-        expires,
-        session_ttl,
+        (expires, session_ttl),
     )
     .await?;
     result.stable_identity = true;
@@ -263,9 +271,8 @@ fn reentry_key(
 async fn reenter(
     store: &SqliteStore,
     tx: &mut Transaction<'_, Sqlite>,
-    request: &PreparedHumanAdmission,
+    (request, input_hash): (&PreparedHumanAdmission, [u8; 32]),
     invite: &crate::HumanInvite,
-    input_hash: [u8; 32],
     row: sqlx::sqlite::SqliteRow,
     identity: crate::human_admission_identity::ResolvedIdentity,
     now: DateTime<Utc>,

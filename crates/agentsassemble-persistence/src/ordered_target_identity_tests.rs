@@ -42,10 +42,12 @@ async fn addressed_input_keeps_immutable_target_after_rename() -> TestResult {
             "general",
             AGENT_ID,
             authority(&start, "renamed", None),
-            "The original target's answer",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "The original target's answer",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     assert_eq!(
@@ -90,10 +92,12 @@ async fn renamed_target_without_alias_reuse_is_not_handed_off() -> TestResult {
             "general",
             AGENT_ID,
             authority(&start, "renamed", None),
-            "The original target's answer",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "The original target's answer",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await?;
     assert!(event_types(&late.events).contains(&"message_final"));

@@ -11,7 +11,7 @@ use agentsassemble_persistence::{
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ring::rand::SystemRandom;
-use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_ASN1_SIGNING};
+use ring::signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair, KeyPair};
 use tower::ServiceExt as _;
 
 const EPOCH: &str = "resume-epoch";
@@ -28,30 +28,21 @@ struct Fixture {
     key_pair: EcdsaKeyPair,
 }
 
-/// The client-built transcript: the same JSON array the browser signs.
-fn client_transcript(
-    server_id: &str,
-    registration_epoch: &str,
-    origin: &str,
-    generation: i64,
-    host_key_fingerprint: &str,
-    browser_credential_fingerprint: &str,
-    client_public_key: &str,
-    channel_id: &str,
-    nonce: &str,
-) -> Vec<u8> {
+/// The client-built transcript: the same JSON array the browser signs, written
+/// out here independently of the host's encoder.
+fn client_transcript(fields: &super::ResumeTranscript<'_>) -> Vec<u8> {
     serde_json::json!([
         "AA-MEMBER-RESUME-1",
-        server_id,
-        registration_epoch,
-        origin,
-        generation,
-        host_key_fingerprint,
-        browser_credential_fingerprint,
-        client_public_key,
-        channel_id,
+        fields.server_id,
+        fields.registration_epoch,
+        fields.origin,
+        fields.generation,
+        fields.host_key_fingerprint,
+        fields.browser_credential_fingerprint,
+        fields.client_public_key,
+        fields.channel_id,
         "resume",
-        nonce
+        fields.nonce
     ])
     .to_string()
     .into_bytes()
@@ -61,7 +52,10 @@ fn client_transcript(
 fn raw_signature(der: &[u8]) -> [u8; 64] {
     let mut offset = 2;
     let mut read = || {
-        assert_eq!(der[offset], 0x02, "the DER signature must hold two integers");
+        assert_eq!(
+            der[offset], 0x02,
+            "the DER signature must hold two integers"
+        );
         let length = usize::from(der[offset + 1]);
         let bytes = &der[offset + 2..offset + 2 + length];
         offset += 2 + length;
@@ -93,12 +87,8 @@ fn other_key_pair() -> EcdsaKeyPair {
     let rng = SystemRandom::new();
     let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &rng)
         .unwrap_or_else(|error| panic!("generate the other key: {error:?}"));
-    EcdsaKeyPair::from_pkcs8(
-        &ECDSA_P256_SHA256_ASN1_SIGNING,
-        pkcs8.as_ref(),
-        &rng,
-    )
-    .unwrap_or_else(|error| panic!("load the other key: {error:?}"))
+    EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, pkcs8.as_ref(), &rng)
+        .unwrap_or_else(|error| panic!("load the other key: {error:?}"))
 }
 
 async fn fixture() -> Fixture {
@@ -128,11 +118,7 @@ async fn fixture() -> Fixture {
         challenge_expires_at: now + chrono::Duration::minutes(5),
     };
     store
-        .create_room_for_local_operator(
-            &uuid::Uuid::new_v4().to_string(),
-            "general",
-            "General",
-        )
+        .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "general", "General")
         .await
         .unwrap_or_else(|error| panic!("create resume fixture room: {error:?}"));
     let authority = crate::HumanInviteCredentialAuthority::from_persistent(
@@ -154,7 +140,11 @@ async fn fixture() -> Fixture {
         })
         .unwrap_or_else(|error| panic!("issue resume fixture invite: {error:?}"));
     let manager = store
-        .authorize_local_room_manager("general", LOCAL_OPERATOR_USER_ID, LOCAL_OPERATOR_PARTICIPANT_ID)
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
         .await
         .unwrap_or_else(|error| panic!("authorize resume fixture manager: {error:?}"));
     store
@@ -210,12 +200,8 @@ async fn fixture() -> Fixture {
     let rng = SystemRandom::new();
     let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &rng)
         .unwrap_or_else(|error| panic!("generate resume key: {error:?}"));
-    let key_pair = EcdsaKeyPair::from_pkcs8(
-        &ECDSA_P256_SHA256_ASN1_SIGNING,
-        pkcs8.as_ref(),
-        &rng,
-    )
-    .unwrap_or_else(|error| panic!("load resume key: {error:?}"));
+    let key_pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, pkcs8.as_ref(), &rng)
+        .unwrap_or_else(|error| panic!("load resume key: {error:?}"));
     let client_public_key = base64(&[7_u8; 65]);
     let hello = crate::central::host_identity::SecureClientHello {
         protocol: "secure_admission_v1".into(),
@@ -227,8 +213,12 @@ async fn fixture() -> Fixture {
         client_nonce: "resume-nonce".into(),
         client_public_key: client_public_key.clone(),
     };
-    let secure = crate::secure_client::SecureClient::new(hello, "c".repeat(43), crate::client_wire::ClientWire::default())
-        .unwrap_or_else(|()| panic!("fixture secure channel"));
+    let secure = crate::secure_client::SecureClient::new(
+        hello,
+        "c".repeat(43),
+        crate::client_wire::ClientWire::default(),
+    )
+    .unwrap_or_else(|()| panic!("fixture secure channel"));
     Fixture {
         state,
         store,
@@ -255,13 +245,12 @@ impl Fixture {
         let mut request = Request::builder()
             .method("POST")
             .header("x-device-token", &self.device)
-            .body(axum::body::Body::from(serde_json::to_vec(body).unwrap_or_else(
-                |error| panic!("encode resume body: {error}"),
-            )))
+            .body(axum::body::Body::from(
+                serde_json::to_vec(body)
+                    .unwrap_or_else(|error| panic!("encode resume body: {error}")),
+            ))
             .unwrap_or_else(|error| panic!("build resume request: {error}"));
-        request
-            .extensions_mut()
-            .insert(self.secure.clone());
+        request.extensions_mut().insert(self.secure.clone());
         request
     }
 
@@ -288,17 +277,17 @@ impl Fixture {
     fn signed_body_with(&self, key_pair: &EcdsaKeyPair, nonce: &str) -> Value {
         let hello = self.secure.hello();
         let browser_fingerprint = self.browser_fingerprint();
-        let transcript = client_transcript(
-            &hello.server_id,
-            &hello.registration_epoch,
-            &hello.origin,
-            hello.generation,
-            self.state.central_host_identity.fingerprint(),
-            &browser_fingerprint,
-            &hello.client_public_key,
-            &self.secure.binding().channel_id,
+        let transcript = client_transcript(&super::ResumeTranscript {
+            server_id: &hello.server_id,
+            registration_epoch: &hello.registration_epoch,
+            origin: &hello.origin,
+            generation: hello.generation,
+            host_key_fingerprint: self.state.central_host_identity.fingerprint(),
+            browser_credential_fingerprint: &browser_fingerprint,
+            client_public_key: &hello.client_public_key,
+            channel_id: &self.secure.binding().channel_id,
             nonce,
-        );
+        });
         json!({
             "server_id": hello.server_id,
             "registration_epoch": hello.registration_epoch,
@@ -563,7 +552,8 @@ async fn a_resume_body_of_another_registration_epoch_never_opens_the_direct_path
 }
 
 #[tokio::test]
-async fn an_unknown_or_expired_key_never_opens_the_direct_path() {    let fixture = fixture().await;
+async fn an_unknown_or_expired_key_never_opens_the_direct_path() {
+    let fixture = fixture().await;
     let nonce = fixture.nonce().await;
     // No key was issued for this browser credential.
     let refused = super::resume(
@@ -660,9 +650,11 @@ async fn the_key_is_issued_only_after_a_central_admission_on_the_same_channel() 
         .member_connect_rooms(&member, chrono::Utc::now())
         .await
         .unwrap_or_else(|error| panic!("list resume fixture rooms: {error:?}"));
-    let record = std::sync::Arc::new(tokio::sync::Mutex::new(
-        connect::ConnectState::redeemed(member, rooms, connect::ConnectOrigin::Central),
-    ));
+    let record = std::sync::Arc::new(tokio::sync::Mutex::new(connect::ConnectState::redeemed(
+        member,
+        rooms,
+        connect::ConnectOrigin::Central,
+    )));
     fixture
         .state
         .member_challenges
@@ -686,13 +678,15 @@ async fn the_key_is_issued_only_after_a_central_admission_on_the_same_channel() 
         .member_resume_key(&fixture.browser, &fixture.public_key())
         .await
         .unwrap_or_else(|error| panic!("read the issued key: {error:?}"));
-    let stored = stored
-        .unwrap_or_else(|| panic!("the issued resume key must be stored for this browser credential"));
+    let stored = stored.unwrap_or_else(|| {
+        panic!("the issued resume key must be stored for this browser credential")
+    });
     // The central redemption issues its key exactly once: a second request on
     // the same channel is refused and never moves the stored expiry.
     let again = super::issue_key(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(&json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
+        fixture
+            .request(&json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
     )
     .await;
     assert!(
@@ -738,7 +732,8 @@ async fn a_direct_resume_never_issues_or_refreshes_the_resume_key() {
     // never issues a key of its own.
     let refused = super::issue_key(
         axum::extract::State(fixture.state.clone()),
-        fixture.request(&json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
+        fixture
+            .request(&json!({"client_public_key": base64(fixture.key_pair.public_key().as_ref())})),
     )
     .await;
     assert!(
@@ -799,7 +794,11 @@ fn an_old_client_keeps_the_current_redeem_and_select_bodies() {
     }))
     .unwrap_or_else(|error| panic!("legacy select body: {error}"));
     assert_eq!(
-        (select.challenge.as_str(), select.room.as_str(), select.client.as_str()),
+        (
+            select.challenge.as_str(),
+            select.room.as_str(),
+            select.client.as_str()
+        ),
         ("challenge", "general", "client")
     );
     assert!(
@@ -815,7 +814,8 @@ fn an_old_client_keeps_the_current_redeem_and_select_bodies() {
 }
 
 #[tokio::test]
-async fn an_old_host_answers_the_resume_route_with_not_found() {    // The old host knows the connect routes and nothing else: its answer to
+async fn an_old_host_answers_the_resume_route_with_not_found() {
+    // The old host knows the connect routes and nothing else: its answer to
     // the resume route is a plain 404, so a client learns that the host has no
     // resume support without sending a resume body.
     let old_host = axum::Router::new().route(

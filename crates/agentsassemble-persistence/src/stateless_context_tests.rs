@@ -31,10 +31,12 @@ async fn api_turns_preserve_creation_context_after_store_reopen() {
             "general",
             AGENT_ID,
             authority(&first_start, "api-provider-turn-1", None),
-            "Understood.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Understood.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|error| panic!("complete first API turn: {error}"));
@@ -88,10 +90,12 @@ async fn deleted_vote_does_not_block_the_next_api_message() {
             "general",
             AGENT_ID,
             authority(&start, "context-poll-turn", None),
-            "Poll received.",
-            "",
-            None,
-            &[],
+            crate::AgentFinalMessage {
+                content: "Poll received.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
         )
         .await
         .unwrap_or_else(|_| panic!("finish poll turn"));

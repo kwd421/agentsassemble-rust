@@ -241,8 +241,7 @@ async fn run_spawned_generation(
         &config.stable_entry,
         projection,
         cancellation,
-        child_owner,
-        output_events,
+        (child_owner, output_events),
         fixed_origin,
     )
     .await;
@@ -299,8 +298,11 @@ async fn observe_generation(
     stable_entry: &crate::stable_entry::StableEntry,
     projection: &Arc<RwLock<ManagedProjection>>,
     cancellation: &CancellationToken,
-    mut child_owner: JoinHandle<io::Result<ExitStatus>>,
-    mut output_events: mpsc::Receiver<OutputEvent>,
+    // The spawned cloudflared and its parsed output.
+    (mut child_owner, mut output_events): (
+        JoinHandle<io::Result<ExitStatus>>,
+        mpsc::Receiver<OutputEvent>,
+    ),
     fixed_origin: Option<CanonicalPublicOrigin>,
 ) -> GenerationObservation {
     let mut child_result = None;
