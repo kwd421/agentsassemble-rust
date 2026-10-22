@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchAgentOwnerSettings, MAX_AGENT_INSTRUCTIONS_CHARS, saveAgentOwnerSettings } from "../../api/agentInstructions";
 import { userFacingError } from "../../lib/apiErrors";
 import { useOwnerRouteHost } from "../../app/ownerRouteHost";
@@ -17,12 +17,17 @@ export default function AgentInstructionsSettings({ roomId, participantId, name 
   const [mentionOnly, setMentionOnly] = useState(false);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  // The AI this section shows now; a reply for another one is dropped.
+  const current = useRef(participantId);
+  current.current = participantId;
 
   useEffect(() => {
     if (!open) return;
     let active = true;
     setStatus("");
     setSaved(null);
+    setDraft("");
+    setMentionOnly(false);
     fetchAgentOwnerSettings(roomId, participantId, serverId)
       .then((loaded) => { if (active) { setSaved(loaded.instructions); setDraft(loaded.instructions); setMentionOnly(loaded.mention_only); } })
       .catch((error) => { if (active) setStatus(userFacingError(error, "지침을 불러오지 못했어요.")); });
@@ -35,7 +40,9 @@ export default function AgentInstructionsSettings({ roomId, participantId, name 
     setBusy(true);
     setStatus("");
     try {
-      const stored = await saveAgentOwnerSettings(roomId, participantId, { instructions: draft }, serverId);
+      const target = participantId;
+      const stored = await saveAgentOwnerSettings(roomId, target, { instructions: draft }, serverId);
+      if (current.current !== target) return;
       setSaved(stored.instructions);
       setDraft(stored.instructions);
       setStatus(stored.instructions ? "지침을 저장했어요. 다음 차례부터 따라요." : "지침을 지웠어요.");
@@ -50,7 +57,9 @@ export default function AgentInstructionsSettings({ roomId, participantId, name 
     setBusy(true);
     setStatus("");
     try {
-      const stored = await saveAgentOwnerSettings(roomId, participantId, { mention_only: next }, serverId);
+      const target = participantId;
+      const stored = await saveAgentOwnerSettings(roomId, target, { mention_only: next }, serverId);
+      if (current.current !== target) return;
       setMentionOnly(stored.mention_only);
       setStatus(stored.mention_only ? "이제 누가 부를 때만 반응해요." : "이제 방 설정대로 반응해요.");
     } catch (error) {

@@ -37,16 +37,7 @@ impl SqliteStore {
         let principal = RoomMutationAuthority::ConnectorSession(authorization)
             .resolve(&mut tx)
             .await?;
-        // An external AI its owner set to wake only when mentioned gets only
-        // the ordinary messages that mention it.
-        let mention_only = crate::agent_instructions::mention_only_in(
-            &mut tx,
-            &principal.room_id,
-            &principal.participant_id,
-        )
-        .await?;
-        let rows = sqlx::query("SELECT wanted.value AS seq, CASE WHEN ? AND d.ordinary THEN EXISTS(SELECT 1 FROM room_events e WHERE e.room_id=d.room_id AND e.seq=d.seq AND (instr(coalesce(json_extract(e.event_json,'$.content'),''), '<@'||?||'>') > 0 OR json_extract(e.event_json,'$.reply_mention_participant_id')=?)) ELSE d.ordinary END AS ordinary FROM json_each(?) wanted LEFT JOIN connector_message_delivery d ON d.room_id=? AND d.seq=wanted.value")
-            .bind(mention_only).bind(&principal.participant_id).bind(&principal.participant_id)
+        let rows = sqlx::query("SELECT wanted.value AS seq,d.ordinary FROM json_each(?) wanted LEFT JOIN connector_message_delivery d ON d.room_id=? AND d.seq=wanted.value")
             .bind(serde_json::to_string(sequences)?).bind(&principal.room_id).fetch_all(&mut *tx).await?;
         let mut ordinary = Vec::new();
         for row in rows {
@@ -60,6 +51,53 @@ impl SqliteStore {
                     ));
                 }
             }
+        }
+        // An external AI its owner set to wake only when mentioned gets only
+        // the ordinary messages that call it, matched like an app AI's mentions.
+        if !ordinary.is_empty()
+            && crate::agent_instructions::mention_only_in(
+                &mut tx,
+                &principal.room_id,
+                &principal.participant_id,
+            )
+            .await?
+        {
+            let names: Vec<(String, String)> = sqlx::query_as(
+                "SELECT participant_id, coalesce(json_extract(participant_json, '$.display_name'), '') FROM participants WHERE room_id = ? AND json_extract(participant_json, '$.participant_type') = 'agent' AND coalesce(json_extract(participant_json, '$.status'), '') NOT IN ('left', 'kicked', 'exported')",
+            )
+            .bind(&principal.room_id)
+            .fetch_all(&mut *tx)
+            .await?;
+            let mut calling = Vec::new();
+            for seq in ordinary {
+                let Some(encoded) = sqlx::query_scalar::<_, String>(
+                    "SELECT event_json FROM room_events WHERE room_id = ? AND seq = ?",
+                )
+                .bind(&principal.room_id)
+                .bind(seq)
+                .fetch_optional(&mut *tx)
+                .await?
+                else {
+                    continue;
+                };
+                let event: agentsassemble_domain::RoomEvent = serde_json::from_str(&encoded)?;
+                let handed = event.extra.get("target_agent_id").and_then(serde_json::Value::as_str)
+                    == Some(principal.participant_id.as_str());
+                if handed
+                    || crate::room_turns::routing::mentions_target(
+                        &event.addressed_content(),
+                        names
+                            .iter()
+                            .filter(|(id, _)| *id != event.actor.participant_id)
+                            .map(|(id, name)| (id.as_str(), name.as_str())),
+                        &principal.participant_id,
+                    )
+                {
+                    calling.push(seq);
+                }
+            }
+            tx.commit().await?;
+            return Ok(calling);
         }
         tx.commit().await?;
         Ok(ordinary)

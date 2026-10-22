@@ -493,8 +493,16 @@ async fn route_sessions(
             .collect();
     if !mention_only.is_empty() {
         let content = event.addressed_content();
+        // A handoff names its next speaker without a mention in the text.
+        let handed_to = event
+            .extra
+            .get("target_agent_id")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        // Aliases are counted without the speaker, as the routes below count them.
         let names: Vec<(String, String)> = sessions
             .iter()
+            .filter(|(session, _)| !is_actor(session, event))
             .map(|(session, _)| {
                 (
                     session.public.session_id.clone(),
@@ -504,6 +512,7 @@ async fn route_sessions(
             .collect();
         sessions.retain(|(session, _)| {
             !mention_only.contains(&session.public.participant_id)
+                || handed_to.as_deref() == Some(session.public.session_id.as_str())
                 || super::routing::mentions_target(
                     &content,
                     names.iter().map(|(id, name)| (id.as_str(), name.as_str())),

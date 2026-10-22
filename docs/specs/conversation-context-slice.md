@@ -389,7 +389,10 @@ the instructions (`mention_only` in its body and result; an older host answers w
 
 - **App AIs.** `route_sessions` leaves such an AI out of every routing path — ordered selection,
   the ordered floor hand-off, ambient and free access — unless the message mentions it by the
-  same rule the routes use, so an unmentioned message never queues it.
-- **External AIs.** A wait delivers such an AI only the ordinary messages that mention it with
-  `<@participant_id>` or call it with a reply mention; it can still read everything with
-  `room_read`. Free-access mention delivery is unchanged.
+  same rule the routes use (aliases counted without the speaker) or hands it the floor with
+  `next_agent_id`, so an unmentioned message never queues it.
+- **External AIs.** A wait delivers such an AI only the ordinary messages that call it, matched
+  like an app AI's mentions (`<@participant_id>`, `@name`, a reply mention, or a hand-off); it
+  can still read everything with `room_read`. Free-access mention delivery is unchanged.
+- Instructions and the switch are saved in one transaction, and saving unchanged text (or
+  clearing instructions that were never set) does not create a new revision.

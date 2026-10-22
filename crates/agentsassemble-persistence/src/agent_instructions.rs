@@ -68,35 +68,6 @@ impl SqliteStore {
         )))
     }
 
-    /// Makes an AI wake only when mentioned, or follow the room again. Returns
-    /// false when the room has no such AI.
-    ///
-    /// # Errors
-    /// Storage failures.
-    pub async fn set_agent_mention_only(
-        &self,
-        room_id: &str,
-        participant_id: &str,
-        mention_only: bool,
-    ) -> Result<bool, PersistenceError> {
-        let mut tx = self.pool.begin().await?;
-        if !is_agent(&mut tx, room_id, participant_id).await? {
-            return Ok(false);
-        }
-        let statement = if mention_only {
-            "INSERT OR IGNORE INTO agent_mention_only(room_id, participant_id) VALUES(?, ?)"
-        } else {
-            "DELETE FROM agent_mention_only WHERE room_id = ? AND participant_id = ?"
-        };
-        sqlx::query(statement)
-            .bind(room_id)
-            .bind(participant_id)
-            .execute(&mut *tx)
-            .await?;
-        tx.commit().await?;
-        Ok(true)
-    }
-
     /// Replaces the instructions; blank text removes them. Returns false when
     /// the room has no such AI, or it was removed from the room.
     ///
@@ -109,8 +80,40 @@ impl SqliteStore {
         instructions: &str,
         now: DateTime<Utc>,
     ) -> Result<bool, PersistenceError> {
-        let instructions = instructions.trim();
-        if instructions.chars().count() > MAX_AGENT_INSTRUCTIONS_CHARS {
+        self.set_agent_owner_settings(room_id, participant_id, Some(instructions), None, now)
+            .await
+    }
+
+    /// Makes an AI wake only when mentioned, or follow the room again. Returns
+    /// false when the room has no such AI.
+    ///
+    /// # Errors
+    /// Storage failures.
+    pub async fn set_agent_mention_only(
+        &self,
+        room_id: &str,
+        participant_id: &str,
+        mention_only: bool,
+    ) -> Result<bool, PersistenceError> {
+        self.set_agent_owner_settings(room_id, participant_id, None, Some(mention_only), Utc::now())
+            .await
+    }
+
+    /// Changes either or both owner settings in one transaction. Returns false
+    /// when the room has no such AI, or it was removed from the room.
+    ///
+    /// # Errors
+    /// Rejects instructions over the limit, and storage failures.
+    pub async fn set_agent_owner_settings(
+        &self,
+        room_id: &str,
+        participant_id: &str,
+        instructions: Option<&str>,
+        mention_only: Option<bool>,
+        now: DateTime<Utc>,
+    ) -> Result<bool, PersistenceError> {
+        let instructions = instructions.map(str::trim);
+        if instructions.is_some_and(|text| text.chars().count() > MAX_AGENT_INSTRUCTIONS_CHARS) {
             return Err(PersistenceError::CommandRejected {
                 code: "bad_request".into(),
                 message: format!(
@@ -122,15 +125,36 @@ impl SqliteStore {
         if !is_agent(&mut tx, room_id, participant_id).await? {
             return Ok(false);
         }
-        // Blank text stays as an empty row, so the change keeps a revision an
-        // external AI can be told about. The revision only ever grows.
-        sqlx::query("INSERT INTO agent_instructions(room_id, participant_id, instructions, updated_at) VALUES(?, ?, ?, ?) ON CONFLICT(room_id, participant_id) DO UPDATE SET instructions = excluded.instructions, updated_at = MAX(excluded.updated_at, agent_instructions.updated_at + 1)")
-            .bind(room_id)
-            .bind(participant_id)
-            .bind(instructions)
-            .bind(now.timestamp_micros())
-            .execute(&mut *tx)
-            .await?;
+        let current = instructions_in(&mut tx, room_id, participant_id)
+            .await?
+            .map(|current| current.instructions);
+        // Only a real change gets a new revision: the same text again, or
+        // clearing instructions that were never set, changes nothing.
+        if let Some(instructions) = instructions
+            && current.as_deref().unwrap_or_default() != instructions
+        {
+            // Blank text stays as an empty row, so the change keeps a revision an
+            // external AI can be told about. The revision only ever grows.
+            sqlx::query("INSERT INTO agent_instructions(room_id, participant_id, instructions, updated_at) VALUES(?, ?, ?, ?) ON CONFLICT(room_id, participant_id) DO UPDATE SET instructions = excluded.instructions, updated_at = MAX(excluded.updated_at, agent_instructions.updated_at + 1)")
+                .bind(room_id)
+                .bind(participant_id)
+                .bind(instructions)
+                .bind(now.timestamp_micros())
+                .execute(&mut *tx)
+                .await?;
+        }
+        if let Some(mention_only) = mention_only {
+            let statement = if mention_only {
+                "INSERT OR IGNORE INTO agent_mention_only(room_id, participant_id) VALUES(?, ?)"
+            } else {
+                "DELETE FROM agent_mention_only WHERE room_id = ? AND participant_id = ?"
+            };
+            sqlx::query(statement)
+                .bind(room_id)
+                .bind(participant_id)
+                .execute(&mut *tx)
+                .await?;
+        }
         tx.commit().await?;
         Ok(true)
     }

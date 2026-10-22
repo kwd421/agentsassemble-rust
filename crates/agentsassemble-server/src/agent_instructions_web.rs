@@ -83,30 +83,23 @@ async fn write_instructions(
     if body.instructions.is_none() && body.mention_only.is_none() {
         return Err(bad_request("Nothing to change."));
     }
-    if let Some(instructions) = &body.instructions {
-        match state
-            .store
-            .set_agent_instructions(&room_id, &participant_id, instructions, chrono::Utc::now())
-            .await
-        {
-            Ok(true) => {}
-            Ok(false) => return Err(missing()),
-            Err(agentsassemble_persistence::PersistenceError::CommandRejected { message, .. }) => {
-                return Err(bad_request(&message));
-            }
-            Err(_) => return Err(unavailable()),
+    match state
+        .store
+        .set_agent_owner_settings(
+            &room_id,
+            &participant_id,
+            body.instructions.as_deref(),
+            body.mention_only,
+            chrono::Utc::now(),
+        )
+        .await
+    {
+        Ok(true) => {}
+        Ok(false) => return Err(missing()),
+        Err(agentsassemble_persistence::PersistenceError::CommandRejected { message, .. }) => {
+            return Err(bad_request(&message));
         }
-    }
-    if let Some(mention_only) = body.mention_only {
-        match state
-            .store
-            .set_agent_mention_only(&room_id, &participant_id, mention_only)
-            .await
-        {
-            Ok(true) => {}
-            Ok(false) => return Err(missing()),
-            Err(_) => return Err(unavailable()),
-        }
+        Err(_) => return Err(unavailable()),
     }
     current(&state, &room_id, &participant_id).await
 }

@@ -271,7 +271,8 @@ async fn a_mention_only_external_ai_wakes_only_for_messages_that_mention_it()
     };
     let pending = client.wait_next();
     let plain = json!({"content": "just chatting"});
-    let called = json!({"content": format!("<@{}> your turn", joined.participant_id)});
+    // A name typed by hand calls it too, as it would an app AI.
+    let called = json!({"content": "@Quiet your turn"});
     let say = async {
         store.execute_message_with_turn(&owner, "plain", "message.send", &plain).await?;
         store.execute_message_with_turn(&owner, "called", "message.send", &called).await
