@@ -4,6 +4,7 @@ use agentsassemble_protocol::{CommandResolution, RoomAction};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use parking_lot::Mutex;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::connector::client::{RoomConnectorClient, transport::normalize_server};
@@ -52,7 +53,7 @@ impl ConnectorHub {
         input: super::contract::AttachmentUpload,
         admission: Option<&crate::connector::mcp_web::RequestAdmission>,
     ) -> Result<Value, String> {
-        let client = self.client(&input.connection_id)?;
+        let client = self.client_or_resume(&input.connection_id).await?;
         if let Some(state) = &self.owned_runtime {
             let fingerprint = client
                 .session_fingerprint()
@@ -91,7 +92,7 @@ impl ConnectorHub {
         input: super::contract::AttachmentRead,
         admission: Option<&crate::connector::mcp_web::RequestAdmission>,
     ) -> Result<agentsassemble_provider::ProviderAttachment, String> {
-        let client = self.client(&input.connection_id)?;
+        let client = self.client_or_resume(&input.connection_id).await?;
         if let Some(state) = &self.owned_runtime {
             let admission = admission.ok_or("mcp_request_admission_required")?;
             let read = async {
@@ -185,7 +186,7 @@ impl ConnectorHub {
             }
             reserved
         } else {
-            let client = self.client(id)?;
+            let client = self.client_or_resume(id).await?;
             if client.invitation_identity() != candidate.invitation_identity()
                 || client.display_name != candidate.display_name
             {
@@ -194,14 +195,17 @@ impl ConnectorHub {
             (id.to_owned(), client)
         };
         match client.join().await {
-            Ok(joined) => Ok(json!({
+            Ok(joined) => {
+                self.remember(&id, &client).await;
+                Ok(json!({
                 "status": "joined", "connection_id": id,
                 "room_id": joined.room_id, "room_uid": joined.room_uid,
                 "conversation_mode": joined.room_state["conversation_mode"], "guidance": joined.room_state["guidance"], "unread_mentions": joined.room_state["unread_mentions"], "mention_overflow": joined.room_state["mention_overflow"], "mention_resync_guidance": joined.room_state["mention_resync_guidance"],
                 "participant_id": joined.participant_id, "display_name": joined.display_name,
                 "role": joined.room_state["role"], "delegated_actions": joined.room_state["delegated_actions"],
                 "instructions": "Joined as this conversation. room_read shows the room, room_say posts, room_wait_next follows the current conversation mode and guidance. connection_id is private and is passed unchanged to later tools."
-            })),
+                }))
+            }
             Err(error) => {
                 if error.resolution == Some(CommandResolution::Rejected)
                     && client.close_rejected_admission().await
@@ -252,6 +256,69 @@ impl ConnectorHub {
         let client = Arc::new(candidate);
         state.clients.insert(id.clone(), client.clone());
         Ok((id, client))
+    }
+
+    /// Like `client`, but after a host restart a hosted connection the AI still
+    /// holds the ID of is restored into its remembered seat.
+    pub(super) async fn client_or_resume(
+        &self,
+        id: &str,
+    ) -> Result<Arc<RoomConnectorClient>, String> {
+        let missing = match self.client(id) {
+            Err(code) if code == "invalid_connection_id" && !id.is_empty() => code,
+            found => return found,
+        };
+        let Some(runtime) = &self.owned_runtime else {
+            return Err(missing);
+        };
+        let hash: [u8; 32] = Sha256::digest(id.as_bytes()).into();
+        let Some(resumed) = runtime
+            .store
+            .resume_connector_connection(&hash, chrono::Utc::now())
+            .await
+            .map_err(|_| "connector_resume_failed".to_owned())?
+        else {
+            return Err(missing);
+        };
+        let local = runtime
+            .public_ingress()
+            .local_url()
+            .ok_or_else(|| "local_ingress_unavailable".to_owned())?;
+        let local = normalize_server(&local).map_err(|error| error.code)?;
+        let client = Arc::new(RoomConnectorClient::resumed(local, resumed).map_err(|error| error.code)?);
+        client.join().await.map_err(|error| error.code)?;
+        let mut state = self.state.lock();
+        if state.closed {
+            return Err("connector_closed".to_owned());
+        }
+        if !state.clients.contains_key(id) && state.clients.len() >= 128 {
+            return Err("connector_capacity_release_receipt_required".to_owned());
+        }
+        Ok(state.clients.entry(id.to_owned()).or_insert(client).clone())
+    }
+
+    /// Lets a hosted connection find its seat again after a host restart.
+    async fn remember(&self, id: &str, client: &RoomConnectorClient) {
+        let Some(runtime) = &self.owned_runtime else {
+            return;
+        };
+        let Ok(fingerprint) = client.session_fingerprint().await else {
+            return;
+        };
+        let hash: [u8; 32] = Sha256::digest(id.as_bytes()).into();
+        if let Err(error) = runtime
+            .store
+            .remember_connector_connection(
+                &hash,
+                &fingerprint,
+                &client.invitation_identity(),
+                &client.display_name,
+                chrono::Utc::now(),
+            )
+            .await
+        {
+            tracing::warn!(code = %crate::room_command_execution::persistence_error_code(&error), "connector connection is not remembered across a restart");
+        }
     }
 
     pub(super) fn client(&self, id: &str) -> Result<Arc<RoomConnectorClient>, String> {

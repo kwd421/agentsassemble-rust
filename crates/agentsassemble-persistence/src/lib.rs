@@ -48,6 +48,7 @@ pub use attendee::ready::AttendeeRuntimeReady;
 pub use attendee::session::AttendeeSessionAuthorization;
 pub use attendee::tool_read::{AttendeeToolRead, AttendeeToolReadRequest, AttendeeToolReadResult};
 mod connector_admission;
+mod connector_connections;
 #[cfg(test)]
 mod connector_file_parity_tests;
 mod connector_mentions;
@@ -55,6 +56,7 @@ mod connector_session;
 #[cfg(test)]
 mod connector_tests;
 pub use connector_admission::{ConnectorAdmission, ConnectorInvite};
+pub use connector_connections::ResumedConnector;
 pub use connector_session::ConnectorSessionAuthorization;
 mod account_guest_retirement;
 #[cfg(test)]

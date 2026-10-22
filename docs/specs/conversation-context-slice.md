@@ -312,3 +312,35 @@ participant and no Agent Session, so the participant owns that name and picture.
   older host never sees the field and never shows the notice.
 - An older host refuses the edit as an unknown session and the window shows the error; no
   host capability gates the controls.
+
+## External AI keeps its seat (2026-10-22, required behavior)
+
+An external AI used to lose its seat: its connector session ended an hour after joining even
+while in use, the in-app MCP hub forgot every connection on restart, and joining again made a
+second participant with none of the first one's role, name or picture.
+
+- **Renewed while in use.** Every connector request authorizes through
+  `authorize_connector_session`; once less than half of the one-hour lifetime is left, the expiry
+  moves a full hour from now. A pending `wait` renews when its timer fires, so an AI that keeps
+  waiting never expires. Only an unused session ends. Authority issued before a renewal stays
+  valid, because the identity check now only refuses an *earlier* expiry than the one issued.
+- **Kept across a host restart.** After a successful `room_join` through this host's own MCP
+  endpoint, the hub stores the SHA-256 of the private `connection_id` with the invitation it used
+  (`connector_connections`, schema v100, not backed up). When an unknown `connection_id` arrives
+  after a restart, the hub looks up that hash, derives the same session credential from the
+  stored invitation (it is an HMAC of the invitation under the host key), renews it, and puts the
+  connection back in the registry, so the AI continues in its own seat without doing anything.
+  Nothing is resumed for a seat that left, was removed, or whose session ended more than 7 days
+  ago; a standalone connector CLI keeps its own registry and only needs the renewal.
+- **Reconnect invitation for a lost connection.** When the AI starts over without its
+  `connection_id`, the owner makes a reconnect invitation from the invite window's AI tab
+  ("기존 외부 AI 다시 연결"). `CreateConnectorInviteRequest.seat_participant_id` (optional; older
+  hosts reject it, and clients send it only for a reconnect) records the seat in
+  `connector_seat_invites`. Joining with it takes that seat back: the seat's earlier invitation
+  is revoked and cleared, its live sessions are closed, the seat is joined again with its own
+  name, role and picture, and a `participant_joined` event is recorded. Only a current external
+  AI of the room (a `room_connector_invites` participant that was not kicked or exported) can be
+  a seat.
+
+Not covered: a seat whose AI went away still shows as joined until it is removed; showing it as
+disconnected needs a presence change across the member list.

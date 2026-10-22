@@ -784,7 +784,7 @@ async fn handle_room_mutation(
             Box::pin(handle_room_command(owners, session_revocations, command)).await
         }
         RoomMutation::ConnectorAdmission(command) => {
-            connector::admit(&owners, room_id, command).await
+            connector::admit(&owners, room_id, session_revocations, command).await
         }
         RoomMutation::Attendee(command) => {
             Box::pin(attendee_execution::execute(owners, command)).await

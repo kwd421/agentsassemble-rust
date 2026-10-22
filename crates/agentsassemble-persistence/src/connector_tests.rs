@@ -451,3 +451,86 @@ async fn a_connected_ai_reply_takes_discords_shape() -> TestResult {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn a_connector_in_use_is_renewed_and_an_unused_one_ends() -> TestResult {
+    let (store, manager) = fixture().await?;
+    let now = Utc::now();
+    let invite = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, now)
+        .await?;
+    let fingerprint = Sha256::digest(invite.invite_bearer.as_bytes()).into();
+    let admitted = store
+        .admit_connector(&fingerprint, &[1; 32], Uuid::new_v4(), "Kept", now)
+        .await?;
+    let session = *admitted.authorization.session_fingerprint();
+    // Early use leaves the expiry alone.
+    let early = store
+        .authorize_connector_session(&session, now + Duration::minutes(10))
+        .await?;
+    assert_eq!(early.expires_at(), admitted.authorization.expires_at());
+    // Past half its lifetime, use pushes the expiry a full hour out.
+    let later = now + Duration::minutes(40);
+    let renewed = store.authorize_connector_session(&session, later).await?;
+    assert!(renewed.expires_at() > admitted.authorization.expires_at());
+    // Authority issued before the renewal stays valid.
+    store
+        .revalidate_connector_session(&admitted.authorization, later)
+        .await?;
+    // It outlives the first hour while in use, and ends once unused.
+    store
+        .authorize_connector_session(&session, now + Duration::minutes(90))
+        .await?;
+    assert!(
+        store
+            .authorize_connector_session(&session, now + Duration::hours(4))
+            .await
+            .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_seat_invitation_takes_the_same_seat_back() -> TestResult {
+    let (store, manager) = fixture().await?;
+    let now = Utc::now();
+    let first = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, now)
+        .await?;
+    let first_fingerprint = Sha256::digest(first.invite_bearer.as_bytes()).into();
+    let seated = store
+        .admit_connector(&first_fingerprint, &[1; 32], Uuid::new_v4(), "Ace", now)
+        .await?;
+    let seat = seated.authorization.principal().participant_id.clone();
+    let old_session = *seated.authorization.session_fingerprint();
+    // A person cannot be a seat.
+    assert!(
+        store
+            .create_connector_seat_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, "operator-local", now)
+            .await
+            .is_err()
+    );
+    let again = store
+        .create_connector_seat_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, &seat, now)
+        .await?;
+    let again_fingerprint = Sha256::digest(again.invite_bearer.as_bytes()).into();
+    let back = store
+        .admit_connector(&again_fingerprint, &[2; 32], Uuid::new_v4(), "Another name", now)
+        .await?;
+    assert_eq!(back.authorization.principal().participant_id, seat);
+    assert_eq!(back.authorization.principal().display_name, "Ace");
+    assert_eq!(back.replaced_sessions, vec![old_session]);
+    assert!(store.authorize_connector_session(&old_session, now).await.is_err());
+    store
+        .authorize_connector_session(back.authorization.session_fingerprint(), now)
+        .await?;
+    let agents = store
+        .snapshot("general", 0, 200)
+        .await?
+        .participants
+        .into_iter()
+        .filter(|participant| participant.participant_type == "agent")
+        .count();
+    assert_eq!(agents, 1, "no second seat");
+    Ok(())
+}

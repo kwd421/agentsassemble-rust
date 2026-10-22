@@ -174,6 +174,39 @@ impl RoomConnectorClient {
         Ok(client)
     }
 
+    /// Rebuilds a hosted connection after a host restart from its remembered
+    /// seat; `join` then reads the room as on a first join.
+    pub(crate) fn resumed(
+        local_origin: Url,
+        resumed: agentsassemble_persistence::ResumedConnector,
+    ) -> Result<Self, ConnectorClientError> {
+        let http = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(10))
+            .build()
+            .map_err(|_| ConnectorClientError::local("http_client_unavailable"))?;
+        Ok(Self {
+            http,
+            server: local_origin,
+            invite_fingerprint: resumed.invitation_identity,
+            display_name: resumed.display_name.clone(),
+            known_name: parking_lot::Mutex::new(KnownName {
+                name: resumed.display_name,
+                revision: None,
+            }),
+            state: Mutex::new(JoinState::Admitted(Admission {
+                session_bearer: resumed.session_bearer,
+                room_id: resumed.room_id,
+                room_uid: resumed.room_uid,
+                participant_id: resumed.participant_id,
+                attachment_transfers: true,
+            })),
+            pending_command: Mutex::new(None),
+            terminal_leave: parking_lot::Mutex::new(None),
+            cancellation: CancellationToken::new(),
+        })
+    }
+
     /// Identifies the exact invitation for a process-owned connection registry; not authorization.
     #[must_use]
     pub const fn invitation_identity(&self) -> [u8; 32] {

@@ -20,6 +20,11 @@ pub struct CreateConnectorInviteRequest {
     pub request_id: String,
     pub scope: InviteScope,
     pub reach: InviteReach,
+    /// Reconnects an existing external AI seat instead of adding a participant.
+    /// Older hosts reject the field, so clients send it only for a reconnect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub seat_participant_id: Option<String>,
 }
 
 // Secret-bearing HTTP result: deliberately no Debug implementation.

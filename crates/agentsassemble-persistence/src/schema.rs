@@ -573,6 +573,7 @@ pub(crate) fn tables() -> impl Iterator<Item = &'static TableDefinition> {
         .chain(crate::schema_votes::TABLES.iter())
         .chain(crate::agent_memory::TABLES.iter())
         .chain(crate::agent_avatar_assets::TABLES.iter())
+        .chain(crate::connector_connections::TABLES.iter())
 }
 
 #[cfg(test)]

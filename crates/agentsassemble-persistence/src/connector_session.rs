@@ -65,6 +65,8 @@ impl SqliteStore {
     }
 
     /// Authenticates one current connector session under its owning room incarnation.
+    /// A session in use is renewed: once less than half its lifetime is left, the
+    /// expiry moves to a full lifetime from now, so only an unused session ends.
     ///
     /// # Errors
     /// Rejects expired/revoked credentials, inactive/mismatched membership and storage failures.
@@ -74,7 +76,17 @@ impl SqliteStore {
         now: DateTime<Utc>,
     ) -> Result<ConnectorSessionAuthorization, PersistenceError> {
         let mut tx = self.pool.begin().await?;
-        let result = authorize_in(&mut tx, fingerprint, now).await?;
+        let mut result = authorize_in(&mut tx, fingerprint, now).await?;
+        let ttl = crate::connector_admission::TTL;
+        if result.expires_at < now + ttl / 2 {
+            let renewed = now + ttl;
+            sqlx::query("UPDATE room_connector_invites SET session_expires_at=? WHERE session_fingerprint=? AND revoked=0")
+                .bind(renewed.timestamp_micros())
+                .bind(fingerprint.as_slice())
+                .execute(&mut *tx)
+                .await?;
+            result.expires_at = timestamp(renewed.timestamp_micros())?;
+        }
         tx.commit().await?;
         Ok(result)
     }
@@ -198,10 +210,12 @@ impl ConnectorSessionRecord {
         &self,
         expected: &ConnectorSessionAuthorization,
     ) -> Result<(), PersistenceError> {
+        // Renewal only moves the expiry later, so authority issued before a
+        // renewal stays valid; an earlier expiry means it was replaced.
         if self.room.room_uid != expected.room_uid
             || self.principal.room_id != expected.principal.room_id
             || self.principal.participant_id != expected.principal.participant_id
-            || self.expires_at != expected.expires_at
+            || self.expires_at < expected.expires_at
         {
             return Err(rejected(
                 "session_revoked",

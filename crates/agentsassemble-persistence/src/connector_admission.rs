@@ -13,7 +13,8 @@ use crate::{
     session_bearer::{SessionBearerPurpose, derive_session_bearer},
 };
 
-const TTL: Duration = Duration::hours(1);
+/// An unused connector session ends this long after its last renewal.
+pub(crate) const TTL: Duration = Duration::hours(1);
 
 /// Secret-bearing result, intentionally neither Debug nor Serialize.
 pub struct ConnectorInvite {
@@ -28,6 +29,8 @@ pub struct ConnectorAdmission {
     pub authorization: ConnectorSessionAuthorization,
     pub event: RoomEvent,
     pub deduplicated: bool,
+    /// Sessions a seat invitation took the seat from; their live connections close.
+    pub replaced_sessions: Vec<[u8; 32]>,
 }
 
 impl SqliteStore {
@@ -40,6 +43,36 @@ impl SqliteStore {
         manager: &RoomManagerAuthority,
         request_id: Uuid,
         scope: InviteScope,
+        now: DateTime<Utc>,
+    ) -> Result<ConnectorInvite, PersistenceError> {
+        self.create_invite(manager, request_id, scope, None, now)
+            .await
+    }
+
+    /// Creates a reconnect invitation for an existing external AI seat. Joining
+    /// with it puts the AI back in that seat, keeping its role, name and picture.
+    ///
+    /// # Errors
+    /// Rejects a seat that is not a current external AI of the room, plus the
+    /// failures of `create_connector_invite`.
+    pub async fn create_connector_seat_invite(
+        &self,
+        manager: &RoomManagerAuthority,
+        request_id: Uuid,
+        scope: InviteScope,
+        participant_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<ConnectorInvite, PersistenceError> {
+        self.create_invite(manager, request_id, scope, Some(participant_id), now)
+            .await
+    }
+
+    async fn create_invite(
+        &self,
+        manager: &RoomManagerAuthority,
+        request_id: Uuid,
+        scope: InviteScope,
+        seat: Option<&str>,
         now: DateTime<Utc>,
     ) -> Result<ConnectorInvite, PersistenceError> {
         if request_id.is_nil() {
@@ -55,6 +88,9 @@ impl SqliteStore {
             InviteScope::ReadOnly => "read_only",
             InviteScope::ReadWrite => "read_write",
         };
+        if let Some(seat) = seat {
+            load_seat(&mut tx, &identity.room_id, seat).await?;
+        }
         let mut seed = Sha256::new();
         seed.update(room.room_uid.as_bytes());
         seed.update(request_id.as_bytes());
@@ -65,7 +101,9 @@ impl SqliteStore {
         );
         if let Some(row) = sqlx::query("SELECT invite_id, creator_id, scope, expires_at, revoked, token_fingerprint FROM room_connector_invites WHERE room_id = ? AND request_id = ?")
             .bind(&identity.room_id).bind(request_id.to_string()).fetch_optional(&mut *tx).await? {
-            if row.get::<String,_>("creator_id") != identity.user_id || row.get::<String,_>("scope") != scope {
+            let stored_seat: Option<String> = sqlx::query_scalar("SELECT participant_id FROM connector_seat_invites WHERE invite_id = ?")
+                .bind(row.get::<String,_>("invite_id")).fetch_optional(&mut *tx).await?;
+            if row.get::<String,_>("creator_id") != identity.user_id || row.get::<String,_>("scope") != scope || stored_seat.as_deref() != seat {
                 return Err(PersistenceError::CommandConflict);
             }
             if row.get::<Vec<u8>,_>("token_fingerprint") != bearer.fingerprint {
@@ -86,6 +124,13 @@ impl SqliteStore {
         sqlx::query("INSERT INTO room_connector_invites(invite_id,room_id,room_uid,creator_id,request_id,scope,token_fingerprint,expires_at) VALUES(?,?,?,?,?,?,?,?)")
             .bind(invite_id.to_string()).bind(&identity.room_id).bind(room.room_uid.to_string()).bind(&identity.user_id)
             .bind(request_id.to_string()).bind(scope).bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).execute(&mut *tx).await?;
+        if let Some(seat) = seat {
+            // The seat keeps the owner it already has.
+            sqlx::query("INSERT INTO connector_seat_invites(invite_id, participant_id) VALUES(?, ?)")
+                .bind(invite_id.to_string()).bind(seat).execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(ConnectorInvite { invite_id, invite_bearer: bearer.bearer, expires_at });
+        }
         crate::delegation_owner::OwnerBinding::from_manager(&mut tx, manager)
             .await?
             .save(
@@ -202,6 +247,7 @@ impl SqliteStore {
                 authorization,
                 event,
                 deduplicated: true,
+                replaced_sessions: Vec::new(),
             });
         }
         if row.get::<i64, _>("expires_at") <= now.timestamp_micros() {
@@ -210,14 +256,21 @@ impl SqliteStore {
                 "The connector invitation expired.",
             ));
         }
-        let (participant, event) = insert_connector_participant(
-            &mut tx,
-            &room_id,
-            display_name,
-            row.get("creator_id"),
-            now,
-        )
-        .await?;
+        let invite_id: String = row.get("invite_id");
+        let seat: Option<String> =
+            sqlx::query_scalar("SELECT participant_id FROM connector_seat_invites WHERE invite_id = ?")
+                .bind(&invite_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let mut replaced_sessions = Vec::new();
+        let (participant, event) = if let Some(seat) = seat {
+            let (participant, event, replaced) = retake_seat(&mut tx, &room_id, &seat, now).await?;
+            replaced_sessions = replaced;
+            (participant, event)
+        } else {
+            insert_connector_participant(&mut tx, &room_id, display_name, row.get("creator_id"), now)
+                .await?
+        };
         sqlx::query("UPDATE room_connector_invites SET client_fingerprint=?,join_request_id=?,join_payload_hash=?,participant_id=?,event_id=?,session_fingerprint=?,session_expires_at=? WHERE invite_id=?")
             .bind(client_fingerprint.as_slice()).bind(request_id.to_string()).bind(payload_hash).bind(&participant.participant_id).bind(&event.id)
             .bind(bearer.fingerprint.as_slice()).bind((now+TTL).timestamp_micros()).bind(row.get::<String,_>("invite_id")).execute(&mut *tx).await?;
@@ -225,7 +278,7 @@ impl SqliteStore {
             &mut tx,
             &room_id,
             "connector",
-            row.get("invite_id"),
+            &invite_id,
             &participant.participant_id,
         )
         .await?;
@@ -236,8 +289,72 @@ impl SqliteStore {
             authorization,
             event,
             deduplicated: false,
+            replaced_sessions,
         })
     }
+}
+
+/// A seat a reconnect invitation may take back: an external AI of this room
+/// that was not removed.
+async fn load_seat(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<Participant, PersistenceError> {
+    let participant = crate::room_turns::support::load_participant(tx, room_id, participant_id)
+        .await
+        .map_err(|_| rejected("seat_unavailable", "That AI is not in this room."))?;
+    let connector: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM room_connector_invites WHERE room_id = ? AND participant_id = ?)",
+    )
+    .bind(room_id)
+    .bind(participant_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if participant.participant_type != "agent"
+        || !connector
+        || matches!(
+            participant.status,
+            ParticipantStatus::Kicked | ParticipantStatus::Exported
+        )
+    {
+        return Err(rejected(
+            "seat_unavailable",
+            "Only an external AI still in the room can be reconnected.",
+        ));
+    }
+    Ok(participant)
+}
+
+/// Moves an existing seat to the invitation being admitted. The seat's earlier
+/// invitation ends with its session, and the seat is in the room again.
+async fn retake_seat(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+    now: DateTime<Utc>,
+) -> Result<(Participant, RoomEvent, Vec<[u8; 32]>), PersistenceError> {
+    let mut participant = load_seat(tx, room_id, participant_id).await?;
+    // participant_id is unique per invitation, so the earlier one gives the seat up.
+    let replaced: Vec<[u8; 32]> = sqlx::query_scalar::<_, Vec<u8>>("SELECT session_fingerprint FROM room_connector_invites WHERE room_id=? AND participant_id=? AND session_fingerprint IS NOT NULL")
+        .bind(room_id)
+        .bind(participant_id)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .filter_map(|fingerprint| fingerprint.try_into().ok())
+        .collect();
+    sqlx::query("UPDATE room_connector_invites SET revoked=1, client_fingerprint=NULL, join_request_id=NULL, join_payload_hash=NULL, participant_id=NULL, event_id=NULL, session_fingerprint=NULL, session_expires_at=NULL WHERE room_id=? AND participant_id=?")
+        .bind(room_id)
+        .bind(participant_id)
+        .execute(&mut **tx)
+        .await?;
+    participant.status = ParticipantStatus::Joined;
+    participant.updated_at = now;
+    crate::participant_rows::save_participant_exact(tx, room_id, participant_id, &participant)
+        .await?;
+    let event = joined_event(tx, &participant, now).await?;
+    Ok((participant, event, replaced))
 }
 
 async fn insert_connector_participant(
@@ -280,6 +397,17 @@ async fn insert_connector_participant(
         .bind(serde_json::to_string(&participant)?)
         .execute(&mut **tx)
         .await?;
+    let event = joined_event(tx, &participant, now).await?;
+    Ok((participant, event))
+}
+
+/// The public join event for a connector seat, stored in the room history.
+async fn joined_event(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    participant: &Participant,
+    now: DateTime<Utc>,
+) -> Result<RoomEvent, PersistenceError> {
+    let room_id = participant.room_id.as_str();
     let event = RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),
@@ -301,8 +429,9 @@ async fn insert_connector_participant(
         extra: std::collections::BTreeMap::from([("participant".to_owned(), json!(participant))]),
     };
     crate::room_turns::support::insert_event(tx, &event).await?;
-    Ok((participant, event))
+    Ok(event)
 }
+
 
 pub(super) fn timestamp(micros: i64) -> Result<DateTime<Utc>, PersistenceError> {
     DateTime::from_timestamp_micros(micros)

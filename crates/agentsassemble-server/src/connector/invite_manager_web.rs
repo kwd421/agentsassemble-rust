@@ -93,11 +93,21 @@ async fn create(
         })?,
     };
     let room_uid = binding.room_uid.to_string();
-    let invite = state
-        .store
-        .create_connector_invite(&authority, request_id, payload.scope, Utc::now())
-        .await
-        .map_err(ConnectorHttpError::from_persistence)?;
+    let invite = match payload.seat_participant_id.as_deref() {
+        Some(seat) => {
+            state
+                .store
+                .create_connector_seat_invite(&authority, request_id, payload.scope, seat, Utc::now())
+                .await
+        }
+        None => {
+            state
+                .store
+                .create_connector_invite(&authority, request_id, payload.scope, Utc::now())
+                .await
+        }
+    }
+    .map_err(ConnectorHttpError::from_persistence)?;
     let mut join = url::Url::parse(&format!("{}/join", origin.trim_end_matches('/')))
         .map_err(|_| ConnectorHttpError::invalid())?;
     join.query_pairs_mut()

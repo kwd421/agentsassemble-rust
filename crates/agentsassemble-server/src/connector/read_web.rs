@@ -224,7 +224,12 @@ pub(super) async fn wait(
     loop {
         tokio::select! {
             () = state.shutdown.cancelled() => return Err(rejected(StatusCode::SERVICE_UNAVAILABLE,"server_stopping")),
-            () = &mut expiry => return Err(rejected(StatusCode::FORBIDDEN,"session_revoked")),
+            () = &mut expiry => {
+                // A connector still waiting is in use: renew it and keep waiting.
+                let renewed = state.store.authorize_connector_session(authorization.session_fingerprint(), chrono::Utc::now()).await.map_err(ConnectorHttpError::from_persistence)?;
+                let left = (renewed.expires_at() - chrono::Utc::now()).to_std().map_err(|_| rejected(StatusCode::FORBIDDEN,"session_revoked"))?;
+                expiry.as_mut().reset(tokio::time::Instant::now() + left);
+            }
             signal = revocations.recv() => {
                 if signal.is_err() && !matches!(signal, Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) { return Err(rejected(StatusCode::GONE,"room_subscription_closed")); }
                 state.store.revalidate_connector_session(&authorization, chrono::Utc::now()).await.map_err(ConnectorHttpError::from_persistence)?;

@@ -49,6 +49,7 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "member_admissions"
         | "room_attendee_invites"
         | "room_connector_invites"
+        | "connector_seat_invites"
         | "local_bootstrap_authority" => Policy::Product,
         "room_message_attachment_previews"
         | "room_connector_upload_previews"
@@ -79,6 +80,8 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "member_resume_keys"
         // Memory is derived from room messages; a restored room refolds it.
         | "agent_memory_pieces"
+        // Live MCP connections belong to the host process that served them.
+        | "connector_connections"
         | "room_message_search_records"
         | "room_message_search_phrase"
         | "room_write_budgets"

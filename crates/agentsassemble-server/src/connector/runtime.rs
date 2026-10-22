@@ -124,6 +124,7 @@ impl RoomRuntime {
 pub(super) async fn admit(
     owners: &RoomCommandOwners<'_>,
     room_id: &str,
+    session_revocations: &tokio::sync::broadcast::Sender<crate::SessionRevocation>,
     command: ConnectorAdmissionCommand,
 ) -> Option<PublicationAttempt> {
     let admission = owners
@@ -136,6 +137,15 @@ pub(super) async fn admit(
             chrono::Utc::now(),
         )
         .await;
+    if let Ok(admission) = &admission {
+        // A seat invitation took the seat from these sessions; close their connections.
+        for fingerprint in &admission.replaced_sessions {
+            let _ = session_revocations.send(crate::SessionRevocation {
+                fingerprint: *fingerprint,
+                final_leave_request: None,
+            });
+        }
+    }
     let publication = if admission.is_ok() {
         Some(publish_durable_room_events(owners.store, owners.event_tx, room_id).await)
     } else {

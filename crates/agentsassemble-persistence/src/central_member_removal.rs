@@ -141,7 +141,7 @@ pub(crate) async fn require_schema(
     // v88/v89 add companion provenance and mention delivery; removal retains the v87 protocol.
     if !matches!(
         version.as_str(),
-        "87" | "88" | "89" | "90" | "91" | "92" | "93" | "94" | "95" | "96" | "97" | "98" | "99"
+        "87" | "88" | "89" | "90" | "91" | "92" | "93" | "94" | "95" | "96" | "97" | "98" | "99" | "100"
     ) {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }
@@ -230,7 +230,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             .await?;
     } else if !matches!(
         version.as_str(),
-        "87" | "88" | "89" | "90" | "91" | "92" | "93" | "94" | "95" | "96" | "97" | "98" | "99"
+        "87" | "88" | "89" | "90" | "91" | "92" | "93" | "94" | "95" | "96" | "97" | "98" | "99" | "100"
     ) {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }

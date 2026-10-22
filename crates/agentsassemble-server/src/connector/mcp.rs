@@ -84,7 +84,8 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(id)?
+                .client_or_resume(id)
+                .await?
                 .command_with_request_id(request_id, action, payload)
                 .await
                 .map_err(|error| error.code)?,
@@ -125,7 +126,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(&agentsassemble_domain::DirectRoomAction::StartAgent(
                     input.request,
                 ))
@@ -144,7 +145,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(&agentsassemble_domain::DirectRoomAction::StopAgent(
                     input.request,
                 ))
@@ -163,7 +164,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::CreateTextChannel(input.request),
                 )
@@ -182,7 +183,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::RequestCreateAgent(input.request),
                 )
@@ -203,7 +204,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::RequestReconfigureAgent(
                         input.request,
@@ -224,7 +225,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::RequestRemoveAgent(input.request),
                 )
@@ -245,7 +246,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::RequestKickParticipant(input.request),
                 )
@@ -264,7 +265,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::RequestCreateInvite(input.request),
                 )
@@ -283,7 +284,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::RequestDeleteTextChannel(
                         input.request,
@@ -304,7 +305,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::RenameTextChannel(input.request),
                 )
@@ -323,7 +324,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .execute_delegated_direct(
                     &agentsassemble_domain::DirectRoomAction::SetParticipantMute(input.request),
                 )
@@ -342,7 +343,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .set_message_pin(&input.request)
                 .await
                 .map_err(|error| error.code)?,
@@ -371,7 +372,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .status(input.before_seq)
                 .await
                 .map_err(|error| error.code)?,
@@ -382,7 +383,7 @@ impl ConnectorMcp {
         description = "Read the current room and its recent public messages. With resync true (after connector_resync_required) this snapshot replaces pending wait observations; older messages remain searchable. Reading mentioned messages clears their unread notifications; other pending observations remain."
     )]
     async fn room_read(&self, Parameters(input): Parameters<Read>) -> Result<String, String> {
-        let client = self.hub.client(&input.connection_id)?;
+        let client = self.hub.client_or_resume(&input.connection_id).await?;
         let response = if input.resync {
             client.resync().await
         } else {
@@ -401,7 +402,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .search(&input.channel_id, &input.query, &input.cursor)
                 .await
                 .map_err(|error| error.code)?,
@@ -416,7 +417,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .context(&input.channel_id, &input.event)
                 .await
                 .map_err(|error| error.code)?,
@@ -449,7 +450,7 @@ impl ConnectorMcp {
         Parameters(input): Parameters<AttachmentRead>,
     ) -> Result<rmcp::model::CallToolResult, String> {
         if let Some(files) = self.files.as_ref() {
-            let client = self.hub.client(&input.connection_id)?;
+            let client = self.hub.client_or_resume(&input.connection_id).await?;
             match client.read_attachment(&input.attachment_id).await {
                 Ok(attachment) => {
                     return agentsassemble_provider::attachment_tool_result(&attachment);
@@ -498,7 +499,7 @@ impl ConnectorMcp {
             .files
             .as_ref()
             .ok_or_else(|| "connector_file_access_unavailable".to_owned())?;
-        let client = self.hub.client(&input.connection_id)?;
+        let client = self.hub.client_or_resume(&input.connection_id).await?;
         let attachment = upload_path(&client, files, &input.path, &input.content_type)
             .await
             .map_err(|error| error.code)?;
@@ -563,7 +564,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .vote_summary(&input.vote_id)
                 .await
                 .map_err(|error| error.code)?,
@@ -620,7 +621,7 @@ impl ConnectorMcp {
         encode(
             &self
                 .hub
-                .client(&input.connection_id)?
+                .client_or_resume(&input.connection_id).await?
                 .wait_next_with_transport(|| {
                     transport.map(|admission| admission.retain_authenticated_wait())
                 })
