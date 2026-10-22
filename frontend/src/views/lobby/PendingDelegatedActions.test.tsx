@@ -84,7 +84,7 @@ it("states the kick consequence as a re-invitable disconnect", async () => {
   render(<PendingDelegatedActions socket={socket} viewerParticipantId="me" />);
 
   expect(screen.getByText("게스트 님을 방에서 내보내려고 해요")).toBeTruthy();
-  expect(screen.getByText("접속이 바로 끊겨요. 새 초대로 다시 참가할 수 있어요.")).toBeTruthy();
+  expect(screen.getByText("접속이 바로 끊기고, 데려온 AI도 함께 나가요. 새 초대로 다시 참가할 수 있어요.")).toBeTruthy();
 });
 
 it("stays quiet when the owner declines", async () => {

@@ -2,7 +2,12 @@
 //! registered with this computer's MCP address keep working after a restart.
 //! A port another program took is not fought over: the server then gets a new
 //! one and that becomes the remembered port.
-use std::{fs, net::TcpListener, path::Path};
+use std::{
+    fs,
+    net::{SocketAddr, TcpListener, TcpStream},
+    path::Path,
+    time::Duration,
+};
 
 const PORT_FILE: &str = "runtime.port";
 
@@ -14,9 +19,18 @@ pub(crate) fn bind_address(data_root: &Path) -> String {
         .filter(|port| *port >= 1024);
     match remembered {
         // Free now; the server binds it a moment later.
-        Some(port) if TcpListener::bind(("127.0.0.1", port)).is_ok() => format!("127.0.0.1:{port}"),
+        Some(port) if free(port) => format!("127.0.0.1:{port}"),
         _ => "127.0.0.1:0".to_owned(),
     }
+}
+
+/// A program listening on every address would still let a loopback bind
+/// through, and then lose its local connections to this server, so the port
+/// must also refuse a connection.
+fn free(port: u16) -> bool {
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&address, Duration::from_millis(200)).is_err()
+        && TcpListener::bind(address).is_ok()
 }
 
 /// Remembers the port the server actually listens on.

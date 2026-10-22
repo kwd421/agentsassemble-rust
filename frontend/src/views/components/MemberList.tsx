@@ -422,6 +422,7 @@ export default function MemberList({
             )}
             {canModerateEntry(memberMenu.entry) && onParticipantRemove && <ParticipantRemovalControls
               key={memberMenu.entry.id} participantId={memberMenu.entry.id} displayName={memberMenu.entry.displayName}
+              person={memberMenu.entry.member?.participant_type === "human"}
               onRemove={async (id, action) => { await onParticipantRemove(id, action); setMemberMenu(null); }}
             />}
           </div>

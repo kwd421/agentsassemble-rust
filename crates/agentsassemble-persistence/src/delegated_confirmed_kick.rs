@@ -24,13 +24,14 @@ use uuid::Uuid;
 
 fn consequences_for(display_name: &str) -> String {
     format!(
-        "Removes the person {display_name} from the room and ends their access: their live room session is closed and their invite or join link stops working. The agents and companions they own are not touched; this cannot be undone."
+        "Removes the person {display_name} from the room and ends their access: their live room session is closed and their invite or join link stops working. The AIs they own leave with them and stop; this cannot be undone."
     )
 }
 
 /// Loads the bound target: a human participant whose removal state still admits a
-/// kick. An agent and an already-removed person are refused here, so a human kick can
-/// never reach an agent's session or repeat a removal.
+/// kick. An agent and an already-removed person are refused here, so a kick never
+/// targets an agent directly or repeats a removal; the AIs the person owns leave with
+/// them through the shared removal core.
 /// # Errors
 /// Refuses `target_changed` for a missing, non-human or already-removed target.
 pub(crate) async fn load_kick_target(

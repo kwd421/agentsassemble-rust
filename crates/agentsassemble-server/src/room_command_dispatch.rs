@@ -226,20 +226,22 @@ async fn execute_participant_removal(
     execution
 }
 
-/// Stops the runtimes of removed AIs now; a failure keeps its durable
-/// reservation for the cleanup reconciler.
+/// Stops the runtimes of removed AIs now, all at once so several slow stops do
+/// not add up; a failure keeps its durable reservation for the cleanup reconciler.
 async fn stop_removed_runtimes(
     store: &SqliteStore,
     adapter: &ProviderAdapter,
     execution: &mut CommandExecution,
     cleanups: &[agentsassemble_persistence::RoomRuntimeCleanupKey],
 ) {
-    for key in cleanups {
-        match Box::pin(crate::room_runtime_cleanup::attempt_cleanup(
+    let stops = cleanups.iter().map(|key| {
+        Box::pin(crate::room_runtime_cleanup::attempt_cleanup(
             store, adapter, key,
         ))
-        .await
-        {
+    });
+    let outcomes = futures_util::future::join_all(stops).await;
+    for (key, outcome) in cleanups.iter().zip(outcomes) {
+        match outcome {
             Ok(Some(commit)) => execution.extend_turn_commit(commit),
             Ok(None) => {}
             Err(error) => crate::room_runtime_cleanup::log_pending(key, &error),

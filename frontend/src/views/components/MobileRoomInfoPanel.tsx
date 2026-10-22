@@ -124,7 +124,7 @@ function MobileMemberItem({
         {executionLocation && <span className="dc-mobile-info-member-detail preserve-words">{executionLocation}</span>}
       </span>
       {onParticipantRemove && row.id !== "operator-local" && (
-        <ParticipantRemovalControls showMenuTrigger participantId={row.id} displayName={row.displayName} onRemove={onParticipantRemove} />
+        <ParticipantRemovalControls showMenuTrigger participantId={row.id} displayName={row.displayName} person={!row.app} onRemove={onParticipantRemove} />
       )}
       {row.app && <span className="dc-mobile-info-app-badge">앱</span>}
     </article>

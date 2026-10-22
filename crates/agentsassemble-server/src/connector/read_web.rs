@@ -176,10 +176,6 @@ pub(super) async fn wait(
         .cloned();
     let authorization = authorize_read(&state, request, SNAPSHOT_EVENTS).await?;
     let principal = authorization.principal();
-    // Waiting again means the AI is done with what it received last.
-    state
-        .participant_activity
-        .end(&principal.room_id, &principal.participant_id);
     let _lease = state
         .connection_admission
         .acquire(principal)
@@ -208,6 +204,11 @@ pub(super) async fn wait(
     if let Some(value) = wait_result(&state, &authorization, pending, delivered).await? {
         return Ok(Json(received(&state, principal, value)));
     }
+    // Waiting with nothing new means the AI is done with what it received last.
+    // A wait that hands over messages at once keeps it working without a flicker.
+    state
+        .participant_activity
+        .end(&principal.room_id, &principal.participant_id);
     let duration = (authorization.expires_at() - chrono::Utc::now())
         .to_std()
         .map_err(|_| rejected(StatusCode::FORBIDDEN, "session_revoked"))?;

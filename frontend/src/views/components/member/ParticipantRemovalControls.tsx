@@ -5,8 +5,10 @@ import { userFacingError } from "../../../lib/apiErrors";
 
 export type ParticipantRemovalAction = (participantId: string, action: "kick" | "export") => Promise<void>;
 
-export default function ParticipantRemovalControls({ participantId, displayName, onRemove, showMenuTrigger = false }: {
+export default function ParticipantRemovalControls({ participantId, displayName, onRemove, showMenuTrigger = false, person = false }: {
   showMenuTrigger?: boolean;
+  /** A person's own AIs leave the room with them. */
+  person?: boolean;
   participantId: string;
   displayName: string;
   onRemove: ParticipantRemovalAction;
@@ -76,7 +78,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
           <h2 className="dc-dialog-title">‘{displayName}’{confirmAction === "kick" ? " 추방하기" : " 차단하기"}</h2>
           <p className="preserve-words" style={{ margin: "20px 0" }}>{displayName}{confirmAction === "kick"
             ? "의 방 접속과 실행이 끝나요. 대화 기록은 남고, 나중에 다시 초대할 수 있어요."
-            : "의 참가가 끝나고 방 접근 권한이 해제돼요. 대화 기록은 남지만, 이 참가자는 다시 들어올 수 없어요."}</p>
+            : "의 참가가 끝나고 방 접근 권한이 해제돼요. 대화 기록은 남지만, 이 참가자는 다시 들어올 수 없어요."}{person && " 데려온 AI가 있으면 함께 나가요."}</p>
           {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
           <div className="dc-create-channel-actions">
             <button type="button" autoFocus className="dc-agent-create-secondary" style={{ minHeight: 40 }} disabled={busy} onClick={() => { setConfirmAction(null); setError(""); }}>취소</button>
