@@ -80,6 +80,16 @@
   flex-shrink: 0;
 }
 
+/* Replaces the bulk buttons while one bulk action runs. */
+.dc-owner-agent-progress {
+  flex: 0 0 auto;
+  padding: 0 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* The connector spine is decoration only: one straight line under the owner's
    avatar (8px row padding + 16px avatar half = 24px centre, so left 23px for a
    2px line), starting at the group top just under the avatar and ending at the

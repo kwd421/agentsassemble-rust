@@ -235,6 +235,39 @@ describe("MemberList component wiring", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("shows bulk progress in the header and on each agent still waiting", async () => {
+    const second = { ...AGENT, agent_id: "agent-2", display_name: "Agent Two" };
+    const first = agentSessionFixture({
+      session_id: "session-1", participant_id: "agent-1", display_name: "Agent One", runtime_status: "idle",
+    });
+    const other = agentSessionFixture({
+      session_id: "session-2", participant_id: "agent-2", display_name: "Agent Two", runtime_status: "idle",
+    });
+    const release: Record<string, () => void> = {};
+    const onAgentControl = vi.fn((session: { session_id: string }) =>
+      new Promise<void>((resolve) => { release[session.session_id] = resolve; })
+    );
+    render(
+      <MemberList
+        agents={[AGENT, second]}
+        agentSessions={[first, other]}
+        roomId="room-1"
+        roomName="Room One"
+        onAgentControl={onAgentControl}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "전체 일시정지" }));
+    expect((await screen.findByRole("status")).textContent).toBe("일시정지 중 0/2");
+    expect(screen.getAllByText("일시정지 중…")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "전체 중지" })).toBeNull();
+    release["session-1"]();
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("일시정지 중 1/2"));
+    expect(screen.getAllByText("일시정지 중…")).toHaveLength(1);
+    release["session-2"]();
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    expect(screen.queryByText("일시정지 중…")).toBeNull();
+  });
+
   it("reports only bulk control failures under the group header", async () => {
     const idle = agentSessionFixture({ session_id: "session-1", participant_id: "agent-1", runtime_status: "idle" });
     const onAgentControl = vi.fn(async () => { throw new Error("제어 실패"); });

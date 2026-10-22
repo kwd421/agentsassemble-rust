@@ -26,7 +26,14 @@ import { useRoomActivity } from "../../app/roomActivity";
 
 export type { RoleId };
 
-const BULK_FAILURE_VERB = { pause: "일시정지", resume: "재개", stop: "중지" } as const;
+type BulkAction = "pause" | "resume" | "stop";
+const BULK_VERB = { pause: "일시정지", resume: "재개", stop: "중지" } as const;
+
+/** While its bulk request is in flight, an agent row says so instead of its old status. */
+function withPendingControl(entry: MemberEntry, pending: Record<string, BulkAction>): MemberEntry {
+  const action = entry.agentSession && pending[entry.agentSession.session_id];
+  return action ? { ...entry, statusLabel: `${BULK_VERB[action]} 중…`, active: true } : entry;
+}
 
 export default function MemberList({
   agents,
@@ -97,7 +104,9 @@ export default function MemberList({
   const [memberMenu, setMemberMenu] = useState<{ x: number; y: number; entry: MemberEntry } | null>(null);
   const [muteBusy, setMuteBusy] = useState(false);
   const [roleChangeError, setRoleChangeError] = useState("");
-  const [groupControlBusy, setGroupControlBusy] = useState<Record<string, boolean>>({});
+  // A running bulk action per owner group, and the sessions whose request is in flight.
+  const [groupProgress, setGroupProgress] = useState<Record<string, { action: BulkAction; done: number; total: number }>>({});
+  const [pendingControls, setPendingControls] = useState<Record<string, BulkAction>>({});
   const [groupControlError, setGroupControlError] = useState<Record<string, string>>({});
   const query = searchQuery ?? localQuery;
   const memberMenuOpen = memberMenu !== null;
@@ -196,25 +205,47 @@ export default function MemberList({
     setCollapsedGroups((previous) => ({ ...previous, [groupId]: !previous[groupId] }));
   }
 
-  async function runGroupControl(groupId: string, sessions: RoomAgentSession[], action: "pause" | "resume" | "stop") {
-    if (!onAgentControl || groupControlBusy[groupId] || sessions.length === 0) return;
-    setGroupControlBusy((previous) => ({ ...previous, [groupId]: true }));
+  async function runGroupControl(groupId: string, sessions: RoomAgentSession[], action: BulkAction) {
+    if (!onAgentControl || groupProgress[groupId] || sessions.length === 0) return;
+    setGroupProgress((previous) => ({ ...previous, [groupId]: { action, done: 0, total: sessions.length } }));
+    setPendingControls((previous) => ({
+      ...previous,
+      ...Object.fromEntries(sessions.map((session) => [session.session_id, action])),
+    }));
     setGroupControlError((previous) => ({ ...previous, [groupId]: "" }));
     try {
       const outcomes = await Promise.allSettled(
-        sessions.map((session) => onAgentControl(session, action))
+        sessions.map(async (session) => {
+          try {
+            await onAgentControl(session, action);
+          } finally {
+            setPendingControls((previous) => {
+              const next = { ...previous };
+              delete next[session.session_id];
+              return next;
+            });
+            setGroupProgress((previous) => {
+              const progress = previous[groupId];
+              return progress ? { ...previous, [groupId]: { ...progress, done: progress.done + 1 } } : previous;
+            });
+          }
+        })
       );
       const failed = outcomes.filter((outcome) => outcome.status === "rejected").length;
       if (failed > 0) {
         setGroupControlError((previous) => ({
           ...previous,
-          [groupId]: `${failed}개의 에이전트를 ${BULK_FAILURE_VERB[action]}하지 못했어요.`,
+          [groupId]: `${failed}개의 에이전트를 ${BULK_VERB[action]}하지 못했어요.`,
         }));
       } else {
         onSessionActionComplete?.();
       }
     } finally {
-      setGroupControlBusy((previous) => ({ ...previous, [groupId]: false }));
+      setGroupProgress((previous) => {
+        const next = { ...previous };
+        delete next[groupId];
+        return next;
+      });
     }
   }
 
@@ -295,26 +326,28 @@ export default function MemberList({
                       <ToggleIcon size={12} aria-hidden />
                       <span>에이전트 {group.agents.length}명</span>
                     </button>
-                    {resumable.length > 0 && (
+                    {groupProgress[group.id] && (
+                      <span className="dc-owner-agent-progress" role="status">
+                        {BULK_VERB[groupProgress[group.id].action]} 중 {groupProgress[group.id].done}/{groupProgress[group.id].total}
+                      </span>
+                    )}
+                    {!groupProgress[group.id] && resumable.length > 0 && (
                       <button type="button" className="dc-owner-agent-bulk-action"
                         aria-label="전체 재개" title="전체 재개" data-tip={`전체 재개 · ${AGENT_CONTROL_HINTS.resume}`}
-                        disabled={groupControlBusy[group.id]}
                         onClick={() => void runGroupControl(group.id, resumable.map((entry) => entry.agentSession!), "resume")}>
                         <Play size={13} aria-hidden />
                       </button>
                     )}
-                    {pausable.length > 0 && (
+                    {!groupProgress[group.id] && pausable.length > 0 && (
                       <button type="button" className="dc-owner-agent-bulk-action"
                         aria-label="전체 일시정지" title="전체 일시정지" data-tip={`전체 일시정지 · ${AGENT_CONTROL_HINTS.pause}`}
-                        disabled={groupControlBusy[group.id]}
                         onClick={() => void runGroupControl(group.id, pausable.map((entry) => entry.agentSession!), "pause")}>
                         <Pause size={13} aria-hidden />
                       </button>
                     )}
-                    {stoppable.length > 0 && (
+                    {!groupProgress[group.id] && stoppable.length > 0 && (
                       <button type="button" className="dc-owner-agent-bulk-action"
                         aria-label="전체 중지" title="전체 중지" data-tip={`전체 중지 · ${AGENT_CONTROL_HINTS.stop}`}
-                        disabled={groupControlBusy[group.id]}
                         onClick={() => void runGroupControl(group.id, stoppable.map((entry) => entry.agentSession!), "stop")}>
                         <Square size={13} aria-hidden />
                       </button>
@@ -330,7 +363,7 @@ export default function MemberList({
                         {group.agents.map((entry) => (
                           <div key={entry.id} className="dc-owner-agent-item">
                             <MemberRow
-                              entry={entry}
+                              entry={withPendingControl(entry, pendingControls)}
                               onOpenDetails={openMemberDetails}
                               onContextMenu={handleMemberContextMenu}
                               canManageParticipant={roleMenuAvailable || Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
