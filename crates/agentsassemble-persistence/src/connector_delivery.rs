@@ -37,7 +37,16 @@ impl SqliteStore {
         let principal = RoomMutationAuthority::ConnectorSession(authorization)
             .resolve(&mut tx)
             .await?;
-        let rows = sqlx::query("SELECT wanted.value AS seq,d.ordinary FROM json_each(?) wanted LEFT JOIN connector_message_delivery d ON d.room_id=? AND d.seq=wanted.value")
+        // An external AI its owner set to wake only when mentioned gets only
+        // the ordinary messages that mention it.
+        let mention_only = crate::agent_instructions::mention_only_in(
+            &mut tx,
+            &principal.room_id,
+            &principal.participant_id,
+        )
+        .await?;
+        let rows = sqlx::query("SELECT wanted.value AS seq, CASE WHEN ? AND d.ordinary THEN EXISTS(SELECT 1 FROM room_events e WHERE e.room_id=d.room_id AND e.seq=d.seq AND (instr(coalesce(json_extract(e.event_json,'$.content'),''), '<@'||?||'>') > 0 OR json_extract(e.event_json,'$.reply_mention_participant_id')=?)) ELSE d.ordinary END AS ordinary FROM json_each(?) wanted LEFT JOIN connector_message_delivery d ON d.room_id=? AND d.seq=wanted.value")
+            .bind(mention_only).bind(&principal.participant_id).bind(&principal.participant_id)
             .bind(serde_json::to_string(sequences)?).bind(&principal.room_id).fetch_all(&mut *tx).await?;
         let mut ordinary = Vec::new();
         for row in rows {

@@ -232,6 +232,57 @@ async fn an_external_ai_gets_its_owners_instructions_and_hears_when_they_change(
     let read = client.read().await?;
     assert_eq!(read["your_instructions"], "Review only Rust files.");
     assert!(read.get("instructions_changed").is_none());
+    // Clearing them is a change the AI hears about too.
+    store
+        .set_agent_instructions("general", &joined.participant_id, "", chrono::Utc::now())
+        .await?;
+    let cleared = client.read().await?;
+    assert_eq!(cleared["your_instructions"], "");
+    assert!(cleared["instructions_changed"].as_str().is_some_and(|notice| notice.contains("removed")));
+    server.stop().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_mention_only_external_ai_wakes_only_for_messages_that_mention_it()
+-> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_domain::{
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, LOCAL_OPERATOR_PARTICIPANT_ID,
+        LOCAL_OPERATOR_USER_ID,
+    };
+    let (store, manager) = fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let invite = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, chrono::Utc::now())
+        .await?;
+    let link = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
+    let client = RoomConnectorClient::new(&link, "Quiet", Some(&[url::Url::parse(&server.base_url)?]))?;
+    let joined = client.join().await?;
+    assert!(store.set_agent_mention_only("general", &joined.participant_id, true).await?);
+    let owner = AuthenticatedPrincipal {
+        principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "Host".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    let pending = client.wait_next();
+    let plain = json!({"content": "just chatting"});
+    let called = json!({"content": format!("<@{}> your turn", joined.participant_id)});
+    let say = async {
+        store.execute_message_with_turn(&owner, "plain", "message.send", &plain).await?;
+        store.execute_message_with_turn(&owner, "called", "message.send", &called).await
+    };
+    let (woken, _) = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        tokio::try_join!(async { pending.await.map_err(|error| error.code) }, async { say.await.map_err(|error| error.to_string()) })
+    })
+    .await??;
+    let messages = woken["messages"].as_array().ok_or("messages missing")?;
+    assert_eq!(messages.len(), 1, "{messages:?}");
+    assert!(messages[0]["content"].as_str().is_some_and(|content| content.ends_with("your turn")));
     server.stop().await;
     Ok(())
 }

@@ -4,32 +4,34 @@ import { remoteOwnerRoute, resolvePersonaHost } from "./personas";
 /** Characters an owner may give one AI; the server enforces the same limit. */
 export const MAX_AGENT_INSTRUCTIONS_CHARS = 4000;
 
-function instructionsPath(roomId: string, participantId: string): string {
+/** The owner's own settings for one AI, app AI or external AI. */
+export type AgentOwnerSettings = { instructions: string; mention_only: boolean };
+
+function settingsPath(roomId: string, participantId: string): string {
   return `/${encodeURIComponent(roomId)}/${encodeURIComponent(participantId)}`;
 }
 
-function instructions(payload: { instructions?: unknown }): string {
+function settings(payload: { instructions?: unknown; mention_only?: unknown }): AgentOwnerSettings {
   if (typeof payload.instructions !== "string") throw new Error("지침 응답이 올바르지 않아요.");
-  return payload.instructions;
+  // Hosts from before the switch answer without it; they always follow the room.
+  return { instructions: payload.instructions, mention_only: payload.mention_only === true };
 }
 
-/** The owner's own instructions for one AI, app AI or external AI. */
-export async function fetchAgentInstructions(roomId: string, participantId: string, remoteServerId: string | null): Promise<string> {
+export async function fetchAgentOwnerSettings(roomId: string, participantId: string, remoteServerId: string | null): Promise<AgentOwnerSettings> {
   // null is this computer's server; a remote room names its own server.
   const host = remoteServerId === null ? null : resolvePersonaHost(remoteServerId);
-  const suffix = instructionsPath(roomId, participantId);
-  return instructions(host
+  const suffix = settingsPath(roomId, participantId);
+  return settings(host
     ? await (await remoteOwnerRoute(host, `/api/central-owner/agent-instructions${suffix}`, { method: "GET" })).json() as { instructions?: unknown }
     : await fetchJsonServerOperator<{ instructions?: unknown }>(`/api/agent-instructions${suffix}`));
 }
 
-export async function saveAgentInstructions(roomId: string, participantId: string, text: string, remoteServerId: string | null): Promise<string> {
+export async function saveAgentOwnerSettings(roomId: string, participantId: string, change: Partial<AgentOwnerSettings>, remoteServerId: string | null): Promise<AgentOwnerSettings> {
   const host = remoteServerId === null ? null : resolvePersonaHost(remoteServerId);
-  const suffix = instructionsPath(roomId, participantId);
-  const body = { instructions: text };
-  return instructions(host
+  const suffix = settingsPath(roomId, participantId);
+  return settings(host
     ? await (await remoteOwnerRoute(host, `/api/central-owner/agent-instructions${suffix}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change),
     })).json() as { instructions?: unknown }
-    : await postJsonServerOperator<{ instructions?: unknown }>(`/api/agent-instructions${suffix}`, body));
+    : await postJsonServerOperator<{ instructions?: unknown }>(`/api/agent-instructions${suffix}`, change));
 }

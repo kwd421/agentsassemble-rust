@@ -359,18 +359,37 @@ second participant with none of the first one's role, name or picture.
 
 ## Owner instructions per AI (2026-10-22, required behavior)
 
-The owner gives one AI its own instructions for a room ("지침" in the AI's profile window), for app
-AIs and external AIs alike. They are private to the owner.
+The room owner gives one AI its own instructions for a room ("지침과 반응" in the AI's profile
+window, desktop and mobile), for app AIs and external AIs alike. They are private to the owner,
+and the AI is told to keep them to itself. A companion AI, which runs on its member's own computer
+under that member's direction, does not receive them.
 
 - **Storage.** `agent_instructions` (schema v101, backed up) keeps up to 4,000 characters per
   room participant, apart from the public participant record, so snapshots never carry them.
-  Blank text removes them.
+  Blank text clears them but keeps the row, so the change has a revision an external AI is told
+  about; the revision only grows. Removing the AI from the room deletes its settings.
 - **Owner routes.** `GET`/`POST /api/agent-instructions/{room_id}/{participant_id}` (and the
   `central-owner` form for a remote room) take the server-owner authority of the memory tab and
   accept only an AI participant of the room.
-- **App AIs** receive them in the room rules of every turn, after the room rules and before any
-  bot card, under "[Your owner's instructions for you in this room]".
+- **App AIs** receive them under "[The room owner's instructions for you in this room]", ranked
+  below the room rules and above any bot card: in the session instructions for API, Codex, Claude
+  Code and OpenCode sessions, and in each turn's input for Cursor and Grok, which take the room
+  rules there.
 - **External AIs** receive them from their own connector: `room_read` results and the join reply
   carry `your_instructions`; read and wait results carry `your_instructions_revision`. After a
   change the connector client adds a one-time `instructions_changed` notice, placed first; a wait
   points the AI at `room_read`, whose result carries the text.
+
+## Wake only when called (2026-10-22, required behavior)
+
+Next to the instructions, the owner can set one AI to "불렀을 때만 반응": it wakes only for a
+message that mentions it, whatever the room's conversation mode. The setting lives in
+`agent_mention_only` (schema v101, backed up) and is read and changed on the same owner route as
+the instructions (`mention_only` in its body and result; an older host answers without it).
+
+- **App AIs.** `route_sessions` leaves such an AI out of every routing path — ordered selection,
+  the ordered floor hand-off, ambient and free access — unless the message mentions it by the
+  same rule the routes use, so an unmentioned message never queues it.
+- **External AIs.** A wait delivers such an AI only the ordinary messages that mention it with
+  `<@participant_id>` or call it with a reply mention; it can still read everything with
+  `room_read`. Free-access mention delivery is unchanged.

@@ -117,7 +117,8 @@
     "version": 101,
     "remove": [],
     "add": [
-      "CREATE TABLE IF NOT EXISTS agent_instructions (room_id TEXT NOT NULL, participant_id TEXT NOT NULL, instructions TEXT NOT NULL CHECK(length(instructions) BETWEEN 1 AND 4000), updated_at INTEGER NOT NULL, PRIMARY KEY(room_id, participant_id), FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE) STRICT"
+      "CREATE TABLE IF NOT EXISTS agent_instructions (room_id TEXT NOT NULL, participant_id TEXT NOT NULL, instructions TEXT NOT NULL CHECK(length(instructions) <= 4000), updated_at INTEGER NOT NULL, PRIMARY KEY(room_id, participant_id), FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE) STRICT",
+      "CREATE TABLE IF NOT EXISTS agent_mention_only (room_id TEXT NOT NULL, participant_id TEXT NOT NULL, PRIMARY KEY(room_id, participant_id), FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE) STRICT"
     ]
   }
 ]

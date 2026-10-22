@@ -482,6 +482,35 @@ async fn route_sessions(
             load_participant(transaction, &event.room_id, &session.public.participant_id).await?;
         sessions.push((session, participant));
     }
+    // An AI its owner set to wake only when mentioned is left out of every
+    // conversation mode unless this message mentions it.
+    let mention_only: BTreeSet<String> =
+        sqlx::query_scalar("SELECT participant_id FROM agent_mention_only WHERE room_id = ?")
+            .bind(&event.room_id)
+            .fetch_all(&mut **transaction)
+            .await?
+            .into_iter()
+            .collect();
+    if !mention_only.is_empty() {
+        let content = event.addressed_content();
+        let names: Vec<(String, String)> = sessions
+            .iter()
+            .map(|(session, _)| {
+                (
+                    session.public.session_id.clone(),
+                    session.public.display_name.clone(),
+                )
+            })
+            .collect();
+        sessions.retain(|(session, _)| {
+            !mention_only.contains(&session.public.participant_id)
+                || super::routing::mentions_target(
+                    &content,
+                    names.iter().map(|(id, name)| (id.as_str(), name.as_str())),
+                    &session.public.session_id,
+                )
+        });
+    }
     Ok(sessions)
 }
 

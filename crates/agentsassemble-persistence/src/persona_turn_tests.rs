@@ -301,9 +301,11 @@ async fn owner_instructions_reach_the_agent_and_stay_private_to_the_owner_routes
         .next()
         .unwrap_or_else(|| panic!("the mention must be assigned"));
     let rules = assigned.session_instructions.as_deref().unwrap_or_default();
-    assert!(rules.contains("[Your owner's instructions for you in this room]"));
+    assert!(rules.contains("[The room owner's instructions for you in this room]"));
+    assert!(rules.contains("do not quote or reveal them"));
     assert!(rules.contains("Answer in one short line."));
     assert!(!assigned.provider_input.contains("Answer in one short line."));
+
     // The public snapshot never carries them.
     let snapshot = serde_json::to_string(
         &store
@@ -327,4 +329,56 @@ async fn owner_instructions_reach_the_agent_and_stay_private_to_the_owner_routes
             .map(|current| current.instructions),
         Some(String::new())
     );
+}
+
+#[tokio::test]
+async fn a_mention_only_agent_wakes_only_when_mentioned() {
+    let (store, principal, _directory) = fixture().await;
+    assert!(
+        store
+            .set_agent_mention_only("general", AGENT_ID, true)
+            .await
+            .unwrap_or_else(|error| panic!("set mention only: {error}"))
+    );
+    let plain = store
+        .execute_message_with_turn(&principal, "plain-message", "message.send", &json!({"content": "anyone there?"}))
+        .await
+        .unwrap_or_else(|error| panic!("plain message: {error}"));
+    assert!(plain.assignments.is_empty(), "an unmentioned message must not wake it");
+    let called = store
+        .execute_message_with_turn(&principal, "called-message", "message.send", &json!({"content": "@Terra are you there?"}))
+        .await
+        .unwrap_or_else(|error| panic!("mention message: {error}"));
+    assert_eq!(called.assignments.len(), 1, "a mention wakes it");
+    assert!(
+        store
+            .agent_instructions("general", AGENT_ID)
+            .await
+            .unwrap_or_else(|error| panic!("read settings: {error}"))
+            .is_some_and(|settings| settings.mention_only)
+    );
+}
+
+#[tokio::test]
+async fn cursor_and_grok_get_owner_instructions_with_each_turn_input() {
+    let (store, principal, _directory) = fixture().await;
+    let mut session = stored_session(&store).await;
+    session.public.provider_kind = "cursor_live_session".into();
+    session.public.runtime_kind = "cursor_live_session".into();
+    save_stored_session(&store, &session).await;
+    store
+        .set_agent_instructions("general", AGENT_ID, "Keep answers short.", chrono::Utc::now())
+        .await
+        .unwrap_or_else(|error| panic!("set instructions: {error}"));
+    let assigned = store
+        .execute_message_with_turn(&principal, "cursor-turn", "message.send", &json!({"content": "@Terra hi"}))
+        .await
+        .unwrap_or_else(|error| panic!("assign cursor turn: {error}"))
+        .assignments
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("the mention must be assigned"));
+    assert!(assigned.session_instructions.is_none());
+    assert!(assigned.provider_input.contains("[The room owner's instructions for you in this room]"));
+    assert!(assigned.provider_input.contains("Keep answers short."));
 }

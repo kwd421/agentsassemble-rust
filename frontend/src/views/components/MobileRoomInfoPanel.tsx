@@ -1,5 +1,7 @@
 import { memberStatusLabel } from "./member/memberHelpers";
 import { externalAgentProfileOf, type AgentProfileTarget } from "./member/memberTypes";
+import AgentInstructionsSettings from "./AgentInstructionsSettings";
+import { useOwnerRouteHost } from "../../app/ownerRouteHost";
 import ResourceImage from "./ResourceImage";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import { useMemo, useState } from "react";
@@ -388,6 +390,7 @@ export default function MobileRoomInfoPanel({
       .flatMap((member) => { const profile = externalAgentProfileOf(member); return profile ? [[member.participant_id, profile] as const] : []; }));
   }, [agentSessions, agents, members]);
   const selectedExternal = selectedAgentSession ? undefined : externalProfiles.get(selectedAgentSessionId);
+  const ownerHost = useOwnerRouteHost();
   const memberGroups = useMemo(
     () => buildMobileMembers({
       agents,
@@ -503,7 +506,9 @@ export default function MobileRoomInfoPanel({
               detail="외부 AI"
               onSave={capabilities["agent.control"] ? onAgentProfileUpdate : undefined}
               onAvatarUpdate={capabilities["agent.control"] ? onAgentAvatarUpdate : undefined}
-            >{null}</AgentProfileCard>
+            >{capabilities["agent.control"] && ownerHost !== undefined
+              ? <AgentInstructionsSettings roomId={selectedExternal.room_id} participantId={selectedExternal.participant_id} name={selectedExternal.display_name} />
+              : null}</AgentProfileCard>
           </section>
         ) : (
           <>

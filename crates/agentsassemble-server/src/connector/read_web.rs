@@ -295,6 +295,7 @@ async fn enrich(
         .unwrap_or(agentsassemble_persistence::AgentInstructions {
             instructions: String::new(),
             updated_at: 0,
+            mention_only: false,
         });
     value["your_instructions"] = json!(instructions.instructions);
     value["your_instructions_revision"] = json!(instructions.updated_at);

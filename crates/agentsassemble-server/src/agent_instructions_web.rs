@@ -1,5 +1,5 @@
-//! The agent card's "지침": the owner's own instructions for one AI in a room,
-//! app AI or external AI. Only the server owner reads or changes them, on the
+//! The agent card's "지침" and "불렀을 때만 반응": the owner's own settings for
+//! one AI in a room, app AI or external AI. Only the server owner reads or changes them, on the
 //! same owner routes as the memory tab.
 use axum::{
     Json, Router,
@@ -39,7 +39,10 @@ registered_routes! {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InstructionsBody {
-    instructions: String,
+    #[serde(default)]
+    instructions: Option<String>,
+    #[serde(default)]
+    mention_only: Option<bool>,
 }
 
 /// Checks the owner on the request head, then hands the request back whole.
@@ -77,17 +80,33 @@ async fn write_instructions(
     let body: InstructionsBody = decode_json_body(request, MAX_BODY_BYTES)
         .await
         .map_err(|_| bad_request("The request body is invalid."))?;
-    match state
-        .store
-        .set_agent_instructions(&room_id, &participant_id, &body.instructions, chrono::Utc::now())
-        .await
-    {
-        Ok(true) => {}
-        Ok(false) => return Err(missing()),
-        Err(agentsassemble_persistence::PersistenceError::CommandRejected { message, .. }) => {
-            return Err(bad_request(&message));
+    if body.instructions.is_none() && body.mention_only.is_none() {
+        return Err(bad_request("Nothing to change."));
+    }
+    if let Some(instructions) = &body.instructions {
+        match state
+            .store
+            .set_agent_instructions(&room_id, &participant_id, instructions, chrono::Utc::now())
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => return Err(missing()),
+            Err(agentsassemble_persistence::PersistenceError::CommandRejected { message, .. }) => {
+                return Err(bad_request(&message));
+            }
+            Err(_) => return Err(unavailable()),
         }
-        Err(_) => return Err(unavailable()),
+    }
+    if let Some(mention_only) = body.mention_only {
+        match state
+            .store
+            .set_agent_mention_only(&room_id, &participant_id, mention_only)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => return Err(missing()),
+            Err(_) => return Err(unavailable()),
+        }
     }
     current(&state, &room_id, &participant_id).await
 }
@@ -99,7 +118,7 @@ async fn current(state: &AppState, room_id: &str, participant_id: &str) -> Resul
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(missing)?;
-    Ok(Json(json!({"instructions": current.instructions})))
+    Ok(Json(json!({"instructions": current.instructions, "mention_only": current.mention_only})))
 }
 
 fn bad_request(message: &str) -> Response {

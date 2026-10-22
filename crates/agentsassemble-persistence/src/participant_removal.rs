@@ -103,6 +103,9 @@ pub(crate) async fn removal_in(
     };
     let mut events = owned.events;
     let mut cleanups = owned.cleanups;
+    if participant.participant_type == "agent" {
+        crate::agent_instructions::forget(transaction, &principal.room_id, target_id).await?;
+    }
     let cleanup = if participant.participant_type == "agent"
         && !crate::connector_session::owns_participant(transaction, &principal.room_id, target_id)
             .await?
