@@ -55,6 +55,15 @@ export function agentSessionCanPause(session: RoomAgentSession) {
   );
 }
 
+/** Whether a running server-owned session may be stopped from the bulk owner controls. */
+export function agentSessionCanBulkStop(session: RoomAgentSession) {
+  return (
+    !session.external_owned &&
+    session.process_ownership === "server" &&
+    ["starting", "idle", "busy", "paused"].includes(session.runtime_status || "")
+  );
+}
+
 /** Whether the viewer may resume this session right now (owner of the detail-panel resume gate). */
 export function agentSessionCanResume(session: RoomAgentSession) {
   if (

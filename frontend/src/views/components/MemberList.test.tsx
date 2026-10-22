@@ -201,7 +201,7 @@ describe("MemberList component wiring", () => {
     expect(screen.queryByRole("menuitem", { name: "추방하기" })).toBeNull();
   });
 
-  it("pauses and resumes every eligible agent of an owner from the group header", async () => {
+  it("pauses, resumes and stops every eligible agent of an owner from the group header", async () => {
     const second = { ...AGENT, agent_id: "agent-2", display_name: "Agent Two" };
     const idle = agentSessionFixture({
       session_id: "session-1", participant_id: "agent-1", display_name: "Agent One",
@@ -228,6 +228,10 @@ describe("MemberList component wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "전체 재개" }));
     await waitFor(() => expect(onAgentControl).toHaveBeenCalledTimes(2));
     expect(onAgentControl).toHaveBeenCalledWith(paused, "resume");
+    fireEvent.click(screen.getByRole("button", { name: "전체 중지" }));
+    await waitFor(() => expect(onAgentControl).toHaveBeenCalledTimes(4));
+    expect(onAgentControl).toHaveBeenCalledWith(idle, "stop");
+    expect(onAgentControl).toHaveBeenCalledWith(paused, "stop");
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -264,6 +268,7 @@ describe("MemberList component wiring", () => {
     );
     expect(screen.queryByRole("button", { name: "전체 일시정지" })).toBeNull();
     expect(screen.queryByRole("button", { name: "전체 재개" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "전체 중지" })).toBeNull();
     view.rerender(
       <MemberList
         agents={[AGENT]}

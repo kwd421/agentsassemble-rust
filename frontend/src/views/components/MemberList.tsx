@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Check, ChevronDown, ChevronRight, Pause, Play, Search, Volume2, VolumeX } from "../../ui/icons";
+import { Check, ChevronDown, ChevronRight, Pause, Play, Search, Square, Volume2, VolumeX } from "../../ui/icons";
 import type {
   LiveAgent,
   RoomAgentSession,
@@ -11,7 +11,7 @@ import ProviderTruthChips from "./ProviderTruthChips";
 import type {
   AgentSessionControlAction,
 } from "./AgentSessionDetails";
-import { agentSessionCanPause, agentSessionCanResume } from "./AgentSessionDetails";
+import { agentSessionCanBulkStop, agentSessionCanPause, agentSessionCanResume } from "./AgentSessionDetails";
 import MemberDetailModal from "./member/MemberDetailModal";
 import MemberProfileCard from "./member/MemberProfileCard";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
@@ -25,6 +25,8 @@ import { userFacingError } from "../../lib/apiErrors";
 import { useRoomActivity } from "../../app/roomActivity";
 
 export type { RoleId };
+
+const BULK_FAILURE_VERB = { pause: "일시정지", resume: "재개", stop: "중지" } as const;
 
 export default function MemberList({
   agents,
@@ -194,7 +196,7 @@ export default function MemberList({
     setCollapsedGroups((previous) => ({ ...previous, [groupId]: !previous[groupId] }));
   }
 
-  async function runGroupControl(groupId: string, sessions: RoomAgentSession[], action: "pause" | "resume") {
+  async function runGroupControl(groupId: string, sessions: RoomAgentSession[], action: "pause" | "resume" | "stop") {
     if (!onAgentControl || groupControlBusy[groupId] || sessions.length === 0) return;
     setGroupControlBusy((previous) => ({ ...previous, [groupId]: true }));
     setGroupControlError((previous) => ({ ...previous, [groupId]: "" }));
@@ -206,9 +208,7 @@ export default function MemberList({
       if (failed > 0) {
         setGroupControlError((previous) => ({
           ...previous,
-          [groupId]: action === "pause"
-            ? `${failed}개의 에이전트를 일시정지하지 못했어요.`
-            : `${failed}개의 에이전트를 재개하지 못했어요.`,
+          [groupId]: `${failed}개의 에이전트를 ${BULK_FAILURE_VERB[action]}하지 못했어요.`,
         }));
       } else {
         onSessionActionComplete?.();
@@ -270,6 +270,9 @@ export default function MemberList({
           const resumable = onAgentControl
             ? group.agents.filter((entry) => entry.agentSession && agentSessionCanResume(entry.agentSession))
             : [];
+          const stoppable = onAgentControl
+            ? group.agents.filter((entry) => entry.agentSession && agentSessionCanBulkStop(entry.agentSession))
+            : [];
           return (
             <section key={group.id} className="dc-person-member-group">
               {group.person ? (
@@ -292,6 +295,14 @@ export default function MemberList({
                       <ToggleIcon size={12} aria-hidden />
                       <span>에이전트 {group.agents.length}명</span>
                     </button>
+                    {resumable.length > 0 && (
+                      <button type="button" className="dc-owner-agent-bulk-action"
+                        aria-label="전체 재개" title="전체 재개"
+                        disabled={groupControlBusy[group.id]}
+                        onClick={() => void runGroupControl(group.id, resumable.map((entry) => entry.agentSession!), "resume")}>
+                        <Play size={13} aria-hidden />
+                      </button>
+                    )}
                     {pausable.length > 0 && (
                       <button type="button" className="dc-owner-agent-bulk-action"
                         aria-label="전체 일시정지" title="전체 일시정지"
@@ -300,12 +311,12 @@ export default function MemberList({
                         <Pause size={13} aria-hidden />
                       </button>
                     )}
-                    {resumable.length > 0 && (
+                    {stoppable.length > 0 && (
                       <button type="button" className="dc-owner-agent-bulk-action"
-                        aria-label="전체 재개" title="전체 재개"
+                        aria-label="전체 중지" title="전체 중지"
                         disabled={groupControlBusy[group.id]}
-                        onClick={() => void runGroupControl(group.id, resumable.map((entry) => entry.agentSession!), "resume")}>
-                        <Play size={13} aria-hidden />
+                        onClick={() => void runGroupControl(group.id, stoppable.map((entry) => entry.agentSession!), "stop")}>
+                        <Square size={13} aria-hidden />
                       </button>
                     )}
                   </div>
