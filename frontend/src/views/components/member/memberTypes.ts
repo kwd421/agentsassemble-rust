@@ -6,6 +6,12 @@ export type RoleId = ParticipantRole;
 
 export type MemberSpeed = "fast" | "priority" | "flex";
 
+/** What the AI profile card edits: an app AI's session, or an external AI's
+ * room participant, keyed by its participant id. */
+export type AgentProfileTarget = Pick<RoomAgentSession,
+  "room_id" | "session_id" | "participant_id" | "display_name" | "avatar_image_url" | "provider_kind"> &
+  Partial<Pick<RoomAgentSession, "reasoning_effort">>;
+
 export type MemberEntry = {
   id: string;
   agent?: LiveAgent;
@@ -34,3 +40,22 @@ export type MemberEntry = {
   meetingId: string;
   icon: AppIcon;
 };
+
+/** An external AI joins through its own program, so it has a room participant and no session. */
+export function externalAgentProfile(entry: MemberEntry): AgentProfileTarget | null {
+  if (entry.agent || entry.agentSession || !entry.member) return null;
+  return externalAgentProfileOf(entry.member);
+}
+
+/** The profile of an AI participant the app does not run; callers rule out app AIs. */
+export function externalAgentProfileOf(member: RoomMember): AgentProfileTarget | null {
+  if (member.participant_type !== "agent") return null;
+  return {
+    room_id: member.room_id,
+    session_id: member.participant_id,
+    participant_id: member.participant_id,
+    display_name: member.display_name || member.participant_id,
+    avatar_image_url: member.avatar_image_url || "",
+    provider_kind: "",
+  };
+}

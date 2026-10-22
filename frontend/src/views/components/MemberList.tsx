@@ -19,7 +19,7 @@ import MemberRow from "./member/MemberRow";
 import { ROLE_OPTIONS } from "./member/memberHelpers";
 import { buildMemberOwnerGroups } from "./member/memberOwnerGroups";
 import { useMemberEntries } from "./member/useMemberEntries";
-import type { MemberEntry, RoleId } from "./member/memberTypes";
+import { externalAgentProfile, type MemberEntry, type RoleId, type AgentProfileTarget } from "./member/memberTypes";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { userFacingError } from "../../lib/apiErrors";
 import { useRoomActivity } from "../../app/roomActivity";
@@ -78,8 +78,8 @@ export default function MemberList({
   ) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
   localProviderActions?: boolean;
-  onAgentAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
-  onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
+  onAgentAvatarUpdate?: (session: AgentProfileTarget, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
+  onAgentProfileUpdate?: (session: AgentProfileTarget, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
     session: RoomAgentSession,
     settings: Record<string, string>,
@@ -219,7 +219,7 @@ export default function MemberList({
   }
 
   function openMemberDetails(entry: MemberEntry, anchor: DOMRect) {
-    if (entry.agent || entry.agentSession) setDetailEntryId(entry.id);
+    if (entry.agent || entry.agentSession || externalAgentProfile(entry)) setDetailEntryId(entry.id);
     else setProfileCard({ entryId: entry.id, anchor });
   }
 

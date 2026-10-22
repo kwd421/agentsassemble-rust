@@ -23,6 +23,7 @@ import {
   agentCreateAckProjectionsAreCoherent,
   agentControlPayloadId,
   agentProfileAckProjectionsAreCoherent,
+  externalAgentProfileAckIsCoherent,
   agentCreationProjectionFromEvent,
   agentReactivationProjectionFromEvent,
   agentReaddAckProjectionsAreCoherent,
@@ -524,6 +525,12 @@ export function commandAckResultIsValid(
     }
     const expectedAgentId = (action === "agent.readd" || action === "agent.profile.update")
       ? agentControlPayloadId(payload) : String(payload.agent_id || "");
+    // An external AI has no session, so its profile result is the participant alone.
+    if (action === "agent.profile.update" && expectedAgentId !== null && !("agent_session" in result)) {
+      return hasDurableEvent && Array.isArray(result.events) &&
+        result.events.every((candidate) => publicRoomEventIsValid(candidate, expectedRoomId)) &&
+        externalAgentProfileAckIsCoherent(result, expectedRoomId, expectedAgentId);
+    }
     if (expectedAgentId === null || !agentSessionIsValid(result.agent_session, expectedRoomId, expectedAgentId)) return false;
     if (action === "agent.profile.update") {
       return hasDurableEvent && Array.isArray(result.events) &&

@@ -10,7 +10,7 @@ import AgentSessionDetails, {
 import type { NativeCliProviderAvailability } from "../../../roomSocketClient";
 import ProviderLogo from "../ProviderLogo";
 import MemberUsage from "./MemberUsage";
-import type { MemberEntry } from "./memberTypes";
+import { externalAgentProfile, type MemberEntry, type AgentProfileTarget } from "./memberTypes";
 
 export type MemberDetailModalProps = {
   entry: MemberEntry;
@@ -21,8 +21,8 @@ export type MemberDetailModalProps = {
   ) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
   localProviderActions?: boolean;
-  onAgentAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
-  onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
+  onAgentAvatarUpdate?: (session: AgentProfileTarget, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
+  onAgentProfileUpdate?: (session: AgentProfileTarget, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
     session: RoomAgentSession,
     settings: Record<string, string>,
@@ -45,7 +45,8 @@ export default function MemberDetailModal({
   onActivityVisibilityChange,
 }: MemberDetailModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const visible = Boolean(entry.agent || entry.agentSession);
+  const external = externalAgentProfile(entry);
+  const visible = Boolean(entry.agent || entry.agentSession || external);
   useEffect(() => {
     if (!visible) return;
     const dialog = dialogRef.current;
@@ -103,7 +104,15 @@ export default function MemberDetailModal({
             onActivityVisibilityChange={onActivityVisibilityChange}
           />
           <MemberUsage key={usageProvider?.id || entry.id} displayName={entry.displayName} provider={usageProvider} />
-        </AgentProfileCard> : <>
+        </AgentProfileCard> : external ? <AgentProfileCard
+          key={`${external.room_id}:${external.participant_id}`}
+          session={external}
+          avatarImage={entry.avatarImage}
+          detail="외부 AI"
+          onClose={onClose}
+          onSave={onAgentProfileUpdate}
+          onAvatarUpdate={onAgentAvatarUpdate}
+        >{null}</AgentProfileCard> : <>
           <header className="dc-member-detail-modal-head">
             <span className="dc-member-detail-modal-avatar" data-role={entry.role}>
               {entry.avatarImage ? <ResourceImage className="dc-member-avatar-image" src={entry.avatarImage} alt="" /> :

@@ -520,3 +520,20 @@ it("binds profile ACK identity and projects both committed events", () => {
   expect(applyParticipantEvents([participant], result.events as unknown as RoomEvent[])[0].display_name).toBe("Renamed");
   expect(agentSessionUpdatesFromEvents(result.events as unknown as RoomEvent[])).toEqual([updated]);
 });
+
+it("accepts an external AI's profile ACK, which has no session", () => {
+  const { participant, createdEvent } = creationRecords();
+  const member = { ...participant, participant_id: "connector-ace", display_name: "Ace", avatar_image_url: "/api/agent-avatars/aa_0123456789abcdef0123456789abcdef", updated_at: createdEvent.created_at };
+  const memberEvent = { ...createdEvent, type: "participant_updated", participant_id: member.participant_id, participant_type: "agent",
+    display_name: "Ace", avatar_image_url: member.avatar_image_url };
+  const result = { participant: member, events: [memberEvent], event: memberEvent, event_seq: memberEvent.seq };
+  const valid = (value: unknown) => commandAckResultIsValid("agent.profile.update",
+    { agent_id: member.participant_id, display_name: "Ace" }, value, "general", "operator-local");
+  expect(valid(result)).toBe(true);
+  expect(valid({ ...result, participant: { ...member, participant_id: "connector-other" } })).toBe(false);
+  expect(valid({ ...result, events: [{ ...memberEvent, display_name: "Other" }], event: { ...memberEvent, display_name: "Other" } })).toBe(false);
+  expect(valid({ ...result, participant: { ...member, participant_type: "human" } })).toBe(false);
+  const [projected] = applyParticipantEvents([{ ...member, display_name: "Before", avatar_image_url: "" }], result.events as unknown as RoomEvent[]);
+  expect(projected.display_name).toBe("Ace");
+  expect(projected.avatar_image_url).toBe(member.avatar_image_url);
+});

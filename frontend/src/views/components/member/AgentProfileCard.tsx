@@ -2,7 +2,7 @@ import ResourceImage from "../ResourceImage";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pencil, X } from "../../../ui/icons";
 import { AGENT_PROFILE_NAME_CHARACTER_LIMIT } from "../../../types/generated/AGENT_PROFILE_WIRE";
-import type { RoomAgentSession } from "../../../api";
+import type { AgentProfileTarget } from "./memberTypes";
 import ImageCropDialog from "../ImageCropDialog";
 import ProviderLogo from "../ProviderLogo";
 import { isGalaxyAgent } from "./memberHelpers";
@@ -12,12 +12,12 @@ import { userFacingError } from "../../../lib/apiErrors";
 // Edited in place like the account profile: the photo opens the file picker and then
 // the crop dialog, and the name is its own edit box. No separate edit screen.
 export default function AgentProfileCard({ session, avatarImage, detail, onClose, onSave, onAvatarUpdate, children }: {
-  session: RoomAgentSession;
+  session: AgentProfileTarget;
   avatarImage?: string;
   detail?: string;
   onClose?: () => void;
-  onSave?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
-  onAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
+  onSave?: (session: AgentProfileTarget, settings: Record<string, string>) => void | Promise<void>;
+  onAvatarUpdate?: (session: AgentProfileTarget, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
   children: ReactNode;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);

@@ -577,7 +577,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   );
 
   const sendAgentProfileUpdate = useCallback(
-    async (session: RoomAgentSession, settings: Record<string, string>) => {
+    async (session: Pick<RoomAgentSession, "participant_id">, settings: Record<string, string>) => {
       const operationSocket = requireCurrentProjectionSocket();
       await operationSocket.command("agent.profile.update", {
         ...settings,

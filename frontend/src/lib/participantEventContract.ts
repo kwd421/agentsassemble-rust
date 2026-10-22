@@ -643,6 +643,18 @@ export function agentReaddAckProjectionsAreCoherent(
   }
 }
 
+export function externalAgentProfileAckIsCoherent(result: Record<string, unknown>, roomId: string, participantId: string): boolean {
+  if (!Array.isArray(result.events) || result.events.length !== 1 || !participantIsValid(result.participant)) return false;
+  const [event] = result.events as RoomEvent[];
+  const participant = result.participant;
+  return participant.participant_type === "agent" && participant.room_id === roomId &&
+    participant.participant_id === participantId &&
+    event.type === "participant_updated" && event.participant_type === "agent" &&
+    event.participant_id === participantId && event.display_name === participant.display_name &&
+    event.avatar_image_url === participant.avatar_image_url && event.created_at === participant.updated_at &&
+    eventProjectionsMatch(result.event, event);
+}
+
 export function agentProfileAckProjectionsAreCoherent(result: Record<string, unknown>): boolean {
   if (!Array.isArray(result.events) || result.events.length !== 2) return false;
   const [memberEvent, stateEvent] = result.events as RoomEvent[];

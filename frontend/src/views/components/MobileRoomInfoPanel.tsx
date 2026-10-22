@@ -1,3 +1,4 @@
+import { externalAgentProfileOf, type AgentProfileTarget } from "./member/memberTypes";
 import ResourceImage from "./ResourceImage";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import { useMemo, useState } from "react";
@@ -84,19 +85,22 @@ function statusTone(active: boolean) {
 function MobileMemberItem({
   row,
   session,
+  external,
   nested = false,
   onSelectAgentSession, onParticipantRemove,
 }: {
   row: MobileMemberRow;
   session?: RoomAgentSession;
+  external?: AgentProfileTarget;
   nested?: boolean;
-  onSelectAgentSession: (session: RoomAgentSession) => void;
+  onSelectAgentSession: (selection: { session_id: string }) => void;
   onParticipantRemove?: ParticipantRemovalAction;
 }) {
   const Icon = row.icon;
   const executionLocation = executionLocationLabel(session);
+  const profile = session || external;
   function selectSession() {
-    if (session) onSelectAgentSession(session);
+    if (profile) onSelectAgentSession(profile);
   }
   return (
     <article
@@ -116,7 +120,7 @@ function MobileMemberItem({
         <span className="dc-mobile-info-member-status" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="dc-mobile-info-member-name preserve-words">{session ? <button type="button" style={{ textAlign: "left" }} aria-label={`${row.displayName} 프로필 보기`}
+        <span className="dc-mobile-info-member-name preserve-words">{profile ? <button type="button" style={{ textAlign: "left" }} aria-label={`${row.displayName} 프로필 보기`}
           onClick={(event) => { event.stopPropagation(); selectSession(); }}>{row.displayName}</button> : row.displayName}</span>
         <span className="dc-mobile-info-member-detail preserve-words">
           {roleLabel(row.role)} · {row.detail}
@@ -252,11 +256,13 @@ function buildMobileMembers({
 function MobileMemberList({
   groups,
   agentSessions,
+  externalProfiles,
   onSelectAgentSession, onParticipantRemove,
 }: {
   groups: MobileMemberGroup[];
   agentSessions: RoomAgentSession[];
-  onSelectAgentSession: (session: RoomAgentSession) => void;
+  externalProfiles: Map<string, AgentProfileTarget>;
+  onSelectAgentSession: (selection: { session_id: string }) => void;
   onParticipantRemove?: ParticipantRemovalAction;
 }) {
   const sessionByParticipantId = new Map(
@@ -295,6 +301,7 @@ function MobileMemberList({
                         key={row.id}
                         row={row}
                         session={sessionByParticipantId.get(row.id)}
+                        external={externalProfiles.get(row.id)}
                         nested
                         onParticipantRemove={onParticipantRemove}
                         onSelectAgentSession={onSelectAgentSession}
@@ -356,8 +363,8 @@ export default function MobileRoomInfoPanel({
     session: RoomAgentSession,
     action: AgentSessionControlAction
   ) => void | Promise<void>;
-  onAgentAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
-  onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
+  onAgentAvatarUpdate?: (session: AgentProfileTarget, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
+  onAgentProfileUpdate?: (session: AgentProfileTarget, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
     session: RoomAgentSession,
     settings: Record<string, string>,
@@ -374,6 +381,12 @@ export default function MobileRoomInfoPanel({
   const selectedProvider = availableProviders.find(
     (provider) => provider.provider_kind === selectedAgentSession?.provider_kind
   );
+  const externalProfiles = useMemo(() => {
+    const appAgents = new Set([...agentSessions.map((session) => session.participant_id), ...agents.map((agent) => agent.agent_id)]);
+    return new Map(members.filter((member) => !appAgents.has(member.participant_id))
+      .flatMap((member) => { const profile = externalAgentProfileOf(member); return profile ? [[member.participant_id, profile] as const] : []; }));
+  }, [agentSessions, agents, members]);
+  const selectedExternal = selectedAgentSession ? undefined : externalProfiles.get(selectedAgentSessionId);
   const memberGroups = useMemo(
     () => buildMobileMembers({
       agents,
@@ -472,6 +485,25 @@ export default function MobileRoomInfoPanel({
             />
             </AgentProfileCard>
           </section>
+        ) : selectedExternal ? (
+          <section className="dc-mobile-agent-session-detail" style={{ padding: "20px 24px 32px" }}>
+            <button
+              type="button"
+              className="dc-agent-create-secondary"
+              onClick={() => setSelectedAgentSessionId("")}
+            >
+              <ArrowLeft size={16} />
+              멤버 목록
+            </button>
+            <AgentProfileCard
+              key={`${selectedExternal.room_id}:${selectedExternal.participant_id}`}
+              session={selectedExternal}
+              avatarImage={resolveAttachmentReference(selectedExternal.avatar_image_url, displayResourceBase)}
+              detail="외부 AI"
+              onSave={capabilities["agent.control"] ? onAgentProfileUpdate : undefined}
+              onAvatarUpdate={capabilities["agent.control"] ? onAgentAvatarUpdate : undefined}
+            >{null}</AgentProfileCard>
+          </section>
         ) : (
           <>
           {(capabilities["agent.control"] || canAddCompanion) && onStartAddAgent && (
@@ -492,6 +524,7 @@ export default function MobileRoomInfoPanel({
             onParticipantRemove={capabilities["room.manage"] ? onParticipantRemove : undefined}
             groups={memberGroups}
             agentSessions={agentSessions}
+            externalProfiles={externalProfiles}
             onSelectAgentSession={(session) => setSelectedAgentSessionId(session.session_id)}
           />
           </>

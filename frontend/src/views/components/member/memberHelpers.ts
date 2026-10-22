@@ -33,7 +33,7 @@ export function rowPointerMovedTooFar(start: { x: number; y: number }, event: Re
 }
 
 export function isGalaxyAgent(
-  session?: Pick<RoomAgentSession, "reasoning_effort">
+  session?: Partial<Pick<RoomAgentSession, "reasoning_effort">>
 ): boolean {
   // Codex "ultra" and Claude Code "ultracode" are the maximum-reasoning modes.
   return ["ultra", "ultracode"].includes(String(session?.reasoning_effort || "").trim().toLowerCase());

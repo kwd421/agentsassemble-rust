@@ -1,3 +1,4 @@
+import type { AgentProfileTarget } from "./member/memberTypes";
 import { Plus } from "../../ui/icons";
 import {
   type ChannelNotificationSetting,
@@ -39,8 +40,8 @@ type RoomConnectionPanelProps = {
   onParticipantMute?: (participantId: string, muted: boolean) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
   localProviderActions?: boolean;
-  onAgentAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
-  onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
+  onAgentAvatarUpdate?: (session: AgentProfileTarget, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
+  onAgentProfileUpdate?: (session: AgentProfileTarget, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
     session: RoomAgentSession,
     settings: Record<string, string>,

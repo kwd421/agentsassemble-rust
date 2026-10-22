@@ -553,7 +553,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     memberSelectError, setMemberSelectError, removeDirectoryRoom: removeRoom, removeMemberRoom: memberHosts.removeRoom,
     clearGuestSession, retainedActiveRoom, setActiveRoomId, setChannel, setAdminOpen, setRoomMenu, setChannelMenu,
     viewerParticipantId: activeGuestSession?.agentId || "operator-local", roomEvents: canonicalRoom.events });
-  const saveAgentAvatar = useCallback(async (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => {
+  const saveAgentAvatar = useCallback(async (session: Pick<RoomAgentSession, "room_id" | "session_id" | "participant_id">, file: File, displayName: string, signal: AbortSignal) => {
     if ((!managerAuthorityCurrent && !(activeGuestLocked && canControlActiveAgents)) || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
       throw new Error("현재 방의 에이전트 프로필 업로드 권위를 사용할 수 없습니다.");
     }

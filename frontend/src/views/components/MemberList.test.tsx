@@ -121,6 +121,24 @@ describe("MemberList component wiring", () => {
     expect(within(dialog).getByRole("button", { name: "시작" })).toBeTruthy();
   });
 
+  it("lets the owner rename an external AI from its profile, like an app AI", async () => {
+    const connector = participantFixture({ room_id: "room-1", participant_id: "connector-1", display_name: "아쎄이", participant_type: "agent", role: "agent" });
+    const onAgentProfileUpdate = vi.fn().mockResolvedValue(undefined);
+    render(<MemberList agents={[]} members={[participantFixture({ room_id: "room-1" }), connector]} viewerParticipantId="operator-local"
+      roomId="room-1" roomName="Room One" onAgentProfileUpdate={onAgentProfileUpdate} onAgentAvatarUpdate={vi.fn()} />);
+    fireEvent.click(screen.getByText("아쎄이"));
+    const dialog = screen.getByRole("dialog", { name: "아쎄이" });
+    expect(within(dialog).getByText("외부 AI")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "프로필 사진 변경" })).toBeTruthy();
+    const name = within(dialog).getByRole("textbox", { name: "표시 이름" });
+    fireEvent.focus(name);
+    fireEvent.change(name, { target: { value: "기합 아쎄이" } });
+    fireEvent.blur(name);
+    await waitFor(() => expect(onAgentProfileUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ participant_id: "connector-1", session_id: "connector-1", room_id: "room-1" }),
+      { display_name: "기합 아쎄이" }));
+  });
+
   it("closes the detail modal on a click outside the card, not inside it", () => {
     render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onAgentControl={vi.fn()} />);
     fireEvent.click(screen.getByText("Agent One"));
