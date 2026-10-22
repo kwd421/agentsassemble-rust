@@ -273,6 +273,8 @@ async fn enrich(
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
     value["role"] = json!(participant.role);
+    // The owner can rename an external AI; its client tells the AI once.
+    value["your_display_name"] = json!(participant.display_name);
     let allowed = state
         .store
         .delegated_direct_actions(
@@ -342,6 +344,13 @@ async fn wait_result(
     if messages.is_empty() && metadata["mention_overflow"] != true {
         return Ok(None);
     }
+    let principal = authorization.principal();
+    let participant = state
+        .store
+        .participant(&principal.room_id, &principal.participant_id)
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    metadata["your_display_name"] = json!(participant.display_name);
     let pending = json!(messages);
     metadata["messages"] = pending;
     metadata["last_seq"] = json!(delivered);

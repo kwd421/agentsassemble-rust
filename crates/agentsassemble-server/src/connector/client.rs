@@ -93,6 +93,8 @@ pub struct RoomConnectorClient {
     server: Url,
     invite_fingerprint: [u8; 32],
     pub(crate) display_name: String,
+    /// The name this AI was last told it has in the room.
+    known_name: parking_lot::Mutex<String>,
     state: Mutex<JoinState>,
     pending_command: Mutex<Option<PendingCommand>>,
     terminal_leave: parking_lot::Mutex<Option<TerminalLeave>>,
@@ -129,6 +131,7 @@ impl RoomConnectorClient {
             server,
             invite_fingerprint: fingerprint,
             display_name: name.to_owned(),
+            known_name: parking_lot::Mutex::new(name.to_owned()),
             state: Mutex::new(JoinState::Pending(PendingJoin {
                 request_id: Uuid::new_v4(),
                 client_secret: URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>()),
@@ -201,12 +204,15 @@ impl RoomConnectorClient {
                 )
                 .await?;
             let last_seq = sequence(&snapshot)?;
+            if let Some(current) = snapshot["your_display_name"].as_str() {
+                current.clone_into(&mut self.known_name.lock());
+            }
             let joined = ConnectorJoined {
                 room_state: room_state(&snapshot),
                 room_id: admission.room_id.clone(),
                 room_uid: admission.room_uid,
                 participant_id: admission.participant_id.clone(),
-                display_name: self.display_name.clone(),
+                display_name: self.known_name.lock().clone(),
                 last_seq,
                 attachment_transfers: admission.attachment_transfers,
             };
@@ -410,7 +416,25 @@ impl RoomConnectorClient {
     /// Reports ended sessions, bounded-response failures or network uncertainty.
     pub async fn read(&self) -> Result<Value, ConnectorClientError> {
         let session = self.session().await?;
-        self.get("read", &[], &session.bearer, false).await
+        let mut response = self.get("read", &[], &session.bearer, false).await?;
+        self.note_rename(&mut response);
+        Ok(response)
+    }
+
+    /// Adds a one-time notice when the room owner renamed this AI since it was
+    /// last told its name. Hosts without the field never trigger it.
+    fn note_rename(&self, response: &mut Value) {
+        let Some(current) = response["your_display_name"].as_str() else {
+            return;
+        };
+        let mut known = self.known_name.lock();
+        if *known == current {
+            return;
+        }
+        current.clone_into(&mut known);
+        response["name_changed"] = json!(format!(
+            "Your display name in this room was changed to \"{current}\". Use it when you refer to yourself."
+        ));
     }
 
     /// Pins under the current director and owner authority; exact UUID retries are safe.
@@ -523,8 +547,9 @@ impl RoomConnectorClient {
     pub async fn resync(&self) -> Result<Value, ConnectorClientError> {
         let session = self.session().await?;
         let mut cursor = session.wait_cursor.lock().await;
-        let response = self.get("read", &[], &session.bearer, false).await?;
+        let mut response = self.get("read", &[], &session.bearer, false).await?;
         *cursor = sequence(&response)?;
+        self.note_rename(&mut response);
         Ok(response)
     }
 
@@ -603,7 +628,7 @@ impl RoomConnectorClient {
         let session = self.session().await?;
         let mut cursor = session.wait_cursor.lock().await;
         let _transport = retain();
-        let response = self
+        let mut response = self
             .get(
                 "wait",
                 &[("after_seq", cursor.to_string())],
@@ -612,6 +637,7 @@ impl RoomConnectorClient {
             )
             .await?;
         *cursor = sequence(&response)?;
+        self.note_rename(&mut response);
         Ok(response)
     }
 

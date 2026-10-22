@@ -126,3 +126,44 @@ async fn normal_connector_silence_outlives_the_http_connection_deadline()
     server.stop().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn a_renamed_external_ai_is_told_its_new_name_once()
+-> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_domain::{
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, LOCAL_OPERATOR_PARTICIPANT_ID,
+        LOCAL_OPERATOR_USER_ID,
+    };
+    let (store, manager) = fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let invite = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, chrono::Utc::now())
+        .await?;
+    let link = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
+    let client = RoomConnectorClient::new(&link, "Ace", Some(&[url::Url::parse(&server.base_url)?]))?;
+    let joined = client.join().await?;
+    assert!(client.read().await?.get("name_changed").is_none());
+    let owner = AuthenticatedPrincipal {
+        principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "Host".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    store
+        .execute_agent_profile_update(
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&owner),
+            "rename-ace",
+            &json!({"agent_id": joined.participant_id, "display_name": "Ace 2"}),
+        )
+        .await?;
+    let told = client.read().await?;
+    assert_eq!(told["your_display_name"], "Ace 2");
+    assert!(told["name_changed"].as_str().is_some_and(|notice| notice.contains("\"Ace 2\"")));
+    assert!(client.read().await?.get("name_changed").is_none());
+    server.stop().await;
+    Ok(())
+}
