@@ -69,7 +69,7 @@ async fn current_generation_launch_retry(action: &'static str) {
 #[tokio::test]
 async fn rejected_and_previous_generation_launch_retries_keep_lifecycle_results() {
     for action in ["agent.resume", "agent.readd"] {
-        rejected_and_previous_generation_launch_retry(action)
+        Box::pin(rejected_and_previous_generation_launch_retry(action))
             .await
             .unwrap_or_else(|error| panic!("launch retry: {error}"));
     }

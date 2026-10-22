@@ -38,12 +38,12 @@ impl RoomRuntime {
         let (reply, response) = oneshot::channel();
         handle
             .mutations
-            .try_send(RoomMutation::Delegated(DelegatedCommand {
+            .try_send(RoomMutation::Delegated(Box::new(DelegatedCommand {
                 authority: authority.clone(),
                 request: request.clone(),
                 admission: self.principal_mutations.clone(),
                 reply,
-            }))
+            })))
             .map_err(|error| PersistenceError::CommandRejected {
                 code: if matches!(error, tokio::sync::mpsc::error::TrySendError::Full(_)) {
                     "room_busy"
@@ -66,7 +66,7 @@ pub(super) async fn execute(
     owners: RoomCommandOwners<'_>,
     command: DelegatedCommand,
 ) -> Option<crate::event_publication::PublicationAttempt> {
-    execute_with_reply(
+    Box::pin(execute_with_reply(
         owners,
         &command.admission,
         &command.authority,
@@ -74,7 +74,7 @@ pub(super) async fn execute(
         |result| {
             let _ = command.reply.send(result);
         },
-    )
+    ))
     .await
 }
 

@@ -1,11 +1,8 @@
 //! Host-owned retained-body admission, independent of encrypted queue credits.
 use crate::http_api::BodyDecodeError;
 use axum::{extract::Request, http::header};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
 use parking_lot::Mutex;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 const HOST_BYTES: usize = 512 * 1024 * 1024;

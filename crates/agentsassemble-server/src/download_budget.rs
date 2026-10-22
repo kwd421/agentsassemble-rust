@@ -52,6 +52,7 @@ impl Drop for Lease {
         let mut principals = self.principals.lock();
         // Every lease with a principal was counted when it was reserved.
         let Some(count) = principals.get_mut(principal) else {
+            tracing::error!("a download lease outlived its principal's count");
             return;
         };
         if self.streamed {

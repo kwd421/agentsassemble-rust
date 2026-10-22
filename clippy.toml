@@ -2,3 +2,7 @@
 # keeps `unwrap_used` and `expect_used` denied (see [workspace.lints]).
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+
+# A function past 150 lines is split; the pedantic default of 100 flagged
+# functions only a few lines over, where a split reads worse (owner, 2026-10-22).
+too-many-lines-threshold = 150

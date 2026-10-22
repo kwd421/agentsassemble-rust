@@ -162,7 +162,15 @@ pub(crate) async fn start(
         {
             return;
         }
-        crate::room_socket_session::run(socket, state, grant, Some(revocations), lease, wire).await;
+        Box::pin(crate::room_socket_session::run(
+            socket,
+            state,
+            grant,
+            Some(revocations),
+            lease,
+            wire,
+        ))
+        .await;
         let _ = output.send(json!({"op":"socket_close", "id":id})).await;
     };
     Ok((input, task))

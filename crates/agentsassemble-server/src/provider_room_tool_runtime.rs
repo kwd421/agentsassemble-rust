@@ -35,7 +35,7 @@ pub(crate) async fn handle_provider_room_tool(
             None
         }
         ProviderRoomToolRequest::DirectAction(request) => {
-            crate::room_runtime::delegated_direct::execute_with_reply(
+            Box::pin(crate::room_runtime::delegated_direct::execute_with_reply(
                 owners,
                 admission,
                 &delegated,
@@ -47,7 +47,7 @@ pub(crate) async fn handle_provider_room_tool(
                             .map_err(public_tool_error),
                     );
                 },
-            )
+            ))
             .await
         }
         ProviderRoomToolRequest::DelegatedActions => {

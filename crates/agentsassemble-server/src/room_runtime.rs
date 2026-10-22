@@ -595,10 +595,14 @@ fn spawn_room_task(
                     RoomInput::ProviderRecovery(Box::new(assignment))
                 }
             };
-            let mut retry_exhausted =
-                handle_room_input(&context, &mut turn_tasks, &mut provider_write_budget, input)
-                    .await
-                    .is_some_and(|publication| publication_retry.record(publication));
+            let mut retry_exhausted = Box::pin(handle_room_input(
+                &context,
+                &mut turn_tasks,
+                &mut provider_write_budget,
+                input,
+            ))
+            .await
+            .is_some_and(|publication| publication_retry.record(publication));
             if requests
                 .reconcile(&context.store, &context.room_id)
                 .await
@@ -668,7 +672,7 @@ async fn handle_room_input(
 ) -> Option<PublicationAttempt> {
     match input {
         RoomInput::Mutation(mutation) => {
-            return handle_room_mutation(
+            return Box::pin(handle_room_mutation(
                 RoomCommandOwners {
                     store: &context.store,
                     provider_catalog: &context.provider_catalog,
@@ -682,7 +686,7 @@ async fn handle_room_input(
                 &context.human_session_revocation_tx,
                 &context.active_rooms,
                 mutation,
-            )
+            ))
             .await;
         }
         RoomInput::Provider(result) => {
@@ -713,20 +717,22 @@ async fn handle_room_input(
                 });
                 return None;
             }
-            return crate::provider_room_tool_runtime::handle_provider_room_tool(
-                RoomCommandOwners {
-                    store: &context.store,
-                    provider_catalog: &context.provider_catalog,
-                    provider_adapter: &context.provider_adapter,
-                    event_tx: &context.event_tx,
-                    turn_tasks,
-                    ingress: &context.ingress,
-                    lifecycle_commands: &context.lifecycle_commands,
-                },
-                &context.room_id,
-                command,
-                provider_write_budget,
-                &context.principal_mutations,
+            return Box::pin(
+                crate::provider_room_tool_runtime::handle_provider_room_tool(
+                    RoomCommandOwners {
+                        store: &context.store,
+                        provider_catalog: &context.provider_catalog,
+                        provider_adapter: &context.provider_adapter,
+                        event_tx: &context.event_tx,
+                        turn_tasks,
+                        ingress: &context.ingress,
+                        lifecycle_commands: &context.lifecycle_commands,
+                    },
+                    &context.room_id,
+                    command,
+                    provider_write_budget,
+                    &context.principal_mutations,
+                ),
             )
             .await;
         }
@@ -779,7 +785,9 @@ async fn handle_room_mutation(
     mutation: RoomMutation,
 ) -> Option<PublicationAttempt> {
     match mutation {
-        RoomMutation::Delegated(command) => delegated_direct::execute(owners, command).await,
+        RoomMutation::Delegated(command) => {
+            Box::pin(delegated_direct::execute(owners, *command)).await
+        }
         RoomMutation::Command(command) => {
             Box::pin(handle_room_command(owners, session_revocations, command)).await
         }
@@ -953,7 +961,7 @@ enum RoomInput {
 }
 
 enum RoomMutation {
-    Delegated(delegated_direct::DelegatedCommand),
+    Delegated(Box<delegated_direct::DelegatedCommand>),
     Command(RoomCommand),
     HumanAdmission(HumanAdmissionCommand),
     ConnectorAdmission(connector::ConnectorAdmissionCommand),

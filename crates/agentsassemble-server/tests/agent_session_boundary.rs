@@ -292,14 +292,14 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
 #[cfg(unix)]
 #[tokio::test]
 async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
-    verify_room_turn_publication("completed").await;
+    Box::pin(verify_room_turn_publication("completed")).await;
 }
 
 #[cfg(unix)]
 #[tokio::test]
 async fn failed_or_interrupted_codex_turn_discards_tentative_room_publication() {
     for status in ["failed", "interrupted"] {
-        verify_room_turn_publication(status).await;
+        Box::pin(verify_room_turn_publication(status)).await;
     }
 }
 
@@ -425,7 +425,7 @@ async fn verify_room_turn_publication(first_status: &str) {
         server.stop().await;
         return;
     }
-    let uploaded = managed_tools::verify(
+    let uploaded = Box::pin(managed_tools::verify(
         &endpoint,
         &token,
         &attachment_ids[0],
@@ -434,7 +434,7 @@ async fn verify_room_turn_publication(first_status: &str) {
         session_id,
         server.state.rooms.subscribe("general").await,
         (&server.base_url, &server.state),
-    )
+    ))
     .await;
     let snapshot = server
         .state

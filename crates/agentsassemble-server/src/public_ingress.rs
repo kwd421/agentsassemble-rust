@@ -67,7 +67,7 @@ pub(crate) struct PublicIngress(
 enum PublicIngressKind {
     Disabled,
     Manual(ManualPublicIngress),
-    Managed(ManagedPublicIngress),
+    Managed(Box<ManagedPublicIngress>),
 }
 
 struct ManualPublicIngress {
@@ -215,7 +215,7 @@ impl PublicIngress {
         )));
         let endpoint_changes = projection.read().endpoint_changes.clone();
         Ok(Self(
-            Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
+            Arc::new(PublicIngressKind::Managed(Box::new(ManagedPublicIngress {
                 projection,
                 controller: ManagedController {
                     config: ManagedIngressConfig {
@@ -231,7 +231,7 @@ impl PublicIngress {
                     }),
                 },
                 named: Arc::new(RwLock::new(None)),
-            })),
+            }))),
             Arc::default(),
             Arc::default(),
             CancellationToken::new(),

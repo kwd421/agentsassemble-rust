@@ -112,14 +112,14 @@ pub(super) async fn verify(
             ])
         );
     }
-    verify_direct(
+    Box::pin(verify_direct(
         client,
         store,
         delegate,
         connection.as_ref(),
         &mut events,
         owner,
-    )
+    ))
     .await?;
     let (first, retry) = tokio::join!(
         call(client, "set_message_pin", args.clone()),
@@ -394,7 +394,7 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
         .await?
         .event
         .id;
-    verify(
+    Box::pin(verify(
         &client,
         &store,
         joined["participant_id"].as_str().unwrap(),
@@ -402,7 +402,7 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
         Some(joined["connection_id"].clone()),
         server.state().rooms.subscribe("general").await,
         (&server.base_url, server.state()),
-    )
+    ))
     .await?;
     role(
         &store,

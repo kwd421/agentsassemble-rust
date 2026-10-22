@@ -146,9 +146,11 @@ pub(super) async fn verify(
     let uploaded: Value =
         serde_json::from_str(&uploaded.content[0].as_text().unwrap().text).unwrap();
     assert_eq!(uploaded["size"], 30 * 1024 * 1024);
-    crate::delegated_pin::verify(&client, store, delegate, event_id, None, events, owner)
-        .await
-        .unwrap();
+    Box::pin(crate::delegated_pin::verify(
+        &client, store, delegate, event_id, None, events, owner,
+    ))
+    .await
+    .unwrap();
     client
         .cancel()
         .await

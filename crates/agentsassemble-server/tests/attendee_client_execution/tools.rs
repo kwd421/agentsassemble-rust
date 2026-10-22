@@ -135,7 +135,7 @@ pub(super) async fn verify(
         assert_eq!(escape.is_error, Some(true));
         let message = &escape.content[0].as_text().unwrap().text;
         assert!(message.contains("workspace_file_failed"));
-        crate::delegated_pin::verify(
+        Box::pin(crate::delegated_pin::verify(
             &client,
             &store,
             &delegate,
@@ -143,7 +143,7 @@ pub(super) async fn verify(
             None,
             events,
             (&owner.0, &owner.1),
-        )
+        ))
         .await
         .unwrap();
         let _ = client.cancel().await;
@@ -189,7 +189,9 @@ pub(super) async fn verify(
     assert_eq!(std::fs::read(&path)?, vec![42u8; 10_485_761]);
     command.complete(Ok(result));
     // A 12 MiB file exceeds the inline bound but fits the 25 MiB room: same limit as humans.
-    let upload_bytes: Vec<u8> = (0..12 * 1024 * 1024).map(|i| u8::try_from(i % 251).unwrap()).collect();
+    let upload_bytes: Vec<u8> = (0..12 * 1024 * 1024)
+        .map(|i| u8::try_from(i % 251).unwrap())
+        .collect();
     std::fs::write(
         std::path::Path::new(workspace).join("twelve.bin"),
         &upload_bytes,

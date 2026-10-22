@@ -353,7 +353,7 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
     )));
     let endpoint_changes = projection.read().endpoint_changes.clone();
     PublicIngress(
-        Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
+        Arc::new(PublicIngressKind::Managed(Box::new(ManagedPublicIngress {
             projection,
             controller: ManagedController {
                 config: ManagedIngressConfig {
@@ -369,7 +369,7 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
                 }),
             },
             named: Arc::new(RwLock::new(None)),
-        })),
+        }))),
         Arc::default(),
         Arc::default(),
         CancellationToken::new(),

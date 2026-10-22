@@ -232,7 +232,7 @@ impl Requests {
                 self.inputs.insert(id, Input::Socket(input));
                 self.tasks.spawn(async move {
                     let _permit = permit;
-                    task.await;
+                    Box::pin(task).await;
                     id
                 });
                 Ok(())

@@ -769,7 +769,8 @@ fn profile_authority(ticket: ConsumedProfileTicket) -> Result<ProfileAuthority, 
 #[derive(Debug, thiserror::Error)]
 #[error("{code}")]
 pub(crate) struct ProfileHttpError {
-    extra: serde_json::Map<String, serde_json::Value>,
+    // Boxed: most errors carry no extra fields, and the error rides in every Result.
+    extra: Box<serde_json::Map<String, serde_json::Value>>,
     status: StatusCode,
     pub(crate) code: std::borrow::Cow<'static, str>,
     pub(crate) message: String,
@@ -782,7 +783,7 @@ impl ProfileHttpError {
         message: impl Into<String>,
     ) -> Self {
         Self {
-            extra: serde_json::Map::new(),
+            extra: Box::default(),
             status,
             code: code.into(),
             message: message.into(),
@@ -792,7 +793,7 @@ impl ProfileHttpError {
     pub(crate) fn from_body(error: BodyDecodeError) -> Self {
         match error {
             BodyDecodeError::RequestTimeout => Self {
-                extra: serde_json::Map::new(),
+                extra: Box::default(),
                 status: StatusCode::REQUEST_TIMEOUT,
                 code: "request_timeout".into(),
                 message: "Request body timed out.".to_owned(),
@@ -806,7 +807,7 @@ impl ProfileHttpError {
     }
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
-            extra: serde_json::Map::new(),
+            extra: Box::default(),
             status: StatusCode::BAD_REQUEST,
             code: "bad_request".into(),
             message: message.into(),
@@ -815,7 +816,7 @@ impl ProfileHttpError {
 
     fn unauthorized() -> Self {
         Self {
-            extra: serde_json::Map::new(),
+            extra: Box::default(),
             status: StatusCode::UNAUTHORIZED,
             code: "unauthorized".into(),
             message: "Valid request authority is required.".to_owned(),
@@ -824,7 +825,7 @@ impl ProfileHttpError {
 
     fn payload_too_large() -> Self {
         Self {
-            extra: serde_json::Map::new(),
+            extra: Box::default(),
             status: StatusCode::PAYLOAD_TOO_LARGE,
             code: "payload_too_large".into(),
             message: "Request body exceeds the route limit.".to_owned(),
@@ -843,7 +844,7 @@ impl ProfileHttpError {
     }
     fn internal() -> Self {
         Self {
-            extra: serde_json::Map::new(),
+            extra: Box::default(),
             status: StatusCode::SERVICE_UNAVAILABLE,
             code: "persistence_failed".into(),
             message: "Persistence operation failed.".to_owned(),
@@ -894,7 +895,7 @@ impl From<PersistenceError> for ProfileHttpError {
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {
-                    extra: serde_json::Map::new(),
+                    extra: Box::default(),
                     status,
                     code,
                     message,
@@ -916,7 +917,7 @@ impl IntoResponse for ProfileHttpError {
         let mut payload = serde_json::Map::new();
         payload.insert("error".into(), self.message.into());
         payload.insert("code".into(), self.code.into());
-        payload.extend(self.extra);
+        payload.extend(*self.extra);
         (self.status, Json(payload)).into_response()
     }
 }
@@ -926,7 +927,7 @@ impl From<crate::upload_body_budget::Error> for ProfileHttpError {
         match error {
             crate::upload_body_budget::Error::Body(error) => Self::from_body(error),
             crate::upload_body_budget::Error::Exhausted => Self {
-                extra: serde_json::Map::new(),
+                extra: Box::default(),
                 status: StatusCode::TOO_MANY_REQUESTS,
                 code: crate::upload_body_budget::ERROR_CODE.into(),
                 message: "Upload body capacity is busy; retry later.".into(),
