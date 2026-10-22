@@ -69,6 +69,21 @@ pub struct AgentRuntimeStarted {
 }
 
 impl SqliteStore {
+    /// Whether this agent waits on a recovery stop before it can run again.
+    ///
+    /// # Errors
+    /// Fails when the session cannot be read.
+    pub async fn agent_recovery_required(
+        &self,
+        room_id: &str,
+        agent_id: &str,
+    ) -> Result<bool, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let session = load_session(&mut transaction, room_id, agent_id).await?;
+        transaction.commit().await?;
+        Ok(session.public.recovery_required)
+    }
+
     /// Durably records a start intent before the provider supervisor is called.
     ///
     /// # Errors

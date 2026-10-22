@@ -1540,12 +1540,20 @@ provider at a fixed address is `provider_model_unavailable` (the model is retire
 loaded); an owner-typed address keeps the generic code. A failed room
 turn keeps these fixed codes visible to the room instead of collapsing them into
 `provider_turn_failed`: `provider_api_busy`, `provider_api_unavailable`, `provider_model_unavailable`,
+`room_portal_unavailable` (the room went away mid-reply, as on app shutdown),
 `provider_rate_limited`, `provider_context_limit`, `provider_credential_rejected`,
 `provider_output_truncated`, `provider_room_action_missing`,
 `provider_room_read_missing` and `provider_tool_round_limit`. The agent details show
 each as one Korean line with no English provider text. Room rules tell an agent how
 mentions of it look (`<@ID>`) and that participant IDs are for addressing only, so it
 does not state its own ID in messages.
+
+Recovery in one step (owner decision, 2026-10-23): a session marked recovery-required
+shows as `오류`, and `agent.resume` performs the recovery itself. The server runs the
+confirmed stop under a request ID derived from the resume (so a retried resume replays
+it), waits briefly for the background runtime reconciliation when a crashed runtime
+cannot confirm its own stop, then starts. If cleanup is still pending it answers
+`agent_recovery_pending` and the owner resumes again. The owner never stops first.
 
 Freebuff and app-managed Antigravity remain excluded by user scope. External
 Antigravity's Room Connector admission is independent of this account matrix.

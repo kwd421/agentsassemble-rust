@@ -523,6 +523,8 @@ pub(super) fn public_error_code(value: &str) -> &'static str {
         "provider_room_action_missing" => "provider_room_action_missing",
         "provider_room_read_missing" => "provider_room_read_missing",
         "provider_tool_round_limit" => "provider_tool_round_limit",
+        // The room went away under the turn, as when the app shuts down mid-reply.
+        "room_portal_unavailable" => "room_portal_unavailable",
         _ => "provider_turn_failed",
     }
 }
@@ -556,6 +558,7 @@ mod public_error_code_tests {
             "provider_room_action_missing",
             "provider_room_read_missing",
             "provider_tool_round_limit",
+            "room_portal_unavailable",
         ] {
             assert_eq!(public_error_code(code), code);
         }

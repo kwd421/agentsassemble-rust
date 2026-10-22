@@ -67,6 +67,75 @@ impl<'a> LifecycleCommand<'a> {
     }
 }
 
+const RECOVERY_WAIT_STEP: std::time::Duration = std::time::Duration::from_millis(100);
+const RECOVERY_WAIT_STEPS: u32 = 50;
+
+/// Resume runs the recovery stop itself: a session marked for recovery needs a
+/// confirmed stop, which the server can perform, so the owner never has to stop
+/// before resuming. The stop gets a request ID derived from the resume, so a
+/// retried resume replays it instead of stopping twice.
+pub(crate) async fn execute_agent_resume(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    command: &LifecycleCommand<'_>,
+) -> CommandExecution {
+    let agent_id = command.payload.get("agent_id").and_then(Value::as_str);
+    let recovering = || async {
+        match agent_id {
+            Some(agent_id) => store
+                .agent_recovery_required(&command.principal.room_id, agent_id)
+                .await
+                .unwrap_or(false),
+            None => false,
+        }
+    };
+    if !recovering().await {
+        return execute_agent_start(store, provider_adapter, command).await;
+    }
+    let stop_request_id = uuid::Uuid::new_v5(
+        &uuid::Uuid::NAMESPACE_OID,
+        format!("agent.resume.recovery:{}", command.request_id).as_bytes(),
+    )
+    .to_string();
+    let stop = LifecycleCommand {
+        principal: command.principal,
+        request_id: &stop_request_id,
+        action: RoomAction::AgentStop,
+        payload: command.payload,
+        control: command.control,
+        receipt: command.receipt,
+        reserved: None,
+    };
+    let mut stopped = execute_agent_stop(store, provider_adapter, &stop).await;
+    let mut events = std::mem::take(&mut stopped.committed_events);
+    // A crashed runtime cannot confirm its own stop; the background runtime
+    // reconciliation proves it gone shortly after. Only that rare case waits,
+    // and only briefly, before asking the owner to resume again.
+    for _ in 0..RECOVERY_WAIT_STEPS {
+        if !recovering().await {
+            break;
+        }
+        tokio::time::sleep(RECOVERY_WAIT_STEP).await;
+    }
+    if recovering().await {
+        return CommandExecution::unresolved_failure_with_events(
+            PersistenceError::CommandRejected {
+                code: "agent_recovery_pending".into(),
+                message: "The previous run is still being cleaned up; resume again shortly."
+                    .to_owned(),
+            },
+            events,
+        );
+    }
+    let mut resumed = execute_agent_start(store, provider_adapter, command).await;
+    events.append(&mut resumed.committed_events);
+    resumed.committed_events = events;
+    let mut assignments = stopped.assignments;
+    assignments.append(&mut resumed.assignments);
+    resumed.assignments = assignments;
+    resumed
+}
+
 pub(crate) async fn execute_agent_start(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,

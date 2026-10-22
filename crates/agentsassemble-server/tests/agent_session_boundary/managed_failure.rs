@@ -2,6 +2,16 @@ use super::*;
 
 #[tokio::test]
 async fn idle_worker_exit_publishes_recovery_without_a_room_command() {
+    Box::pin(idle_worker_exit(false)).await;
+}
+
+// Resume runs the recovery stop itself: the owner never stops first.
+#[tokio::test]
+async fn resume_alone_recovers_an_idle_worker_exit() {
+    Box::pin(idle_worker_exit(true)).await;
+}
+
+async fn idle_worker_exit(resume: bool) {
     let _serial = AGENT_BOUNDARY_LOCK.lock().await;
     let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("failure root: {error}"));
     let store = SqliteStore::open(&format!(
@@ -98,8 +108,44 @@ async fn idle_worker_exit_publishes_recovery_without_a_room_command() {
             .count(),
         1
     );
-    confirm_stop(&mut socket, session_id).await;
+    if resume {
+        confirm_resume(&mut socket, session_id, &started).await;
+    } else {
+        confirm_stop(&mut socket, session_id).await;
+    }
     server.stop().await;
+}
+
+async fn confirm_resume<S>(socket: &mut RoomSocketPeer<S>, session_id: &str, started: &Path)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    send_command(
+        socket,
+        "idle-crash-resume",
+        "agent.resume",
+        &json!({"agent_id":session_id}),
+    )
+    .await;
+    let resumed = receive_command_ack(socket).await;
+    assert_eq!(resumed["result"]["agent_session"]["runtime_status"], "idle");
+    assert_eq!(
+        resumed["result"]["agent_session"]["recovery_required"],
+        false
+    );
+    assert_eq!(std::fs::read_to_string(started).unwrap().lines().count(), 2);
+    send_command(
+        socket,
+        "idle-crash-resume-stop",
+        "agent.stop",
+        &json!({"agent_id":session_id}),
+    )
+    .await;
+    let stopped = receive_command_ack(socket).await;
+    assert_eq!(
+        stopped["result"]["agent_session"]["runtime_status"],
+        "stopped"
+    );
 }
 
 async fn parent_pid(pid: u32) -> u32 {
