@@ -943,3 +943,14 @@ Current provider scope and final verification are owned by `docs/PRODUCT_REIMPLE
 terminalized without a late final for all three providers; the OpenCode defect found by
 that run was corrected, re-run from a fresh package, and approved by both manual
 reviewers before this boundary closed.
+
+## A person's AIs leave with them (2026-10-22, required behavior)
+
+When a person leaves the room, is kicked or is exported, every AI they own that is still joined
+or detached (server-run agents, companions and Room Connector AIs whose `owner_id` is that
+person) is removed in the same transaction, as `participant_kicked` by the same actor, before
+the person's own removal event. Their runtimes go through the existing durable cleanup, which
+the command attempts at once and the cleanup reconciler finishes if that attempt fails. Nobody
+is left to answer such an AI's approvals or stop it, and a turn-wide approval cannot outlive its
+owner's membership. The room owner cannot leave or be removed, so the owner's own AIs are not
+affected.

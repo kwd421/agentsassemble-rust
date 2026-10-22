@@ -27,7 +27,7 @@ use crate::{
 pub struct ParticipantRemovalMutation {
     pub outcome: CommandOutcome,
     pub revoked_session_fingerprints: Vec<[u8; 32]>,
-    pub cleanup: Option<RoomRuntimeCleanupKey>,
+    pub cleanups: Vec<RoomRuntimeCleanupKey>,
 }
 
 /// What one committed participant removal produced, shared by the owner's own kick
@@ -38,7 +38,48 @@ pub(crate) struct ParticipantRemovalCommit {
     pub event: RoomEvent,
     pub participant: Participant,
     pub revoked_session_fingerprints: Vec<[u8; 32]>,
-    pub cleanup: Option<RoomRuntimeCleanupKey>,
+    pub cleanups: Vec<RoomRuntimeCleanupKey>,
+}
+
+/// What removing a person's AIs along with them produced.
+#[derive(Default)]
+pub(crate) struct OwnedAgentsRemoval {
+    pub events: Vec<RoomEvent>,
+    pub revoked_session_fingerprints: Vec<[u8; 32]>,
+    pub cleanups: Vec<RoomRuntimeCleanupKey>,
+}
+
+/// A person's AIs leave with them: no one is left to answer their approvals
+/// or stop them. They are removed as kicked, by the same actor.
+pub(crate) async fn remove_owned_agents_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    owner_id: &str,
+) -> Result<OwnedAgentsRemoval, PersistenceError> {
+    let owned = sqlx::query_scalar::<_, String>(
+        "SELECT participant_id FROM participants WHERE room_id = ? AND json_extract(participant_json, '$.participant_type') = 'agent' AND json_extract(participant_json, '$.owner_id') = ? AND json_extract(participant_json, '$.status') IN ('joined', 'detached') ORDER BY participant_id",
+    )
+    .bind(&principal.room_id)
+    .bind(owner_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    let mut removed = OwnedAgentsRemoval::default();
+    for agent_id in owned {
+        let commit = Box::pin(removal_in(
+            transaction,
+            principal,
+            &agent_id,
+            ParticipantStatus::Kicked,
+            "participant_kicked",
+        ))
+        .await?;
+        removed.events.extend(commit.events);
+        removed
+            .revoked_session_fingerprints
+            .extend(commit.revoked_session_fingerprints);
+        removed.cleanups.extend(commit.cleanups);
+    }
+    Ok(removed)
 }
 
 /// Commits one participant removal inside the caller's transaction: the state
@@ -55,7 +96,13 @@ pub(crate) async fn removal_in(
 ) -> Result<ParticipantRemovalCommit, PersistenceError> {
     let mut participant = load_participant(transaction, &principal.room_id, target_id).await?;
     require_removal_transition(participant.status, status)?;
-    let mut events = Vec::new();
+    let owned = if participant.participant_type == "human" {
+        remove_owned_agents_in(transaction, principal, target_id).await?
+    } else {
+        OwnedAgentsRemoval::default()
+    };
+    let mut events = owned.events;
+    let mut cleanups = owned.cleanups;
     let cleanup = if participant.participant_type == "agent"
         && !crate::connector_session::owns_participant(transaction, &principal.room_id, target_id)
             .await?
@@ -71,8 +118,10 @@ pub(crate) async fn removal_in(
     } else {
         None
     };
-    let revoked_session_fingerprints =
-        revoke_participant_access(transaction, &principal.room_id, target_id).await?;
+    cleanups.extend(cleanup);
+    let mut revoked_session_fingerprints = owned.revoked_session_fingerprints;
+    revoked_session_fingerprints
+        .extend(revoke_participant_access(transaction, &principal.room_id, target_id).await?);
     crate::agent_handoff_trust::forget_person(transaction, &principal.room_id, target_id).await?;
     participant.status = status;
     participant.updated_at = Utc::now();
@@ -87,7 +136,7 @@ pub(crate) async fn removal_in(
         event,
         participant,
         revoked_session_fingerprints,
-        cleanup,
+        cleanups,
     })
 }
 
@@ -126,7 +175,7 @@ impl SqliteStore {
             return Ok(ParticipantRemovalMutation {
                 outcome,
                 revoked_session_fingerprints: Vec::new(),
-                cleanup: None,
+                cleanups: Vec::new(),
             });
         }
         let ParticipantRemovalCommit {
@@ -134,12 +183,12 @@ impl SqliteStore {
             event,
             participant,
             revoked_session_fingerprints,
-            cleanup,
+            cleanups,
         } = removal_in(&mut transaction, principal, &target_id, status, event_type).await?;
         let result = json!({
             "participant": participant,
             "revoked_sessions": revoked_session_fingerprints.len(),
-            "cleanup_pending": cleanup.is_some(),
+            "cleanup_pending": !cleanups.is_empty(),
             "event": event,
             "event_seq": event.seq,
             "events": events,
@@ -160,7 +209,7 @@ impl SqliteStore {
         Ok(ParticipantRemovalMutation {
             outcome,
             revoked_session_fingerprints,
-            cleanup,
+            cleanups,
         })
     }
 }

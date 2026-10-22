@@ -194,7 +194,15 @@ async fn companion_packet_requires_posting_human_and_keeps_its_parent_custody() 
             denied.resolution,
             Some(agentsassemble_protocol::CommandResolution::Rejected)
         );
-        agentsassemble_server::shutdown_attendee(&attendee, None, None).await?;
+        // The companion left with its person, so its session is already gone.
+        let shutdown = agentsassemble_server::shutdown_attendee(&attendee, None, None).await;
+        assert!(
+            shutdown
+                .as_ref()
+                .err()
+                .is_none_or(|error| error.code == "session_revoked"),
+            "{shutdown:?}"
+        );
     }
     server.stop().await;
     Ok(())

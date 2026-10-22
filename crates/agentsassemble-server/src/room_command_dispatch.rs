@@ -40,7 +40,7 @@ pub(crate) async fn execute_command(
     if let Some(RoomCommandSession::Browser(authorization)) = &command.session
         && requires_session_dispatch(authorization, command.action)
     {
-        return execute_room_session_command(store, command, authorization).await;
+        return execute_room_session_command(store, provider_adapter, command, authorization).await;
     }
     if let Some(RoomCommandSession::Connector(authorization)) = &command.session {
         return crate::room_runtime::connector::execute(store, command, authorization).await;
@@ -115,7 +115,9 @@ pub(crate) async fn execute_command(
         RoomAction::ParticipantMute => {
             execute_participant_mute(store, provider_adapter, command).await
         }
-        RoomAction::ParticipantLeave => execute_participant_leave(store, command).await,
+        RoomAction::ParticipantLeave => {
+            execute_participant_leave(store, provider_adapter, command).await
+        }
         RoomAction::ParticipantKick | RoomAction::ParticipantExport => {
             execute_participant_removal(store, provider_adapter, command).await
         }
@@ -220,18 +222,29 @@ async fn execute_participant_removal(
     };
     let mut execution = CommandExecution::success(mutation.outcome);
     execution.revoked_human_sessions = mutation.revoked_session_fingerprints;
-    if let Some(key) = mutation.cleanup {
+    stop_removed_runtimes(store, adapter, &mut execution, &mutation.cleanups).await;
+    execution
+}
+
+/// Stops the runtimes of removed AIs now; a failure keeps its durable
+/// reservation for the cleanup reconciler.
+async fn stop_removed_runtimes(
+    store: &SqliteStore,
+    adapter: &ProviderAdapter,
+    execution: &mut CommandExecution,
+    cleanups: &[agentsassemble_persistence::RoomRuntimeCleanupKey],
+) {
+    for key in cleanups {
         match Box::pin(crate::room_runtime_cleanup::attempt_cleanup(
-            store, adapter, &key,
+            store, adapter, key,
         ))
         .await
         {
             Ok(Some(commit)) => execution.extend_turn_commit(commit),
             Ok(None) => {}
-            Err(error) => crate::room_runtime_cleanup::log_pending(&key, &error),
+            Err(error) => crate::room_runtime_cleanup::log_pending(key, &error),
         }
     }
-    execution
 }
 
 async fn execute_participant_mute(
@@ -384,14 +397,29 @@ fn misrouted_durable_command(action: RoomAction) -> CommandExecution {
     })
 }
 
-async fn execute_participant_leave(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
+async fn execute_participant_leave(
+    store: &SqliteStore,
+    adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) -> CommandExecution {
     match store
         .execute_participant_leave(&command.principal, &command.request_id, &command.payload)
         .await
     {
-        Ok(mutation) => CommandExecution::participant_leave(mutation),
+        Ok(mutation) => left_with_owned_agents(store, adapter, mutation).await,
         Err(error) => CommandExecution::transactional_failure(error),
     }
+}
+
+async fn left_with_owned_agents(
+    store: &SqliteStore,
+    adapter: &ProviderAdapter,
+    mut mutation: agentsassemble_persistence::ParticipantLeaveMutation,
+) -> CommandExecution {
+    let cleanups = std::mem::take(&mut mutation.cleanups);
+    let mut execution = CommandExecution::participant_leave(mutation);
+    stop_removed_runtimes(store, adapter, &mut execution, &cleanups).await;
+    execution
 }
 
 fn log_agent_interrupt_error(
@@ -431,6 +459,7 @@ fn requires_session_dispatch(
 
 async fn execute_room_session_command(
     store: &SqliteStore,
+    adapter: &ProviderAdapter,
     command: &RoomCommand,
     authorization: &agentsassemble_persistence::RoomSessionAuthorization,
 ) -> CommandExecution {
@@ -479,7 +508,7 @@ async fn execute_room_session_command(
             )
             .await
         {
-            Ok(mutation) => CommandExecution::participant_leave(mutation),
+            Ok(mutation) => left_with_owned_agents(store, adapter, mutation).await,
             Err(error) => CommandExecution::transactional_failure(error),
         },
         _ => CommandExecution::transactional_failure(PersistenceError::CommandRejected {

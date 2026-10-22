@@ -111,6 +111,7 @@ impl SqliteStore {
             return Ok(crate::ParticipantLeaveMutation {
                 outcome,
                 revoked_session_fingerprints: Vec::new(),
+                cleanups: Vec::new(),
             });
         }
         let current = record.authorize(&expected.fingerprint, Utc::now())?;
@@ -158,6 +159,7 @@ impl SqliteStore {
         Ok(crate::ParticipantLeaveMutation {
             outcome,
             revoked_session_fingerprints: vec![current.fingerprint],
+            cleanups: Vec::new(),
         })
     }
 }

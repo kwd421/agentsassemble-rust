@@ -372,7 +372,7 @@ async fn connector_moderation_controls_membership_without_claiming_a_provider_pr
             &serde_json::json!({"participant_id":target}),
         )
         .await?;
-    assert!(removed.cleanup.is_none());
+    assert!(removed.cleanups.is_empty());
     assert_eq!(
         removed.revoked_session_fingerprints,
         vec![*admitted.authorization.session_fingerprint()]
@@ -406,7 +406,7 @@ async fn connector_moderation_controls_membership_without_claiming_a_provider_pr
             &serde_json::json!({"participant_id":target}),
         )
         .await?;
-    assert!(exported.cleanup.is_none());
+    assert!(exported.cleanups.is_empty());
     Ok(())
 }
 

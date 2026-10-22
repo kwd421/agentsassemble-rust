@@ -77,6 +77,7 @@ pub(crate) async fn leave_operator_session(
     Ok(crate::ParticipantLeaveMutation {
         outcome,
         revoked_session_fingerprints: vec![*current.session_fingerprint()],
+        cleanups: Vec::new(),
     })
 }
 

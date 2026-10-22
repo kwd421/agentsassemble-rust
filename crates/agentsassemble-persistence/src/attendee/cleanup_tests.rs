@@ -119,7 +119,11 @@ async fn revoked_attendee_cleanup_requires_its_exact_external_stop_and_retries_a
             &json!({"participant_id":connection.session().principal().participant_id}),
         )
         .await?;
-    let key = removal.cleanup.ok_or("cleanup pending missing")?;
+    let key = removal
+        .cleanups
+        .into_iter()
+        .next()
+        .ok_or("cleanup pending missing")?;
     assert!(
         store
             .authorize_attendee_session(fingerprint, now)
@@ -230,7 +234,11 @@ async fn idle_external_cleanup_preserves_removal_and_unstarted_cleanup_needs_no_
                 &json!({"participant_id":session.principal().participant_id}),
             )
             .await?;
-        let key = removal.cleanup.ok_or("cleanup missing")?;
+        let key = removal
+            .cleanups
+            .into_iter()
+            .next()
+            .ok_or("cleanup missing")?;
         if ready {
             let authority = store
                 .authorize_attendee_cleanup(session.session_fingerprint())

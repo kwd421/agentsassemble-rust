@@ -25,6 +25,8 @@ pub(crate) const PARTICIPANT_LEAVE_ACTION: &str = "participant.leave";
 pub struct ParticipantLeaveMutation {
     pub outcome: CommandOutcome,
     pub revoked_session_fingerprints: Vec<[u8; 32]>,
+    /// Runtimes of the AIs that left with this person.
+    pub cleanups: Vec<crate::RoomRuntimeCleanupKey>,
 }
 
 pub(crate) fn participant_leave_payload_is_exact(payload: &Value) -> bool {
@@ -136,6 +138,12 @@ async fn execute_leave_in(
     let mut participant =
         load_participant(transaction, &principal.room_id, &principal.participant_id).await?;
     require_exact_joined_human(&participant, principal)?;
+    let owned = crate::participant_removal::remove_owned_agents_in(
+        transaction,
+        principal,
+        &principal.participant_id,
+    )
+    .await?;
     crate::agent_handoff_trust::forget_person(
         transaction,
         &principal.room_id,
@@ -144,10 +152,11 @@ async fn execute_leave_in(
     .await?;
     participant.status = ParticipantStatus::Left;
     participant.updated_at = Utc::now();
-    let revoked_session_fingerprints = match session_fingerprint {
-        Some(fingerprint) => end_exact_session(transaction, principal, fingerprint).await?,
-        None => Vec::new(),
-    };
+    let mut revoked_session_fingerprints = owned.revoked_session_fingerprints;
+    if let Some(fingerprint) = session_fingerprint {
+        revoked_session_fingerprints
+            .extend(end_exact_session(transaction, principal, fingerprint).await?);
+    }
     crate::participant_rows::save_participant_exact(
         transaction,
         &principal.room_id,
@@ -174,6 +183,8 @@ async fn execute_leave_in(
         "event": event,
         "event_seq": event.seq,
     });
+    let mut events = owned.events;
+    events.push(event);
     let outcome = store_result(
         transaction,
         principal,
@@ -181,12 +192,13 @@ async fn execute_leave_in(
         PARTICIPANT_LEAVE_ACTION,
         payload_hash,
         result,
-        vec![event],
+        events,
     )
     .await?;
     Ok(ParticipantLeaveMutation {
         outcome,
         revoked_session_fingerprints,
+        cleanups: owned.cleanups,
     })
 }
 
@@ -476,7 +488,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("remove admitted human: {error}"));
         assert_eq!(mutation.revoked_session_fingerprints, vec![fingerprint]);
-        assert!(mutation.cleanup.is_none());
+        assert!(mutation.cleanups.is_empty());
         assert!(matches!(
             store.authorize_human_session(&fingerprint).await,
             Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
