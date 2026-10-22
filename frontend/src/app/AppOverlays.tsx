@@ -1,3 +1,4 @@
+import { EXTERNAL_AI_ID_PREFIX } from "../views/components/member/memberTypes";
 import type { SavedFriendsAuthority } from "../api/friends";
 import { centralIdentityConfigured, loadCentralSession } from "../lib/central/identity";
 import ConnectionBanner from "../views/components/ConnectionBanner";
@@ -83,6 +84,10 @@ export default function AppOverlays({ controller, companionInvites, friendAuthor
             canCreateLink={inviteModalRoom.roomOrigin !== "remote_server" || Boolean(guestSession?.centralOwner)}
             humanInvites={roomInvite.humanInvites}
             connectorInvites={roomInvite.connectorInvites}
+            connectorSeats={inviteModalRoom.id === activeRoom.id ? canonicalRoom.participantRecords
+              .filter((participant) => participant.participant_type === "agent" && participant.participant_id.startsWith(EXTERNAL_AI_ID_PREFIX) &&
+                participant.status !== "kicked" && participant.status !== "exported")
+              .map((participant) => ({ id: participant.participant_id, name: participant.display_name || participant.participant_id })) : []}
             attendeeInvites={roomInvite.attendeeInvites}
             operatorPairings={roomInvite.pairings}
             pairingCreating={roomInvite.pairingCreating}

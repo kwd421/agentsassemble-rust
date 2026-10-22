@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import type { ConnectorInvitePresentation } from "../../app/useManagedAiInvites";
+import type { ConnectorInvitePresentation, ConnectorSeat } from "../../app/useManagedAiInvites";
 
 export type ConnectorInviteControls = {
   invites: readonly ConnectorInvitePresentation[];
   creating: boolean;
   create: () => void;
+  /** Makes an invitation that puts an existing external AI back in its own seat. */
+  reconnect?: (seat: ConnectorSeat) => void;
   copy: (key: string) => boolean | Promise<boolean> | void;
 };
 
-export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }: { controls: ConnectorInviteControls; disabled: boolean; localOnly: boolean; mcpOrigin?: string }) {
+export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin, seats = [] }: { controls: ConnectorInviteControls; disabled: boolean; localOnly: boolean; mcpOrigin?: string; seats?: readonly ConnectorSeat[] }) {
   const [copiedKey, setCopiedKey] = useState("");
   const copiedTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => {
@@ -32,10 +34,22 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }
       disabled={disabled || controls.creating} onClick={() => controls.create()}>
       {controls.creating ? "초대 만드는 중" : localOnly ? "이 컴퓨터용 초대 만들기" : "초대 만들기"}
     </button>
+    {controls.reconnect && seats.length > 0 && <details className="dc-invite-details">
+      <summary>기존 외부 AI 다시 연결</summary>
+      <p>새 대화에서 다시 들어오는 외부 AI를 원래 자리로 불러요. 역할, 이름, 프로필 사진이 그대로 남아요.</p>
+      <div role="list">
+        {seats.map((seat) => <div className="dc-invite-friend-row" role="listitem" key={seat.id}>
+          <strong className="preserve-words">{seat.name}</strong>
+          <button type="button" className="dc-button dc-button--md dc-button--secondary"
+            aria-label={`${seat.name} 다시 연결 초대 만들기`}
+            disabled={disabled || controls.creating} onClick={() => controls.reconnect?.(seat)}>다시 연결 초대</button>
+        </div>)}
+      </div>
+    </details>}
     {controls.invites.length > 0 && <div role="list">
       {controls.invites.map((invite, index) => <div className="dc-invite-friend-row" style={{ flexWrap: "wrap" }} role="listitem" key={invite.key}>
         <div className="dc-invite-card-copy">
-          <strong>AI 초대 {controls.invites.length - index}{invite.local ? " · 이 컴퓨터 전용" : ""}</strong>
+          <strong>{invite.seatName ? `${invite.seatName} 다시 연결` : `AI 초대 ${controls.invites.length - index}`}{invite.local ? " · 이 컴퓨터 전용" : ""}</strong>
           <p>{invite.copyable ? `만료 ${new Date(invite.expiresAt).toLocaleTimeString()}` : "만료되었거나 현재 주소에서 사용할 수 없어요."}</p>
         </div>
         <button type="button" className="dc-button dc-button--lg dc-button--secondary" style={{ minWidth: 44 }}

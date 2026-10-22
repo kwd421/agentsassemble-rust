@@ -2,4 +2,9 @@
 import type { InviteReach } from "./InviteReach.js";
 import type { InviteScope } from "./InviteScope.js";
 
-export type CreateConnectorInviteRequest = { request_id: string, scope: InviteScope, reach: InviteReach, };
+export type CreateConnectorInviteRequest = { request_id: string, scope: InviteScope, reach: InviteReach, 
+/**
+ * Reconnects an existing external AI seat instead of adding a participant.
+ * Older hosts reject the field, so clients send it only for a reconnect.
+ */
+seat_participant_id?: string, };

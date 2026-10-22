@@ -10,9 +10,11 @@ import { userFacingError } from "../lib/apiErrors";
 type Origins = { publicOrigin: string; localOrigin: string };
 type OriginProof = Origins & { isCurrent: () => boolean };
 type Pending = { authority: DesktopManagerRoomAuthority; requestId: string };
-export type ConnectorInvitePresentation = { key: string; expiresAt: string; copyable: boolean; local: boolean };
+export type ConnectorInvitePresentation = { key: string; expiresAt: string; copyable: boolean; local: boolean; seatName?: string };
+/** An external AI seat a reconnect invitation can take back. */
+export type ConnectorSeat = { id: string; name: string };
 export type AttendeeInvitePresentation = ConnectorInvitePresentation & { displayName: string; provider: string };
-type ManagedAiInvite = (ConnectorInviteCustody & { kind: "connector" }) | (AttendeePacketCustody & { kind: "attendee"; authority: DesktopManagerRoomAuthority });
+type ManagedAiInvite = (ConnectorInviteCustody & { kind: "connector"; seatName?: string }) | (AttendeePacketCustody & { kind: "attendee"; authority: DesktopManagerRoomAuthority });
 
 function isLocal(record: ManagedAiInvite) {
   return record.kind === "connector" && record.reach === "local";
@@ -51,14 +53,14 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
     const origin = isLocal(record) ? origins.localOrigin : origins.publicOrigin;
     return record.origin === origin && record.expiresAtMs > time && authorityCurrent(record.authority);
   }
-  async function create(friendId?: string) {
+  async function create(friendId?: string, seat?: ConnectorSeat) {
     if (busy.current || !roomDockId) return;
     busy.current = true; setCreating(true);
     const refresh = captureOriginRefresh();
     let proof: OriginProof | null = null;
     try {
       const authority = resolveManager(roomDockId);
-      const pendingKey = JSON.stringify([roomDockId, friendId ?? null]);
+      const pendingKey = JSON.stringify([roomDockId, friendId ?? null, seat?.id ?? null]);
       let receipt = pending.current.get(pendingKey);
       if (!receipt || !sameManagerAuthority(receipt.authority, authority)) {
         receipt = { authority, requestId: crypto.randomUUID() };
@@ -81,7 +83,7 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
       assertCurrent();
       const record: ManagedAiInvite = friendId
         ? { ...await createFriendAttendeeInvite(authority, { request_id: receipt.requestId, friend_id: friendId }, assertCurrent, remote), kind: "attendee", authority }
-        : { ...await createConnectorInvite(authority, { request_id: receipt.requestId, scope: "read_write", reach }, assertCurrent, remote), kind: "connector" };
+        : { ...await createConnectorInvite(authority, { request_id: receipt.requestId, scope: "read_write", reach, ...(seat ? { seat_participant_id: seat.id } : {}) }, assertCurrent, remote), kind: "connector", seatName: seat?.name };
       // Keep the receipt after any uncertain response. Only a confirmed result releases it.
       pending.current.delete(pendingKey);
       if (!active.current) return;
@@ -124,9 +126,10 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
   const currentRecords = records.filter((record) => authorityCurrent(record.authority));
   const invites: ConnectorInvitePresentation[] = currentRecords.filter((record) => record.kind === "connector").map((record) => ({
     key: record.result.invite_id, expiresAt: record.result.expires_at, copyable: copyable(record, origins, now), local: isLocal(record),
+    ...(record.seatName ? { seatName: record.seatName } : {}),
   })).reverse();
   const attendeeInvites: AttendeeInvitePresentation[] = currentRecords.filter((record) => record.kind === "attendee").map((record) => ({
     key: record.result.invite_id, expiresAt: record.result.expires_at, copyable: copyable(record, origins, now), local: false, displayName: record.result.display_name, provider: record.result.provider,
   })).reverse();
-  return { invites, attendeeInvites, creating, create, copy };
+  return { invites, attendeeInvites, creating, create, reconnect: (seat: ConnectorSeat) => void create(undefined, seat), copy };
 }

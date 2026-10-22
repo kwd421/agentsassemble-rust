@@ -5,6 +5,7 @@ import type { SavedFriendsAuthority } from "../../api/friends";
 import { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import { AttendeeFriendInviteCard, type AttendeeInviteControls } from "./AttendeeFriendInviteCard";
 import { ConnectorInviteCard, type ConnectorInviteControls } from "./ConnectorInviteCard";
+import type { ConnectorSeat } from "../../app/useManagedAiInvites";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Copy, Settings, X } from "../../ui/icons";
 import type { PublicInviteStatus } from "../../api";
@@ -58,6 +59,7 @@ export default function RoomInviteModal({
   canCreateLink = true,
   humanInvites = [],
   connectorInvites,
+  connectorSeats,
   attendeeInvites,
   operatorPairings = [],
   pairingCreating = false,
@@ -89,6 +91,8 @@ export default function RoomInviteModal({
   canCreateLink?: boolean;
   humanInvites?: readonly HumanInvitePresentation[];
   connectorInvites?: ConnectorInviteControls;
+  /** External AIs of this room that a reconnect invitation can put back in their seat. */
+  connectorSeats?: readonly ConnectorSeat[];
   attendeeInvites?: AttendeeInviteControls;
   operatorPairings?: readonly OperatorPairingPresentation[];
   pairingCreating?: boolean;
@@ -379,7 +383,7 @@ export default function RoomInviteModal({
           </section>}
 
           {tab === "ai" && attendeeInvites && friendAuthority !== null && <AttendeeFriendInviteCard directory={friendsDirectory} controls={attendeeInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
-          {tab === "ai" && connectorInvites && <ConnectorInviteCard controls={connectorInvites} localOnly={!publicAccessRunning}
+          {tab === "ai" && connectorInvites && <ConnectorInviteCard controls={connectorInvites} localOnly={!publicAccessRunning} seats={connectorSeats}
             mcpOrigin={publicAccessBusy ? undefined : publicUrl}
             disabled={publicAccessBusy || (!publicAccessRunning && !tunnelStatus?.local_url)} />}
           {tab === "device" && onCreatePairing && onCopyPairing && onRevokePairing && (
