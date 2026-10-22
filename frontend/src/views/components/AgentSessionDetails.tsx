@@ -55,6 +55,13 @@ export function agentSessionCanPause(session: RoomAgentSession) {
   );
 }
 
+/** What pause, stop and resume do, shown when hovering the controls. */
+export const AGENT_CONTROL_HINTS = {
+  pause: "쉬는 동안 새 메시지에 답하지 않아요. 실행은 그대로 두어서 재개하면 바로 이어가요.",
+  stop: "실행을 끝내요. 답하는 중이었다면 그 답도 멈춰요. 재개하면 다시 실행해요.",
+  resume: "다시 깨워요. 멈춘 동안 온 메시지는 다음에 부를 때 함께 읽어요.",
+} as const;
+
 /** Whether a running server-owned session may be stopped from the bulk owner controls.
  * A starting session is left out: the server refuses to stop it until the start settles. */
 export function agentSessionCanBulkStop(session: RoomAgentSession) {
@@ -428,6 +435,7 @@ export default function AgentSessionDetails({
             type="button"
             className="dc-button dc-button--md dc-button--secondary"
             title="세션 일시정지"
+            data-tip={AGENT_CONTROL_HINTS.pause}
             disabled={!canPause || Boolean(pendingAction)}
             onClick={() => void runControl("pause")}
           >
@@ -438,6 +446,7 @@ export default function AgentSessionDetails({
             type="button"
             className={`dc-button dc-button--md ${strandedRuntime ? "dc-button--secondary" : "dc-button--danger-soft"}`}
             title={strandedRuntime ? "남은 실행이 끝났는지 확인하고 정리해요" : "세션 중지"}
+            data-tip={strandedRuntime ? undefined : AGENT_CONTROL_HINTS.stop}
             disabled={!canStop || Boolean(pendingAction)}
             onClick={() => void runControl("stop")}
           >
@@ -448,6 +457,7 @@ export default function AgentSessionDetails({
             type="button"
             className="dc-button dc-button--md dc-button--primary"
             title="세션 재개"
+            data-tip={AGENT_CONTROL_HINTS.resume}
             disabled={!canResume || Boolean(pendingAction)}
             onClick={() => void runControl("resume")}
           >

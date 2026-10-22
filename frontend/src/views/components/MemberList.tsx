@@ -11,7 +11,7 @@ import ProviderTruthChips from "./ProviderTruthChips";
 import type {
   AgentSessionControlAction,
 } from "./AgentSessionDetails";
-import { agentSessionCanBulkStop, agentSessionCanPause, agentSessionCanResume } from "./AgentSessionDetails";
+import { AGENT_CONTROL_HINTS, agentSessionCanBulkStop, agentSessionCanPause, agentSessionCanResume } from "./AgentSessionDetails";
 import MemberDetailModal from "./member/MemberDetailModal";
 import MemberProfileCard from "./member/MemberProfileCard";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
@@ -297,7 +297,7 @@ export default function MemberList({
                     </button>
                     {resumable.length > 0 && (
                       <button type="button" className="dc-owner-agent-bulk-action"
-                        aria-label="전체 재개" title="전체 재개"
+                        aria-label="전체 재개" title="전체 재개" data-tip={`전체 재개 · ${AGENT_CONTROL_HINTS.resume}`}
                         disabled={groupControlBusy[group.id]}
                         onClick={() => void runGroupControl(group.id, resumable.map((entry) => entry.agentSession!), "resume")}>
                         <Play size={13} aria-hidden />
@@ -305,7 +305,7 @@ export default function MemberList({
                     )}
                     {pausable.length > 0 && (
                       <button type="button" className="dc-owner-agent-bulk-action"
-                        aria-label="전체 일시정지" title="전체 일시정지"
+                        aria-label="전체 일시정지" title="전체 일시정지" data-tip={`전체 일시정지 · ${AGENT_CONTROL_HINTS.pause}`}
                         disabled={groupControlBusy[group.id]}
                         onClick={() => void runGroupControl(group.id, pausable.map((entry) => entry.agentSession!), "pause")}>
                         <Pause size={13} aria-hidden />
@@ -313,7 +313,7 @@ export default function MemberList({
                     )}
                     {stoppable.length > 0 && (
                       <button type="button" className="dc-owner-agent-bulk-action"
-                        aria-label="전체 중지" title="전체 중지"
+                        aria-label="전체 중지" title="전체 중지" data-tip={`전체 중지 · ${AGENT_CONTROL_HINTS.stop}`}
                         disabled={groupControlBusy[group.id]}
                         onClick={() => void runGroupControl(group.id, stoppable.map((entry) => entry.agentSession!), "stop")}>
                         <Square size={13} aria-hidden />

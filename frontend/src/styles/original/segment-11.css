@@ -542,6 +542,8 @@ button.dc-dialog-close:focus-visible {
 .dc-tooltip {
   position: fixed;
   z-index: 1000;
+  /* Sized by its text, not by the room left at its previous position. */
+  width: max-content;
   max-width: 240px;
   border: 1px solid #323237;
   border-radius: 8px;
@@ -552,6 +554,7 @@ button.dc-dialog-close:focus-visible {
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
+  word-break: keep-all;
   overflow-wrap: anywhere;
   pointer-events: none;
 }
