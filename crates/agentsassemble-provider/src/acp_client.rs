@@ -235,6 +235,7 @@ impl AcpClient {
         };
         Ok(ProviderTurnCompleted {
             memory_summary: None,
+            usage: None,
             turn_id: turn_id.to_owned(),
             provider_turn_id: turn_id.to_owned(),
             provider_session_id: Some(session_id),

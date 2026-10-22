@@ -84,6 +84,8 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "agent_memory_pieces"
         // Live MCP connections belong to the host process that served them.
         | "connector_connections"
+        // Model-use statistics are not room content.
+        | "agent_usage"
         | "room_message_search_records"
         | "room_message_search_phrase"
         | "room_write_budgets"

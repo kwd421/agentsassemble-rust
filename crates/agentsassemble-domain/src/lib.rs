@@ -25,6 +25,7 @@ mod message_mutations;
 mod message_pins;
 pub use message_pins::SetMessagePin;
 mod message_search;
+mod agent_usage;
 mod model;
 mod persona;
 mod persona_text;
@@ -173,3 +174,4 @@ pub use delegated_actions::*;
 
 mod delegated_confirmation;
 pub use delegated_confirmation::*;
+pub use agent_usage::{AgentTurnUsage, AgentUsageTotals};

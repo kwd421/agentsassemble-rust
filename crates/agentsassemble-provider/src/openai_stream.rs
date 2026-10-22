@@ -82,6 +82,8 @@ pub(crate) struct OpenAiUsage {
     pub(crate) prompt: u64,
     pub(crate) completion: u64,
     pub(crate) total: u64,
+    /// Prompt tokens served from the provider's cache.
+    pub(crate) cached: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -113,6 +115,21 @@ struct UsageChunk {
     completion: u64,
     #[serde(rename = "total_tokens")]
     total: u64,
+    /// DeepSeek's count of prompt tokens served from its cache.
+    #[serde(default)]
+    prompt_cache_hit_tokens: Option<u64>,
+    /// OpenAI-style providers put the same count here.
+    #[serde(default)]
+    prompt_tokens_details: Option<PromptTokensDetails>,
+    /// Some providers report it at the top level.
+    #[serde(default)]
+    cached_tokens: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,6 +268,13 @@ impl CompletionAccumulator {
                 prompt: usage.prompt,
                 completion: usage.completion,
                 total: usage.total,
+                // Never more than the prompt, whatever a server reports.
+                cached: usage
+                    .prompt_cache_hit_tokens
+                    .or_else(|| usage.prompt_tokens_details.and_then(|details| details.cached_tokens))
+                    .or(usage.cached_tokens)
+                    .unwrap_or(0)
+                    .min(usage.prompt),
             };
             // Gemini repeats a running total on every chunk; a later report may
             // only grow, and the last one is the turn's usage.
@@ -707,6 +731,37 @@ mod tests {
             .err()
             .unwrap_or_else(|| panic!("truncated stream must fail"));
         assert_eq!(error, OpenAiStreamError::InvalidResponse);
+    }
+
+    #[tokio::test]
+    async fn cache_hits_are_read_in_deepseek_and_openai_form() {
+        for usage in [
+            json!({"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105, "prompt_cache_hit_tokens": 96}),
+            json!({"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105, "prompt_tokens_details": {"cached_tokens": 96}}),
+            json!({"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}),
+        ] {
+            let payload = [
+                event(&json!({
+                    "id": "chat-cache",
+                    "model": "model-1",
+                    "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": "stop"}]
+                })),
+                event(&json!({"id": "chat-cache", "model": "model-1", "choices": [], "usage": usage})),
+                "data: [DONE]\n\n".to_owned(),
+            ]
+            .concat();
+            let completion = decode_events(stream::iter([Ok(Bytes::from(payload))]))
+                .await
+                .unwrap_or_else(|error| panic!("decode stream: {error}"));
+            let expected = if usage.get("prompt_cache_hit_tokens").is_some()
+                || usage.get("prompt_tokens_details").is_some()
+            {
+                96
+            } else {
+                0
+            };
+            assert_eq!(completion.usage.map(|usage| usage.cached), Some(expected));
+        }
     }
 
     // Gemini streams a growing running total of usage on every chunk.

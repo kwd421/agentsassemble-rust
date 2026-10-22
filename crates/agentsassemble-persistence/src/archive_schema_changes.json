@@ -120,5 +120,12 @@
       "CREATE TABLE IF NOT EXISTS agent_instructions (room_id TEXT NOT NULL, participant_id TEXT NOT NULL, instructions TEXT NOT NULL CHECK(length(instructions) <= 4000), updated_at INTEGER NOT NULL, PRIMARY KEY(room_id, participant_id), FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE) STRICT",
       "CREATE TABLE IF NOT EXISTS agent_mention_only (room_id TEXT NOT NULL, participant_id TEXT NOT NULL, PRIMARY KEY(room_id, participant_id), FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE) STRICT"
     ]
+  },
+  {
+    "version": 102,
+    "remove": [],
+    "add": [
+      "CREATE TABLE IF NOT EXISTS agent_usage (room_id TEXT NOT NULL, session_id TEXT NOT NULL, turns INTEGER NOT NULL, steps INTEGER NOT NULL, prompt_tokens INTEGER NOT NULL, cached_prompt_tokens INTEGER NOT NULL, completion_tokens INTEGER NOT NULL, last_prompt_tokens INTEGER NOT NULL, context_tokens INTEGER NOT NULL, model_ms INTEGER NOT NULL, PRIMARY KEY(room_id, session_id), FOREIGN KEY(room_id, session_id) REFERENCES agent_sessions(room_id, session_id) ON DELETE CASCADE) STRICT"
+    ]
   }
 ]

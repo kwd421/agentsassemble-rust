@@ -592,6 +592,7 @@ fn finish_turn(driver: &mut CodexDriver) -> Result<ProviderTurnCompleted, Driver
     }
     let outcome = ProviderTurnCompleted {
         memory_summary: None,
+        usage: None,
         turn_id: active.request.turn_id.clone(),
         provider_turn_id: active.provider_turn_id,
         provider_session_id: None,

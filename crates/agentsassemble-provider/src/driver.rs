@@ -163,4 +163,7 @@ pub struct ProviderTurnCompleted {
     /// The summary of this turn's memory fold, when the harness wrote one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_summary: Option<String>,
+    /// The turn's model use, when the harness calls the model itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<agentsassemble_domain::AgentTurnUsage>,
 }

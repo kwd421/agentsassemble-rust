@@ -382,3 +382,53 @@ async fn cursor_and_grok_get_owner_instructions_with_each_turn_input() {
     assert!(assigned.provider_input.contains("[The room owner's instructions for you in this room]"));
     assert!(assigned.provider_input.contains("Keep answers short."));
 }
+
+#[tokio::test]
+async fn usage_totals_add_up_turns_and_keep_the_last_context() {
+    let (store, _principal, _directory) = fixture().await;
+    let zero = store
+        .agent_usage("general", AGENT_ID)
+        .await
+        .unwrap_or_else(|error| panic!("read usage: {error}"))
+        .unwrap_or_else(|| panic!("the agent exists"));
+    assert_eq!(zero.turns, 0);
+    for (prompt, cached, last) in [(1000, 900, 600), (2000, 1950, 1200)] {
+        store
+            .record_agent_usage(
+                "general",
+                AGENT_ID,
+                &agentsassemble_domain::AgentTurnUsage {
+                    steps: 2,
+                    prompt_tokens: prompt,
+                    cached_prompt_tokens: cached,
+                    completion_tokens: 50,
+                    last_prompt_tokens: last,
+                    context_tokens: 128_000,
+                    model_ms: 400,
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("record usage: {error}"));
+    }
+    let totals = store
+        .agent_usage("general", AGENT_ID)
+        .await
+        .unwrap_or_else(|error| panic!("read usage: {error}"))
+        .unwrap_or_else(|| panic!("the agent exists"));
+    assert_eq!((totals.turns, totals.steps), (2, 4));
+    assert_eq!((totals.prompt_tokens, totals.cached_prompt_tokens), (3000, 2850));
+    assert_eq!((totals.completion_tokens, totals.model_ms), (100, 800));
+    assert_eq!((totals.last_prompt_tokens, totals.context_tokens), (1200, 128_000));
+    // A turn whose server reported no usage keeps the last known context.
+    store
+        .record_agent_usage("general", AGENT_ID, &agentsassemble_domain::AgentTurnUsage { steps: 1, ..Default::default() })
+        .await
+        .unwrap_or_else(|error| panic!("record empty usage: {error}"));
+    let kept = store
+        .agent_usage("general", AGENT_ID)
+        .await
+        .unwrap_or_else(|error| panic!("read usage: {error}"))
+        .unwrap_or_else(|| panic!("the agent exists"));
+    assert_eq!((kept.turns, kept.last_prompt_tokens, kept.context_tokens), (3, 1200, 128_000));
+    assert!(store.agent_usage("general", "no-such-agent").await.unwrap_or_else(|error| panic!("{error}")).is_none());
+}

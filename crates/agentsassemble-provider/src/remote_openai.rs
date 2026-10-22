@@ -261,6 +261,12 @@ impl RemoteOpenAiDriver {
             .unwrap_or(turn_compaction::UNKNOWN_CONTEXT_TOKENS);
         // The provider's own usage report for messages[..covered].
         let mut measured: Option<(usize, u64)> = None;
+        // What the turn used, for its owner's usage line.
+        // An unknown window is shown as unknown, not as the compaction guess.
+        let mut usage = agentsassemble_domain::AgentTurnUsage {
+            context_tokens: request.context_tokens.unwrap_or(0),
+            ..Default::default()
+        };
         // A turn uses its tools for as long as its work needs; the owner's
         // turn interrupt is what stops it.
         for round in 0_usize.. {
@@ -273,6 +279,7 @@ impl RemoteOpenAiDriver {
                 measured,
             )
             .await?;
+            let asked = std::time::Instant::now();
             let response = self
                 .api
                 .complete(
@@ -283,6 +290,20 @@ impl RemoteOpenAiDriver {
                     observation.is_some(),
                 )
                 .await?;
+            usage.steps += 1;
+            if let Some(reported) = response.usage {
+                // Time counts only with the tokens it produced, so speed stays honest
+                // when a server leaves usage out.
+                usage.model_ms = usage
+                    .model_ms
+                    .saturating_add(u64::try_from(asked.elapsed().as_millis()).unwrap_or(u64::MAX));
+                usage.prompt_tokens = usage.prompt_tokens.saturating_add(reported.prompt);
+                usage.cached_prompt_tokens =
+                    usage.cached_prompt_tokens.saturating_add(reported.cached);
+                usage.completion_tokens =
+                    usage.completion_tokens.saturating_add(reported.completion);
+                usage.last_prompt_tokens = reported.prompt;
+            }
             validate_completion(&response, &session.public.model, self.spec)?;
             let reported = response.usage.map(|usage| {
                 (
@@ -309,7 +330,7 @@ impl RemoteOpenAiDriver {
                             self.spec.errors.invalid_response,
                         )
                     })?;
-                return Ok(completed(request, provider_turn_id, content));
+                return Ok(completed(request, provider_turn_id, content, usage));
             }
             let forced_read = round == 0 && observation.is_some();
             if forced_read {
@@ -362,6 +383,7 @@ impl RemoteOpenAiDriver {
                     request,
                     provider_turn_id,
                     "Room Portal action completed.".to_owned(),
+                    usage,
                 ));
             }
         }
@@ -929,9 +951,11 @@ fn completed(
     request: &ProviderTurnRequest,
     provider_turn_id: String,
     content: String,
+    usage: agentsassemble_domain::AgentTurnUsage,
 ) -> ProviderTurnCompleted {
     ProviderTurnCompleted {
         memory_summary: None,
+        usage: Some(usage),
         turn_id: request.turn_id.clone(),
         provider_turn_id,
         provider_session_id: None,

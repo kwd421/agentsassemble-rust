@@ -47,6 +47,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             | "99"
             | "100"
             | "101"
+            | "102"
     ) {
         return Ok(());
     }

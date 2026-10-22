@@ -396,3 +396,27 @@ the instructions (`mention_only` in its body and result; an older host answers w
   can still read everything with `room_read`. Free-access mention delivery is unchanged.
 - Instructions and the switch are saved in one transaction, and saving unchanged text (or
   clearing instructions that were never set) does not create a new revision.
+
+## API AI usage line (2026-10-22, required behavior)
+
+Under an API AI's settings the owner sees one line like the footer of DeepSeek's own harness:
+turns and model calls, total tokens, cache hit rate, how full the context was on the last call,
+and response speed ("13차례 · 322단계 · 토큰 50M · 캐시 99.7% · 컨텍스트 26.0% · 응답 242 tok/s").
+
+- The built-in harness reads the cached prompt tokens each call reports (DeepSeek's
+  `prompt_cache_hit_tokens`, `prompt_tokens_details.cached_tokens`, or a top-level
+  `cached_tokens`; never more than the prompt) and sums a turn's
+  calls into `ProviderTurnCompleted.usage` (`AgentTurnUsage`): calls, prompt, cached and
+  completion tokens, the last prompt size, the context window and the time spent waiting on the
+  model. Speed is completion tokens over that time, so it includes time to first token; a call
+  that reports no usage adds no time either. An unknown context window is recorded as 0 and
+  shown as "—", and a turn without a reported prompt size keeps the last known one. Each turn
+  counts at most 10^12 per field.
+- After a turn commits, the server adds it to `agent_usage` (schema v102, per Agent Session, not
+  backed up; a failure to record leaves the turn committed). Failed turns and the memory and
+  compaction summary calls are not counted. A turn whose commit was dropped after an
+  interruption is still counted, because its tokens were spent, so the usage turn count can run
+  ahead of the session's turn count.
+- The owner reads the totals on `GET /api/agent-usage/{room_id}/{session_id}` (and the
+  `central-owner` form), with the memory tab's server-owner authority. The line refreshes when the
+  session's turn count changes. Other harnesses and external AIs show no line.

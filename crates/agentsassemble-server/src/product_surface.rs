@@ -90,6 +90,7 @@ fn registered_routes(
         crate::agent_memory_web::HTTP_ROUTES,
         crate::agent_handoff_trust_web::HTTP_ROUTES,
         crate::agent_instructions_web::HTTP_ROUTES,
+        crate::agent_usage_web::HTTP_ROUTES,
         crate::profile_web::HTTP_ROUTES,
         crate::account_web::HTTP_ROUTES,
         crate::guest_identity_recovery_web::HTTP_ROUTES,

@@ -51,7 +51,8 @@ pub(crate) async fn require_unbound_user(
             | 98
             | 99
             | 100
-            | 101,
+            | 101
+            | 102,
         ) => {
             let bound: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM central_identity_bindings WHERE user_id = ?)",

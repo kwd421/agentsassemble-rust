@@ -227,6 +227,7 @@ async fn commit_provider_result(
         .as_ref()
         .ok()
         .and_then(|completed| completed.memory_summary.clone());
+    let usage = result.as_ref().ok().and_then(|completed| completed.usage);
     let commit =
         commit_exact_provider_result(store, provider_adapter, &start_authority, result).await?;
     if let (Some((from_seq, to_seq, folded_text)), Some(summary)) = (fold, summary) {
@@ -245,6 +246,15 @@ async fn commit_provider_result(
             tracing::warn!(%error, room_id = %start_authority.room_id,
                 session_id = %start_authority.session_id, "agent memory piece was not stored");
         }
+    }
+    if let Some(usage) = usage
+        && let Err(error) = store
+            .record_agent_usage(&start_authority.room_id, &start_authority.session_id, &usage)
+            .await
+    {
+        // Statistics only: the turn stays committed.
+        tracing::warn!(%error, room_id = %start_authority.room_id,
+            session_id = %start_authority.session_id, "agent usage was not recorded");
     }
     Ok(commit)
 }
