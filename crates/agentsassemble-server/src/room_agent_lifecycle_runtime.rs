@@ -79,10 +79,13 @@ pub(crate) async fn execute_agent_resume(
     lifecycle_commands: &crate::lifecycle_command_tracker::LifecycleCommandTracker,
 ) -> CommandExecution {
     let recover = match command.payload.get("agent_id").and_then(Value::as_str) {
-        Some(agent_id) => store
+        Some(agent_id) => match store
             .resume_needs_recovery_stop(command.principal, command.request_id, agent_id)
             .await
-            .unwrap_or(false),
+        {
+            Ok(recover) => recover,
+            Err(error) => return CommandExecution::transactional_failure(error),
+        },
         None => false,
     };
     if !recover {
@@ -118,7 +121,11 @@ pub(crate) async fn execute_agent_resume(
     drop(stop_guard);
     match &stopped.reply {
         Ok(_) => {}
-        Err(failure) if failure.resolution == CommandResolution::Unresolved => {
+        // Still unconfirmed, or another resume's stop is still being finished.
+        Err(failure)
+            if failure.resolution == CommandResolution::Unresolved
+                || matches!(&failure.error, PersistenceError::CommandRejected { code, .. } if code == "operation_in_progress") =>
+        {
             return CommandExecution::committed_failure(
                 pending(),
                 std::mem::take(&mut stopped.committed_events),

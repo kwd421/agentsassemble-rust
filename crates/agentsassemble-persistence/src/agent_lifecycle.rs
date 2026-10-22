@@ -70,8 +70,8 @@ pub struct AgentRuntimeStarted {
 
 impl SqliteStore {
     /// Whether a resume should first run the recovery stop: a server-owned agent
-    /// marked recovery-required, unless this exact request was already recorded
-    /// (its retry replays the recorded lifecycle result instead).
+    /// marked recovery-required, unless this exact request was already recorded,
+    /// pending or finished (its retry replays the recorded result instead).
     ///
     /// # Errors
     /// Fails when the session or the request record cannot be read.
@@ -83,7 +83,7 @@ impl SqliteStore {
     ) -> Result<bool, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let recorded: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?)",
+            "SELECT EXISTS(SELECT 1 FROM lifecycle_command_reservations WHERE room_id = ?1 AND principal_id = ?2 AND request_id = ?3) OR EXISTS(SELECT 1 FROM command_results WHERE room_id = ?1 AND principal_id = ?2 AND request_id = ?3)",
         )
         .bind(&principal.room_id)
         .bind(&principal.principal_id)
