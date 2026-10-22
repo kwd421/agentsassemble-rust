@@ -164,6 +164,12 @@
   padding: 8px 10px;
 }
 
+/* The text takes the row so the action button lines up on the right. */
+.dc-invite-friend-row > .dc-invite-card-copy {
+  flex: 1;
+  min-width: 0;
+}
+
 .dc-invite-friend-row:hover {
   background: rgba(255, 255, 255, 0.04);
 }
