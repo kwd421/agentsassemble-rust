@@ -30,6 +30,8 @@ pub(crate) const CONNECTOR_DDL: &str = concat!(
     "FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE)",
 );
 
+pub(crate) const EXPIRY_INDEX_DDL: &str = "CREATE INDEX IF NOT EXISTS connector_avatar_assets_expiry_idx ON connector_avatar_assets(expires_at) WHERE state = 'pending'";
+
 pub(crate) const TABLES: &[crate::schema::TableDefinition] = &[crate::schema::TableDefinition {
     name: "connector_avatar_assets",
     ddl: CONNECTOR_DDL,
@@ -324,6 +326,7 @@ pub(crate) async fn upgrade(pool: &sqlx::SqlitePool) -> Result<(), PersistenceEr
             .await?;
     if version.parse::<i64>().is_ok_and(|version| version < 99) {
         sqlx::query(CONNECTOR_DDL).execute(&mut *tx).await?;
+        sqlx::query(EXPIRY_INDEX_DDL).execute(&mut *tx).await?;
         sqlx::query("UPDATE runtime_metadata SET value = '99' WHERE key = 'schema_version'")
             .execute(&mut *tx)
             .await?;

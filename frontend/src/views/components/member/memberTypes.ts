@@ -47,9 +47,12 @@ export function externalAgentProfile(entry: MemberEntry): AgentProfileTarget | n
   return externalAgentProfileOf(entry.member);
 }
 
-/** The profile of an AI participant the app does not run; callers rule out app AIs. */
+/** External AIs get their participant id from the Room Connector join. */
+export const EXTERNAL_AI_ID_PREFIX = "connector-";
+
+/** The profile of an AI that joined through a Room Connector invite. */
 export function externalAgentProfileOf(member: RoomMember): AgentProfileTarget | null {
-  if (member.participant_type !== "agent") return null;
+  if (member.participant_type !== "agent" || !member.participant_id.startsWith(EXTERNAL_AI_ID_PREFIX)) return null;
   return {
     room_id: member.room_id,
     session_id: member.participant_id,

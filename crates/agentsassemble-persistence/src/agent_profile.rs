@@ -199,13 +199,33 @@ pub(crate) async fn load_profile_target(
         .await?
         .is_none()
     {
-        // Every AI the app runs has a session, so an AI participant without one
-        // is an external AI.
+        // Every AI the app runs has a session; an external AI has none and
+        // joined through a Room Connector invite. Anything else is refused, so
+        // an app AI whose session row went missing fails instead of being edited
+        // as an external AI.
         let participant = load_participant(transaction, room_id, agent_id).await?;
-        if participant.participant_type != "agent" {
+        let joined_by_connector: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM room_connector_invites WHERE room_id = ? AND participant_id = ?)",
+        )
+        .bind(room_id)
+        .bind(agent_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+        if participant.participant_type != "agent" || !joined_by_connector {
             return Err(rejected(
                 "not_found",
                 &format!("Agent session {agent_id} was not found."),
+            ));
+        }
+        // An external AI that left or was removed keeps its row only for history.
+        if !matches!(
+            participant.status,
+            agentsassemble_domain::ParticipantStatus::Joined
+                | agentsassemble_domain::ParticipantStatus::Detached
+        ) {
+            return Err(rejected(
+                "participant_inactive",
+                "This AI is no longer in the room.",
             ));
         }
         return Ok(ProfileTarget::Connector(participant));

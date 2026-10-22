@@ -528,6 +528,7 @@ pub(crate) const TABLES: &[TableDefinition] = &[
 ];
 
 pub(crate) const INDEXES: &[&str] = &[
+    crate::agent_avatar_assets::EXPIRY_INDEX_DDL,
     crate::central_identity_bindings::USER_INDEX_DDL,
     crate::member_resume::LOOKUP_INDEX_DDL,
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_requests_pending_session_idx ON provider_requests(room_id,session_id) WHERE state IN ('open','resolving')",

@@ -292,11 +292,16 @@ participant and no Agent Session, so the participant owns that name and picture.
 - `agent.profile.update` takes the external AI's participant id as `agent_id` and keeps the
   `agent.control` requirement. Its result is `{participant, events, event}` with one
   `participant_updated` event carrying `display_name` and `avatar_image_url`; there is no
-  `agent_session`. A person's participant id is refused.
+  `agent_session`. Only a participant that joined through a Room Connector invite (a matching
+  `room_connector_invites` row; its id starts with `connector-`) and is still joined or
+  detached qualifies. A person, an app AI whose session row is missing, and an external AI that
+  left or was removed are refused.
 - Pictures upload through the same `/api/agent-avatars/upload/{id}` route with the
   participant id, under the same raster rules, 15-minute pending lifetime and room storage
   quota. They live in their own table, `connector_avatar_assets` (schema v99), keyed by room
   participant and removed with it, and are served at the same `/api/agent-avatars/{id}` path.
   Backups carry them; archives from before v99 restore without them.
-- The AI is not told about the change. It keeps the name it joined with in its own context;
-  the room shows the new one.
+- The AI is not told about the change. It keeps the name it joined with in its own context, and
+  a repeated `room_join` still answers with that name; the room shows the new one.
+- An older host refuses the edit as an unknown session and the window shows the error; no
+  host capability gates the controls.
