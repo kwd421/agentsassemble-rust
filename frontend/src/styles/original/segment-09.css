@@ -611,6 +611,15 @@
   min-width: 0;
 }
 
+/* An untagged fence renders its code with the inline class; inside a block
+   it must not draw a chip per line. */
+.dc-markdown pre .dc-inline-code {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 0;
+}
+
 .dc-markdown > :first-child {
   margin-top: 0;
 }

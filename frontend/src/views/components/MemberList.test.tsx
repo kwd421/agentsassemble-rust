@@ -53,6 +53,10 @@ describe("MemberList component wiring", () => {
       expect(screen.getByText("응답 중")).toBeTruthy();
       cleanup();
     }
+    // Idle, it keeps the plain row it always had: no chip.
+    render(<MemberList agents={[]} members={[participantFixture(), connector]} viewerParticipantId="operator-local" roomId="general" roomName="General" />);
+    expect(screen.queryByText("응답 중")).toBeNull();
+    expect(document.querySelector(".dc-member-status-chip")).toBeNull();
   });
 
   it.each([true, false])("marks the host as 방장, the viewer as 나, and ordinary members with no badge (host=%s)", (host) => {

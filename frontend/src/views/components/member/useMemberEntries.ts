@@ -136,9 +136,10 @@ export function useMemberEntries({
             : member
               ? memberStatusLabel(member)
               : undefined,
+        working: !agentSession && working.includes(agent.agent_id),
         role,
         owner: false,
-        active: agentSession ? agentSessionIsPresent(runtimeStatus) : isActive(agent),
+        active: agentSession ? agentSessionIsPresent(runtimeStatus) : working.includes(agent.agent_id) || isActive(agent),
         muted: mutedById.get(agent.agent_id) ?? false,
         meetingId: member?.room_id || agent.meeting_id || "",
         ownerId: ownerId || undefined,
@@ -190,11 +191,12 @@ export function useMemberEntries({
             : working.includes(member.participant_id)
               ? "응답 중"
               : memberStatusLabel(member),
+          working: !agentSession && working.includes(member.participant_id),
           role,
           owner: false,
           active: agentSession
             ? agentSessionIsPresent(agentSession.runtime_status || agentSession.status)
-            : memberActive(member),
+            : working.includes(member.participant_id) || memberActive(member),
           muted: Boolean(member.muted),
           meetingId: member.room_id,
           ownerId: ownerId || undefined,

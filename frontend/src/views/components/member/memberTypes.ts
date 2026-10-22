@@ -19,6 +19,8 @@ export type MemberEntry = {
   speed?: MemberSpeed | null;
   ultraMode?: boolean;
   statusLabel?: string;
+  /** An external AI the server says is working on a message. */
+  working?: boolean;
   role: RoleId;
   owner: boolean;
   ownerId?: string;

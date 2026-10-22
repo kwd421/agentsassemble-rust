@@ -15,10 +15,10 @@ const MAX_TOOL_ARGUMENT_BYTES: usize = 64 * 1024;
 const MAX_EXTRA_CONTENT_BYTES: usize = 64 * 1024;
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_FINISH_REASON_BYTES: usize = 64;
-/// Keep-alive comments are not events: a request that only gets them for this
-/// long before its first event is reported instead of waited on. Once events
-/// flow, the stream is not bounded here.
-const FIRST_EVENT_WAIT: std::time::Duration = std::time::Duration::from_mins(10);
+/// Keep-alive comments are not events: a request that gets only them for this
+/// long, before or between events, is reported instead of waited on. Slow but
+/// working answers send events far more often.
+const EVENT_WAIT: std::time::Duration = std::time::Duration::from_mins(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub(crate) enum OpenAiStreamError {
@@ -215,17 +215,10 @@ where
     futures_util::pin_mut!(events);
     let mut accumulator = CompletionAccumulator::default();
     let mut done = false;
-    let mut started = false;
-    loop {
-        let next = if started {
-            events.next().await
-        } else {
-            tokio::time::timeout(FIRST_EVENT_WAIT, events.next())
-                .await
-                .map_err(|_| OpenAiStreamError::Stalled)?
-        };
-        let Some(event) = next else { break };
-        started = true;
+    while let Some(event) = tokio::time::timeout(EVENT_WAIT, events.next())
+        .await
+        .map_err(|_| OpenAiStreamError::Stalled)?
+    {
         let event = event.map_err(|error| match error {
             EventStreamError::Transport(error) => error,
             EventStreamError::Utf8(_) | EventStreamError::Parser(_) => {
@@ -675,6 +668,27 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("a slow but working request must complete: {error}"));
         assert_eq!(completion.message.content.as_deref(), Some("늦었지만 답"));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn keep_alives_after_a_first_event_also_end_as_stalled() {
+        let first = event(&json!({
+            "id": "chat-1",
+            "model": "model-1",
+            "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": null}]
+        }));
+        let hung = futures_util::StreamExt::chain(
+            stream::iter([
+                Ok::<_, OpenAiStreamError>(Bytes::from(first)),
+                Ok(Bytes::from_static(b": PROCESSING\n\n")),
+            ]),
+            stream::pending(),
+        );
+        let error = decode_events(hung)
+            .await
+            .err()
+            .unwrap_or_else(|| panic!("a hang after the first event must not wait forever"));
+        assert_eq!(error, OpenAiStreamError::Stalled);
     }
 
     #[tokio::test]

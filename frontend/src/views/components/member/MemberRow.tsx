@@ -40,8 +40,8 @@ export default function MemberRow({
   const assignedRole = ["director", "implementer", "reviewer"].includes(entry.role)
     ? ROLE_OPTIONS.find((option) => option.id === entry.role)?.label
     : undefined;
-  // An external AI has neither a live-agent record nor a server session.
-  const isAgent = Boolean(entry.agent || entry.agentSession || entry.member?.participant_type === "agent");
+  // A working external AI has neither a live-agent record nor a server session.
+  const isAgent = Boolean(entry.agent || entry.agentSession || entry.working);
   // Like Discord's member list, a person is just a name; agents keep their model line.
   const showDetail = isAgent || !(entry.owner || entry.member?.participant_type === "human");
   // Without a model, an agent's status reads like a Discord activity line instead of a chip.

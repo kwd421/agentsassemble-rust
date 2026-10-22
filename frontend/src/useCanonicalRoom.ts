@@ -500,6 +500,8 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         connectionGenerationRef.current += 1;
         clearAcceptedProjection();
       }
+      // The next connection reports activity afresh.
+      setActivityByRoom((previous) => ({ ...previous, [roomId]: [] }));
       currentSocket.close();
       setSocket((current) => (current === currentSocket ? null : current));
       setConnectionState("disconnected");
