@@ -172,6 +172,12 @@ impl RemoteOpenAiSpec {
             OpenAiStreamError::ResponseTooLarge | OpenAiStreamError::InvalidResponse => {
                 provider_error("provider_protocol_invalid", self.errors.invalid_response)
             }
+            // OpenAI-compatible APIs answer 404 when the model is gone, as a
+            // retired free model on OpenRouter does.
+            OpenAiStreamError::Http(404) => provider_error(
+                "provider_model_unavailable",
+                "The AI service does not offer this model (HTTP 404).",
+            ),
             OpenAiStreamError::Http(status) => DriverError {
                 code: "provider_api_unavailable".into(),
                 message: format!("{} (HTTP {status})", self.errors.api_unavailable).into(),
@@ -189,4 +195,22 @@ impl RemoteOpenAiSpec {
 
 pub(crate) const fn provider_error(code: &'static str, message: &'static str) -> DriverError {
     DriverError::new(code, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::openai_stream::OpenAiStreamError;
+
+    #[test]
+    fn a_missing_model_is_told_apart_from_other_refusals() {
+        let spec = &crate::openrouter::OPENROUTER_SPEC;
+        assert_eq!(
+            spec.stream_error(OpenAiStreamError::Http(404)).code,
+            "provider_model_unavailable"
+        );
+        assert_eq!(
+            spec.stream_error(OpenAiStreamError::Http(400)).code,
+            "provider_api_unavailable"
+        );
+    }
 }

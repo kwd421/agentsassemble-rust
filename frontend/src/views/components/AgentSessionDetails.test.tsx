@@ -157,6 +157,7 @@ describe("AgentSessionDetails diagnostics", () => {
     ["provider_room_action_missing", "Agent Platform ended without the required room action.", "AI가 방에 답을 남기지 않고 끝냈어요. 다시 요청해 주세요."],
     ["provider_api_unavailable", "The Gemini API request did not complete. (HTTP 500)", "AI 서비스가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요."],
     ["provider_api_unavailable", "The Gemini API request did not complete.", "AI 서비스에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."],
+    ["provider_model_unavailable", "The AI service does not offer this model (HTTP 404).", "AI 서비스가 이 모델을 더 이상 제공하지 않아요. 실행 설정에서 다른 모델을 골라 주세요."],
   ])("renders %s as one Korean line without English", (code, raw, korean) => {
     const session = agentSessionFixture({ provider_kind: "agent_platform_api", runtime_status: "error",
       last_error_code: code, last_error: raw, recovery_required: true });

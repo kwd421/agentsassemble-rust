@@ -515,6 +515,7 @@ pub(super) fn public_error_code(value: &str) -> &'static str {
         // Fixed API-provider outcomes the room can explain in its own words.
         "provider_api_busy" => "provider_api_busy",
         "provider_api_unavailable" => "provider_api_unavailable",
+        "provider_model_unavailable" => "provider_model_unavailable",
         "provider_rate_limited" => "provider_rate_limited",
         "provider_context_limit" => "provider_context_limit",
         "provider_credential_rejected" => "provider_credential_rejected",
@@ -547,6 +548,7 @@ mod public_error_code_tests {
         for code in [
             "provider_api_busy",
             "provider_api_unavailable",
+            "provider_model_unavailable",
             "provider_rate_limited",
             "provider_context_limit",
             "provider_credential_rejected",
