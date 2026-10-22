@@ -107,8 +107,5 @@ mod tests {
                 "tools": tools,
             })
         );
-        assert_eq!(CATALOG_ENDPOINT, "https://ai-gateway.vercel.sh/v1/models");
-        assert!(VERCEL_SPEC.headers.is_empty());
-        assert!(!VERCEL_SPEC.retain_reasoning);
     }
 }

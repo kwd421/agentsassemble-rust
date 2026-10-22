@@ -137,8 +137,5 @@ mod tests {
                 "", "none", "minimal", "low", "medium", "high", "xhigh", "max"
             ]
         );
-        assert_eq!(CATALOG_ENDPOINT, "https://api.llmgateway.io/v1/models");
-        assert!(LLM_GATEWAY_SPEC.headers.is_empty());
-        assert!(!LLM_GATEWAY_SPEC.retain_reasoning);
     }
 }

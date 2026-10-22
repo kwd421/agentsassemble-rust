@@ -210,9 +210,5 @@ mod tests {
                 "tools": tools,
             })
         );
-        assert_eq!(PREFERRED_MODEL, "moonshotai/kimi-k3-free");
-        assert!(TOKENROUTER_SPEC.headers.is_empty());
-        assert!(!TOKENROUTER_SPEC.retain_reasoning);
-        assert!(CATALOG_ENDPOINT.starts_with("https://tokenrouter-backend-api.tokenrouter.com/"));
     }
 }

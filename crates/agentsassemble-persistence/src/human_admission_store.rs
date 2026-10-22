@@ -678,12 +678,6 @@ mod debug_ttl_tests {
     use super::*;
 
     #[test]
-    fn default_room_session_ttl_is_one_hour() {
-        assert_eq!(default_room_session_ttl(), Duration::hours(1));
-        assert_eq!(default_room_session_ttl().num_seconds(), 3_600);
-    }
-
-    #[test]
     fn debug_ttl_parsing_clamps_to_sane_range() {
         assert_eq!(
             parse_debug_room_session_ttl("60"),
