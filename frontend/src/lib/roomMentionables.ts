@@ -1,6 +1,7 @@
 import type { RoomAgentSession, RoomMember } from "../api";
 import type { Mentionable } from "./mentionComposerModel";
 import { resolveAttachmentReference } from "./attachmentReference";
+import { distinctNames } from "./distinctNames";
 
 function clean(value: unknown) {
   return String(value || "").trim();
@@ -35,20 +36,16 @@ export function roomMentionables({
   const viewerDisplayName = clean(
     memberById.get(viewerId)?.display_name
   );
-  const displayNameCounts = new Map<string, number>();
-  // Members sharing a name are told apart by a number, never their internal ID.
-  const displayNameOrdinal = new Map<string, number>();
-  participantIds.forEach((participantId) => {
-    const session = sessionByParticipantId.get(participantId);
-    const displayName = clean(
-      session
-        ? session.display_name
-        : memberById.get(participantId)?.display_name
-    );
-    const key = displayName.toLowerCase();
-    if (key) displayNameCounts.set(key, (displayNameCounts.get(key) || 0) + 1);
-    if (key) displayNameOrdinal.set(participantId, displayNameCounts.get(key) || 1);
-  });
+  const labels = distinctNames(
+    Array.from(participantIds.values(), (participantId) => {
+      const session = sessionByParticipantId.get(participantId);
+      return {
+        id: participantId,
+        name: clean(session ? session.display_name : memberById.get(participantId)?.display_name),
+      };
+    }),
+    viewerDisplayName ? [viewerDisplayName] : [],
+  );
 
   function mentionableFor(participantId: string): Mentionable {
     const member = memberById.get(participantId);
@@ -63,19 +60,12 @@ export function roomMentionables({
       : undefined;
     // Room Connector is an agent participant without a managed Agent Session.
     // Its canonical member identity remains sufficient for ordinary mentions.
-    const displayName = clean(session ? session.display_name : member.display_name);
-    const uniqueDisplayName =
-      displayName && displayNameCounts.get(displayName.toLowerCase()) === 1;
     const participantKind = member.participant_type;
     const ownerId = clean(member.owner_id);
     const ownerDisplayName = clean(memberById.get(ownerId)?.display_name);
     return {
       token: participantId,
-      label: uniqueDisplayName
-        ? displayName
-        : displayName
-          ? `${displayName} (${displayNameOrdinal.get(participantId) || 1})`
-          : participantId,
+      label: labels.get(participantId) || participantId,
       avatarImage: session
         ? resolveAttachmentReference(session.avatar_image_url, displayResourceBase)
         : resolveAttachmentReference(member.avatar_image_url, displayResourceBase),

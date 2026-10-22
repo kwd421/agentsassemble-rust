@@ -1,4 +1,6 @@
 import { EXTERNAL_AI_ID_PREFIX } from "../views/components/member/memberTypes";
+import { distinctNames } from "../lib/distinctNames";
+import type { RoomMember } from "../api";
 import type { SavedFriendsAuthority } from "../api/friends";
 import { centralIdentityConfigured, loadCentralSession } from "../lib/central/identity";
 import ConnectionBanner from "../views/components/ConnectionBanner";
@@ -84,10 +86,7 @@ export default function AppOverlays({ controller, companionInvites, friendAuthor
             canCreateLink={inviteModalRoom.roomOrigin !== "remote_server" || Boolean(guestSession?.centralOwner)}
             humanInvites={roomInvite.humanInvites}
             connectorInvites={roomInvite.connectorInvites}
-            connectorSeats={inviteModalRoom.id === activeRoom.id ? canonicalRoom.participantRecords
-              .filter((participant) => participant.participant_type === "agent" && participant.participant_id.startsWith(EXTERNAL_AI_ID_PREFIX) &&
-                participant.status !== "kicked" && participant.status !== "exported")
-              .map((participant) => ({ id: participant.participant_id, name: participant.display_name || participant.participant_id, away: participant.status === "detached" })) : []}
+            connectorSeats={inviteModalRoom.id === activeRoom.id ? externalAiSeats(canonicalRoom.participantRecords) : []}
             attendeeInvites={roomInvite.attendeeInvites}
             operatorPairings={roomInvite.pairings}
             pairingCreating={roomInvite.pairingCreating}
@@ -246,4 +245,12 @@ export default function AppOverlays({ controller, companionInvites, friendAuthor
     </div>,
     document.body
   );
+}
+
+/** External AIs a reconnect invitation can put back, named apart when names repeat. */
+function externalAiSeats(participants: readonly RoomMember[]) {
+  const seats = participants.filter((participant) => participant.participant_type === "agent" &&
+    participant.participant_id.startsWith(EXTERNAL_AI_ID_PREFIX) && participant.status !== "kicked" && participant.status !== "exported");
+  const labels = distinctNames(seats.map((seat) => ({ id: seat.participant_id, name: seat.display_name || seat.participant_id })));
+  return seats.map((seat) => ({ id: seat.participant_id, name: labels.get(seat.participant_id) || seat.participant_id, away: seat.status === "detached" }));
 }

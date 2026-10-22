@@ -24,7 +24,9 @@ export function presenceStatusLabel(status?: string): string {
   if (status === "available") return "시작 대기";
   if (status === "paused") return "일시정지";
   if (status === "stopped") return "중지됨";
-  if (status === "disconnected" || status === "detached") return "연결 끊김";
+  if (status === "disconnected") return "연결 끊김";
+  // An app-run agent that is not running; an external AI says 연결 끊김 instead (memberStatusLabel).
+  if (status === "detached") return "중지됨";
   if (status === "left") return "퇴장";
   if (status === "kicked") return "내보내짐";
   if (status === "error") return "오류";

@@ -14,7 +14,7 @@ export type Mentionable = {
 
 type MentionableInput = Mentionable | string;
 
-function cleanMentionName(name: string) {
+export function cleanMentionName(name: string) {
   return name
     .replace(/[\r\n<>]/g, " ")
     .replace(/\s+/g, " ")

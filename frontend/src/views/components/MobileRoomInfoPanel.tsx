@@ -1,3 +1,4 @@
+import { memberStatusLabel } from "./member/memberHelpers";
 import { externalAgentProfileOf, type AgentProfileTarget } from "./member/memberTypes";
 import ResourceImage from "./ResourceImage";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
@@ -22,7 +23,7 @@ import type { AppIcon } from "../../ui/icons";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import { executionLocationLabel, providerExecutionLabel } from "../../lib/agentLabels";
 import type { RoomAppearance } from "../../lib/roomAppearance";
-import { isActivePresence, presenceStatusLabel } from "../../lib/presenceStatus";
+import { isActivePresence } from "../../lib/presenceStatus";
 import { participantTypeMeta } from "../../lib/participantTypes";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
@@ -205,7 +206,7 @@ function buildMobileMembers({
       return {
         id: member.participant_id,
         displayName: member.display_name || member.participant_id,
-        detail: [typeMeta.label, presenceStatusLabel(member.status)].filter(Boolean).join(" · "),
+        detail: [typeMeta.label, memberStatusLabel(member)].filter(Boolean).join(" · "),
         active: isActivePresence(member.status),
         role,
         icon: typeMeta.icon,

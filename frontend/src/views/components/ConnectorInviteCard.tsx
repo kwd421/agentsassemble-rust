@@ -41,7 +41,7 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin, 
         {seats.map((seat) => <div className="dc-invite-friend-row" role="listitem" key={seat.id}>
           <div className="dc-invite-card-copy">
             <strong className="preserve-words">{seat.name}</strong>
-            <p>{seat.away ? "연결 끊김" : "연결됨"}</p>
+            <p>{seat.away ? "연결 끊김" : "참여 중"}</p>
           </div>
           <button type="button" className="dc-button dc-button--md dc-button--secondary"
             aria-label={`${seat.name} 다시 연결 초대 만들기`}

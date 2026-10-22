@@ -89,6 +89,8 @@ export function memberRole(member: RoomMember): RoleId {
   return member.role;
 }
 
-export function memberStatusLabel(member: RoomMember) {
+export function memberStatusLabel(member: Pick<RoomMember, "status" | "participant_id">) {
+  // Only an external AI is detached because its connection ended.
+  if (member.status === "detached" && member.participant_id.startsWith("connector-")) return "연결 끊김";
   return presenceStatusLabel(member.status);
 }
