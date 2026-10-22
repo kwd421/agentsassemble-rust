@@ -69,19 +69,33 @@ pub struct AgentRuntimeStarted {
 }
 
 impl SqliteStore {
-    /// Whether this agent waits on a recovery stop before it can run again.
+    /// Whether a resume should first run the recovery stop: a server-owned agent
+    /// marked recovery-required, unless this exact request was already recorded
+    /// (its retry replays the recorded lifecycle result instead).
     ///
     /// # Errors
-    /// Fails when the session cannot be read.
-    pub async fn agent_recovery_required(
+    /// Fails when the session or the request record cannot be read.
+    pub async fn resume_needs_recovery_stop(
         &self,
-        room_id: &str,
+        principal: &agentsassemble_domain::AuthenticatedPrincipal,
+        request_id: &str,
         agent_id: &str,
     ) -> Result<bool, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let session = load_session(&mut transaction, room_id, agent_id).await?;
+        let recorded: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?)",
+        )
+        .bind(&principal.room_id)
+        .bind(&principal.principal_id)
+        .bind(request_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        let session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
         transaction.commit().await?;
-        Ok(session.public.recovery_required)
+        Ok(!recorded
+            && session.public.recovery_required
+            && !session.public.external_owned
+            && session.public.process_ownership == "server")
     }
 
     /// Durably records a start intent before the provider supervisor is called.

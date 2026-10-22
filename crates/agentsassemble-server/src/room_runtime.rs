@@ -874,6 +874,7 @@ async fn handle_room_command(
                 provider_adapter,
                 event_tx,
                 &command,
+                lifecycle_commands,
             ))
             .await
             }

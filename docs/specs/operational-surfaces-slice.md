@@ -1549,11 +1549,12 @@ mentions of it look (`<@ID>`) and that participant IDs are for addressing only, 
 does not state its own ID in messages.
 
 Recovery in one step (owner decision, 2026-10-23): a session marked recovery-required
-shows as `오류`, and `agent.resume` performs the recovery itself. The server runs the
-confirmed stop under a request ID derived from the resume (so a retried resume replays
-it), waits briefly for the background runtime reconciliation when a crashed runtime
-cannot confirm its own stop, then starts. If cleanup is still pending it answers
-`agent_recovery_pending` and the owner resumes again. The owner never stops first.
+shows as `오류`, and `agent.resume` performs the recovery itself. For a server-owned
+session whose resume request is not yet recorded, the server runs the confirmed stop
+under a request ID derived from the resume (claimed like any lifecycle request) and then
+starts. A crashed runtime that cannot confirm its own stop is finished by the background
+runtime reconciliation, so the resume answers a rejected `agent_recovery_pending` and the
+owner resumes again; a refused stop is returned as is. Nothing waits inside the room.
 
 Freebuff and app-managed Antigravity remain excluded by user scope. External
 Antigravity's Room Connector admission is independent of this account matrix.

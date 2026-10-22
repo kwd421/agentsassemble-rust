@@ -20,6 +20,7 @@ pub(crate) async fn execute_command(
     provider_adapter: &ProviderAdapter,
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
+    lifecycle_commands: &crate::lifecycle_command_tracker::LifecycleCommandTracker,
 ) -> CommandExecution {
     if command.action == RoomAction::DelegatedActionDecide {
         let result = match serde_json::from_value::<agentsassemble_domain::DecideDelegatedAction>(command.payload.clone()) {
@@ -83,6 +84,7 @@ pub(crate) async fn execute_command(
                 store,
                 provider_adapter,
                 &crate::room_agent_lifecycle_runtime::LifecycleCommand::from(command),
+                lifecycle_commands,
             )
             .await
         }

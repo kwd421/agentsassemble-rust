@@ -120,14 +120,27 @@ async fn confirm_resume<S>(socket: &mut RoomSocketPeer<S>, session_id: &str, sta
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    send_command(
-        socket,
-        "idle-crash-resume",
-        "agent.resume",
-        &json!({"agent_id":session_id}),
-    )
-    .await;
-    let resumed = receive_command_ack(socket).await;
+    let resume = json!({"agent_id":session_id});
+    send_command(socket, "idle-crash-resume", "agent.resume", &resume).await;
+    // A crashed worker cannot confirm its own stop: the background
+    // reconciliation finishes it, and the first resume says so instead of
+    // waiting inside the room.
+    let (first, mut stopped) = receive_response(socket, "idle-crash-resume", session_id).await;
+    let resumed = if first["op"] == "nack" {
+        assert_eq!(first["resolution"], "rejected");
+        assert_eq!(first["error"]["code"], "agent_recovery_pending");
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !stopped {
+                stopped = is_stopped_state(&receive_json(socket).await, session_id);
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("background reconciliation did not finish the stop"));
+        send_command(socket, "idle-crash-resume-again", "agent.resume", &resume).await;
+        receive_command_ack(socket).await
+    } else {
+        first
+    };
     assert_eq!(resumed["result"]["agent_session"]["runtime_status"], "idle");
     assert_eq!(
         resumed["result"]["agent_session"]["recovery_required"],
@@ -146,6 +159,35 @@ where
         stopped["result"]["agent_session"]["runtime_status"],
         "stopped"
     );
+}
+
+async fn receive_response<S>(
+    socket: &mut RoomSocketPeer<S>,
+    request_id: &str,
+    session_id: &str,
+) -> (Value, bool)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let mut stopped = false;
+    loop {
+        let frame = receive_json(socket).await;
+        stopped |= is_stopped_state(&frame, session_id);
+        if matches!(frame["op"].as_str(), Some("ack" | "nack")) && frame["request_id"] == request_id
+        {
+            return (frame, stopped);
+        }
+    }
+}
+
+fn is_stopped_state(frame: &Value, session_id: &str) -> bool {
+    frame["events"].as_array().is_some_and(|events| {
+        events.iter().any(|event| {
+            event["type"] == "agent_session_state"
+                && event["agent_session"]["session_id"] == session_id
+                && event["agent_session"]["runtime_status"] == "stopped"
+        })
+    })
 }
 
 async fn parent_pid(pid: u32) -> u32 {
