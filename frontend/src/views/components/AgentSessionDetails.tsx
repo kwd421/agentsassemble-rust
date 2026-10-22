@@ -58,8 +58,8 @@ export function agentSessionCanPause(session: RoomAgentSession) {
 /** What pause, stop and resume do, shown when hovering the controls. */
 export const AGENT_CONTROL_HINTS = {
   pause: "쉬는 동안 새 메시지에 답하지 않아요. 실행은 그대로 두어서 재개하면 바로 이어가요.",
-  stop: "실행을 끝내요. 답하는 중이었다면 그 답도 멈춰요. 재개하면 다시 실행해요.",
-  resume: "다시 깨워요. 멈춘 동안 온 메시지는 다음에 부를 때 함께 읽어요.",
+  stop: "실행을 끝내요. 답하는 중이었다면 멈추고, 재개하면 멈추기 전에 받은 메시지에 이어서 답해요.",
+  resume: "다시 깨워요. 멈춘 동안 온 메시지에는 따로 답하지 않아요.",
 } as const;
 
 /** Whether a running server-owned session may be stopped from the bulk owner controls.
@@ -144,7 +144,7 @@ function sessionErrorText(session: RoomAgentSession): { summary: string; detail:
       : { summary: "AI 서비스에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.", detail: "" };
   }
   if (session.last_error_code === "provider_model_unavailable") {
-    return { summary: "AI 서비스가 이 모델을 더 이상 제공하지 않아요. 실행 설정에서 다른 모델을 골라 주세요.", detail: "" };
+    return { summary: "AI 서비스에서 이 모델을 찾지 못했어요. 실행 설정에서 다른 모델을 골라 주세요.", detail: "" };
   }
   if (session.last_error_code === "provider_context_limit") {
     return { summary: "AI에게 보낼 대화 내용이 너무 커요. 다시 시도해 주세요.", detail: "" };

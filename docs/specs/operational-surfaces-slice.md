@@ -1535,9 +1535,11 @@ that the turn had not started.
 
 API-provider failure codes (2026-10-20, owner real-app check): an HTTP 503 or 529 from
 an OpenAI-compatible provider is `provider_api_busy` (the service is shedding load),
-distinct from other unsuccessful statuses (`provider_api_unavailable`). A failed room
+distinct from other unsuccessful statuses (`provider_api_unavailable`). An HTTP 404 from a
+provider at a fixed address is `provider_model_unavailable` (the model is retired or not
+loaded); an owner-typed address keeps the generic code. A failed room
 turn keeps these fixed codes visible to the room instead of collapsing them into
-`provider_turn_failed`: `provider_api_busy`, `provider_api_unavailable`,
+`provider_turn_failed`: `provider_api_busy`, `provider_api_unavailable`, `provider_model_unavailable`,
 `provider_rate_limited`, `provider_context_limit`, `provider_credential_rejected`,
 `provider_output_truncated`, `provider_room_action_missing`,
 `provider_room_read_missing` and `provider_tool_round_limit`. The agent details show

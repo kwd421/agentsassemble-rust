@@ -172,12 +172,20 @@ impl RemoteOpenAiSpec {
             OpenAiStreamError::ResponseTooLarge | OpenAiStreamError::InvalidResponse => {
                 provider_error("provider_protocol_invalid", self.errors.invalid_response)
             }
-            // OpenAI-compatible APIs answer 404 when the model is gone, as a
-            // retired free model on OpenRouter does.
-            OpenAiStreamError::Http(404) => provider_error(
-                "provider_model_unavailable",
-                "The AI service does not offer this model (HTTP 404).",
-            ),
+            // At a fixed address, an OpenAI-compatible 404 means the model is gone
+            // (a retired OpenRouter free model) or not loaded (a local server). An
+            // address the owner typed may simply be wrong, so it stays generic.
+            OpenAiStreamError::Http(404)
+                if matches!(
+                    self.endpoint,
+                    RemoteOpenAiEndpoint::Fixed(_) | RemoteOpenAiEndpoint::FixedLoopback(_)
+                ) =>
+            {
+                provider_error(
+                    "provider_model_unavailable",
+                    "The AI service does not offer this model (HTTP 404).",
+                )
+            }
             OpenAiStreamError::Http(status) => DriverError {
                 code: "provider_api_unavailable".into(),
                 message: format!("{} (HTTP {status})", self.errors.api_unavailable).into(),
@@ -210,6 +218,13 @@ mod tests {
         );
         assert_eq!(
             spec.stream_error(OpenAiStreamError::Http(400)).code,
+            "provider_api_unavailable"
+        );
+        // A typed address may be wrong rather than the model missing.
+        assert_eq!(
+            crate::custom_api::CUSTOM_API_SPEC
+                .stream_error(OpenAiStreamError::Http(404))
+                .code,
             "provider_api_unavailable"
         );
     }
