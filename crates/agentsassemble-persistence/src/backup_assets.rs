@@ -122,7 +122,7 @@ pub(super) async fn validate_historical_file(
     version: i64,
 ) -> Result<(), PersistenceError> {
     let metadata = require_message_metadata(values, version)?;
-    if integer(values, "archive_content_length")? != metadata.size as i64 {
+    if i64::try_from(metadata.size).ok() != Some(integer(values, "archive_content_length")?) {
         return Err(invalid());
     }
     if metadata.is_image {

@@ -164,14 +164,11 @@ impl SqliteStore {
         {
             let binding: Binding = serde_json::from_str(row.get("binding_json"))?;
             let stored = item(&row)?;
-            let bound = match &stored.action {
-                ConfirmedRoomAction::RemoveAgent(remove) => remove,
-                _ => {
-                    return Err(rejected(
-                        "request_conflict",
-                        "This request ID identifies another action or execution.",
-                    ));
-                }
+            let ConfirmedRoomAction::RemoveAgent(bound) = &stored.action else {
+                return Err(rejected(
+                    "request_conflict",
+                    "This request ID identifies another action or execution.",
+                ));
             };
             if !binding.authority.same_delegate(authority) || bound.params != *params {
                 return Err(rejected(

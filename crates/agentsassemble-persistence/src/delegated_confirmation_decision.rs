@@ -154,7 +154,7 @@ impl SqliteStore {
                         }
                         settings.channels.retain(|c| c.id != action.channel_id);
                         for (position, channel) in settings.channels.iter_mut().enumerate() {
-                            channel.position = position as u32;
+                            channel.position = u32::try_from(position).unwrap_or(u32::MAX);
                         }
                         let delta = json!({"expected_revision":current_revision,"channels":settings.channels});
                         let mut outcome = crate::room_settings::update_settings_in(&mut tx, &proof.owner, &delta).await?;

@@ -133,10 +133,7 @@ pub(crate) async fn launch(
 mod tests {
     use serde_json::json;
 
-    use super::{
-        CATALOG_ENDPOINT, DISPLAY_NAME, PREFERRED_MODEL, TOKENROUTER_SPEC, model_options,
-        request_payload,
-    };
+    use super::{DISPLAY_NAME, model_options, request_payload};
     use crate::{remote_catalog::RemoteCatalogError, test_support::durable_session};
 
     #[test]

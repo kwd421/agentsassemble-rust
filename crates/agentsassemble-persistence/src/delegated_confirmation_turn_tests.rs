@@ -355,8 +355,8 @@ async fn attendee_store() -> Result<
             &issuer,
             CompanionInviteRequest {
                 request_id: Uuid::new_v4(),
-                provider_kind: "codex_live_session".into(),
-                display_name: "Companion".into(),
+                provider_kind: "codex_live_session",
+                display_name: "Companion",
             },
             now,
         )
@@ -368,8 +368,8 @@ async fn attendee_store() -> Result<
                 invite_fingerprint: &fingerprint,
                 client_fingerprint: &[1; 32],
                 request_id: Uuid::new_v4(),
-                provider_kind: "codex_live_session".into(),
-                display_name: "Companion".into(),
+                provider_kind: "codex_live_session",
+                display_name: "Companion",
             },
             now,
         )

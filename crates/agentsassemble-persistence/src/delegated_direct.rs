@@ -38,19 +38,19 @@ impl DelegatedRoomActionAuthority {
     fn allows(&self, action: &str) -> bool {
         match action {
             "set_message_pin" => true,
-            "create_text_channel" | "rename_text_channel" | "request_delete_text_channel" => {
-                self.owner.capabilities.room_manage
-            }
+            // Removal falls back to the owner's own kick gate
+            // (`authorized_removal_target`), invite creation to the owner's own
+            // room-manager authority.
+            "create_text_channel"
+            | "rename_text_channel"
+            | "request_delete_text_channel"
+            | "request_remove_agent"
+            | "request_kick_participant"
+            | "request_create_invite" => self.owner.capabilities.room_manage,
             "set_participant_mute" => self.owner.capabilities.participant_mute,
             "start_agent" | "stop_agent" | "request_create_agent" | "request_reconfigure_agent" => {
                 self.owner.capabilities.agent_control
             }
-            // Falls back to the owner's own kick gate (`authorized_removal_target`).
-            "request_remove_agent" | "request_kick_participant" => {
-                self.owner.capabilities.room_manage
-            }
-            // Falls back to the owner's own room-manager authority for invite creation.
-            "request_create_invite" => self.owner.capabilities.room_manage,
             _ => false,
         }
     }
@@ -283,7 +283,7 @@ async fn channel_delta(
                 id: id.clone(),
                 name: r.name.clone(),
                 channel_type: "text".into(),
-                position: current.channels.len() as u32,
+                position: u32::try_from(current.channels.len()).unwrap_or(u32::MAX),
                 created_at: Utc::now().to_rfc3339(),
             });
             (revision, id)

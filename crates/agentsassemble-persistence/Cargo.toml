@@ -17,6 +17,7 @@ gif.workspace = true
 libsodium-rs.workspace = true
 zeroize.workspace = true
 mime_guess.workspace = true
+parking_lot.workspace = true
 png.workspace = true
 ring.workspace = true
 same-file.workspace = true

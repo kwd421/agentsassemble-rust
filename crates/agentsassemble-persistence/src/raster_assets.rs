@@ -54,7 +54,7 @@ pub(crate) async fn prepare_card_thumbnail(
     let permit = decode_permit().await?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        card_thumbnail_blocking(declared_format, content)
+        card_thumbnail_blocking(declared_format, &content)
     })
     .await
     .map_err(|_| decode_task_failed())?
@@ -62,12 +62,12 @@ pub(crate) async fn prepare_card_thumbnail(
 
 fn card_thumbnail_blocking(
     declared_format: ImageFormat,
-    content: Vec<u8>,
+    content: &[u8],
 ) -> Result<Vec<u8>, PersistenceError> {
     let mut limits = decode_limits();
     limits.max_image_width = Some(MAX_CARD_ART_DIMENSION);
     limits.max_image_height = Some(MAX_CARD_ART_DIMENSION);
-    let mut reader = ImageReader::new(Cursor::new(content.as_slice()))
+    let mut reader = ImageReader::new(Cursor::new(content))
         .with_guessed_format()
         .map_err(|_| invalid_image())?;
     reader.limits(limits.clone());
@@ -79,7 +79,7 @@ fn card_thumbnail_blocking(
     if pixels == 0 || pixels > MAX_IMAGE_PIXELS {
         return Err(invalid_image());
     }
-    let decoded = ImageReader::new(Cursor::new(content.as_slice()))
+    let decoded = ImageReader::new(Cursor::new(content))
         .with_guessed_format()
         .map_err(|_| invalid_image())
         .and_then(|mut reader| {
@@ -321,13 +321,13 @@ fn validate_preserved_blocking(
     } else {
         Orientation::NoTransforms
     };
-    let mut decoded = DynamicImage::from_decoder(decoder).map_err(|_| invalid_image())?;
-    validate_pixels(&decoded)?;
+    let mut picture = DynamicImage::from_decoder(decoder).map_err(|_| invalid_image())?;
+    validate_pixels(&picture)?;
     if !wants_preview || animated {
         return Ok(None);
     }
-    decoded.apply_orientation(orientation);
-    crate::raster_preview::encode(decoded).map(Some)
+    picture.apply_orientation(orientation);
+    crate::raster_preview::encode(&picture).map(Some)
 }
 
 fn bounded_reader<R: std::io::BufRead + std::io::Seek>(

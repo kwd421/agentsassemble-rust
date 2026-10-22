@@ -431,14 +431,11 @@ impl SqliteStore {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let row = load_in(&mut tx, room_id, confirmation_id).await?;
         let request = item(&row)?;
-        let stored = match &request.action {
-            ConfirmedRoomAction::CreateHumanInvite(invite) => invite,
-            _ => {
-                return Err(rejected(
-                    "bad_request",
-                    "A human invite creation is required.",
-                ));
-            }
+        let ConfirmedRoomAction::CreateHumanInvite(stored) = &request.action else {
+            return Err(rejected(
+                "bad_request",
+                "A human invite creation is required.",
+            ));
         };
         if request.state != ConfirmationState::Executing {
             if request.state == ConfirmationState::Pending {
@@ -457,16 +454,17 @@ impl SqliteStore {
             });
         }
         let recorded = match row.get::<Option<&str>, _>("decision_json") {
-            Some(encoded) => match serde_json::from_str::<RecordedInviteDecision>(encoded) {
-                Ok(recorded) => recorded,
-                Err(_) => {
+            Some(encoded) => {
+                if let Ok(recorded) = serde_json::from_str::<RecordedInviteDecision>(encoded) {
+                    recorded
+                } else {
                     // No bound approver (a corrupt or pre-binding row): fail closed.
                     tx.commit().await?;
                     return self
                         .cancel_approved_human_invite(room_id, confirmation_id)
                         .await;
                 }
-            },
+            }
             None => {
                 return Err(rejected("permission_denied", "The owner has not approved."));
             }

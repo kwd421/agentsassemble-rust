@@ -170,7 +170,7 @@ pub(crate) async fn create_in<A>(
         delegate_participant_id: proof.delegate.participant_id.clone(),
         delegate_display_name: proof.delegate.display_name.clone(),
         action: action.clone(),
-        target_name: target_name,
+        target_name,
         consequences: consequences.into(),
         created_at: now,
         expires_at: expiry,

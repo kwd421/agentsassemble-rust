@@ -72,7 +72,7 @@ async fn managed_upload_uses_current_limits_participant_custody_and_streamed_rea
             "attached",
             "",
             None,
-            &[completed.attachment_id.clone()],
+            std::slice::from_ref(&completed.attachment_id),
         )
         .await?;
     assert_eq!(

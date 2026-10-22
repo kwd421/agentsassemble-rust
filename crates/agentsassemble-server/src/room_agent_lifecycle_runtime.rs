@@ -80,8 +80,8 @@ pub(crate) async fn execute_agent_start(
     let mut plan = store
         .prepare_agent_launch(
             command.control,
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
             command.action.as_str(),
         )
         .await;
@@ -89,10 +89,10 @@ pub(crate) async fn execute_agent_start(
         plan = match recover_exact_lifecycle_command(
             store,
             provider_adapter,
-            &command.principal,
-            &command.request_id,
+            command.principal,
+            command.request_id,
             command.action.as_str(),
-            &command.payload,
+            command.payload,
         )
         .await
         {
@@ -100,8 +100,8 @@ pub(crate) async fn execute_agent_start(
                 store
                     .prepare_agent_launch(
                         command.control,
-                        &command.request_id,
-                        &command.payload,
+                        command.request_id,
+                        command.payload,
                         command.action.as_str(),
                     )
                     .await
@@ -136,8 +136,8 @@ pub(crate) async fn execute_agent_start(
     let authorized = store
         .authorize_agent_start_effect(
             command.control,
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
             &effect.operation_id,
             command.action.as_str(),
             &reservation.runtime_handle_id,
@@ -181,8 +181,8 @@ async fn execute_paused_resume(
     let plan = match store
         .prepare_paused_agent_resume(
             command.mutation_authority(),
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
         )
         .await
     {
@@ -203,8 +203,8 @@ async fn execute_paused_resume(
     match store
         .resume_paused_agent(
             command.mutation_authority(),
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
             &runtime,
         )
         .await
@@ -230,8 +230,8 @@ pub(crate) async fn execute_agent_pause(
     let plan = match store
         .prepare_agent_pause(
             command.mutation_authority(),
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
         )
         .await
     {
@@ -250,8 +250,8 @@ pub(crate) async fn execute_agent_pause(
     store
         .execute_agent_pause(
             command.mutation_authority(),
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
             &runtime,
         )
         .await
@@ -285,9 +285,9 @@ async fn record_agent_start_pre_effect_failure(
 ) -> CommandExecution {
     let commit = store
         .fail_agent_start_before_effect(
-            &command.principal,
-            &command.request_id,
-            &command.payload,
+            command.principal,
+            command.request_id,
+            command.payload,
             &effect.operation_id,
             reason.0,
             reason.1,
@@ -317,8 +317,8 @@ async fn complete_agent_start(
     let outcome = store
         .complete_agent_launch(
             command.mutation_authority(),
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
             &effect.operation_id,
             &persisted,
             command.action.as_str(),
@@ -340,7 +340,7 @@ async fn record_agent_start_failure(
     if error.effect_uncertain {
         let events = match store
             .mark_agent_start_unconfirmed(
-                &command.principal,
+                command.principal,
                 &effect.session.public.session_id,
                 &effect.operation_id,
                 &error.runtime_handle_id,
@@ -362,9 +362,9 @@ async fn record_agent_start_failure(
     }
     let commit = store
         .fail_agent_launch(
-            &command.principal,
-            &command.request_id,
-            &command.payload,
+            command.principal,
+            command.request_id,
+            command.payload,
             &effect.operation_id,
             &error.code,
             &error.message,
@@ -398,9 +398,9 @@ async fn record_agent_stop_authorization_failure(
     };
     match store
         .fail_agent_stop_before_effect(
-            &command.principal,
-            &command.request_id,
-            &command.payload,
+            command.principal,
+            command.request_id,
+            command.payload,
             operation_id,
             reason,
         )
@@ -435,8 +435,8 @@ pub(crate) async fn execute_agent_stop(
             match store
                 .finalize_agent_stop(
                     command.mutation_authority(),
-                    &command.request_id,
-                    &command.payload,
+                    command.request_id,
+                    command.payload,
                 )
                 .await
             {
@@ -460,8 +460,8 @@ async fn execute_managed_stop(
     let effect = match store
         .authorize_agent_stop_effect(
             command.control,
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
             &effect.operation_id,
         )
         .await
@@ -489,7 +489,7 @@ async fn execute_managed_stop(
     if let Err(error) = stop {
         let events = match store
             .mark_agent_stop_unconfirmed(
-                &command.principal,
+                command.principal,
                 &effect.session_id,
                 &effect.operation_id,
                 &error.code,
@@ -532,8 +532,8 @@ async fn execute_managed_stop(
     match store
         .finalize_agent_stop(
             command.mutation_authority(),
-            &command.request_id,
-            &command.payload,
+            command.request_id,
+            command.payload,
         )
         .await
     {
@@ -586,7 +586,7 @@ async fn prepare_agent_stop_with_recovery(
     command: &LifecycleCommand<'_>,
 ) -> Result<AgentStopPlan, PersistenceError> {
     let plan = store
-        .prepare_agent_stop(command.control, &command.request_id, &command.payload)
+        .prepare_agent_stop(command.control, command.request_id, command.payload)
         .await;
     if !plan.as_ref().is_err_and(unconfirmed_effect) {
         return plan;
@@ -594,16 +594,16 @@ async fn prepare_agent_stop_with_recovery(
     match recover_exact_lifecycle_command(
         store,
         provider_adapter,
-        &command.principal,
-        &command.request_id,
+        command.principal,
+        command.request_id,
         command.action.as_str(),
-        &command.payload,
+        command.payload,
     )
     .await
     {
         Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
             store
-                .prepare_agent_stop(command.control, &command.request_id, &command.payload)
+                .prepare_agent_stop(command.control, command.request_id, command.payload)
                 .await
         }
         Ok(LiveRuntimeReconciliation::StillUnresolved) => plan,

@@ -198,12 +198,12 @@ impl Output {
             let _source_wait = self
                 .progress
                 .as_ref()
-                .map(|progress| progress.server_wait());
+                .map(super::http_body_policy::Progress::server_wait);
             let _credit_wait = self
                 .credit_progress
                 .as_ref()
                 .filter(|_| self.body_data.available_permits() == BODY_WINDOW_BYTES - length)
-                .map(|progress| progress.server_wait());
+                .map(super::http_body_policy::Progress::server_wait);
             let permit = if length == 0 {
                 self.data
                     .clone()

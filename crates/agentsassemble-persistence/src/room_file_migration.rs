@@ -34,7 +34,7 @@ pub(crate) async fn require_source(
         .fetch_all(&mut canonical)
         .await?;
     let actual: Vec<Trigger> = sqlx::query_as(triggers)
-        .bind((expected.len() + 1) as i64)
+        .bind(i64::try_from(expected.len() + 1).unwrap_or(i64::MAX))
         .fetch_all(&mut *source)
         .await?;
     if actual != expected {
@@ -47,7 +47,7 @@ pub(crate) async fn require_source(
         .fetch_all(&mut canonical)
         .await?;
     let actual: Vec<(String, String, String, Option<String>)> = sqlx::query_as(metadata)
-        .bind((expected.len() + 1) as i64)
+        .bind(i64::try_from(expected.len() + 1).unwrap_or(i64::MAX))
         .fetch_all(&mut *source)
         .await?;
     if actual != expected {
@@ -67,7 +67,7 @@ pub(crate) async fn require_source(
         .fetch_all(&mut canonical)
         .await?;
     let actual: Vec<Reference> = sqlx::query_as(references)
-        .bind((expected.len() + 1) as i64)
+        .bind(i64::try_from(expected.len() + 1).unwrap_or(i64::MAX))
         .fetch_all(&mut *source)
         .await?;
     if actual != expected {

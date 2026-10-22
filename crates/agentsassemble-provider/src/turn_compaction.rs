@@ -2,6 +2,8 @@
 //! messages come near the model's context window, the older tool rounds are
 //! summarized by the model and replaced by that summary. The room rules, the
 //! turn input and the latest rounds stay exactly as they were.
+use std::fmt::Write as _;
+
 use serde_json::{Value, json};
 
 /// The window assumed when neither the catalog nor the provider's documents
@@ -77,19 +79,24 @@ pub(crate) fn summary_request(messages: &[Value], opening: usize, cut: usize) ->
         match message["role"].as_str() {
             Some("assistant") => {
                 if !content.is_empty() {
-                    work.push_str(&format!("Agent: {content}\n"));
+                    let _ = writeln!(work, "Agent: {content}");
                 }
                 for call in message["tool_calls"].as_array().into_iter().flatten() {
                     let function = &call["function"];
-                    work.push_str(&format!(
-                        "Called {}({})\n",
+                    let _ = writeln!(
+                        work,
+                        "Called {}({})",
                         function["name"].as_str().unwrap_or_default(),
                         function["arguments"].as_str().unwrap_or_default()
-                    ));
+                    );
                 }
             }
-            Some("tool") => work.push_str(&format!("Result: {content}\n")),
-            _ => work.push_str(&format!("Earlier summary: {content}\n")),
+            Some("tool") => {
+                let _ = writeln!(work, "Result: {content}");
+            }
+            _ => {
+                let _ = writeln!(work, "Earlier summary: {content}");
+            }
         }
     }
     vec![

@@ -18,6 +18,7 @@ pub const ROOM_STORAGE_LIMITS: [u64; 5] = [
 pub(crate) fn default_file_limit() -> usize {
     MAX_ATTACHMENT_BYTES
 }
+#[allow(clippy::trivially_copy_pass_by_ref)] // Serde skip predicates receive a reference.
 pub(crate) fn is_default_file_limit(value: &usize) -> bool {
     *value == MAX_ATTACHMENT_BYTES
 }

@@ -82,7 +82,7 @@ pub(crate) async fn revalidate_runtime_authority(
         };
     if executable_registration.executable_required {
         let executable = runtime_executable_identity(
-            &executable_registration.provider_kind,
+            executable_registration.provider_kind,
             session.executable.clone(),
         )
         .await

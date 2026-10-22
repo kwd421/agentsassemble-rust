@@ -3,7 +3,7 @@ use std::path::Path;
 use super::{SERVER_USERNAME, config_error};
 use crate::launch_error::DriverLaunchError;
 
-/// Builds the child environment that keeps OpenCode's discovery, state and
+/// Builds the child environment that keeps `OpenCode`'s discovery, state and
 /// watchers inside this launch.
 pub(super) fn isolated_environment(
     root: &Path,

@@ -71,16 +71,17 @@ pub(crate) async fn run_generation(
     let named = match config.named.as_ref() {
         Some(context) => {
             match ensure_named_tunnel(&context.store, &context.directory, &context.identity).await {
-                TunnelPlan::Named(stored) => match CanonicalPublicOrigin::parse(&stored.origin()) {
-                    Ok(origin) => Some((stored, origin)),
-                    Err(_) => {
+                TunnelPlan::Named(stored) => {
+                    if let Ok(origin) = CanonicalPublicOrigin::parse(&stored.origin()) {
+                        Some((stored, origin))
+                    } else {
                         tracing::warn!(
                             %generation,
                             "named tunnel origin is invalid; using quick tunnel"
                         );
                         None
                     }
-                },
+                }
                 TunnelPlan::Quick { reason } => {
                     tracing::info!(
                         %generation,
@@ -149,7 +150,7 @@ async fn run_named_generation(
     // the public hostname, so the ingress trust decision is identical for both
     // and no local process can reach the loopback port with the public Host.
     let origin_host = generated_origin_host();
-    let spawned = match spawn_cloudflared_named(
+    let spawned = if let Ok(spawned) = spawn_cloudflared_named(
         cloudflared,
         &config.local_url,
         &origin_host,
@@ -158,14 +159,13 @@ async fn run_named_generation(
     )
     .await
     {
-        Ok(spawned) => spawned,
-        Err(_) => {
-            tracing::warn!(
-                %generation,
-                "named tunnel spawn failed; using quick tunnel"
-            );
-            return run_quick_generation(generation, config, projection, cancellation).await;
-        }
+        spawned
+    } else {
+        tracing::warn!(
+            %generation,
+            "named tunnel spawn failed; using quick tunnel"
+        );
+        return run_quick_generation(generation, config, projection, cancellation).await;
     };
     let (outcome, fallback) = run_spawned_generation(
         generation,
@@ -241,8 +241,8 @@ async fn run_spawned_generation(
         generation,
         &origin_host,
         &config.stable_entry,
-        &projection,
-        &cancellation,
+        projection,
+        cancellation,
         child_owner,
         output_events,
         fixed_origin,

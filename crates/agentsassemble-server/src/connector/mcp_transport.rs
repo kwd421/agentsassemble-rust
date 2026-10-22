@@ -16,8 +16,7 @@ use super::ConnectorMcp;
 /// Reports MCP initialization or transport task failure.
 pub async fn serve_stdio(workspace: Option<std::path::PathBuf>) -> anyhow::Result<()> {
     let workspace = workspace
-        .map(Ok)
-        .unwrap_or_else(std::env::current_dir)
+        .map_or_else(std::env::current_dir, Ok)
         .map_err(|error| anyhow::anyhow!("connector workspace unavailable: {error}"))?
         .canonicalize()
         .map_err(|error| anyhow::anyhow!("connector workspace unavailable: {error}"))?;

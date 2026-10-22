@@ -10,7 +10,7 @@ pub(crate) struct Preview {
     pub(crate) content: Vec<u8>,
 }
 
-pub(crate) fn encode(image: DynamicImage) -> Result<Preview, PersistenceError> {
+pub(crate) fn encode(image: &DynamicImage) -> Result<Preview, PersistenceError> {
     let transparent =
         image.color().has_alpha() && image.pixels().any(|(_, _, pixel)| pixel[3] != 255);
     let mut side = MAX_DIMENSION.min(image.width().max(image.height()));

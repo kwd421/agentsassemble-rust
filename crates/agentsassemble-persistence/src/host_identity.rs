@@ -210,8 +210,7 @@ impl SqliteStore {
             (None, Some(_)) => false,
             (Some(value), Some(epoch)) => {
                 serde_json::from_str::<crate::named_tunnel::StoredPayloadForCleanup>(&value)
-                    .map(|payload| payload.registration_epoch != epoch)
-                    .unwrap_or(true)
+                    .map_or(true, |payload| payload.registration_epoch != epoch)
             }
         };
         if stale {

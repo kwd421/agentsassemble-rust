@@ -27,7 +27,7 @@ pub(crate) const SESSION_TTL: Duration = Duration::hours(1);
 pub const DEBUG_ROOM_SESSION_TTL_ENV: &str = "AGENTSASSEMBLE_DEBUG_ROOM_SESSION_TTL_SECS";
 /// Smallest accepted debug override (60 s).
 pub const DEBUG_ROOM_SESSION_TTL_MIN_SECS: i64 = 60;
-/// Largest accepted debug override (3_600 s = the 1 h default).
+/// Largest accepted debug override (`3_600` s = the 1 h default).
 pub const DEBUG_ROOM_SESSION_TTL_MAX_SECS: i64 = 3600;
 
 #[must_use]

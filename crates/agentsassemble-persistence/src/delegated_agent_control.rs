@@ -110,6 +110,8 @@ impl AgentControlAuthority<'_> {
     }
 }
 
+// The field names are the stored JSON keys.
+#[allow(clippy::struct_field_names)]
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Attribution {

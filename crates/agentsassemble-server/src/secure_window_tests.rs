@@ -175,8 +175,9 @@ async fn stalled_body_releases_share_while_healthy_consumers_and_control_continu
         loop {
             let message = records.recv().await.unwrap();
             match &message {
-                axum::extract::ws::Message::Ping(_)
-                | axum::extract::ws::Message::Pong(_) => continue,
+                axum::extract::ws::Message::Ping(_) | axum::extract::ws::Message::Pong(_) => {
+                    continue;
+                }
                 _ => return message,
             }
         }

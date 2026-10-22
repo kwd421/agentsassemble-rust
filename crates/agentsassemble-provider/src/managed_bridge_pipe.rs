@@ -103,6 +103,13 @@ mod tests {
     }
 
     async fn backpressure_case() -> Result<(), Box<dyn std::error::Error>> {
+        struct Retained(std::sync::Arc<()>);
+        impl AsRef<[u8]> for Retained {
+            fn as_ref(&self) -> &[u8] {
+                let _ = &self.0;
+                b"owned"
+            }
+        }
         let (left, right) = tokio::io::duplex(64);
         let (left_read, left_write) = tokio::io::split(left);
         let (right_read, right_write) = tokio::io::split(right);
@@ -112,13 +119,6 @@ mod tests {
         let payload = "x".repeat(4096);
         let owner = std::sync::Arc::new(());
         let lifetime = std::sync::Arc::downgrade(&owner);
-        struct Retained(std::sync::Arc<()>);
-        impl AsRef<[u8]> for Retained {
-            fn as_ref(&self) -> &[u8] {
-                let _ = &self.0;
-                b"owned"
-            }
-        }
         pipe.queue_retained(&payload, Some(Bytes::from_owner(Retained(owner))))?;
         pipe.queue(&"second")?;
         tokio::select! {

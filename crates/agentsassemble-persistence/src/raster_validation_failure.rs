@@ -1,8 +1,9 @@
 //! Immutable validation diagnoses; CPU/storage/admission errors are never receipts.
 use crate::PersistenceError;
+use parking_lot::Mutex;
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
@@ -53,44 +54,36 @@ impl Default for PreviewFailures {
         Self {
             receipts: Mutex::default(),
             slots: Arc::new(Semaphore::new(
-                crate::asset_storage::MAX_RETAINED_ASSETS as usize,
+                usize::try_from(crate::asset_storage::MAX_RETAINED_ASSETS).unwrap_or_default(),
             )),
         }
     }
 }
 impl PreviewFailures {
     pub(crate) fn get(&self, id: &str) -> Option<RasterValidationFailure> {
-        self.receipts
-            .lock()
-            .expect("preview failure receipts")
-            .get(id)
-            .map(|(error, _)| error.clone())
+        self.receipts.lock().get(id).map(|(error, _)| error.clone())
     }
     pub(crate) async fn reserve(
         self: &Arc<Self>,
         id: &str,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ) -> Result<PreviewFailureSlot, PersistenceError> {
-        let permit = match self.slots.clone().try_acquire_owned() {
-            Ok(permit) => permit,
-            Err(_) => {
-                let live: HashSet<String> =
-                    sqlx::query_scalar("SELECT attachment_id FROM room_message_attachments")
-                        .fetch_all(&mut **tx)
-                        .await?
-                        .into_iter()
-                        .collect();
-                self.receipts
-                    .lock()
-                    .expect("preview failure receipts")
-                    .retain(|id, _| live.contains(id));
-                self.slots.clone().try_acquire_owned().map_err(|_| {
-                    PersistenceError::CommandRejected {
-                        code: "attachment_download_budget_exhausted".into(),
-                        message: "Preview validation receipts are busy; retry later.".into(),
-                    }
-                })?
-            }
+        let permit = if let Ok(permit) = self.slots.clone().try_acquire_owned() {
+            permit
+        } else {
+            let live: HashSet<String> =
+                sqlx::query_scalar("SELECT attachment_id FROM room_message_attachments")
+                    .fetch_all(&mut **tx)
+                    .await?
+                    .into_iter()
+                    .collect();
+            self.receipts.lock().retain(|id, _| live.contains(id));
+            self.slots.clone().try_acquire_owned().map_err(|_| {
+                PersistenceError::CommandRejected {
+                    code: "attachment_download_budget_exhausted".into(),
+                    message: "Preview validation receipts are busy; retry later.".into(),
+                }
+            })?
         };
         Ok(PreviewFailureSlot {
             owner: self.clone(),
@@ -110,7 +103,6 @@ impl PreviewFailureSlot {
             self.owner
                 .receipts
                 .lock()
-                .expect("preview failure receipts")
                 .insert(self.id, (failure, self.permit));
         }
     }

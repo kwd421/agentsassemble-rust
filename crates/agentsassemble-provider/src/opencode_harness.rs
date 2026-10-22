@@ -14,7 +14,7 @@ use crate::{
 };
 use agentsassemble_domain::DurableAgentSession;
 
-/// Stored value of the execution harness that runs an API agent inside OpenCode.
+/// Stored value of the execution harness that runs an API agent inside `OpenCode`.
 pub(crate) const NAME: &str = "opencode";
 
 struct HarnessProvider {
@@ -37,7 +37,7 @@ fn provider(provider_kind: &str) -> Option<&'static HarnessProvider> {
     }
 }
 
-/// Maps a stored API model onto the model id OpenCode expects.
+/// Maps a stored API model onto the model id `OpenCode` expects.
 pub(crate) fn driver_model(provider_kind: &str, model: &str) -> Option<String> {
     let provider = provider(provider_kind)?;
     if model.is_empty()
@@ -52,7 +52,7 @@ pub(crate) fn driver_model(provider_kind: &str, model: &str) -> Option<String> {
     Some(format!("{}/{model}", provider.opencode_provider))
 }
 
-/// Starts the loopback key broker that holds this session's API key. OpenCode
+/// Starts the loopback key broker that holds this session's API key. `OpenCode`
 /// only ever receives the broker's address and per-launch token.
 pub(crate) async fn key_broker(
     session: &DurableAgentSession,
@@ -64,7 +64,7 @@ pub(crate) async fn key_broker(
     KeyBroker::start(upstream, session.public.model.clone(), secret.to_owned()).await
 }
 
-/// Folder an API agent without an owner-selected workspace runs in. OpenCode
+/// Folder an API agent without an owner-selected workspace runs in. `OpenCode`
 /// keeps each session, and the directory it was opened in, in the owner's data
 /// root, so the folder must outlive one launch for the session to resume.
 pub(crate) async fn conversation_workspace(

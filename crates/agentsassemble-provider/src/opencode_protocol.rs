@@ -120,8 +120,8 @@ pub(crate) fn is_harness(session: &DurableAgentSession) -> bool {
     session.public.execution_harness == opencode_harness::NAME
 }
 
-/// The OpenCode model id for this session. API-harness sessions use the mapped
-/// provider id; every real OpenCode session keeps its stored model.
+/// The `OpenCode` model id for this session. API-harness sessions use the mapped
+/// provider id; every real `OpenCode` session keeps its stored model.
 pub(crate) fn session_model(session: &DurableAgentSession) -> Result<String, DriverError> {
     if !is_harness(session) {
         return Ok(session.public.model.clone());

@@ -80,7 +80,7 @@ async fn pending_message_upload_preserves_bytes_and_classifies_only_verified_ras
     assert_eq!(
         crate::room_file_content::RoomFileContent::Message
             .collect(
-                &mut *store
+                &mut store
                     .pool
                     .acquire()
                     .await
@@ -106,7 +106,7 @@ async fn pending_message_upload_preserves_bytes_and_classifies_only_verified_ras
     assert_eq!(
         crate::room_file_content::RoomFileContent::Message
             .collect(
-                &mut *store
+                &mut store
                     .pool
                     .acquire()
                     .await

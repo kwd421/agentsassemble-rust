@@ -1,4 +1,6 @@
 //! Request transitions, exact replay and owner-private durable delivery.
+use std::collections::BTreeMap;
+
 use crate::delegated_confirmation::{Binding, rejected};
 use crate::delegated_pin::DelegatedRoomActionAuthority;
 use crate::{DelegateRoomAuthority, PersistenceError, SqliteStore};
@@ -210,7 +212,7 @@ async fn base_event(
         display_name: None,
         content: None,
         message_kind: None,
-        extra: Default::default(),
+        extra: BTreeMap::default(),
     })
 }
 

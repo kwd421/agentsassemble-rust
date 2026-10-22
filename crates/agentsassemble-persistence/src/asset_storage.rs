@@ -59,6 +59,9 @@ fn rejected(code: &'static str, message: &str) -> PersistenceError {
 impl SqliteStore {
     /// One statement gives room labels and retained sizes from the same read snapshot.
     /// Deliberately includes expired pending rows until their storage owner deletes them.
+    ///
+    /// # Errors
+    /// Fails when the database read fails.
     pub async fn attachment_storage_usage(
         &self,
     ) -> Result<AttachmentStorageUsage, PersistenceError> {

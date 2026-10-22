@@ -162,7 +162,7 @@ async fn provider_read_revalidates_exact_turn_and_inflight_reference() {
         turn_generation: assignment.turn_generation,
         execution_id: &assignment.execution_id,
     };
-    let (read, _) = store
+    let (read, ()) = store
         .bound_provider_message_attachment(authority, &attachment.id, |_, _| Ok(()))
         .await
         .unwrap_or_else(|error| panic!("read provider attachment: {error}"));
@@ -271,7 +271,7 @@ async fn provider_reads_an_attachment_shown_before_the_message_that_asks_about_i
         )
         .await
         .unwrap_or_else(|error| panic!("authorize Terra turn: {error}"));
-    let (read, _) = store
+    let (read, ()) = store
         .bound_provider_message_attachment(
             ProviderAttachmentReadAuthority {
                 room_id: &assignment.session.public.room_id,
@@ -354,7 +354,7 @@ async fn provider_reads_an_older_attachment_outside_its_room_view() {
         turn_generation: assignment.turn_generation,
         execution_id: &assignment.execution_id,
     };
-    let (read, _) = store
+    let (read, ()) = store
         .bound_provider_message_attachment(authority, &attachment.id, |_, _| Ok(()))
         .await
         .unwrap_or_else(|error| panic!("read the older attachment: {error}"));

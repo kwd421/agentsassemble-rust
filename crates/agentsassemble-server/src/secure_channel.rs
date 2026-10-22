@@ -192,7 +192,9 @@ async fn hello_is_live(state: &AppState, origin: &str, hello: &SecureClientHello
 
 #[path = "secure_writer.rs"]
 mod writer;
-pub(crate) use writer::{SECURE_CHANNEL_KEEPALIVE, write_records};
+#[cfg(test)]
+pub(crate) use writer::SECURE_CHANNEL_KEEPALIVE;
+pub(crate) use writer::write_records;
 
 fn run(
     mut socket: WebSocket,

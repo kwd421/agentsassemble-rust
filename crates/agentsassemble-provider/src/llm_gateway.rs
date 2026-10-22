@@ -94,9 +94,7 @@ pub(crate) async fn launch(
 mod tests {
     use serde_json::json;
 
-    use super::{
-        CATALOG_ENDPOINT, LLM_GATEWAY_SPEC, PREFERRED_MODEL, REASONING_EFFORTS, request_payload,
-    };
+    use super::{PREFERRED_MODEL, REASONING_EFFORTS, request_payload};
     use crate::test_support::durable_session;
 
     #[test]

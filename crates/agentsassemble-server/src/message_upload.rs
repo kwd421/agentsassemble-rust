@@ -322,10 +322,10 @@ impl Service {
         handle: String,
     ) -> Result<MessageUploadStatus, ProfileHttpError> {
         let entry = self.entry(&authority, &handle).await?;
-        if !entry.active.load(Ordering::Relaxed) {
-            if let Some(failure) = entry.failure.read().await.as_ref() {
-                return Err(failure.error().into());
-            }
+        if !entry.active.load(Ordering::Relaxed)
+            && let Some(failure) = entry.failure.read().await.as_ref()
+        {
+            return Err(failure.error().into());
         }
         self.store
             .message_upload_status(&authority, &handle)

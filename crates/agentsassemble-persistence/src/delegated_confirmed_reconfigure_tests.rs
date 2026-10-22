@@ -100,9 +100,8 @@ async fn unconfirmed_reconfigure_changes_nothing_and_only_owner_approves() -> Te
         before
     );
     let (request, owner_reference, _) = store.approved_reconfigure_snapshot("general", id).await?;
-    let bound = match &request.action {
-        ConfirmedRoomAction::ReconfigureAgent(reconfigure) => reconfigure,
-        _ => return Err("bound reconfiguration missing".into()),
+    let ConfirmedRoomAction::ReconfigureAgent(bound) = &request.action else {
+        return Err("bound reconfiguration missing".into());
     };
     assert_eq!(bound.params, params);
     assert_eq!(bound.expected_configuration_revision, "profile-1");

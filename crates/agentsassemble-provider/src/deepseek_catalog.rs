@@ -101,7 +101,7 @@ fn ready(
     )
 }
 
-/// DeepSeek's model list carries no context window; these come from the
+/// `DeepSeek`'s model list carries no context window; these come from the
 /// models table at api-docs.deepseek.com/quick_start/pricing (2026-10-21).
 /// A model missing here gets no window rather than a guessed one.
 const DOCUMENTED_CONTEXT: [(&str, u64); 2] = [

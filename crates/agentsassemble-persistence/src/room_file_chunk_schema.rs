@@ -38,7 +38,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             .collect();
         expected_indexes.sort();
         let mut actual_indexes: Vec<Option<String>> = sqlx::query_scalar("SELECT CASE WHEN length(sql)<=65536 THEN sql END FROM sqlite_schema WHERE tbl_name=? AND type!='table' AND sql IS NOT NULL LIMIT ?")
-            .bind(name).bind((expected_indexes.len()+1) as i64).fetch_all(&mut *tx).await?;
+            .bind(name).bind(i64::try_from(expected_indexes.len()+1).unwrap_or(i64::MAX)).fetch_all(&mut *tx).await?;
         actual_indexes.sort();
         if actual_indexes != expected_indexes.into_iter().map(Some).collect::<Vec<_>>() {
             return Err(PersistenceError::InvalidSchemaVersion(format!(

@@ -40,7 +40,7 @@ where
     (task, ready_receiver)
 }
 
-/// OpenCode 1 prints "opencode server listening on <url>", OpenCode 2 drops the
+/// `OpenCode` 1 prints "opencode server listening on <url>", `OpenCode` 2 drops the
 /// leading "opencode "; either names the exact bound endpoint.
 fn ready_line_matches(line: &[u8], expected: &str) -> bool {
     line == expected.as_bytes()

@@ -13,9 +13,9 @@ use tokio::time::{Instant, timeout_at};
 
 const CONTROL: Duration = Duration::from_secs(10);
 pub(crate) const IDLE: Duration = Duration::from_secs(30);
-const WINDOW: Duration = Duration::from_secs(120);
+const WINDOW: Duration = Duration::from_mins(2);
 const MIN_PROGRESS: usize = 64 * 1024;
-pub(crate) const UPLOAD_CEILING: Duration = Duration::from_secs(60 * 60);
+pub(crate) const UPLOAD_CEILING: Duration = Duration::from_hours(1);
 
 #[derive(Clone)]
 pub(crate) struct Policy {
@@ -34,10 +34,10 @@ impl Drop for ServerWait {
     fn drop(&mut self) {
         self.0.clock.send_modify(|clock| {
             clock.owners -= 1;
-            if clock.owners == 0 {
-                if let Some(start) = clock.paused.take() {
-                    clock.excluded += start.elapsed();
-                }
+            if clock.owners == 0
+                && let Some(start) = clock.paused.take()
+            {
+                clock.excluded += start.elapsed();
             }
         });
     }
@@ -160,19 +160,19 @@ impl Progress {
     pub(crate) fn emitted(&self) {
         self.0.send_modify(|window| {
             let now = Instant::now();
-            if !window.emitted {
-                *window = ProgressWindow::new(now);
-            } else {
+            if window.emitted {
                 // Source/encryption/queue waits with nothing to credit are server time.
                 window.window_end += now.saturating_duration_since(window.last_data);
                 window.last_data = now;
                 window.paused = None;
+            } else {
+                *window = ProgressWindow::new(now);
             }
         });
     }
     pub(crate) fn accept(&self, bytes: usize) {
         self.0.send_modify(|window| {
-            window.accept_at(bytes, window.paused.unwrap_or_else(Instant::now))
+            window.accept_at(bytes, window.paused.unwrap_or_else(Instant::now));
         });
     }
     pub(crate) fn ceiling(&self) -> Instant {

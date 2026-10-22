@@ -153,7 +153,7 @@ impl SqliteStore {
         if let Some(row) = sqlx::query("SELECT * FROM temp.message_uploads WHERE room_id=? AND user_id=? AND participant_id=? AND operation_id=?")
             .bind(&p.room_id).bind(&p.principal_id).bind(&p.participant_id).bind(operation_id)
             .fetch_optional(&mut *tx).await? {
-            if row.get::<i64,_>("size") != size as i64 || row.get::<String,_>("filename") != filename
+            if row.get::<i64,_>("size") != sql_int(size) || row.get::<String,_>("filename") != filename
                 || row.get::<String,_>("content_type") != content_type {
                 return Err(rejected("upload_operation_conflict"));
             }
@@ -166,7 +166,7 @@ impl SqliteStore {
         attachments::require_storage_capacity(
             &mut tx,
             &p,
-            size as i64,
+            sql_int(size),
             matches!(authority, MessageUploadAuthority::Connector(_)),
         )
         .await?;
@@ -175,7 +175,7 @@ impl SqliteStore {
         let expiry = Utc::now().timestamp() + 3600;
         sqlx::query("INSERT INTO temp.message_uploads(handle,attachment_id,room_id,user_id,participant_id,operation_id,filename,content_type,size,expires_at,room_uid) VALUES(?,?,?,?,?,?,?,?,?,?,(SELECT json_extract(room_json,'$.room_uid') FROM rooms WHERE room_id=?))")
             .bind(&handle).bind(&id).bind(&p.room_id).bind(&p.principal_id).bind(&p.participant_id)
-            .bind(operation_id).bind(filename).bind(content_type).bind(size as i64).bind(expiry).bind(&p.room_id)
+            .bind(operation_id).bind(filename).bind(content_type).bind(sql_int(size)).bind(expiry).bind(&p.room_id)
             .execute(&mut *tx).await?;
         let status = status_in(&mut tx, &handle).await?;
         tx.commit().await?;
@@ -218,19 +218,19 @@ impl SqliteStore {
                     "SELECT content FROM temp.message_upload_pieces WHERE handle=? AND sequence=?",
                 )
                 .bind(handle)
-                .bind(sequence as i64)
+                .bind(sql_int(sequence))
                 .fetch_one(&mut *tx)
                 .await?
             };
             let take = (MESSAGE_UPLOAD_PIECE_BYTES - tail).min(bytes.len() - consumed);
             piece.extend_from_slice(&bytes[consumed..consumed + take]);
             sqlx::query("INSERT INTO temp.message_upload_pieces(handle,sequence,content) VALUES(?,?,?) ON CONFLICT(handle,sequence) DO UPDATE SET content=excluded.content")
-                .bind(handle).bind(sequence as i64).bind(piece).execute(&mut *tx).await?;
+                .bind(handle).bind(sql_int(sequence)).bind(piece).execute(&mut *tx).await?;
             consumed += take;
             position += take;
         }
         sqlx::query("UPDATE temp.message_uploads SET accepted=? WHERE handle=?")
-            .bind(next as i64)
+            .bind(sql_int(next))
             .bind(handle)
             .execute(&mut *tx)
             .await?;
@@ -297,7 +297,7 @@ impl SqliteStore {
                     "SELECT content FROM temp.message_upload_pieces WHERE handle=? AND sequence=?",
                 )
                 .bind(handle)
-                .bind(sequence as i64)
+                .bind(sql_int(sequence))
                 .fetch_one(&self.pool)
                 .await?;
                 content.extend_from_slice(&piece);
@@ -323,7 +323,7 @@ impl SqliteStore {
         attachments::require_storage_capacity(
             &mut tx,
             &p,
-            original.declared_size as i64,
+            sql_int(original.declared_size),
             matches!(authority, MessageUploadAuthority::Connector(_)),
         )
         .await?;
@@ -336,14 +336,14 @@ impl SqliteStore {
         if participant_owned {
             sqlx::query("INSERT INTO room_connector_uploads(attachment_id,room_id,participant_id,filename,content_type,size,is_safe_image,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)")
                 .bind(&original.attachment_id).bind(&p.room_id).bind(&p.participant_id).bind(&filename)
-                .bind(&content_type).bind(original.declared_size as i64).bind(is_image).bind(created).bind(created+3600)
+                .bind(&content_type).bind(sql_int(original.declared_size)).bind(is_image).bind(created).bind(created+3600)
                 .execute(&mut *tx).await?;
             sqlx::query("INSERT INTO room_connector_upload_chunks(attachment_id,sequence,content) SELECT ?,sequence,content FROM temp.message_upload_pieces WHERE handle=?")
                 .bind(&original.attachment_id).bind(handle).execute(&mut *tx).await?;
         } else {
             sqlx::query("INSERT INTO room_message_attachments(attachment_id,room_id,pending_owner_user_id,filename,content_type,size,is_safe_image,created_at,state,expires_at) VALUES(?,?,?,?,?,?,?,?,'pending',?)")
             .bind(&original.attachment_id).bind(&p.room_id).bind(&p.principal_id).bind(&filename)
-            .bind(&content_type).bind(original.declared_size as i64).bind(is_image).bind(created).bind(created+3600)
+            .bind(&content_type).bind(sql_int(original.declared_size)).bind(is_image).bind(created).bind(created+3600)
             .execute(&mut *tx).await?;
             sqlx::query("INSERT INTO room_message_attachment_chunks(attachment_id,sequence,content) SELECT ?,sequence,content FROM temp.message_upload_pieces WHERE handle=?")
             .bind(&original.attachment_id).bind(handle).execute(&mut *tx).await?;
@@ -397,14 +397,15 @@ async fn status_in(
 }
 fn status_row(row: &sqlx::sqlite::SqliteRow) -> Result<MessageUploadStatus, PersistenceError> {
     let id: String = row.try_get("attachment_id")?;
-    let size = row.try_get::<i64, _>("size")? as usize;
+    let size = usize::try_from(row.try_get::<i64, _>("size")?).map_err(|_| rejected("upload_missing"))?;
     Ok(MessageUploadStatus {
         handle: row.try_get("handle")?,
         attachment_id: id.clone(),
         piece_size: MESSAGE_UPLOAD_PIECE_BYTES,
         expires_at: row.try_get("expires_at")?,
         declared_size: size,
-        accepted_offset: row.try_get::<i64, _>("accepted")? as usize,
+        accepted_offset: usize::try_from(row.try_get::<i64, _>("accepted")?)
+            .map_err(|_| rejected("upload_missing"))?,
         attachment: if row.try_get::<bool, _>("finished")? {
             Some(attachments::metadata(
                 id,
@@ -424,6 +425,10 @@ pub(crate) async fn expire_in(tx: &mut Transaction<'_, Sqlite>) -> Result<(), Pe
         .execute(&mut **tx)
         .await?;
     Ok(())
+}
+/// `SQLite` integers are `i64`; no in-memory length reaches that bound.
+fn sql_int(value: usize) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
 }
 fn rejected(code: &'static str) -> PersistenceError {
     PersistenceError::CommandRejected {

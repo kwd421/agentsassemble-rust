@@ -29,6 +29,7 @@ use uuid::Uuid;
 /// the acknowledgement placeholder validates the candidate only and confers no
 /// authority. The human acknowledgement that matters is enforced in the approval
 /// decision. Creation is always stopped.
+#[must_use]
 pub fn create_selection_payload(params: &RequestCreateAgent) -> Value {
     let mut payload = Map::new();
     payload.insert("provider_id".into(), json!(params.provider_id.clone()));
@@ -63,6 +64,7 @@ pub fn create_selection_payload(params: &RequestCreateAgent) -> Value {
 ///
 /// The acknowledgement records the verified decision outcome for the bound draft;
 /// `_delegation` carries only attribution, never authority.
+#[must_use]
 pub fn create_execution_payload(
     params: &RequestCreateAgent,
     draft: &AgentSessionDraft,
@@ -272,9 +274,8 @@ impl SqliteStore {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let row = load_in(&mut tx, room_id, confirmation_id).await?;
         let request = item(&row)?;
-        let stored = match &request.action {
-            ConfirmedRoomAction::CreateAgent(create) => create,
-            _ => return Err(rejected("bad_request", "An agent creation is required.")),
+        let ConfirmedRoomAction::CreateAgent(stored) = &request.action else {
+            return Err(rejected("bad_request", "An agent creation is required."));
         };
         if request.state != ConfirmationState::Executing {
             if request.state == ConfirmationState::Pending {
@@ -530,7 +531,7 @@ fn authority_end(error: &PersistenceError) -> (ConfirmationState, Cow<'static, s
 
 fn authority_message(error: &PersistenceError) -> String {
     match error {
-        PersistenceError::CommandRejected { message, .. } => message.to_string(),
+        PersistenceError::CommandRejected { message, .. } => message.clone(),
         _ => "The owner cannot control agents.".to_owned(),
     }
 }

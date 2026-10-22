@@ -93,10 +93,10 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
             if !matches!(sent, Ok(Ok(()))) {
                 break;
             }
-            if item.header {
-                if let Some(id) = item.http {
-                    headers.insert(id);
-                }
+            if item.header
+                && let Some(id) = item.http
+            {
+                headers.insert(id);
             }
             if let Some((id, offset, _, _)) = &item.window {
                 if item.bytes.len() == 18 {
@@ -229,7 +229,7 @@ pub(crate) async fn write_records<S: futures_util::Sink<Message> + Unpin>(
                     }
                 }
                 Some(Feedback::CancelConfirm(id)) => {
-                    if !retired.get(&id).is_some_and(|r| r.notice.is_some()) { break; }
+                    if retired.get(&id).is_none_or(|r| r.notice.is_none()) { break; }
                     retired.remove(&id);
                 }
                 Some(Feedback::Ack(ack)) => {

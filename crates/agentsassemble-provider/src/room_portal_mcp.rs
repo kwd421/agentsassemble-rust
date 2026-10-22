@@ -86,7 +86,7 @@ impl RoomPortalMcp {
         let result = ingress
             .submit(
                 authority,
-                ProviderRoomToolRequest::DirectAction(request),
+                ProviderRoomToolRequest::DirectAction(Box::new(request)),
                 reservation,
             )
             .await

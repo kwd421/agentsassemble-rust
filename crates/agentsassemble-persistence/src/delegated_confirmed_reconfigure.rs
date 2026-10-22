@@ -30,6 +30,7 @@ use uuid::Uuid;
 /// profile through the owner's own selection merge. The acknowledgement placeholder
 /// validates the candidate only and confers no authority: the human acknowledgement
 /// that matters is enforced in the approval decision.
+#[must_use]
 pub fn reconfigure_selection_payload(params: &RequestReconfigureAgent) -> Value {
     let mut payload = Map::new();
     payload.insert("agent_id".into(), json!(params.agent_id.clone()));
@@ -54,6 +55,7 @@ pub fn reconfigure_selection_payload(params: &RequestReconfigureAgent) -> Value 
 /// Builds the `agent.configure` execution payload for an approved drive.
 ///
 /// `_delegation` carries only attribution, never authority.
+#[must_use]
 pub fn reconfigure_execution_payload(
     params: &RequestReconfigureAgent,
     request: &DelegatedActionRequest,
@@ -165,14 +167,11 @@ impl SqliteStore {
         {
             let binding: Binding = serde_json::from_str(row.get("binding_json"))?;
             let stored = item(&row)?;
-            let bound = match &stored.action {
-                ConfirmedRoomAction::ReconfigureAgent(reconfigure) => reconfigure,
-                _ => {
-                    return Err(rejected(
-                        "request_conflict",
-                        "This request ID identifies another action or execution.",
-                    ));
-                }
+            let ConfirmedRoomAction::ReconfigureAgent(bound) = &stored.action else {
+                return Err(rejected(
+                    "request_conflict",
+                    "This request ID identifies another action or execution.",
+                ));
             };
             if !binding.authority.same_delegate(authority) || bound.params != *params {
                 return Err(rejected(
@@ -313,14 +312,11 @@ impl SqliteStore {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let row = load_in(&mut tx, room_id, confirmation_id).await?;
         let request = item(&row)?;
-        let stored = match &request.action {
-            ConfirmedRoomAction::ReconfigureAgent(reconfigure) => reconfigure,
-            _ => {
-                return Err(rejected(
-                    "bad_request",
-                    "An agent reconfiguration is required.",
-                ));
-            }
+        let ConfirmedRoomAction::ReconfigureAgent(stored) = &request.action else {
+            return Err(rejected(
+                "bad_request",
+                "An agent reconfiguration is required.",
+            ));
         };
         if request.state != ConfirmationState::Executing {
             if request.state == ConfirmationState::Pending {
@@ -409,20 +405,13 @@ impl SqliteStore {
         let owner = proof.owner.clone();
         // The bound target: the configuration sealed at request time must still hold,
         // and the execution must be the exact profile the owner approved.
-        let current = match load_reconfigure_target(&mut tx, room_id, &stored.agent_id).await {
-            Ok(session) => session,
-            Err(_) => {
-                let outcome = finish_target_changed(
-                    &mut tx,
-                    room_id,
-                    &row,
-                    "The target agent no longer exists.",
-                )
-                .await?;
-                tx.commit().await?;
-                self.notify_room_directory_changed();
-                return Ok(outcome);
-            }
+        let Ok(current) = load_reconfigure_target(&mut tx, room_id, &stored.agent_id).await else {
+            let outcome =
+                finish_target_changed(&mut tx, room_id, &row, "The target agent no longer exists.")
+                    .await?;
+            tx.commit().await?;
+            self.notify_room_directory_changed();
+            return Ok(outcome);
         };
         if current.runtime_profile_key != stored.expected_configuration_revision {
             let outcome = finish_target_changed(
@@ -629,7 +618,7 @@ fn authority_end(error: &PersistenceError) -> (ConfirmationState, Cow<'static, s
 
 fn authority_message(error: &PersistenceError) -> String {
     match error {
-        PersistenceError::CommandRejected { message, .. } => message.to_string(),
+        PersistenceError::CommandRejected { message, .. } => message.clone(),
         _ => "The owner cannot control agents.".to_owned(),
     }
 }

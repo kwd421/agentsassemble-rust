@@ -6,6 +6,10 @@ use crate::{
     openai_stream::OpenAiStreamError,
 };
 
+/// Names the header and value that carry a session's service tier.
+pub(crate) type ServiceTierHeader =
+    fn(&DurableAgentSession) -> Option<(&'static str, &'static str)>;
+
 #[derive(Clone, Copy)]
 pub(crate) struct RemoteOpenAiErrors {
     pub(crate) context_limit: &'static str,
@@ -30,8 +34,7 @@ pub(crate) struct RemoteOpenAiSpec {
     pub(crate) headers: &'static [(&'static str, &'static str)],
     /// The selected tier travels in a request header for providers whose
     /// OpenAI-compatible endpoint does not read it from the payload.
-    pub(crate) service_tier_header:
-        Option<fn(&DurableAgentSession) -> Option<(&'static str, &'static str)>>,
+    pub(crate) service_tier_header: Option<ServiceTierHeader>,
     pub(crate) request_payload: fn(&DurableAgentSession, &[Value], Option<&[Value]>) -> Value,
     pub(crate) response_model: ResponseModelIdentity,
     pub(crate) retain_reasoning: bool,

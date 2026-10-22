@@ -45,7 +45,7 @@ pub(crate) async fn handle_provider_room_tool(
                         result
                             .map(ProviderRoomToolResult::DirectAction)
                             .map_err(public_tool_error),
-                    )
+                    );
                 },
             )
             .await

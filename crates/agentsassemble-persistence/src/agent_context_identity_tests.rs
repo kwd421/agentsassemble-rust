@@ -758,7 +758,11 @@ async fn an_agent_trusts_only_the_people_its_owner_picked() -> Result<(), Box<dy
     );
     assert!(
         store
-            .set_agent_trusted_ai_owners(&room, &id, &[session.public.participant_id.clone()])
+            .set_agent_trusted_ai_owners(
+                &room,
+                &id,
+                std::slice::from_ref(&session.public.participant_id)
+            )
             .await
             .is_err(),
         "an AI is not a person"

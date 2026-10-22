@@ -78,7 +78,7 @@ pub(crate) async fn launch(
 mod tests {
     use serde_json::json;
 
-    use super::{CATALOG_ENDPOINT, VERCEL_SPEC, request_payload};
+    use super::request_payload;
     use crate::test_support::durable_session;
 
     #[test]

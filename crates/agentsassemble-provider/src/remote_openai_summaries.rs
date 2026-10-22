@@ -56,7 +56,7 @@ impl RemoteOpenAiDriver {
         (!wrong_model
             && response.message.tool_calls.is_empty()
             && matches!(response.finish_reason.as_str(), "stop" | "length"))
-        .then(|| response.message.content.as_deref())
+        .then_some(response.message.content.as_deref())
         .flatten()
         .and_then(turn_compaction::bounded_summary)
         .ok_or_else(|| {

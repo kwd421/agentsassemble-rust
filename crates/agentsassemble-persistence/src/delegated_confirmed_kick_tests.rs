@@ -360,7 +360,7 @@ async fn rejoinable_fixture() -> Result<
 }
 
 async fn rejoin(store: &SqliteStore) -> Result<(), Box<dyn std::error::Error>> {
-    insert_reusable_invite(&store, REJOIN_SIGNED_TWO, REJOIN_JOIN_TWO, "unused").await?;
+    insert_reusable_invite(store, REJOIN_SIGNED_TWO, REJOIN_JOIN_TWO, "unused").await?;
     let request = PreparedHumanAdmission::prepare(
         HumanInviteCredentialEvidence::JoinCode {
             fingerprint: REJOIN_JOIN_TWO,

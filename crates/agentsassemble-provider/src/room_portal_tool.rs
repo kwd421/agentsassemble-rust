@@ -23,7 +23,7 @@ pub enum ProviderRoomToolRequest {
     UploadAttachment { path: String, content_type: String },
     DelegatedActions,
     SetMessagePin(agentsassemble_domain::SetMessagePin),
-    DirectAction(agentsassemble_domain::DirectRoomAction),
+    DirectAction(Box<agentsassemble_domain::DirectRoomAction>),
     ReadRoomStatus { before_seq: i64 },
     Random(RoomRandomRequest),
     SearchMessages { query: String, cursor: String },

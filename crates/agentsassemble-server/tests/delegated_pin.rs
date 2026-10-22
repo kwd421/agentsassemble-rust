@@ -573,7 +573,8 @@ async fn verify_direct(
     }
     let mut after = serde_json::to_value(store.snapshot("general", 0, 200).await?.settings)?;
     let before = serde_json::to_value(before)?;
-    for field in ["channels"] {
+    {
+        let field = "channels";
         after[field] = before[field].clone();
     }
     assert_eq!(before, after);

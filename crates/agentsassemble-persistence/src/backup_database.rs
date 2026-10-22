@@ -332,8 +332,7 @@ pub(crate) async fn reconstruct(
         if backup_policy::policy(&table)? == Policy::Ephemeral {
             if hostile
                 && sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
-                    "SELECT count(*) FROM \"{}\"",
-                    &table
+                    "SELECT count(*) FROM \"{table}\""
                 )))
                 .fetch_one(&mut *source)
                 .await?
@@ -364,7 +363,7 @@ pub(crate) async fn reconstruct(
         } else {
             fields
         };
-        let mut query = format!("SELECT {fields} FROM \"{}\"", &table);
+        let mut query = format!("SELECT {fields} FROM \"{table}\"");
         let live_companions = table == "room_attendee_invites" && !hostile;
         if live_companions {
             // Expired/revoked invitations cannot be redeemed and their parent
@@ -400,7 +399,7 @@ pub(crate) async fn reconstruct(
                 .collect::<Vec<_>>()
                 .join(",");
             let parameters = vec!["?"; values.len()].join(",");
-            let statement = format!("INSERT INTO \"{}\" ({names}) VALUES ({parameters})", &table);
+            let statement = format!("INSERT INTO \"{table}\" ({names}) VALUES ({parameters})");
             let mut insert = sqlx::query(sqlx::AssertSqlSafe(statement));
             for cell in values.into_values() {
                 insert = match cell {

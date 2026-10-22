@@ -69,7 +69,9 @@ impl AttendeeToolCall {
                     turn_generation: command.turn_generation(),
                     execution_id: command.execution_id().into(),
                     request: match command.request() {
-                        ProviderRoomToolRequest::DirectAction(request) => Some(request.clone()),
+                        ProviderRoomToolRequest::DirectAction(request) => {
+                            Some(request.as_ref().clone())
+                        }
                         _ => None,
                     },
                 })
@@ -231,7 +233,7 @@ impl RoomAttendeeClient {
                         connection,
                         command,
                         files,
-                        &command.attachment_id().to_owned(),
+                        command.attachment_id(),
                     )
                     .await;
                 }

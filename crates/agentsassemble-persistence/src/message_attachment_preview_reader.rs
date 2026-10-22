@@ -1,5 +1,8 @@
 //! Lazy cache work retains read authority and per-attachment custody, never a CPU-held transaction.
-use super::*;
+use super::{
+    MessageAttachmentReadAuthority, MessageAttachmentReader, PersistenceError, Sqlite, SqliteStore,
+    Transaction, invalid_attachment_state,
+};
 use sqlx::Row;
 
 impl SqliteStore {
@@ -96,8 +99,8 @@ impl MessageAttachmentReader {
             .filter(|offset| *offset < self.metadata.size)
             .ok_or_else(invalid_attachment_state)?;
         let bytes: Vec<u8> = sqlx::query_scalar("SELECT substr(content,?,65536) FROM room_message_attachment_previews WHERE attachment_id=? AND content_type=? AND length(content)=?")
-            .bind((offset + 1) as i64).bind(&self.metadata.id).bind(&self.metadata.content_type)
-            .bind(self.metadata.size as i64).fetch_optional(&mut **tx).await?.ok_or_else(invalid_attachment_state)?;
+            .bind(i64::try_from(offset + 1).map_err(|_| invalid_attachment_state())?).bind(&self.metadata.id).bind(&self.metadata.content_type)
+            .bind(i64::try_from(self.metadata.size).map_err(|_| invalid_attachment_state())?).fetch_optional(&mut **tx).await?.ok_or_else(invalid_attachment_state)?;
         if bytes.len() != (self.metadata.size - offset).min(crate::room_file_content::PIECE_BYTES) {
             return Err(invalid_attachment_state());
         }

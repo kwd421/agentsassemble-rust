@@ -71,19 +71,16 @@ pub(crate) fn agent_reply_text(content: &str, reply_author: Option<&str>) -> (St
     let mut rest = content;
     while let Some(start) = rest.find("&lt;<@") {
         let after = &rest[start + "&lt;".len()..];
-        match after
+        if let Some(end) = after
             .find('>')
             .filter(|end| after[end + 1..].starts_with("&gt;"))
         {
-            Some(end) => {
-                text.push_str(&rest[..start]);
-                text.push_str(&after[..=end]);
-                rest = &after[end + 1 + "&gt;".len()..];
-            }
-            None => {
-                text.push_str(&rest[..start + "&lt;".len()]);
-                rest = after;
-            }
+            text.push_str(&rest[..start]);
+            text.push_str(&after[..=end]);
+            rest = &after[end + 1 + "&gt;".len()..];
+        } else {
+            text.push_str(&rest[..start + "&lt;".len()]);
+            rest = after;
         }
     }
     text.push_str(rest);

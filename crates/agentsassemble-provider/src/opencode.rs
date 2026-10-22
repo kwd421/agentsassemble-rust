@@ -70,7 +70,7 @@ pub(crate) struct OpenCodeDriver {
     http: LoopbackHttp,
     room_portal: RoomPortal,
     config_root: tempfile::TempDir,
-    /// Holds an API agent's key outside the OpenCode process for the driver's life.
+    /// Holds an API agent's key outside the `OpenCode` process for the driver's life.
     _key_broker: Option<KeyBroker>,
     session_instructions: Option<String>,
     attached_session_id: Option<String>,
@@ -93,7 +93,7 @@ impl OpenCodeDriver {
         Self::spawn_inner(session, runtime_lease, guardian, None, None).await
     }
 
-    /// Starts OpenCode for an API provider. The key stays in the broker; OpenCode
+    /// Starts `OpenCode` for an API provider. The key stays in the broker; `OpenCode`
     /// only learns the broker's loopback address and per-launch token.
     #[cfg(unix)]
     pub(crate) async fn spawn_harness(
@@ -405,7 +405,7 @@ impl OpenCodeDriver {
         loop {
             if let Ok(connection) = self.connect_owned_peer().await
                 && let Ok(response) = connection
-                    .get_json(self.api.mcp_list_path(), Duration::from_millis(1_000))
+                    .get_json(self.api.mcp_list_path(), Duration::from_secs(1))
                     .await
                 && response.status.is_success()
             {

@@ -1,5 +1,5 @@
 //! How much an API AI used its model: what one turn reports, and the running
-//! totals its owner sees, like the footer of DeepSeek's own harness.
+//! totals its owner sees, like the footer of `DeepSeek`'s own harness.
 use serde::{Deserialize, Serialize};
 
 /// One turn's model use, summed over its tool rounds.

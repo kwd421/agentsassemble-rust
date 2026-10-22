@@ -1,4 +1,4 @@
-//! Opt-in real turn against the locally installed OpenCode 2 and a zero-cost model.
+//! Opt-in real turn against the locally installed `OpenCode` 2 and a zero-cost model.
 //!
 //! Run with:
 //! `cargo test -p agentsassemble-provider --lib opencode_live -- --ignored --nocapture`
@@ -10,8 +10,7 @@ use super::{
     tests::RUNTIME_TEST_LOCK,
 };
 use crate::{
-    filesystem::canonical_workspace, profile::runtime_profile_key,
-    test_support::durable_session,
+    filesystem::canonical_workspace, profile::runtime_profile_key, test_support::durable_session,
 };
 
 const DEFAULT_EXECUTABLE: &str = "/opt/homebrew/bin/opencode";
@@ -21,10 +20,12 @@ const DEFAULT_MODEL: &str = "opencode/deepseek-v4.1-flash-free";
 #[ignore = "requires the locally installed OpenCode 2 and a zero-cost model"]
 async fn opencode_live_free_model_turn_completes() -> Result<(), Box<dyn std::error::Error>> {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
-    let executable = std::env::var("OPENCODE_LIVE_EXECUTABLE")
-        .unwrap_or_else(|_| DEFAULT_EXECUTABLE.to_owned());
+    let executable =
+        std::env::var("OPENCODE_LIVE_EXECUTABLE").unwrap_or_else(|_| DEFAULT_EXECUTABLE.to_owned());
     let model = std::env::var("OPENCODE_LIVE_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_owned());
-    let executable = std::fs::canonicalize(&executable)?.to_string_lossy().into_owned();
+    let executable = std::fs::canonicalize(&executable)?
+        .to_string_lossy()
+        .into_owned();
     let directory = tempfile::tempdir()?;
     let (workspace, workspace_identity) =
         canonical_workspace(directory.path().to_string_lossy().into_owned())
@@ -93,11 +94,9 @@ async fn opencode_live_free_model_turn_completes() -> Result<(), Box<dyn std::er
             room_tool_ingress: None,
         }),
     };
-    let completed = tokio::time::timeout(
-        Duration::from_secs(180),
-        adapter.send_turn(&active, &request),
-    )
-    .await??;
+    let completed =
+        tokio::time::timeout(Duration::from_mins(3), adapter.send_turn(&active, &request))
+            .await??;
     assert_eq!(completed.turn_id, "live-turn-1");
     assert!(
         completed.provider_turn_id.starts_with("msg_"),
@@ -117,13 +116,15 @@ async fn opencode_live_free_model_turn_completes() -> Result<(), Box<dyn std::er
 
 #[tokio::test]
 #[ignore = "requires the locally installed OpenCode 2 and a zero-cost model"]
-async fn opencode_live_read_only_turn_cannot_execute_shell() -> Result<(), Box<dyn std::error::Error>>
-{
+async fn opencode_live_read_only_turn_cannot_execute_shell()
+-> Result<(), Box<dyn std::error::Error>> {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
-    let executable = std::env::var("OPENCODE_LIVE_EXECUTABLE")
-        .unwrap_or_else(|_| DEFAULT_EXECUTABLE.to_owned());
+    let executable =
+        std::env::var("OPENCODE_LIVE_EXECUTABLE").unwrap_or_else(|_| DEFAULT_EXECUTABLE.to_owned());
     let model = std::env::var("OPENCODE_LIVE_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_owned());
-    let executable = std::fs::canonicalize(&executable)?.to_string_lossy().into_owned();
+    let executable = std::fs::canonicalize(&executable)?
+        .to_string_lossy()
+        .into_owned();
     let directory = tempfile::tempdir()?;
     let marker = directory.path().join("created-by-shell");
     let (workspace, workspace_identity) =
@@ -183,11 +184,8 @@ async fn opencode_live_read_only_turn_cannot_execute_shell() -> Result<(), Box<d
             .to_owned(),
         room_observation: None,
     };
-    let _ = tokio::time::timeout(
-        Duration::from_secs(180),
-        adapter.send_turn(&active, &request),
-    )
-    .await;
+    let _ =
+        tokio::time::timeout(Duration::from_mins(3), adapter.send_turn(&active, &request)).await;
     assert!(!marker.exists(), "read-only turn executed a shell write");
     stop_and_release(&adapter, &active, &started).await;
     Ok(())

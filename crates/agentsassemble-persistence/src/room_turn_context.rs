@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use agentsassemble_domain::{
     DurableAgentSession, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_ROOM_OBSERVATION_AGENT_IDS,
@@ -125,10 +125,11 @@ pub(super) async fn prepare_room_input(
     if delivery_kind == RoomInputDeliveryKind::FreeAccessMention
         || settings.conversation_mode == "free_access"
     {
-        provider_input.push_str(&format!(
+        let _ = write!(
+            provider_input,
             "\nCurrent room conversation mode: {}.\n",
             settings.conversation_mode
-        ));
+        );
         provider_input.push_str(if delivery_kind == RoomInputDeliveryKind::FreeAccessMention {
             "You were called because you were explicitly mentioned. In free_access, nobody prompts you otherwise.\n"
         } else {

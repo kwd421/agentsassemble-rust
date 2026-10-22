@@ -1,8 +1,8 @@
-//! Loopback key broker for API agents that run inside OpenCode.
+//! Loopback key broker for API agents that run inside `OpenCode`.
 //!
-//! The saved API key never enters the OpenCode process: OpenCode's shell tool
+//! The saved API key never enters the `OpenCode` process: `OpenCode`'s shell tool
 //! inherits its whole environment, so anything placed there is readable by a
-//! command the model runs. OpenCode instead talks to this broker on 127.0.0.1
+//! command the model runs. `OpenCode` instead talks to this broker on 127.0.0.1
 //! with a per-launch token; the broker checks the token, allows only the
 //! session's own model endpoint, swaps in the real key and forwards to the fixed
 //! provider host. A leaked token works only through this broker, only for that
@@ -58,7 +58,7 @@ impl Upstream {
         }
     }
 
-    /// Paths OpenCode may reach for this session's model, and nothing else.
+    /// Paths `OpenCode` may reach for this session's model, and nothing else.
     fn allows(self, model: &str, path: &str, query: Option<&str>) -> bool {
         match self {
             Self::Gemini => {
@@ -73,7 +73,7 @@ impl Upstream {
         }
     }
 
-    /// DeepSeek names the model only in the body, so the broker checks it there;
+    /// `DeepSeek` names the model only in the body, so the broker checks it there;
     /// Gemini's path already carries it.
     fn body_names_model(self, model: &str, body: &[u8]) -> bool {
         match self {
@@ -88,7 +88,9 @@ impl Upstream {
     fn presented_token<B>(self, request: &Request<B>) -> Option<&[u8]> {
         let headers = request.headers();
         match self {
-            Self::Gemini => headers.get("x-goog-api-key").map(|value| value.as_bytes()),
+            Self::Gemini => headers
+                .get("x-goog-api-key")
+                .map(reqwest::header::HeaderValue::as_bytes),
             Self::DeepSeek => headers
                 .get(hyper::header::AUTHORIZATION)
                 .and_then(|value| value.as_bytes().strip_prefix(b"Bearer ")),
@@ -183,7 +185,7 @@ impl KeyBroker {
         })
     }
 
-    /// OpenCode configuration that points this provider at the broker. The main
+    /// `OpenCode` configuration that points this provider at the broker. The main
     /// and small model are both the session's model, the only one the broker serves.
     pub(crate) fn config_content(&self) -> String {
         let provider = self.upstream.opencode_provider();

@@ -1,5 +1,5 @@
 //! The room-file byte owner. Callers retain authority, metadata and transaction
-//! ownership; each operation below crosses SQLx with at most one 64 KiB piece.
+//! ownership; each operation below crosses `SQLx` with at most one 64 KiB piece.
 use crate::{PersistenceError, message_attachments::invalid_attachment_state};
 use sqlx::{Row, SqliteConnection};
 
@@ -67,7 +67,7 @@ impl RoomFileContent {
         .bind(id)
         .bind(sequence)
         .bind(id)
-        .bind(bytes.len() as i64)
+        .bind(i64::try_from(bytes.len()).unwrap_or(i64::MAX))
         .bind(sequence)
         .execute(connection)
         .await?;
@@ -213,13 +213,13 @@ impl RoomFileContent {
         let bytes: Vec<u8> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             "SELECT substr(content,?*{PIECE_BYTES}+1,{PIECE_BYTES}) FROM room_file_archive.room_message_attachments WHERE attachment_id=?"
         )))
-        .bind(sequence as i64).bind(id).fetch_one(connection).await?;
+        .bind(i64::try_from(sequence).unwrap_or(i64::MAX)).bind(id).fetch_one(connection).await?;
         Ok(bytes)
     }
 
-    /// Keep historical content inside SQLite until its normal staged migration.
+    /// Keep historical content inside `SQLite` until its normal staged migration.
     /// Metadata and raster policy have already crossed archive validation. Never
-    /// bind a whole old BLOB through SQLx, or concatenate pieces into a BLOB.
+    /// bind a whole old BLOB through `SQLx`, or concatenate pieces into a BLOB.
     pub(crate) async fn copy_archive_file(
         connection: &mut SqliteConnection,
         id: &str,
@@ -231,7 +231,7 @@ impl RoomFileContent {
         Ok(())
     }
 
-    /// Connector publication copies pieces inside SQLite, before parent deletion.
+    /// Connector publication copies pieces inside `SQLite`, before parent deletion.
     pub(crate) async fn publish_connector(
         connection: &mut SqliteConnection,
         id: &str,

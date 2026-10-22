@@ -517,7 +517,7 @@ impl RoomConnectorClient {
 
     /// Adds a one-time notice when the owner changed this AI's instructions
     /// since it was last told. A wait carries only the revision, so it points
-    /// the AI at room_read, whose result carries the text.
+    /// the AI at `room_read`, whose result carries the text.
     fn note_instructions(&self, response: &mut Value) {
         let Some(revision) = response["your_instructions_revision"].as_i64() else {
             return;

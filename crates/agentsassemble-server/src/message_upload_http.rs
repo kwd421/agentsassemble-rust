@@ -85,7 +85,7 @@ pub(super) async fn data(
     let _connection_wait = request
         .extensions()
         .get::<crate::http_admission::HttpConnectionAdmission>()
-        .map(|connection| connection.retain_authenticated_wait());
+        .map(super::super::http_admission::HttpConnectionAdmission::retain_authenticated_wait);
     if request
         .headers()
         .get(header::CONTENT_TYPE)
@@ -131,7 +131,7 @@ pub(super) async fn finish(
     let _connection_wait = request
         .extensions()
         .get::<crate::http_admission::HttpConnectionAdmission>()
-        .map(|connection| connection.retain_authenticated_wait());
+        .map(super::super::http_admission::HttpConnectionAdmission::retain_authenticated_wait);
     crate::http_api::ensure_empty_body(request, 0)
         .await
         .map_err(ProfileHttpError::from_body)?;

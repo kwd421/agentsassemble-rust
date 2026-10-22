@@ -14,6 +14,7 @@ pub struct ProviderFileAuthority {
     pub execution_id: String,
 }
 impl ProviderFileAuthority {
+    #[must_use]
     pub fn read_authority(&self) -> ProviderAttachmentReadAuthority<'_> {
         ProviderAttachmentReadAuthority {
             room_id: &self.room_id,

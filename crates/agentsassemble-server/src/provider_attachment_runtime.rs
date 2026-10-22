@@ -203,8 +203,8 @@ async fn upload_path(
 }
 fn upload_error(error: crate::profile_web::ProfileHttpError) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: error.code.into(),
-        message: error.message.into(),
+        code: error.code,
+        message: error.message,
     }
 }
 pub(crate) fn into_provider_attachment(

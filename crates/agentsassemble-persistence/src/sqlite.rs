@@ -382,8 +382,8 @@ impl SqliteStore {
             settings,
             participants,
             agent_sessions,
-            provider_requests,
             delegated_action_requests,
+            provider_requests,
             events,
             oldest_seq,
             last_seq,
@@ -420,13 +420,14 @@ async fn latest_channel_message_cursors(
     for row in rows {
         let channel_id: Option<String> = row.try_get("channel_id")?;
         let last_seq: i64 = row.try_get("last_seq")?;
-        if let Some(channel_id) = channel_id {
-            if !channel_id.is_empty() && last_seq > 0 {
-                cursors.push(ChannelMessageCursor {
-                    channel_id,
-                    last_seq,
-                });
-            }
+        if let Some(channel_id) = channel_id
+            && !channel_id.is_empty()
+            && last_seq > 0
+        {
+            cursors.push(ChannelMessageCursor {
+                channel_id,
+                last_seq,
+            });
         }
     }
     cursors.sort_by(|left, right| left.channel_id.cmp(&right.channel_id));

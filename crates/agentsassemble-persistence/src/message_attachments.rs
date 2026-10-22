@@ -760,7 +760,10 @@ pub(crate) async fn require_storage_capacity(
     // setting, so it keeps its existing exemption; the chunked transfer path
     // declares larger sizes and is held to the current room limit like everyone.
     if principal.client_kind != ClientKind::RoomConnector || enforce_current_limit {
-        require_file_size(size as usize, settings.attachment_file_limit_bytes)?;
+        require_file_size(
+            usize::try_from(size).unwrap_or(usize::MAX),
+            settings.attachment_file_limit_bytes,
+        )?;
     }
     if let Some(limit) = settings.attachment_storage_limit_bytes {
         let used: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM room_message_attachments WHERE room_id = ? UNION ALL SELECT size FROM room_connector_uploads WHERE room_id = ? UNION ALL SELECT size FROM temp.message_uploads WHERE room_id = ? AND finished=0)")

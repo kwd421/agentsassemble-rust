@@ -1,4 +1,4 @@
-//! Risu-style memory for API agents (after RisuAI's HypaMemory, no code from it).
+//! Risu-style memory for API agents (after `RisuAI`'s `HypaMemory`, no code from it).
 //!
 //! An API agent sees only its last 50 room messages each turn. Older messages
 //! are folded, in batches, into memory pieces that the agent's own model

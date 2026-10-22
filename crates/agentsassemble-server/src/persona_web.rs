@@ -390,7 +390,7 @@ impl From<crate::upload_body_budget::Error> for PersonaHttpError {
             crate::upload_body_budget::Error::Body(error) => Self::from_body(error),
             crate::upload_body_budget::Error::Exhausted => Self {
                 status: StatusCode::TOO_MANY_REQUESTS,
-                code: crate::upload_body_budget::ERROR_CODE.into(),
+                code: crate::upload_body_budget::ERROR_CODE,
                 message: "Upload body capacity is busy; retry later.".into(),
             },
         }

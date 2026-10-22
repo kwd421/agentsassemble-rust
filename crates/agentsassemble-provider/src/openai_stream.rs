@@ -115,7 +115,7 @@ struct UsageChunk {
     completion: u64,
     #[serde(rename = "total_tokens")]
     total: u64,
-    /// DeepSeek's count of prompt tokens served from its cache.
+    /// `DeepSeek`'s count of prompt tokens served from its cache.
     #[serde(default)]
     prompt_cache_hit_tokens: Option<u64>,
     /// OpenAI-style providers put the same count here.

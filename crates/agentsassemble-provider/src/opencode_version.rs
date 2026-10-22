@@ -1,6 +1,6 @@
 use semver::Version;
 
-/// OpenCode 1 prints the bare version. OpenCode 2 prints `opencode v<version>`.
+/// `OpenCode` 1 prints the bare version. `OpenCode` 2 prints `opencode v<version>`.
 /// Both forms name the same semantic version, so callers never guess from a probe
 /// when the installed CLI already reports it.
 pub(crate) fn parse(output: &str) -> Option<Version> {

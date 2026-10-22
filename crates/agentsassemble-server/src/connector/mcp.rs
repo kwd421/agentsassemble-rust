@@ -59,6 +59,7 @@ impl ConnectorMcp {
 
     /// Binds the CLI working folder for path uploads and saved large reads.
     /// Hosted and HTTP connectors keep `None` and have no file access.
+    #[must_use]
     pub fn with_workspace(mut self, workspace: String, identity: String) -> Self {
         self.files = Some(Arc::new(ConnectorFileContext {
             workspace,
