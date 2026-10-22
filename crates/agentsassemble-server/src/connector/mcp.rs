@@ -97,7 +97,7 @@ fn encode(value: &Value) -> Result<String, String> {
     let mut value = value.clone();
     // Keep what the AI must notice at the front of a long result.
     let mut front = Vec::new();
-    for key in ["name_changed", "unread_mentions"] {
+    for key in ["name_changed", "instructions_changed", "unread_mentions"] {
         if let Some(field) = value.as_object_mut().and_then(|object| object.remove(key)) {
             front.push(format!("{}:{field}", json!(key)));
         }

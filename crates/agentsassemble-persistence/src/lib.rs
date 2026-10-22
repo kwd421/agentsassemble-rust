@@ -6,6 +6,8 @@ mod delegated_pin;
 pub use delegated_pin::DelegateRoomAuthority;
 mod account_data_reset;
 mod agent_handoff_trust;
+mod agent_instructions;
+pub use agent_instructions::{AgentInstructions, MAX_AGENT_INSTRUCTIONS_CHARS};
 mod agent_memory;
 mod archive_schema;
 pub mod backup_codec;

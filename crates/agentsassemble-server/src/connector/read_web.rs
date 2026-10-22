@@ -286,6 +286,18 @@ async fn enrich(
     // The owner can rename an external AI; its client tells the AI once.
     value["your_display_name"] = json!(participant.display_name);
     value["your_display_name_revision"] = json!(participant.updated_at);
+    // The owner's own instructions for this AI; the client notes a change once.
+    let instructions = state
+        .store
+        .agent_instructions(&principal.room_id, &principal.participant_id)
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?
+        .unwrap_or(agentsassemble_persistence::AgentInstructions {
+            instructions: String::new(),
+            updated_at: 0,
+        });
+    value["your_instructions"] = json!(instructions.instructions);
+    value["your_instructions_revision"] = json!(instructions.updated_at);
     let allowed = state
         .store
         .delegated_direct_actions(
@@ -363,6 +375,15 @@ async fn wait_result(
         .map_err(ConnectorHttpError::from_persistence)?;
     metadata["your_display_name"] = json!(participant.display_name);
     metadata["your_display_name_revision"] = json!(participant.updated_at);
+    // A wait carries only the revision; the text comes with room_read.
+    metadata["your_instructions_revision"] = json!(
+        state
+            .store
+            .agent_instructions(&principal.room_id, &principal.participant_id)
+            .await
+            .map_err(ConnectorHttpError::from_persistence)?
+            .map_or(0, |current| current.updated_at)
+    );
     let pending = json!(messages);
     metadata["messages"] = pending;
     metadata["last_seq"] = json!(delivered);

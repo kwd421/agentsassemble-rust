@@ -356,3 +356,21 @@ second participant with none of the first one's role, name or picture.
   status stays `joined`, and the departed-inclusive snapshot is not projected. After the
   window, or once its invitation is revoked, it leaves the roster as before. The projection is
   computed when a snapshot is read; a seat that expires or resumes does not push a live update.
+
+## Owner instructions per AI (2026-10-22, required behavior)
+
+The owner gives one AI its own instructions for a room ("지침" in the AI's profile window), for app
+AIs and external AIs alike. They are private to the owner.
+
+- **Storage.** `agent_instructions` (schema v101, backed up) keeps up to 4,000 characters per
+  room participant, apart from the public participant record, so snapshots never carry them.
+  Blank text removes them.
+- **Owner routes.** `GET`/`POST /api/agent-instructions/{room_id}/{participant_id}` (and the
+  `central-owner` form for a remote room) take the server-owner authority of the memory tab and
+  accept only an AI participant of the room.
+- **App AIs** receive them in the room rules of every turn, after the room rules and before any
+  bot card, under "[Your owner's instructions for you in this room]".
+- **External AIs** receive them from their own connector: `room_read` results and the join reply
+  carry `your_instructions`; read and wait results carry `your_instructions_revision`. After a
+  change the connector client adds a one-time `instructions_changed` notice, placed first; a wait
+  points the AI at `room_read`, whose result carries the text.

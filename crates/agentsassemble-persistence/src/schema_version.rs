@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 100;
+pub const CURRENT_SCHEMA_VERSION: i64 = 101;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -282,6 +282,10 @@ async fn upgrade_member_schema(pool: &SqlitePool, version: &str) -> Result<(), P
     if current.parse::<i64>().is_ok_and(|v| v < 100) {
         // v100 remembers external AI connections so they keep their seat across a restart.
         crate::connector_connections::upgrade(pool).await?;
+    }
+    if current.parse::<i64>().is_ok_and(|v| v < 101) {
+        // v101 keeps the owner's own instructions for each AI.
+        crate::agent_instructions::upgrade(pool).await?;
     }
     Ok(())
 }

@@ -234,6 +234,7 @@ pub(crate) async fn upgrade(
             | "98"
             | "99"
             | "100"
+            | "101"
     ) {
         return Ok(());
     }

@@ -257,3 +257,74 @@ async fn persistent_instruction_provider_matrix() {
         }
     }
 }
+
+#[tokio::test]
+async fn owner_instructions_reach_the_agent_and_stay_private_to_the_owner_routes() {
+    let (store, principal, _directory) = fixture().await;
+    let now = chrono::Utc::now();
+    assert!(
+        store
+            .set_agent_instructions("general", AGENT_ID, "  Answer in one short line.  ", now)
+            .await
+            .unwrap_or_else(|error| panic!("set instructions: {error}"))
+    );
+    let current = store
+        .agent_instructions("general", AGENT_ID)
+        .await
+        .unwrap_or_else(|error| panic!("read instructions: {error}"))
+        .unwrap_or_else(|| panic!("the agent has instructions"));
+    assert_eq!(current.instructions, "Answer in one short line.");
+    // A person is not an AI, and text over the limit is refused.
+    assert!(
+        !store
+            .set_agent_instructions("general", &principal.participant_id, "x", now)
+            .await
+            .unwrap_or_else(|error| panic!("person target: {error}"))
+    );
+    assert!(
+        store
+            .set_agent_instructions("general", AGENT_ID, &"가".repeat(4001), now)
+            .await
+            .is_err()
+    );
+    let assigned = store
+        .execute_message_with_turn(
+            &principal,
+            "instructed-turn",
+            "message.send",
+            &json!({"content": "@Terra hello"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign instructed turn: {error}"))
+        .assignments
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("the mention must be assigned"));
+    let rules = assigned.session_instructions.as_deref().unwrap_or_default();
+    assert!(rules.contains("[Your owner's instructions for you in this room]"));
+    assert!(rules.contains("Answer in one short line."));
+    assert!(!assigned.provider_input.contains("Answer in one short line."));
+    // The public snapshot never carries them.
+    let snapshot = serde_json::to_string(
+        &store
+            .snapshot("general", 0, 200)
+            .await
+            .unwrap_or_else(|error| panic!("snapshot: {error}"))
+            .participants,
+    )
+    .unwrap_or_else(|error| panic!("encode: {error}"));
+    assert!(!snapshot.contains("Answer in one short line."));
+    // Blank text removes them.
+    store
+        .set_agent_instructions("general", AGENT_ID, "  ", now)
+        .await
+        .unwrap_or_else(|error| panic!("clear instructions: {error}"));
+    assert_eq!(
+        store
+            .agent_instructions("general", AGENT_ID)
+            .await
+            .unwrap_or_else(|error| panic!("read cleared: {error}"))
+            .map(|current| current.instructions),
+        Some(String::new())
+    );
+}

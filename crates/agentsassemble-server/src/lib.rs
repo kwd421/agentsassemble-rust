@@ -150,6 +150,7 @@ mod operational_web;
 mod operator_pairing_web;
 mod owned_command;
 mod agent_handoff_trust_web;
+mod agent_instructions_web;
 mod agent_memory_web;
 mod client_wire;
 mod participant_activity;

@@ -188,3 +188,50 @@ async fn a_renamed_external_ai_is_told_its_new_name_once() -> Result<(), Box<dyn
     server.stop().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn an_external_ai_gets_its_owners_instructions_and_hears_when_they_change()
+-> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_domain::{
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, LOCAL_OPERATOR_PARTICIPANT_ID,
+        LOCAL_OPERATOR_USER_ID,
+    };
+    let (store, manager) = fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let invite = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, chrono::Utc::now())
+        .await?;
+    let link = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
+    let client = RoomConnectorClient::new(&link, "Ace", Some(&[url::Url::parse(&server.base_url)?]))?;
+    let joined = client.join().await?;
+    let first = client.read().await?;
+    assert_eq!(first["your_instructions"], "");
+    assert!(first.get("instructions_changed").is_none());
+    store
+        .set_agent_instructions("general", &joined.participant_id, "Review only Rust files.", chrono::Utc::now())
+        .await?;
+    let owner = AuthenticatedPrincipal {
+        principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "Host".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    // A wait points the AI at room_read; the read carries the text.
+    let pending = client.wait_next();
+    let hello = json!({"content": "hello"});
+    let said = store.execute_message_with_turn(&owner, "say-after-instructions", "message.send", &hello);
+    let (waited, _) = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        tokio::try_join!(async { pending.await.map_err(|error| error.code) }, async { said.await.map_err(|error| error.to_string()) })
+    })
+    .await??;
+    assert!(waited["instructions_changed"].as_str().is_some_and(|notice| notice.contains("room_read")));
+    let read = client.read().await?;
+    assert_eq!(read["your_instructions"], "Review only Rust files.");
+    assert!(read.get("instructions_changed").is_none());
+    server.stop().await;
+    Ok(())
+}

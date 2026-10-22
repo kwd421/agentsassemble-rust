@@ -112,5 +112,12 @@
       "CREATE TABLE IF NOT EXISTS connector_connections (connection_hash BLOB NOT NULL PRIMARY KEY CHECK(length(connection_hash) = 32), invite_id TEXT NOT NULL REFERENCES room_connector_invites(invite_id) ON DELETE CASCADE, invitation_identity BLOB NOT NULL CHECK(length(invitation_identity) = 32), display_name TEXT NOT NULL, created_at INTEGER NOT NULL) STRICT",
       "CREATE TABLE IF NOT EXISTS connector_seat_invites (invite_id TEXT NOT NULL PRIMARY KEY REFERENCES room_connector_invites(invite_id) ON DELETE CASCADE, participant_id TEXT NOT NULL) STRICT"
     ]
+  },
+  {
+    "version": 101,
+    "remove": [],
+    "add": [
+      "CREATE TABLE IF NOT EXISTS agent_instructions (room_id TEXT NOT NULL, participant_id TEXT NOT NULL, instructions TEXT NOT NULL CHECK(length(instructions) BETWEEN 1 AND 4000), updated_at INTEGER NOT NULL, PRIMARY KEY(room_id, participant_id), FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE) STRICT"
+    ]
   }
 ]

@@ -50,6 +50,7 @@ pub(crate) fn policy(table: &str) -> Result<Policy, PersistenceError> {
         | "room_attendee_invites"
         | "room_connector_invites"
         | "connector_seat_invites"
+        | "agent_instructions"
         | "local_bootstrap_authority" => Policy::Product,
         "room_message_attachment_previews"
         | "room_connector_upload_previews"

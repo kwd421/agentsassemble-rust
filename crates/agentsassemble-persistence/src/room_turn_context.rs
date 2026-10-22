@@ -96,8 +96,17 @@ pub(super) async fn prepare_room_input(
         RoomInputDeliveryKind::AmbientObservation => "Ambient",
         RoomInputDeliveryKind::FreeAccessMention => "Free access mention",
     };
-    let session_instructions =
-        persistent.then(|| render_room_rules(room, session, tabletop_tools, &fixed_persona));
+    let owner_instructions = crate::agent_instructions::instructions_in(
+        transaction,
+        &room.room_id,
+        &session.public.participant_id,
+    )
+    .await?
+    .map(|current| current.instructions)
+    .unwrap_or_default();
+    let session_instructions = persistent.then(|| {
+        render_room_rules(room, session, tabletop_tools, &owner_instructions, &fixed_persona)
+    });
     let mut provider_input = render_observation_input(
         room,
         session,
@@ -722,6 +731,7 @@ fn render_room_rules(
     room: &Room,
     session: &DurableAgentSession,
     tabletop_tools: bool,
+    owner_instructions: &str,
     persona: &str,
 ) -> String {
     let mut sections = vec![
@@ -737,6 +747,9 @@ fn render_room_rules(
     ];
     if session.public.runtime_kind == "api" {
         sections.push("This API transport accepts text attachment results, not image/binary results. Reuploading the same file does not change that limitation. A rejected tool returns an error; use its reason to correct the request rather than assume its content was read.".to_owned());
+    }
+    if !owner_instructions.is_empty() {
+        sections.push(format!("[Your owner's instructions for you in this room]\nFollow these after the room rules and before any bot card.\n{owner_instructions}"));
     }
     if !persona.is_empty() {
         sections.push(format!("[Applied bot card or Risu module]\n{persona}"));

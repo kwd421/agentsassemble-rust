@@ -203,6 +203,7 @@ impl ConnectorHub {
                 "conversation_mode": joined.room_state["conversation_mode"], "guidance": joined.room_state["guidance"], "unread_mentions": joined.room_state["unread_mentions"], "mention_overflow": joined.room_state["mention_overflow"], "mention_resync_guidance": joined.room_state["mention_resync_guidance"],
                 "participant_id": joined.participant_id, "display_name": joined.display_name,
                 "role": joined.room_state["role"], "delegated_actions": joined.room_state["delegated_actions"],
+                "your_instructions": joined.room_state["your_instructions"],
                 "instructions": "Joined as this conversation. room_read shows the room, room_say posts, room_wait_next follows the current conversation mode and guidance. connection_id is private and is passed unchanged to later tools."
                 }))
             }

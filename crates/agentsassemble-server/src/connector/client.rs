@@ -91,6 +91,8 @@ struct TerminalLeave {
 struct KnownName {
     name: String,
     revision: Option<chrono::DateTime<chrono::Utc>>,
+    /// The revision of the owner's instructions this AI was last told about.
+    instructions: Option<i64>,
 }
 
 fn name_revision(response: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
@@ -147,6 +149,7 @@ impl RoomConnectorClient {
             known_name: parking_lot::Mutex::new(KnownName {
                 name: name.to_owned(),
                 revision: None,
+                instructions: None,
             }),
             state: Mutex::new(JoinState::Pending(PendingJoin {
                 request_id: Uuid::new_v4(),
@@ -193,6 +196,7 @@ impl RoomConnectorClient {
             known_name: parking_lot::Mutex::new(KnownName {
                 name: resumed.display_name,
                 revision: None,
+                instructions: None,
             }),
             state: Mutex::new(JoinState::Admitted(Admission {
                 session_bearer: resumed.session_bearer,
@@ -261,6 +265,8 @@ impl RoomConnectorClient {
                 *self.known_name.lock() = KnownName {
                     name: current.to_owned(),
                     revision: name_revision(&snapshot),
+                    // The join reply carries the instructions themselves.
+                    instructions: snapshot["your_instructions_revision"].as_i64(),
                 };
             }
             let joined = ConnectorJoined {
@@ -485,6 +491,7 @@ impl RoomConnectorClient {
     /// Adds a one-time notice when the room owner renamed this AI since it was
     /// last told its name. Hosts without the field never trigger it.
     fn note_rename(&self, response: &mut Value) {
+        self.note_instructions(response);
         let Some(current) = response["your_display_name"].as_str() else {
             return;
         };
@@ -499,15 +506,36 @@ impl RoomConnectorClient {
             return;
         }
         let changed = known.name != current;
-        *known = KnownName {
-            name: current.to_owned(),
-            revision,
-        };
+        known.name = current.to_owned();
+        known.revision = revision;
         if changed {
             response["name_changed"] = json!(format!(
                 "Your display name in this room was changed to {current:?}. Use it when you refer to yourself."
             ));
         }
+    }
+
+    /// Adds a one-time notice when the owner changed this AI's instructions
+    /// since it was last told. A wait carries only the revision, so it points
+    /// the AI at room_read, whose result carries the text.
+    fn note_instructions(&self, response: &mut Value) {
+        let Some(revision) = response["your_instructions_revision"].as_i64() else {
+            return;
+        };
+        let mut known = self.known_name.lock();
+        if known.instructions.is_some_and(|known| revision <= known) {
+            return;
+        }
+        let first = known.instructions.is_none();
+        known.instructions = Some(revision);
+        if first {
+            return;
+        }
+        response["instructions_changed"] = json!(match response["your_instructions"].as_str() {
+            Some("") => "Your owner removed your instructions for this room.",
+            Some(_) => "Your owner changed your instructions for this room; they are in your_instructions. Follow them from now on.",
+            None => "Your owner changed your instructions for this room. Call room_read to read them.",
+        });
     }
 
     /// Pins under the current director and owner authority; exact UUID retries are safe.
@@ -913,5 +941,5 @@ fn preserved_message(value: &Value, code: &str) -> String {
 }
 
 fn room_state(snapshot: &Value) -> Value {
-    json!({"role":snapshot["role"],"delegated_actions":snapshot["delegated_actions"],"conversation_mode":snapshot["conversation_mode"],"guidance":snapshot["guidance"],"unread_mentions":snapshot["unread_mentions"],"mention_overflow":snapshot["mention_overflow"],"mention_resync_guidance":snapshot["mention_resync_guidance"]})
+    json!({"your_instructions":snapshot["your_instructions"],"role":snapshot["role"],"delegated_actions":snapshot["delegated_actions"],"conversation_mode":snapshot["conversation_mode"],"guidance":snapshot["guidance"],"unread_mentions":snapshot["unread_mentions"],"mention_overflow":snapshot["mention_overflow"],"mention_resync_guidance":snapshot["mention_resync_guidance"]})
 }

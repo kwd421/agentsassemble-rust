@@ -1,0 +1,142 @@
+//! The owner's own instructions for one AI in a room, for app AIs and external
+//! AIs alike. They are private to the owner: kept apart from the public
+//! participant record and read only on the owner routes, by the AI's prompt and
+//! by that external AI's own connector.
+use chrono::{DateTime, Utc};
+use sqlx::{Row, Sqlite, Transaction};
+
+use crate::{PersistenceError, SqliteStore};
+
+pub(crate) const DDL: &str = "CREATE TABLE IF NOT EXISTS agent_instructions (room_id TEXT NOT NULL, participant_id TEXT NOT NULL, instructions TEXT NOT NULL CHECK(length(instructions) BETWEEN 1 AND 4000), updated_at INTEGER NOT NULL, PRIMARY KEY(room_id, participant_id), FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE) STRICT";
+
+pub(crate) const TABLES: &[crate::schema::TableDefinition] = &[crate::schema::TableDefinition {
+    name: "agent_instructions",
+    ddl: DDL,
+    infrastructure: false,
+}];
+
+/// Characters an owner may give one AI.
+pub const MAX_AGENT_INSTRUCTIONS_CHARS: usize = 4000;
+
+/// The current instructions and when they last changed (microseconds).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AgentInstructions {
+    pub instructions: String,
+    pub updated_at: i64,
+}
+
+impl SqliteStore {
+    /// `None` when the room has no such AI; empty instructions when none are set.
+    ///
+    /// # Errors
+    /// Storage failures.
+    pub async fn agent_instructions(
+        &self,
+        room_id: &str,
+        participant_id: &str,
+    ) -> Result<Option<AgentInstructions>, PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        if !is_agent(&mut tx, room_id, participant_id).await? {
+            return Ok(None);
+        }
+        let current = instructions_in(&mut tx, room_id, participant_id).await?;
+        tx.commit().await?;
+        Ok(Some(current.unwrap_or(AgentInstructions {
+            instructions: String::new(),
+            updated_at: 0,
+        })))
+    }
+
+    /// Replaces the instructions; blank text removes them. Returns false when
+    /// the room has no such AI.
+    ///
+    /// # Errors
+    /// Rejects text over the limit, and storage failures.
+    pub async fn set_agent_instructions(
+        &self,
+        room_id: &str,
+        participant_id: &str,
+        instructions: &str,
+        now: DateTime<Utc>,
+    ) -> Result<bool, PersistenceError> {
+        let instructions = instructions.trim();
+        if instructions.chars().count() > MAX_AGENT_INSTRUCTIONS_CHARS {
+            return Err(PersistenceError::CommandRejected {
+                code: "bad_request".into(),
+                message: format!(
+                    "Instructions are limited to {MAX_AGENT_INSTRUCTIONS_CHARS} characters."
+                ),
+            });
+        }
+        let mut tx = self.pool.begin().await?;
+        if !is_agent(&mut tx, room_id, participant_id).await? {
+            return Ok(false);
+        }
+        if instructions.is_empty() {
+            sqlx::query("DELETE FROM agent_instructions WHERE room_id = ? AND participant_id = ?")
+                .bind(room_id)
+                .bind(participant_id)
+                .execute(&mut *tx)
+                .await?;
+        } else {
+            sqlx::query("INSERT INTO agent_instructions(room_id, participant_id, instructions, updated_at) VALUES(?, ?, ?, ?) ON CONFLICT(room_id, participant_id) DO UPDATE SET instructions = excluded.instructions, updated_at = excluded.updated_at")
+                .bind(room_id)
+                .bind(participant_id)
+                .bind(instructions)
+                .bind(now.timestamp_micros())
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(true)
+    }
+}
+
+async fn is_agent(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<bool, PersistenceError> {
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM participants WHERE room_id = ? AND participant_id = ? AND json_extract(participant_json, '$.participant_type') = 'agent'",
+    )
+    .bind(room_id)
+    .bind(participant_id)
+    .fetch_one(&mut **tx)
+    .await?
+        == 1)
+}
+
+pub(crate) async fn instructions_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<Option<AgentInstructions>, PersistenceError> {
+    Ok(sqlx::query(
+        "SELECT instructions, updated_at FROM agent_instructions WHERE room_id = ? AND participant_id = ?",
+    )
+    .bind(room_id)
+    .bind(participant_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .map(|row| AgentInstructions {
+        instructions: row.get("instructions"),
+        updated_at: row.get("updated_at"),
+    }))
+}
+
+pub(crate) async fn upgrade(pool: &sqlx::SqlitePool) -> Result<(), PersistenceError> {
+    let mut tx = pool.begin().await?;
+    let version: String =
+        sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
+            .fetch_one(&mut *tx)
+            .await?;
+    if version.parse::<i64>().is_ok_and(|version| version < 101) {
+        sqlx::query(DDL).execute(&mut *tx).await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '101' WHERE key = 'schema_version'")
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
