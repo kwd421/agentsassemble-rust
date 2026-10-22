@@ -269,6 +269,17 @@ describe("MemberList component wiring", () => {
     expect(screen.queryByRole("button", { name: "전체 일시정지" })).toBeNull();
     expect(screen.queryByRole("button", { name: "전체 재개" })).toBeNull();
     expect(screen.queryByRole("button", { name: "전체 중지" })).toBeNull();
+    // The server refuses to stop a session until its start settles.
+    view.rerender(
+      <MemberList
+        agents={[AGENT]}
+        agentSessions={[{ ...external, external_owned: false, process_ownership: "server", runtime_status: "starting" }]}
+        roomId="room-1"
+        roomName="Room One"
+        onAgentControl={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "전체 중지" })).toBeNull();
     view.rerender(
       <MemberList
         agents={[AGENT]}
