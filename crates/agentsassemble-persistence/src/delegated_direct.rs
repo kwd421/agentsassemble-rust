@@ -147,46 +147,8 @@ impl SqliteStore {
         }
         let first_seq =
             crate::room_event_sequence::next_sequence(&mut tx, authority.room_id()).await?;
-        let (mut mutation, target, description) = match request {
-            DirectRoomAction::RequestDeleteTextChannel(_)
-            | DirectRoomAction::StartAgent(_)
-            | DirectRoomAction::RequestCreateAgent(_)
-            | DirectRoomAction::RequestReconfigureAgent(_)
-            | DirectRoomAction::RequestRemoveAgent(_)
-            | DirectRoomAction::RequestKickParticipant(_)
-            | DirectRoomAction::RequestCreateInvite(_)
-            | DirectRoomAction::StopAgent(_) => {
-                return Err(rejected("bad_request", "Use the lifecycle mutation owner."));
-            }
-            DirectRoomAction::CreateTextChannel(_) | DirectRoomAction::RenameTextChannel(_) => {
-                let (delta, target) = channel_delta(&mut tx, authority.room_id(), request).await?;
-                let outcome =
-                    crate::room_settings::update_settings_in(&mut tx, &proof.owner, &delta).await?;
-                (
-                    ParticipantMuteMutation {
-                        outcome,
-                        assignments: Vec::new(),
-                        host_interrupt_effect: None,
-                    },
-                    target,
-                    "updated a text channel",
-                )
-            }
-            DirectRoomAction::SetParticipantMute(r) => (
-                crate::participant_mute::mute_in(
-                    &mut tx,
-                    &proof.owner,
-                    &json!({"participant_id":r.participant_id,"muted":r.muted}),
-                )
-                .await?,
-                r.participant_id.clone(),
-                if r.muted {
-                    "muted a participant"
-                } else {
-                    "unmuted a participant"
-                },
-            ),
-        };
+        let (mut mutation, target, description) =
+            apply_direct(&mut tx, authority.room_id(), &proof, request).await?;
         let bytes = crate::room_write_budget::command_size(request_id, request.name(), &payload)?;
         crate::room_write_budget::reserve_room_write_budget(&mut tx, authority.room_id(), bytes)
             .await?;
@@ -210,29 +172,7 @@ impl SqliteStore {
         if let DirectRoomAction::SetParticipantMute(r) = request {
             event.extra.insert("muted".into(), json!(r.muted));
         }
-        let canonical_id = mutation.outcome.event.id.clone();
-        for canonical in mutation
-            .outcome
-            .events
-            .iter_mut()
-            .filter(|event| event.id == canonical_id)
-        {
-            for key in [
-                "actor_participant_id",
-                "on_behalf_of_participant_id",
-                "action",
-                "target_id",
-                "request_id",
-            ] {
-                canonical.extra.insert(key.into(), event.extra[key].clone());
-            }
-            sqlx::query("UPDATE room_events SET event_json=? WHERE room_id=? AND seq=?")
-                .bind(serde_json::to_string(canonical)?)
-                .bind(authority.room_id())
-                .bind(canonical.seq)
-                .execute(&mut *tx)
-                .await?;
-        }
+        attribute_canonical(&mut tx, authority.room_id(), &mut mutation, &event).await?;
         crate::room_turns::support::insert_event(&mut tx, &event).await?;
         mutation.outcome.events.push(event.clone());
         crate::delegated_event_attribution::attribute_since(
@@ -263,6 +203,89 @@ impl SqliteStore {
         self.notify_room_directory_changed();
         Ok((mutation, Some(debit)))
     }
+}
+
+/// Applies one direct action through the owner's own mutation core and names
+/// its target and the room-visible description.
+async fn apply_direct(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    proof: &DelegatedRoomActionAuthority,
+    request: &DirectRoomAction,
+) -> Result<(ParticipantMuteMutation, String, &'static str), PersistenceError> {
+    Ok(match request {
+        DirectRoomAction::RequestDeleteTextChannel(_)
+        | DirectRoomAction::StartAgent(_)
+        | DirectRoomAction::RequestCreateAgent(_)
+        | DirectRoomAction::RequestReconfigureAgent(_)
+        | DirectRoomAction::RequestRemoveAgent(_)
+        | DirectRoomAction::RequestKickParticipant(_)
+        | DirectRoomAction::RequestCreateInvite(_)
+        | DirectRoomAction::StopAgent(_) => {
+            return Err(rejected("bad_request", "Use the lifecycle mutation owner."));
+        }
+        DirectRoomAction::CreateTextChannel(_) | DirectRoomAction::RenameTextChannel(_) => {
+            let (delta, target) = channel_delta(tx, room_id, request).await?;
+            let outcome =
+                crate::room_settings::update_settings_in(tx, &proof.owner, &delta).await?;
+            (
+                ParticipantMuteMutation {
+                    outcome,
+                    assignments: Vec::new(),
+                    host_interrupt_effect: None,
+                },
+                target,
+                "updated a text channel",
+            )
+        }
+        DirectRoomAction::SetParticipantMute(r) => (
+            crate::participant_mute::mute_in(
+                tx,
+                &proof.owner,
+                &json!({"participant_id":r.participant_id,"muted":r.muted}),
+            )
+            .await?,
+            r.participant_id.clone(),
+            if r.muted {
+                "muted a participant"
+            } else {
+                "unmuted a participant"
+            },
+        ),
+    })
+}
+
+/// Marks the owner-core event as the delegate's action on the owner's behalf.
+async fn attribute_canonical(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    mutation: &mut ParticipantMuteMutation,
+    event: &agentsassemble_domain::RoomEvent,
+) -> Result<(), PersistenceError> {
+    let canonical_id = mutation.outcome.event.id.clone();
+    for canonical in mutation
+        .outcome
+        .events
+        .iter_mut()
+        .filter(|event| event.id == canonical_id)
+    {
+        for key in [
+            "actor_participant_id",
+            "on_behalf_of_participant_id",
+            "action",
+            "target_id",
+            "request_id",
+        ] {
+            canonical.extra.insert(key.into(), event.extra[key].clone());
+        }
+        sqlx::query("UPDATE room_events SET event_json=? WHERE room_id=? AND seq=?")
+            .bind(serde_json::to_string(canonical)?)
+            .bind(room_id)
+            .bind(canonical.seq)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
 }
 
 async fn channel_delta(

@@ -27,7 +27,7 @@ use agentsassemble_domain::{
     DecideDelegatedAction, DelegatedActionRequest, InviteScope, RequestCreateInvite, RoomEvent,
     canonical_payload_hash,
 };
-use sqlx::{Row, Sqlite, Transaction};
+use sqlx::{Row, Sqlite, Transaction, sqlite::SqliteRow};
 
 const MAX_INVITE_LABEL_CHARS: usize = 128;
 
@@ -415,6 +415,26 @@ impl SqliteStore {
         })
     }
 
+    /// Ends an approved invite with a terminal receipt; nothing is minted.
+    async fn end_approved_invite(
+        &self,
+        mut tx: Transaction<'_, Sqlite>,
+        room_id: &str,
+        row: &SqliteRow,
+        state: ConfirmationState,
+        receipt: Value,
+    ) -> Result<ApprovedInviteDrive, PersistenceError> {
+        finish_in(&mut tx, room_id, row, state, &receipt).await?;
+        tx.commit().await?;
+        self.notify_room_directory_changed();
+        Ok(ApprovedInviteDrive {
+            receipt,
+            state,
+            new_events: Vec::new(),
+            invite: None,
+        })
+    }
+
     /// Executes one approved HUMAN invite creation through the owner's own invite core.
     /// Idempotent: a request that already left `executing` returns its receipt without
     /// minting or storing a credential. The credential identity is supplied by the
@@ -483,22 +503,9 @@ impl SqliteStore {
                 | PersistenceError::RoomMissing,
             ) => {
                 let receipt = json!({"status":"rejected","code":"confirmation_cancelled","message":"The owner or delegate authority ended before execution.","retryable":false});
-                finish_in(
-                    &mut tx,
-                    room_id,
-                    &row,
-                    ConfirmationState::Cancelled,
-                    &receipt,
-                )
-                .await?;
-                tx.commit().await?;
-                self.notify_room_directory_changed();
-                return Ok(ApprovedInviteDrive {
-                    receipt,
-                    state: ConfirmationState::Cancelled,
-                    new_events: Vec::new(),
-                    invite: None,
-                });
+                return self
+                    .end_approved_invite(tx, room_id, &row, ConfirmationState::Cancelled, receipt)
+                    .await;
             }
             Err(error) => return Err(error),
         };
@@ -508,15 +515,9 @@ impl SqliteStore {
             Err(PersistenceError::CommandRejected { code, message }) => {
                 let receipt =
                     json!({"status":"rejected","code":code,"message":message,"retryable":false});
-                finish_in(&mut tx, room_id, &row, ConfirmationState::Failed, &receipt).await?;
-                tx.commit().await?;
-                self.notify_room_directory_changed();
-                return Ok(ApprovedInviteDrive {
-                    receipt,
-                    state: ConfirmationState::Failed,
-                    new_events: Vec::new(),
-                    invite: None,
-                });
+                return self
+                    .end_approved_invite(tx, room_id, &row, ConfirmationState::Failed, receipt)
+                    .await;
             }
             Err(error) => return Err(error),
         };

@@ -91,6 +91,21 @@ pub(crate) async fn drive_approved_confirmed_invite(
     }
 }
 
+/// Ends the approved invite with a terminal receipt; nothing is minted.
+async fn fail(
+    state: &AppState,
+    room_id: &str,
+    confirmation_id: &str,
+    code: &str,
+    message: &str,
+) -> Result<Option<Value>, PersistenceError> {
+    state
+        .store
+        .fail_approved_human_invite(room_id, confirmation_id, code, message)
+        .await?;
+    Ok(None)
+}
+
 async fn mint_and_drive(
     state: &AppState,
     room_id: &str,
@@ -112,25 +127,19 @@ async fn mint_and_drive(
     let policy = match delegated_invite_policy(&invite.params) {
         Ok(policy) => policy,
         Err(PersistenceError::CommandRejected { code, message }) => {
-            state
-                .store
-                .fail_approved_human_invite(room_id, confirmation_id, &code, &message)
-                .await?;
-            return Ok(None);
+            return fail(state, room_id, confirmation_id, &code, &message).await;
         }
         Err(error) => return Err(error),
     };
     let Some(ingress) = state.public_ingress.ready_snapshot() else {
-        state
-            .store
-            .fail_approved_human_invite(
-                room_id,
-                confirmation_id,
-                "public_ingress_not_ready",
-                "Public ingress must be ready before creating an invite.",
-            )
-            .await?;
-        return Ok(None);
+        return fail(
+            state,
+            room_id,
+            confirmation_id,
+            "public_ingress_not_ready",
+            "Public ingress must be ready before creating an invite.",
+        )
+        .await;
     };
     let epoch = state.store.registration_epoch().await?;
     let Some(created_at) =
@@ -141,29 +150,17 @@ async fn mint_and_drive(
             "The invite window is invalid.",
         ));
     };
-    let Some(ttl) = chrono::TimeDelta::try_seconds(policy.ttl_seconds) else {
-        state
-            .store
-            .fail_approved_human_invite(
-                room_id,
-                confirmation_id,
-                "invite_window_invalid",
-                "The invite expiry is out of range.",
-            )
-            .await?;
-        return Ok(None);
-    };
-    let Some(expires_at) = created_at.checked_add_signed(ttl) else {
-        state
-            .store
-            .fail_approved_human_invite(
-                room_id,
-                confirmation_id,
-                "invite_window_invalid",
-                "The invite expiry is out of range.",
-            )
-            .await?;
-        return Ok(None);
+    let Some(expires_at) = chrono::TimeDelta::try_seconds(policy.ttl_seconds)
+        .and_then(|ttl| created_at.checked_add_signed(ttl))
+    else {
+        return fail(
+            state,
+            room_id,
+            confirmation_id,
+            "invite_window_invalid",
+            "The invite expiry is out of range.",
+        )
+        .await;
     };
     let base_participant_id = format!("guest-{}", uuid::Uuid::new_v4().simple());
     let Ok(credentials) = state
@@ -179,16 +176,14 @@ async fn mint_and_drive(
             expires_at,
         })
     else {
-        state
-            .store
-            .fail_approved_human_invite(
-                room_id,
-                confirmation_id,
-                "invite_credentials_unavailable",
-                "Invite credentials could not be issued.",
-            )
-            .await?;
-        return Ok(None);
+        return fail(
+            state,
+            room_id,
+            confirmation_id,
+            "invite_credentials_unavailable",
+            "Invite credentials could not be issued.",
+        )
+        .await;
     };
     // Mirrors the owner's own member-join URL construction in `human_invite_manager_web`.
     let join_url = match epoch.as_deref() {
@@ -228,11 +223,7 @@ async fn mint_and_drive(
     let drive = match drive {
         Ok(drive) => drive,
         Err(PersistenceError::CommandRejected { code, message }) => {
-            state
-                .store
-                .fail_approved_human_invite(room_id, confirmation_id, &code, &message)
-                .await?;
-            return Ok(None);
+            return fail(state, room_id, confirmation_id, &code, &message).await;
         }
         Err(error) => return Err(error),
     };
