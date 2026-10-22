@@ -53,6 +53,30 @@ fn denied(reason: Rejection) -> HumanAdmissionDecision {
     HumanAdmissionDecision::Rejected(reason)
 }
 
+/// Why this invite or its room cannot admit anyone right now.
+fn invite_rejection(
+    invite: &crate::HumanInvite,
+    room: &agentsassemble_domain::Room,
+    request: &PreparedHumanAdmission,
+    now: DateTime<Utc>,
+) -> Option<Rejection> {
+    if invite.revoked {
+        return Some(Rejection::InviteRevoked);
+    }
+    if invite.expires_at <= now {
+        return Some(Rejection::InviteExpired);
+    }
+    if room.status != RoomStatus::Active {
+        return Some(Rejection::RoomUnavailable);
+    }
+    if !request.meeting_id_assertion().is_empty()
+        && request.meeting_id_assertion() != invite.room_id
+    {
+        return Some(Rejection::MeetingMismatch);
+    }
+    None
+}
+
 pub(crate) async fn admit(
     store: &SqliteStore,
     tx: &mut Transaction<'_, Sqlite>,
@@ -67,19 +91,8 @@ pub(crate) async fn admit(
         return Ok(denied(Rejection::InviteNotFound));
     };
     require_credential_binding(&invite, request.credential())?;
-    if invite.revoked {
-        return Ok(denied(Rejection::InviteRevoked));
-    }
-    if invite.expires_at <= now {
-        return Ok(denied(Rejection::InviteExpired));
-    }
-    if room.status != RoomStatus::Active {
-        return Ok(denied(Rejection::RoomUnavailable));
-    }
-    if !request.meeting_id_assertion().is_empty()
-        && request.meeting_id_assertion() != invite.room_id
-    {
-        return Ok(denied(Rejection::MeetingMismatch));
+    if let Some(reason) = invite_rejection(&invite, &room, request, now) {
+        return Ok(denied(reason));
     }
     let avatar =
         crate::human_admission_identity::resolve_admission_avatar(tx, request, &invite, now)
