@@ -36,8 +36,9 @@ pub(crate) const TABLES: &[crate::schema::TableDefinition] = &[
     },
 ];
 
-/// A connection whose session ended longer ago than this is not resumed.
-const RESUME_WINDOW: Duration = Duration::days(7);
+/// An external AI whose session ended stays listed, as detached, this long so
+/// the owner can make it a reconnect invitation.
+pub(crate) const AWAY_LISTING_WINDOW: Duration = Duration::days(7);
 
 /// Secret-bearing result for the in-process MCP hub only; neither Debug nor Serialize.
 pub struct ResumedConnector {
@@ -62,6 +63,11 @@ impl SqliteStore {
         display_name: &str,
         now: DateTime<Utc>,
     ) -> Result<(), PersistenceError> {
+        // Rows of ended connections are never resumed again.
+        sqlx::query("DELETE FROM connector_connections WHERE invite_id IN (SELECT invite_id FROM room_connector_invites WHERE revoked = 1 OR session_expires_at IS NULL OR session_expires_at <= ?)")
+            .bind(now.timestamp_micros())
+            .execute(&self.pool)
+            .await?;
         sqlx::query("INSERT OR IGNORE INTO connector_connections(connection_hash, invite_id, invitation_identity, display_name, created_at) SELECT ?, invite_id, ?, ?, ? FROM room_connector_invites WHERE session_fingerprint = ? AND revoked = 0")
             .bind(connection_hash.as_slice())
             .bind(invitation_identity.as_slice())
@@ -73,8 +79,9 @@ impl SqliteStore {
         Ok(())
     }
 
-    /// Restores a remembered connection's session: its expiry moves a full
-    /// lifetime out, and the same credential is derived from its invitation.
+    /// Restores a remembered connection whose session has not ended: its expiry
+    /// moves a full lifetime out, and the same credential is derived from its
+    /// invitation. A host restart therefore never revives an ended session.
     /// `None` when the ID is unknown or the seat has ended.
     ///
     /// # Errors
@@ -84,6 +91,17 @@ impl SqliteStore {
         connection_hash: &[u8; 32],
         now: DateTime<Utc>,
     ) -> Result<Option<ResumedConnector>, PersistenceError> {
+        // An unknown ID is the common case on the public endpoint: answer it
+        // with a read, never a write transaction.
+        let known: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM connector_connections WHERE connection_hash = ?)",
+        )
+        .bind(connection_hash.as_slice())
+        .fetch_one(&self.pool)
+        .await?;
+        if !known {
+            return Ok(None);
+        }
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let Some(row) = sqlx::query("SELECT c.invitation_identity, c.display_name, i.invite_id, i.room_id, i.room_uid, i.participant_id, i.token_fingerprint, i.session_fingerprint, i.session_expires_at FROM connector_connections c JOIN room_connector_invites i ON i.invite_id = c.invite_id WHERE c.connection_hash = ? AND i.revoked = 0 AND i.session_fingerprint IS NOT NULL")
             .bind(connection_hash.as_slice())
@@ -92,7 +110,7 @@ impl SqliteStore {
         else {
             return Ok(None);
         };
-        if timestamp(row.get("session_expires_at"))? + RESUME_WINDOW <= now {
+        if timestamp(row.get("session_expires_at"))? <= now {
             return Ok(None);
         }
         let token: [u8; 32] = row

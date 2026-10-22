@@ -321,8 +321,8 @@ second participant with none of the first one's role, name or picture.
 
 - **Renewed while in use.** Every connector request authorizes through
   `authorize_connector_session`; once less than half of the one-hour lifetime is left, the expiry
-  moves a full hour from now. A pending `wait` renews when its timer fires, so an AI that keeps
-  waiting never expires. Only an unused session ends. Authority issued before a renewal stays
+  moves a full hour from now. A pending `wait` wakes 15 minutes before its session would end and
+  renews it, so an AI that keeps waiting never expires. Only an unused session ends. Authority issued before a renewal stays
   valid, because the identity check now only refuses an *earlier* expiry than the one issued.
 - **Kept across a host restart.** After a successful `room_join` through this host's own MCP
   endpoint, the hub stores the SHA-256 of the private `connection_id` with the invitation it used
@@ -330,17 +330,29 @@ second participant with none of the first one's role, name or picture.
   after a restart, the hub looks up that hash, derives the same session credential from the
   stored invitation (it is an HMAC of the invitation under the host key), renews it, and puts the
   connection back in the registry, so the AI continues in its own seat without doing anything.
-  Nothing is resumed for a seat that left, was removed, or whose session ended more than 7 days
-  ago; a standalone connector CLI keeps its own registry and only needs the renewal.
+  Only a session that has not ended is resumed, so a restart never revives a connection that was
+  already dead while the host ran; nothing is resumed for a seat that left or was removed. IDs
+  that are not 43 base64url characters are refused without a lookup, and a miss is a read, never
+  a write transaction. Rows of ended connections are pruned when a new one is remembered.
+  `room_leave` restores the connection first, so it also works right after a restart. Messages
+  posted between the restart and the AI's first call are not delivered to its next wait; they
+  stay readable with `room_read`. A standalone connector CLI keeps its own registry and only
+  needs the renewal.
 - **Reconnect invitation for a lost connection.** When the AI starts over without its
   `connection_id`, the owner makes a reconnect invitation from the invite window's AI tab
   ("기존 외부 AI 다시 연결"). `CreateConnectorInviteRequest.seat_participant_id` (optional; older
   hosts reject it, and clients send it only for a reconnect) records the seat in
   `connector_seat_invites`. Joining with it takes that seat back: the seat's earlier invitation
   is revoked and cleared, its live sessions are closed, the seat is joined again with its own
-  name, role and picture, and a `participant_joined` event is recorded. Only a current external
-  AI of the room (a `room_connector_invites` participant that was not kicked or exported) can be
-  a seat.
+  name, role, picture and read/write scope (the request's scope is ignored), and a
+  `participant_joined` event is recorded. The used reconnect row is deleted, because backups drop
+  admitted invitations. Only an external AI of the room (a `room_connector_invites` participant
+  that was not kicked or exported; one that left on its own may be invited back) can be a seat.
 
-Not covered: a seat whose AI went away still shows as joined until it is removed; showing it as
-disconnected needs a presence change across the member list.
+- **Away seats stay listed.** The live roster used to drop an external AI as soon as its session
+  expired, which hid the very seats a reconnect invitation is for and turned their mentions into
+  "@알 수 없는 사용자". A seat whose session ended now stays in the live roster for 7 days,
+  projected as `detached` ("연결 끊김"), so the owner can make it a reconnect invitation; its stored
+  status stays `joined`, and the departed-inclusive snapshot is not projected. After the
+  window, or once its invitation is revoked, it leaves the roster as before. The projection is
+  computed when a snapshot is read; a seat that expires or resumes does not push a live update.

@@ -165,6 +165,10 @@ pub(super) async fn vote(
     Ok(Json(json!(result)))
 }
 
+/// A waiting connector renews this long before its session would end; less
+/// than half the session lifetime, so the renewal always applies.
+const RENEW_BEFORE_EXPIRY: chrono::Duration = chrono::Duration::minutes(15);
+
 pub(super) async fn wait(
     State(state): State<AppState>,
     Query(cursor): Query<Cursor>,
@@ -209,9 +213,10 @@ pub(super) async fn wait(
     state
         .participant_activity
         .end(&principal.room_id, &principal.participant_id);
-    let duration = (authorization.expires_at() - chrono::Utc::now())
+    // Wake before the session would end, so the renewal finds it still valid.
+    let duration = (authorization.expires_at() - RENEW_BEFORE_EXPIRY - chrono::Utc::now())
         .to_std()
-        .map_err(|_| rejected(StatusCode::FORBIDDEN, "session_revoked"))?;
+        .unwrap_or_default();
     let expiry = tokio::time::sleep(duration);
     tokio::pin!(expiry);
     let transport = transport.ok_or_else(|| {
@@ -227,7 +232,7 @@ pub(super) async fn wait(
             () = &mut expiry => {
                 // A connector still waiting is in use: renew it and keep waiting.
                 let renewed = state.store.authorize_connector_session(authorization.session_fingerprint(), chrono::Utc::now()).await.map_err(ConnectorHttpError::from_persistence)?;
-                let left = (renewed.expires_at() - chrono::Utc::now()).to_std().map_err(|_| rejected(StatusCode::FORBIDDEN,"session_revoked"))?;
+                let left = (renewed.expires_at() - RENEW_BEFORE_EXPIRY - chrono::Utc::now()).to_std().map_err(|_| rejected(StatusCode::FORBIDDEN,"session_revoked"))?;
                 expiry.as_mut().reset(tokio::time::Instant::now() + left);
             }
             signal = revocations.recv() => {

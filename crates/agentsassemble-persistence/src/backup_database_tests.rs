@@ -306,3 +306,44 @@ async fn aggregate_rows_are_rejected_before_materialization()
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn a_used_and_a_pending_reconnect_invitation_back_up() -> Result<(), Box<dyn std::error::Error>> {
+    use sha2::{Digest, Sha256};
+    let directory = tempfile::tempdir()?;
+    let store = SqliteStore::open_path(&directory.path().join("source.sqlite")).await?;
+    store
+        .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Backup owner")
+        .await?;
+    store
+        .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "general", "Backup room")
+        .await?;
+    let manager =
+        crate::RoomManagerAuthority::Local(crate::room_user_identity::test_authority(&store).await);
+    let now = chrono::Utc::now();
+    let scope = agentsassemble_domain::InviteScope::ReadWrite;
+    let first = store
+        .create_connector_invite(&manager, uuid::Uuid::new_v4(), scope, now)
+        .await?;
+    let seated = store
+        .admit_connector(&Sha256::digest(first.invite_bearer.as_bytes()).into(), &[1; 32], uuid::Uuid::new_v4(), "Ace", now)
+        .await?;
+    let seat = seated.authorization.principal().participant_id.clone();
+    let used = store
+        .create_connector_seat_invite(&manager, uuid::Uuid::new_v4(), scope, &seat, now)
+        .await?;
+    store
+        .admit_connector(&Sha256::digest(used.invite_bearer.as_bytes()).into(), &[2; 32], uuid::Uuid::new_v4(), "Ace", now)
+        .await?;
+    store
+        .create_connector_seat_invite(&manager, uuid::Uuid::new_v4(), scope, &seat, now)
+        .await?;
+    let snapshot = directory.path().join("snapshot.sqlite");
+    let payload = directory.path().join("payload.sqlite");
+    store
+        .export_backup_payload(&ServerOwnerAuthority::LocalOperator, &snapshot, &payload)
+        .await?;
+    let rebuilt = directory.path().join("rebuilt.sqlite");
+    reconstruct_payload(&payload, &rebuilt, crate::schema_version::CURRENT_SCHEMA_VERSION).await?;
+    Ok(())
+}

@@ -271,6 +271,14 @@ impl ConnectorHub {
         let Some(runtime) = &self.owned_runtime else {
             return Err(missing);
         };
+        // Issued IDs are 32 random bytes in unpadded base64url; nothing else is looked up.
+        if id.len() != 43
+            || !id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        {
+            return Err(missing);
+        }
         let hash: [u8; 32] = Sha256::digest(id.as_bytes()).into();
         let Some(resumed) = runtime
             .store
@@ -285,6 +293,9 @@ impl ConnectorHub {
             .local_url()
             .ok_or_else(|| "local_ingress_unavailable".to_owned())?;
         let local = normalize_server(&local).map_err(|error| error.code)?;
+        if let Ok(client) = self.client(id) {
+            return Ok(client);
+        }
         let client = Arc::new(RoomConnectorClient::resumed(local, resumed).map_err(|error| error.code)?);
         client.join().await.map_err(|error| error.code)?;
         let mut state = self.state.lock();
@@ -364,6 +375,10 @@ impl ConnectorHub {
     }
 
     pub(super) async fn leave(&self, id: &str, release_receipt: bool) -> Result<Value, String> {
+        // After a host restart the connection is restored first, so it can leave.
+        if !id.is_empty() && self.connection(id, true).is_err() {
+            let _ = self.client_or_resume(id).await;
+        }
         let client = self.connection(id, true)?;
         if release_receipt {
             if !client.has_completed_leave() {

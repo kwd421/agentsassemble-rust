@@ -44,8 +44,9 @@ async fn verify_departures(status: ParticipantStatus) -> Result<(), Box<dyn std:
         .await?;
     let manager = agentsassemble_persistence::RoomManagerAuthority::Local(manager);
     for index in 0..1_000 {
+        // Expired memberships past the week an away AI stays listed for reconnecting.
         let now = if status == ParticipantStatus::Joined {
-            chrono::Utc::now() - chrono::Duration::days(1_001 - index)
+            chrono::Utc::now() - chrono::Duration::days(1_008 - index)
         } else {
             chrono::Utc::now()
         };

@@ -534,3 +534,50 @@ async fn a_seat_invitation_takes_the_same_seat_back() -> TestResult {
     assert_eq!(agents, 1, "no second seat");
     Ok(())
 }
+
+#[tokio::test]
+async fn an_away_external_ai_stays_listed_as_detached_until_it_can_no_longer_return() -> TestResult {
+    let (store, manager) = fixture().await?;
+    let now = Utc::now();
+    let invite = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, now)
+        .await?;
+    let fingerprint = Sha256::digest(invite.invite_bearer.as_bytes()).into();
+    let admitted = store
+        .admit_connector(&fingerprint, &[1; 32], Uuid::new_v4(), "Away", now)
+        .await?;
+    let seat = admitted.authorization.principal().participant_id.clone();
+    let owner = agentsassemble_domain::AuthenticatedPrincipal {
+        principal_id: agentsassemble_domain::LOCAL_OPERATOR_USER_ID.to_owned(),
+        participant_id: agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "Host".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: agentsassemble_domain::CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    let roster = || store.snapshot_for(crate::RoomMutationAuthority::TrustedPrincipal(&owner), 0, 200);
+    let status = |participants: Vec<agentsassemble_domain::Participant>| {
+        participants
+            .into_iter()
+            .find(|participant| participant.participant_id == seat)
+            .map(|participant| participant.status)
+    };
+    assert_eq!(
+        status(roster().await?.participants),
+        Some(agentsassemble_domain::ParticipantStatus::Joined)
+    );
+    for (ago, expected) in [
+        (Duration::hours(2), Some(agentsassemble_domain::ParticipantStatus::Detached)),
+        (Duration::days(8), None),
+    ] {
+        sqlx::query("UPDATE room_connector_invites SET session_expires_at = ? WHERE participant_id = ?")
+            .bind((now - ago).timestamp_micros())
+            .bind(&seat)
+            .execute(&store.pool)
+            .await?;
+        assert_eq!(status(roster().await?.participants), expected);
+    }
+    Ok(())
+}

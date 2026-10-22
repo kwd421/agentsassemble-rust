@@ -444,12 +444,14 @@ async fn load_snapshot_participants(
     // Discord-style. Anonymous guests (admitted without a central account, so no
     // bound admission row) leave the live roster once all their sessions expire;
     // expiry only revokes authorization for members, never roster membership.
-    // Only terminal statuses (`left`/`kicked`/`exported`) and revoked/expired
-    // connector invites leave the roster otherwise. Keep managed session
+    // Only terminal statuses (`left`/`kicked`/`exported`) and revoked connector
+    // invites leave the roster otherwise. An external AI whose session ended
+    // stays, shown as detached, while it can still come back to its seat. Keep managed session
     // participants for re-add eligibility and exported exclusions; their count
     // is bounded by the existing Agent Session capacity owner.
     let participant_rows = sqlx::query(
-        "SELECT p.participant_json, json_extract(u.profile_json, '$.avatar_label') AS profile_avatar_label \
+        "SELECT p.participant_json, json_extract(u.profile_json, '$.avatar_label') AS profile_avatar_label, \
+         EXISTS (SELECT 1 FROM room_connector_invites AS c WHERE c.room_id = p.room_id AND c.participant_id = p.participant_id AND c.revoked = 0 AND c.session_expires_at <= ?) AS connector_away \
          FROM participants AS p LEFT JOIN user_profiles AS u ON u.participant_id = p.participant_id \
          WHERE p.room_id = ? \
          AND (? OR (coalesce(json_extract(p.participant_json, '$.status'), '') NOT IN ('left', 'kicked', 'exported') \
@@ -461,11 +463,12 @@ async fn load_snapshot_participants(
          AND json_extract(s.session_json, '$.participant_id') = p.participant_id)) \
          ORDER BY p.participant_id",
     )
+    .bind(now)
     .bind(room_id)
     .bind(include_departed)
     .bind(room_id)
     .bind(now)
-    .bind(now)
+    .bind(now - crate::connector_connections::AWAY_LISTING_WINDOW.num_microseconds().unwrap_or(i64::MAX))
     .fetch_all(&mut **transaction)
     .await?;
     Ok(participant_rows
@@ -475,6 +478,12 @@ async fn load_snapshot_participants(
                 serde_json::from_str(row.get::<&str, _>("participant_json"))?;
             if participant.participant_type == "human" {
                 participant.avatar_label = row.get("profile_avatar_label");
+            }
+            if !include_departed
+                && row.get::<bool, _>("connector_away")
+                && participant.status == agentsassemble_domain::ParticipantStatus::Joined
+            {
+                participant.status = agentsassemble_domain::ParticipantStatus::Detached;
             }
             Ok::<_, serde_json::Error>(participant)
         })

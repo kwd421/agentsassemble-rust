@@ -88,8 +88,15 @@ impl SqliteStore {
             InviteScope::ReadOnly => "read_only",
             InviteScope::ReadWrite => "read_write",
         };
+        // A reconnect keeps the seat's own read/write scope.
+        let mut scope = scope;
         if let Some(seat) = seat {
             load_seat(&mut tx, &identity.room_id, seat).await?;
+            let current: Option<String> = sqlx::query_scalar("SELECT scope FROM room_connector_invites WHERE room_id = ? AND participant_id = ?")
+                .bind(&identity.room_id).bind(seat).fetch_optional(&mut *tx).await?;
+            if let Some(current) = current {
+                scope = if current == "read_only" { "read_only" } else { "read_write" };
+            }
         }
         let mut seed = Sha256::new();
         seed.update(room.room_uid.as_bytes());
@@ -266,6 +273,12 @@ impl SqliteStore {
         let (participant, event) = if let Some(seat) = seat {
             let (participant, event, replaced) = retake_seat(&mut tx, &room_id, &seat, now).await?;
             replaced_sessions = replaced;
+            // A used reconnect invitation is an ordinary admitted one: backups
+            // drop admitted invitations, so nothing may keep pointing at it.
+            sqlx::query("DELETE FROM connector_seat_invites WHERE invite_id = ?")
+                .bind(&invite_id)
+                .execute(&mut *tx)
+                .await?;
             (participant, event)
         } else {
             insert_connector_participant(&mut tx, &room_id, display_name, row.get("creator_id"), now)
@@ -295,7 +308,7 @@ impl SqliteStore {
 }
 
 /// A seat a reconnect invitation may take back: an external AI of this room
-/// that was not removed.
+/// that was not removed. One that left on its own may be invited back.
 async fn load_seat(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     room_id: &str,
