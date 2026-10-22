@@ -15,6 +15,7 @@ import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
 import AgentActivitySettings from "./AgentActivitySettings";
 import AgentMemorySettings, { keepsMemory } from "./AgentMemorySettings";
 import AgentInstructionsSettings from "./AgentInstructionsSettings";
+import AgentUsageLine from "./AgentUsageLine";
 import AgentHandoffTrustSetting from "./AgentHandoffTrustSetting";
 import { useOwnerRouteHost } from "../../app/ownerRouteHost";
 import ProviderModelRefresh from "./ProviderModelRefresh";
@@ -530,6 +531,7 @@ export default function AgentSessionDetails({
       )}
       {ownerRoutes && <AgentInstructionsSettings roomId={session.room_id} participantId={session.participant_id} name={session.display_name} />}
       {ownerRoutes && keepsMemory(session) && <AgentMemorySettings session={session} />}
+      {ownerRoutes && session.runtime_kind === "api" && <AgentUsageLine roomId={session.room_id} sessionId={session.session_id} turnCount={session.turn_count || 0} />}
       {ownerRoutes && session.permission_mode === "full_access" && <AgentHandoffTrustSetting session={session} />}
       <AgentActivitySettings
         session={session}
