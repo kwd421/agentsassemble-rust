@@ -54,6 +54,14 @@
   flex-shrink: 0;
 }
 
+/* The count label gives way first when progress text shares a narrow panel. */
+.dc-owner-agent-toggle span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dc-owner-agent-bulk-action {
   display: grid;
   flex: 0 0 auto;
