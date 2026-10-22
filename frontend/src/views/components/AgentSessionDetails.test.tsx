@@ -80,7 +80,7 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(onControl).toHaveBeenLastCalledWith(recovery, "stop");
   });
 
-  it("offers recovery instead of stop for a runtime stranded by a killed server", async () => {
+  it("resumes a runtime stranded by a killed server in one step", async () => {
     const onControl = vi.fn().mockResolvedValue(undefined);
     const session = agentSessionFixture({
       runtime_status: "disconnected", enabled: false, recovery_required: true,
@@ -88,13 +88,13 @@ describe("AgentSessionDetails diagnostics", () => {
       last_error: "Provider runtime authority could not be confirmed.",
     });
     render(<AgentSessionDetails session={session} onControl={onControl} />);
-    expect(screen.queryByRole("button", { name: "중지" })).toBeNull();
     expect(screen.getByText(/앱이 갑자기 종료돼/)).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "복구" }));
-    expect(onControl).toHaveBeenCalledWith(session, "stop");
+    expect(screen.queryByRole("button", { name: "복구" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "재개" }));
+    expect(onControl).toHaveBeenCalledWith(session, "resume");
   });
 
-  it.each([0, 2])("requires cleanup before restarting a disconnected session (%s turns)", async (turnCount) => {
+  it.each([0, 2])("resumes a disconnected session without a separate stop (%s turns)", async (turnCount) => {
     const onControl = vi.fn().mockResolvedValue(undefined);
     const session = agentSessionFixture({
       runtime_status: "disconnected", enabled: false, recovery_required: true,
@@ -103,15 +103,13 @@ describe("AgentSessionDetails diagnostics", () => {
     const { rerender } = render(<AgentSessionDetails session={session} provider={codexProvider()}
       onControl={onControl} onConfigure={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "시작" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "재개" })).toBeNull();
     fireEvent.click(screen.getByText("실행 설정"));
     expect((screen.getByRole("button", { name: "실행 설정 저장" }) as HTMLButtonElement).disabled).toBe(true);
-    await userEvent.click(screen.getByRole("button", { name: "중지" }));
-    expect(onControl).toHaveBeenCalledWith(session, "stop");
-    rerender(<AgentSessionDetails session={{ ...session, runtime_status: "stopped", recovery_required: false }}
+    await userEvent.click(screen.getByRole("button", { name: "재개" }));
+    expect(onControl).toHaveBeenCalledWith(session, "resume");
+    rerender(<AgentSessionDetails session={{ ...session, runtime_status: "idle", recovery_required: false }}
       provider={codexProvider()} onControl={onControl} />);
-    await waitFor(() => expect(screen.queryByRole("button", { name: "중지" })).toBeNull());
-    expect(screen.getByRole("button", { name: turnCount ? "재개" : "시작" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "재개" })).toBeNull());
   });
 
   it("shows one Korean reason and keeps raw provider text behind the disclosure", () => {
@@ -158,6 +156,7 @@ describe("AgentSessionDetails diagnostics", () => {
     ["provider_api_unavailable", "The Gemini API request did not complete. (HTTP 500)", "AI 서비스가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요."],
     ["provider_api_unavailable", "The Gemini API request did not complete.", "AI 서비스에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."],
     ["provider_model_unavailable", "The AI service does not offer this model (HTTP 404).", "AI 서비스에서 이 모델을 찾지 못했어요. 실행 설정에서 다른 모델을 골라 주세요."],
+    ["room_portal_unavailable", "The server-owned provider room portal is unavailable.", "앱이 꺼지거나 방 연결이 끊겨 답이 중단됐어요. 재개하면 다시 답해요."],
   ])("renders %s as one Korean line without English", (code, raw, korean) => {
     const session = agentSessionFixture({ provider_kind: "agent_platform_api", runtime_status: "error",
       last_error_code: code, last_error: raw, recovery_required: true });
@@ -187,7 +186,7 @@ describe("AgentSessionDetails diagnostics", () => {
       await waitFor(() => expect(interrupt!.disabled).toBe(false));
       rerender(<AgentSessionDetails session={{ ...session, recovery_required: true }} provider={provider} onControl={onControl} />);
       expect(screen.queryByRole("button", { name: "응답 중단" })).toBeNull();
-      expect(screen.getByText("복구 필요")).toBeTruthy();
+      expect(screen.getByText("오류")).toBeTruthy();
       expect(screen.queryByText("응답 중")).toBeNull();
     } else {
       expect(interrupt).toBeNull();

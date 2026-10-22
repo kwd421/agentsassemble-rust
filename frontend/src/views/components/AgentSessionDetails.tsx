@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CirclePause, LifeBuoy, Play, RotateCcw, Save, Square, Zap } from "../../ui/icons";
+import { CirclePause, Play, RotateCcw, Save, Square, Zap } from "../../ui/icons";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import {
@@ -28,7 +28,7 @@ import { errorCodeOf, userFacingError } from "../../lib/apiErrors";
 export type AgentSessionControlAction = "start" | "pause" | "stop" | "resume" | "interrupt";
 
 export function agentSessionStatusLabel(status?: string, recoveryRequired = false) {
-  if (recoveryRequired) return "복구 필요";
+  if (recoveryRequired) return "오류";
   if (status === "busy") return "응답 중";
   if (status === "starting") return "시작 중";
   if (status === "idle") return "대기";
@@ -74,13 +74,11 @@ export function agentSessionCanBulkStop(session: RoomAgentSession) {
 
 /** Whether the viewer may resume this session right now (owner of the detail-panel resume gate). */
 export function agentSessionCanResume(session: RoomAgentSession) {
-  if (
-    session.external_owned ||
-    session.process_ownership !== "server" ||
-    session.recovery_required
-  ) {
+  if (session.external_owned || session.process_ownership !== "server") {
     return false;
   }
+  // Resume runs the recovery stop on the server first, so recovery needs no separate step.
+  if (session.recovery_required) return true;
   if (session.runtime_status === "paused") return true;
   return (
     Boolean(session.turn_count || session.last_seen_event_id) &&
@@ -117,16 +115,16 @@ function sessionErrorInfo(session: RoomAgentSession): { summary: string; detail:
 
 function sessionErrorText(session: RoomAgentSession): { summary: string; detail: string } {
   if (session.last_error_code === "managed_bridge_exited") {
-    return { summary: "에이전트 연결이 끊겼어요. 중지한 뒤 재개해 주세요.", detail: "" };
+    return { summary: "에이전트 연결이 끊겼어요. 재개하면 다시 연결해요.", detail: "" };
   }
   if (session.last_error_code === "provider_output_truncated") {
     return { summary: "응답이 최대 응답 길이에서 잘렸어요. 실행 설정에서 최대 응답 길이를 늘리거나 더 짧게 요청해 주세요.", detail: "" };
   }
   if (session.last_error_code === "runtime_authority_uncertain") {
-    return { summary: "앱이 갑자기 종료돼 이 세션이 실제로 끝났는지 확인하지 못했어요. 복구를 누르면 확인 후 정리해요.", detail: "" };
+    return { summary: "앱이 갑자기 종료돼 이 세션이 실제로 끝났는지 확인하지 못했어요. 재개를 누르면 확인한 뒤 다시 시작해요.", detail: "" };
   }
   if (session.last_error_code === "provider_turn_recovery_required") {
-    return { summary: "AI 응답이 완료됐는지 확인하지 못했어요. 복구를 눌러 실행 상태를 확인해 주세요.", detail: "" };
+    return { summary: "AI 응답이 완료됐는지 확인하지 못했어요. 재개를 누르면 확인한 뒤 다시 시작해요.", detail: "" };
   }
   if (session.last_error_code === "quota_exhausted") {
     return { summary: "AI 서비스의 사용 한도나 잔액을 모두 썼어요.", detail: "" };
@@ -142,6 +140,9 @@ function sessionErrorText(session: RoomAgentSession): { summary: string; detail:
     return /\(HTTP \d{3}\)/.test(session.last_error || "")
       ? { summary: "AI 서비스가 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.", detail: "" }
       : { summary: "AI 서비스에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.", detail: "" };
+  }
+  if (session.last_error_code === "room_portal_unavailable") {
+    return { summary: "앱이 꺼지거나 방 연결이 끊겨 답이 중단됐어요. 재개하면 다시 답해요.", detail: "" };
   }
   if (session.last_error_code === "provider_model_unavailable") {
     return { summary: "AI 서비스에서 이 모델을 찾지 못했어요. 실행 설정에서 다른 모델을 골라 주세요.", detail: "" };
@@ -198,13 +199,13 @@ function sessionErrorText(session: RoomAgentSession): { summary: string; detail:
     return { summary: "외부 연결이 끊겼어요. 연결한 앱에서 다시 연결해 주세요.", detail: "" };
   }
   if (session.last_error_code === "server_restored") {
-    return { summary: "서버가 복구돼 세션을 다시 확인해야 해요. 중지한 뒤 재개해 주세요.", detail: "" };
+    return { summary: "서버가 복구돼 세션을 다시 확인해야 해요. 재개해 주세요.", detail: "" };
   }
   if (session.last_error_code === "runtime_start_failed") {
     return { summary: "에이전트를 시작하지 못했어요. 다시 시도해 주세요.", detail: "" };
   }
   if (session.last_error_code === "runtime_stop_unconfirmed") {
-    return { summary: "에이전트가 정말 끝났는지 확인하지 못했어요. 복구를 눌러 확인해 주세요.", detail: "" };
+    return { summary: "에이전트가 정말 끝났는지 확인하지 못했어요. 재개를 누르면 확인한 뒤 다시 시작해요.", detail: "" };
   }
   if (session.last_error_code === "runtime_start_recovered_gone") {
     return { summary: "시작 요청이 서버 복구 전에 끝났어요. 다시 시작해 주세요.", detail: "" };
@@ -270,10 +271,6 @@ export default function AgentSessionDetails({
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
   const canPause = agentSessionCanPause(session);
   const canStop = agentSessionIsPresent(status) || status === "error" || session.recovery_required;
-  // A server killed without a clean shutdown leaves this: stop is the owner request that lets
-  // the runtime prove the previous owner is gone, so it is offered as recovery.
-  const strandedRuntime =
-    session.recovery_required && session.last_error_code === "runtime_authority_uncertain";
   const canResume = agentSessionCanResume(session);
   const canInterrupt =
     (serverOwned ? provider?.turn_interrupt === "retained_runtime"
@@ -444,14 +441,14 @@ export default function AgentSessionDetails({
           </button>}
           {(canStop || pendingAction === "stop") && <button
             type="button"
-            className={`dc-button dc-button--md ${strandedRuntime ? "dc-button--secondary" : "dc-button--danger-soft"}`}
-            title={strandedRuntime ? "남은 실행이 끝났는지 확인하고 정리해요" : "세션 중지"}
-            data-tip={strandedRuntime ? undefined : AGENT_CONTROL_HINTS.stop}
+            className="dc-button dc-button--md dc-button--danger-soft"
+            title="세션 중지"
+            data-tip={AGENT_CONTROL_HINTS.stop}
             disabled={!canStop || Boolean(pendingAction)}
             onClick={() => void runControl("stop")}
           >
-            {strandedRuntime ? <LifeBuoy size={15} /> : <Square size={15} />}
-            {strandedRuntime ? "복구" : "중지"}
+            <Square size={15} />
+            중지
           </button>}
           {(canResume || pendingAction === "resume") && <button
             type="button"

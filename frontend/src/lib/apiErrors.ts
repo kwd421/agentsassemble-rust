@@ -35,6 +35,7 @@ const KNOWN_ERROR_KOREAN: Record<string, string> = {
   server_retirement_capacity: "잠시 후 다시 시도해 주세요.",
   actor_quota_exhausted: "오늘 요청 한도를 다 썼어요. 잠시 후 다시 시도해 주세요.",
   temporary_capacity_exhausted: "오늘 요청 한도를 다 썼어요. 잠시 후 다시 시도해 주세요.",
+  agent_recovery_pending: "이전 실행을 정리하는 중이에요. 잠시 후 다시 재개해 주세요.",
   central_throttled: CENTRAL_THROTTLED_NOTICE,
   room_attachment_quota_reached: "이 방의 저장 공간이 가득 찼어요.",
   attachment_quota_reached: "이 방의 저장 공간이 가득 찼어요.",
