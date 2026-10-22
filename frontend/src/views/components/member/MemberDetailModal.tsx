@@ -1,3 +1,5 @@
+import AgentInstructionsSettings from "../AgentInstructionsSettings";
+import { useOwnerRouteHost } from "../../../app/ownerRouteHost";
 import { resolveProviderPresentation } from "../providerBranding";
 import ResourceImage from "../ResourceImage";
 import { useEffect, useRef } from "react";
@@ -46,6 +48,7 @@ export default function MemberDetailModal({
 }: MemberDetailModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const external = externalAgentProfile(entry);
+  const ownerHost = useOwnerRouteHost();
   const visible = Boolean(entry.agent || entry.agentSession || external);
   useEffect(() => {
     if (!visible) return;
@@ -112,7 +115,9 @@ export default function MemberDetailModal({
           onClose={onClose}
           onSave={onAgentProfileUpdate}
           onAvatarUpdate={onAgentAvatarUpdate}
-        >{null}</AgentProfileCard> : <>
+        >{onAgentProfileUpdate && ownerHost !== undefined ? <section className="dc-member-detail-section" aria-label={`${external.display_name} 설정`}>
+          <AgentInstructionsSettings roomId={external.room_id} participantId={external.participant_id} name={external.display_name} />
+        </section> : null}</AgentProfileCard> : <>
           <header className="dc-member-detail-modal-head">
             <span className="dc-member-detail-modal-avatar" data-role={entry.role}>
               {entry.avatarImage ? <ResourceImage className="dc-member-avatar-image" src={entry.avatarImage} alt="" /> :
