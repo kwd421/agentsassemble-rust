@@ -1,4 +1,5 @@
 use super::*;
+use crate::remote_openai::tool_results::{image_budget, tool_result_text};
 use crate::room_attachment::{ProviderAttachment, ProviderAttachmentReadIngress};
 use crate::room_portal::{ProviderRoomToolIngress, ProviderRoomToolResult};
 use agentsassemble_domain::{RoomMessageSearchPage, RoomMessageSearchResult};
@@ -149,7 +150,7 @@ async fn a_vision_model_sees_an_image_attachment_right_after_the_tool_result() {
                 messages[tool]["content"]
                     .as_str()
                     .unwrap()
-                    .contains("next message")
+                    .contains("after the tool results")
             );
             assert_eq!(shown[0]["role"], "user");
             assert_eq!(
@@ -278,4 +279,28 @@ async fn eligible_pin_is_discovered_after_api_launch_and_result_reaches_next_rou
     let result = delivered_result(observation, "set_message_pin", json!({"channel_id":"lobby","message_id":"message-1","pinned":true,"request_id":uuid::Uuid::new_v4()})).await;
     owner.await.expect("tool owner");
     assert!(result.contains("succeeded"));
+}
+
+#[test]
+fn images_already_in_the_turn_count_against_what_one_request_may_carry() {
+    let png = |bytes: usize| {
+        rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::image(
+            "A".repeat(bytes / 3 * 4),
+            "image/png",
+        )])
+    };
+    let mb = 1024 * 1024;
+    let (_, images) = tool_result_text(&png(4 * mb), &DEEPSEEK_SPEC, Some(12 * mb)).unwrap();
+    assert_eq!(images.len(), 1);
+    let sent = json!({"role": "user", "content": [
+        {"type": "image_url", "image_url": {"url": "A".repeat(10 * mb / 3 * 4)}}
+    ]});
+    let remaining = image_budget(true, &[sent], &[]).unwrap();
+    assert!(remaining < 3 * mb, "{remaining}");
+    let (refused, images) =
+        tool_result_text(&png(4 * mb), &DEEPSEEK_SPEC, Some(remaining)).unwrap();
+    assert!(images.is_empty());
+    let value: Value = serde_json::from_str(&refused).unwrap();
+    assert_eq!(value["error"]["code"], "room_tool_image_too_large");
+    assert_eq!(image_budget(false, &[], &[]), None);
 }

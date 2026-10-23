@@ -354,12 +354,14 @@ impl RemoteOpenAiDriver {
             }
             let mut executed = Vec::new();
             for call in message.tool_calls.iter().cloned() {
+                let images = image_budget(request.vision, &messages, &executed);
                 let result = self
                     .execute_turn_tool(
                         call,
                         observation.is_some_and(|value| value.tabletop_tools),
                         session,
                         request,
+                        images,
                     )
                     .await?;
                 let terminal = result.terminal;
@@ -404,6 +406,7 @@ impl RemoteOpenAiDriver {
         random_tools: bool,
         session: &DurableAgentSession,
         request: &ProviderTurnRequest,
+        image_budget: Option<usize>,
     ) -> Result<ExecutedTool, DriverError> {
         if call.function.name == crate::workspace_command::NAME {
             let cancellation = tokio_util::sync::CancellationToken::new();
@@ -450,7 +453,7 @@ impl RemoteOpenAiDriver {
                 terminal: false,
             });
         }
-        self.execute_room_tool(call, random_tools, request.vision)
+        self.execute_room_tool(call, random_tools, image_budget)
             .await
     }
 
@@ -480,15 +483,16 @@ impl RemoteOpenAiDriver {
         call: ToolCall,
         random_tools: bool,
     ) -> Result<ExecutedTool, DriverError> {
-        self.execute_room_tool(call, random_tools, false).await
+        self.execute_room_tool(call, random_tools, None).await
     }
 
-    /// `vision`: the model takes images, so an image result is shown to it.
+    /// `image_budget`: what images may still join the turn, `None` when the
+    /// model takes none.
     async fn execute_room_tool(
         &mut self,
         call: ToolCall,
         random_tools: bool,
-        vision: bool,
+        image_budget: Option<usize>,
     ) -> Result<ExecutedTool, DriverError> {
         // A tool this room does not offer, or arguments that are not an object, is the model
         // getting it wrong, not the transport breaking. Nothing reached the room, so report it
@@ -530,7 +534,7 @@ impl RemoteOpenAiDriver {
             self.turn_effect_uncertain = previous_effect_uncertain;
         }
         let terminal = terminal_action && result.is_error != Some(true);
-        let (result, images) = tool_result_text(&result, self.spec, vision)?;
+        let (result, images) = tool_result_text(&result, self.spec, image_budget)?;
         Ok(ExecutedTool {
             call,
             result,
@@ -928,7 +932,9 @@ fn canonical_content(value: &str) -> Option<String> {
 mod summaries;
 #[path = "remote_openai_tool_results.rs"]
 mod tool_results;
-use tool_results::{ExecutedTool, images_message, tool_error_text, tool_result_text, tool_value};
+use tool_results::{
+    ExecutedTool, image_budget, images_message, tool_error_text, tool_result_text, tool_value,
+};
 
 #[cfg(test)]
 #[path = "deepseek_tests.rs"]
