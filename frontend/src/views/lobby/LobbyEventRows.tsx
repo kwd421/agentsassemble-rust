@@ -290,7 +290,7 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
       >
         {/* The faces are the collapsed form; the expanded list shows each one beside its name. */}
         {!open && <span style={{ display: "inline-flex", alignItems: "center" }} aria-hidden="true">
-          {/* Newest first and drawn over the ones before it, so earlier skips peek out to the right. */}
+          {/* In turn order, each later skip drawn over the one before it. */}
           {skips.map((skip, index) => (
             <span
               key={`${skip.participant_id}:${index}`}
@@ -299,7 +299,7 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
                 background: "var(--color-panel-soft)",
                 boxShadow: "0 0 0 2px var(--color-chat-bg)",
-                marginLeft: index ? -7 : 0, zIndex: skips.length - index,
+                marginLeft: index ? -7 : 0, zIndex: index + 1,
               }}
             >
               {skip.avatar_image_url

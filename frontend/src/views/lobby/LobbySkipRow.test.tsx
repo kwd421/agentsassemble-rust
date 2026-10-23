@@ -33,6 +33,12 @@ describe("LobbySkipRow", () => {
     expect(screen.queryByText("Sonnet")).toBeNull();
   });
 
+  it("draws each later skip over the one before it", () => {
+    const { container } = render(<LobbySkipRow event={event} />);
+    const faces = Array.from(container.querySelectorAll<HTMLElement>("[aria-hidden='true'] > span"));
+    expect(faces.map((face) => Number(face.style.zIndex))).toEqual([1, 2]);
+  });
+
   it("keeps the whole summary available without hovering", () => {
     render(<LobbySkipRow event={event} />);
     expect(screen.getByLabelText(event.message)).toBeTruthy();
