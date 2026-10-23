@@ -172,10 +172,6 @@ pub(super) async fn prepare_room_input(
     })
 }
 
-/// The owner's own message, or one from another of the owner's AIs written
-/// in a turn that was itself owner-started. Work handed between the owner's
-/// AIs keeps the owner's word; a chain anyone else began never gains it.
-/// An AI added by a person the owner trusts for this agent counts too.
 /// Full access runs without asking only in a turn the agent's owner started:
 /// every message this turn answers speaks for the owner.
 async fn owner_started_turn(
@@ -229,6 +225,10 @@ fn append_free_access_note(
     });
 }
 
+/// The owner's own message, or one from another of the owner's AIs written
+/// in a turn that was itself owner-started. Work handed between the owner's
+/// AIs keeps the owner's word; a chain anyone else began never gains it.
+/// An AI added by a person the owner trusts for this agent counts too.
 pub(super) async fn speaks_for_owner(
     transaction: &mut Transaction<'_, Sqlite>,
     owner: &str,
