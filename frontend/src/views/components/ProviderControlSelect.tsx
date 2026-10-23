@@ -170,13 +170,16 @@ export default function ProviderControlSelect({
       : menu.querySelector<HTMLElement>(`${MENU_ITEMS}[data-selected="true"]`) ??
         menu.querySelector<HTMLElement>(MENU_ITEMS);
     target?.focus({ preventScroll: true });
+    // preventScroll keeps the page still; the bounded list still has to show the row.
+    if (target && !(target instanceof HTMLInputElement)) target.scrollIntoView?.({ block: "nearest" });
   }, [activeGroup, menuPosition, open, showModelTools]);
 
   // Arrow keys walk the rows like a native select; Enter and Space press the
   // focused row because every row is a button.
   function moveFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
     const menu = menuRef.current;
-    if (!menu || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    if (!menu || event.nativeEvent.isComposing) return;
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     if (event.target instanceof HTMLInputElement && event.key !== "ArrowDown") return;
     const items = Array.from(menu.querySelectorAll<HTMLButtonElement>(MENU_ITEMS)).filter(
       (item) => !item.disabled
