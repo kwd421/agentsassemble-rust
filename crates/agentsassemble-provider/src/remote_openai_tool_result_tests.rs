@@ -139,6 +139,12 @@ async fn a_vision_model_sees_an_image_attachment_right_after_the_tool_result() {
         .await;
         owner.await.unwrap();
         assert!(outcome.is_ok(), "{outcome:?}");
+        assert!(
+            bodies[0]["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .contains("You can see images")
+        );
         let messages = bodies[2]["messages"].as_array().unwrap();
         let tool = messages
             .iter()
