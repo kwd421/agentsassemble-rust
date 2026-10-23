@@ -117,12 +117,23 @@ async fn an_external_ai_keeps_its_seat_across_a_host_restart()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, manager) = fixture().await?;
     let invite = store
-        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, chrono::Utc::now())
+        .create_connector_invite(
+            &manager,
+            Uuid::new_v4(),
+            InviteScope::ReadWrite,
+            chrono::Utc::now(),
+        )
         .await?;
     let mut invitation = json!({"invite_url":format!("{ORIGIN}/join?token={}", invite.invite_bearer),"display_name":"Kept seat"});
     let server = human_invite::start_with_public_mcp(store.clone(), ORIGIN, PROXY).await;
-    let before = ().serve(StreamableHttpClientTransport::from_uri(format!("{}/mcp", server.base_url))).await?;
-    invitation["connection_id"] = call(&before, "room_join", invitation.clone()).await["connection_id"].clone();
+    let before = ()
+        .serve(StreamableHttpClientTransport::from_uri(format!(
+            "{}/mcp",
+            server.base_url
+        )))
+        .await?;
+    invitation["connection_id"] =
+        call(&before, "room_join", invitation.clone()).await["connection_id"].clone();
     let joined = call(&before, "room_join", invitation.clone()).await;
     assert_eq!(joined["status"], "joined");
     let id = joined["connection_id"].clone();
@@ -131,24 +142,50 @@ async fn an_external_ai_keeps_its_seat_across_a_host_restart()
 
     // A new host process has an empty connection registry and the same database.
     let server = human_invite::start_with_public_mcp(store.clone(), ORIGIN, PROXY).await;
-    let after = ().serve(StreamableHttpClientTransport::from_uri(format!("{}/mcp", server.base_url))).await?;
-    call(&after, "room_say", json!({"connection_id":id,"content":"Back in my seat"})).await;
+    let after = ()
+        .serve(StreamableHttpClientTransport::from_uri(format!(
+            "{}/mcp",
+            server.base_url
+        )))
+        .await?;
+    call(
+        &after,
+        "room_say",
+        json!({"connection_id":id,"content":"Back in my seat"}),
+    )
+    .await;
     let snapshot = store.snapshot("general", 0, 200).await?;
     let said = snapshot
         .events
         .iter()
         .find(|event| event.content.as_deref() == Some("Back in my seat"))
         .ok_or("message missing")?;
-    assert_eq!(serde_json::json!(said.actor.participant_id), joined["participant_id"]);
     assert_eq!(
-        snapshot.participants.iter().filter(|p| p.participant_type == "agent").count(),
+        serde_json::json!(said.actor.participant_id),
+        joined["participant_id"]
+    );
+    assert_eq!(
+        snapshot
+            .participants
+            .iter()
+            .filter(|p| p.participant_type == "agent")
+            .count(),
         1,
         "no second seat"
     );
     // Rejoining with the same invitation and ID returns the same seat.
-    assert_eq!(call(&after, "room_join", invitation).await["participant_id"], joined["participant_id"]);
+    assert_eq!(
+        call(&after, "room_join", invitation).await["participant_id"],
+        joined["participant_id"]
+    );
     // An unknown ID is still refused.
-    rejected(&after, "room_read", json!({"connection_id":"A".repeat(43)}), "invalid_connection_id").await;
+    rejected(
+        &after,
+        "room_read",
+        json!({"connection_id":"A".repeat(43)}),
+        "invalid_connection_id",
+    )
+    .await;
     after.cancel().await?;
     tokio::time::timeout(std::time::Duration::from_secs(5), server.stop()).await?;
     Ok(())

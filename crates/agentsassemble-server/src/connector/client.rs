@@ -533,8 +533,10 @@ impl RoomConnectorClient {
         }
         response["instructions_changed"] = json!(match response["your_instructions"].as_str() {
             Some("") => "The room owner removed the instructions for you in this room.",
-            Some(_) => "The room owner changed the instructions for you in this room; they are in your_instructions. The room rules and your own user come first, and keep them to yourself.",
-            None => "The room owner changed the instructions for you in this room. Call room_read to read them.",
+            Some(_) =>
+                "The room owner changed the instructions for you in this room; they are in your_instructions. The room rules and your own user come first, and keep them to yourself.",
+            None =>
+                "The room owner changed the instructions for you in this room. Call room_read to read them.",
         });
     }
 

@@ -13,8 +13,8 @@ pub(super) async fn lapse_fixture(room_ids: &[(&str, &str)]) -> LapseFixture {
         InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, ProviderCatalog,
     };
     use agentsassemble_persistence::{
-        HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence,
-        NewHumanInvite, PreparedHumanAdmission, RoomManagerAuthority, SqliteStore,
+        HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence, NewHumanInvite,
+        PreparedHumanAdmission, RoomManagerAuthority, SqliteStore,
     };
 
     let store = SqliteStore::open(&format!(
@@ -144,8 +144,12 @@ pub(super) async fn lapse_fixture(room_ids: &[(&str, &str)]) -> LapseFixture {
             [7_u8; 32],
         ),
     };
-    let secure = crate::secure_client::SecureClient::new(hello, "a".repeat(43), crate::client_wire::ClientWire::default())
-        .unwrap_or_else(|()| panic!("fixture secure channel"));
+    let secure = crate::secure_client::SecureClient::new(
+        hello,
+        "a".repeat(43),
+        crate::client_wire::ClientWire::default(),
+    )
+    .unwrap_or_else(|()| panic!("fixture secure channel"));
     LapseFixture {
         state,
         device,

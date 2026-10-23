@@ -232,9 +232,9 @@ async fn retained_body_saturation_is_retryable_before_the_authorized_route_reads
 
 #[tokio::test]
 async fn large_download_responses_enforce_host_and_principal_budgets_until_last_clone_drops() {
-    use futures_util::StreamExt;
     use agentsassemble_domain::{CapabilitySet, ClientKind, InviteScope, public_settings};
     use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
+    use futures_util::StreamExt;
     let fixture = HumanSessionFixture::new(1).await;
     let other = fixture.authorize(0).await;
     let state = AppState::local(

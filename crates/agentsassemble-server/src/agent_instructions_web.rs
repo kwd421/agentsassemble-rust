@@ -104,14 +104,20 @@ async fn write_instructions(
     current(&state, &room_id, &participant_id).await
 }
 
-async fn current(state: &AppState, room_id: &str, participant_id: &str) -> Result<Json<Value>, Response> {
+async fn current(
+    state: &AppState,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<Json<Value>, Response> {
     let current = state
         .store
         .agent_instructions(room_id, participant_id)
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(missing)?;
-    Ok(Json(json!({"instructions": current.instructions, "mention_only": current.mention_only})))
+    Ok(Json(
+        json!({"instructions": current.instructions, "mention_only": current.mention_only}),
+    ))
 }
 
 fn bad_request(message: &str) -> Response {

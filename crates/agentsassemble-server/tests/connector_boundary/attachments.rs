@@ -6,10 +6,10 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 #[tokio::test]
 async fn connector_attachments_keep_pending_custody_and_revalidate_leave()
 -> Result<(), Box<dyn std::error::Error>> {
-    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, public_settings,
     };
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
     let (store, manager) = fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let mut clients = Vec::new();

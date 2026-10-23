@@ -76,15 +76,17 @@ impl SqliteStore {
             .bind(session_id)
             .fetch_optional(&self.pool)
             .await?;
-        Ok(Some(row.map_or_else(AgentUsageTotals::default, |row| AgentUsageTotals {
-            turns: loaded(row.get("turns")),
-            steps: loaded(row.get("steps")),
-            prompt_tokens: loaded(row.get("prompt_tokens")),
-            cached_prompt_tokens: loaded(row.get("cached_prompt_tokens")),
-            completion_tokens: loaded(row.get("completion_tokens")),
-            last_prompt_tokens: loaded(row.get("last_prompt_tokens")),
-            context_tokens: loaded(row.get("context_tokens")),
-            model_ms: loaded(row.get("model_ms")),
+        Ok(Some(row.map_or_else(AgentUsageTotals::default, |row| {
+            AgentUsageTotals {
+                turns: loaded(row.get("turns")),
+                steps: loaded(row.get("steps")),
+                prompt_tokens: loaded(row.get("prompt_tokens")),
+                cached_prompt_tokens: loaded(row.get("cached_prompt_tokens")),
+                completion_tokens: loaded(row.get("completion_tokens")),
+                last_prompt_tokens: loaded(row.get("last_prompt_tokens")),
+                context_tokens: loaded(row.get("context_tokens")),
+                model_ms: loaded(row.get("model_ms")),
+            }
         })))
     }
 }

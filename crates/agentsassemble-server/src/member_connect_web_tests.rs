@@ -102,9 +102,9 @@ async fn issue_redeemed(
         .state
         .member_challenges
         .issue_for(
-            super::super::ChallengePurpose::Connect(std::sync::Arc::new(
-                tokio::sync::Mutex::new(super::ConnectState::Issued),
-            )),
+            super::super::ChallengePurpose::Connect(std::sync::Arc::new(tokio::sync::Mutex::new(
+                super::ConnectState::Issued,
+            ))),
             fixture.browser,
             LAPSE_TEST_EPOCH.to_owned(),
             chrono::Utc::now(),
@@ -141,11 +141,8 @@ async fn issue_redeemed(
             _ => panic!("issued challenge must be a connect challenge"),
         }
     };
-    *record.lock().await = super::ConnectState::redeemed(
-        member,
-        rooms,
-        super::ConnectOrigin::Central,
-    );
+    *record.lock().await =
+        super::ConnectState::redeemed(member, rooms, super::ConnectOrigin::Central);
     challenge_id
 }
 
@@ -303,8 +300,7 @@ async fn lapsed_channel_bound_select_without_secure_channel_is_refused() {
         _ => panic!("refused challenge must stay redeemed"),
     }
     assert!(
-        entry_expires(&fixture, &challenge_id)
-            .is_some_and(|expires| expires <= chrono::Utc::now()),
+        entry_expires(&fixture, &challenge_id).is_some_and(|expires| expires <= chrono::Utc::now()),
         "the refused select must not slide the stored entry"
     );
 }
@@ -349,8 +345,7 @@ async fn channel_bound_select_slides_lapsed_entry_past_later_prune() {
         "distinct rooms mint separate sessions on one challenge"
     );
     assert!(
-        entry_expires(&fixture, &challenge_id)
-            .is_some_and(|expires| expires > chrono::Utc::now()),
+        entry_expires(&fixture, &challenge_id).is_some_and(|expires| expires > chrono::Utc::now()),
         "the bound select must slide the stored entry past now"
     );
     // Another member issuing a challenge runs the prune over every entry:
@@ -405,7 +400,9 @@ async fn quiet_lapsed_entry_is_pruned_and_needs_new_grant() {
 async fn age_completed(fixture: &LapseFixture, challenge_id: &str, room: &str) {
     let record = {
         let entries = fixture.state.member_challenges.0.lock();
-        let entry = entries.get(challenge_id).expect("aged challenge must be stored");
+        let entry = entries
+            .get(challenge_id)
+            .expect("aged challenge must be stored");
         match &entry.purpose {
             super::super::ChallengePurpose::Connect(record) => record.clone(),
             _ => panic!("aged challenge must be a connect challenge"),
@@ -414,7 +411,9 @@ async fn age_completed(fixture: &LapseFixture, challenge_id: &str, room: &str) {
     let mut guard = record.lock().await;
     match &mut *guard {
         super::ConnectState::ConnectRedeemed { selected, .. } => {
-            let entry = selected.get_mut(room).expect("aged room must have been selected");
+            let entry = selected
+                .get_mut(room)
+                .expect("aged room must have been selected");
             entry.completed_at = Some(
                 chrono::Utc::now()
                     - super::SELECT_COMPLETED_RETRY_WINDOW
@@ -427,15 +426,16 @@ async fn age_completed(fixture: &LapseFixture, challenge_id: &str, room: &str) {
 
 fn bearer_fingerprint(token: &serde_json::Value) -> [u8; 32] {
     sha2::Sha256::digest(
-        token.as_str().expect("select must mint a session token").as_bytes(),
+        token
+            .as_str()
+            .expect("select must mint a session token")
+            .as_bytes(),
     )
     .into()
 }
 
 async fn kick_general(fixture: &LapseFixture, participant: &str) {
-    use agentsassemble_domain::{
-        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-    };
+    use agentsassemble_domain::{AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope};
     let manager = AuthenticatedPrincipal {
         room_id: "general".into(),
         principal_id: agentsassemble_domain::LOCAL_OPERATOR_USER_ID.into(),
@@ -465,9 +465,13 @@ async fn past_retry_window_reselect_mints_new_bearer_and_revokes_previous() {
     let binding = fixture.secure.binding().clone();
     let challenge_id = issue_redeemed(&fixture, Some(binding)).await;
     let query = "?room_select_channel_bound=1";
-    let first = select(&fixture, query, &challenge_id, "general", true).await.unwrap();
+    let first = select(&fixture, query, &challenge_id, "general", true)
+        .await
+        .unwrap();
     age_completed(&fixture, &challenge_id, "general").await;
-    let second = select(&fixture, query, &challenge_id, "general", true).await.unwrap();
+    let second = select(&fixture, query, &challenge_id, "general", true)
+        .await
+        .unwrap();
     assert_ne!(first["session_token"], second["session_token"]);
     assert!(
         fixture
@@ -491,9 +495,16 @@ async fn past_retry_window_reselect_after_kick_is_refused() {
     let binding = fixture.secure.binding().clone();
     let challenge_id = issue_redeemed(&fixture, Some(binding)).await;
     let query = "?room_select_channel_bound=1";
-    let first = select(&fixture, query, &challenge_id, "general", true).await.unwrap();
-    kick_general(&fixture, first["agent_id"].as_str().expect("select must report a participant"))
-        .await;
+    let first = select(&fixture, query, &challenge_id, "general", true)
+        .await
+        .unwrap();
+    kick_general(
+        &fixture,
+        first["agent_id"]
+            .as_str()
+            .expect("select must report a participant"),
+    )
+    .await;
     age_completed(&fixture, &challenge_id, "general").await;
     let error = select(&fixture, query, &challenge_id, "general", true)
         .await
@@ -507,7 +518,11 @@ async fn exact_retry_inside_retry_window_replays_identical_response() {
     let binding = fixture.secure.binding().clone();
     let challenge_id = issue_redeemed(&fixture, Some(binding)).await;
     let query = "?room_select_channel_bound=1";
-    let first = select(&fixture, query, &challenge_id, "general", true).await.unwrap();
-    let retry = select(&fixture, query, &challenge_id, "general", true).await.unwrap();
+    let first = select(&fixture, query, &challenge_id, "general", true)
+        .await
+        .unwrap();
+    let retry = select(&fixture, query, &challenge_id, "general", true)
+        .await
+        .unwrap();
     assert_eq!(first, retry);
 }

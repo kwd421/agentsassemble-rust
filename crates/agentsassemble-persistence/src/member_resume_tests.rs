@@ -147,7 +147,10 @@ async fn one_browser_credential_replaces_its_own_key_and_the_person_keeps_eight(
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM member_resume_keys")
         .fetch_one(&store.pool)
         .await?;
-    assert_eq!(count, 8, "one person cannot accumulate unbounded resume keys");
+    assert_eq!(
+        count, 8,
+        "one person cannot accumulate unbounded resume keys"
+    );
     // The oldest row is the one that goes.
     assert!(store.member_resume_key(&[1; 32], &second).await?.is_none());
     assert!(
@@ -200,17 +203,14 @@ async fn direct_resume_keeps_the_stored_projection_and_acked_revision() -> TestR
 }
 
 #[tokio::test]
-async fn a_kick_or_a_leave_refuses_the_direct_select_while_another_room_still_lists() -> TestResult {
+async fn a_kick_or_a_leave_refuses_the_direct_select_while_another_room_still_lists() -> TestResult
+{
     let (store, now) = fixture().await;
     store.set_registration_epoch(Some(EPOCH)).await?;
     admitted_member(&store, now).await?;
     // A second joined room on the same key stays listable.
     store
-        .create_room_for_local_operator(
-            &uuid::Uuid::new_v4().to_string(),
-            "second",
-            "Second",
-        )
+        .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "second", "Second")
         .await?;
     sqlx::query("INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'second', 'second-guest', 'Second Guest', 'read_write', 1, 0, ?, 0, ?, ?)")
         .bind(hex::encode(&[6_u8; 32][..8]))
@@ -269,7 +269,10 @@ async fn a_kick_or_a_leave_refuses_the_direct_select_while_another_room_still_li
     ));
     // The left room leaves the list as well.
     assert!(
-        store.member_connect_rooms(&admission, now).await?.is_empty(),
+        store
+            .member_connect_rooms(&admission, now)
+            .await?
+            .is_empty(),
         "a left member keeps no joined room"
     );
     Ok(())
@@ -308,9 +311,7 @@ async fn account_deletion_and_epoch_rotation_delete_the_resume_row() -> TestResu
     assert!(store.member_resume_key(&[6; 32], &other).await?.is_some());
     // The fence refuses the direct path for that person.
     let mut tx = store.pool.begin().await?;
-    assert!(
-        !crate::central_member_removal::person_is_live(&mut tx, ISSUER, PERSON).await?
-    );
+    assert!(!crate::central_member_removal::person_is_live(&mut tx, ISSUER, PERSON).await?);
     tx.commit().await?;
     Ok(())
 }
@@ -333,7 +334,10 @@ async fn a_rotated_incarnation_drops_every_resume_row() -> TestResult {
         sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key='named_tunnel'")
             .fetch_optional(&store.pool)
             .await?;
-    assert!(tunnel.is_none(), "the epoch change drops the named tunnel token");
+    assert!(
+        tunnel.is_none(),
+        "the epoch change drops the named tunnel token"
+    );
     Ok(())
 }
 
@@ -374,7 +378,11 @@ async fn resume_keys_are_ephemeral_and_never_survive_a_restore() -> TestResult {
     let snapshot = directory.path().join("snapshot.sqlite");
     let payload = directory.path().join("payload.sqlite");
     store
-        .export_backup_payload(&crate::ServerOwnerAuthority::LocalOperator, &snapshot, &payload)
+        .export_backup_payload(
+            &crate::ServerOwnerAuthority::LocalOperator,
+            &snapshot,
+            &payload,
+        )
         .await?;
     let rebuilt = directory.path().join("rebuilt.sqlite");
     crate::backup_database::reconstruct_payload(

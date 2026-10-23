@@ -305,7 +305,11 @@ fn quota_jitter_secs() -> i64 {
 fn parse_retry_after_ms(value: &str, now: chrono::DateTime<Utc>) -> Option<i64> {
     let trimmed = value.trim();
     if let Ok(secs) = trimmed.parse::<u64>() {
-        return Some(i64::try_from(secs.min(3_600)).unwrap_or(3_600).saturating_mul(1000));
+        return Some(
+            i64::try_from(secs.min(3_600))
+                .unwrap_or(3_600)
+                .saturating_mul(1000),
+        );
     }
     let date = chrono::DateTime::parse_from_rfc2822(trimmed)
         .ok()
@@ -423,11 +427,13 @@ async fn send_signed(
         if status == StatusCode::TOO_MANY_REQUESTS {
             return Err(map_rate_limit(inner, response).await);
         }
-        return Err(if status.is_server_error() || status == StatusCode::REQUEST_TIMEOUT {
-            CentralDirectoryError::Unavailable
-        } else {
-            CentralDirectoryError::Rejected
-        });
+        return Err(
+            if status.is_server_error() || status == StatusCode::REQUEST_TIMEOUT {
+                CentralDirectoryError::Unavailable
+            } else {
+                CentralDirectoryError::Rejected
+            },
+        );
     }
     if response
         .content_length()

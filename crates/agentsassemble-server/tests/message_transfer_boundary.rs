@@ -26,7 +26,9 @@ async fn plain_raw_transfer_is_exact_resumable_idempotent_and_bindable() -> Test
     for (index, bytes, content_type) in [
         (
             0,
-            (0..50 * 1024 * 1024).map(|n| u8::try_from(n % 251).unwrap()).collect(),
+            (0..50 * 1024 * 1024)
+                .map(|n| u8::try_from(n % 251).unwrap())
+                .collect(),
             "application/octet-stream",
         ),
         (1, STANDARD.decode(PNG_BASE64)?, "image/png"),

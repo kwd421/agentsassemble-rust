@@ -201,10 +201,9 @@ pub(super) async fn run(
             if gate > now {
                 candidates.push(gate);
             }
-            for candidate in
-                [endpoint_due, name.dirty.then_some(name.due), member_due]
-                    .into_iter()
-                    .flatten()
+            for candidate in [endpoint_due, name.dirty.then_some(name.due), member_due]
+                .into_iter()
+                .flatten()
             {
                 candidates.push(candidate.max(gate));
             }
@@ -255,9 +254,8 @@ fn should_reserve_endpoint_event(
     if !origin.is_empty() {
         return true;
     }
-    observed.is_some_and(|previous| {
-        previous.0.as_deref() == Some(epoch) && !previous.1.1.is_empty()
-    })
+    observed
+        .is_some_and(|previous| previous.0.as_deref() == Some(epoch) && !previous.1.1.is_empty())
 }
 
 /// A fresh publisher run starts with no live origin when the channel still

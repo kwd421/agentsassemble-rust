@@ -297,7 +297,8 @@ impl ConnectorHub {
         if let Ok(client) = self.client(id) {
             return Ok(client);
         }
-        let client = Arc::new(RoomConnectorClient::resumed(local, resumed).map_err(|error| error.code)?);
+        let client =
+            Arc::new(RoomConnectorClient::resumed(local, resumed).map_err(|error| error.code)?);
         client.join().await.map_err(|error| error.code)?;
         let mut state = self.state.lock();
         if state.closed {

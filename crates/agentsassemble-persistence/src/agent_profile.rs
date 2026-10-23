@@ -73,13 +73,25 @@ impl SqliteStore {
                 ProfileTarget::Session(session, _) => session.public.avatar_image_url.clone(),
                 ProfileTarget::Connector(participant) => participant.avatar_image_url.clone(),
             };
-            replace_agent_avatar(&mut transaction, AvatarHolder::of(&target), &current, avatar)
-                .await?;
+            replace_agent_avatar(
+                &mut transaction,
+                AvatarHolder::of(&target),
+                &current,
+                avatar,
+            )
+            .await?;
         }
         let (result, events) = match target {
             ProfileTarget::Session(session, participant) => {
-                update_session(&mut transaction, principal, *session, participant, name, avatar)
-                    .await?
+                update_session(
+                    &mut transaction,
+                    principal,
+                    *session,
+                    participant,
+                    name,
+                    avatar,
+                )
+                .await?
             }
             ProfileTarget::Connector(participant) => {
                 update_connector(&mut transaction, principal, participant, name, avatar).await?

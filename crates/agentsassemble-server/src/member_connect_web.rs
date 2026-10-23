@@ -39,8 +39,7 @@ const ROOM_SELECT_REUSE_VALUE: &str = "1";
 pub(crate) fn client_advertises_room_select_reuse(query: Option<&str>) -> bool {
     query.is_some_and(|query| {
         query.split('&').any(|pair| {
-            pair.split_once('=')
-                == Some((ROOM_SELECT_REUSE_QUERY, ROOM_SELECT_REUSE_VALUE))
+            pair.split_once('=') == Some((ROOM_SELECT_REUSE_QUERY, ROOM_SELECT_REUSE_VALUE))
         })
     })
 }

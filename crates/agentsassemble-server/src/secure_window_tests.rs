@@ -201,7 +201,10 @@ async fn stalled_body_releases_share_while_healthy_consumers_and_control_continu
                 })
                 .await
                 .unwrap();
-            feedback.send(Feedback::Ack(u64::from(id) - 1)).await.unwrap();
+            feedback
+                .send(Feedback::Ack(u64::from(id) - 1))
+                .await
+                .unwrap();
             error_handled = true;
             piece = recv_data(&mut records).await;
         }

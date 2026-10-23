@@ -131,7 +131,10 @@ impl SqliteStore {
             .execute(&mut *tx)
             .await?;
         // The seat must still be in the room and the room still active.
-        if authorize_in(&mut tx, &bearer.fingerprint, now).await.is_err() {
+        if authorize_in(&mut tx, &bearer.fingerprint, now)
+            .await
+            .is_err()
+        {
             return Ok(None);
         }
         let resumed = ResumedConnector {

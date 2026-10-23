@@ -48,7 +48,13 @@ async fn read_usage(
     .map_err(|(status, code, message)| error(status, code, &message))?;
     ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
         .await
-        .map_err(|_| error(StatusCode::BAD_REQUEST, "bad_request", "This request takes no body."))?;
+        .map_err(|_| {
+            error(
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+                "This request takes no body.",
+            )
+        })?;
     let usage = state
         .store
         .agent_usage(&room_id, &session_id)
@@ -60,7 +66,13 @@ async fn read_usage(
                 "Persistence operation failed.",
             )
         })?
-        .ok_or_else(|| error(StatusCode::NOT_FOUND, "agent_not_found", "The agent is unavailable."))?;
+        .ok_or_else(|| {
+            error(
+                StatusCode::NOT_FOUND,
+                "agent_not_found",
+                "The agent is unavailable.",
+            )
+        })?;
     Ok(Json(json!({"usage": usage})))
 }
 

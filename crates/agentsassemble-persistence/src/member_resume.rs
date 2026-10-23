@@ -235,23 +235,21 @@ pub(crate) async fn delete_outside_epoch(
     tx: &mut Transaction<'_, Sqlite>,
     registration_epoch: Option<&str>,
 ) -> Result<u64, PersistenceError> {
-    let removed = sqlx::query(
-        "DELETE FROM member_resume_keys WHERE registration_epoch != COALESCE(?, '')",
-    )
-    .bind(registration_epoch)
-    .execute(&mut **tx)
-    .await?;
+    let removed =
+        sqlx::query("DELETE FROM member_resume_keys WHERE registration_epoch != COALESCE(?, '')")
+            .bind(registration_epoch)
+            .execute(&mut **tx)
+            .await?;
     Ok(removed.rows_affected())
 }
 
 /// Creates the resume key table for the current schema version.
 pub(crate) async fn upgrade(pool: &sqlx::SqlitePool) -> Result<(), PersistenceError> {
     let mut tx = pool.begin().await?;
-    let version: String = sqlx::query_scalar(
-        "SELECT value FROM runtime_metadata WHERE key = 'schema_version'",
-    )
-    .fetch_one(&mut *tx)
-    .await?;
+    let version: String =
+        sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
+            .fetch_one(&mut *tx)
+            .await?;
     if version.parse::<i64>().is_ok_and(|version| version < 97) {
         sqlx::query(DDL).execute(&mut *tx).await?;
         sqlx::query(LOOKUP_INDEX_DDL).execute(&mut *tx).await?;

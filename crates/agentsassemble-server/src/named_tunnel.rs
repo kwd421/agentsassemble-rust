@@ -279,7 +279,9 @@ mod tests {
     use super::*;
 
     fn response(hostname: &str, origin: &str, tunnel_id: &str) -> Vec<u8> {
-        provision_body(hostname, origin, tunnel_id, tunnel_id, None).to_string().into_bytes()
+        provision_body(hostname, origin, tunnel_id, tunnel_id, None)
+            .to_string()
+            .into_bytes()
     }
 
     fn provision_body(

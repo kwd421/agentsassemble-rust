@@ -506,7 +506,13 @@ async fn a_seat_invitation_takes_the_same_seat_back() -> TestResult {
     // A person cannot be a seat.
     assert!(
         store
-            .create_connector_seat_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, "operator-local", now)
+            .create_connector_seat_invite(
+                &manager,
+                Uuid::new_v4(),
+                InviteScope::ReadWrite,
+                "operator-local",
+                now
+            )
             .await
             .is_err()
     );
@@ -515,12 +521,23 @@ async fn a_seat_invitation_takes_the_same_seat_back() -> TestResult {
         .await?;
     let again_fingerprint = Sha256::digest(again.invite_bearer.as_bytes()).into();
     let back = store
-        .admit_connector(&again_fingerprint, &[2; 32], Uuid::new_v4(), "Another name", now)
+        .admit_connector(
+            &again_fingerprint,
+            &[2; 32],
+            Uuid::new_v4(),
+            "Another name",
+            now,
+        )
         .await?;
     assert_eq!(back.authorization.principal().participant_id, seat);
     assert_eq!(back.authorization.principal().display_name, "Ace");
     assert_eq!(back.replaced_sessions, vec![old_session]);
-    assert!(store.authorize_connector_session(&old_session, now).await.is_err());
+    assert!(
+        store
+            .authorize_connector_session(&old_session, now)
+            .await
+            .is_err()
+    );
     store
         .authorize_connector_session(back.authorization.session_fingerprint(), now)
         .await?;
@@ -536,7 +553,8 @@ async fn a_seat_invitation_takes_the_same_seat_back() -> TestResult {
 }
 
 #[tokio::test]
-async fn an_away_external_ai_stays_listed_as_detached_until_it_can_no_longer_return() -> TestResult {
+async fn an_away_external_ai_stays_listed_as_detached_until_it_can_no_longer_return() -> TestResult
+{
     let (store, manager) = fixture().await?;
     let now = Utc::now();
     let invite = store
@@ -555,9 +573,18 @@ async fn an_away_external_ai_stays_listed_as_detached_until_it_can_no_longer_ret
         client_kind: ClientKind::Browser,
         invite_scope: InviteScope::ReadWrite,
         is_operator: true,
-        capabilities: agentsassemble_domain::CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+        capabilities: agentsassemble_domain::CapabilitySet::local_operator(
+            ClientKind::Browser,
+            InviteScope::ReadWrite,
+        ),
     };
-    let roster = || store.snapshot_for(crate::RoomMutationAuthority::TrustedPrincipal(&owner), 0, 200);
+    let roster = || {
+        store.snapshot_for(
+            crate::RoomMutationAuthority::TrustedPrincipal(&owner),
+            0,
+            200,
+        )
+    };
     let status = |participants: Vec<agentsassemble_domain::Participant>| {
         participants
             .into_iter()
@@ -569,14 +596,19 @@ async fn an_away_external_ai_stays_listed_as_detached_until_it_can_no_longer_ret
         Some(agentsassemble_domain::ParticipantStatus::Joined)
     );
     for (ago, expected) in [
-        (Duration::hours(2), Some(agentsassemble_domain::ParticipantStatus::Detached)),
+        (
+            Duration::hours(2),
+            Some(agentsassemble_domain::ParticipantStatus::Detached),
+        ),
         (Duration::days(8), None),
     ] {
-        sqlx::query("UPDATE room_connector_invites SET session_expires_at = ? WHERE participant_id = ?")
-            .bind((now - ago).timestamp_micros())
-            .bind(&seat)
-            .execute(&store.pool)
-            .await?;
+        sqlx::query(
+            "UPDATE room_connector_invites SET session_expires_at = ? WHERE participant_id = ?",
+        )
+        .bind((now - ago).timestamp_micros())
+        .bind(&seat)
+        .execute(&store.pool)
+        .await?;
         assert_eq!(status(roster().await?.participants), expected);
     }
     Ok(())

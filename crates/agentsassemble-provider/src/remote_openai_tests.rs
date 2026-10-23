@@ -67,7 +67,6 @@ fn gemini_tool_stream(model: &str, tool: &str, signature: &str) -> String {
     format!("data: {call}\n\ndata: {stop}\n\ndata: [DONE]\n\n")
 }
 
-
 async fn api_fixture(
     responses: Vec<String>,
 ) -> (

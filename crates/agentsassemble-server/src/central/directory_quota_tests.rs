@@ -25,7 +25,9 @@ fn quota_park_ends_at_next_utc_midnight_with_bounded_jitter() {
 
 #[test]
 fn retry_after_parses_seconds_dates_and_rejects_everything_else() {
-    let now = chrono::Utc.with_ymd_and_hms(2026, 10, 17, 12, 0, 0).unwrap();
+    let now = chrono::Utc
+        .with_ymd_and_hms(2026, 10, 17, 12, 0, 0)
+        .unwrap();
     assert_eq!(parse_retry_after_ms("2", now), Some(2_000));
     assert_eq!(parse_retry_after_ms("  45 ", now), Some(45_000));
     assert_eq!(parse_retry_after_ms("99999", now), Some(3_600_000));
@@ -33,7 +35,10 @@ fn retry_after_parses_seconds_dates_and_rejects_everything_else() {
         parse_retry_after_ms("Sat, 17 Oct 2026 12:01:00 GMT", now),
         Some(60_000)
     );
-    assert_eq!(parse_retry_after_ms("Sat, 17 Oct 2026 11:59:00 GMT", now), None);
+    assert_eq!(
+        parse_retry_after_ms("Sat, 17 Oct 2026 11:59:00 GMT", now),
+        None
+    );
     for invalid in ["", "soon", "-3", "1.5", "Mon, 99 Xxx 2026 00:00:00 GMT"] {
         assert_eq!(parse_retry_after_ms(invalid, now), None, "{invalid}");
     }
@@ -69,8 +74,7 @@ async fn quota_refusal_parks_every_host_request_until_utc_midnight()
         }),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let directory =
-        CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
+    let directory = CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
     let cancellation = tokio_util::sync::CancellationToken::new();
     let shutdown = cancellation.clone();
     let server = tokio::spawn(async move {
@@ -149,8 +153,7 @@ async fn temporary_capacity_refusal_parks_like_quota_until_utc_midnight()
         }),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let directory =
-        CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
+    let directory = CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
     let cancellation = tokio_util::sync::CancellationToken::new();
     let shutdown = cancellation.clone();
     let server = tokio::spawn(async move {
@@ -229,8 +232,7 @@ async fn other_rate_limits_honour_retry_after_without_parking()
         }),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let directory =
-        CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
+    let directory = CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
     let cancellation = tokio_util::sync::CancellationToken::new();
     let shutdown = cancellation.clone();
     let server = tokio::spawn(async move {

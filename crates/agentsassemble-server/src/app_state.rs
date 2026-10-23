@@ -46,7 +46,8 @@ pub struct AppState {
     pub provider_adapter: ProviderAdapter,
     pub(crate) provider_credentials: ProviderCredentialStore,
     pub(crate) member_challenges: Arc<crate::human_invite_web::member::MemberChallenges>,
-    pub(crate) member_resume_nonces: Arc<crate::human_invite_web::member::resume::MemberResumeNonces>,
+    pub(crate) member_resume_nonces:
+        Arc<crate::human_invite_web::member::resume::MemberResumeNonces>,
     pub human_invite_credentials: HumanInviteCredentialAuthority,
     pub(crate) central_host_identity: CentralHostIdentity,
     pub(crate) central_directory: crate::central::directory::CentralDirectory,

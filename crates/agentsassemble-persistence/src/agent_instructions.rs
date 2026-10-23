@@ -95,8 +95,14 @@ impl SqliteStore {
         participant_id: &str,
         mention_only: bool,
     ) -> Result<bool, PersistenceError> {
-        self.set_agent_owner_settings(room_id, participant_id, None, Some(mention_only), Utc::now())
-            .await
+        self.set_agent_owner_settings(
+            room_id,
+            participant_id,
+            None,
+            Some(mention_only),
+            Utc::now(),
+        )
+        .await
     }
 
     /// Changes either or both owner settings in one transaction. Returns false

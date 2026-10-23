@@ -44,20 +44,8 @@ async fn removal_commit_fences_both_existing_devices_replay_connect_and_mutation
     let (store, now) = fixture().await;
     store.set_registration_epoch(Some("epoch")).await?;
     insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
-    let a = prepared(
-        [2; 32],
-        [3; 32],
-        &uuid::Uuid::new_v4().to_string(),
-        "",
-    )
-    .with_member(member());
-    let b = prepared(
-        [2; 32],
-        [4; 32],
-        &uuid::Uuid::new_v4().to_string(),
-        "",
-    )
-    .with_member(member());
+    let a = prepared([2; 32], [3; 32], &uuid::Uuid::new_v4().to_string(), "").with_member(member());
+    let b = prepared([2; 32], [4; 32], &uuid::Uuid::new_v4().to_string(), "").with_member(member());
     let first = admitted(store.admit_human(&a, now).await?);
     let second = admitted(store.admit_human(&b, now).await?);
     let fingerprint = |bearer: &str| -> [u8; 32] { Sha256::digest(bearer.as_bytes()).into() };
@@ -222,13 +210,8 @@ async fn wrong_channel_epoch_and_failed_initial_work_leave_no_fence() -> TestRes
         .await?;
     let now = Utc::now();
     insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
-    let request = prepared(
-        [2; 32],
-        [3; 32],
-        &uuid::Uuid::new_v4().to_string(),
-        "",
-    )
-    .with_member(member());
+    let request =
+        prepared([2; 32], [3; 32], &uuid::Uuid::new_v4().to_string(), "").with_member(member());
     assert!(matches!(
         store.admit_human(&request, now).await?,
         HumanAdmissionDecision::Rejected(HumanAdmissionRejection::SessionUnavailable)

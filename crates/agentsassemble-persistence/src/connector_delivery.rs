@@ -81,7 +81,10 @@ impl SqliteStore {
                     continue;
                 };
                 let event: agentsassemble_domain::RoomEvent = serde_json::from_str(&encoded)?;
-                let handed = event.extra.get("target_agent_id").and_then(serde_json::Value::as_str)
+                let handed = event
+                    .extra
+                    .get("target_agent_id")
+                    .and_then(serde_json::Value::as_str)
                     == Some(principal.participant_id.as_str());
                 if handed
                     || crate::room_turns::routing::mentions_target(

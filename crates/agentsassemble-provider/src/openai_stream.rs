@@ -271,7 +271,11 @@ impl CompletionAccumulator {
                 // Never more than the prompt, whatever a server reports.
                 cached: usage
                     .prompt_cache_hit_tokens
-                    .or_else(|| usage.prompt_tokens_details.and_then(|details| details.cached_tokens))
+                    .or_else(|| {
+                        usage
+                            .prompt_tokens_details
+                            .and_then(|details| details.cached_tokens)
+                    })
                     .or(usage.cached_tokens)
                     .unwrap_or(0)
                     .min(usage.prompt),
@@ -746,7 +750,9 @@ mod tests {
                     "model": "model-1",
                     "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": "stop"}]
                 })),
-                event(&json!({"id": "chat-cache", "model": "model-1", "choices": [], "usage": usage})),
+                event(
+                    &json!({"id": "chat-cache", "model": "model-1", "choices": [], "usage": usage}),
+                ),
                 "data: [DONE]\n\n".to_owned(),
             ]
             .concat();

@@ -17,7 +17,11 @@ use crate::{
 fn server_launch_disables_external_and_project_configuration() {
     let arguments = server_arguments(43123);
     // OpenCode 2 rejects these flags; purity comes from the environment below.
-    assert!(!arguments.iter().any(|argument| argument == "--pure" || argument == "--log-level"));
+    assert!(
+        !arguments
+            .iter()
+            .any(|argument| argument == "--pure" || argument == "--log-level")
+    );
 
     let root = tempfile::tempdir()
         .unwrap_or_else(|error| panic!("create OpenCode config fixture: {error}"));

@@ -205,7 +205,9 @@ async fn member_connect_reuses_one_redeemed_challenge_across_joined_rooms() -> T
         .json()
         .await?;
     let listed = client
-        .post(format!("{base}/api/member-connect/rooms?room_select_reuse=1"))
+        .post(format!(
+            "{base}/api/member-connect/rooms?room_select_reuse=1"
+        ))
         .header("x-device-token", &device)
         .json(&json!({"challenge_id":challenge["challenge_id"],"grant_token":"aamc1.connect"}))
         .send()
@@ -246,7 +248,9 @@ async fn member_connect_reuses_one_redeemed_challenge_across_joined_rooms() -> T
     let legacy = client
         .post(format!("{base}/api/member-connect/rooms"))
         .header("x-device-token", &device)
-        .json(&json!({"challenge_id":legacy_challenge["challenge_id"],"grant_token":"aamc1.connect"}))
+        .json(
+            &json!({"challenge_id":legacy_challenge["challenge_id"],"grant_token":"aamc1.connect"}),
+        )
         .send()
         .await?;
     assert_eq!(legacy.status(), StatusCode::OK);

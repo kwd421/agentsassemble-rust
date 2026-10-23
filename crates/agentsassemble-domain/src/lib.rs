@@ -26,8 +26,8 @@ mod message_attachments;
 mod message_mutations;
 mod message_pins;
 pub use message_pins::SetMessagePin;
-mod message_search;
 mod agent_usage;
+mod message_search;
 mod model;
 mod persona;
 mod persona_text;
@@ -126,9 +126,9 @@ pub use model::{
 };
 pub use persona::{
     MAX_PERSONA_CONTEXT_CHARACTERS, MAX_PERSONA_ID_CHARACTERS, MAX_PERSONA_LORE_CHARACTERS,
-    MAX_PERSONA_UPLOAD_BYTES,
-    PersonaAssetKind, PersonaAssetSummary, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
-    canonical_persona_id, render_persona_context, render_persona_context_parts,
+    MAX_PERSONA_UPLOAD_BYTES, PersonaAssetKind, PersonaAssetSummary, PersonaCard, PersonaLoreEntry,
+    PersonaLoreSettings, canonical_persona_id, render_persona_context,
+    render_persona_context_parts,
 };
 pub use persona_text::{persona_card_keywords, trim_persona_card_text};
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
@@ -175,5 +175,5 @@ mod delegated_actions;
 pub use delegated_actions::*;
 
 mod delegated_confirmation;
-pub use delegated_confirmation::*;
 pub use agent_usage::{AgentTurnUsage, AgentUsageTotals};
+pub use delegated_confirmation::*;

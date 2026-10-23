@@ -397,7 +397,8 @@ async fn status_in(
 }
 fn status_row(row: &sqlx::sqlite::SqliteRow) -> Result<MessageUploadStatus, PersistenceError> {
     let id: String = row.try_get("attachment_id")?;
-    let size = usize::try_from(row.try_get::<i64, _>("size")?).map_err(|_| rejected("upload_missing"))?;
+    let size =
+        usize::try_from(row.try_get::<i64, _>("size")?).map_err(|_| rejected("upload_missing"))?;
     Ok(MessageUploadStatus {
         handle: row.try_get("handle")?,
         attachment_id: id.clone(),

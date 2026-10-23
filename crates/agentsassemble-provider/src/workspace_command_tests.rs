@@ -168,7 +168,10 @@ async fn a_command_that_leaves_a_program_running_still_returns() {
         .unwrap_or_else(|| panic!("no child pid"));
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while rustix::process::test_kill_process(pid).is_ok() {
-        assert!(std::time::Instant::now() < deadline, "the background program outlived the command");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the background program outlived the command"
+        );
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
 }

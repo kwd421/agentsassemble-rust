@@ -78,7 +78,6 @@ mod registration_tests;
 mod remote_catalog;
 mod remote_https;
 mod remote_openai;
-mod turn_compaction;
 mod remote_openai_spec;
 mod room_attachment;
 mod room_file_workspace;
@@ -100,6 +99,7 @@ mod selection_input;
 #[cfg(test)]
 mod test_support;
 mod tokenrouter;
+mod turn_compaction;
 #[cfg(unix)]
 mod unix_custody;
 #[cfg(unix)]
@@ -125,8 +125,8 @@ pub use provider_request_exchange::{
     ProviderRequestResponder,
 };
 pub use provider_request_ingress::{ProviderRequestCommand, ProviderRequestIngress};
-pub use remote_catalog::model_context_tokens;
 pub use registration::{registered_provider_id, registered_provider_kind};
+pub use remote_catalog::model_context_tokens;
 pub use room_attachment::{
     ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,
     ProviderAttachmentReadIngress, attachment_tool_result,
@@ -140,7 +140,7 @@ pub use runtime::{
     ProviderResidentRuntime, ProviderRoomObservation, ProviderRuntimeFailure, ProviderRuntimeGone,
     ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
     ProviderStartReservation, ProviderTurnCompleted, ProviderTurnControl,
-    ProviderTurnInterruptDisposition, ProviderTurnNotStartedProof, ProviderTurnQuiescence,
-    ProviderTurnMemory, ProviderTurnRequest,
+    ProviderTurnInterruptDisposition, ProviderTurnMemory, ProviderTurnNotStartedProof,
+    ProviderTurnQuiescence, ProviderTurnRequest,
 };
 pub use selection::{ProviderSelection, ProviderSelectionError, creation_start_requested};

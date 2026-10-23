@@ -157,13 +157,7 @@ pub(super) async fn data(
     .await?;
     let status = state
         .uploads
-        .data(
-            authority,
-            handle,
-            offset.at,
-            request.into_body(),
-            policy.0,
-        )
+        .data(authority, handle, offset.at, request.into_body(), policy.0)
         .await
         .map_err(AttendeeHttpError::from_profile)?;
     Ok(Json(json!({"transfer": status})))

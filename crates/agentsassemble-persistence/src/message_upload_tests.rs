@@ -388,7 +388,12 @@ async fn raster_preview_matches_legacy_and_invalid_raster_never_commits() -> Tes
         noise ^= noise << 13;
         noise ^= noise >> 17;
         noise ^= noise << 5;
-        image::Rgba([noise.to_le_bytes()[2], noise.to_le_bytes()[1], noise.to_le_bytes()[0], 255])
+        image::Rgba([
+            noise.to_le_bytes()[2],
+            noise.to_le_bytes()[1],
+            noise.to_le_bytes()[0],
+            255,
+        ])
     }));
     let mut output = std::io::Cursor::new(Vec::new());
     image.write_to(&mut output, image::ImageFormat::Png)?;

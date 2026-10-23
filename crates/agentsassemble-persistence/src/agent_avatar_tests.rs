@@ -325,10 +325,17 @@ async fn the_owner_renames_an_external_ai_and_sets_its_picture()
     let upload = crate::RoomManagerAuthority::Local(manager);
     let now = chrono::Utc::now();
     let invite = store
-        .create_connector_invite(&upload, uuid::Uuid::new_v4(), agentsassemble_domain::InviteScope::ReadWrite, now)
+        .create_connector_invite(
+            &upload,
+            uuid::Uuid::new_v4(),
+            agentsassemble_domain::InviteScope::ReadWrite,
+            now,
+        )
         .await?;
-    let fingerprint: [u8; 32] =
-        sha2::Digest::finalize(<sha2::Sha256 as sha2::Digest>::new_with_prefix(invite.invite_bearer.as_bytes())).into();
+    let fingerprint: [u8; 32] = sha2::Digest::finalize(
+        <sha2::Sha256 as sha2::Digest>::new_with_prefix(invite.invite_bearer.as_bytes()),
+    )
+    .into();
     let joined = store
         .admit_connector(&fingerprint, &[7; 32], uuid::Uuid::new_v4(), "Ace", now)
         .await?;
@@ -344,12 +351,19 @@ async fn the_owner_renames_an_external_ai_and_sets_its_picture()
         )
         .await?;
     assert_eq!(outcome.result["participant"]["display_name"], "Ace 2");
-    assert_eq!(outcome.result["participant"]["avatar_image_url"], picture.url);
+    assert_eq!(
+        outcome.result["participant"]["avatar_image_url"],
+        picture.url
+    );
     assert!(outcome.result.get("agent_session").is_none());
     assert_eq!(outcome.result["event"]["type"], "participant_updated");
     assert_eq!(outcome.result["event"]["avatar_image_url"], picture.url);
     assert_eq!(
-        store.agent_avatar(&picture.id, |_| Ok(())).await?.0.metadata,
+        store
+            .agent_avatar(&picture.id, |_| Ok(()))
+            .await?
+            .0
+            .metadata,
         picture
     );
     // Clearing the picture removes the stored image.
@@ -377,7 +391,8 @@ async fn the_owner_renames_an_external_ai_and_sets_its_picture()
             .is_err()
     );
     // An AI participant with neither a session nor a connector join is refused.
-    let mut orphan: agentsassemble_domain::Participant = serde_json::from_value(outcome.result["participant"].clone())?;
+    let mut orphan: agentsassemble_domain::Participant =
+        serde_json::from_value(outcome.result["participant"].clone())?;
     orphan.participant_id = "orphan-agent".to_owned();
     sqlx::query("INSERT INTO participants(room_id,participant_id,participant_json) VALUES(?,?,?)")
         .bind("general")

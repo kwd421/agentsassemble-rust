@@ -92,10 +92,19 @@ impl SqliteStore {
         let mut scope = scope;
         if let Some(seat) = seat {
             load_seat(&mut tx, &identity.room_id, seat).await?;
-            let current: Option<String> = sqlx::query_scalar("SELECT scope FROM room_connector_invites WHERE room_id = ? AND participant_id = ?")
-                .bind(&identity.room_id).bind(seat).fetch_optional(&mut *tx).await?;
+            let current: Option<String> = sqlx::query_scalar(
+                "SELECT scope FROM room_connector_invites WHERE room_id = ? AND participant_id = ?",
+            )
+            .bind(&identity.room_id)
+            .bind(seat)
+            .fetch_optional(&mut *tx)
+            .await?;
             if let Some(current) = current {
-                scope = if current == "read_only" { "read_only" } else { "read_write" };
+                scope = if current == "read_only" {
+                    "read_only"
+                } else {
+                    "read_write"
+                };
             }
         }
         let mut seed = Sha256::new();
@@ -133,10 +142,19 @@ impl SqliteStore {
             .bind(request_id.to_string()).bind(scope).bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).execute(&mut *tx).await?;
         if let Some(seat) = seat {
             // The seat keeps the owner it already has.
-            sqlx::query("INSERT INTO connector_seat_invites(invite_id, participant_id) VALUES(?, ?)")
-                .bind(invite_id.to_string()).bind(seat).execute(&mut *tx).await?;
+            sqlx::query(
+                "INSERT INTO connector_seat_invites(invite_id, participant_id) VALUES(?, ?)",
+            )
+            .bind(invite_id.to_string())
+            .bind(seat)
+            .execute(&mut *tx)
+            .await?;
             tx.commit().await?;
-            return Ok(ConnectorInvite { invite_id, invite_bearer: bearer.bearer, expires_at });
+            return Ok(ConnectorInvite {
+                invite_id,
+                invite_bearer: bearer.bearer,
+                expires_at,
+            });
         }
         crate::delegation_owner::OwnerBinding::from_manager(&mut tx, manager)
             .await?
@@ -264,11 +282,12 @@ impl SqliteStore {
             ));
         }
         let invite_id: String = row.get("invite_id");
-        let seat: Option<String> =
-            sqlx::query_scalar("SELECT participant_id FROM connector_seat_invites WHERE invite_id = ?")
-                .bind(&invite_id)
-                .fetch_optional(&mut *tx)
-                .await?;
+        let seat: Option<String> = sqlx::query_scalar(
+            "SELECT participant_id FROM connector_seat_invites WHERE invite_id = ?",
+        )
+        .bind(&invite_id)
+        .fetch_optional(&mut *tx)
+        .await?;
         let mut replaced_sessions = Vec::new();
         let (participant, event) = if let Some(seat) = seat {
             let (participant, event, replaced) = retake_seat(&mut tx, &room_id, &seat, now).await?;
@@ -281,8 +300,14 @@ impl SqliteStore {
                 .await?;
             (participant, event)
         } else {
-            insert_connector_participant(&mut tx, &room_id, display_name, row.get("creator_id"), now)
-                .await?
+            insert_connector_participant(
+                &mut tx,
+                &room_id,
+                display_name,
+                row.get("creator_id"),
+                now,
+            )
+            .await?
         };
         sqlx::query("UPDATE room_connector_invites SET client_fingerprint=?,join_request_id=?,join_payload_hash=?,participant_id=?,event_id=?,session_fingerprint=?,session_expires_at=? WHERE invite_id=?")
             .bind(client_fingerprint.as_slice()).bind(request_id.to_string()).bind(payload_hash).bind(&participant.participant_id).bind(&event.id)
@@ -444,7 +469,6 @@ async fn joined_event(
     crate::room_turns::support::insert_event(tx, &event).await?;
     Ok(event)
 }
-
 
 pub(super) fn timestamp(micros: i64) -> Result<DateTime<Utc>, PersistenceError> {
     DateTime::from_timestamp_micros(micros)

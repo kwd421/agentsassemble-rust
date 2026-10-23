@@ -249,7 +249,11 @@ async fn commit_provider_result(
     }
     if let Some(usage) = usage
         && let Err(error) = store
-            .record_agent_usage(&start_authority.room_id, &start_authority.session_id, &usage)
+            .record_agent_usage(
+                &start_authority.room_id,
+                &start_authority.session_id,
+                &usage,
+            )
             .await
     {
         // Statistics only: the turn stays committed.

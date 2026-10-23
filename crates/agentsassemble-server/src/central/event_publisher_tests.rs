@@ -132,8 +132,8 @@ fn endpoint_reserve_rule_keeps_explicit_stop_revocation_only() {
 }
 
 #[tokio::test]
-async fn cold_start_with_closed_ingress_publishes_nothing()
--> Result<(), Box<dyn std::error::Error>> {
+async fn cold_start_with_closed_ingress_publishes_nothing() -> Result<(), Box<dyn std::error::Error>>
+{
     let store = SqliteStore::open("sqlite::memory:").await?;
     store
         .bootstrap_local_authority("2d697cab-366f-4b22-82d0-2c96b67bab42", "Owner")
@@ -178,10 +178,7 @@ async fn cold_start_with_closed_ingress_publishes_nothing()
 #[tokio::test]
 async fn stale_pre_quit_online_event_is_superseded_while_offline_revocation_delivers()
 -> Result<(), Box<dyn std::error::Error>> {
-    for (stale_origin, expect_request) in [
-        ("https://dead.trycloudflare.com", false),
-        ("", true),
-    ] {
+    for (stale_origin, expect_request) in [("https://dead.trycloudflare.com", false), ("", true)] {
         let store = SqliteStore::open("sqlite::memory:").await?;
         store
             .bootstrap_local_authority("2d697cab-366f-4b22-82d0-2c96b67bab42", "Owner")
@@ -266,7 +263,9 @@ async fn restart_publishes_only_the_new_origin() -> Result<(), Box<dyn std::erro
     });
     let manual = || {
         PublicIngress::configured_manual(
-            "127.0.0.1:41955".parse().unwrap_or_else(|e| panic!("listener: {e}")),
+            "127.0.0.1:41955"
+                .parse()
+                .unwrap_or_else(|e| panic!("listener: {e}")),
             "https://event.test",
             &"s".repeat(32),
         )
@@ -293,18 +292,17 @@ async fn restart_publishes_only_the_new_origin() -> Result<(), Box<dyn std::erro
     // Restart publishes exactly one endpoint event: the new origin PUT with
     // a strictly higher durable generation. Quiesce before asserting.
     let restart_cancel = CancellationToken::new();
-    let second_run = tokio::spawn(directory.run(
-        store.clone(),
-        manual(),
-        identity,
-        restart_cancel.clone(),
-    ));
+    let second_run =
+        tokio::spawn(directory.run(store.clone(), manual(), identity, restart_cancel.clone()));
     let second = requests.recv().await.ok_or("restart endpoint")?;
     assert_eq!(second.0, "endpoint");
     assert_eq!(second.1, Method::PUT);
     assert_eq!(second.2["origin"], "https://event.test");
     assert!(
-        second.2["generation"].as_i64().ok_or("restart generation")? > first_generation
+        second.2["generation"]
+            .as_i64()
+            .ok_or("restart generation")?
+            > first_generation
     );
     assert_eq!(requests.recv().await.ok_or("restart name")?.0, "name");
     probe.wait_for(|(_, waiting)| *waiting).await?;
@@ -478,7 +476,10 @@ async fn per_minute_rate_limit_honours_retry_after_without_quota_park()
     // Quit publishes nothing, so no offline publish fires into the
     // rate limit either.
     let result = sender.await?;
-    assert!(matches!(result, Ok(())), "quit sends nothing, got {result:?}");
+    assert!(
+        matches!(result, Ok(())),
+        "quit sends nothing, got {result:?}"
+    );
     assert!(requests.try_recv().is_err());
     http_cancel.cancel();
     http.await??;

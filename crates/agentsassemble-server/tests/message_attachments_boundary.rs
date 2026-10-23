@@ -689,7 +689,12 @@ async fn local_tcp_preview_is_private_bounded_and_preserves_original_download()
         noise ^= noise << 13;
         noise ^= noise >> 17;
         noise ^= noise << 5;
-        pixels.extend_from_slice(&[noise.to_le_bytes()[2], noise.to_le_bytes()[1], noise.to_le_bytes()[0], 128]);
+        pixels.extend_from_slice(&[
+            noise.to_le_bytes()[2],
+            noise.to_le_bytes()[1],
+            noise.to_le_bytes()[0],
+            128,
+        ]);
     }
     let mut original = Vec::new();
     {

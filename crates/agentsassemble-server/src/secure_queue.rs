@@ -307,9 +307,8 @@ mod tests {
         loop {
             match records.recv().await {
                 None => break,
-                Some(
-                    axum::extract::ws::Message::Ping(_) | axum::extract::ws::Message::Pong(_),
-                ) => {}
+                Some(axum::extract::ws::Message::Ping(_) | axum::extract::ws::Message::Pong(_)) => {
+                }
                 Some(_) => panic!("expected close after keepalive-aware idle cleanup"),
             }
         }
@@ -340,8 +339,12 @@ mod tests {
                 .await
                 .unwrap();
             records.recv().await.unwrap();
-            tokio::time::advance(crate::http_body_policy::IDLE.checked_sub(std::time::Duration::from_secs(1)).unwrap())
-                .await;
+            tokio::time::advance(
+                crate::http_body_policy::IDLE
+                    .checked_sub(std::time::Duration::from_secs(1))
+                    .unwrap(),
+            )
+            .await;
             assert!(!closed.is_cancelled());
             ack.send(Feedback::Ack(sequence)).await.unwrap();
         }

@@ -62,7 +62,9 @@ async fn piece_reads_reauthorize_after_deletion_and_access_loss() -> TestResult 
 #[tokio::test]
 async fn local_piece_reader_is_exact_and_does_not_retain_the_only_connection() -> TestResult {
     let (store, principal) = crate::message_attachment_tests::fixture().await;
-    let bytes: Vec<u8> = (0..65536 + 19).map(|n| u8::try_from(n % 251).unwrap()).collect();
+    let bytes: Vec<u8> = (0..65536 + 19)
+        .map(|n| u8::try_from(n % 251).unwrap())
+        .collect();
     let attachment = store
         .store_message_attachment(
             &principal,

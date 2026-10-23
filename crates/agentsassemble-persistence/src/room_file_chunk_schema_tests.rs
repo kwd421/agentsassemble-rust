@@ -18,7 +18,9 @@ async fn genuine_v92_converts_exact_bytes_and_refuses_hostile_shapes_atomically(
                 .foreign_keys(true),
         )
         .await?;
-    let message = (0..65553).map(|i| u8::try_from(i % 251).unwrap()).collect::<Vec<_>>();
+    let message = (0..65553)
+        .map(|i| u8::try_from(i % 251).unwrap())
+        .collect::<Vec<_>>();
     let connector = (0..agentsassemble_domain::MAX_ROOM_FILE_BYTES)
         .map(|i| u8::try_from(i % 239).unwrap())
         .collect::<Vec<_>>();

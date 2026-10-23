@@ -97,7 +97,13 @@ async fn create(
         Some(seat) => {
             state
                 .store
-                .create_connector_seat_invite(&authority, request_id, payload.scope, seat, Utc::now())
+                .create_connector_seat_invite(
+                    &authority,
+                    request_id,
+                    payload.scope,
+                    seat,
+                    Utc::now(),
+                )
                 .await
         }
         None => {

@@ -223,7 +223,11 @@ fn amendments(
             let id = format!("network-policy-{index}");
             // The card labels the option from this structured kind, never the
             // English text: a deny rule must not reuse the allow kind.
-            let kind = if action == "deny" { "deny_policy" } else { "allow_policy" };
+            let kind = if action == "deny" {
+                "deny_policy"
+            } else {
+                "allow_policy"
+            };
             options.push(option(
                 &id,
                 &format!("Apply {action} network rule"),

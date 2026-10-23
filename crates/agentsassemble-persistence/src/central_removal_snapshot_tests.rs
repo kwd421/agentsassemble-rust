@@ -7,13 +7,8 @@ async fn snapshot_fixture()
     let (store, now) = fixture().await;
     store.set_registration_epoch(Some("epoch")).await?;
     insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
-    let request = prepared(
-        [2; 32],
-        [3; 32],
-        &uuid::Uuid::new_v4().to_string(),
-        "",
-    )
-    .with_member(member());
+    let request =
+        prepared([2; 32], [3; 32], &uuid::Uuid::new_v4().to_string(), "").with_member(member());
     let joined = admitted(store.admit_human(&request, now).await?);
     let participant: Participant = serde_json::from_str(
         &sqlx::query_scalar::<_, String>(

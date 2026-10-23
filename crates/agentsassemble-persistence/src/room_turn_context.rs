@@ -111,7 +111,13 @@ pub(super) async fn prepare_room_input(
         .unwrap_or_default()
     };
     let session_instructions = persistent.then(|| {
-        render_room_rules(room, session, tabletop_tools, &owner_instructions, &fixed_persona)
+        render_room_rules(
+            room,
+            session,
+            tabletop_tools,
+            &owner_instructions,
+            &fixed_persona,
+        )
     });
     let mut provider_input = render_observation_input(
         room,

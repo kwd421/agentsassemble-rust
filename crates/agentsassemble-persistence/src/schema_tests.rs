@@ -90,16 +90,13 @@ async fn fixed_authority_bytes_require_blob_storage() {
 
 pub(super) async fn seed_human_authorities(pool: &SqlitePool) {
     for room_id in ["room-a", "room-b"] {
-        sqlx::query(
-            "INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, '{}', '{}')",
-        )
-        .bind(room_id)
-        .execute(pool)
-        .await
-        .unwrap_or_else(|error| panic!("insert room {room_id}: {error}"));
+        sqlx::query("INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, '{}', '{}')")
+            .bind(room_id)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert room {room_id}: {error}"));
     }
-    for (user_id, participant_id) in [("user-a", "participant-a"), ("user-b", "participant-b")]
-    {
+    for (user_id, participant_id) in [("user-a", "participant-a"), ("user-b", "participant-b")] {
         sqlx::query(
             "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES (?, ?, '{}')",
         )
@@ -280,23 +277,19 @@ async fn human_sessions_require_exact_composite_authority() {
     let reusable = "2222222222222222";
 
     assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT key_kind FROM room_invites WHERE invite_id = ?",
-        )
-        .bind(one_use)
-        .fetch_one(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("read one-use classification: {error}")),
+        sqlx::query_scalar::<_, String>("SELECT key_kind FROM room_invites WHERE invite_id = ?",)
+            .bind(one_use)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("read one-use classification: {error}")),
         "one_use"
     );
     assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT key_kind FROM room_invites WHERE invite_id = ?",
-        )
-        .bind(reusable)
-        .fetch_one(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("read reusable classification: {error}")),
+        sqlx::query_scalar::<_, String>("SELECT key_kind FROM room_invites WHERE invite_id = ?",)
+            .bind(reusable)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("read reusable classification: {error}")),
         "reusable"
     );
 
@@ -335,11 +328,10 @@ async fn human_sessions_require_exact_composite_authority() {
     .await
     .unwrap_or_else(|error| panic!("insert valid reusable session: {error}"));
 
-    let session_count =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM human_room_sessions")
-            .fetch_one(&pool)
-            .await
-            .unwrap_or_else(|error| panic!("count admitted sessions: {error}"));
+    let session_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM human_room_sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("count admitted sessions: {error}"));
     assert_eq!(session_count, 2);
 }
 
@@ -371,8 +363,8 @@ async fn invite_schema_preserves_configured_values_and_key_kind() {
     );
 
     for (index, configured) in [0_i64, 1, 2, 3, 5, 128, 129].into_iter().enumerate() {
-        let index = u8::try_from(index)
-            .unwrap_or_else(|_| panic!("invite limit fixture index exceeds u8"));
+        let index =
+            u8::try_from(index).unwrap_or_else(|_| panic!("invite limit fixture index exceeds u8"));
         let accepted_marker = index + 1;
         let accepted_id = format!("{accepted_marker:02x}").repeat(8);
         sqlx::query(
@@ -387,12 +379,11 @@ async fn invite_schema_preserves_configured_values_and_key_kind() {
         .await
         .unwrap_or_else(|error| panic!("insert configured invite {configured}: {error}"));
 
-        let stored =
-            sqlx::query("SELECT max_uses, key_kind FROM room_invites WHERE invite_id = ?")
-                .bind(&accepted_id)
-                .fetch_one(&pool)
-                .await
-                .unwrap_or_else(|error| panic!("read configured invite {configured}: {error}"));
+        let stored = sqlx::query("SELECT max_uses, key_kind FROM room_invites WHERE invite_id = ?")
+            .bind(&accepted_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("read configured invite {configured}: {error}"));
         assert_eq!(stored.get::<i64, _>("max_uses"), configured);
         assert_eq!(
             stored.get::<String, _>("key_kind"),

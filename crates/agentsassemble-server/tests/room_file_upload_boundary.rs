@@ -194,7 +194,9 @@ async fn room_limit_bounds_plain_bodies_and_grandfathers_bound_downloads() -> Te
     );
 
     set_limit(&server, 50 * 1024 * 1024, "raise").await?;
-    let bytes: Vec<u8> = (0..size).map(|index| u8::try_from(index % 251).unwrap()).collect();
+    let bytes: Vec<u8> = (0..size)
+        .map(|index| u8::try_from(index % 251).unwrap())
+        .collect();
     let uploaded = upload_local(
         &client,
         &server,

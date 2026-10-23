@@ -135,17 +135,20 @@ fn validate_credentials(tunnel_id: &str, credentials: &str) -> Result<(), Persis
     if credentials.is_empty() || credentials.len() > MAX_CREDENTIALS_BYTES {
         return Err(invalid("named tunnel credentials are invalid"));
     }
-    let value: serde_json::Value =
-        serde_json::from_str(credentials).map_err(|_| invalid("named tunnel credentials are invalid"))?;
+    let value: serde_json::Value = serde_json::from_str(credentials)
+        .map_err(|_| invalid("named tunnel credentials are invalid"))?;
     let object = value
         .as_object()
         .ok_or_else(|| invalid("named tunnel credentials are invalid"))?;
     let get_field = |name: &str| {
-        object.get(name).and_then(serde_json::Value::as_str).filter(|field| {
-            !field.is_empty()
-                && field.len() <= MAX_CREDENTIAL_FIELD_BYTES
-                && !field.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
-        })
+        object
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .filter(|field| {
+                !field.is_empty()
+                    && field.len() <= MAX_CREDENTIAL_FIELD_BYTES
+                    && !field.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
+            })
     };
     let account_tag = get_field("AccountTag");
     let tunnel = get_field("TunnelID");
@@ -396,17 +399,42 @@ mod tests {
         let good_credentials = test_credentials("tunnel-id-one");
         let mismatched_credentials = test_credentials("other-tunnel-id");
         for (hostname, tunnel_id, credentials, epoch) in [
-            ("phish.agentsassemble.uk", "tunnel-id-one", good_credentials.as_str(), "epoch"),
-            ("h-0123456789ab.agentsassemble.uk", "", good_credentials.as_str(), "epoch"),
+            (
+                "phish.agentsassemble.uk",
+                "tunnel-id-one",
+                good_credentials.as_str(),
+                "epoch",
+            ),
+            (
+                "h-0123456789ab.agentsassemble.uk",
+                "",
+                good_credentials.as_str(),
+                "epoch",
+            ),
             (
                 "h-0123456789ab.agentsassemble.uk",
                 "tunnel-id-one",
                 mismatched_credentials.as_str(),
                 "epoch",
             ),
-            ("h-0123456789ab.agentsassemble.uk", "tunnel-id-one", "not-json", "epoch"),
-            ("h-0123456789ab.agentsassemble.uk", "tunnel-id-one", "{}", "epoch"),
-            ("h-0123456789ab.agentsassemble.uk", "tunnel-id-one", good_credentials.as_str(), ""),
+            (
+                "h-0123456789ab.agentsassemble.uk",
+                "tunnel-id-one",
+                "not-json",
+                "epoch",
+            ),
+            (
+                "h-0123456789ab.agentsassemble.uk",
+                "tunnel-id-one",
+                "{}",
+                "epoch",
+            ),
+            (
+                "h-0123456789ab.agentsassemble.uk",
+                "tunnel-id-one",
+                good_credentials.as_str(),
+                "",
+            ),
         ] {
             assert!(
                 store

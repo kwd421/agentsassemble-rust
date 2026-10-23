@@ -41,8 +41,14 @@ pub(crate) const TABLES: &[crate::schema::TableDefinition] = &[crate::schema::Ta
 /// Whose picture a stored avatar is: an Agent Session's, or an external AI's.
 #[derive(Clone, Copy)]
 pub(crate) enum AvatarHolder<'a> {
-    Session { room_id: &'a str, session_id: &'a str },
-    Connector { room_id: &'a str, participant_id: &'a str },
+    Session {
+        room_id: &'a str,
+        session_id: &'a str,
+    },
+    Connector {
+        room_id: &'a str,
+        participant_id: &'a str,
+    },
 }
 
 impl<'a> AvatarHolder<'a> {
@@ -143,8 +149,13 @@ impl SqliteStore {
         )
         .await?;
         if let Some(previous) = previous {
-            delete_exact_asset(&mut transaction, holder, previous.get("asset_id"), "pending")
-                .await?;
+            delete_exact_asset(
+                &mut transaction,
+                holder,
+                previous.get("asset_id"),
+                "pending",
+            )
+            .await?;
         }
         let id = format!("{AGENT_AVATAR_ID_PREFIX}{}", Uuid::new_v4().simple());
         sqlx::query(holder.sql("INSERT INTO {table}(asset_id, room_id, {key}, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)"))
@@ -186,8 +197,12 @@ impl SqliteStore {
         } else {
             let row = sqlx::query("SELECT room_id, participant_id, filename, content_type, length(content) AS content_length, size, created_at FROM connector_avatar_assets WHERE asset_id = ? AND state = 'current'")
                 .bind(asset_id).fetch_optional(&mut *transaction).await?.ok_or_else(missing)?;
-            let participant =
-                load_participant(&mut transaction, row.get("room_id"), row.get("participant_id")).await?;
+            let participant = load_participant(
+                &mut transaction,
+                row.get("room_id"),
+                row.get("participant_id"),
+            )
+            .await?;
             if agent_avatar_asset_id(&participant.avatar_image_url) != Some(asset_id) {
                 return Err(invalid_custody());
             }
@@ -205,8 +220,8 @@ impl SqliteStore {
             "SELECT content FROM {table} WHERE asset_id = ?"
         )))
         .bind(asset_id)
-                .fetch_one(&mut *transaction)
-                .await?;
+        .fetch_one(&mut *transaction)
+        .await?;
         let metadata = metadata(
             asset_id.to_owned(),
             sanitize_filename(row.get("filename")),
@@ -238,13 +253,14 @@ pub(crate) async fn replace_agent_avatar(
             )
         })?)
     };
-    let current_id = sqlx::query_scalar::<_, String>(holder.sql(
-        "SELECT asset_id FROM {table} WHERE room_id = ? AND {key} = ? AND state = 'current'",
-    ))
-    .bind(holder.room_id())
-    .bind(holder.key())
-    .fetch_optional(&mut **transaction)
-    .await?;
+    let current_id =
+        sqlx::query_scalar::<_, String>(holder.sql(
+            "SELECT asset_id FROM {table} WHERE room_id = ? AND {key} = ? AND state = 'current'",
+        ))
+        .bind(holder.room_id())
+        .bind(holder.key())
+        .fetch_optional(&mut **transaction)
+        .await?;
     if current_id.as_deref() != previous_id {
         return Err(invalid_custody());
     }
@@ -271,15 +287,16 @@ async fn delete_exact_asset(
     id: &str,
     state: &str,
 ) -> Result<(), PersistenceError> {
-    let deleted = sqlx::query(holder.sql(
-        "DELETE FROM {table} WHERE asset_id = ? AND room_id = ? AND {key} = ? AND state = ?",
-    ))
-    .bind(id)
-    .bind(holder.room_id())
-    .bind(holder.key())
-    .bind(state)
-    .execute(&mut **transaction)
-    .await?;
+    let deleted =
+        sqlx::query(holder.sql(
+            "DELETE FROM {table} WHERE asset_id = ? AND room_id = ? AND {key} = ? AND state = ?",
+        ))
+        .bind(id)
+        .bind(holder.room_id())
+        .bind(holder.key())
+        .bind(state)
+        .execute(&mut **transaction)
+        .await?;
     if deleted.rows_affected() != 1 {
         return Err(invalid_custody());
     }
