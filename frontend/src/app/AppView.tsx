@@ -215,6 +215,10 @@ export default function AppView({ controller }: { controller: AppController }) {
   // reconnects on its own at the reset), so the top banner does not repeat it.
   const activeRoomWaitsForQuota = centralQuotaResetAt !== null && (activeRoomDisconnected || Boolean(activeRoomSelectError)) &&
     activeRoom.roomOrigin === "remote_server" && !activeRoomSelectError?.membershipEnded;
+  // A room still connecting shows its own loading, not the unplugged view: that
+  // view is for a connection that failed or waits on something.
+  const activeRoomOnlyConnecting = activeRoom.connectionState === "connecting" &&
+    !activeRoomSelectError && !activeRoomNeedsAdmission && !activeRoomWaitsForQuota;
   const centralQuotaNotice = quotaPersonId && !activeRoomWaitsForQuota && !quotaNoticeDismissed(quotaPersonId, centralQuotaResetAt)
     ? centralDailyQuotaNotice(quotaPersonId)
     : null;
@@ -506,7 +510,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             <AdminPanel onClose={() => setAdminOpen(false)} ownsLocalServer={ownsThisComputer} />
           ) : activeRoomSelectError?.membershipEnded ? (
             <MembershipEndedView key={activeRoom.id} room={activeRoom} scope={activeRoomSelectError.membershipEnded} onConfirm={controller.acknowledgeMembershipEnded} />
-          ) : activeRoomDisconnected || activeRoomSelectError ? (
+          ) : (activeRoomDisconnected && !activeRoomOnlyConnecting) || activeRoomSelectError ? (
             <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={activeRoomSelectError?.message ?? controller.activeMemberHostDetail}
               autoReconnectAt={activeRoomWaitsForQuota && centralQuotaResetAt !== null ? formatCentralQuotaResetLocal(centralQuotaResetAt) : null}
               hostDisplayName={activeRoom.serverId ? controller.centralDirectory?.live?.servers?.find((server) => server.server_id === activeRoom.serverId)?.alias ?? null : null}
