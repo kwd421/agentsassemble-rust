@@ -232,6 +232,8 @@ fn ready(provider: ProviderAvailability) -> ProviderAvailability {
             option
                 .metadata
                 .insert("relation_scope".to_owned(), json!("global"));
+            // Every Gemini model on this list takes images.
+            option.metadata.insert("vision".to_owned(), json!(true));
             option
         })
         .collect::<Vec<_>>();
