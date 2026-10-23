@@ -140,6 +140,7 @@ export function useLobbyHistory({
   // has not moved up from it is content growing (an image preview loading) or the browser
   // clamping after a resize, not the reader scrolling up.
   const lastScrollTopRef = useRef(0);
+  const lastScrollHeightRef = useRef(0);
   const historyReadyRef = useRef(false);
   const historyRoomRef = useRef(activeRoom.id);
   const initialBackfillFailedRoomRef = useRef("");
@@ -217,6 +218,7 @@ export function useLobbyHistory({
   const pinFeedToBottom = useCallback((element: HTMLDivElement) => {
     element.scrollTop = element.scrollHeight;
     lastScrollTopRef.current = element.scrollTop;
+    lastScrollHeightRef.current = element.scrollHeight;
   }, []);
 
   const retireHistoryPageRequest = useCallback(() => {
@@ -346,12 +348,18 @@ export function useLobbyHistory({
       }
       const element = event.currentTarget;
       const previousScrollTop = lastScrollTopRef.current;
+      const previousScrollHeight = lastScrollHeightRef.current;
       lastScrollTopRef.current = element.scrollTop;
+      lastScrollHeightRef.current = element.scrollHeight;
+      // When a row above shrinks, the browser lowers scrollTop to the new maximum
+      // and reports it before the resize observer runs; that is not the reader
+      // scrolling up, so a pinned feed stays pinned.
       if (
         pinnedToLatestRef.current &&
         !feedIsNearBottom(element) &&
         previousScrollTop > 0 &&
-        element.scrollTop >= previousScrollTop - 1
+        (element.scrollTop >= previousScrollTop - 1 ||
+          element.scrollHeight !== previousScrollHeight)
       ) {
         pinFeedToBottom(element);
         return;
@@ -382,6 +390,7 @@ export function useLobbyHistory({
       }
       if (feedIsNearBottom(element)) {
         lastScrollTopRef.current = element.scrollTop;
+        lastScrollHeightRef.current = element.scrollHeight;
       } else {
         pinFeedToBottom(element);
       }

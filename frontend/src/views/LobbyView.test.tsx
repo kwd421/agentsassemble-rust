@@ -757,6 +757,42 @@ describe("LobbyView history loading", () => {
     expect(await screen.findByText("initial message 0")).toBeTruthy();
   });
 
+  it("stays pinned when a shrinking row lowers scrollTop to the new bottom", () => {
+    const messages: LobbyEvent[] = Array.from({ length: 30 }, (_, index) => ({
+      id: `pinned-message-${index}`,
+      kind: "message",
+      name: "Agent A",
+      message: `pinned message ${index}`,
+      side: "other",
+      created_at: `2026-07-26T01:00:${String(index).padStart(2, "0")}Z`,
+      actor_id: "agent-a",
+      flow_meeting_id: "room-a",
+      flow_action: "message_final",
+    }));
+    const { container } = render(
+      <LobbyView activeRoom={room} agents={[]} canonicalEvents={messages} />
+    );
+    const feed = container.querySelector<HTMLDivElement>(".chat-scroll")!;
+    let scrollHeight = 2_000;
+    Object.defineProperties(feed, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+      scrollTop: { configurable: true, writable: true, value: 1_400 },
+    });
+    fireEvent.scroll(feed);
+
+    // A row shrinks by 36px (the browser clamps scrollTop) and images below
+    // grow before the scroll event is delivered.
+    feed.scrollTop = 1_364;
+    scrollHeight = 2_100;
+    fireEvent.scroll(feed);
+    expect(feed.scrollTop).toBe(2_100);
+
+    feed.scrollTop = 1_000;
+    fireEvent.scroll(feed);
+    expect(feed.scrollTop).toBe(1_000);
+  });
+
   it("loads one older page for one top-scroll interaction without draining the history", async () => {
     const loadCanonicalHistory = vi.fn().mockResolvedValue({
       loadedCount: 10,
