@@ -63,6 +63,10 @@ export type {
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 const ROOM_SOCKET_KEEPALIVE_MS = 3 * 60_000;
+/** A missing pong waits this long before the socket is called dead: a window
+ * brought back from the Dock runs its overdue keepalive timer before the pong
+ * that already arrived, so failing at once reconnected a healthy socket. */
+const ROOM_SOCKET_PONG_GRACE_MS = 10_000;
 const UTF8_ENCODER = new TextEncoder();
 
 interface PendingRoomCommand extends PendingCommandRetryState {
@@ -331,6 +335,7 @@ export function openRoomSocket(
       let keepaliveTimer = 0;
       let keepaliveSequence = 0;
       let expectedPongNonce: string | null = null;
+      let pongGraceGiven = false;
       const ownsConnectionGeneration = () =>
         !closed && generation === connectionGeneration;
       const canUseOpenSocket = () =>
@@ -349,8 +354,13 @@ export function openRoomSocket(
       const scheduleKeepalive = () => {
         clearKeepalive();
         if (!canUseOpenSocket() || !transportReady) return;
-        keepaliveTimer = window.setTimeout(() => {
+        const keepalive = () => {
           keepaliveTimer = 0;
+          if (expectedPongNonce !== null && !pongGraceGiven) {
+            pongGraceGiven = true;
+            keepaliveTimer = window.setTimeout(keepalive, ROOM_SOCKET_PONG_GRACE_MS);
+            return;
+          }
           if (expectedPongNonce !== null) {
             failConnection(new RoomSocketSayError(
               "Room socket did not acknowledge its keepalive.",
@@ -370,8 +380,10 @@ export function openRoomSocket(
             return;
           }
           expectedPongNonce = nonce;
+          pongGraceGiven = false;
           scheduleKeepalive();
-        }, ROOM_SOCKET_KEEPALIVE_MS);
+        };
+        keepaliveTimer = window.setTimeout(keepalive, ROOM_SOCKET_KEEPALIVE_MS);
       };
       stopKeepaliveForConnection = clearKeepalive;
 

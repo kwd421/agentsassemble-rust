@@ -101,6 +101,56 @@ describe("canonical room socket quiet keepalive", () => {
     handle.close();
   });
 
+  it("waits briefly for a pong the overdue timer ran ahead of, as after a restored window", async () => {
+    vi.useFakeTimers();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, opened, sockets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await opened;
+    await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS);
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const ping = sentClientFrame(sockets[0]);
+    // The next keepalive fires before the pong is handled.
+    await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS);
+    expect(sockets[0].readyState).toBe(WebSocket.OPEN);
+    receiveServerFrame(sockets[0], { op: "pong", nonce: ping.nonce });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(errors).toHaveLength(0);
+    expect(sockets[0].readyState).toBe(WebSocket.OPEN);
+    await vi.waitFor(() => expect(sentClientFrame(sockets[0], 2)).toEqual({ op: "ping", nonce: "keepalive-2" }));
+    handle.close();
+  });
+
+  it("calls the socket dead when the pong never comes", async () => {
+    vi.useFakeTimers();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, opened, sockets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await opened;
+    await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS * 2);
+    expect(sockets[0].readyState).toBe(WebSocket.OPEN);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("keepalive_response_missing"));
+    expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
+    handle.close();
+  });
+
   it("fails the exact connection on a mismatched pong", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
