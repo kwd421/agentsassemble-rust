@@ -108,6 +108,7 @@ mod tests {
         let memory = crate::driver::ProviderTurnMemory {
             context: "Pinned messages".to_owned(),
             fold: Some("#3 A: hello".to_owned()),
+            revision: "deleted:;pinned:3".to_owned(),
         };
         let request = ProviderTurnRequest {
             context_tokens: Some(131_072),

@@ -143,6 +143,10 @@ pub struct ProviderTurnMemory {
     pub context: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fold: Option<String>,
+    /// Changes when the owner deletes memory or pins change; a carried
+    /// conversation that included the old memory is reopened.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub revision: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

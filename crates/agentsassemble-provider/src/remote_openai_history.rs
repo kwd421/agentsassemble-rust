@@ -23,6 +23,15 @@ pub(super) struct ConversationHistory {
     synced_seq: i64,
     /// The provider's usage report for `messages[..covered]`.
     measured: Option<(usize, u64)>,
+    /// The memory revision the conversation's memory was shown at.
+    memory_revision: String,
+}
+
+fn memory_revision(request: &ProviderTurnRequest) -> &str {
+    request
+        .memory
+        .as_ref()
+        .map_or("", |memory| memory.revision.as_str())
 }
 
 impl ConversationHistory {
@@ -30,11 +39,12 @@ impl ConversationHistory {
     /// holds, so the turn can continue it.
     pub(super) fn continues(history: Option<&Self>, request: &ProviderTurnRequest) -> bool {
         history.is_some_and(|history| {
-            request
-                .room_observation
-                .as_ref()
-                .and_then(|observation| observation.view_delta.as_ref())
-                .is_some_and(|delta| delta.since_seq == history.synced_seq)
+            history.memory_revision == memory_revision(request)
+                && request
+                    .room_observation
+                    .as_ref()
+                    .and_then(|observation| observation.view_delta.as_ref())
+                    .is_some_and(|delta| delta.since_seq == history.synced_seq)
         })
     }
 
@@ -132,6 +142,7 @@ impl RemoteOpenAiDriver {
                 messages,
                 synced_seq: observation.input_up_to_seq,
                 measured,
+                memory_revision: memory_revision(request).to_owned(),
             });
         }
     }

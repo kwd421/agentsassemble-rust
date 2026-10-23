@@ -188,6 +188,7 @@ fn provider_request(
             agentsassemble_provider::ProviderTurnMemory {
                 context: memory.context.clone(),
                 fold: memory.fold.as_ref().map(|fold| fold.text.clone()),
+                revision: memory.revision.clone(),
             }
         }),
         request_ingress: Some(ingress.requests),

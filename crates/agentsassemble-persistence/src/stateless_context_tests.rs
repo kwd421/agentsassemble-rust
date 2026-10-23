@@ -201,3 +201,66 @@ async fn a_deleted_message_reopens_the_api_conversation_from_current_rows() {
     assert!(assignment.room_view_delta.is_none());
     assert!(!assignment.room_view.contains("4417"));
 }
+
+#[tokio::test]
+async fn a_pin_changes_the_memory_revision_a_carried_conversation_checks() {
+    let (store, principal, _directory) = fixture().await;
+    let mut session = stored_session(&store).await;
+    session.public.provider_kind = "deepseek_api".to_owned();
+    session.public.runtime_kind = "api".to_owned();
+    session.public.transport = "https".to_owned();
+    session.public.execution_harness = "builtin".to_owned();
+    save_stored_session(&store, &session).await;
+    let first = store
+        .execute_message_with_turn(
+            &principal,
+            "revision-first",
+            "message.send",
+            &json!({"content": "@Terra remember the launch is Friday"}),
+        )
+        .await
+        .unwrap();
+    let before = first.assignments[0]
+        .memory
+        .as_ref()
+        .map_or(String::new(), |memory| memory.revision.clone());
+    assert!(before.is_empty());
+    let start = running_authority(&store, &first.assignments[0], "revision-turn-1").await;
+    store
+        .complete_agent_turn(
+            "general",
+            AGENT_ID,
+            authority(&start, "revision-turn-1", None),
+            crate::AgentFinalMessage {
+                content: "Got it.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
+        )
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO room_message_pins(room_id,event_id,event_seq,pinned_at) VALUES (?,?,?,1)",
+    )
+    .bind(&first.outcome.event.room_id)
+    .bind(&first.outcome.event.id)
+    .bind(first.outcome.event.seq)
+    .execute(&store.pool)
+    .await
+    .unwrap();
+    let second = store
+        .execute_message_with_turn(
+            &principal,
+            "revision-second",
+            "message.send",
+            &json!({"content": "@Terra and now?"}),
+        )
+        .await
+        .unwrap();
+    let after = &second.assignments[0].memory.as_ref().unwrap().revision;
+    assert_eq!(
+        after,
+        &format!("deleted:;pinned:{}", first.outcome.event.seq)
+    );
+}

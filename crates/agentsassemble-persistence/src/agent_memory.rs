@@ -43,6 +43,11 @@ pub struct TurnMemoryInput {
     /// Older messages no piece covers yet, summarized by the harness this turn.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fold: Option<MemoryFold>,
+    /// Which pieces the owner deleted and which messages are pinned. A harness
+    /// that carries a conversation reopens it when this changes, so deleted
+    /// memory and unpinned messages are not resent.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub revision: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -89,13 +94,41 @@ pub(crate) async fn prepare(
             "Memory of earlier conversation you no longer see in full:\n{pieces}"
         ));
     }
-    if sections.is_empty() && fold.is_none() {
+    let revision = revision(tx, room_id, session_id).await?;
+    if sections.is_empty() && fold.is_none() && revision.is_empty() {
         return Ok(None);
     }
     Ok(Some(TurnMemoryInput {
         context: sections.join("\n\n"),
         fold,
+        revision,
     }))
+}
+
+/// The deleted pieces and the pins, empty when there are none.
+async fn revision(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    session_id: &str,
+) -> Result<String, PersistenceError> {
+    let deleted: String = sqlx::query_scalar(
+        "SELECT COALESCE(GROUP_CONCAT(from_seq), '') FROM (SELECT from_seq FROM agent_memory_pieces WHERE room_id = ? AND session_id = ? AND hidden = 1 ORDER BY from_seq)",
+    )
+    .bind(room_id)
+    .bind(session_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    let pinned: String = sqlx::query_scalar(
+        "SELECT COALESCE(GROUP_CONCAT(event_seq), '') FROM (SELECT event_seq FROM room_message_pins WHERE room_id = ? ORDER BY event_seq)",
+    )
+    .bind(room_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(if deleted.is_empty() && pinned.is_empty() {
+        String::new()
+    } else {
+        format!("deleted:{deleted};pinned:{pinned}")
+    })
 }
 
 /// The fold text of exactly `from_seq..=to_seq`, as `load_fold` renders it.

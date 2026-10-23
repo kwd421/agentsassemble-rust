@@ -4,6 +4,11 @@ use crate::driver::ProviderRoomViewDelta;
 /// Two room turns on one driver; the second sends the room messages since
 /// `delta_since` beside its full window. Returns every API request body.
 async fn two_room_turns(delta_since: i64) -> Vec<Value> {
+    two_room_turns_with(delta_since, "").await
+}
+
+/// As `two_room_turns`, with the second turn's memory at `revision`.
+async fn two_room_turns_with(delta_since: i64, revision: &str) -> Vec<Value> {
     let model = "deepseek-chat";
     let (endpoint, mut captured, server) = api_fixture(vec![
         tool_stream(model, "read_discussion", "tool_calls"),
@@ -43,6 +48,13 @@ async fn two_room_turns(delta_since: i64) -> Vec<Value> {
         since_seq: delta_since,
         view: "#3 Human: and again".to_owned(),
     });
+    if !revision.is_empty() {
+        second.memory = Some(crate::driver::ProviderTurnMemory {
+            context: String::new(),
+            fold: None,
+            revision: revision.to_owned(),
+        });
+    }
     for request in [&first, &second] {
         driver.begin_room_observation(request).await.unwrap();
         driver.send_turn(&session, request).await.unwrap();
@@ -92,5 +104,14 @@ async fn a_turn_that_does_not_follow_the_held_one_opens_fresh() {
     assert_eq!(
         read_result(&bodies[3]),
         "#1 Human: reply once\n#3 Human: and again"
+    );
+}
+
+#[tokio::test]
+async fn deleted_memory_or_changed_pins_reopen_the_conversation() {
+    let bodies = two_room_turns_with(1, "deleted:7;pinned:").await;
+    assert_eq!(
+        bodies[2]["messages"].as_array().unwrap().len(),
+        bodies[0]["messages"].as_array().unwrap().len()
     );
 }
