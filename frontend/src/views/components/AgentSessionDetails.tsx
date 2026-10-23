@@ -331,16 +331,22 @@ export default function AgentSessionDetails({
   useEffect(() => setDraft(null), [savedKey]);
   // After an app restart providers are discovered on demand. Saving this agent's settings or
   // bot card needs its provider in the current catalog, so a detail opened before anything
-  // discovered it asks for that once.
+  // discovered it asks for that once. An agent run through OpenCode also needs OpenCode,
+  // which a recent check answers from cache.
   const providerId = provider?.id || "";
   const providerUndiscovered = Boolean(provider) && provider?.discovery_status !== "ready";
+  const openCodeHarness = session.execution_harness === "opencode";
   useEffect(() => {
-    if (!serverOwned || !onConfigure || !localProviderActions || !isDesktopWebview() ||
-        !providerId || !providerUndiscovered) return;
+    if (!serverOwned || !onConfigure || !localProviderActions || !isDesktopWebview()) return;
+    const ids = [providerUndiscovered ? providerId : "", openCodeHarness ? "opencode" : ""]
+      .filter(Boolean);
+    if (!ids.length) return;
     const controller = new AbortController();
-    void refreshLocalProviderCatalog(providerId, false, controller.signal).catch(() => undefined);
+    for (const id of ids) {
+      void refreshLocalProviderCatalog(id, false, controller.signal).catch(() => undefined);
+    }
     return () => controller.abort();
-  }, [serverOwned, onConfigure, localProviderActions, providerId, providerUndiscovered]);
+  }, [serverOwned, onConfigure, localProviderActions, providerId, providerUndiscovered, openCodeHarness]);
   const settings = draft ?? savedSettings;
   const settingsChanged = Object.entries(storedSettings).some(([key, value]) => settings[key] !== value);
   const invalidRuntimeControl = provider && runtimeControls.find((control) =>

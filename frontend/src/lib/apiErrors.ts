@@ -51,7 +51,7 @@ const KNOWN_ERROR_KOREAN: Record<string, string> = {
   full_access_unsupported_harness: "OpenCode 하네스에서는 전체 액세스를 쓸 수 없어요. 기본 하네스를 고르거나 작업 폴더 쓰기를 써 주세요.",
   persona_in_use: "이 카드를 쓰는 에이전트가 있어요. 에이전트에서 카드를 빼고 다시 지워 주세요.",
   catalog_not_ready: "AI 목록을 확인하는 중이에요. 잠시 뒤 다시 시도해 주세요.",
-  opencode_harness_unavailable: "OpenCode가 아직 준비되지 않았어요. AI 다시 확인을 누른 뒤 다시 시도해 주세요.",
+  opencode_harness_unavailable: "OpenCode를 쓸 수 없어요. 이 컴퓨터에 OpenCode가 설치돼 있고 로그인돼 있는지 확인해 주세요.",
   catalog_changed: "AI 프로그램이 바뀌었어요. AI 다시 확인을 누른 뒤 다시 시도해 주세요.",
   catalog_inconsistent: "AI 목록을 확인하지 못했어요. AI 다시 확인을 누른 뒤 다시 시도해 주세요.",
   workspace_picker_timeout: "폴더 선택 창이 응답하지 않아요. 창을 닫고 다시 시도해 주세요.",
