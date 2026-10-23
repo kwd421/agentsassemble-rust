@@ -11,30 +11,30 @@ use crate::{
 
 impl RemoteOpenAiDriver {
     /// pi-style compaction: past 75% of what the window leaves after the reply
-    /// limit, the older tool rounds of this turn are replaced by the model's own
-    /// summary of them. A fresh usage report follows the next reply.
+    /// limit (a carried room conversation sooner), the oldest part is replaced
+    /// by the model's own summary of it. A fresh usage report follows the next
+    /// reply.
     pub(super) async fn compact(
         &self,
         session: &DurableAgentSession,
         credential: Option<&ProviderCredential>,
         messages: &mut Vec<Value>,
-        opening: usize,
-        context_tokens: u64,
+        window: &mut turn_compaction::Window,
         measured: Option<(usize, u64)>,
     ) -> Result<(), DriverError> {
-        let threshold =
-            turn_compaction::threshold(context_tokens, session.public.max_output_tokens);
-        if turn_compaction::used_tokens(messages, measured) <= threshold {
+        if turn_compaction::used_tokens(messages, measured) <= window.threshold {
             return Ok(());
         }
-        let Some(cut) = turn_compaction::cut_point(messages, opening, threshold) else {
+        let Some((start, cut)) = window.fold_range(messages) else {
             return Ok(());
         };
-        let summary_request = turn_compaction::summary_request(messages, opening, cut);
+        let summary_request =
+            turn_compaction::summary_request(messages, window.turn_input, start, cut);
         let summary = self
             .summarize(session, credential, &summary_request)
             .await?;
-        turn_compaction::fold(messages, opening, cut, &summary);
+        turn_compaction::fold(messages, start, cut, &summary);
+        window.folded(start, cut);
         Ok(())
     }
 

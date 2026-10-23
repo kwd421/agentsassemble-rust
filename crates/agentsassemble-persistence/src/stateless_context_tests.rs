@@ -144,3 +144,60 @@ async fn deleted_vote_does_not_block_the_next_api_message() {
     .unwrap_or_else(|_| panic!("read committed message"));
     assert_eq!(committed, 1);
 }
+
+#[tokio::test]
+async fn a_deleted_message_reopens_the_api_conversation_from_current_rows() {
+    let (store, principal, _directory) = fixture().await;
+    let mut session = stored_session(&store).await;
+    session.public.provider_kind = "deepseek_api".to_owned();
+    session.public.runtime_kind = "api".to_owned();
+    session.public.transport = "https".to_owned();
+    save_stored_session(&store, &session).await;
+    let first = store
+        .execute_message_with_turn(
+            &principal,
+            "carried-secret",
+            "message.send",
+            &json!({"content": "@Terra the door code is 4417"}),
+        )
+        .await
+        .unwrap();
+    let start = running_authority(&store, &first.assignments[0], "carried-turn-1").await;
+    store
+        .complete_agent_turn(
+            "general",
+            AGENT_ID,
+            authority(&start, "carried-turn-1", None),
+            crate::AgentFinalMessage {
+                content: "Noted.",
+                target_agent_id: "",
+                reply_to_event_id: None,
+                attachment_ids: &[],
+            },
+        )
+        .await
+        .unwrap();
+    store
+        .execute_message_mutation(
+            &principal,
+            "carried-delete",
+            "message.delete",
+            &json!({"event_id": first.outcome.event.id}),
+        )
+        .await
+        .unwrap();
+    let second = store
+        .execute_message_with_turn(
+            &principal,
+            "carried-next",
+            "message.send",
+            &json!({"content": "@Terra anything new?"}),
+        )
+        .await
+        .unwrap();
+    let assignment = &second.assignments[0];
+    // The deleted message may sit in the carried conversation, so the turn
+    // reopens from the current window, which no longer has it.
+    assert!(assignment.room_view_delta.is_none());
+    assert!(!assignment.room_view.contains("4417"));
+}

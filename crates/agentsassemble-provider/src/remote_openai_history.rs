@@ -12,9 +12,9 @@ use serde_json::{Value, json};
 use super::{RemoteOpenAiDriver, opening_messages, system_message};
 use crate::{driver::ProviderTurnRequest, turn_compaction};
 
-/// A carried conversation is compacted within this window whatever the model
-/// allows: every turn resends it, so its size is each turn's cost.
-pub(super) const ROOM_CONVERSATION_TOKENS: u64 = 48_000;
+/// A carried conversation is compacted past this many tokens whatever the
+/// model allows: every turn resends it, so its size is each turn's cost.
+const ROOM_COMPACT_AT_TOKENS: u64 = 36_000;
 
 pub(super) struct ConversationHistory {
     messages: Vec<Value>,
@@ -40,7 +40,7 @@ impl ConversationHistory {
 
     /// The messages to go on from, with this turn's room rules and request,
     /// and where compaction may start folding.
-    pub(super) fn resume(
+    fn resume(
         self,
         system: Option<Value>,
         input: &str,
@@ -73,12 +73,9 @@ impl ConversationHistory {
 /// Where a turn starts.
 pub(super) struct TurnStart {
     pub(super) messages: Vec<Value>,
-    /// Compaction folds only what comes after this.
-    pub(super) opening: usize,
+    pub(super) window: turn_compaction::Window,
     /// The provider's usage report for `messages[..covered]`.
     pub(super) measured: Option<(usize, u64)>,
-    /// The window compaction keeps the messages in.
-    pub(super) context_tokens: u64,
 }
 
 impl RemoteOpenAiDriver {
@@ -94,26 +91,32 @@ impl RemoteOpenAiDriver {
         let room = request.room_observation.is_some();
         let continues = room && ConversationHistory::continues(self.history.as_ref(), request);
         let held = if room { self.history.take() } else { None }.filter(|_| continues);
-        let (messages, opening, measured) = if let Some(history) = held {
+        let (messages, fold_from, measured) = if let Some(history) = held {
             history.resume(system_message(session, request), &request.input)
         } else {
             let messages = opening_messages(session, request, memory);
             let opening = messages.len();
             (messages, opening, None)
         };
-        let context_tokens = request
-            .context_tokens
-            .unwrap_or(turn_compaction::UNKNOWN_CONTEXT_TOKENS)
-            .min(if room {
-                ROOM_CONVERSATION_TOKENS
+        let threshold = turn_compaction::threshold(
+            request
+                .context_tokens
+                .unwrap_or(turn_compaction::UNKNOWN_CONTEXT_TOKENS),
+            session.public.max_output_tokens,
+        );
+        let window = turn_compaction::Window {
+            fold_from,
+            turn_input: messages.len() - 1,
+            threshold: if room {
+                threshold.min(ROOM_COMPACT_AT_TOKENS)
             } else {
-                u64::MAX
-            });
+                threshold
+            },
+        };
         TurnStart {
             messages,
-            opening,
+            window,
             measured,
-            context_tokens,
         }
     }
 

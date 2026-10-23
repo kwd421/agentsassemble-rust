@@ -16,8 +16,9 @@ use crate::{
 
 const CONTINUATION: &str = "[Only the room messages since your last turn; the earlier ones are above in this conversation.]";
 
-/// `None` when there is no completed turn to continue from, or when more
-/// arrived than one view holds; the harness then shows the full window.
+/// `None` when there is no completed turn to continue from, when a message was
+/// edited or deleted since, or when more arrived than one view holds; the
+/// harness then shows the full window.
 pub(super) async fn load_view_delta(
     transaction: &mut Transaction<'_, Sqlite>,
     room: &Room,
@@ -29,6 +30,18 @@ pub(super) async fn load_view_delta(
 ) -> Result<Option<RoomViewDelta>, PersistenceError> {
     let since_seq = session.public.last_provider_sync_seq;
     if session.public.runtime_kind != "api" || since_seq <= 0 || since_seq >= up_to_seq {
+        return Ok(None);
+    }
+    // A message edited or deleted since then may still be in the carried
+    // conversation, so the harness reopens from current rows instead.
+    let rewritten: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM room_events WHERE room_id = ? AND seq > ? AND json_extract(event_json, '$.type') IN ('message_updated', 'message_deleted'))",
+    )
+    .bind(&room.room_id)
+    .bind(since_seq)
+    .fetch_one(&mut **transaction)
+    .await?;
+    if rewritten {
         return Ok(None);
     }
     let rows = sqlx::query(

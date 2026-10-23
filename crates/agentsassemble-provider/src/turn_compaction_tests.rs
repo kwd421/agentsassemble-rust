@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 
 use super::{
-    IMAGE_TOKENS, bounded_summary, cut_point, estimate_tokens, fold, summary_request, threshold,
-    used_tokens,
+    IMAGE_TOKENS, Window, bounded_summary, cut_point, estimate_tokens, fold, summary_request,
+    threshold, used_tokens,
 };
 
 fn round(index: usize, output: &str) -> [Value; 2] {
@@ -54,7 +54,7 @@ fn folding_keeps_rules_input_and_whole_recent_rounds() {
         cut < messages.len() - 2,
         "more than the latest round is kept"
     );
-    let request = summary_request(&messages, 2, cut);
+    let request = summary_request(&messages, 1, 2, cut);
     let asked = request[1]["content"].as_str().unwrap_or_default();
     assert!(asked.starts_with("Task:\nfix the build"));
     assert!(asked.contains("Called run_workspace_command({\"command\":\"step 0\"})"));
@@ -108,8 +108,50 @@ fn an_image_counts_as_a_fixed_cost_not_its_base64_bytes() {
         (IMAGE_TOKENS..IMAGE_TOKENS + 100).contains(&tokens),
         "{tokens}"
     );
-    let request = summary_request(&[json!({"role": "user", "content": "task"}), image], 1, 2);
+    let request = summary_request(
+        &[json!({"role": "user", "content": "task"}), image],
+        0,
+        1,
+        2,
+    );
     let work = request[1]["content"].as_str().unwrap();
     assert!(work.contains("Shown: Images returned by the room tool calls above. [image]"));
     assert!(!work.contains("AAAA"));
+}
+
+#[test]
+fn a_carried_conversation_folds_earlier_turns_before_the_current_request() {
+    // rules, three earlier turns of one round each, then this turn's request.
+    let mut messages = vec![json!({"role": "system", "content": "room rules"})];
+    for index in 0..3 {
+        messages.push(json!({"role": "user", "content": format!("turn {index}")}));
+        messages.extend(round(index, &"x".repeat(30_000)));
+    }
+    messages.push(json!({"role": "user", "content": "this turn"}));
+    let turn_input = messages.len() - 1;
+    let mut window = Window {
+        fold_from: 1,
+        turn_input,
+        threshold: 30_000,
+    };
+    let (start, cut) = window.fold_range(&messages).unwrap();
+    // The latest earlier turn and the current request stay word for word.
+    assert_eq!(start, 1);
+    assert!(cut < turn_input && messages[cut]["role"] == "assistant");
+    let asked = summary_request(&messages, turn_input, start, cut);
+    assert!(
+        asked[1]["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("Task:\nthis turn")
+    );
+    fold(&mut messages, start, cut, "earlier turns");
+    window.folded(start, cut);
+    assert_eq!(messages[window.turn_input]["content"], "this turn");
+    // With only the summary and one earlier turn left before the request,
+    // further folding takes the turn's own rounds instead.
+    messages.extend(round(9, &"y".repeat(30_000)));
+    messages.extend(round(10, &"z".repeat(30_000)));
+    let (start, _) = window.fold_range(&messages).unwrap();
+    assert!(start == 1 || start == window.turn_input + 1);
 }

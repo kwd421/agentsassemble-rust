@@ -256,9 +256,8 @@ impl RemoteOpenAiDriver {
         let tools = self.turn_tools(session, request);
         let history::TurnStart {
             mut messages,
-            opening,
+            mut window,
             mut measured,
-            context_tokens,
         } = self.turn_start(session, request, memory);
         // What the turn used, for its owner's usage line.
         // An unknown window is shown as unknown, not as the compaction guess.
@@ -273,8 +272,7 @@ impl RemoteOpenAiDriver {
                 session,
                 credential.as_ref(),
                 &mut messages,
-                opening,
-                context_tokens,
+                &mut window,
                 measured,
             )
             .await?;

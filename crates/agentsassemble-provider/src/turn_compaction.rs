@@ -82,6 +82,37 @@ pub(crate) fn used_tokens(messages: &[Value], measured: Option<(usize, u64)>) ->
     }
 }
 
+/// What a turn may fold: older turns from `fold_from` up to its request at
+/// `turn_input`, then its own rounds after the request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Window {
+    pub(crate) fold_from: usize,
+    pub(crate) turn_input: usize,
+    pub(crate) threshold: u64,
+}
+
+impl Window {
+    /// The range to fold: earlier turns first, keeping the latest of them and
+    /// the turn's own request; only then the turn's older rounds.
+    pub(crate) fn fold_range(&self, messages: &[Value]) -> Option<(usize, usize)> {
+        if self.fold_from < self.turn_input
+            && let Some(cut) =
+                cut_point(&messages[..self.turn_input], self.fold_from, self.threshold)
+        {
+            return Some((self.fold_from, cut));
+        }
+        let rounds = self.turn_input + 1;
+        cut_point(messages, rounds, self.threshold).map(|cut| (rounds, cut))
+    }
+
+    /// After folding `start..cut` into one message.
+    pub(crate) fn folded(&mut self, start: usize, cut: usize) {
+        if cut <= self.turn_input {
+            self.turn_input -= cut - start - 1;
+        }
+    }
+}
+
 /// Where the kept messages start. A round is one assistant message and the
 /// tool results that answer it, so a tool call never loses its result. The
 /// latest round is always kept; `None` means nothing older can be folded.
@@ -106,16 +137,17 @@ pub(crate) fn cut_point(messages: &[Value], opening: usize, threshold: u64) -> O
     (starts[0] < cut).then_some(cut)
 }
 
-/// The request that asks the model for a summary of `messages[opening..cut]`.
-pub(crate) fn summary_request(messages: &[Value], opening: usize, cut: usize) -> Vec<Value> {
-    let task = messages[..opening]
-        .iter()
-        .rev()
-        .find(|message| message["role"] == "user")
-        .and_then(|message| message["content"].as_str())
-        .unwrap_or_default();
+/// The request that asks the model for a summary of `messages[start..cut]`
+/// for the turn whose request is `messages[turn_input]`.
+pub(crate) fn summary_request(
+    messages: &[Value],
+    turn_input: usize,
+    start: usize,
+    cut: usize,
+) -> Vec<Value> {
+    let task = messages[turn_input]["content"].as_str().unwrap_or_default();
     let mut work = String::new();
-    for message in &messages[opening..cut] {
+    for message in &messages[start..cut] {
         let content = message_text(message);
         match message["role"].as_str() {
             Some("assistant") => {
