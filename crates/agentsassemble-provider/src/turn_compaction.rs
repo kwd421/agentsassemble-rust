@@ -14,14 +14,51 @@ const KEEP_RECENT_TOKENS: u64 = 20_000;
 
 const SUMMARY_INSTRUCTIONS: &str = "You summarize an agent's work in progress so it can continue in a smaller context. Write a concise summary of the work so far: what was done, what the tools returned that still matters, exact file paths, names, values and error codes, and what remains to do for the task. Do not invent anything and do not continue the work yourself.";
 
+/// What one image costs a vision model, roughly; its base64 size says nothing.
+const IMAGE_TOKENS: u64 = 1_500;
+
 /// About three bytes of request JSON per token: it over-counts English and
 /// roughly matches Korean, so the estimate errs toward compacting early.
 pub(crate) fn estimate_tokens(messages: &[Value]) -> u64 {
-    let bytes: usize = messages
+    messages
         .iter()
-        .map(|message| serde_json::to_vec(message).map_or(0, |bytes| bytes.len()))
-        .sum();
-    u64::try_from(bytes).unwrap_or(u64::MAX) / 3
+        .map(message_tokens)
+        .fold(0, u64::saturating_add)
+}
+
+fn message_tokens(message: &Value) -> u64 {
+    let bytes = |value: &Value| {
+        u64::try_from(serde_json::to_vec(value).map_or(0, |bytes| bytes.len())).unwrap_or(u64::MAX)
+    };
+    let Some(parts) = message["content"].as_array() else {
+        return bytes(message) / 3;
+    };
+    let images = parts.iter().filter(|part| is_image(part)).count();
+    let text: Vec<&Value> = parts.iter().filter(|part| !is_image(part)).collect();
+    (bytes(&message["role"]) + bytes(&json!(text))) / 3
+        + IMAGE_TOKENS.saturating_mul(u64::try_from(images).unwrap_or(u64::MAX))
+}
+
+fn is_image(part: &Value) -> bool {
+    part["type"] == "image_url"
+}
+
+/// A message's text, with each image shown as a placeholder.
+fn message_text(message: &Value) -> String {
+    match message["content"].as_array() {
+        Some(parts) => parts
+            .iter()
+            .map(|part| {
+                if is_image(part) {
+                    "[image]"
+                } else {
+                    part["text"].as_str().unwrap_or_default()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        None => message["content"].as_str().unwrap_or_default().to_owned(),
+    }
 }
 
 /// Compaction starts at 75% of what the window leaves after the reply limit.
@@ -75,7 +112,7 @@ pub(crate) fn summary_request(messages: &[Value], opening: usize, cut: usize) ->
         .unwrap_or_default();
     let mut work = String::new();
     for message in &messages[opening..cut] {
-        let content = message["content"].as_str().unwrap_or_default();
+        let content = message_text(message);
         match message["role"].as_str() {
             Some("assistant") => {
                 if !content.is_empty() {
@@ -93,6 +130,10 @@ pub(crate) fn summary_request(messages: &[Value], opening: usize, cut: usize) ->
             }
             Some("tool") => {
                 let _ = writeln!(work, "Result: {content}");
+            }
+            // The images a vision model was shown after its tool results.
+            Some("user") if message["content"].is_array() => {
+                let _ = writeln!(work, "Shown: {content}");
             }
             _ => {
                 let _ = writeln!(work, "Earlier summary: {content}");

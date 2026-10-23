@@ -61,6 +61,7 @@ async fn correlates_session_and_turn_receipts() {
             "room-session",
             &crate::driver::ProviderTurnRequest {
                 context_tokens: None,
+                vision: false,
                 owner_started: false,
                 memory: None,
                 session_instructions: Some("fixed card".to_owned()),
@@ -109,6 +110,7 @@ async fn owner_answers_wait_for_native_delivery_and_durable_receipts() {
         let (ingress, mut commands) = ProviderRequestIngress::channel(4);
         let request = crate::driver::ProviderTurnRequest {
             context_tokens: None,
+            vision: false,
             owner_started: false,
             memory: None,
             session_instructions: None,

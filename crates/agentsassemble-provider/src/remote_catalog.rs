@@ -274,6 +274,25 @@ pub fn model_context_tokens(
     provider_kind: &str,
     model: &str,
 ) -> Option<u64> {
+    model_metadata(catalog, provider_kind, model, "context_length")?.as_u64()
+}
+
+/// Whether the provider's catalog says the model takes images.
+#[must_use]
+pub fn model_supports_vision(
+    catalog: &agentsassemble_domain::ProviderCatalog,
+    provider_kind: &str,
+    model: &str,
+) -> bool {
+    model_metadata(catalog, provider_kind, model, "vision").and_then(Value::as_bool) == Some(true)
+}
+
+fn model_metadata<'a>(
+    catalog: &'a agentsassemble_domain::ProviderCatalog,
+    provider_kind: &str,
+    model: &str,
+    key: &str,
+) -> Option<&'a Value> {
     catalog
         .providers
         .iter()
@@ -285,8 +304,7 @@ pub fn model_context_tokens(
         .iter()
         .find(|option| option.value == model)?
         .metadata
-        .get("context_length")?
-        .as_u64()
+        .get(key)
 }
 
 #[cfg(test)]

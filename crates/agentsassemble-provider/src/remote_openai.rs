@@ -4,7 +4,7 @@ use agentsassemble_domain::{DurableAgentSession, MAX_MESSAGE_CHARACTERS};
 use reqwest::{Client, Url};
 use rmcp::{
     RoleClient, ServiceExt,
-    model::{CallToolRequestParams, CallToolResult, Tool},
+    model::{CallToolRequestParams, Tool},
     service::RunningService,
     transport::{
         StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
@@ -76,12 +76,6 @@ struct RemoteOpenAiApi {
     client: Client,
     endpoint: Url,
     session_endpoint_authority: Option<String>,
-}
-
-struct ExecutedTool {
-    call: ToolCall,
-    result: String,
-    terminal: bool,
 }
 
 impl RemoteOpenAiDriver {
@@ -377,6 +371,7 @@ impl RemoteOpenAiDriver {
             message.tool_calls = executed.iter().map(|item| item.call.clone()).collect();
             messages.push(assistant_value(&message, self.spec.retain_reasoning));
             messages.extend(executed.iter().map(tool_value));
+            messages.extend(images_message(&executed));
             measured = reported;
             if executed.last().is_some_and(|item| item.terminal) {
                 return Ok(completed(
@@ -426,6 +421,7 @@ impl RemoteOpenAiDriver {
             return Ok(ExecutedTool {
                 call,
                 result,
+                images: Vec::new(),
                 terminal: false,
             });
         }
@@ -450,10 +446,12 @@ impl RemoteOpenAiDriver {
             return Ok(ExecutedTool {
                 call,
                 result,
+                images: Vec::new(),
                 terminal: false,
             });
         }
-        self.execute_tool(call, random_tools).await
+        self.execute_room_tool(call, random_tools, request.vision)
+            .await
     }
 
     fn turn_tools(
@@ -482,6 +480,16 @@ impl RemoteOpenAiDriver {
         call: ToolCall,
         random_tools: bool,
     ) -> Result<ExecutedTool, DriverError> {
+        self.execute_room_tool(call, random_tools, false).await
+    }
+
+    /// `vision`: the model takes images, so an image result is shown to it.
+    async fn execute_room_tool(
+        &mut self,
+        call: ToolCall,
+        random_tools: bool,
+        vision: bool,
+    ) -> Result<ExecutedTool, DriverError> {
         // A tool this room does not offer, or arguments that are not an object, is the model
         // getting it wrong, not the transport breaking. Nothing reached the room, so report it
         // the way a rejected room tool is reported and let the same turn correct itself.
@@ -489,6 +497,7 @@ impl RemoteOpenAiDriver {
             return Ok(ExecutedTool {
                 call,
                 result: tool_error_text("room_tool_unavailable"),
+                images: Vec::new(),
                 terminal: false,
             });
         }
@@ -497,6 +506,7 @@ impl RemoteOpenAiDriver {
             return Ok(ExecutedTool {
                 call,
                 result: tool_error_text("room_tool_arguments_invalid"),
+                images: Vec::new(),
                 terminal: false,
             });
         };
@@ -520,9 +530,11 @@ impl RemoteOpenAiDriver {
             self.turn_effect_uncertain = previous_effect_uncertain;
         }
         let terminal = terminal_action && result.is_error != Some(true);
+        let (result, images) = tool_result_text(&result, self.spec, vision)?;
         Ok(ExecutedTool {
             call,
-            result: tool_result_text(&result, self.spec)?,
+            result,
+            images,
             terminal,
         })
     }
@@ -874,58 +886,6 @@ fn validate_completion(
     Ok(())
 }
 
-/// The shape the room already returns for a rejected tool, so one reader covers both.
-fn tool_error_text(code: &str) -> String {
-    json!({"ok": false, "error": {"code": code}}).to_string()
-}
-
-fn tool_result_text(
-    result: &CallToolResult,
-    spec: &RemoteOpenAiSpec,
-) -> Result<String, DriverError> {
-    let mut text = String::new();
-    for (index, content) in result.content.iter().enumerate() {
-        let Some(part) = content.as_text() else {
-            // This transport carries text tool results, not media. Report the
-            // limitation to the model without claiming the attachment was read.
-            return Ok(json!({"ok": false, "error": {
-                "code": "room_tool_media_unsupported",
-                "message": "This API transport cannot deliver image or binary tool results. The attachment content was not delivered; explain this limitation instead of claiming to have read it."
-            }}).to_string());
-        };
-        if text
-            .len()
-            .saturating_add(usize::from(index > 0))
-            .saturating_add(part.text.len())
-            > MAX_TOOL_RESULT_BYTES
-        {
-            return Ok(json!({"ok": false, "error": {
-                "code": "room_tool_result_too_large",
-                "message": "The tool result exceeds this API transport's byte limit and was not delivered. Narrow the search when possible, or explain the limitation; do not claim to have read the omitted content.",
-                "max_bytes": MAX_TOOL_RESULT_BYTES
-            }}).to_string());
-        }
-        if index > 0 {
-            text.push('\n');
-        }
-        text.push_str(&part.text);
-    }
-    if result.is_error == Some(true) {
-        // Local MCP owners already expose public errors, never raw provider failures.
-        return Ok(json!({"ok": false, "error": {
-            "code": "room_tool_rejected", "message": text
-        }})
-        .to_string());
-    }
-    if text.is_empty() {
-        return Err(provider_error(
-            "provider_tool_call_invalid",
-            spec.errors.invalid_tool_call,
-        ));
-    }
-    Ok(text)
-}
-
 fn assistant_value(message: &AssistantMessage, retain_reasoning: bool) -> Value {
     let mut value = json!({
         "role": "assistant",
@@ -936,15 +896,6 @@ fn assistant_value(message: &AssistantMessage, retain_reasoning: bool) -> Value 
         value["reasoning_content"] = json!(message.reasoning_content);
     }
     value
-}
-
-fn tool_value(executed: &ExecutedTool) -> Value {
-    json!({
-        "role": "tool",
-        "tool_call_id": executed.call.id,
-        "name": executed.call.function.name,
-        "content": executed.result,
-    })
 }
 
 fn completed(
@@ -975,6 +926,9 @@ fn canonical_content(value: &str) -> Option<String> {
 
 #[path = "remote_openai_summaries.rs"]
 mod summaries;
+#[path = "remote_openai_tool_results.rs"]
+mod tool_results;
+use tool_results::{ExecutedTool, images_message, tool_error_text, tool_result_text, tool_value};
 
 #[cfg(test)]
 #[path = "deepseek_tests.rs"]

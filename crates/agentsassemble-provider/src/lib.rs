@@ -126,7 +126,7 @@ pub use provider_request_exchange::{
 };
 pub use provider_request_ingress::{ProviderRequestCommand, ProviderRequestIngress};
 pub use registration::{registered_provider_id, registered_provider_kind};
-pub use remote_catalog::model_context_tokens;
+pub use remote_catalog::{model_context_tokens, model_supports_vision};
 pub use room_attachment::{
     ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,
     ProviderAttachmentReadIngress, attachment_tool_result,

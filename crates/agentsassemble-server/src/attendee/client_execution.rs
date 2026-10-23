@@ -96,6 +96,7 @@ impl AttendeeRuntime {
         }
         let request = ProviderTurnRequest {
             context_tokens: None,
+            vision: false,
             owner_started: false,
             memory: None,
             session_instructions: Some(COMPANION_INSTRUCTIONS.into()),

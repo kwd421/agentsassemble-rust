@@ -72,6 +72,7 @@ async fn opencode_live_free_model_turn_completes() -> Result<(), Box<dyn std::er
     let active = active_session(&session, &started, "live-turn-1");
     let request = ProviderTurnRequest {
         context_tokens: None,
+        vision: false,
         owner_started: false,
         memory: None,
         session_instructions: Some("You are a live test room member.".to_owned()),
@@ -172,6 +173,7 @@ async fn opencode_live_read_only_turn_cannot_execute_shell()
     let active = active_session(&session, &started, "live-turn-1");
     let request = ProviderTurnRequest {
         context_tokens: None,
+        vision: false,
         owner_started: false,
         memory: None,
         session_instructions: None,

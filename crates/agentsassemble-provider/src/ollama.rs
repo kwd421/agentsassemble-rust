@@ -120,8 +120,8 @@ async fn discover(
             Ok(details) => details,
             Err(failure) => return failed_provider(provider, failure),
         };
-        if supports_tools(&details) {
-            models.push(model_option(&candidate));
+        if has_capability(&details, "tools") {
+            models.push(model_option(&candidate, has_capability(&details, "vision")));
         }
     }
     if models.is_empty() {
@@ -187,13 +187,14 @@ fn model_entries(output: &str) -> Vec<ModelEntry> {
         .collect()
 }
 
-fn supports_tools(output: &str) -> bool {
+/// Whether `ollama show` lists `capability` under its Capabilities heading.
+fn has_capability(output: &str, capability: &str) -> bool {
     let mut capabilities = false;
     for line in output.lines() {
         let normalized = line.trim().to_ascii_lowercase();
         if normalized == "capabilities" {
             capabilities = true;
-        } else if capabilities && normalized == "tools" {
+        } else if capabilities && normalized == capability {
             return true;
         } else if capabilities
             && !normalized.is_empty()
@@ -206,8 +207,9 @@ fn supports_tools(output: &str) -> bool {
     false
 }
 
-fn model_option(entry: &ModelEntry) -> ProviderControlOption {
+fn model_option(entry: &ModelEntry, vision: bool) -> ProviderControlOption {
     let mut result = option(&entry.value, &ollama_model_label(&entry.value));
+    result.metadata.insert("vision".to_owned(), json!(vision));
     let group = if entry.cloud { "harness" } else { "local" };
     result
         .metadata
@@ -255,7 +257,7 @@ fn ollama_model_label(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ModelEntry, SPEC, model_entries, model_option, ollama_model_label, supports_tools,
+        ModelEntry, SPEC, has_capability, model_entries, model_option, ollama_model_label,
     };
     use crate::{
         credentials::ProviderCredentialStore, driver::ProviderDriver,
@@ -282,22 +284,40 @@ mod tests {
                 },
             ]
         );
-        assert!(supports_tools("Capabilities\n  completion\n  tools\n"));
-        assert!(!supports_tools(
-            "Capabilities\n  completion\nTemplate\n  tools\n"
+        assert!(has_capability(
+            "Capabilities\n  completion\n  tools\n",
+            "tools"
+        ));
+        assert!(!has_capability(
+            "Capabilities\n  completion\nTemplate\n  tools\n",
+            "tools"
+        ));
+        assert!(has_capability(
+            "Capabilities\n  completion\n  vision\n  tools\n",
+            "vision"
+        ));
+        assert!(!has_capability(
+            "Capabilities\n  completion\n  tools\n",
+            "vision"
         ));
     }
 
     #[test]
     fn options_project_cloud_and_local_models_without_changing_provider_identity() {
-        let cloud = model_option(&ModelEntry {
-            value: "nemotron-3-super:cloud".to_owned(),
-            cloud: true,
-        });
-        let local = model_option(&ModelEntry {
-            value: "gemma4:12b".to_owned(),
-            cloud: false,
-        });
+        let cloud = model_option(
+            &ModelEntry {
+                value: "nemotron-3-super:cloud".to_owned(),
+                cloud: true,
+            },
+            false,
+        );
+        let local = model_option(
+            &ModelEntry {
+                value: "gemma4:12b".to_owned(),
+                cloud: false,
+            },
+            true,
+        );
         assert_eq!(cloud.label, "Nemotron 3 Super");
         assert_eq!(cloud.metadata["catalog_group"], "harness");
         assert_eq!(cloud.metadata["execution_location"], "cloud");

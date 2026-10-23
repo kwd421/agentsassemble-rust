@@ -1,6 +1,9 @@
 use serde_json::{Value, json};
 
-use super::{bounded_summary, cut_point, fold, summary_request, threshold, used_tokens};
+use super::{
+    IMAGE_TOKENS, bounded_summary, cut_point, estimate_tokens, fold, summary_request, threshold,
+    used_tokens,
+};
 
 fn round(index: usize, output: &str) -> [Value; 2] {
     [
@@ -92,4 +95,21 @@ fn an_earlier_summary_alone_is_not_folded_again() {
         json!({"role": "user", "content": "Summary of the earlier work"}),
     );
     assert_eq!(cut_point(&messages, 2, 100_000), None);
+}
+
+#[test]
+fn an_image_counts_as_a_fixed_cost_not_its_base64_bytes() {
+    let image = json!({"role": "user", "content": [
+        {"type": "text", "text": "Images returned by the room tool calls above."},
+        {"type": "image_url", "image_url": {"url": format!("data:image/png;base64,{}", "A".repeat(3_000_000))}},
+    ]});
+    let tokens = estimate_tokens(std::slice::from_ref(&image));
+    assert!(
+        (IMAGE_TOKENS..IMAGE_TOKENS + 100).contains(&tokens),
+        "{tokens}"
+    );
+    let request = summary_request(&[json!({"role": "user", "content": "task"}), image], 1, 2);
+    let work = request[1]["content"].as_str().unwrap();
+    assert!(work.contains("Shown: Images returned by the room tool calls above. [image]"));
+    assert!(!work.contains("AAAA"));
 }

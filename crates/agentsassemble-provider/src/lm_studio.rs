@@ -3,7 +3,7 @@ use crate::runtime_lease::HeldRuntimeLease;
 use std::{collections::HashSet, time::Duration};
 
 use agentsassemble_domain::{DurableAgentSession, ProviderAvailability};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -133,12 +133,17 @@ async fn discover(
     }
     let default_model = models
         .iter()
-        .find(|model| model.as_str() == PREFERRED_MODEL)
+        .find(|(model, _)| model.as_str() == PREFERRED_MODEL)
         .unwrap_or(&models[0])
+        .0
         .clone();
     let options = models
         .into_iter()
-        .map(|model| option(&model, &model_label(&model)))
+        .map(|(model, vision)| {
+            let mut option = option(&model, &model_label(&model));
+            option.metadata.insert("vision".to_owned(), json!(vision));
+            option
+        })
         .collect();
     ready_provider(
         provider,
@@ -169,7 +174,8 @@ fn server_is_running(output: &str) -> bool {
     })
 }
 
-fn tool_models(output: &str) -> Result<Vec<String>, ()> {
+/// Loaded tool models, each with whether it takes images.
+fn tool_models(output: &str) -> Result<Vec<(String, bool)>, ()> {
     let payload = serde_json::from_str::<Value>(output).map_err(|_| ())?;
     let entries = payload.as_array().ok_or(())?;
     let mut seen = HashSet::new();
@@ -185,11 +191,12 @@ fn tool_models(output: &str) -> Result<Vec<String>, ()> {
                 .or_else(|| entry.get("modelKey"))?
                 .as_str()?
                 .trim();
+            let vision = entry.get("vision").and_then(Value::as_bool) == Some(true);
             (!identifier.is_empty()
                 && identifier.len() <= MAX_OPTION_VALUE_BYTES
                 && !identifier.chars().any(char::is_control)
                 && seen.insert(identifier.to_owned()))
-            .then(|| identifier.to_owned())
+            .then(|| (identifier.to_owned(), vision))
         })
         .collect())
 }
@@ -209,7 +216,7 @@ mod tests {
     fn inventory_keeps_loaded_tool_models_and_preserves_order() {
         let models = tool_models(
             r#"[
-                {"type":"llm","identifier":"gemma-4-e4b-it","trainedForToolUse":true},
+                {"type":"llm","identifier":"gemma-4-e4b-it","trainedForToolUse":true,"vision":true},
                 {"type":"llm","modelKey":"fallback-model","trainedForToolUse":true},
                 {"type":"llm","identifier":"plain-model","trainedForToolUse":false},
                 {"type":"embedding","identifier":"embed","trainedForToolUse":true},
@@ -217,7 +224,13 @@ mod tests {
             ]"#,
         )
         .unwrap_or_else(|()| panic!("parse fixture inventory"));
-        assert_eq!(models, ["gemma-4-e4b-it", "fallback-model"]);
+        assert_eq!(
+            models,
+            [
+                ("gemma-4-e4b-it".to_owned(), true),
+                ("fallback-model".to_owned(), false)
+            ]
+        );
         assert!(tool_models("not json").is_err());
         assert!(tool_models("{}").is_err());
     }

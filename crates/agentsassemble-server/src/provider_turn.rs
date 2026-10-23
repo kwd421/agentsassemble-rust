@@ -166,13 +166,17 @@ fn provider_request(
         tabletop_tools: assignment.tabletop_tools,
         room_tool_ingress: Some(ingress.tools),
     });
-    let context_tokens = agentsassemble_provider::model_context_tokens(
-        &ingress.catalog.snapshot(),
+    let catalog = ingress.catalog.snapshot();
+    let (provider_kind, model) = (
         &assignment.session.public.provider_kind,
         &assignment.session.public.model,
     );
+    let context_tokens =
+        agentsassemble_provider::model_context_tokens(&catalog, provider_kind, model);
+    let vision = agentsassemble_provider::model_supports_vision(&catalog, provider_kind, model);
     ProviderTurnRequest {
         context_tokens,
+        vision,
         owner_started: assignment.owner_started,
         memory: assignment.memory.as_ref().map(|memory| {
             agentsassemble_provider::ProviderTurnMemory {

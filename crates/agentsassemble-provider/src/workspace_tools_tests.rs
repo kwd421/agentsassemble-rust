@@ -120,6 +120,7 @@ async fn writes_require_exact_owner_response_and_delivery_receipt() -> Result<()
     let (ingress, mut commands) = ProviderRequestIngress::channel(1);
     let request = ProviderTurnRequest {
         context_tokens: None,
+        vision: false,
         owner_started: false,
         memory: None,
         session_instructions: None,
@@ -344,6 +345,7 @@ async fn file_result_budget_preserves_unicode_and_escaped_partial_results()
             .map_err(|_| "workspace")?;
     let request = ProviderTurnRequest {
         context_tokens: None,
+        vision: false,
         owner_started: false,
         memory: None,
         session_instructions: None,

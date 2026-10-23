@@ -210,6 +210,11 @@ fn model_options(payload: Value) -> Result<Vec<ProviderControlOption>, RemoteCat
                 .metadata
                 .insert("context_length".to_owned(), json!(context));
         }
+        // Gemini chat models take images; the speech-only ones do not.
+        option.metadata.insert(
+            "vision".to_owned(),
+            json!(id.starts_with("gemini-") && !id.contains("tts")),
+        );
         options.push(option);
     }
     bound_catalog_options(options)

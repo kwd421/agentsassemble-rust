@@ -16,6 +16,8 @@ pub(super) struct TurnInput {
     #[serde(default)]
     pub(super) context_tokens: Option<u64>,
     #[serde(default)]
+    pub(super) vision: bool,
+    #[serde(default)]
     pub(super) owner_started: bool,
     #[serde(default)]
     pub(super) memory: Option<crate::driver::ProviderTurnMemory>,
@@ -38,6 +40,7 @@ impl TurnInput {
     pub(super) fn into_request(self, relay: &super::callbacks::Callbacks) -> ProviderTurnRequest {
         ProviderTurnRequest {
             context_tokens: self.context_tokens,
+            vision: self.vision,
             owner_started: self.owner_started,
             memory: self.memory,
             request_ingress: self.requests.then(|| relay.requests.clone()),
@@ -70,6 +73,7 @@ impl From<&ProviderTurnRequest> for TurnInput {
             session_instructions: request.session_instructions.clone(),
             requests: request.request_ingress.is_some(),
             context_tokens: request.context_tokens,
+            vision: request.vision,
             owner_started: request.owner_started,
             memory: request.memory.clone(),
             observation: request
@@ -103,6 +107,7 @@ mod tests {
         };
         let request = ProviderTurnRequest {
             context_tokens: Some(131_072),
+            vision: false,
             owner_started: true,
             memory: Some(memory.clone()),
             request_ingress: None,

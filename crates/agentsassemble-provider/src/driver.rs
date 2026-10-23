@@ -126,6 +126,9 @@ pub struct ProviderTurnRequest {
     /// The model's context window from the provider catalog, when published;
     /// the built-in harness compacts a long turn to fit it.
     pub context_tokens: Option<u64>,
+    /// The model takes images, per the provider catalog; the built-in harness
+    /// then shows image attachments its room tools return.
+    pub vision: bool,
     /// Every message this turn answers came from the agent's owner; full
     /// access runs without asking only then.
     pub owner_started: bool,

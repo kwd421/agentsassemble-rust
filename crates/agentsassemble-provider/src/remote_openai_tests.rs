@@ -140,6 +140,7 @@ async fn api_fixture(
 fn room_request(session_id: &str) -> ProviderTurnRequest {
     ProviderTurnRequest {
         context_tokens: None,
+        vision: false,
         owner_started: false,
         memory: None,
         session_instructions: None,
@@ -259,6 +260,25 @@ async fn room_turn_with_observation(
     workspace: Option<&std::path::Path>,
     observation: Option<ProviderRoomObservation>,
 ) -> (Result<ProviderTurnOutcome, DriverError>, Vec<Value>) {
+    room_turn_with(
+        spec,
+        requested_model,
+        responses,
+        workspace,
+        observation,
+        false,
+    )
+    .await
+}
+
+async fn room_turn_with(
+    spec: &'static RemoteOpenAiSpec,
+    requested_model: &str,
+    responses: Vec<String>,
+    workspace: Option<&std::path::Path>,
+    observation: Option<ProviderRoomObservation>,
+    vision: bool,
+) -> (Result<ProviderTurnOutcome, DriverError>, Vec<Value>) {
     let (endpoint, mut captured, server) = api_fixture(responses).await;
     let credentials = ProviderCredentialStore::isolated_test_store();
     credentials
@@ -297,6 +317,7 @@ async fn room_turn_with_observation(
         .unwrap_or_else(|error| panic!("attach session: {error}"));
     let mut request = room_request(&session.public.session_id);
     request.session_instructions = Some("room rules and fixed card".to_owned());
+    request.vision = vision;
     if let Some(observation) = observation {
         request.room_observation = Some(observation);
     }

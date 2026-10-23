@@ -91,6 +91,81 @@ async fn attachment_results_reach_api_and_preserve_turn_completion() {
 }
 
 #[tokio::test]
+async fn a_vision_model_sees_an_image_attachment_right_after_the_tool_result() {
+    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6N8AAAAASUVORK5CYII=";
+    for (content, content_type, is_image, image) in [
+        (
+            base64::engine::general_purpose::STANDARD
+                .decode(PNG)
+                .unwrap(),
+            "image/png",
+            true,
+            true,
+        ),
+        (vec![255, 0, 254], "application/octet-stream", false, false),
+    ] {
+        let id = "ma_00000000000000000000000000000001".to_owned();
+        let (ingress, mut commands) = ProviderAttachmentReadIngress::channel(1);
+        let attachment = ProviderAttachment {
+            path: None,
+            id: id.clone(),
+            filename: "shot.png".to_owned(),
+            content_type: content_type.to_owned(),
+            size: content.len(),
+            is_image,
+            content: content.into(),
+        };
+        let owner = tokio::spawn(async move {
+            let command = commands.recv().await.unwrap();
+            command.complete(Ok(attachment));
+        });
+        let mut observation = room_request("session").room_observation.unwrap();
+        observation.view = format!("#1 Human: look at {id}");
+        observation.attachment_ids = vec![id.clone()];
+        observation.attachment_ingress = Some(ingress);
+        let (outcome, bodies) = room_turn_with(
+            &DEEPSEEK_SPEC,
+            "deepseek-chat",
+            vec![
+                tool_stream("deepseek-chat", "read_discussion", "tool_calls"),
+                input_stream("read_attachment", &json!({"attachment_id": id})),
+                tool_stream("deepseek-chat", "publish_message", "tool_calls"),
+            ],
+            None,
+            Some(observation),
+            true,
+        )
+        .await;
+        owner.await.unwrap();
+        assert!(outcome.is_ok(), "{outcome:?}");
+        let messages = bodies[2]["messages"].as_array().unwrap();
+        let tool = messages
+            .iter()
+            .position(|m| m["role"] == "tool" && m["name"] == "read_attachment")
+            .unwrap();
+        let shown = &messages[tool + 1..];
+        if image {
+            assert!(
+                messages[tool]["content"]
+                    .as_str()
+                    .unwrap()
+                    .contains("next message")
+            );
+            assert_eq!(shown[0]["role"], "user");
+            assert_eq!(
+                shown[0]["content"][1]["image_url"]["url"],
+                format!("data:image/png;base64,{PNG}")
+            );
+        } else {
+            let value: Value =
+                serde_json::from_str(messages[tool]["content"].as_str().unwrap()).unwrap();
+            assert_eq!(value["error"]["code"], "room_tool_media_unsupported");
+            assert!(shown.iter().all(|m| !m["content"].is_array()));
+        }
+    }
+}
+
+#[tokio::test]
 async fn search_over_huge_messages_reaches_api_as_previews_instead_of_failing() {
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(1);
     let owner = tokio::spawn(async move {

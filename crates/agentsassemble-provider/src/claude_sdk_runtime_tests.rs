@@ -23,6 +23,7 @@ async fn fatal_protocol_does_not_mask_confirmed_owned_cleanup() {
             "room-session",
             &crate::driver::ProviderTurnRequest {
                 context_tokens: None,
+                vision: false,
                 owner_started: false,
                 memory: None,
                 session_instructions: None,
@@ -45,6 +46,7 @@ async fn fatal_protocol_does_not_mask_confirmed_owned_cleanup() {
                 "room-session",
                 &crate::driver::ProviderTurnRequest {
                     context_tokens: None,
+                    vision: false,
                     owner_started: false,
                     memory: None,
                     session_instructions: None,
