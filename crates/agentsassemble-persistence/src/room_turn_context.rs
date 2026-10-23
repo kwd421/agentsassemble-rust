@@ -122,20 +122,7 @@ pub(super) async fn prepare_room_input(
         &persona_context,
         persistent,
     );
-    if delivery_kind == RoomInputDeliveryKind::FreeAccessMention
-        || settings.conversation_mode == "free_access"
-    {
-        let _ = write!(
-            provider_input,
-            "\nCurrent room conversation mode: {}.\n",
-            settings.conversation_mode
-        );
-        provider_input.push_str(if delivery_kind == RoomInputDeliveryKind::FreeAccessMention {
-            "You were called because you were explicitly mentioned. In free_access, nobody prompts you otherwise.\n"
-        } else {
-            "This turn completes work queued before the mode changed. In free_access, new messages prompt you only when they explicitly mention you.\n"
-        });
-    }
+    append_free_access_note(&mut provider_input, delivery_kind, settings);
     if !is_room_observation_view(&room_view)
         || !is_provider_input(&provider_input)
         || !is_provider_input(&format!(
@@ -149,23 +136,7 @@ pub(super) async fn prepare_room_input(
             "The canonical room observation exceeds its provider-visible bound.",
         ));
     }
-    // Full access runs without asking only in a turn the agent's owner started:
-    // every message this turn answers speaks for the owner.
-    let owner = load_participant(transaction, &room.room_id, &session.public.participant_id)
-        .await?
-        .owner_id;
-    let mut owner_started = !owner.is_empty();
-    for pending in &inflight {
-        if owner_started {
-            owner_started = speaks_for_owner(
-                transaction,
-                &owner,
-                &session.trusted_ai_owners,
-                &pending.event,
-            )
-            .await?;
-        }
-    }
+    let owner_started = owner_started_turn(transaction, &room.room_id, session, &inflight).await?;
     // Memory reaches back before the oldest message this turn shows.
     let oldest_shown = context.first().map_or(source.event.seq, |event| event.seq);
     let recent = context
@@ -199,6 +170,59 @@ pub(super) async fn prepare_room_input(
 /// in a turn that was itself owner-started. Work handed between the owner's
 /// AIs keeps the owner's word; a chain anyone else began never gains it.
 /// An AI added by a person the owner trusts for this agent counts too.
+/// Full access runs without asking only in a turn the agent's owner started:
+/// every message this turn answers speaks for the owner.
+async fn owner_started_turn(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    session: &DurableAgentSession,
+    inflight: &[&PendingRoomEvent],
+) -> Result<bool, PersistenceError> {
+    let owner = load_participant(transaction, room_id, &session.public.participant_id)
+        .await?
+        .owner_id;
+    if owner.is_empty() {
+        return Ok(false);
+    }
+    for pending in inflight {
+        if !speaks_for_owner(
+            transaction,
+            &owner,
+            &session.trusted_ai_owners,
+            &pending.event,
+        )
+        .await?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// In free access, says why this turn runs: a mention, or work queued before
+/// the mode changed.
+fn append_free_access_note(
+    provider_input: &mut String,
+    delivery_kind: RoomInputDeliveryKind,
+    settings: &RoomSettings,
+) {
+    if delivery_kind != RoomInputDeliveryKind::FreeAccessMention
+        && settings.conversation_mode != "free_access"
+    {
+        return;
+    }
+    let _ = write!(
+        provider_input,
+        "\nCurrent room conversation mode: {}.\n",
+        settings.conversation_mode
+    );
+    provider_input.push_str(if delivery_kind == RoomInputDeliveryKind::FreeAccessMention {
+        "You were called because you were explicitly mentioned. In free_access, nobody prompts you otherwise.\n"
+    } else {
+        "This turn completes work queued before the mode changed. In free_access, new messages prompt you only when they explicitly mention you.\n"
+    });
+}
+
 pub(super) async fn speaks_for_owner(
     transaction: &mut Transaction<'_, Sqlite>,
     owner: &str,
