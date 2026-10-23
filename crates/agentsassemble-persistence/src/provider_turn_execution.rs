@@ -126,6 +126,9 @@ pub struct ProviderTurnAssignmentEnvelope {
     pub provider_input: String,
     pub session_instructions: Option<String>,
     pub room_view: String,
+    /// Left out when absent, so an older app can still read the row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room_view_delta: Option<crate::room_turns::RoomViewDelta>,
     pub attachment_ids: Vec<String>,
     pub room_agent_ids: Vec<String>,
     pub tabletop_tools: bool,

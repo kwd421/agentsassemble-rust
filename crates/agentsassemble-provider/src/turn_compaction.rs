@@ -12,7 +12,11 @@ pub(crate) const UNKNOWN_CONTEXT_TOKENS: u64 = 32_768;
 /// Recent rounds kept word for word, at most (pi's `keepRecentTokens`).
 const KEEP_RECENT_TOKENS: u64 = 20_000;
 
-const SUMMARY_INSTRUCTIONS: &str = "You summarize an agent's work in progress so it can continue in a smaller context. Write a concise summary of the work so far: what was done, what the tools returned that still matters, exact file paths, names, values and error codes, and what remains to do for the task. Do not invent anything and do not continue the work yourself.";
+const SUMMARY_INSTRUCTIONS: &str = "You summarize an agent's conversation and work so far so it can continue in a smaller context. The earlier summary, if any, and everything after it become one updated summary. Keep exactly what the room said and decided, facts, names, numbers, dates and promises, what the tools returned that still matters (file paths, values, error codes), and what remains to do. When something changed later, keep only the latest value and say it changed. Write in the language of the conversation, as short bullet points. Do not invent anything and do not continue the work yourself.";
+/// What a folded conversation starts with; a later fold reads it as the
+/// earlier summary.
+const SUMMARY_PREFIX: &str =
+    "Summary of the earlier conversation and work (older messages were folded to fit the context):";
 
 /// What one image costs a vision model, roughly; its base64 size says nothing.
 const IMAGE_TOKENS: u64 = 1_500;
@@ -135,8 +139,11 @@ pub(crate) fn summary_request(messages: &[Value], opening: usize, cut: usize) ->
             Some("user") if message["content"].is_array() => {
                 let _ = writeln!(work, "Shown: {content}");
             }
-            _ => {
+            _ if content.starts_with(SUMMARY_PREFIX) => {
                 let _ = writeln!(work, "Earlier summary: {content}");
+            }
+            _ => {
+                let _ = writeln!(work, "Request: {content}");
             }
         }
     }
@@ -185,7 +192,7 @@ pub(crate) fn fold(messages: &mut Vec<Value>, opening: usize, cut: usize, summar
         opening..cut,
         [json!({
             "role": "user",
-            "content": format!("Summary of the earlier work in this turn (older tool results were folded to fit the context):\n{summary}"),
+            "content": format!("{SUMMARY_PREFIX}\n{summary}"),
         })],
     );
 }

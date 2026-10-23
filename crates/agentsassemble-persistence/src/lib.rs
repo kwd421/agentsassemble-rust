@@ -328,7 +328,7 @@ pub use room_runtime_cleanup::{RoomRuntimeCleanupKey, RoomRuntimeCleanupPage};
 pub use room_subscription::RoomCatchUp;
 pub use room_turns::{
     AgentFinalMessage, AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority,
-    RoomCommandMutation,
+    RoomCommandMutation, RoomViewDelta,
 };
 pub use room_user_identity::{LocalRoomManagerAuthority, RoomManagerAuthority, RoomUserIdentity};
 pub use room_write_budget::command_size as room_write_command_size;

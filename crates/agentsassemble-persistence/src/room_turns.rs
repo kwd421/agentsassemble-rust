@@ -17,6 +17,15 @@ use crate::{
     room_write_budget::command_size,
 };
 
+/// The room view of what an API agent has not seen yet: the messages after
+/// `since_seq`, the input its last completed turn answered.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoomViewDelta {
+    pub since_seq: i64,
+    pub view: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct AgentTurnAssignment {
     pub session: DurableAgentSession,
@@ -27,6 +36,9 @@ pub struct AgentTurnAssignment {
     pub provider_input: String,
     pub session_instructions: Option<String>,
     pub room_view: String,
+    /// Only the messages since the agent's last completed turn, for a harness
+    /// that still holds the conversation where it saw the rest.
+    pub room_view_delta: Option<RoomViewDelta>,
     pub attachment_ids: Vec<String>,
     pub room_agent_ids: Vec<String>,
     pub tabletop_tools: bool,

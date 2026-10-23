@@ -72,6 +72,8 @@ pub(crate) struct RemoteOpenAiDriver {
     allowed_commands: std::collections::HashSet<String>,
     stopped: bool,
     portal_failed: bool,
+    /// The room conversation the next turn continues, kept until it stops.
+    history: Option<ConversationHistory>,
 }
 
 struct RemoteOpenAiApi {
@@ -191,6 +193,7 @@ impl RemoteOpenAiDriver {
             allowed_commands: std::collections::HashSet::new(),
             stopped: false,
             portal_failed: false,
+            history: None,
         })
     }
 
@@ -251,13 +254,12 @@ impl RemoteOpenAiDriver {
                 .map_err(|_| ROOM_PORTAL_UNAVAILABLE)?;
         }
         let tools = self.turn_tools(session, request);
-        let mut messages = opening_messages(session, request, memory);
-        let opening = messages.len();
-        let context_tokens = request
-            .context_tokens
-            .unwrap_or(turn_compaction::UNKNOWN_CONTEXT_TOKENS);
-        // The provider's own usage report for messages[..covered].
-        let mut measured: Option<(usize, u64)> = None;
+        let history::TurnStart {
+            mut messages,
+            opening,
+            mut measured,
+            context_tokens,
+        } = self.turn_start(session, request, memory);
         // What the turn used, for its owner's usage line.
         // An unknown window is shown as unknown, not as the compaction guess.
         let mut usage = agentsassemble_domain::AgentTurnUsage {
@@ -379,6 +381,7 @@ impl RemoteOpenAiDriver {
             messages.extend(images_message(&executed));
             measured = reported;
             if executed.last().is_some_and(|item| item.terminal) {
+                self.keep_conversation(request, messages, measured);
                 return Ok(completed(
                     request,
                     provider_turn_id,
@@ -659,6 +662,7 @@ impl ProviderDriver for RemoteOpenAiDriver {
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
         Box::pin(async move {
             self.stopped = true;
+            self.history = None;
             self.workspace_tools.cleanup().await?;
             self.attached_session_id = None;
             let client = match std::mem::replace(&mut self.portal_client, PortalClientState::Closed)
@@ -696,10 +700,11 @@ impl ProviderDriver for RemoteOpenAiDriver {
         request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<(), DriverError>> {
         Box::pin(async move {
+            let continues = ConversationHistory::continues(self.history.as_ref(), request);
             self.portal
                 .as_ref()
                 .ok_or(ROOM_PORTAL_UNAVAILABLE)?
-                .begin_turn(request)
+                .begin_turn(&history::portal_request(request, continues))
                 .map_err(DriverError::from)
         })
     }
@@ -808,6 +813,18 @@ fn opening_messages(
     request: &ProviderTurnRequest,
     memory: Option<&str>,
 ) -> Vec<Value> {
+    // Memory is room text, so it travels as quoted information, never with
+    // the authority of the rules above.
+    let memory = memory.map(|memory| format!("{MEMORY_PREFACE}\n\n{memory}"));
+    system_message(session, request)
+        .into_iter()
+        .chain(memory.map(|memory| json!({"role": "user", "content": memory})))
+        .chain([json!({"role": "user", "content": request.input})])
+        .collect()
+}
+
+/// The room rules, workspace rules and vision rule, as the system message.
+fn system_message(session: &DurableAgentSession, request: &ProviderTurnRequest) -> Option<Value> {
     let workspace_rules = matches!(
         session.public.permission_mode.as_str(),
         "workspace_write" | "full_access"
@@ -822,16 +839,7 @@ fn opening_messages(
     .into_iter()
     .flatten()
     .collect();
-    let system = (!parts.is_empty()).then(|| parts.join("\n\n"));
-    // Memory is room text, so it travels as quoted information, never with
-    // the authority of the rules above.
-    let memory = memory.map(|memory| format!("{MEMORY_PREFACE}\n\n{memory}"));
-    system
-        .map(|system| json!({"role": "system", "content": system}))
-        .into_iter()
-        .chain(memory.map(|memory| json!({"role": "user", "content": memory})))
-        .chain([json!({"role": "user", "content": request.input})])
-        .collect()
+    (!parts.is_empty()).then(|| json!({"role": "system", "content": parts.join("\n\n")}))
 }
 
 fn api_tools(tools: &[Tool], random_tools: bool) -> Vec<Value> {
@@ -936,10 +944,13 @@ fn canonical_content(value: &str) -> Option<String> {
     (!value.is_empty() && value.chars().count() <= MAX_MESSAGE_CHARACTERS).then(|| value.to_owned())
 }
 
+#[path = "remote_openai_history.rs"]
+mod history;
 #[path = "remote_openai_summaries.rs"]
 mod summaries;
 #[path = "remote_openai_tool_results.rs"]
 mod tool_results;
+use history::ConversationHistory;
 use tool_results::{
     ExecutedTool, image_budget, images_message, tool_error_text, tool_result_text, tool_value,
 };

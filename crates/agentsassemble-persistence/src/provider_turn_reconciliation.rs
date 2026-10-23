@@ -271,6 +271,7 @@ impl SqliteStore {
             session_instructions: assignment.session_instructions,
             provider_input: assignment.provider_input,
             room_view: assignment.room_view,
+            room_view_delta: assignment.room_view_delta,
             attachment_ids: assignment.attachment_ids,
             room_agent_ids: assignment.room_agent_ids,
             tabletop_tools: assignment.tabletop_tools,
@@ -681,6 +682,10 @@ async fn validate_assignment_envelope(
             assignment.provider_input
         ))
         || !is_room_observation_view(&assignment.room_view)
+        || assignment
+            .room_view_delta
+            .as_ref()
+            .is_some_and(|delta| delta.since_seq <= 0 || !is_room_observation_view(&delta.view))
         || !readable_attachments_match(&assignment.attachment_ids, &expected_attachment_ids)
         || assignment.room_agent_ids.len() > MAX_ROOM_OBSERVATION_AGENT_IDS
         || unique_agent_ids.len() != assignment.room_agent_ids.len()

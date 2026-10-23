@@ -56,15 +56,25 @@ async fn api_turns_preserve_creation_context_after_store_reopen() {
         )
         .await
         .unwrap_or_else(|error| panic!("assign second API turn: {error}"));
-    let room_view = &second
+    let assignment = second
         .assignments
         .first()
-        .unwrap_or_else(|| panic!("second API message must be assigned"))
-        .room_view;
+        .unwrap_or_else(|| panic!("second API message must be assigned"));
+    let room_view = &assignment.room_view;
 
     assert!(room_view.contains("archive project code ORCHID-71"));
     assert!(room_view.contains("Understood."));
     assert!(room_view.contains("which project code did I give you?"));
+    // A harness that still holds the first turn reads only what followed it,
+    // without its own reply.
+    let delta = assignment
+        .room_view_delta
+        .as_ref()
+        .unwrap_or_else(|| panic!("a completed API turn is continued"));
+    assert_eq!(delta.since_seq, first_assignment.session.input_up_to_seq);
+    assert!(delta.view.contains("which project code did I give you?"));
+    assert!(!delta.view.contains("ORCHID-71"));
+    assert!(!delta.view.contains("Understood."));
 }
 
 #[tokio::test]

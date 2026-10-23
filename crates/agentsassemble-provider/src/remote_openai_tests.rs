@@ -158,6 +158,7 @@ fn room_request(session_id: &str) -> ProviderTurnRequest {
             allowed_agent_ids: vec![],
             tabletop_tools: false,
             room_tool_ingress: None,
+            view_delta: None,
         }),
     }
 }
@@ -614,5 +615,7 @@ async fn builtin_workspace_tool_reaches_api_and_preserves_room_terminal_flow() {
     assert!(requests[2]["messages"].to_string().contains("visible.txt"));
 }
 
+#[path = "remote_openai_history_tests.rs"]
+mod history;
 #[path = "remote_openai_tool_result_tests.rs"]
 mod tool_results;

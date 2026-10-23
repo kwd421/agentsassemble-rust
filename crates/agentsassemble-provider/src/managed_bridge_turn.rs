@@ -34,6 +34,8 @@ pub(super) struct Observation {
     pub(super) allowed_agent_ids: Vec<String>,
     pub(super) tabletop_tools: bool,
     pub(super) tools: bool,
+    #[serde(default)]
+    pub(super) view_delta: Option<crate::driver::ProviderRoomViewDelta>,
 }
 
 impl TurnInput {
@@ -58,6 +60,7 @@ impl TurnInput {
                 allowed_agent_ids: observation.allowed_agent_ids,
                 tabletop_tools: observation.tabletop_tools,
                 room_tool_ingress: observation.tools.then(|| relay.tools.clone()),
+                view_delta: observation.view_delta,
             }),
         }
     }
@@ -88,6 +91,7 @@ impl From<&ProviderTurnRequest> for TurnInput {
                     allowed_agent_ids: observation.allowed_agent_ids.clone(),
                     tabletop_tools: observation.tabletop_tools,
                     tools: observation.room_tool_ingress.is_some(),
+                    view_delta: observation.view_delta.clone(),
                 }),
         }
     }

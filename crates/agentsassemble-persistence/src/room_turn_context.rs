@@ -24,6 +24,7 @@ pub(super) struct PreparedRoomInput {
     pub(super) provider_input: String,
     pub(super) session_instructions: Option<String>,
     pub(super) room_view: String,
+    pub(super) room_view_delta: Option<crate::room_turns::RoomViewDelta>,
     pub(super) attachment_ids: Vec<String>,
     pub(super) inflight_inputs: Vec<QueuedRoomInput>,
     pub(super) source_event_id: String,
@@ -74,6 +75,16 @@ pub(super) async fn prepare_room_input(
     let delivery_kind = inflight[0].input.delivery_kind;
     let attachment_ids = readable_attachment_ids(&inflight, &context)?;
     let room_view = render_room_view(room, session, &roster, &context, &reply_previews)?;
+    let room_view_delta = delta::load_view_delta(
+        transaction,
+        room,
+        session,
+        source.event.seq,
+        &inflight,
+        &roster,
+        &mut reply_previews,
+    )
+    .await?;
     let persistent = session.public.runtime_kind == "api"
         || matches!(
             session.public.provider_kind.as_str(),
@@ -161,6 +172,7 @@ pub(super) async fn prepare_room_input(
         session_instructions,
         provider_input,
         room_view,
+        room_view_delta,
         attachment_ids,
         inflight_inputs: inflight
             .iter()
@@ -565,6 +577,31 @@ fn render_room_view<'a>(
     context: impl IntoIterator<Item = &'a RoomEvent>,
     reply_previews: &BTreeMap<String, String>,
 ) -> Result<String, PersistenceError> {
+    let context_floor = if session.public.runtime_kind == "api" {
+        session.public.bootstrap_cutoff_seq
+    } else {
+        session.public.last_provider_sync_seq
+    };
+    render_room_view_from(
+        room,
+        session,
+        roster,
+        context,
+        reply_previews,
+        context_floor,
+    )
+}
+
+/// The room view of `context`, noting when messages after `context_floor`
+/// come before the first one shown.
+fn render_room_view_from<'a>(
+    room: &Room,
+    session: &DurableAgentSession,
+    roster: &RoomRoster,
+    context: impl IntoIterator<Item = &'a RoomEvent>,
+    reply_previews: &BTreeMap<String, String>,
+    context_floor: i64,
+) -> Result<String, PersistenceError> {
     let mut context = context.into_iter().peekable();
     let mut lines = vec![
         format!("Room: {}", room.label),
@@ -591,11 +628,6 @@ fn render_room_view<'a>(
             }
         ),
     ];
-    let context_floor = if session.public.runtime_kind == "api" {
-        session.public.bootstrap_cutoff_seq
-    } else {
-        session.public.last_provider_sync_seq
-    };
     if context
         .peek()
         .is_some_and(|event| event.seq > context_floor.saturating_add(1))
@@ -648,6 +680,9 @@ fn render_room_view<'a>(
     }
     Ok(lines.join("\n"))
 }
+
+#[path = "room_turn_delta.rs"]
+mod delta;
 
 // Projection only: resolve current source in the assignment transaction, never store a quote.
 async fn load_reply_preview(

@@ -10,7 +10,8 @@ pub(crate) use crate::driver::{
     DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
 };
 pub use crate::driver::{
-    ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnMemory, ProviderTurnRequest,
+    ProviderRoomObservation, ProviderRoomViewDelta, ProviderTurnCompleted, ProviderTurnMemory,
+    ProviderTurnRequest,
 };
 use crate::{
     credentials::ProviderCredentialStore,

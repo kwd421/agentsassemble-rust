@@ -655,6 +655,7 @@ fn turn(id: &str, input: &str, observed: bool) -> crate::driver::ProviderTurnReq
             allowed_agent_ids: vec![],
             tabletop_tools: false,
             room_tool_ingress: None,
+            view_delta: None,
         }),
     }
 }

@@ -264,6 +264,7 @@ async fn tool_only_completion_preserves_portal_validation_and_native_authority()
         allowed_agent_ids: vec![],
         tabletop_tools: false,
         room_tool_ingress: None,
+        view_delta: None,
     });
     let completed = super::OpenCodeDriver::completed_from_response(
         &session,

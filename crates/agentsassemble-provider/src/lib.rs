@@ -137,10 +137,10 @@ pub use room_portal::{
 };
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderExactTurnAuthority, ProviderPreparedTurn,
-    ProviderResidentRuntime, ProviderRoomObservation, ProviderRuntimeFailure, ProviderRuntimeGone,
-    ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
-    ProviderStartReservation, ProviderTurnCompleted, ProviderTurnControl,
-    ProviderTurnInterruptDisposition, ProviderTurnMemory, ProviderTurnNotStartedProof,
-    ProviderTurnQuiescence, ProviderTurnRequest,
+    ProviderResidentRuntime, ProviderRoomObservation, ProviderRoomViewDelta,
+    ProviderRuntimeFailure, ProviderRuntimeGone, ProviderRuntimeObservation,
+    ProviderRuntimeStarted, ProviderShutdownOutcome, ProviderStartReservation,
+    ProviderTurnCompleted, ProviderTurnControl, ProviderTurnInterruptDisposition,
+    ProviderTurnMemory, ProviderTurnNotStartedProof, ProviderTurnQuiescence, ProviderTurnRequest,
 };
 pub use selection::{ProviderSelection, ProviderSelectionError, creation_start_requested};

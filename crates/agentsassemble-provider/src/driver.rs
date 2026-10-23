@@ -155,6 +155,16 @@ pub struct ProviderRoomObservation {
     pub allowed_agent_ids: Vec<String>,
     pub tabletop_tools: bool,
     pub room_tool_ingress: Option<ProviderRoomToolIngress>,
+    /// Only the messages after `since_seq`, the input of the agent's last
+    /// completed turn, for a harness that still holds that conversation.
+    pub view_delta: Option<ProviderRoomViewDelta>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderRoomViewDelta {
+    pub since_seq: i64,
+    pub view: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

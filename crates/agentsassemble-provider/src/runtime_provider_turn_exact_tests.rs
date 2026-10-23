@@ -368,6 +368,7 @@ async fn failed_observation_abort_stops_instead_of_reusing_the_runtime() {
             allowed_agent_ids: Vec::new(),
             tabletop_tools: false,
             room_tool_ingress: None,
+            view_delta: None,
         }),
     };
 

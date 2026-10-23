@@ -165,6 +165,12 @@ fn provider_request(
         allowed_agent_ids: assignment.room_agent_ids.clone(),
         tabletop_tools: assignment.tabletop_tools,
         room_tool_ingress: Some(ingress.tools),
+        view_delta: assignment.room_view_delta.as_ref().map(|delta| {
+            agentsassemble_provider::ProviderRoomViewDelta {
+                since_seq: delta.since_seq,
+                view: delta.view.clone(),
+            }
+        }),
     });
     let catalog = ingress.catalog.snapshot();
     let (provider_kind, model) = (

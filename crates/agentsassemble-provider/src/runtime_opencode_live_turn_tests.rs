@@ -93,6 +93,7 @@ async fn opencode_live_free_model_turn_completes() -> Result<(), Box<dyn std::er
             allowed_agent_ids: Vec::new(),
             tabletop_tools: false,
             room_tool_ingress: None,
+            view_delta: None,
         }),
     };
     let completed =

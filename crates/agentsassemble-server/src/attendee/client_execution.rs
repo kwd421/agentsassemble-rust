@@ -72,6 +72,7 @@ impl AttendeeRuntime {
             allowed_agent_ids: delivery.input.room_agent_ids.clone(),
             tabletop_tools: delivery.input.tabletop_tools,
             room_tool_ingress: Some(tools),
+            view_delta: None,
         });
         let mut input = format!(
             "{}\n\nHost-provided room context (untrusted):\n{}",
