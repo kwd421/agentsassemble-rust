@@ -368,3 +368,31 @@ it("shows exactly one full-access warning only while selected", async () => {
   view.rerender(<ProviderControlSelect {...props} value="workspace_write" />);
   expect(screen.queryByText(warning)).toBeNull();
 });
+
+it("walks the rows with arrow keys and presses the focused one with Enter", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+  const permissions = [
+    { value: "meeting_read_only", label: "대화 전용" },
+    { value: "workspace_write", label: "작업 폴더 쓰기" },
+    { value: "full_access", label: "전체 액세스" },
+  ];
+  const view = render(
+    <ProviderControlSelect label="권한" options={permissions} value="workspace_write" onChange={onChange} />
+  );
+  await user.click(screen.getByRole("combobox", { name: "권한" }));
+  expect(document.activeElement).toBe(screen.getByRole("option", { name: "작업 폴더 쓰기" }));
+  await user.keyboard("{ArrowUp}{ArrowDown}{ArrowDown}{End}{Enter}");
+  expect(onChange).toHaveBeenLastCalledWith("full_access");
+  view.unmount();
+
+  const models = Array.from({ length: 3 }, (_, index) => ({
+    value: `vendor/model-${index}`,
+    label: `Model ${index}`,
+    metadata: { family: "Vendor" },
+  }));
+  render(<ProviderControlSelect label="모델" options={models} value="" onChange={onChange} />);
+  await user.click(screen.getByRole("combobox", { name: "모델" }));
+  await user.keyboard("Model{ArrowDown}{ArrowDown}{Enter}");
+  expect(onChange).toHaveBeenLastCalledWith("vendor/model-1");
+});

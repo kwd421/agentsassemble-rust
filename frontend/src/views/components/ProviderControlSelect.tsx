@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { overlayHost } from "../../lib/overlayHost";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Search } from "../../ui/icons";
@@ -20,6 +20,8 @@ import ProviderControlOptionContent, {
   providerControlOptionHasDescription,
 } from "./ProviderControlOptionContent";
 import { useProviderModelDetails } from "./ProviderModelDetailsPopover";
+
+const MENU_ITEMS = ':is([role="option"], [role^="menuitem"])';
 
 export default function ProviderControlSelect({
   label,
@@ -162,13 +164,35 @@ export default function ProviderControlSelect({
 
   useLayoutEffect(() => {
     if (!open || !menuPosition || !menuRef.current) return;
-    const selector = activeGroup
-      ? '[role="option"]'
-      : showModelTools
-        ? 'input[aria-label="모델 검색"]'
-        : '[role="option"], [role^="menuitem"]';
-    menuRef.current.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
+    const menu = menuRef.current;
+    const target = !activeGroup && showModelTools
+      ? menu.querySelector<HTMLElement>('input[aria-label="모델 검색"]')
+      : menu.querySelector<HTMLElement>(`${MENU_ITEMS}[data-selected="true"]`) ??
+        menu.querySelector<HTMLElement>(MENU_ITEMS);
+    target?.focus({ preventScroll: true });
   }, [activeGroup, menuPosition, open, showModelTools]);
+
+  // Arrow keys walk the rows like a native select; Enter and Space press the
+  // focused row because every row is a button.
+  function moveFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const menu = menuRef.current;
+    if (!menu || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    if (event.target instanceof HTMLInputElement && event.key !== "ArrowDown") return;
+    const items = Array.from(menu.querySelectorAll<HTMLButtonElement>(MENU_ITEMS)).filter(
+      (item) => !item.disabled
+    );
+    if (items.length === 0) return;
+    event.preventDefault();
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const search = menu.querySelector<HTMLElement>('input[aria-label="모델 검색"]');
+    const next =
+      event.key === "Home" ? items[0]
+      : event.key === "End" ? items[items.length - 1]
+      : event.key === "ArrowDown" ? items[Math.min(current + 1, items.length - 1)]
+      : current > 0 ? items[current - 1]
+      : search ?? items[0];
+    next.focus();
+  }
 
   function toggleMenu() {
     if (controlDisabled || !buttonRef.current) return;
@@ -252,6 +276,7 @@ export default function ProviderControlSelect({
             ref={menuRef}
             className="dc-agent-select-popover"
             style={menuPosition}
+            onKeyDown={moveFocus}
             onMouseDown={(event) => {
               if (event.target instanceof Element && event.target.closest("button")) {
                 event.preventDefault();
