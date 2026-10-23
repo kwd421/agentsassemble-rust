@@ -588,7 +588,7 @@ mod tests {
         let bytes: Vec<u8> = (0..300_000_u32).map(|value| (value % 251) as u8).collect();
         std::fs::write(&source_path, &bytes)
             .unwrap_or_else(|error| panic!("write staged comparison source: {error}"));
-        let mut check = |staged_bytes: &[u8]| {
+        let check = |staged_bytes: &[u8]| {
             std::fs::write(&staged_path, staged_bytes)
                 .unwrap_or_else(|error| panic!("write staged comparison copy: {error}"));
             let mut source = std::fs::File::open(&source_path)
