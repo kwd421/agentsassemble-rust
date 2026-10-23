@@ -596,11 +596,12 @@
 }
 
 .dc-inline-code {
-  /* Measured on Discord (2026-10-22): a fill just above the chat background
-     with a 1px edge, so the chip reads on dark backgrounds. */
-  border: 1px solid #34343e;
+  /* Started from Discord's measured chip (2026-10-22: #222130 fill, #34343e
+     edge); the owner found that fill too close to the #1a1a1e chat background,
+     so it sits about twice as far above it. */
+  border: 1px solid #40414e;
   border-radius: 4px;
-  background: #222130;
+  background: #2b2c38;
   padding: 1px 4px;
   color: #dbdee1;
   font-family: var(--font-mono);
