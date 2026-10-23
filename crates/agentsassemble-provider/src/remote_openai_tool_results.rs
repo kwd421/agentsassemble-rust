@@ -74,7 +74,7 @@ pub(super) fn tool_result_text(
 ) -> Result<(String, Vec<ToolImage>), DriverError> {
     let mut text = String::new();
     let mut images = Vec::new();
-    let mut budget = image_budget.unwrap_or(0).min(MAX_VISION_IMAGE_BYTES);
+    let mut budget = image_budget.unwrap_or(0);
     for (index, content) in result.content.iter().enumerate() {
         let part = if let Some(part) = content.as_text() {
             part.text.as_str()
@@ -82,11 +82,12 @@ pub(super) fn tool_result_text(
             image_budget.is_some() && VISION_IMAGE_TYPES.contains(&image.mime_type.as_str())
         }) {
             let size = decoded_bytes(&image.data);
-            if size > budget {
+            let limit = budget.min(MAX_VISION_IMAGE_BYTES);
+            if size > limit {
                 return Ok((json!({"ok": false, "error": {
                     "code": "room_tool_image_too_large",
                     "message": "The image is larger than this API request can still carry and was not delivered; explain this limitation instead of claiming to have seen it.",
-                    "max_bytes": budget
+                    "max_bytes": limit
                 }}).to_string(), Vec::new()));
             }
             budget -= size;
