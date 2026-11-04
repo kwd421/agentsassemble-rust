@@ -167,6 +167,7 @@ mod tests {
 printf '%s\n' "$@" > "$0.args"
 printf '%s' "$TUNNEL_CRED_CONTENTS" > "$0.credentials"
 printf '%s' "${TUNNEL_TOKEN-unset}" > "$0.token"
+: > "$0.ready"
 exec /bin/sleep 60
 "#,
         )
@@ -182,30 +183,23 @@ exec /bin/sleep 60
         )
         .await
         .unwrap_or_else(|error| panic!("spawn named tunnel: {error}"));
-        let arguments = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-            loop {
-                if let Ok(arguments) =
-                    tokio::fs::read_to_string(executable.with_extension("args")).await
-                {
-                    return arguments;
-                }
+        // The marker is written last, so every captured file is complete.
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while tokio::fs::metadata(executable.with_extension("ready"))
+                .await
+                .is_err()
+            {
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("fake cloudflared arguments timed out"));
-        let credentials = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-            loop {
-                if let Ok(credentials) =
-                    tokio::fs::read_to_string(executable.with_extension("credentials")).await
-                {
-                    return credentials;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap_or_else(|_| panic!("fake cloudflared credentials timed out"));
+        .unwrap_or_else(|_| panic!("fake cloudflared timed out"));
+        let arguments = tokio::fs::read_to_string(executable.with_extension("args"))
+            .await
+            .unwrap_or_else(|error| panic!("fake cloudflared arguments: {error}"));
+        let credentials = tokio::fs::read_to_string(executable.with_extension("credentials"))
+            .await
+            .unwrap_or_else(|error| panic!("fake cloudflared credentials: {error}"));
         assert!(arguments.contains("--no-autoupdate"));
         assert!(arguments.contains("run"));
         assert!(arguments.contains("http://127.0.0.1:41955"));
