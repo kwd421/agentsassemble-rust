@@ -29,7 +29,10 @@ export function KnownChannels({ names, children }: { names: readonly string[]; c
   return <KnownChannelsContext.Provider value={known}>{children}</KnownChannelsContext.Provider>;
 }
 
-const ROOM_REFERENCE_PATTERN = /(<@[^>\r\n]{1,80}>|@[^\s@#:`*~<>]+|#[^\s@#:`*~<>]+)/gu;
+/// An `@` or `#` right after an address character belongs to an address such as
+/// `a@localhost` (one with a dot is already a mail link), not a mention.
+const ROOM_REFERENCE_PATTERN =
+  /(<@[^>\r\n]{1,80}>|(?<![A-Za-z0-9._%+-])@[^\s@#:`*~<>]+|(?<![A-Za-z0-9._%+-])#[^\s@#:`*~<>]+)/gu;
 
 /// One-line plain text (reply previews, titles): stored `<@participant_id>`
 /// mentions read as `@name`, never the raw id.

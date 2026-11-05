@@ -52,6 +52,16 @@ describe("DiscordText", () => {
     expect(container.querySelector("script")).toBeNull();
   });
 
+  it("leaves the @ inside an email or address as text", () => {
+    const { container } = render(
+      <DiscordText text="kwd421@gmail.com 이나 admin@localhost 로 보내고 @codex 확인해줘, 이거@codex 도" />
+    );
+    const mentions = [...container.querySelectorAll(".dc-mention")].map((node) => node.textContent);
+    expect(mentions).toEqual(["@codex", "@codex"]);
+    expect(container.querySelector("a")?.textContent).toBe("kwd421@gmail.com");
+    expect(container.textContent).toContain("admin@localhost");
+  });
+
   it("renders a durable participant mention with the current display name", () => {
     const { container, rerender } = render(
       <DiscordText
