@@ -35,6 +35,7 @@ mod profile;
 mod projection;
 mod provider_request;
 mod provider_setup;
+mod runtime_profile;
 pub use provider_request::{
     DurableProviderResolution, PendingProviderRequest, PendingProviderRequestState,
     ProviderRequest, ProviderRequestKind, ProviderRequestOption, ProviderRequestPrompt,
@@ -92,7 +93,7 @@ pub use command::{
 pub use diagnostic::redact_persisted_diagnostic_text;
 pub use identity::{
     codex_bundle_identity, codex_code_mode_host_name, stable_bundle_identity,
-    stable_content_identity, stable_identity_hash,
+    stable_content_identity, stable_file_identity, stable_identity_hash,
 };
 pub use message_attachments::{
     MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES, MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS,
@@ -155,6 +156,9 @@ pub use room_settings::{
 };
 pub use room_turn::{
     QueuedRoomInput, RoomInputDeliveryKind, RoomRandomError, RoomRandomRequest, RoomRandomResult,
+};
+pub use runtime_profile::{
+    durable_runtime_profile_key, runtime_profile_key, runtime_profile_key_with_output,
 };
 pub use side_chat::{
     SIDE_CHAT_MAX_MESSAGES, SIDE_CHAT_TTL_SECONDS, SideChatMessage, SideChatSend, SideChatSnapshot,

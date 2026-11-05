@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_domain::{stable_content_identity, stable_identity_hash};
+use agentsassemble_domain::{stable_content_identity, stable_file_identity};
 use same_file::Handle;
 use tokio::sync::{Semaphore, oneshot};
 
@@ -239,7 +239,7 @@ pub(crate) async fn canonical_workspace(
             .to_str()
             .ok_or_else(|| io::Error::other("workspace path is not UTF-8"))?
             .to_owned();
-        let identity = stable_identity_hash(&Handle::from_path(&canonical)?);
+        let identity = stable_file_identity(&Handle::from_path(&canonical)?);
         Ok((encoded, identity))
     })
     .await

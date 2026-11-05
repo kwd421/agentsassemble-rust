@@ -8,7 +8,7 @@ use std::{
 
 use agentsassemble_domain::{
     AgentSessionDraft, codex_bundle_identity, codex_code_mode_host_name, stable_content_identity,
-    stable_identity_hash,
+    stable_file_identity,
 };
 use same_file::Handle;
 use tokio::sync::{Semaphore, oneshot};
@@ -65,13 +65,51 @@ pub(crate) async fn revalidate_runtime_authority(
     }
 }
 
-async fn run_with<F>(
+/// Recomputes a stored session's identities in their reboot-stable form, each
+/// only where its stored path still canonicalizes to itself. `None` keeps that
+/// identity as stored, so the session still fails closed if it really changed.
+pub(crate) async fn reboot_stable_identities(
+    provider_kind: String,
+    workspace: String,
+    executable: String,
+) -> (Option<String>, Option<String>) {
+    let outcome = run_with(
+        Arc::clone(WORKERS.get_or_init(|| Arc::new(Semaphore::new(FILESYSTEM_WORKERS)))),
+        FILESYSTEM_TIMEOUT,
+        move || {
+            Ok((
+                rebound_workspace(Path::new(&workspace)),
+                rebound_executable(&provider_kind, Path::new(&executable)),
+            ))
+        },
+    )
+    .await;
+    outcome.unwrap_or_default()
+}
+
+fn rebound_workspace(workspace: &Path) -> Option<String> {
+    let canonical = workspace.canonicalize().ok()?;
+    if canonical != workspace || !canonical.is_dir() {
+        return None;
+    }
+    Some(stable_file_identity(&Handle::from_path(&canonical).ok()?))
+}
+
+fn rebound_executable(provider_kind: &str, executable: &Path) -> Option<String> {
+    if executable.canonicalize().ok()? != executable {
+        return None;
+    }
+    runtime_executable_identity(provider_kind, executable).ok()
+}
+
+async fn run_with<F, T>(
     workers: Arc<Semaphore>,
     timeout: Duration,
     operation: F,
-) -> Result<(), AuthorityFailure>
+) -> Result<T, AuthorityFailure>
 where
-    F: FnOnce() -> io::Result<()> + Send + 'static,
+    F: FnOnce() -> io::Result<T> + Send + 'static,
+    T: Send + 'static,
 {
     let permit = workers
         .try_acquire_owned()
@@ -86,7 +124,7 @@ where
         })
         .map_err(|_| AuthorityFailure::Task("filesystem worker could not be started"))?;
     match tokio::time::timeout(timeout, receiver).await {
-        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Ok(value))) => Ok(value),
         Ok(Ok(Err(_))) => Err(AuthorityFailure::Changed),
         Ok(Err(_)) => Err(AuthorityFailure::Task(
             "filesystem worker result channel closed",
@@ -106,7 +144,7 @@ fn validate_sync(draft: &AgentSessionDraft) -> io::Result<()> {
         if canonical_workspace != workspace || !canonical_workspace.is_dir() {
             return Err(io::Error::other("workspace authority is not canonical"));
         }
-        let workspace_identity = stable_identity_hash(&Handle::from_path(&canonical_workspace)?);
+        let workspace_identity = stable_file_identity(&Handle::from_path(&canonical_workspace)?);
         if workspace_identity != draft.workspace_identity {
             return Err(io::Error::other("workspace identity changed"));
         }

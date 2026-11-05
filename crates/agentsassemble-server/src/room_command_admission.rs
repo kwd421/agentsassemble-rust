@@ -125,7 +125,7 @@ mod tests {
 
     use agentsassemble_domain::{
         AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-        LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_identity_hash,
+        LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_file_identity,
     };
     use agentsassemble_persistence::{AgentStartPlan, SqliteStore};
     use agentsassemble_protocol::RoomAction;
@@ -367,7 +367,7 @@ mod tests {
             executable: executable.to_string_lossy().into_owned(),
             executable_identity,
             workspace: workspace.to_string_lossy().into_owned(),
-            workspace_identity: stable_identity_hash(
+            workspace_identity: stable_file_identity(
                 &Handle::from_path(&workspace)
                     .unwrap_or_else(|error| panic!("identify workspace: {error}")),
             ),

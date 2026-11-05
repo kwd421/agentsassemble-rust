@@ -8,7 +8,7 @@ use agentsassemble_server::connector::client::files::{
 
 fn file_context(workspace: &std::path::Path) -> ConnectorFileContext {
     let canonical = workspace.canonicalize().expect("workspace canonicalizable");
-    let identity = agentsassemble_domain::stable_identity_hash(
+    let identity = agentsassemble_domain::stable_file_identity(
         &same_file::Handle::from_path(&canonical).expect("workspace identity"),
     );
     ConnectorFileContext {

@@ -90,7 +90,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     let canonical = std::fs::canonicalize(directory.path())?;
     let workspace = canonical.to_str().ok_or("workspace not UTF-8")?.to_owned();
     let identity =
-        agentsassemble_domain::stable_identity_hash(&same_file::Handle::from_path(&canonical)?);
+        agentsassemble_domain::stable_file_identity(&same_file::Handle::from_path(&canonical)?);
     tool_relay::verify(
         (&client, replacement.connection_id()),
         (&endpoint, &token),

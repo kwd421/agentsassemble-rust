@@ -156,6 +156,7 @@ pub(crate) async fn require_schema(
             | "100"
             | "101"
             | "102"
+            | "103"
     ) {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }
@@ -259,6 +260,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
             | "100"
             | "101"
             | "102"
+            | "103"
     ) {
         return Err(PersistenceError::InvalidSchemaVersion(version));
     }

@@ -141,7 +141,7 @@ mod tests {
             .to_str()
             .unwrap()
             .to_owned();
-        let identity = agentsassemble_domain::stable_identity_hash(
+        let identity = agentsassemble_domain::stable_file_identity(
             &same_file::Handle::from_path(&path).unwrap(),
         );
         (dir, path, identity)

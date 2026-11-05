@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use agentsassemble_domain::stable_identity_hash;
+use agentsassemble_domain::stable_file_identity;
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt, OpenOptionsSyncExt};
 use cap_std::fs::{Dir, OpenOptions};
 use serde::{Deserialize, Serialize};
@@ -148,7 +148,7 @@ impl FileOperation {
 pub(super) fn bind(workspace: &str, identity: &str) -> io::Result<Dir> {
     let dir = Dir::open_ambient_dir(workspace, cap_std::ambient_authority())?;
     let handle = same_file::Handle::from_file(dir.try_clone()?.into_std_file())?;
-    if stable_identity_hash(&handle) != identity {
+    if stable_file_identity(&handle) != identity {
         return Err(invalid());
     }
     Ok(dir)

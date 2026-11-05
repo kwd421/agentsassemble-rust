@@ -110,6 +110,7 @@ mod runtime_restart;
 mod runtime_restart_recovery;
 pub use runtime_restart::{RuntimeRestartPhase, RuntimeRestartRecord, RuntimeRestartTarget};
 mod database_target;
+mod file_identity_rebind;
 mod filesystem_authority;
 mod friends;
 #[cfg(test)]

@@ -411,7 +411,7 @@ pub(crate) mod tests {
 
     use agentsassemble_domain::{
         AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-        LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_identity_hash,
+        LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_file_identity,
     };
     use agentsassemble_persistence::{
         AgentStartPlan, LiveRuntimeReconciliation, RuntimeReconciliationObservation, SqliteStore,
@@ -677,7 +677,7 @@ pub(crate) mod tests {
         let executable_identity = stable_content_identity(&executable_handle, &mut file)
             .unwrap_or_else(|error| panic!("hash executable: {error}"));
         let workspace = workspace.to_string_lossy().into_owned();
-        let workspace_identity = stable_identity_hash(
+        let workspace_identity = stable_file_identity(
             &Handle::from_path(&workspace)
                 .unwrap_or_else(|error| panic!("identify workspace: {error}")),
         );

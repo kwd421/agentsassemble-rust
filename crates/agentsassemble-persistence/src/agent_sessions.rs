@@ -136,14 +136,14 @@ impl SqliteStore {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::RoomMutationAuthority::TrustedPrincipal;
     use std::{collections::BTreeMap, fs::File, path::Path};
 
     use agentsassemble_domain::{
         AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession,
         InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, PersonaAssetKind, PersonaCard,
-        PersonaLoreSettings, stable_content_identity, stable_identity_hash,
+        PersonaLoreSettings, stable_content_identity, stable_file_identity,
     };
     use same_file::Handle;
     use serde_json::json;
@@ -237,7 +237,7 @@ mod tests {
         }
     }
 
-    async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
+    pub(crate) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
         let directory =
             tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
         let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
@@ -271,7 +271,7 @@ mod tests {
         (store, principal, directory)
     }
 
-    fn draft(workspace: &str) -> AgentSessionDraft {
+    pub(crate) fn draft(workspace: &str) -> AgentSessionDraft {
         let workspace = std::fs::canonicalize(workspace)
             .unwrap_or_else(|error| panic!("canonical workspace: {error}"));
         let executable = std::env::current_exe()
@@ -287,7 +287,7 @@ mod tests {
             executable,
             executable_identity,
             workspace: workspace.to_string_lossy().into_owned(),
-            workspace_identity: stable_identity_hash(
+            workspace_identity: stable_file_identity(
                 &Handle::from_path(&workspace)
                     .unwrap_or_else(|error| panic!("open workspace: {error}")),
             ),

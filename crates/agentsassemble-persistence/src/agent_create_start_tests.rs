@@ -4,7 +4,7 @@ use std::{fs::File, path::Path};
 use agentsassemble_domain::{
     AgentLifecycleIntentStatus, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
     CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, RoomEvent,
-    stable_content_identity, stable_identity_hash,
+    stable_content_identity, stable_file_identity,
 };
 use same_file::Handle;
 use serde_json::{Value, json};
@@ -69,7 +69,7 @@ fn draft(workspace: &Path) -> AgentSessionDraft {
         executable_identity: stable_content_identity(&executable_handle, &mut file)
             .unwrap_or_else(|error| panic!("hash executable: {error}")),
         workspace: workspace.to_string_lossy().into_owned(),
-        workspace_identity: stable_identity_hash(
+        workspace_identity: stable_file_identity(
             &Handle::from_path(&workspace)
                 .unwrap_or_else(|error| panic!("identify workspace: {error}")),
         ),

@@ -20,7 +20,7 @@ pub async fn serve_stdio(workspace: Option<std::path::PathBuf>) -> anyhow::Resul
         .map_err(|error| anyhow::anyhow!("connector workspace unavailable: {error}"))?
         .canonicalize()
         .map_err(|error| anyhow::anyhow!("connector workspace unavailable: {error}"))?;
-    let identity = agentsassemble_domain::stable_identity_hash(
+    let identity = agentsassemble_domain::stable_file_identity(
         &same_file::Handle::from_path(&workspace)
             .map_err(|error| anyhow::anyhow!("connector workspace unavailable: {error}"))?,
     );

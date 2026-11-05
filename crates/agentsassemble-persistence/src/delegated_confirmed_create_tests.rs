@@ -1,7 +1,7 @@
 use super::*;
 use agentsassemble_domain::{
     AgentSessionDraft, ConfirmationDecision, ConfirmationState, ConfirmedRoomAction,
-    DecideDelegatedAction, RequestCreateAgent, stable_content_identity, stable_identity_hash,
+    DecideDelegatedAction, RequestCreateAgent, stable_content_identity, stable_file_identity,
 };
 use same_file::Handle;
 use std::fs::File;
@@ -41,7 +41,7 @@ fn draft(workspace: &str, agent_id: &str, permission_mode: &str) -> AgentSession
         executable,
         executable_identity,
         workspace: workspace.to_string_lossy().into_owned(),
-        workspace_identity: stable_identity_hash(
+        workspace_identity: stable_file_identity(
             &Handle::from_path(&workspace).unwrap_or_else(|error| panic!("workspace id: {error}")),
         ),
         provider_endpoint: String::new(),
