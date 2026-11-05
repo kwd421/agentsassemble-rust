@@ -443,6 +443,10 @@ impl PublicIngress {
             &mut lifecycle.active,
         )
         .await;
+        // The context holds the central directory, which holds this ingress; a
+        // closed ingress never starts again, so dropping it ends that cycle and
+        // lets the store reach its last owner.
+        ingress.named.write().take();
         ingress.projection.read().cleanup_result()
     }
 

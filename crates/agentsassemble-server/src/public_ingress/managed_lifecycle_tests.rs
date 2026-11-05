@@ -546,3 +546,27 @@ fn endpoint_events_ignore_health_fluctuations_and_keep_explicit_stop() {
     projection.begin_stop(generation);
     assert_eq!(*changes.borrow_and_update(), (generation, String::new()));
 }
+
+#[tokio::test]
+async fn shutdown_releases_the_store_held_for_named_provisioning()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = tempfile::tempdir()?;
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        root.path().join("host.sqlite").display()
+    );
+    let store = agentsassemble_persistence::SqliteStore::open(&url).await?;
+    let identity = crate::central::host_identity::CentralHostIdentity::from_persistent(
+        &store.host_identity().await?,
+    )?;
+    let ingress = PublicIngress::managed("127.0.0.1:41955".parse()?, None, root.path()).await?;
+    let directory = crate::central::directory::CentralDirectory::configured("http://127.0.0.1:1")?;
+    // The same wiring as startup: each side keeps the other.
+    directory.bind_ingress(ingress.clone());
+    ingress.bind_named_tunnel_context(store.clone(), directory.clone(), identity);
+    drop(directory);
+    ingress.shutdown().await?;
+    drop(ingress);
+    store.close().await?;
+    Ok(())
+}
