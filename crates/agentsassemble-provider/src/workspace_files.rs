@@ -145,10 +145,19 @@ impl FileOperation {
     }
 }
 
+/// Opens the selected workspace for one tool call. The stored identity omits the
+/// Unix device number so it survives a reboot, so the opened directory must also
+/// be the very object now at the stored canonical path: within one run, handle
+/// equality compares the device too, which refuses a symlink swapped in toward a
+/// same-inode directory on another volume.
 pub(super) fn bind(workspace: &str, identity: &str) -> io::Result<Dir> {
     let dir = Dir::open_ambient_dir(workspace, cap_std::ambient_authority())?;
     let handle = same_file::Handle::from_file(dir.try_clone()?.into_std_file())?;
-    if stable_file_identity(&handle) != identity {
+    let canonical = std::fs::canonicalize(workspace)?;
+    if canonical != Path::new(workspace)
+        || same_file::Handle::from_path(&canonical)? != handle
+        || stable_file_identity(&handle) != identity
+    {
         return Err(invalid());
     }
     Ok(dir)

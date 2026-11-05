@@ -1,4 +1,6 @@
-use agentsassemble_domain::{DurableAgentSession, durable_runtime_profile_key};
+use agentsassemble_domain::{
+    DurableAgentSession, durable_runtime_profile_key, stable_identity_hash,
+};
 use serde_json::json;
 
 use crate::{
@@ -18,9 +20,13 @@ async fn stored(store: &SqliteStore) -> DurableAgentSession {
 /// Mimics a session bound before v103, when identities held the Unix device
 /// number that macOS renumbers at boot. `profile_matches` keeps its profile key
 /// consistent with those identities, as a real pre-v103 session's key is.
-async fn make_legacy(store: &SqliteStore, profile_matches: bool) {
+async fn make_legacy(store: &SqliteStore, profile_matches: bool) -> String {
     let mut session = stored(store).await;
-    session.workspace_identity = "identity-v1-legacy".to_owned();
+    // The pre-v103 formula hashed the whole handle, device number included.
+    session.workspace_identity = stable_identity_hash(
+        &same_file::Handle::from_path(&session.workspace)
+            .unwrap_or_else(|error| panic!("open workspace: {error}")),
+    );
     session.executable_identity = "content-identity-v1-legacy".to_owned();
     session.runtime_profile_key = if profile_matches {
         durable_runtime_profile_key(&session)
@@ -36,6 +42,7 @@ async fn make_legacy(store: &SqliteStore, profile_matches: bool) {
         .execute(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("store v102: {error}"));
+    session.workspace_identity
 }
 
 async fn upgrade(store: &SqliteStore) {
@@ -77,20 +84,17 @@ async fn v103_rebinds_identities_whose_paths_and_profile_still_hold() {
     );
 
     // A profile that no longer matches its own fields is left to fail closed.
-    make_legacy(&store, false).await;
+    let legacy = make_legacy(&store, false).await;
     upgrade(&store).await;
-    assert_eq!(
-        stored(&store).await.workspace_identity,
-        "identity-v1-legacy"
-    );
+    assert_eq!(stored(&store).await.workspace_identity, legacy);
 
     // So is a workspace that moved away.
-    make_legacy(&store, true).await;
+    let legacy = make_legacy(&store, true).await;
     std::fs::rename(&workspace, directory.path().join("moved"))
         .unwrap_or_else(|error| panic!("move workspace: {error}"));
     upgrade(&store).await;
     let session = stored(&store).await;
-    assert_eq!(session.workspace_identity, "identity-v1-legacy");
+    assert_eq!(session.workspace_identity, legacy);
     assert_eq!(session.executable_identity, draft.executable_identity);
     assert_eq!(
         session.runtime_profile_key,

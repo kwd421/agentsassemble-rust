@@ -506,3 +506,23 @@ fn workspace_commit_excludes_other_processes_and_stale_approvals() -> Result<(),
     );
     Ok(())
 }
+
+/// The stored identity omits the Unix device number, so a tool call must also
+/// find the very object at the canonical path, not one reached through a symlink.
+#[cfg(unix)]
+#[tokio::test]
+async fn bind_refuses_a_workspace_swapped_for_a_symlink() -> Result<(), Box<dyn Error>> {
+    let parent = tempfile::tempdir()?;
+    let selected = parent.path().join("workspace");
+    std::fs::create_dir(&selected)?;
+    let (workspace, identity) = canonical_workspace(selected.to_string_lossy().into_owned())
+        .await
+        .map_err(|_| "workspace")?;
+    assert!(workspace_files::bind(&workspace, &identity).is_ok());
+    // The same directory, reached through a symlink, keeps device and inode.
+    let moved = parent.path().join("moved");
+    std::fs::rename(&selected, &moved)?;
+    std::os::unix::fs::symlink(&moved, &selected)?;
+    assert!(workspace_files::bind(&workspace, &identity).is_err());
+    Ok(())
+}
