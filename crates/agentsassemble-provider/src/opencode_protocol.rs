@@ -327,13 +327,6 @@ pub(crate) const fn session_unconfirmed() -> DriverError {
     )
 }
 
-pub(crate) const fn session_missing() -> DriverError {
-    DriverError::new(
-        "provider_session_missing",
-        "The stored OpenCode session no longer exists.",
-    )
-}
-
 pub(crate) const fn session_mismatch() -> DriverError {
     DriverError::new(
         "provider_session_mismatch",

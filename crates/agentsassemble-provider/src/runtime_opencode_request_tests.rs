@@ -159,6 +159,52 @@ async fn check_native_permissions(
     Ok(())
 }
 
+#[tokio::test]
+async fn opencode_resume_opens_a_fresh_conversation_only_when_the_stored_one_is_gone()
+-> Result<(), Box<dyn std::error::Error>> {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    for (stored, reused) in [("session-gone", false), ("session-1", true)] {
+        let directory = tempfile::tempdir()?;
+        let mut session = fixture_session(
+            directory.path(),
+            include_str!("runtime_opencode_request_fixture.py"),
+        )
+        .await;
+        configure_session(&mut session, "meeting_read_only");
+        stored.clone_into(&mut session.provider_session_id);
+        let adapter = ProviderAdapter::new();
+        let started = adapter.start(&session).await?;
+        assert_eq!(started.provider_session_id, "session-1", "{stored}");
+        assert_eq!(started.provider_session_reused, reused, "{stored}");
+        // A conversation that still exists is never replaced by a new one.
+        assert_eq!(
+            directory.path().join("session-request.json").exists(),
+            !reused,
+            "{stored}"
+        );
+        let active = active_session(&session, &started, "room-turn-1");
+        stop_and_release(&adapter, &active, &started).await;
+    }
+    // Any other lookup failure keeps failing the start instead of replacing it.
+    let directory = tempfile::tempdir()?;
+    let mut session = fixture_session(
+        directory.path(),
+        include_str!("runtime_opencode_request_fixture.py"),
+    )
+    .await;
+    configure_session(&mut session, "meeting_read_only");
+    "session-broken".clone_into(&mut session.provider_session_id);
+    let adapter = ProviderAdapter::new();
+    let failed = adapter.start(&session).await;
+    assert!(
+        failed.is_err_and(|error| error.code == "provider_request_failed"),
+        "a failed lookup must not open a new conversation"
+    );
+    assert!(!directory.path().join("session-request.json").exists());
+    adapter.shutdown().await?;
+    Ok(())
+}
+
 fn configure_session(session: &mut agentsassemble_domain::DurableAgentSession, mode: &str) {
     let registration = &crate::registration::OPENCODE_PROVIDER;
     registration

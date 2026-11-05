@@ -47,6 +47,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.reply({"version": "2.0.32", "pid": 1, "urls": []})
         if path == "/api/session/session-1":
             return self.reply({"data": {"id": "session-1"}})
+        if path == "/api/session/session-broken":
+            return self.reply({"name": "UnknownError"}, 500)
+        if path.startswith("/api/session/") and path.count("/") == 3:
+            return self.reply({"name": "NotFoundError"}, 404)
         if path == "/api/mcp":
             return self.reply(
                 {

@@ -29,8 +29,8 @@ use crate::{
         OpenCodeApi, assistant_message, clean_session_id, config_error, executable_error,
         http_driver_error, is_harness, model_mismatch, model_parts, profile_error, protocol_error,
         provider_request_error, provider_response_error, runtime_exited, session_mismatch,
-        session_missing, session_model, session_path, session_unconfirmed, startup_error,
-        turn_empty, turn_in_progress, turn_mismatch, turn_transport_error, validate_profile,
+        session_model, session_path, session_unconfirmed, startup_error, turn_empty,
+        turn_in_progress, turn_mismatch, turn_transport_error, validate_profile,
     },
     opencode_sse::OpenCodeTurnEvents,
     opencode_startup::{reserve_loopback_port, server_password},
@@ -326,8 +326,14 @@ impl OpenCodeDriver {
         } else {
             let provider_session_id =
                 clean_session_id(&session.provider_session_id).ok_or_else(profile_error)?;
-            self.require_session(&provider_session_id).await?;
-            (provider_session_id, true)
+            if self.session_exists(&provider_session_id).await? {
+                (provider_session_id, true)
+            } else {
+                // OpenCode confirmed the stored conversation is gone (deleted, or lost
+                // in an OpenCode data upgrade). As after a lost runtime, the agent
+                // continues in a fresh one and reports it as not reused.
+                (self.create_session(session).await?, false)
+            }
         };
         self.attached_session_id = Some(provider_session_id.clone());
         self.attached_reused = reused;
@@ -514,7 +520,7 @@ impl OpenCodeDriver {
         .await
     }
 
-    async fn require_session(&mut self, provider_session_id: &str) -> Result<(), DriverError> {
+    async fn session_exists(&mut self, provider_session_id: &str) -> Result<bool, DriverError> {
         let response = self
             .connect_owned_peer()
             .await?
@@ -525,8 +531,8 @@ impl OpenCodeDriver {
             .await
             .map_err(http_driver_error)?;
         match response.status {
-            status if status.is_success() => Ok(()),
-            StatusCode::NOT_FOUND => Err(session_missing()),
+            status if status.is_success() => Ok(true),
+            StatusCode::NOT_FOUND => Ok(false),
             _ => Err(provider_request_error()),
         }
     }
