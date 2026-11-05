@@ -22,6 +22,10 @@ use crate::{
 };
 
 const HELPER_TIMEOUT: Duration = Duration::from_secs(5);
+/// Readiness covers executing a freshly staged helper and provider copy. macOS checks
+/// every new copy on its first run (measured 2.3-2.8 s for `OpenCode` and the debug
+/// host binary when idle), so the helper deadline alone failed first starts under load.
+const LAUNCH_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const FAILED_START_CLEANUP_TIMEOUT: Duration = Duration::from_secs(7);
 const MAX_HELPER_LINE_BYTES: usize = 1024;
 const MAX_HELPER_LINES: usize = 32;
@@ -199,7 +203,7 @@ impl UnixProcessCustody {
         let (mut guardian, guardian_input, mut guardian_output) =
             establish_guardian_lifetime_custody(runtime_lease, launch, config).await?;
         let Ok(Ok((anchor_pid, provider_pid))) =
-            tokio::time::timeout(HELPER_TIMEOUT, read_ready(&mut guardian_output)).await
+            tokio::time::timeout(LAUNCH_READY_TIMEOUT, read_ready(&mut guardian_output)).await
         else {
             return Err(failed_started_guardian(
                 &mut guardian,
@@ -368,8 +372,11 @@ async fn establish_guardian_lifetime_custody(
         LinesCodec::new_with_max_length(MAX_HELPER_LINE_BYTES),
     );
     let mut guardian_input = guardian_input;
-    let ready =
-        tokio::time::timeout(HELPER_TIMEOUT, read_lifetime_ready(&mut guardian_output)).await;
+    let ready = tokio::time::timeout(
+        LAUNCH_READY_TIMEOUT,
+        read_lifetime_ready(&mut guardian_output),
+    )
+    .await;
     if !matches!(ready, Ok(Ok(()))) {
         return Err(abort_unacknowledged_guardian(
             &mut guardian,
