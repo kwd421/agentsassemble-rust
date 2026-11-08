@@ -932,6 +932,24 @@ owner cleaned the 18.97 GiB cache after builds stopped, as required by its exist
 
 ## Connector invitation management
 
+### Hosted MCP relay to other AgentsAssemble hosts (2026-11-08)
+
+Owner decision: a web AI (ChatGPT) registers only its owner's own server `/mcp`
+once. An AI invite for a room on another AgentsAssemble host is pasted into that
+conversation; the owner's hosted MCP joins it on the AI's behalf and carries every
+later tool call to that host. This replaces the "no forwarding to another computer"
+rule below for exactly this case:
+
+- Only `https://<label>.agentsassemble.uk` invite origins (default port, no path
+  prefix) are relayed; any other foreign origin stays `room_server_not_allowed`.
+- The destination host still owns admission, permissions, waits and leave receipts;
+  the relaying host stores no room data and acquires no authority there.
+- At most 16 relayed connections are live per host; more answer
+  `connector_relay_capacity`.
+- Relayed connections are not remembered across a relaying-host restart; the AI
+  joins again with the invite.
+- The hosted 45-second `no_new_message` wait bound applies to relayed waits too.
+
 ### AI-facing connector results (2026-11-08)
 
 AI-facing results carry no delivery bookkeeping: `seq`, `last_seq`, `v`, `room_id`

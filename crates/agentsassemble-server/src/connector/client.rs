@@ -114,6 +114,8 @@ pub struct RoomConnectorClient {
     pending_command: Mutex<Option<PendingCommand>>,
     terminal_leave: parking_lot::Mutex<Option<TerminalLeave>>,
     pub(super) cancellation: CancellationToken,
+    /// A hosted MCP carries this connection to another `AgentsAssemble` host.
+    relayed: bool,
 }
 
 impl RoomConnectorClient {
@@ -160,6 +162,7 @@ impl RoomConnectorClient {
             pending_command: Mutex::new(None),
             terminal_leave: parking_lot::Mutex::new(None),
             cancellation: CancellationToken::new(),
+            relayed: false,
         })
     }
 
@@ -175,6 +178,35 @@ impl RoomConnectorClient {
         let mut client = Self::new(invite_url, display_name, Some(allowed_origins))?;
         client.server = local_origin;
         Ok(client)
+    }
+
+    /// A hosted MCP joins a room on another `AgentsAssemble` host for its AI. Only
+    /// `https://<label>.agentsassemble.uk/` hosts are reachable this way.
+    pub(crate) fn new_relayed(
+        invite_url: &str,
+        display_name: &str,
+    ) -> Result<Self, ConnectorClientError> {
+        let (server, _) = parse_invite(invite_url)?;
+        let label = server
+            .host_str()
+            .and_then(|host| host.strip_suffix(".agentsassemble.uk"))
+            .unwrap_or_default();
+        if server.scheme() != "https"
+            || server.port().is_some()
+            || server.path() != "/"
+            || label.is_empty()
+            || label.contains('.')
+        {
+            return Err(ConnectorClientError::local("room_server_not_allowed"));
+        }
+        let mut client = Self::new(invite_url, display_name, None)?;
+        client.relayed = true;
+        Ok(client)
+    }
+
+    #[must_use]
+    pub(crate) fn relayed(&self) -> bool {
+        self.relayed
     }
 
     /// Rebuilds a hosted connection after a host restart from its remembered
@@ -208,6 +240,7 @@ impl RoomConnectorClient {
             pending_command: Mutex::new(None),
             terminal_leave: parking_lot::Mutex::new(None),
             cancellation: CancellationToken::new(),
+            relayed: false,
         })
     }
 

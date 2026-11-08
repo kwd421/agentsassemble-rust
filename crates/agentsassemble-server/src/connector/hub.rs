@@ -9,6 +9,9 @@ use url::Url;
 
 use crate::connector::client::{RoomConnectorClient, transport::normalize_server};
 
+/// Live connections a hosted MCP carries to other `AgentsAssemble` hosts.
+const RELAY_CAPACITY: usize = 16;
+
 pub(super) struct ConnectorHub {
     allowed_servers: Option<Vec<Url>>,
     owned_runtime: Option<crate::AppState>,
@@ -54,7 +57,7 @@ impl ConnectorHub {
         admission: Option<&crate::connector::mcp_web::RequestAdmission>,
     ) -> Result<Value, String> {
         let client = self.client_or_resume(&input.connection_id).await?;
-        if let Some(state) = &self.owned_runtime {
+        if let Some(state) = self.owned_runtime.as_ref().filter(|_| !client.relayed()) {
             let fingerprint = client
                 .session_fingerprint()
                 .await
@@ -93,7 +96,7 @@ impl ConnectorHub {
         admission: Option<&crate::connector::mcp_web::RequestAdmission>,
     ) -> Result<agentsassemble_provider::ProviderAttachment, String> {
         let client = self.client_or_resume(&input.connection_id).await?;
-        if let Some(state) = &self.owned_runtime {
+        if let Some(state) = self.owned_runtime.as_ref().filter(|_| !client.relayed()) {
             let admission = admission.ok_or("mcp_request_admission_required")?;
             let read = async {
                 let fingerprint = client.session_fingerprint().await.map_err(|e| e.code)?;
@@ -146,12 +149,18 @@ impl ConnectorHub {
         if let Some(ready) = runtime.public_ingress().ready_snapshot() {
             allowed.push(normalize_server(&ready.public_url).map_err(|error| error.code)?);
         }
-        RoomConnectorClient::new_hosted(invite, name, &allowed, local).map_err(|error| error.code)
+        match RoomConnectorClient::new_hosted(invite, name, &allowed, local) {
+            Err(error) if error.code == "room_server_not_allowed" => {
+                RoomConnectorClient::new_relayed(invite, name).map_err(|error| error.code)
+            }
+            result => result.map_err(|error| error.code),
+        }
     }
 
     pub(super) async fn join(&self, invite: &str, name: &str, id: &str) -> Result<Value, String> {
         let candidate = self.candidate(invite, name)?;
         if id.is_empty()
+            && !candidate.relayed()
             && let Some(runtime) = &self.owned_runtime
         {
             // This public preparation step retains capacity. Require evidence of
@@ -240,6 +249,16 @@ impl ConnectorHub {
         if state.clients.len() >= 128 {
             return Err("connector_capacity_release_receipt_required".to_owned());
         }
+        if candidate.relayed()
+            && state
+                .clients
+                .values()
+                .filter(|client| client.relayed() && !client.has_completed_leave())
+                .count()
+                >= RELAY_CAPACITY
+        {
+            return Err("connector_relay_capacity".to_owned());
+        }
         if !self.remote()
             && state
                 .clients
@@ -315,6 +334,10 @@ impl ConnectorHub {
         let Some(runtime) = &self.owned_runtime else {
             return;
         };
+        // The destination host owns a relayed seat; the AI joins again after a restart.
+        if client.relayed() {
+            return;
+        }
         let Ok(fingerprint) = client.session_fingerprint().await else {
             return;
         };
@@ -434,5 +457,35 @@ impl ConnectorHub {
 impl Drop for ConnectorHub {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod relay_tests {
+    use crate::connector::client::RoomConnectorClient;
+
+    #[test]
+    fn only_agentsassemble_hosts_are_relayed() {
+        let relayed =
+            |url: &str| RoomConnectorClient::new_relayed(url, "Astra").map(|c| c.relayed());
+        assert_eq!(
+            relayed("https://h-8bd5a65c2632.agentsassemble.uk/join?token=t").ok(),
+            Some(true)
+        );
+        for refused in [
+            "https://example.com/join?token=t",
+            "http://h-1.agentsassemble.uk/join?token=t",
+            "https://h-1.agentsassemble.uk:8443/join?token=t",
+            "https://a.b.agentsassemble.uk/join?token=t",
+            "https://agentsassemble.uk/join?token=t",
+            "https://h-1.agentsassemble.uk/x/join?token=t",
+            "https://h-1.agentsassemble.uk.evil.test/join?token=t",
+        ] {
+            assert_eq!(
+                relayed(refused).err().map(|error| error.code),
+                Some("room_server_not_allowed".to_owned()),
+                "{refused}"
+            );
+        }
     }
 }
