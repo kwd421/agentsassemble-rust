@@ -63,3 +63,44 @@ async fn hosted_wait_retains_authenticated_lifetime_and_shutdown_cancels_it()
     client.cancel().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn hosted_wait_answers_before_chatgpt_cuts_the_call_and_resumes()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, manager) = fixture().await?;
+    let origin = "https://hosted-wait-return.example.test";
+    let server = human_invite::start_with_public_mcp(
+        store.clone(),
+        origin,
+        "hosted-wait-proxy-fixture-00000002",
+    )
+    .await;
+    let client = ()
+        .serve(StreamableHttpClientTransport::from_uri(format!(
+            "{}/mcp",
+            server.base_url
+        )))
+        .await?;
+    let invite = store
+        .create_connector_invite(
+            &manager,
+            Uuid::new_v4(),
+            InviteScope::ReadWrite,
+            chrono::Utc::now(),
+        )
+        .await?;
+    let mut args = json!({"invite_url":format!("{origin}/join?token={}", invite.invite_bearer)});
+    let prepared = call(&client, "room_join", args.clone()).await;
+    args["connection_id"] = prepared["connection_id"].clone();
+    call(&client, "room_join", args).await;
+    let wait = json!({"connection_id":prepared["connection_id"]});
+    // A silent room answers within the hosted bound, well before a minute.
+    let quiet = tokio::time::timeout(Duration::from_secs(55), call(&client, "room_wait_next", wait.clone())).await?;
+    assert_eq!(quiet["status"], "no_new_message");
+    // The next wait is still a live wait on the same connection.
+    let resumed = tokio::time::timeout(Duration::from_secs(2), call(&client, "room_wait_next", wait)).await;
+    assert!(resumed.is_err(), "a resumed wait ended without an event: {resumed:?}");
+    server.stop().await;
+    client.cancel().await?;
+    Ok(())
+}

@@ -23,6 +23,9 @@ use contract::{
 };
 use hub::ConnectorHub;
 
+/// How long a hosted (HTTP) `room_wait_next` holds before answering "nothing new".
+const HOSTED_WAIT_RETURN: std::time::Duration = std::time::Duration::from_secs(45);
+
 #[derive(Clone)]
 pub struct ConnectorMcp {
     hub: Arc<ConnectorHub>,
@@ -617,7 +620,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Wait for another participant's public message (in free_access, only an explicit mention of you), with no model deadline. Other tools can run meanwhile. Keep one wait pending while you take part; after it returns and you respond, call it again. After connector_resync_required, room_read with resync true refreshes the view before the next wait."
+        description = "Wait for another participant's public message (in free_access, only an explicit mention of you), with no model deadline. On the hosted HTTP server it returns no_new_message after 45 seconds; call it again. Other tools can run meanwhile. Keep one wait pending while you take part; after it returns and you respond, call it again. After connector_resync_required, room_read with resync true refreshes the view before the next wait."
     )]
     async fn room_wait_next(
         &self,
@@ -636,17 +639,23 @@ impl ConnectorMcp {
         if self.hub.owns_runtime() && transport.is_none() {
             return Err("http_connection_unavailable".to_owned());
         }
-        encode(
-            &self
-                .hub
-                .client_or_resume(&input.connection_id)
-                .await?
-                .wait_next_with_transport(|| {
-                    transport.map(|admission| admission.retain_authenticated_wait())
-                })
-                .await
-                .map_err(|error| error.code)?,
-        )
+        let client = self.hub.client_or_resume(&input.connection_id).await?;
+        let wait = client.wait_next_with_transport(|| {
+            transport.map(|admission| admission.retain_authenticated_wait())
+        });
+        if !self.hub.owns_runtime() {
+            return encode(&wait.await.map_err(|error| error.code)?);
+        }
+        // Hosted HTTP clients (ChatGPT) cut a tool call after about a minute and end
+        // their run with it. Return before that; the cursor only advances on an
+        // event, so the next wait resumes exactly where this one stopped.
+        match tokio::time::timeout(HOSTED_WAIT_RETURN, wait).await {
+            Ok(response) => encode(&response.map_err(|error| error.code)?),
+            Err(_) => encode(&json!({
+                "status": "no_new_message",
+                "instructions": "Nothing new yet. Call room_wait_next again now to keep hearing the room."
+            })),
+        }
     }
 
     #[tool(
