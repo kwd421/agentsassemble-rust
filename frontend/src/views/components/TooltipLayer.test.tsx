@@ -64,3 +64,11 @@ it("keeps the same hint node while the pointer moves inside the trigger", () => 
   expect(screen.queryByRole("tooltip")).toBeNull();
   expect(button.getAttribute("title")).toBe("답장");
 });
+
+it("draws a hint inside an open modal card so the card does not cover it", () => {
+  render(<><TooltipLayer /><dialog open aria-label="Fable"><button title="프로필 사진 변경">사진</button></dialog></>);
+  fireEvent.pointerOver(screen.getByRole("button"));
+  const hint = screen.getByRole("tooltip");
+  expect(hint.textContent).toBe("프로필 사진 변경");
+  expect(hint.closest("dialog")).not.toBeNull();
+});

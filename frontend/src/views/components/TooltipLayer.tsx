@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { overlayHost } from "../../lib/overlayHost";
 
 const EDGE = 8;
 
@@ -11,7 +12,7 @@ function clipped(element: HTMLElement) {
 // One styled hint for every control that names itself with `title` (or `data-tip`).
 // The native title is parked while the hint is up, so the system tooltip does not appear as well.
 export default function TooltipLayer() {
-  const [tip, setTip] = useState<{ text: string; rect: DOMRect; side?: string } | null>(null);
+  const [tip, setTip] = useState<{ text: string; rect: DOMRect; side?: string; host: HTMLElement } | null>(null);
   const bubble = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let current: HTMLElement | null = null;
@@ -51,7 +52,8 @@ export default function TooltipLayer() {
       // A re-rendered control with the same hint keeps the one already on screen.
       if (wanted && text === shown) return;
       shown = wanted ? text : "";
-      setTip(wanted ? { text, rect: element.getBoundingClientRect(), side: element.closest<HTMLElement>("[data-tip-side]")?.dataset.tipSide } : null);
+      // Inside an open modal dialog (a member card) the hint must join that top layer.
+      setTip(wanted ? { text, rect: element.getBoundingClientRect(), side: element.closest<HTMLElement>("[data-tip-side]")?.dataset.tipSide, host: overlayHost(element) } : null);
     };
     const over = (event: PointerEvent) => { if (event.pointerType !== "touch") show(event.target); };
     const focus = (event: FocusEvent) => {
@@ -108,6 +110,6 @@ export default function TooltipLayer() {
   }, [tip]);
   return tip ? createPortal(
     <div ref={bubble} className="dc-tooltip" role="tooltip" style={{ visibility: "hidden" }}>{tip.text}</div>,
-    document.body,
+    tip.host,
   ) : null;
 }
