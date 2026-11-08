@@ -209,7 +209,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Request creation of a stopped agent owned by your owner. Nothing is created until the exact human owner approves within five minutes; the approval re-validates the catalog selection and a full-access choice needs the owner's explicit acknowledgement in the decision. Starting the new agent later is a separate step. Retry the same request ID on this session to read the outcome."
+        description = "Request creation of a stopped agent owned by your owner; room_agent_catalog lists the provider_id, catalog_revision and model values. Nothing is created until the exact human owner approves within five minutes; the approval re-validates the catalog selection and a full-access choice needs the owner's explicit acknowledgement in the decision. Starting the new agent later is a separate step. Retry the same request ID on this session to read the outcome."
     )]
     async fn request_create_agent(
         &self,
@@ -419,6 +419,24 @@ impl ConnectorMcp {
                 .client_or_resume(&input.connection_id)
                 .await?
                 .status(input.before_seq)
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
+        description = "List the harnesses and models your owner's host can start, with the provider_id, catalog_revision and control values request_create_agent and request_reconfigure_agent take. Requires current director role and owner agent-control authority."
+    )]
+    async fn room_agent_catalog(
+        &self,
+        Parameters(input): Parameters<Connection>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client_or_resume(&input.connection_id)
+                .await?
+                .agent_catalog()
                 .await
                 .map_err(|error| error.code)?,
         )

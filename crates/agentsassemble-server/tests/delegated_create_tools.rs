@@ -27,6 +27,27 @@ pub(super) async fn verify(
     } else {
         vec!["meeting_read_only"]
     };
+    if let Some(connection) = connection {
+        // A director reads the exact values request_create_agent takes.
+        let catalog = call(
+            client,
+            "room_agent_catalog",
+            json!({"connection_id": connection}),
+        )
+        .await;
+        assert_eq!(
+            catalog["catalog_revision"], "catalog-boundary-1",
+            "{catalog}"
+        );
+        assert!(
+            catalog["providers"]
+                .as_array()
+                .ok_or("providers missing")?
+                .iter()
+                .any(|provider| provider["provider_id"] == "codex"),
+            "{catalog}"
+        );
+    }
     for mode in modes {
         let request_id = Uuid::new_v4().to_string();
         let mut args = json!({

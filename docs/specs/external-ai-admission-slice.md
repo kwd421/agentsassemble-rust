@@ -12,6 +12,16 @@ Slice 2 extends attendee/companion and connector delegated actions with channel 
 See the slice 2 section in local-authority-surface-admission-moderation-slice.md for the complete authority, replay, attribution and verification contract. Earlier pin-only sections describe slice 1.
 
 
+## Director agent catalog (2026-11-08)
+
+Owner decision: `request_create_agent`/`request_reconfigure_agent` need host catalog
+values no AI could see. Connector MCP `room_agent_catalog` returns the host's
+available, startable harnesses (`provider_id`, display name, workspace requirement,
+default model, control keys/options/defaults) and the current `catalog_revision`.
+It is served only while the AI's current director authority offers agent creation or
+reconfiguration; otherwise `delegated_action_unavailable`. Executable paths and
+credential state are never included. Approval still re-validates the selection.
+
 ## Director pin delegation
 
 Companion, friend-attendee and connector invitation/admission retain the issuer's

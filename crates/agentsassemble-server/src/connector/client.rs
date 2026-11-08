@@ -624,6 +624,15 @@ impl RoomConnectorClient {
         .await
     }
 
+    /// Reads the host's agent catalog for a director's agent requests.
+    ///
+    /// # Errors
+    /// Reports missing director authority or transport failure.
+    pub async fn agent_catalog(&self) -> Result<Value, ConnectorClientError> {
+        let session = self.session().await?;
+        self.get("catalog", &[], &session.bearer, false).await
+    }
+
     /// Reads a published attachment through the current room session.
     ///
     /// # Errors

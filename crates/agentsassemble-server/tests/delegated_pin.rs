@@ -384,6 +384,18 @@ async fn stateless_connector_pin_uses_selected_connection_and_fresh_authority() 
     let joined = call(&client, "room_join", join.clone()).await;
     assert_eq!(joined["role"], "agent");
     assert_eq!(joined["delegated_actions"], json!([]));
+    // Without director authority the host catalog stays private.
+    let catalog = room_portal_fixture::call_tool(
+        &client,
+        "room_agent_catalog",
+        json!({"connection_id": joined["connection_id"]}),
+    )
+    .await;
+    assert_eq!(catalog.is_error, Some(true));
+    assert!(
+        format!("{catalog:?}").contains("delegated_action_unavailable"),
+        "{catalog:?}"
+    );
     let message = store
         .execute_message(
             &operator(),
