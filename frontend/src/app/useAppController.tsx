@@ -77,7 +77,7 @@ import {
 import { useSidebarResize } from "./useSidebarResize";
 import { projectChannelUnread } from "../lib/channelUnread";
 import { closeRemoteWorkspace, unbindRemoteSessionsForServer } from "../lib/remote/remoteWorkspace";
-import { useMemberRoomAutoReselect, selectMemberRoomOnDemand } from "./useMemberRoomAutoReselect";
+import { useMemberRoomAutoReselect, tapMemberRoom } from "./useMemberRoomAutoReselect";
 import { userFacingError } from "../lib/apiErrors";
 import type { MemberSelectError } from "../lib/memberMembershipEnded";
 import { createConfirmedMembershipLostHandler, useMembershipEndedRoom } from "./useMembershipEndedRoom";
@@ -641,34 +641,13 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
           !(admittedSessionToken && guestSession && !guestExpired &&
             guestSession.meetingId === room.meetingId &&
             guestSession.serverSurface.server_id === room.serverId)) {
-        // A tap opens the room at once, as in Discord: the host's answer only
-        // fills it in. Only where a session is scoped to its own room, so the
-        // room never borrows the previous room's session while it waits.
-        // Marking the admission first keeps the automatic re-select from
-        // spending a second attempt on the room this tap is already opening.
-        const opensAtOnce = scopeSessionToActiveRoom;
-        if (opensAtOnce) {
-          markAdmissionSeen(memberServerId, room.meetingId);
-          setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
-          setSelectingRoomId(roomId);
-          showRoom(roomId);
-        }
-        try {
-          await selectMemberRoomOnDemand({
-            roomId, meetingId: room.meetingId, memberServerId,
-            liveSessionFor: memberRoomLive.liveSessionFor,
-            selectRoom: memberHosts.selectRoom,
-            acceptSession: acceptMemberRoomSession,
-            setSelectError: setMemberSelectError,
-          });
-        } finally {
-          // The manual tap consumed this admission for this room: the
-          // automatic re-select must not spend a second attempt on
-          // the same host channel.
-          markAdmissionSeen(memberServerId, room.meetingId);
-          if (opensAtOnce) setSelectingRoomId((current) => (current === roomId ? "" : current));
-        }
-        if (opensAtOnce) return;
+        await tapMemberRoom({
+          roomId, meetingId: room.meetingId, memberServerId, opensAtOnce: scopeSessionToActiveRoom,
+          showRoom, setSelectingRoomId, markAdmissionSeen,
+          liveSessionFor: memberRoomLive.liveSessionFor, selectRoom: memberHosts.selectRoom,
+          acceptSession: acceptMemberRoomSession, setSelectError: setMemberSelectError,
+        });
+        if (scopeSessionToActiveRoom) return;
       } else if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
     } catch (error) {
       window.alert(userFacingError(error, "방을 열지 못했어요."));

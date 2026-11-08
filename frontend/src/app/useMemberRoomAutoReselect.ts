@@ -413,3 +413,35 @@ export async function selectMemberRoomOnDemand({ roomId, meetingId, memberServer
     }
   }
 }
+
+type MemberSelectArgs = Parameters<typeof selectMemberRoomOnDemand>[0];
+
+/**
+ * A rail tap on a member room. Where a session is scoped to its own room
+ * (`opensAtOnce`), the room opens at once, as in Discord, and loads until the
+ * host answers: it never borrows the previous room's session while it waits.
+ * The admission is marked first so the automatic re-select does not spend a
+ * second attempt on the room this tap is already opening, and again after,
+ * because the tap consumed it.
+ */
+export async function tapMemberRoom({ opensAtOnce, showRoom, setSelectingRoomId, markAdmissionSeen, ...select }: MemberSelectArgs & {
+  opensAtOnce: boolean;
+  showRoom: (roomId: string) => void;
+  setSelectingRoomId: (update: (current: string) => string) => void;
+  markAdmissionSeen: (serverId: string, meetingId: string) => void;
+}): Promise<void> {
+  const { roomId, meetingId, memberServerId } = select;
+  if (opensAtOnce) {
+    markAdmissionSeen(memberServerId, meetingId);
+    (select.setSelectError as (update: (current: MemberSelectError | null) => MemberSelectError | null) => void)(
+      (current) => (current?.roomId === roomId ? null : current));
+    setSelectingRoomId(() => roomId);
+    showRoom(roomId);
+  }
+  try {
+    await selectMemberRoomOnDemand(select);
+  } finally {
+    markAdmissionSeen(memberServerId, meetingId);
+    if (opensAtOnce) setSelectingRoomId((current) => (current === roomId ? "" : current));
+  }
+}
