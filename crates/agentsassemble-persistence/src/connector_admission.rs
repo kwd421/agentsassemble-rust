@@ -4,7 +4,7 @@ use agentsassemble_domain::{
 use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use sqlx::Row;
+use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
@@ -75,15 +75,33 @@ impl SqliteStore {
         seat: Option<&str>,
         now: DateTime<Utc>,
     ) -> Result<ConnectorInvite, PersistenceError> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let invite = self
+            .create_connector_invite_in(&mut tx, manager, request_id, scope, seat, now)
+            .await?;
+        tx.commit().await?;
+        Ok(invite)
+    }
+
+    /// Issues or replays one connector invitation inside the caller's transaction;
+    /// an owner-approved delegated AI invite mints through this same core.
+    pub(crate) async fn create_connector_invite_in(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        manager: &RoomManagerAuthority,
+        request_id: Uuid,
+        scope: InviteScope,
+        seat: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<ConnectorInvite, PersistenceError> {
         if request_id.is_nil() {
             return Err(rejected(
                 "bad_request",
                 "A nonzero request UUID is required.",
             ));
         }
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let identity = manager.resolve(&mut tx).await?;
-        let room = crate::authority::load_active_room(&mut tx, &identity.room_id).await?;
+        let identity = manager.resolve(tx).await?;
+        let room = crate::authority::load_active_room(tx, &identity.room_id).await?;
         let scope = match scope {
             InviteScope::ReadOnly => "read_only",
             InviteScope::ReadWrite => "read_write",
@@ -91,13 +109,13 @@ impl SqliteStore {
         // A reconnect keeps the seat's own read/write scope.
         let mut scope = scope;
         if let Some(seat) = seat {
-            load_seat(&mut tx, &identity.room_id, seat).await?;
+            load_seat(tx, &identity.room_id, seat).await?;
             let current: Option<String> = sqlx::query_scalar(
                 "SELECT scope FROM room_connector_invites WHERE room_id = ? AND participant_id = ?",
             )
             .bind(&identity.room_id)
             .bind(seat)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&mut **tx)
             .await?;
             if let Some(current) = current {
                 scope = if current == "read_only" {
@@ -116,9 +134,9 @@ impl SqliteStore {
             SessionBearerPurpose::ConnectorInvite,
         );
         if let Some(row) = sqlx::query("SELECT invite_id, creator_id, scope, expires_at, revoked, token_fingerprint FROM room_connector_invites WHERE room_id = ? AND request_id = ?")
-            .bind(&identity.room_id).bind(request_id.to_string()).fetch_optional(&mut *tx).await? {
+            .bind(&identity.room_id).bind(request_id.to_string()).fetch_optional(&mut **tx).await? {
             let stored_seat: Option<String> = sqlx::query_scalar("SELECT participant_id FROM connector_seat_invites WHERE invite_id = ?")
-                .bind(row.get::<String,_>("invite_id")).fetch_optional(&mut *tx).await?;
+                .bind(row.get::<String,_>("invite_id")).fetch_optional(&mut **tx).await?;
             if row.get::<String,_>("creator_id") != identity.user_id || row.get::<String,_>("scope") != scope || stored_seat.as_deref() != seat {
                 return Err(PersistenceError::CommandConflict);
             }
@@ -128,7 +146,6 @@ impl SqliteStore {
             let expires_at = timestamp(row.get("expires_at"))?;
             if row.get::<i64,_>("revoked") != 0 || expires_at <= now { return Err(rejected("invite_unavailable", "This connector invitation has ended.")); }
             let result = ConnectorInvite { invite_id: parse_uuid(row.get("invite_id"))?, invite_bearer: bearer.bearer, expires_at };
-            tx.commit().await?;
             return Ok(result);
         }
         // Retain manager-created receipts until room deletion. Removing expired
@@ -139,7 +156,7 @@ impl SqliteStore {
         let expires_at = timestamp((now + TTL).timestamp_micros())?;
         sqlx::query("INSERT INTO room_connector_invites(invite_id,room_id,room_uid,creator_id,request_id,scope,token_fingerprint,expires_at) VALUES(?,?,?,?,?,?,?,?)")
             .bind(invite_id.to_string()).bind(&identity.room_id).bind(room.room_uid.to_string()).bind(&identity.user_id)
-            .bind(request_id.to_string()).bind(scope).bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).execute(&mut *tx).await?;
+            .bind(request_id.to_string()).bind(scope).bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).execute(&mut **tx).await?;
         if let Some(seat) = seat {
             // The seat keeps the owner it already has.
             sqlx::query(
@@ -147,25 +164,18 @@ impl SqliteStore {
             )
             .bind(invite_id.to_string())
             .bind(seat)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
-            tx.commit().await?;
             return Ok(ConnectorInvite {
                 invite_id,
                 invite_bearer: bearer.bearer,
                 expires_at,
             });
         }
-        crate::delegation_owner::OwnerBinding::from_manager(&mut tx, manager)
+        crate::delegation_owner::OwnerBinding::from_manager(tx, manager)
             .await?
-            .save(
-                &mut tx,
-                &identity.room_id,
-                "connector",
-                &invite_id.to_string(),
-            )
+            .save(tx, &identity.room_id, "connector", &invite_id.to_string())
             .await?;
-        tx.commit().await?;
         Ok(ConnectorInvite {
             invite_id,
             invite_bearer: bearer.bearer,

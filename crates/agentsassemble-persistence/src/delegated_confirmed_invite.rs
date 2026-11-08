@@ -12,6 +12,7 @@
 use chrono::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::Digest as _;
 use uuid::Uuid;
 
 use crate::delegated_confirmation::{Binding, create_in, rejected};
@@ -24,8 +25,8 @@ use crate::{
 };
 use agentsassemble_domain::{
     ConfirmationDecision, ConfirmationState, ConfirmedHumanInvite, ConfirmedRoomAction,
-    DecideDelegatedAction, DelegatedActionRequest, InviteScope, RequestCreateInvite, RoomEvent,
-    canonical_payload_hash,
+    DecideDelegatedAction, DelegatedActionRequest, InviteInvitee, InviteScope, RequestCreateInvite,
+    RoomEvent, canonical_payload_hash,
 };
 use sqlx::{Row, Sqlite, Transaction, sqlite::SqliteRow};
 
@@ -38,6 +39,8 @@ pub struct DelegatedInvitePolicy {
     pub invite_scope: InviteScope,
     pub ttl_seconds: i64,
     pub max_uses: i64,
+    /// An external-AI (connector) invite under the owner's own AI-invite rules.
+    pub ai: bool,
 }
 
 /// The already-minted credential identity and window for one approved invite. The server
@@ -58,6 +61,8 @@ pub struct ApprovedInviteDrive {
     pub state: ConfirmationState,
     pub new_events: Vec<RoomEvent>,
     pub invite: Option<HumanInvite>,
+    /// The connector invitation an approved AI invite minted in this call.
+    pub connector: Option<crate::ConnectorInvite>,
 }
 
 /// Validates and normalises the AI-supplied invite fields as the owner's own human
@@ -71,6 +76,22 @@ pub struct ApprovedInviteDrive {
 pub fn delegated_invite_policy(
     params: &RequestCreateInvite,
 ) -> Result<DelegatedInvitePolicy, PersistenceError> {
+    if params.invitee == Some(InviteInvitee::Ai) {
+        let Ok(invite_scope) = scope(&params.invite_scope) else {
+            return Err(rejected(
+                "invalid_ai_invite",
+                "AI invite policy is invalid.",
+            ));
+        };
+        // The owner's own AI invites admit one AI within the connector invite lifetime.
+        return Ok(DelegatedInvitePolicy {
+            display_name: "AI".to_owned(),
+            invite_scope,
+            ttl_seconds: crate::connector_admission::TTL.num_seconds(),
+            max_uses: 1,
+            ai: true,
+        });
+    }
     let label = params.display_name.as_deref().unwrap_or_default().trim();
     let display_name = if label.is_empty() { "Guest" } else { label };
     if display_name.chars().count() > MAX_INVITE_LABEL_CHARS || display_name.contains(['\r', '\n'])
@@ -80,15 +101,11 @@ pub fn delegated_invite_policy(
             "Human invite policy is invalid.",
         ));
     }
-    let invite_scope = match params.invite_scope.as_str() {
-        "read_write" => InviteScope::ReadWrite,
-        "read_only" => InviteScope::ReadOnly,
-        _ => {
-            return Err(rejected(
-                "invalid_human_invite",
-                "Human invite policy is invalid.",
-            ));
-        }
+    let Ok(invite_scope) = scope(&params.invite_scope) else {
+        return Err(rejected(
+            "invalid_human_invite",
+            "Human invite policy is invalid.",
+        ));
     };
     if params.ttl_seconds <= 0 || params.max_uses < 0 {
         return Err(rejected(
@@ -104,7 +121,16 @@ pub fn delegated_invite_policy(
         invite_scope,
         ttl_seconds: params.ttl_seconds,
         max_uses: params.max_uses,
+        ai: false,
     })
+}
+
+fn scope(value: &str) -> Result<InviteScope, ()> {
+    match value {
+        "read_write" => Ok(InviteScope::ReadWrite),
+        "read_only" => Ok(InviteScope::ReadOnly),
+        _ => Err(()),
+    }
 }
 
 fn consequences(policy: &DelegatedInvitePolicy) -> String {
@@ -112,6 +138,11 @@ fn consequences(policy: &DelegatedInvitePolicy) -> String {
         InviteScope::ReadWrite => "read and write messages in",
         InviteScope::ReadOnly => "read messages in",
     };
+    if policy.ai {
+        return format!(
+            "Creates an AI invitation link that lets one external AI join and {scope} this room within an hour. You see the link once in this acknowledgement; it is never posted to the room and cannot be retrieved later."
+        );
+    }
     format!(
         "Creates a room invitation that lets whoever holds the link or join code {scope} this room. You see the link once in this acknowledgement; it is never posted to the room and cannot be retrieved later."
     )
@@ -359,6 +390,7 @@ impl SqliteStore {
                 state: request.state,
                 new_events: Vec::new(),
                 invite: None,
+                connector: None,
             });
         }
         let receipt = json!({"status":"rejected","code":code,"message":message,"retryable":false});
@@ -370,6 +402,7 @@ impl SqliteStore {
             state: ConfirmationState::Failed,
             new_events: Vec::new(),
             invite: None,
+            connector: None,
         })
     }
 
@@ -394,6 +427,7 @@ impl SqliteStore {
                 state: request.state,
                 new_events: Vec::new(),
                 invite: None,
+                connector: None,
             });
         }
         let receipt = json!({"status":"rejected","code":"confirmation_cancelled","message":"The owner or delegate authority ended before execution.","retryable":false});
@@ -412,6 +446,7 @@ impl SqliteStore {
             state: ConfirmationState::Cancelled,
             new_events: Vec::new(),
             invite: None,
+            connector: None,
         })
     }
 
@@ -432,6 +467,7 @@ impl SqliteStore {
             state,
             new_events: Vec::new(),
             invite: None,
+            connector: None,
         })
     }
 
@@ -446,7 +482,7 @@ impl SqliteStore {
         &self,
         room_id: &str,
         confirmation_id: &str,
-        minted: &MintedHumanInvite,
+        minted: Option<&MintedHumanInvite>,
     ) -> Result<ApprovedInviteDrive, PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let row = load_in(&mut tx, room_id, confirmation_id).await?;
@@ -471,6 +507,7 @@ impl SqliteStore {
                 state: request.state,
                 new_events: Vec::new(),
                 invite: None,
+                connector: None,
             });
         }
         let recorded = match row.get::<Option<&str>, _>("decision_json") {
@@ -534,21 +571,9 @@ impl SqliteStore {
             Err(error) => return Err(error),
         };
         let first_seq = crate::room_event_sequence::next_sequence(&mut tx, room_id).await?;
-        let invite = crate::human_invites::create_human_invite_in(
-            &mut tx,
-            &manager,
-            NewHumanInvite {
-                signed_token_fingerprint: minted.signed_token_fingerprint,
-                join_code_fingerprint: minted.join_code_fingerprint,
-                base_participant_id: minted.base_participant_id.clone(),
-                display_name: policy.display_name.clone(),
-                invite_scope: policy.invite_scope,
-                max_uses: policy.max_uses,
-                expires_at: minted.expires_at,
-                created_at: minted.created_at,
-            },
-        )
-        .await?;
+        let (invite, connector) = self
+            .mint_approved_invite_in(&mut tx, &manager, &policy, &request.confirmation_id, minted)
+            .await?;
         let mut events: Vec<RoomEvent> = Vec::new();
         let mut system = crate::delegated_pin::attributed_action_event(
             &mut tx,
@@ -556,7 +581,11 @@ impl SqliteStore {
             &stored.request_id,
             "create_human_invite",
             "",
-            "created a room invite",
+            if policy.ai {
+                "created an AI invite"
+            } else {
+                "created a room invite"
+            },
         )
         .await?;
         system
@@ -588,7 +617,61 @@ impl SqliteStore {
             receipt,
             state: ConfirmationState::Succeeded,
             new_events: events,
-            invite: Some(invite),
+            invite,
+            connector,
+        })
+    }
+
+    /// Mints the approved invite inside the drive transaction: a connector invite for an
+    /// AI through the owner's own connector core, else the server-minted human invite.
+    async fn mint_approved_invite_in(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        manager: &RoomManagerAuthority,
+        policy: &DelegatedInvitePolicy,
+        confirmation_id: &str,
+        minted: Option<&MintedHumanInvite>,
+    ) -> Result<(Option<HumanInvite>, Option<crate::ConnectorInvite>), PersistenceError> {
+        Ok(if policy.ai {
+            // The confirmation identifies the issued AI invite, so an exact replay
+            // re-derives the same credential instead of issuing another.
+            let digest = sha2::Sha256::digest(confirmation_id.as_bytes());
+            let mut id = [0_u8; 16];
+            id.copy_from_slice(&digest[..16]);
+            let connector = self
+                .create_connector_invite_in(
+                    tx,
+                    manager,
+                    Uuid::from_bytes(id),
+                    policy.invite_scope,
+                    None,
+                    Utc::now(),
+                )
+                .await?;
+            (None, Some(connector))
+        } else {
+            let Some(minted) = minted else {
+                return Err(rejected(
+                    "bad_request",
+                    "A minted human invite is required.",
+                ));
+            };
+            let invite = crate::human_invites::create_human_invite_in(
+                tx,
+                manager,
+                NewHumanInvite {
+                    signed_token_fingerprint: minted.signed_token_fingerprint,
+                    join_code_fingerprint: minted.join_code_fingerprint,
+                    base_participant_id: minted.base_participant_id.clone(),
+                    display_name: policy.display_name.clone(),
+                    invite_scope: policy.invite_scope,
+                    max_uses: policy.max_uses,
+                    expires_at: minted.expires_at,
+                    created_at: minted.created_at,
+                },
+            )
+            .await?;
+            (Some(invite), None)
         })
     }
 }

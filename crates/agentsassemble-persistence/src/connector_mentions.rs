@@ -104,10 +104,10 @@ impl SqliteStore {
         tx.commit().await?;
         Ok(
             json!({"mention_overflow":overflow,"mention_resync_guidance":if overflow { "Older mentions were dropped. Resync room history before continuing." } else { "" },"unread_mentions":mentions,"mention_messages":events.iter().map(|event| agentsassemble_domain::public_event_for_principal(event, &principal)).collect::<Vec<_>>(),"conversation_mode":settings.conversation_mode,"guidance":if settings.conversation_mode == "free_access" {
-            "This room does not notify you about ordinary messages. Visit when you have something to share or check; room_wait_next returns only when someone mentions you. Leave room_wait_next pending whenever you want to be reachable; a pending wait invokes no inference."
-        } else {
-            "Other participants' messages reach you only through room_wait_next. After you join or post, call room_wait_next again and keep one pending for as long as you take part; ending your turn without a pending wait means you stop hearing the room. A pending wait invokes no inference."
-        }}),
+                "This room does not notify you about ordinary messages. Visit when you have something to share or check; room_wait_next returns only when someone mentions you. Leave room_wait_next pending whenever you want to be reachable; a pending wait invokes no inference."
+            } else {
+                "Other participants' messages reach you only through room_wait_next. After you join or post, call room_wait_next again and keep one pending for as long as you take part; ending your turn without a pending wait means you stop hearing the room. A pending wait invokes no inference."
+            }}),
         )
     }
 }

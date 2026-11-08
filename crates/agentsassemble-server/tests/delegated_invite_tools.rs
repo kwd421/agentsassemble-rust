@@ -199,5 +199,58 @@ pub(super) async fn verify(
             "replayed decision carries a credential: {replay}"
         );
     }
+    verify_ai(client, connection, owner).await
+}
+
+/// An AI invite follows the same owner approval and yields a connector invitation
+/// link that only the owner's acknowledgement carries.
+async fn verify_ai(
+    client: &Client,
+    connection: Option<&Value>,
+    owner: (&str, &AppState),
+) -> TestResult {
+    let mut args = json!({
+        "request_id": Uuid::new_v4().to_string(),
+        "invite_scope": "read_write",
+        "ttl_seconds": 600,
+        "max_uses": 5,
+        "invitee": "ai",
+    });
+    if let Some(connection) = connection {
+        args["connection_id"] = connection.clone();
+    }
+    let pending = call(client, "request_create_invite", args.clone()).await;
+    assert_eq!(pending["status"], "pending_confirmation", "{pending}");
+    let confirmation_id = pending["confirmation_id"]
+        .as_str()
+        .ok_or("confirmation")?
+        .to_owned();
+    let ack = super::decide_on_socket(owner, &confirmation_id, "approve", None).await;
+    let invite = &ack["result"]["invite"];
+    assert_eq!(invite["invitee"], "ai", "{ack}");
+    assert_eq!(invite["join_code"], "");
+    assert_eq!(invite["max_uses"], 1);
+    let join_url = invite["join_url"]
+        .as_str()
+        .ok_or("join url missing")?
+        .to_owned();
+    let token = invite["invite_token"]
+        .as_str()
+        .ok_or("token missing")?
+        .to_owned();
+    assert!(
+        join_url.ends_with(&format!("/join?token={token}")),
+        "{join_url}"
+    );
+    assert!(
+        token.starts_with(agentsassemble_persistence::CONNECTOR_INVITE_PREFIX),
+        "{token}"
+    );
+    let done = call(client, "request_create_invite", args).await;
+    assert_eq!(done["status"], "succeeded", "{done}");
+    assert!(
+        !serde_json::to_string(&done)?.contains(&token),
+        "AI result carries the link: {done}"
+    );
     Ok(())
 }

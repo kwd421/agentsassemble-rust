@@ -6,8 +6,8 @@ use crate::{
 };
 use agentsassemble_domain::{
     AuthenticatedPrincipal, ConfirmationDecision, ConfirmationState, ConfirmedRoomAction,
-    DecideDelegatedAction, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, ParticipantRole,
-    RequestCreateInvite,
+    DecideDelegatedAction, InviteInvitee, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
+    ParticipantRole, RequestCreateInvite,
 };
 
 const ORIGIN: &str = "https://room.example.test";
@@ -87,6 +87,7 @@ fn params() -> RequestCreateInvite {
         invite_scope: "read_only".into(),
         ttl_seconds: 600,
         max_uses: 3,
+        invitee: None,
     }
 }
 
@@ -197,7 +198,7 @@ async fn unconfirmed_invite_binds_policy_and_only_the_owner_approves() -> TestRe
     // The drive mints through the owner's own core, binding the stored policy exactly.
     let minted = minted()?;
     let drive = store
-        .drive_approved_human_invite("general", &id, &minted)
+        .drive_approved_human_invite("general", &id, Some(&minted))
         .await?;
     let invite = drive.invite.clone().ok_or("minted invite missing")?;
     assert_eq!(invite.invite_id, "abababababababab");
@@ -251,7 +252,7 @@ async fn unconfirmed_invite_binds_policy_and_only_the_owner_approves() -> TestRe
     }
     // A second drive returns only the recorded receipt, never another credential.
     let again = store
-        .drive_approved_human_invite("general", &id, &minted)
+        .drive_approved_human_invite("general", &id, Some(&minted))
         .await?;
     assert!(again.invite.is_none());
     assert_eq!(again.receipt, *receipt);
@@ -448,7 +449,7 @@ async fn a_central_owner_session_approves_and_the_mint_binds_that_session() -> T
     assert!(ack.result.get("invite").is_none());
     assert_eq!(invite_rows(&store).await?, baseline);
     let drive = store
-        .drive_approved_human_invite("general", &id, &minted()?)
+        .drive_approved_human_invite("general", &id, Some(&minted()?))
         .await?;
     assert!(drive.invite.is_some());
     assert_eq!(drive.state, ConfirmationState::Succeeded);
@@ -477,7 +478,7 @@ async fn a_session_revoked_after_approval_mints_no_invite() -> TestResult {
         .execute(&store.pool)
         .await?;
     let drive = store
-        .drive_approved_human_invite("general", &id, &minted()?)
+        .drive_approved_human_invite("general", &id, Some(&minted()?))
         .await?;
     assert!(drive.invite.is_none());
     assert_eq!(drive.state, ConfirmationState::Cancelled);
@@ -508,5 +509,54 @@ async fn manager_authority_refuses_an_ordinary_operator_provenance() -> TestResu
         Err(PersistenceError::CommandRejected { code, .. }) if code == "owner_authority_unavailable"
     ));
     tx.rollback().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_approved_ai_invite_mints_one_connector_invite_for_the_owner_only() -> TestResult {
+    let (store, owner, delegate) = invite_fixture().await?;
+    let connectors = || async {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_connector_invites")
+            .fetch_one(&store.pool)
+            .await
+    };
+    let baseline = connectors().await?;
+    let params = params_with(|params| params.invitee = Some(InviteInvitee::Ai));
+    let pending = store
+        .request_delegated_human_invite(&delegate, &params, |_, _, _| Ok(()))
+        .await?
+        .0;
+    assert_eq!(pending["status"], "pending_confirmation", "{pending}");
+    let id = pending["confirmation_id"]
+        .as_str()
+        .ok_or("confirmation")?
+        .to_owned();
+    let (request, _, _) = store.approved_invite_snapshot("general", &id).await?;
+    assert_eq!(request.target_name, "AI");
+    assert!(request.consequences.contains("one external AI"));
+    assert_eq!(connectors().await?, baseline);
+    let decision = DecideDelegatedAction {
+        confirmation_id: id.clone(),
+        decision: ConfirmationDecision::Approve,
+        full_access_acknowledged: None,
+    };
+    store
+        .decide_delegated_action(RoomMutationAuthority::TrustedPrincipal(&owner), &decision)
+        .await?;
+    let drive = store
+        .drive_approved_human_invite("general", &id, None)
+        .await?;
+    assert!(drive.invite.is_none());
+    let connector = drive.connector.ok_or("connector invite missing")?;
+    assert!(!connector.invite_bearer.is_empty());
+    assert_eq!(drive.state, ConfirmationState::Succeeded);
+    assert_eq!(connectors().await?, baseline + 1);
+    assert!(!serde_json::to_string(&drive.receipt)?.contains(&connector.invite_bearer));
+    // A second drive returns only the receipt, never the credential again.
+    let again = store
+        .drive_approved_human_invite("general", &id, None)
+        .await?;
+    assert!(again.connector.is_none());
+    assert_eq!(connectors().await?, baseline + 1);
     Ok(())
 }

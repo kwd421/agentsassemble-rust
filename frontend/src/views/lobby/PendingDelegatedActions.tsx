@@ -52,7 +52,13 @@ function describe(request: DelegatedActionRequest): { summary: string; consequen
     return { summary: `${request.target_name} 님을 방에서 내보내려고 해요`, consequence: "접속이 바로 끊기고, 데려온 AI도 함께 나가요. 새 초대로 다시 참가할 수 있어요.", destructive: true };
   }
   if (action.action === "create_human_invite") {
-    const { display_name, invite_scope, max_uses, ttl_seconds } = action.params;
+    const { display_name, invite_scope, max_uses, ttl_seconds, invitee } = action.params;
+    if (invitee === "ai") {
+      return {
+        summary: "AI 초대 링크를 만들려고 해요",
+        consequence: "AI 한 명이 1시간 안에 참가할 수 있어요." + (invite_scope === "read_only" ? " 읽기 전용으로 참가해요." : ""),
+      };
+    }
     return {
       summary: display_name ? `‘${display_name}’ 초대 링크를 만들려고 해요` : "사람 초대 링크를 만들려고 해요",
       consequence: humanInviteSummary(max_uses, ttl_seconds) + (invite_scope === "read_only" ? " 읽기 전용으로 참가해요." : ""),

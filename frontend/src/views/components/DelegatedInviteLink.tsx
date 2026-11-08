@@ -26,7 +26,9 @@ export default function DelegatedInviteLink({ invite, onClose }: { invite: Deleg
       <Link2 size={24} className="dc-delegated-action-icon" aria-hidden="true" />
       <div className="dc-delegated-action-main">
         <p className="dc-delegated-action-note preserve-words">
-          {humanInviteSummary(invite.max_uses, Math.round(ttlSeconds / 60) * 60)} 닫으면 다시 볼 수 없어요.
+          {invite.invitee === "ai"
+            ? "AI 초대 링크예요. 참가시킬 AI 대화에 붙여 넣으세요. AI 한 명이 1시간 안에 쓸 수 있어요."
+            : humanInviteSummary(invite.max_uses, Math.round(ttlSeconds / 60) * 60)} 닫으면 다시 볼 수 없어요.
         </p>
         <div className="dc-invite-link-field">
           <input className="dc-invite-link-input" value={invite.join_url} readOnly aria-label="만든 초대 링크" onFocus={(event) => event.currentTarget.select()} />

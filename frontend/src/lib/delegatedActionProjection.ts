@@ -67,7 +67,8 @@ export function parseDelegatedActionRequest(value: unknown): DelegatedActionRequ
     assertExactKeys(action, ["action", "request_id", "params"], "confirmed human invite");
     if (typeof action.request_id !== "string" || !action.request_id) throw new Error("Invalid confirmed invite identity");
     const params = strictRecord(action.params, "confirmed invite params");
-    assertExactKeys(params, ["request_id", "invite_scope", "ttl_seconds", "max_uses"], "confirmed invite params", ["display_name"]);
+    assertExactKeys(params, ["request_id", "invite_scope", "ttl_seconds", "max_uses"], "confirmed invite params", ["display_name", "invitee"]);
+    if (params.invitee !== undefined && params.invitee !== "human" && params.invitee !== "ai") throw new Error("Invalid confirmed invitee");
     if (params.request_id !== action.request_id) throw new Error("Invalid confirmed invite params");
     if (params.display_name !== undefined && typeof params.display_name !== "string") throw new Error("Invalid confirmed invite params");
     if (params.invite_scope !== "read_write" && params.invite_scope !== "read_only") throw new Error("Invalid confirmed invite scope");
@@ -107,8 +108,11 @@ export function delegatedActionAckIsValid(payload: Record<string, unknown>, resu
     if (result.confirmation_id !== payload.confirmation_id || !states.includes(String(result.state)) || typeof result.receipt !== "object" || result.receipt === null) return false;
     if (result.invite !== undefined) {
       const invite = strictRecord(result.invite, "delegated invite");
-      assertExactKeys(invite, ["invite_id", "invite_token", "join_code", "join_url", "display_name", "invite_scope", "max_uses", "expires_at"], "delegated invite");
-      if (["invite_id", "invite_token", "join_code", "join_url", "display_name", "invite_scope", "expires_at"].some((key) => typeof invite[key] !== "string" || !invite[key])) return false;
+      assertExactKeys(invite, ["invite_id", "invite_token", "join_code", "join_url", "display_name", "invite_scope", "max_uses", "expires_at"], "delegated invite", ["invitee"]);
+      if (invite.invitee !== undefined && invite.invitee !== "ai") return false;
+      // An AI invitation link has no join code.
+      if (invite.invitee === "ai" ? invite.join_code !== "" : typeof invite.join_code !== "string" || !invite.join_code) return false;
+      if (["invite_id", "invite_token", "join_url", "display_name", "invite_scope", "expires_at"].some((key) => typeof invite[key] !== "string" || !invite[key])) return false;
       if (!Number.isSafeInteger(invite.max_uses) || Number(invite.max_uses) < 0) return false;
       if (!Number.isFinite(Date.parse(String(invite.expires_at)))) return false;
     }

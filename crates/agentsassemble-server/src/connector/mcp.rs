@@ -295,7 +295,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Request creation of a HUMAN room invite on behalf of your owner. Nothing changes until the exact human owner approves within five minutes; the approval mints the invite under the owner's own authority and shows the link to that owner only. The link, join code and invite id are never returned to you. Companion, attendee and connector invites cannot be requested. Retry the same request ID on this session to read the outcome."
+        description = "Request a room invite on behalf of your owner: for a person by default, or with invitee \"ai\" an AI invitation link for one external AI (ChatGPT, Claude, Codex and the like) valid for an hour, where display_name, ttl_seconds and max_uses are ignored. Nothing changes until the exact human owner approves within five minutes; the approval mints the invite under the owner's own authority and shows the link to that owner only. The link, join code and invite id are never returned to you; the owner hands the link to whoever joins. Companion and attendee invites cannot be requested. Retry the same request ID on this session to read the outcome."
     )]
     async fn request_create_invite(
         &self,

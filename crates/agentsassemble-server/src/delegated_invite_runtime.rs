@@ -1,4 +1,4 @@
-//! Server-owned minting for one approved delegated HUMAN room invite.
+//! Server-owned minting for one approved delegated room invite (a person or an AI).
 //!
 //! The room actor's request branch stores the owner-bound confirmation; the owner's own
 //! socket decision commits it. This module mints the credential in the server crate and
@@ -131,6 +131,9 @@ async fn mint_and_drive(
         }
         Err(error) => return Err(error),
     };
+    if policy.ai {
+        return mint_ai_and_drive(state, room_id, confirmation_id, &policy).await;
+    }
     let Some(ingress) = state.public_ingress.ready_snapshot() else {
         return fail(
             state,
@@ -211,13 +214,13 @@ async fn mint_and_drive(
         .drive_approved_human_invite(
             room_id,
             confirmation_id,
-            &MintedHumanInvite {
+            Some(&MintedHumanInvite {
                 signed_token_fingerprint: *credentials.signed_token_fingerprint(),
                 join_code_fingerprint: *credentials.join_code_fingerprint(),
                 base_participant_id,
                 created_at,
                 expires_at,
-            },
+            }),
         )
         .await;
     let drive = match drive {
@@ -240,6 +243,61 @@ async fn mint_and_drive(
         "invite_scope": invite_scope_wire(policy.invite_scope),
         "max_uses": policy.max_uses,
         "expires_at": format_invite_timestamp(expires_at),
+    })))
+}
+
+/// An approved AI invite mints through the owner's own connector-invite core; the AI
+/// invitation link reaches only the owner's live acknowledgement.
+async fn mint_ai_and_drive(
+    state: &AppState,
+    room_id: &str,
+    confirmation_id: &str,
+    policy: &agentsassemble_persistence::DelegatedInvitePolicy,
+) -> Result<Option<Value>, PersistenceError> {
+    let join = state.public_ingress.ready_snapshot().and_then(|ingress| {
+        url::Url::parse(&format!(
+            "{}/join",
+            ingress.public_url.trim_end_matches('/')
+        ))
+        .ok()
+    });
+    let Some(mut join) = join else {
+        return fail(
+            state,
+            room_id,
+            confirmation_id,
+            "public_ingress_not_ready",
+            "Public ingress must be ready before creating an invite.",
+        )
+        .await;
+    };
+    let drive = match state
+        .store
+        .drive_approved_human_invite(room_id, confirmation_id, None)
+        .await
+    {
+        Ok(drive) => drive,
+        Err(PersistenceError::CommandRejected { code, message }) => {
+            return fail(state, room_id, confirmation_id, &code, &message).await;
+        }
+        Err(error) => return Err(error),
+    };
+    let Some(connector) = drive.connector else {
+        return Ok(None);
+    };
+    state.rooms.notify_room_publication(room_id).await;
+    join.query_pairs_mut()
+        .append_pair("token", &connector.invite_bearer);
+    Ok(Some(json!({
+        "invite_id": connector.invite_id.to_string(),
+        "invite_token": connector.invite_bearer,
+        "join_code": "",
+        "join_url": join.to_string(),
+        "display_name": policy.display_name,
+        "invite_scope": invite_scope_wire(policy.invite_scope),
+        "max_uses": policy.max_uses,
+        "expires_at": format_invite_timestamp(connector.expires_at),
+        "invitee": "ai",
     })))
 }
 

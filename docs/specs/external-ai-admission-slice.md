@@ -12,6 +12,17 @@ Slice 2 extends attendee/companion and connector delegated actions with channel 
 See the slice 2 section in local-authority-surface-admission-moderation-slice.md for the complete authority, replay, attribution and verification contract. Earlier pin-only sections describe slice 1.
 
 
+## Director AI invites (2026-11-08)
+
+Owner decision: a director may also request an AI invite. `request_create_invite`
+takes optional `invitee` (`human` default, `ai`). An `ai` request follows the same
+owner confirmation, approver binding, replay and secret rules as a person's invite;
+on approval the owner's own connector-invite core mints one AI invitation (one AI,
+one hour, the requested scope; label, lifetime and use limit are ignored) and only
+the owner's live acknowledgement carries its `/join?token=` link (`invitee: ai`,
+empty `join_code`). The AI sees only the receipt. Companion and attendee invites
+stay unreachable.
+
 ## Director agent catalog (2026-11-08)
 
 Owner decision: `request_create_agent`/`request_reconfigure_agent` need host catalog

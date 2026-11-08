@@ -122,3 +122,25 @@ it("shows a minted invite link only from the approval acknowledgement, until clo
   fireEvent.click(screen.getByRole("button", { name: "닫기" }));
   expect(screen.queryByDisplayValue(invite.join_url)).toBeNull();
 });
+
+it("asks for and then shows an AI invitation link without a join code", async () => {
+  const invite = {
+    invite_id: "inv", invite_token: "aai1.secret", join_code: "", join_url: "https://h-1.agentsassemble.uk/join?token=aai1.secret",
+    display_name: "AI", invite_scope: "read_write", max_uses: 1, expires_at: new Date(Date.now() + 3_600_000).toISOString(), invitee: "ai",
+  };
+  const command = vi.fn().mockResolvedValue({ result: { confirmation_id: "mine", state: "succeeded", receipt: {}, invite } });
+  const socket = { command } as unknown as RoomSocketHandle;
+  const store = createDelegatedActionProjection();
+  registerDelegatedActionProjection(socket, store);
+  store.replace([{
+    ...request("me", "mine"),
+    action: { action: "create_human_invite", request_id: "r", params: { request_id: "r", invite_scope: "read_write", ttl_seconds: 600, max_uses: 3, invitee: "ai" } },
+  } as DelegatedActionRequest]);
+  render(<PendingDelegatedActions socket={socket} viewerParticipantId="me" />);
+
+  expect(screen.getByText("AI 초대 링크를 만들려고 해요")).toBeTruthy();
+  expect(screen.getByText("AI 한 명이 1시간 안에 참가할 수 있어요.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "허용" }));
+  expect(await screen.findByDisplayValue(invite.join_url)).toBeTruthy();
+  expect(screen.getByText(/참가시킬 AI 대화에 붙여 넣으세요/)).toBeTruthy();
+});

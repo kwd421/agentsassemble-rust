@@ -94,6 +94,10 @@ pub struct DelegatedInviteAck {
     pub invite_scope: String,
     pub max_uses: i64,
     pub expires_at: String,
+    /// `ai` for an AI invitation link (no join code); omitted for a person.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub invitee: Option<crate::InviteInvitee>,
 }
 
 /// Owner-private fields of requested/updated room event envelopes.

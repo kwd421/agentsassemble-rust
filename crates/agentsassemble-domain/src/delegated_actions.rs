@@ -140,10 +140,29 @@ pub struct RequestKickParticipant {
     pub participant_id: String,
 }
 
-// Director-requested HUMAN room invite. The schema carries only the invite fields the
-// owner's own human-invite creation accepts from a person: an optional label, the
-// invite scope, a positive lifetime and a use limit. Companion, attendee and connector
-// invites have no variant here, so they are structurally unreachable through delegation.
+// Director-requested room invite. For a person (the default) the schema carries only
+// the invite fields the owner's own human-invite creation accepts: an optional label,
+// the invite scope, a positive lifetime and a use limit. `invitee: ai` asks for an
+// external-AI (connector) invite instead; it follows the owner's own AI-invite rules
+// (one AI, one hour) and ignores the label, lifetime and use limit. Companion and
+// attendee invites stay unreachable through delegation.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+    ts_rs::TS,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum InviteInvitee {
+    Human,
+    Ai,
+}
+
 #[derive(
     Debug,
     Clone,
@@ -163,6 +182,10 @@ pub struct RequestCreateInvite {
     pub invite_scope: String,
     pub ttl_seconds: i64,
     pub max_uses: i64,
+    /// `ai` for an external-AI invite; omitted or `human` for a person.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub invitee: Option<InviteInvitee>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
