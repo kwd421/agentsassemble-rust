@@ -91,13 +91,19 @@ function LobbyImageAttachment({
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
+    setIntersecting(false);
     const element = triggerRef.current;
     if (!element || typeof IntersectionObserver !== "function") {
       setError("이미지 미리보기 관찰 경계를 사용할 수 없습니다.");
       return undefined;
     }
+    // An image starts loading the first time it is seen and then stays, as in
+    // Discord: leaving the viewport never aborts or drops it (that skipped images
+    // pushed out by fast new messages and made the list jump).
     const observer = new IntersectionObserver((entries) => {
-      setIntersecting(entries.some((entry) => entry.isIntersecting));
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setIntersecting(true);
+      observer.disconnect();
     });
     observer.observe(element);
     return () => observer.disconnect();

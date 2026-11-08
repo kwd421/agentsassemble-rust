@@ -212,32 +212,29 @@ describe("LobbyAttachments", () => {
     expect(await screen.findByRole("img", { name: "e.png" })).toBeTruthy();
   });
 
-  it("aborts and revokes an image as soon as it leaves the viewport", async () => {
+  it("keeps loading and showing an image once seen, even after it leaves the viewport", async () => {
     const image = attachment();
     createObjectURL.mockReturnValue("blob:image");
-    transfer.read.mockResolvedValue(new Blob(["image"], { type: "image/png" }));
+    let finish: (blob: Blob) => void = () => undefined;
+    transfer.read.mockReturnValueOnce(new Promise<Blob>((resolve) => { finish = resolve; }));
     const view = render(
       <LobbyAttachments attachments={[image]} scheduler={scheduler()} />
     );
     act(() => intersectionObservers[0]?.emit(true));
+    await waitFor(() => expect(transfer.read).toHaveBeenCalledTimes(1));
+    const signal = transfer.read.mock.calls[0]?.[4] as AbortSignal;
+    // Once seen it stops watching the viewport, so being pushed out by new
+    // messages can neither abort the load nor drop the shown image.
+    expect(() => intersectionObservers[0]?.emit(false)).toThrow("observer target is unavailable");
+    expect(signal.aborted).toBe(false);
+    await act(async () => { finish(new Blob(["image"], { type: "image/png" })); });
     await screen.findByRole("img", { name: "a.png" });
 
-    act(() => intersectionObservers[0]?.emit(false));
-    await waitFor(() => expect(screen.queryByRole("img", { name: "a.png" })).toBeNull());
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:image");
-
-    transfer.read.mockReturnValueOnce(new Promise<Blob>(() => {}));
-    act(() => intersectionObservers[0]?.emit(true));
-    await waitFor(() => expect(transfer.read).toHaveBeenCalledTimes(2));
-    const activeSignal = transfer.read.mock.calls[1]?.[4] as AbortSignal;
-    act(() => intersectionObservers[0]?.emit(false));
-    expect(activeSignal.aborted).toBe(true);
-
-    transfer.read.mockResolvedValueOnce(new Blob(["image"], { type: "image/png" }));
-    act(() => intersectionObservers[0]?.emit(true));
-    await screen.findByRole("img", { name: "a.png" });
+    expect(screen.getByRole("img", { name: "a.png" })).toBeTruthy();
+    expect(transfer.read).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).not.toHaveBeenCalled();
     view.unmount();
-    expect(revokeObjectURL).toHaveBeenCalledTimes(2);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:image");
   });
 
   it("revokes the previous authority image before layout observers run", async () => {

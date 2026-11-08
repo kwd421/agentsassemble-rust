@@ -527,9 +527,11 @@ tests passed, plus `cargo fmt --all`, `git diff --check` and unchanged architect
   or remote reads;
   the fifth remains queued until an active transport actually settles, even when its
   caller has already aborted, and cancellation before deferred transport entry performs
-  no transfer. Intersecting images retain only
-  their own generation-owned object URL and revoke it on viewport exit, replacement,
-  room or authority change, abort, or unmount. Authority replacement layout-aborts the
+  no transfer. An image starts its preview read the first time it enters the
+  viewport and keeps it, as in Discord (owner, 2026-11-08: unloading on viewport exit
+  flickered at the edge and dropped images pushed out by fast new messages). It retains
+  only its own generation-owned object URL and revokes it on replacement, room or
+  authority change, abort, or unmount. Authority replacement layout-aborts the
   old readers and revokes their object URLs before the new principal can paint, while
   any abort-ignoring transport retains its shared slot until actual settlement. The
   stable capacity owner is neither retired by React StrictMode's effect reconnect nor
