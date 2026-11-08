@@ -125,6 +125,24 @@ pub fn delegated_invite_policy(
     })
 }
 
+/// An AI invite keeps only its scope and the AI-invite rules; `human` is the default.
+fn normalized_invite_params(params: &RequestCreateInvite) -> RequestCreateInvite {
+    match params.invitee {
+        Some(InviteInvitee::Ai) => RequestCreateInvite {
+            request_id: params.request_id.clone(),
+            display_name: None,
+            invite_scope: params.invite_scope.clone(),
+            ttl_seconds: crate::connector_admission::TTL.num_seconds(),
+            max_uses: 1,
+            invitee: Some(InviteInvitee::Ai),
+        },
+        Some(InviteInvitee::Human) | None => RequestCreateInvite {
+            invitee: None,
+            ..params.clone()
+        },
+    }
+}
+
 fn scope(value: &str) -> Result<InviteScope, ()> {
     match value {
         "read_write" => Ok(InviteScope::ReadWrite),
@@ -290,6 +308,10 @@ impl SqliteStore {
                 "A nonzero request UUID is required.",
             ));
         }
+        // The stored request carries what will be minted, so an AI invite never binds
+        // the ignored person-invite fields an owner's client would reject.
+        let normalized = normalized_invite_params(params);
+        let params = &normalized;
         let policy = delegated_invite_policy(params)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let action = ConfirmedRoomAction::CreateHumanInvite(ConfirmedHumanInvite {

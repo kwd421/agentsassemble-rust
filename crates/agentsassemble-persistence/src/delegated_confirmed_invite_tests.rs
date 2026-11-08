@@ -521,7 +521,12 @@ async fn an_approved_ai_invite_mints_one_connector_invite_for_the_owner_only() -
             .await
     };
     let baseline = connectors().await?;
-    let params = params_with(|params| params.invitee = Some(InviteInvitee::Ai));
+    // Ignored person-invite fields, even out-of-range ones, are not bound as sent.
+    let params = params_with(|params| {
+        params.invitee = Some(InviteInvitee::Ai);
+        params.ttl_seconds = 0;
+        params.max_uses = -1;
+    });
     let pending = store
         .request_delegated_human_invite(&delegate, &params, |_, _, _| Ok(()))
         .await?
@@ -533,6 +538,17 @@ async fn an_approved_ai_invite_mints_one_connector_invite_for_the_owner_only() -
         .to_owned();
     let (request, _, _) = store.approved_invite_snapshot("general", &id).await?;
     assert_eq!(request.target_name, "AI");
+    let ConfirmedRoomAction::CreateHumanInvite(bound) = &request.action else {
+        return Err("bound invite missing".into());
+    };
+    assert_eq!(
+        (
+            bound.params.ttl_seconds,
+            bound.params.max_uses,
+            bound.params.display_name.as_deref()
+        ),
+        (3600, 1, None)
+    );
     assert!(request.consequences.contains("one external AI"));
     assert_eq!(connectors().await?, baseline);
     let decision = DecideDelegatedAction {
