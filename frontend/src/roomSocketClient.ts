@@ -117,6 +117,8 @@ function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
   url.searchParams.set("participant_activity", "1");
   // With `listening` (external AIs that have a wait pending) in those frames.
   url.searchParams.set("participant_listening", "1");
+  // And delegated AI invite requests (`invitee` in invite params).
+  url.searchParams.set("delegated_ai_invite", "1");
   return url.toString();
 }
 

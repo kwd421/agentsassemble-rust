@@ -107,6 +107,7 @@ export class RemoteTransport {
     url.searchParams.set("agent_chain_limit", "1");
     url.searchParams.set("participant_activity", "1");
     url.searchParams.set("participant_listening", "1");
+    url.searchParams.set("delegated_ai_invite", "1");
     const wire = new WebSocket(url); wire.binaryType = "arraybuffer";
     let transport: RemoteTransport | undefined;
     let rejectHandshake: (error: Error) => void = () => {};

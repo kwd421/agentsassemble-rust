@@ -21,7 +21,10 @@ on approval the owner's own connector-invite core mints one AI invitation (one A
 one hour, the requested scope; label, lifetime and use limit are ignored) and only
 the owner's live acknowledgement carries its `/join?token=` link (`invitee: ai`,
 empty `join_code`). The AI sees only the receipt. Companion and attendee invites
-stay unreachable.
+stay unreachable. The stored request binds the AI-invite rules, never the ignored
+fields as sent. A client that does not advertise `delegated_ai_invite=1` never
+sees `invitee`: pending lists omit AI invite requests and their events arrive as
+`cancelled`, so its strict parser and `seq` stay intact.
 
 ## Director agent catalog (2026-11-08)
 

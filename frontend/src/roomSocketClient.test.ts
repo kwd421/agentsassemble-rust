@@ -115,6 +115,7 @@ describe("bounded canonical room socket", () => {
     expect(url.searchParams.get("channel_message_cursors")).toBe("1");
     expect(url.searchParams.get("participant_activity")).toBe("1");
     expect(url.searchParams.get("participant_listening")).toBe("1");
+    expect(url.searchParams.get("delegated_ai_invite")).toBe("1");
     handle.close();
   });
 
