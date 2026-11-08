@@ -256,6 +256,10 @@ describe("member click after the host reaps the listing channel", () => {
     expect(result.current.rooms.some((room) => room.id === memberId)).toBe(true);
     const midFlight = result.current.rooms.find((room) => room.id === memberId)!;
     expect(midFlight.connectionState).not.toBe("disconnected");
+    // The tap opens the member room at once (loading), before its host answers.
+    expect(result.current.activeRoom.id).toBe(memberId);
+    expect(result.current.activeRoomSelecting).toBe(true);
+    expect(result.current.activeRoomDisconnected).toBe(true);
     const opensBeforeAdmission = hooks.opens.length;
     const closesBeforeAdmission = hooks.closes.length;
 
@@ -269,9 +273,9 @@ describe("member click after the host reaps the listing channel", () => {
     expect(hooks.deadSelect).not.toHaveBeenCalled();
     expect(hooks.liveSelect).toHaveBeenCalledTimes(1);
     expect(result.current.memberSelectError).toBeNull();
-    // Admission complete: the clicked member room is active and its socket
-    // opens with its own session; the own socket is closed exactly once by
-    // the room switch and never reopened on the own room.
+    // Admission complete: the clicked member room's socket opens with its own
+    // session; the own socket was closed exactly once by the switch at the tap
+    // and never reopened, and nothing opened before the host answered.
     await waitFor(() => expect(result.current.activeRoom.meetingId).toBe(MEMBER_MEETING));
     expect(result.current.activeRoom.id).toBe(memberId);
     const memberOpen = hooks.opens.find((open) => open.roomId === MEMBER_MEETING);
@@ -281,6 +285,7 @@ describe("member click after the host reaps the listing channel", () => {
     expect(hooks.opens.filter((open) => open.roomId === OWN_MEETING)).toHaveLength(1);
     expect(hooks.closes.filter((close) => close.roomId === OWN_MEETING)).toHaveLength(1);
     expect(opensBeforeAdmission).toBe(1);
-    expect(closesBeforeAdmission).toBe(0);
+    expect(closesBeforeAdmission).toBe(1);
+    expect(result.current.activeRoomSelecting).toBe(false);
   });
 });

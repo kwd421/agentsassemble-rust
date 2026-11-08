@@ -217,7 +217,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     activeRoom.roomOrigin === "remote_server" && !activeRoomSelectError?.membershipEnded;
   // A room still connecting shows its own loading, not the unplugged view: that
   // view is for a connection that failed or waits on something.
-  const activeRoomOnlyConnecting = activeRoom.connectionState === "connecting" &&
+  const activeRoomOnlyConnecting = (activeRoom.connectionState === "connecting" || controller.activeRoomSelecting) &&
     !activeRoomSelectError && !activeRoomNeedsAdmission && !activeRoomWaitsForQuota;
   const centralQuotaNotice = quotaPersonId && !activeRoomWaitsForQuota && !quotaNoticeDismissed(quotaPersonId, centralQuotaResetAt)
     ? centralDailyQuotaNotice(quotaPersonId)

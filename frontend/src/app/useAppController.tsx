@@ -141,6 +141,8 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   // alert); the next tap retries through a fresh admission. A kicked room
   // carries a structured membership-ended reason instead of matched text.
   const [memberSelectError, setMemberSelectError] = useState<MemberSelectError | null>(null);
+  // The member room a rail tap opened before its host answered (shown as loading).
+  const [selectingRoomId, setSelectingRoomId] = useState("");
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);
   const [channelMenu, setChannelMenu] = useState<ChannelMenuState>(null);
   const [settingsModal, setSettingsModal] = useState<RoomSettingsState>(null);
@@ -295,6 +297,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   // which must never drive another host's room.
   const activeRoomSelectError = memberSelectError && memberSelectError.roomId === activeRoom.id
     ? memberSelectError : null;
+  const activeRoomSelecting = Boolean(selectingRoomId) && selectingRoomId === activeRoom.id;
   // Joined member rooms stay live in the background: each covered room keeps
   // a lightweight event stream for its rail unread/mention badge. The active
   // room suspends its background stream (the canonical socket owns it).
@@ -638,6 +641,18 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
           !(admittedSessionToken && guestSession && !guestExpired &&
             guestSession.meetingId === room.meetingId &&
             guestSession.serverSurface.server_id === room.serverId)) {
+        // A tap opens the room at once, as in Discord: the host's answer only
+        // fills it in. Only where a session is scoped to its own room, so the
+        // room never borrows the previous room's session while it waits.
+        // Marking the admission first keeps the automatic re-select from
+        // spending a second attempt on the room this tap is already opening.
+        const opensAtOnce = scopeSessionToActiveRoom;
+        if (opensAtOnce) {
+          markAdmissionSeen(memberServerId, room.meetingId);
+          setMemberSelectError((current) => (current?.roomId === roomId ? null : current));
+          setSelectingRoomId(roomId);
+          showRoom(roomId);
+        }
         try {
           await selectMemberRoomOnDemand({
             roomId, meetingId: room.meetingId, memberServerId,
@@ -651,12 +666,18 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
           // automatic re-select must not spend a second attempt on
           // the same host channel.
           markAdmissionSeen(memberServerId, room.meetingId);
+          if (opensAtOnce) setSelectingRoomId((current) => (current === roomId ? "" : current));
         }
+        if (opensAtOnce) return;
       } else if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
     } catch (error) {
       window.alert(userFacingError(error, "방을 열지 못했어요."));
       return;
     }
+    showRoom(roomId);
+  }
+
+  function showRoom(roomId: string) {
     setActiveRoomId(roomId);
     setAdminOpen(false);
     setChannel("lobby");
@@ -948,7 +969,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     activeChannelDisplay, activeChannelSettings,
     canManageActiveRoom, canControlActiveAgents, canAddCompanion, canAddActiveAI,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
-    activeRoomDisconnected: activeRoomOperationallyDisconnected, activeMemberHostDetail, activeRoomSelectError, activeRoomNeedsAdmission, activeRoomHistory, activeRoomMembers,
+    activeRoomDisconnected: activeRoomOperationallyDisconnected, activeMemberHostDetail, activeRoomSelectError, activeRoomSelecting, activeRoomNeedsAdmission, activeRoomHistory, activeRoomMembers,
     addFreshRoom, adjustSidebarWidthWithKeyboard,
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,
     cancelMobileShellPointer, canonicalRoom, sideChat,

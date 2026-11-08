@@ -400,6 +400,41 @@ describe("member room selection on an owner local host", () => {
     }
   });
 
+  it("opens a tapped member room at once and loads until its host answers", async () => {
+    const { result } = renderHook(() => useAppController("device-test", "client-test"));
+    await waitFor(() => {
+      if (result.current.rooms.length !== 2) throw new Error("rail not merged yet");
+    });
+    const memberId = result.current.rooms.find((room) => room.meetingId === MEMBER_MEETING)!.id;
+    const successSelect = hooks.select.getMockImplementation();
+    let answer: () => void = () => undefined;
+    const hostAnswers = new Promise<void>((resolve) => { answer = resolve; });
+    // The host is off: every select attempt fails once it answers.
+    hooks.select.mockImplementation(async () => {
+      await hostAnswers;
+      throw new Error("연결이 끝났어요.");
+    });
+    try {
+      let tapped: Promise<void> | null = null;
+      act(() => { tapped = result.current.selectRoom(memberId); });
+      // One tap is enough: the room is shown loading before the host answers.
+      await waitFor(() => expect(result.current.activeRoom.id).toBe(memberId));
+      expect(result.current.activeRoomSelecting).toBe(true);
+      expect(result.current.activeRoomSelectError).toBeNull();
+      await act(async () => {
+        answer();
+        await tapped!;
+      });
+      expect(result.current.activeRoom.id).toBe(memberId);
+      expect(result.current.activeRoomSelecting).toBe(false);
+      expect(result.current.activeRoomSelectError).toEqual({
+        roomId: memberId, message: "방을 열지 못했어요. 다시 시도해 주세요.",
+      });
+    } finally {
+      if (successSelect) hooks.select.mockImplementation(successSelect);
+    }
+  });
+
   it("never drives a member room with host auth when the rail menu opens it", async () => {
     const { result } = renderHook(() => useAppController("device-test", "client-test"));
     await waitFor(() => {
