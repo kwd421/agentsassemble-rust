@@ -115,6 +115,8 @@ function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
   url.searchParams.set("agent_chain_limit", "1");
   // And `participant_activity` frames: which external AIs are working.
   url.searchParams.set("participant_activity", "1");
+  // With `listening` (external AIs that have a wait pending) in those frames.
+  url.searchParams.set("participant_listening", "1");
   return url.toString();
 }
 
@@ -559,11 +561,12 @@ export function openRoomSocket(
           return;
         }
         if (msg.op === "participant_activity") {
-          assertExactKeys(msg, ["op", "active"], "participant activity");
-          if (!Array.isArray(msg.active) || !msg.active.every((id) => typeof id === "string" && id)) {
+          assertExactKeys(msg, ["op", "active"], "participant activity", ["listening"]);
+          const ids = (value: unknown) => Array.isArray(value) && value.every((id) => typeof id === "string" && id);
+          if (!ids(msg.active) || (msg.listening !== undefined && !ids(msg.listening))) {
             throw new RoomSocketSayError("Participant activity frame was invalid.", "frame_schema_invalid");
           }
-          handlers.onParticipantActivity?.(msg.active as string[]);
+          handlers.onParticipantActivity?.(msg.active as string[], (msg.listening ?? []) as string[]);
           return;
         }
         if (msg.op === "side_chat_updated" || msg.op === "side_chat_resync_required") {

@@ -27,6 +27,8 @@ export type MemberEntry = {
   statusLabel?: string;
   /** An external AI the server says is working on a message. */
   working?: boolean;
+  /** An external AI with a wait pending: it hears the room. */
+  listening?: boolean;
   role: RoleId;
   owner: boolean;
   ownerId?: string;

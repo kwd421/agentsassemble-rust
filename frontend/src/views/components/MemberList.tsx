@@ -22,7 +22,7 @@ import { useMemberEntries } from "./member/useMemberEntries";
 import { externalAgentProfile, type MemberEntry, type RoleId, type AgentProfileTarget } from "./member/memberTypes";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { userFacingError } from "../../lib/apiErrors";
-import { useRoomActivity } from "../../app/roomActivity";
+import { useRoomActivity, useRoomListening } from "../../app/roomActivity";
 
 export type { RoleId };
 
@@ -120,6 +120,7 @@ export default function MemberList({
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [memberMenuOpen]);
   const working = useRoomActivity();
+  const listening = useRoomListening();
   const { entries, contextBadges } = useMemberEntries({
     agents,
     members,
@@ -127,6 +128,7 @@ export default function MemberList({
     displayResourceBase,
     agentSessions,
     working,
+    listening,
   });
   const profileCardEntry = profileCard ? entries.find((entry) => entry.id === profileCard.entryId) || null : null;
   const closeProfileCard = useCallback(() => setProfileCard(null), []);

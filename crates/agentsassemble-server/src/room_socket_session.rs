@@ -62,11 +62,11 @@ pub(crate) async fn run<S>(
     };
     let mut principal = principal;
     let mut room_session = room_session;
-    let mut activity = wire
-        .participant_activity
+    let mut activity = (wire.participant_activity != crate::client_wire::ActivityWire::Off)
         .then(|| state.participant_activity.subscribe(&principal.room_id));
+    let listening = wire.participant_activity == crate::client_wire::ActivityWire::Listening;
     if let Some(activity) = &mut activity {
-        let frame = activity_frame(activity);
+        let frame = activity_frame(activity, listening);
         if send_authorized_frame(
             &state,
             &mut principal,
@@ -309,7 +309,7 @@ pub(crate) async fn run<S>(
                 }
                 changed = activity_changed(&mut activity) => {
                     let Some(activity) = activity.as_mut().filter(|_| changed) else { return; };
-                    let frame = activity_frame(activity);
+                    let frame = activity_frame(activity, listening);
                     if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
                 }
                 changed = catalog_updates.changed() => {
@@ -334,7 +334,7 @@ pub(crate) async fn run<S>(
     }
 }
 
-type ActivityReceiver = tokio::sync::watch::Receiver<std::collections::BTreeSet<String>>;
+type ActivityReceiver = tokio::sync::watch::Receiver<crate::participant_activity::ActivitySnapshot>;
 
 /// Never resolves for a client that did not ask for activity.
 async fn activity_changed(activity: &mut Option<ActivityReceiver>) -> bool {
@@ -344,9 +344,11 @@ async fn activity_changed(activity: &mut Option<ActivityReceiver>) -> bool {
     }
 }
 
-fn activity_frame(activity: &mut ActivityReceiver) -> ServerFrame {
+fn activity_frame(activity: &mut ActivityReceiver, listening: bool) -> ServerFrame {
+    let snapshot = activity.borrow_and_update();
     ServerFrame::ParticipantActivity {
-        active: activity.borrow_and_update().iter().cloned().collect(),
+        active: snapshot.working.iter().cloned().collect(),
+        listening: listening.then(|| snapshot.listening.iter().cloned().collect()),
     }
 }
 

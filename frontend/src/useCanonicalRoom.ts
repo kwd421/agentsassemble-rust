@@ -135,6 +135,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   const [participantsByRoom, setParticipantsByRoom] = useState<Record<string, RoomMember[]>>({});
   const [capabilitiesByRoom, setCapabilitiesByRoom] = useState<Record<string, Record<string, boolean>>>({});
   const [activityByRoom, setActivityByRoom] = useState<Record<string, string[]>>({});
+  const [listeningByRoom, setListeningByRoom] = useState<Record<string, string[]>>({});
   const [providerCatalogByRoom, setProviderCatalogByRoom] = useState<
     Record<string, ProviderCatalogSnapshot>
   >({});
@@ -450,9 +451,10 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       onSideChat: (update) => {
         if (connectionIsCurrent() && socketIsAccepted(currentSocket)) callbacksRef.current.onSideChat?.(update);
       },
-      onParticipantActivity: (active) => {
+      onParticipantActivity: (active, listening) => {
         if (connectionIsCurrent() && socketIsAccepted(currentSocket)) {
           setActivityByRoom((previous) => ({ ...previous, [roomId]: active }));
+          setListeningByRoom((previous) => ({ ...previous, [roomId]: listening }));
         }
       },
       onOpen: () => {
@@ -465,6 +467,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           setConnectionState("connecting");
           // A new connection reports the current activity again.
           setActivityByRoom((previous) => ({ ...previous, [roomId]: [] }));
+          setListeningByRoom((previous) => ({ ...previous, [roomId]: [] }));
           callbacksRef.current.onSideChatClose?.();
         }
       },
@@ -502,6 +505,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       }
       // The next connection reports activity afresh.
       setActivityByRoom((previous) => ({ ...previous, [roomId]: [] }));
+      setListeningByRoom((previous) => ({ ...previous, [roomId]: [] }));
       currentSocket.close();
       setSocket((current) => (current === currentSocket ? null : current));
       setConnectionState("disconnected");
@@ -809,6 +813,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       : EMPTY_PROVIDER_CATALOG,
     agentSessionProgress: projectionIsCurrent ? progressByRoom[roomId] || null : null,
     activeParticipantIds: projectionIsCurrent ? activityByRoom[roomId] || NO_ACTIVITY : NO_ACTIVITY,
+    listeningParticipantIds: projectionIsCurrent ? listeningByRoom[roomId] || NO_ACTIVITY : NO_ACTIVITY,
     pluginEnvelopes: projectionIsCurrent ? pluginEnvelopesByRoom[roomId] || [] : [],
     history: projectionIsCurrent
       ? historyByRoom[roomId] || EMPTY_CANONICAL_HISTORY

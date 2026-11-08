@@ -9,6 +9,10 @@ use serde_json::Value;
 pub(crate) const AGENT_CHAIN_LIMIT_QUERY: &str = "agent_chain_limit";
 /// The client reads `participant_activity` frames.
 const PARTICIPANT_ACTIVITY_QUERY: &str = "participant_activity";
+/// The client reads `listening` in those frames.
+const PARTICIPANT_LISTENING_QUERY: &str = "participant_listening";
+/// The client reads delegated AI invite requests.
+const DELEGATED_AI_INVITE_QUERY: &str = "delegated_ai_invite";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ClientWire {
@@ -16,8 +20,21 @@ pub(crate) struct ClientWire {
     pub(crate) channel_message_cursors: bool,
     /// `agent_chain_limit` in room settings, wherever they appear.
     pub(crate) agent_chain_limit: bool,
-    /// Which external AIs are working, as `participant_activity` frames.
-    pub(crate) participant_activity: bool,
+    /// Which `participant_activity` frames the client reads.
+    pub(crate) participant_activity: ActivityWire,
+    /// Delegated AI invite requests (`invitee` in invite params).
+    pub(crate) delegated_ai_invite: bool,
+}
+
+/// How much external-AI activity a client reads.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ActivityWire {
+    #[default]
+    Off,
+    /// Which external AIs are working.
+    Working,
+    /// Also which have a wait pending (`listening`).
+    Listening,
 }
 
 impl ClientWire {
@@ -27,7 +44,15 @@ impl ClientWire {
                 query,
             ),
             agent_chain_limit: advertises(query, AGENT_CHAIN_LIMIT_QUERY),
-            participant_activity: advertises(query, PARTICIPANT_ACTIVITY_QUERY),
+            participant_activity: match (
+                advertises(query, PARTICIPANT_ACTIVITY_QUERY),
+                advertises(query, PARTICIPANT_LISTENING_QUERY),
+            ) {
+                (false, _) => ActivityWire::Off,
+                (true, false) => ActivityWire::Working,
+                (true, true) => ActivityWire::Listening,
+            },
+            delegated_ai_invite: advertises(query, DELEGATED_AI_INVITE_QUERY),
         }
     }
 
@@ -75,7 +100,7 @@ mod tests {
     use axum::extract::ws::Message;
     use serde_json::{Value, json};
 
-    use super::ClientWire;
+    use super::{ActivityWire, ClientWire};
 
     fn sent(wire: ClientWire, frame: &Value) -> Value {
         match wire.adapt(Message::Text(frame.to_string().into())) {
@@ -112,10 +137,17 @@ mod tests {
 
     #[test]
     fn only_an_advertising_client_gets_activity_frames() {
-        assert!(!ClientWire::from_query(Some("ticket=t&agent_chain_limit=1")).participant_activity);
-        assert!(!ClientWire::from_query(Some("participant_activity=0")).participant_activity);
-        assert!(
-            ClientWire::from_query(Some("ticket=t&participant_activity=1")).participant_activity
+        let wire = |query| ClientWire::from_query(Some(query)).participant_activity;
+        assert_eq!(wire("ticket=t&agent_chain_limit=1"), ActivityWire::Off);
+        assert_eq!(wire("participant_activity=0"), ActivityWire::Off);
+        assert_eq!(wire("participant_listening=1"), ActivityWire::Off);
+        assert_eq!(
+            wire("ticket=t&participant_activity=1"),
+            ActivityWire::Working
+        );
+        assert_eq!(
+            wire("participant_activity=1&participant_listening=1"),
+            ActivityWire::Listening
         );
     }
 }

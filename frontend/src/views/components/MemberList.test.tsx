@@ -4,7 +4,7 @@ import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import { agentSessionFixture } from "../../test/agentSession";
 import { participantFixture } from "../../test/participant";
 import MemberList from "./MemberList";
-import { RoomActivity } from "../../app/roomActivity";
+import { RoomActivity, RoomListening } from "../../app/roomActivity";
 
 
 const AGENT: LiveAgent = {
@@ -41,6 +41,24 @@ afterEach(() => {
 });
 
 describe("MemberList component wiring", () => {
+  it("shows 듣는 중 for an external AI with a wait pending, and 응답 중 wins while it works", () => {
+    const connector = participantFixture({ participant_id: "connector-1", display_name: "아쎄이", participant_type: "agent", role: "agent" });
+    render(
+      <RoomListening.Provider value={["connector-1"]}>
+        <MemberList agents={[]} members={[participantFixture(), connector]} viewerParticipantId="operator-local" roomId="general" roomName="General" />
+      </RoomListening.Provider>
+    );
+    expect(screen.getByText("듣는 중")).toBeTruthy();
+    cleanup();
+    render(
+      <RoomActivity.Provider value={["connector-1"]}><RoomListening.Provider value={["connector-1"]}>
+        <MemberList agents={[]} members={[participantFixture(), connector]} viewerParticipantId="operator-local" roomId="general" roomName="General" />
+      </RoomListening.Provider></RoomActivity.Provider>
+    );
+    expect(screen.getByText("응답 중")).toBeTruthy();
+    expect(screen.queryByText("듣는 중")).toBeNull();
+  });
+
   it("shows 응답 중 for a working external AI, whichever list it comes from", () => {
     const connector = participantFixture({ participant_id: "connector-1", display_name: "아쎄이", participant_type: "agent", role: "agent" });
     const asAgent: LiveAgent = { ...AGENT, agent_id: "connector-1", display_name: "아쎄이", provider_kind: "", connection_kind: "room_connector", engagement_mode: "" };

@@ -280,6 +280,13 @@ after subscribing and on every change. Older clients never see the frame, and a 
 was not added because older clients reject a server surface whose stream list differs. The
 client shows a working external AI in the typing line and as "응답 중" in the member list.
 
+Listening (2026-11-08, owner request "듣는 중 / 생각 중 / 입력 중 구별되면"): a connector
+`wait` left pending is "listening"; it ends when that request ends, after a 5-second grace so a
+hosted wait re-called every 45 seconds does not flicker. A client that also adds
+`participant_listening=1` receives `listening: [participant ids]` in the same frame and shows
+"듣는 중" (online) when the AI is not working. Thinking and typing cannot be told apart for an
+external AI: its post arrives whole, so both stay "응답 중".
+
 Non-goal for this slice: a durable "차례 넘김" row for an external AI that reads and stays silent,
 which would need a new durable event type across history and backups.
 

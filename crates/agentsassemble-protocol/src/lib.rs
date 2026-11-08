@@ -391,6 +391,9 @@ pub enum ServerFrame {
     /// Sent only to clients that advertised `participant_activity=1`.
     ParticipantActivity {
         active: Vec<String>,
+        /// External AIs with a wait pending; only for `participant_listening=1`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        listening: Option<Vec<String>>,
     },
     Ack(CommandAck),
     Nack(CommandNack),

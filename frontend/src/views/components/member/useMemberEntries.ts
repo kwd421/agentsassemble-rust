@@ -33,6 +33,8 @@ type MemberEntriesOptions = {
   displayResourceBase: string;
   /** External AIs working on a message; they have no session status. */
   working?: readonly string[];
+  /** External AIs with a wait pending: they hear the room. */
+  listening?: readonly string[];
 };
 
 export function useMemberEntries({
@@ -42,6 +44,7 @@ export function useMemberEntries({
   agentSessions,
   displayResourceBase,
   working = NOT_WORKING,
+  listening = NOT_WORKING,
 }: MemberEntriesOptions): {
   entries: MemberEntry[];
   contextBadges: ReturnType<typeof roomContextSummaryBadges>;
@@ -133,13 +136,16 @@ export function useMemberEntries({
           ? agentSessionStatusLabel(runtimeStatus, agentSession.recovery_required)
           : working.includes(agent.agent_id)
             ? "응답 중"
-            : member
+            : listening.includes(agent.agent_id)
+              ? "듣는 중"
+              : member
               ? memberStatusLabel(member)
               : undefined,
         working: !agentSession && working.includes(agent.agent_id),
+        listening: !agentSession && listening.includes(agent.agent_id),
         role,
         owner: false,
-        active: agentSession ? agentSessionIsPresent(runtimeStatus) : working.includes(agent.agent_id) || isActive(agent),
+        active: agentSession ? agentSessionIsPresent(runtimeStatus) : working.includes(agent.agent_id) || listening.includes(agent.agent_id) || isActive(agent),
         muted: mutedById.get(agent.agent_id) ?? false,
         meetingId: member?.room_id || agent.meeting_id || "",
         ownerId: ownerId || undefined,
@@ -190,13 +196,16 @@ export function useMemberEntries({
             ? agentSessionStatusLabel(agentSession.runtime_status || agentSession.status, agentSession.recovery_required)
             : working.includes(member.participant_id)
               ? "응답 중"
-              : memberStatusLabel(member),
+              : listening.includes(member.participant_id)
+                ? "듣는 중"
+                : memberStatusLabel(member),
           working: !agentSession && working.includes(member.participant_id),
+          listening: !agentSession && listening.includes(member.participant_id),
           role,
           owner: false,
           active: agentSession
             ? agentSessionIsPresent(agentSession.runtime_status || agentSession.status)
-            : working.includes(member.participant_id) || memberActive(member),
+            : working.includes(member.participant_id) || listening.includes(member.participant_id) || memberActive(member),
           muted: Boolean(member.muted),
           meetingId: member.room_id,
           ownerId: ownerId || undefined,
@@ -223,6 +232,7 @@ export function useMemberEntries({
     members,
     viewerParticipantId,
     working,
+    listening,
   ]);
 
   return { entries, contextBadges };

@@ -114,6 +114,7 @@ describe("bounded canonical room socket", () => {
     expect(url.searchParams.get("ticket")).toBe("a".repeat(64));
     expect(url.searchParams.get("channel_message_cursors")).toBe("1");
     expect(url.searchParams.get("participant_activity")).toBe("1");
+    expect(url.searchParams.get("participant_listening")).toBe("1");
     handle.close();
   });
 
@@ -657,7 +658,9 @@ describe("bounded canonical room socket", () => {
     sockets[0].receiveRaw(frames.rawSnapshot);
     await flushPromises();
     receiveServerFrame(sockets[0], { op: "participant_activity", active: ["connector-a"] });
-    await vi.waitFor(() => expect(onParticipantActivity).toHaveBeenCalledWith(["connector-a"]));
+    await vi.waitFor(() => expect(onParticipantActivity).toHaveBeenCalledWith(["connector-a"], []));
+    receiveServerFrame(sockets[0], { op: "participant_activity", active: [], listening: ["connector-b"] });
+    await vi.waitFor(() => expect(onParticipantActivity).toHaveBeenCalledWith([], ["connector-b"]));
     receiveServerFrame(sockets[0], { op: "participant_activity", active: [7] });
     await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("frame_schema_invalid"));
     handle.close();

@@ -231,6 +231,10 @@ pub(super) async fn wait(
     state
         .participant_activity
         .end(&principal.room_id, &principal.participant_id);
+    // A pending wait is the AI listening; it ends when this request does.
+    let _listening = state
+        .participant_activity
+        .listen(&principal.room_id, &principal.participant_id);
     // Wake before the session would end, so the renewal finds it still valid.
     let duration = (authorization.expires_at() - RENEW_BEFORE_EXPIRY - chrono::Utc::now())
         .to_std()
