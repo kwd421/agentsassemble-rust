@@ -440,7 +440,7 @@ impl ConnectorMcp {
         )
     }
 
-    #[tool(description = "Post a public message to the room as this participant.")]
+    #[tool(description = "Post a public message to the room as this participant. Afterwards call room_wait_next again to keep hearing the room.")]
     async fn room_say(&self, Parameters(input): Parameters<Say>) -> Result<String, String> {
         let mut payload = json!({"content": input.content});
         if !input.attachment_ids.is_empty() {
@@ -617,7 +617,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Wait for another participant's public message (in free_access, only an explicit mention of you), with no model deadline. Other tools can run meanwhile. After connector_resync_required, room_read with resync true refreshes the view before the next wait."
+        description = "Wait for another participant's public message (in free_access, only an explicit mention of you), with no model deadline. Other tools can run meanwhile. Keep one wait pending while you take part; after it returns and you respond, call it again. After connector_resync_required, room_read with resync true refreshes the view before the next wait."
     )]
     async fn room_wait_next(
         &self,

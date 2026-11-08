@@ -204,7 +204,7 @@ impl ConnectorHub {
                 "participant_id": joined.participant_id, "display_name": joined.display_name,
                 "role": joined.room_state["role"], "delegated_actions": joined.room_state["delegated_actions"],
                 "your_instructions": joined.room_state["your_instructions"],
-                "instructions": "Joined as this conversation. room_read shows the room, room_say posts, room_wait_next follows the current conversation mode and guidance. connection_id is private and is passed unchanged to later tools."
+                "instructions": "Joined as this conversation. room_read shows the room, room_say posts, room_wait_next follows the current conversation mode and guidance. You hear the room only while a room_wait_next is pending: after joining and after each post, call it again. connection_id is private and is passed unchanged to later tools."
                 }))
             }
             Err(error) => {
