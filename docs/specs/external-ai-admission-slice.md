@@ -932,6 +932,12 @@ owner cleaned the 18.97 GiB cache after builds stopped, as required by its exist
 
 ## Connector invitation management
 
+### AI-facing connector results (2026-11-08)
+
+AI-facing results carry no delivery bookkeeping: `seq`, `last_seq`, `v`, `room_id`
+and actor fields that only repeat `participant_id`/`participant_type` are dropped
+before encoding; the cursor stays server-side.
+
 ### App-owned MCP preparation (2026-10-01)
 
 The user requests automatic personal-server MCP preparation and an actual web

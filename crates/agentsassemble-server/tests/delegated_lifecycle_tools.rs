@@ -120,10 +120,13 @@ pub(super) async fn verify(
                 agentsassemble_domain::AgentRuntimeStatus::Idle
             );
             for event in started["events"].as_array().unwrap() {
-                assert_eq!(event["actor"]["participant_id"], delegate);
-                assert_eq!(event["actor"]["participant_type"], "agent");
-                assert_eq!(event["actor_id"], delegate);
-                assert_eq!(event["actor_type"], "agent");
+                // Actor fields that only repeat participant_id are not sent to the AI.
+                let actor = event.get("actor_id").unwrap_or(&event["participant_id"]);
+                let actor_type = event
+                    .get("actor_type")
+                    .unwrap_or(&event["participant_type"]);
+                assert_eq!(actor, &delegate);
+                assert_eq!(actor_type, "agent");
                 assert_eq!(
                     event["on_behalf_of_participant_id"],
                     LOCAL_OPERATOR_PARTICIPANT_ID
@@ -175,10 +178,13 @@ pub(super) async fn verify(
         );
         for result in [started, stopped] {
             for event in result["events"].as_array().unwrap() {
-                assert_eq!(event["actor"]["participant_id"], delegate);
-                assert_eq!(event["actor"]["participant_type"], "agent");
-                assert_eq!(event["actor_id"], delegate);
-                assert_eq!(event["actor_type"], "agent");
+                // Actor fields that only repeat participant_id are not sent to the AI.
+                let actor = event.get("actor_id").unwrap_or(&event["participant_id"]);
+                let actor_type = event
+                    .get("actor_type")
+                    .unwrap_or(&event["participant_type"]);
+                assert_eq!(actor, &delegate);
+                assert_eq!(actor_type, "agent");
                 assert_eq!(
                     event["on_behalf_of_participant_id"],
                     LOCAL_OPERATOR_PARTICIPANT_ID

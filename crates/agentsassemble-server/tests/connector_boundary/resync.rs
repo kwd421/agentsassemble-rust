@@ -65,7 +65,7 @@ async fn explicit_mcp_read_recovers_a_wait_history_gap() -> Result<(), Box<dyn s
     // Five 200-event reads use the real principal's 1,000-event/10-second budget.
     // Wait for that declared window; this does not coordinate concurrent work.
     tokio::time::sleep(Duration::from_secs(10)).await;
-    let sent = writer
+    writer
         .command(
             RoomAction::MessageSend,
             json!({"content":"After explicit resync"}),
@@ -86,7 +86,8 @@ async fn explicit_mcp_read_recovers_a_wait_history_gap() -> Result<(), Box<dyn s
         1
     );
     assert_eq!(received["messages"][0]["content"], "After explicit resync");
-    assert_eq!(received["last_seq"], sent["result"]["event_seq"]);
+    // Delivery numbers stay server-side; the AI gets the message itself.
+    assert!(received.get("last_seq").is_none());
     mcp::call(&client, "room_leave", json!({})).await;
     writer
         .command(RoomAction::ParticipantLeave, json!({}))

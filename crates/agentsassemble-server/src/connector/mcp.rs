@@ -97,8 +97,36 @@ impl ConnectorMcp {
     }
 }
 
+/// Drops room-event bookkeeping the AI never uses: delivery numbers, the room id, and
+/// actor fields when they only repeat `participant_id`/`participant_type`.
+fn strip_bookkeeping(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            if object.contains_key("actor") {
+                for key in ["v", "seq", "room_id"] {
+                    object.remove(key);
+                }
+                if object.get("actor_id") == object.get("participant_id")
+                    && object.get("actor_type") == object.get("participant_type")
+                {
+                    for key in ["actor", "actor_id", "actor_type"] {
+                        object.remove(key);
+                    }
+                }
+            }
+            object.values_mut().for_each(strip_bookkeeping);
+        }
+        Value::Array(items) => items.iter_mut().for_each(strip_bookkeeping),
+        _ => {}
+    }
+}
+
 fn encode(value: &Value) -> Result<String, String> {
     let mut value = value.clone();
+    if let Some(object) = value.as_object_mut() {
+        object.remove("last_seq");
+    }
+    strip_bookkeeping(&mut value);
     // Keep what the AI must notice at the front of a long result.
     let mut front = Vec::new();
     for key in ["name_changed", "instructions_changed", "unread_mentions"] {
@@ -443,7 +471,9 @@ impl ConnectorMcp {
         )
     }
 
-    #[tool(description = "Post a public message to the room as this participant. Afterwards call room_wait_next again to keep hearing the room.")]
+    #[tool(
+        description = "Post a public message to the room as this participant. Afterwards call room_wait_next again to keep hearing the room."
+    )]
     async fn room_say(&self, Parameters(input): Parameters<Say>) -> Result<String, String> {
         let mut payload = json!({"content": input.content});
         if !input.attachment_ids.is_empty() {
@@ -750,5 +780,27 @@ mod encode_tests {
         assert_eq!(alone, r#"{"unread_mentions":1}"#);
         let plain = encode(&json!({"a": 1})).unwrap_or_else(|error| panic!("encode: {error}"));
         assert_eq!(plain, r#"{"a":1}"#);
+    }
+
+    #[test]
+    fn messages_reach_the_ai_without_delivery_numbers_or_repeated_actor_fields() {
+        let encoded = encode(&json!({"last_seq": 49, "next_before_seq": 3, "messages": [{
+            "v": 1, "id": "e1", "seq": 49, "room_id": "r", "type": "message_final",
+            "actor": {"participant_id": "p", "participant_type": "agent"},
+            "participant_id": "p", "participant_type": "agent", "actor_id": "p",
+            "actor_type": "agent", "display_name": "Fable", "content": "hi",
+            "message_kind": "message"
+        }]}))
+        .unwrap_or_else(|error| panic!("encode: {error}"));
+        let parsed: Value =
+            serde_json::from_str(&encoded).unwrap_or_else(|error| panic!("json: {error}"));
+        assert_eq!(
+            parsed,
+            json!({"next_before_seq": 3, "messages": [{
+                "id": "e1", "type": "message_final", "participant_id": "p",
+                "participant_type": "agent", "display_name": "Fable", "content": "hi",
+                "message_kind": "message"
+            }]})
+        );
     }
 }

@@ -95,11 +95,22 @@ async fn hosted_wait_answers_before_chatgpt_cuts_the_call_and_resumes()
     call(&client, "room_join", args).await;
     let wait = json!({"connection_id":prepared["connection_id"]});
     // A silent room answers within the hosted bound, well before a minute.
-    let quiet = tokio::time::timeout(Duration::from_secs(55), call(&client, "room_wait_next", wait.clone())).await?;
+    let quiet = tokio::time::timeout(
+        Duration::from_secs(55),
+        call(&client, "room_wait_next", wait.clone()),
+    )
+    .await?;
     assert_eq!(quiet["status"], "no_new_message");
     // The next wait is still a live wait on the same connection.
-    let resumed = tokio::time::timeout(Duration::from_secs(2), call(&client, "room_wait_next", wait)).await;
-    assert!(resumed.is_err(), "a resumed wait ended without an event: {resumed:?}");
+    let resumed = tokio::time::timeout(
+        Duration::from_secs(2),
+        call(&client, "room_wait_next", wait),
+    )
+    .await;
+    assert!(
+        resumed.is_err(),
+        "a resumed wait ended without an event: {resumed:?}"
+    );
     server.stop().await;
     client.cancel().await?;
     Ok(())
