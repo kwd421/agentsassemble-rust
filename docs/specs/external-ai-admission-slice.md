@@ -970,8 +970,10 @@ rule below for exactly this case:
   prefix) are relayed; any other foreign origin stays `room_server_not_allowed`.
 - The destination host still owns admission, permissions, waits and leave receipts;
   the relaying host stores no room data and acquires no authority there.
-- At most 16 relayed connections are live per host; more answer
-  `connector_relay_capacity`.
+- At most 16 relayed connections are admitted per host; more answer
+  `connector_relay_capacity`. Preparing one needs no invite this host can check,
+  so at most 16 more may wait to be admitted and the oldest waiting one is closed
+  when another is prepared; an unchecked invite never holds relay capacity.
 - Relayed connections are not remembered across a relaying-host restart; the AI
   joins again with the invite.
 - The hosted 45-second `no_new_message` wait bound applies to relayed waits too.

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 
 use agentsassemble_protocol::{CommandResolution, RoomAction};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -9,7 +12,9 @@ use url::Url;
 
 use crate::connector::client::{RoomConnectorClient, transport::normalize_server};
 
-/// Live connections a hosted MCP carries to other `AgentsAssemble` hosts.
+/// Live connections a hosted MCP carries to other `AgentsAssemble` hosts. As many
+/// relayed connections may wait to be admitted; the oldest waiting one gives way,
+/// since preparing one needs no invite this host can check.
 const RELAY_CAPACITY: usize = 16;
 
 pub(super) struct ConnectorHub {
@@ -21,6 +26,8 @@ pub(super) struct ConnectorHub {
 struct HubState {
     closed: bool,
     clients: HashMap<String, Arc<RoomConnectorClient>>,
+    /// Relayed connections not yet admitted by their host, oldest first.
+    relay_waiting: VecDeque<String>,
 }
 
 impl ConnectorHub {
@@ -205,6 +212,10 @@ impl ConnectorHub {
         };
         match client.join().await {
             Ok(joined) => {
+                self.state
+                    .lock()
+                    .relay_waiting
+                    .retain(|waiting| *waiting != id);
                 self.remember(&id, &client).await;
                 Ok(json!({
                 "status": "joined", "connection_id": id,
@@ -249,15 +260,8 @@ impl ConnectorHub {
         if state.clients.len() >= 128 {
             return Err("connector_capacity_release_receipt_required".to_owned());
         }
-        if candidate.relayed()
-            && state
-                .clients
-                .values()
-                .filter(|client| client.relayed() && !client.has_completed_leave())
-                .count()
-                >= RELAY_CAPACITY
-        {
-            return Err("connector_relay_capacity".to_owned());
+        if candidate.relayed() {
+            make_relay_room(&mut state)?;
         }
         if !self.remote()
             && state
@@ -274,6 +278,9 @@ impl ConnectorHub {
             }
         };
         let client = Arc::new(candidate);
+        if client.relayed() {
+            state.relay_waiting.push_back(id.clone());
+        }
         state.clients.insert(id.clone(), client.clone());
         Ok((id, client))
     }
@@ -441,6 +448,7 @@ impl ConnectorHub {
                 .is_some_and(|current| Arc::ptr_eq(current, client))
         {
             state.clients.remove(&key);
+            state.relay_waiting.retain(|waiting| *waiting != key);
             client.close();
         }
     }
@@ -454,6 +462,29 @@ impl ConnectorHub {
     }
 }
 
+/// Refuses a relayed connection once admitted ones fill the relay; otherwise
+/// keeps the waiting ones within it by closing the oldest.
+fn make_relay_room(state: &mut HubState) -> Result<(), String> {
+    let admitted = state
+        .clients
+        .iter()
+        .filter(|(id, client)| {
+            client.relayed() && !client.has_completed_leave() && !state.relay_waiting.contains(id)
+        })
+        .count();
+    if admitted >= RELAY_CAPACITY {
+        return Err("connector_relay_capacity".to_owned());
+    }
+    while state.relay_waiting.len() >= RELAY_CAPACITY {
+        if let Some(oldest) = state.relay_waiting.pop_front()
+            && let Some(client) = state.clients.remove(&oldest)
+        {
+            client.close();
+        }
+    }
+    Ok(())
+}
+
 impl Drop for ConnectorHub {
     fn drop(&mut self) {
         self.close();
@@ -462,7 +493,40 @@ impl Drop for ConnectorHub {
 
 #[cfg(test)]
 mod relay_tests {
+    use super::{ConnectorHub, RELAY_CAPACITY};
     use crate::connector::client::RoomConnectorClient;
+
+    #[test]
+    fn unadmitted_relayed_connections_never_hold_the_relay() {
+        let hub = ConnectorHub::new(Some(vec!["https://example.com".to_owned()]))
+            .unwrap_or_else(|code| panic!("{code}"));
+        let relayed = || {
+            RoomConnectorClient::new_relayed("https://h-1.agentsassemble.uk/join?token=t", "A")
+                .unwrap_or_else(|error| panic!("{}", error.code))
+        };
+        let reserved: Vec<_> = (0..RELAY_CAPACITY * 2)
+            .map(|_| {
+                hub.reserve(relayed())
+                    .unwrap_or_else(|code| panic!("{code}"))
+            })
+            .collect();
+        assert!(
+            reserved[..RELAY_CAPACITY]
+                .iter()
+                .all(|(_, client)| client.cancellation.is_cancelled())
+        );
+        assert!(
+            reserved[RELAY_CAPACITY..]
+                .iter()
+                .all(|(id, _)| hub.client(id).is_ok())
+        );
+        // Admitted connections fill the relay and refuse further ones.
+        hub.state.lock().relay_waiting.clear();
+        assert_eq!(
+            hub.reserve(relayed()).err().as_deref(),
+            Some("connector_relay_capacity")
+        );
+    }
 
     #[test]
     fn only_agentsassemble_hosts_are_relayed() {
