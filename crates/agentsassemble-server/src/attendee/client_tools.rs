@@ -37,6 +37,7 @@ enum Request {
         operation_id: String,
     },
     Direct(crate::attendee::tool_wire::DelegatedDirectRequest),
+    Catalog(crate::attendee::tool_wire::DelegatedDirectRequest),
     Pin(crate::attendee::tool_wire::DelegatedPinRequest),
     Read(AttendeeToolReadRequest),
     Random(AttendeeRandomRequest),
@@ -74,6 +75,13 @@ impl AttendeeToolCall {
                         }
                         _ => None,
                     },
+                })
+            }
+            ProviderRoomToolRequest::AgentCatalog => {
+                Request::Catalog(crate::attendee::tool_wire::DelegatedDirectRequest {
+                    turn_generation: command.turn_generation(),
+                    execution_id: command.execution_id().into(),
+                    request: None,
                 })
             }
             ProviderRoomToolRequest::SetMessagePin(_) => {
@@ -165,6 +173,10 @@ impl AttendeeToolCall {
                         .map_err(|_| invalid_response())
                 }
             }
+            Request::Catalog(request) => client
+                .post("tool/catalog", Some(connection), request)
+                .await
+                .map(ProviderRoomToolResult::AgentCatalog),
             Request::Pin(request) => {
                 let result = client.post("tool/pin", Some(connection), request).await?;
                 Ok(ProviderRoomToolResult::MessagePin(result))

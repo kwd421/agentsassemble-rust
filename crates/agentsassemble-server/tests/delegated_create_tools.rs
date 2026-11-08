@@ -27,14 +27,13 @@ pub(super) async fn verify(
     } else {
         vec!["meeting_read_only"]
     };
-    if let Some(connection) = connection {
-        // A director reads the exact values request_create_agent takes.
-        let catalog = call(
-            client,
-            "room_agent_catalog",
-            json!({"connection_id": connection}),
-        )
-        .await;
+    {
+        // A director on every surface reads the exact values request_create_agent takes.
+        let catalog_args = connection.map_or_else(
+            || json!({}),
+            |connection| json!({"connection_id": connection}),
+        );
+        let catalog = call(client, "room_agent_catalog", catalog_args).await;
         assert_eq!(
             catalog["catalog_revision"], "catalog-boundary-1",
             "{catalog}"

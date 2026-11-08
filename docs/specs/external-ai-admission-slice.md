@@ -26,7 +26,9 @@ stay unreachable.
 ## Director agent catalog (2026-11-08)
 
 Owner decision: `request_create_agent`/`request_reconfigure_agent` need host catalog
-values no AI could see. Connector MCP `room_agent_catalog` returns the host's
+values no AI could see. `room_agent_catalog` (connector MCP, the managed and API
+room portal, and external attendees through `/api/room-attendee/tool/catalog`)
+returns the host's
 available, startable harnesses (`provider_id`, display name, workspace requirement,
 default model, control keys/options/defaults) and the current `catalog_revision`.
 It is served only while the AI's current director authority offers agent creation or

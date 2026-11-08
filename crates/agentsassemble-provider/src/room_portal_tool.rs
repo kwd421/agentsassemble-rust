@@ -20,20 +20,33 @@ pub struct ProviderRoomToolIngress {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolRequest {
-    UploadAttachment { path: String, content_type: String },
+    UploadAttachment {
+        path: String,
+        content_type: String,
+    },
     DelegatedActions,
+    /// The host's startable harnesses for a director's agent requests.
+    AgentCatalog,
     SetMessagePin(agentsassemble_domain::SetMessagePin),
     DirectAction(Box<agentsassemble_domain::DirectRoomAction>),
-    ReadRoomStatus { before_seq: i64 },
+    ReadRoomStatus {
+        before_seq: i64,
+    },
     Random(RoomRandomRequest),
-    SearchMessages { query: String, cursor: String },
-    ReadMessageContext { event_id: String },
+    SearchMessages {
+        query: String,
+        cursor: String,
+    },
+    ReadMessageContext {
+        event_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolResult {
     UploadAttachment(serde_json::Value),
     DelegatedActions(Vec<String>),
+    AgentCatalog(serde_json::Value),
     MessagePin(serde_json::Value),
     DirectAction(serde_json::Value),
     ConversationStatus(agentsassemble_domain::ConversationStatus),
@@ -163,7 +176,12 @@ impl ProviderRoomToolCommand {
                 })
         });
         self.reservation.resolve(
-            result.is_ok() && !matches!(self.request, ProviderRoomToolRequest::DelegatedActions),
+            result.is_ok()
+                && !matches!(
+                    self.request,
+                    ProviderRoomToolRequest::DelegatedActions
+                        | ProviderRoomToolRequest::AgentCatalog
+                ),
         );
         self.resolved = true;
         if let Some(reply) = self.reply.take() {
@@ -199,6 +217,9 @@ fn response_matches(request: &ProviderRoomToolRequest, result: &ProviderRoomTool
         ) | (
             ProviderRoomToolRequest::DelegatedActions,
             ProviderRoomToolResult::DelegatedActions(_)
+        ) | (
+            ProviderRoomToolRequest::AgentCatalog,
+            ProviderRoomToolResult::AgentCatalog(_)
         ) | (
             ProviderRoomToolRequest::SetMessagePin(_),
             ProviderRoomToolResult::MessagePin(_)

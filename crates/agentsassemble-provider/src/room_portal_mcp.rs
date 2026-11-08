@@ -71,6 +71,7 @@ impl RoomPortalMcp {
             ProviderRoomToolResult::UploadAttachment(_)
             | ProviderRoomToolResult::Random(_)
             | ProviderRoomToolResult::DelegatedActions(_)
+            | ProviderRoomToolResult::AgentCatalog(_)
             | ProviderRoomToolResult::MessagePin(_)
             | ProviderRoomToolResult::DirectAction(_) => {
                 Err("The room tool owner returned a mismatched result.".to_owned())
@@ -165,7 +166,26 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Request creation of a stopped agent owned by your owner. Nothing is created until the exact human owner approves within five minutes; the approval re-validates the catalog selection and a full-access choice needs the owner's explicit acknowledgement in the decision. Starting the new agent later is a separate step. Retry the same request ID to read the outcome. Requires current director role and current owner agent-control authority."
+        description = "List the harnesses and models your owner's host can start, with the provider_id, catalog_revision and control values request_create_agent and request_reconfigure_agent take. Requires current director role and owner agent-control authority."
+    )]
+    async fn room_agent_catalog(&self) -> Result<String, String> {
+        let (authority, reservation, ingress) = reserve_room_tool(&self.state)?;
+        let result = ingress
+            .submit(
+                authority,
+                ProviderRoomToolRequest::AgentCatalog,
+                reservation,
+            )
+            .await
+            .map_err(|error| format!("{}: {}", error.code, error.message))?;
+        let ProviderRoomToolResult::AgentCatalog(catalog) = result else {
+            return Err("The room tool owner returned a mismatched result.".into());
+        };
+        serde_json::to_string(&catalog).map_err(|_| "Catalog encoding failed.".into())
+    }
+
+    #[tool(
+        description = "Request creation of a stopped agent owned by your owner; room_agent_catalog lists the provider_id, catalog_revision and model values. Nothing is created until the exact human owner approves within five minutes; the approval re-validates the catalog selection and a full-access choice needs the owner's explicit acknowledgement in the decision. Starting the new agent later is a separate step. Retry the same request ID to read the outcome. Requires current director role and current owner agent-control authority."
     )]
     async fn request_create_agent(
         &self,
@@ -552,6 +572,11 @@ impl ServerHandler for RoomPortalMcp {
             .into_iter()
             .filter(|tool| {
                 let name = tool.name.as_ref();
+                if name == "room_agent_catalog" {
+                    return available.iter().any(|action| {
+                        action == "request_create_agent" || action == "request_reconfigure_agent"
+                    });
+                }
                 !(name == "set_message_pin"
                     || agentsassemble_domain::DirectRoomAction::NAMES.contains(&name))
                     || available.iter().any(|action| action == name)

@@ -74,46 +74,14 @@ pub(super) async fn catalog(
     request: Request,
 ) -> Result<Json<Value>, ConnectorHttpError> {
     let authorization = authorize_read(&state, request, 1).await?;
-    let allowed = state
-        .store
-        .delegated_direct_actions(
-            &agentsassemble_persistence::DelegateRoomAuthority::Connector(authorization),
-        )
-        .await
-        .map_err(ConnectorHttpError::from_persistence)?;
-    if !allowed
-        .iter()
-        .any(|action| action == "request_create_agent" || action == "request_reconfigure_agent")
-    {
-        return Err(rejected(
-            StatusCode::FORBIDDEN,
-            "delegated_action_unavailable",
-        ));
-    }
-    let catalog = state.provider_catalog.snapshot();
-    let providers: Vec<Value> = catalog
-        .providers
-        .iter()
-        .filter(|provider| provider.available && provider.startable)
-        .map(|provider| {
-            let controls: Vec<Value> = provider
-                .controls
-                .iter()
-                .map(|control| {
-                    json!({"key": control.key, "default_value": control.default_value,
-                        "options": control.options.iter().map(|option| json!({"value": option.value, "label": option.label})).collect::<Vec<_>>()})
-                })
-                .collect();
-            json!({"provider_id": provider.id, "display_name": provider.display_name,
-                "workspace_required": provider.workspace_required,
-                "default_model": provider.default_model, "controls": controls})
-        })
-        .collect();
-    Ok(Json(json!({
-        "catalog_revision": catalog.catalog_revision,
-        "status": catalog.status,
-        "providers": providers,
-    })))
+    let value = crate::delegated_agent_catalog::read(
+        &state.store,
+        &state.provider_catalog.snapshot(),
+        &agentsassemble_persistence::DelegateRoomAuthority::Connector(authorization),
+    )
+    .await
+    .map_err(ConnectorHttpError::from_persistence)?;
+    Ok(Json(value))
 }
 
 pub(super) async fn snapshot(

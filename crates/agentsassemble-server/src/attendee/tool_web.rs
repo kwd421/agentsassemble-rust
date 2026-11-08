@@ -156,6 +156,39 @@ pub(super) async fn direct(
     Ok(Json(value))
 }
 
+/// The host's agent catalog for an attendee director, under the same live custody.
+pub(super) async fn catalog(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<Value>, AttendeeHttpError> {
+    let fingerprint = purpose_bearer_fingerprint(request.headers(), ATTENDEE_SESSION_PREFIX)
+        .ok_or_else(|| {
+            AttendeeHttpError::rejected(StatusCode::UNAUTHORIZED, "attendee_credential_required")
+        })?;
+    let connection_id = connection_id(request.headers())?;
+    let body: crate::attendee::tool_wire::DelegatedDirectRequest =
+        decode_json_body(request, 16384).await?;
+    let session = state
+        .store
+        .authorize_attendee_session(&fingerprint, chrono::Utc::now())
+        .await
+        .map_err(AttendeeHttpError::from_persistence)?;
+    let authority = agentsassemble_persistence::DelegateRoomAuthority::Attendee {
+        session,
+        connection_id,
+        turn_generation: body.turn_generation,
+        execution_id: body.execution_id,
+    };
+    crate::delegated_agent_catalog::read(
+        &state.store,
+        &state.provider_catalog.snapshot(),
+        &authority,
+    )
+    .await
+    .map(Json)
+    .map_err(AttendeeHttpError::from_persistence)
+}
+
 pub(super) async fn random(
     State(state): State<AppState>,
     request: Request,

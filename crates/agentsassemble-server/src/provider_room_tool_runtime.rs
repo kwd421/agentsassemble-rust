@@ -50,6 +50,19 @@ pub(crate) async fn handle_provider_room_tool(
             ))
             .await
         }
+        ProviderRoomToolRequest::AgentCatalog => {
+            command.complete(
+                crate::delegated_agent_catalog::read(
+                    store,
+                    &owners.provider_catalog.snapshot(),
+                    &delegated,
+                )
+                .await
+                .map(ProviderRoomToolResult::AgentCatalog)
+                .map_err(public_tool_error),
+            );
+            None
+        }
         ProviderRoomToolRequest::DelegatedActions => {
             command.complete(
                 store

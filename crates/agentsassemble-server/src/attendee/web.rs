@@ -60,6 +60,7 @@ registered_routes! {
         same_origin_public "/api/room-attendee/tool/upload/{handle}" => delete(transfer::cancel),
         same_origin_public "/api/room-attendee/tool/attachment/download" => get(transfer::download),
         same_origin_public "/api/room-attendee/tool/direct" => post(tool::direct),
+        same_origin_public "/api/room-attendee/tool/catalog" => post(tool::catalog),
         same_origin_public "/api/room-attendee/tool/pin" => post(tool::pin),
         same_origin_public "/api/room-attendee/tool/random" => post(tool::random),
     }
