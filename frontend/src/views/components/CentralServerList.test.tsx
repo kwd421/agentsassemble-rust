@@ -256,3 +256,15 @@ it("retries pending local retirement after the conflict list has disappeared", a
   await vi.advanceTimersByTimeAsync(5000);
   expect(retryPendingLocalDemotion).toHaveBeenCalledTimes(2);
 });
+
+it("says a published server that did not answer its last open is not answering", () => {
+  const remote = { ...host, server_id: "remote", alias: "Hihi의 MacBook Air",
+    endpoint: { origin: "https://hihi.test", generation: 1, status: "published" as const, mode: "event_secure_v1" } };
+  const { rerender } = render(<CentralServerList servers={[remote]} liveServers={[remote]} busy={false}
+    onOpen={async () => {}} onRefresh={async () => {}} />);
+  expect(screen.getByText(/연결 가능/)).toBeTruthy();
+  rerender(<CentralServerList servers={[remote]} liveServers={[remote]} unreachableServerIds={new Set(["remote"])} busy={false}
+    onOpen={async () => {}} onRefresh={async () => {}} />);
+  expect(screen.getByText(/응답 없음/)).toBeTruthy();
+  expect(screen.queryByText(/연결 가능/)).toBeNull();
+});

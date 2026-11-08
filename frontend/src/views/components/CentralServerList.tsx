@@ -27,6 +27,8 @@ type Props = {
   // Until the central directory answers, this computer's row is only checking, not openable.
   localChecking?: boolean;
   connectingServerId?: string;
+  /** Servers whose last open got no answer, shown as such instead of "연결 가능". */
+  unreachableServerIds?: ReadonlySet<string>;
   busy: boolean;
   localHost?: HostDeviceInfo | null;
   profileName?: string;
@@ -63,7 +65,7 @@ export function ServerIcon({ reference, name }: { reference?: string; name: stri
     : <span title={failed ? "아이콘을 불러오지 못했어요" : undefined}>{roomInitials(name)}</span>;
 }
 
-export default function CentralServerList({ deviceConnect = false, deviceToken = "", conflict, servers, busy, localHost, profileName, onOpenLocal, onOpen, onRefresh, liveServers, centralUnavailable = false, localChecking = false, connectingServerId }: Props) {
+export default function CentralServerList({ deviceConnect = false, deviceToken = "", conflict, servers, busy, localHost, profileName, onOpenLocal, onOpen, onRefresh, liveServers, centralUnavailable = false, localChecking = false, connectingServerId, unreachableServerIds }: Props) {
   const [keeperId, setKeeperId] = useState("");
   const [confirmKeeper, setConfirmKeeper] = useState("");
   const [localName, setLocalName] = useState<string | undefined>();
@@ -232,7 +234,7 @@ export default function CentralServerList({ deviceConnect = false, deviceToken =
           <strong className="break-all">{name}</strong>
           <span className="dc-server-row-meta">
             <span className="dc-server-row-dot" aria-hidden />
-            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : (state === "local" || state === "checking") ? "이 컴퓨터" : state === "online" ? "연결 가능" : "연결 끊김"}
+            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : (state === "local" || state === "checking") ? "이 컴퓨터" : state === "online" ? (unreachableServerIds?.has(server.server_id) ? "응답 없음" : "연결 가능") : "연결 끊김"}
             {server.relation !== "member" && <> · <span aria-label="서버 컴퓨터 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span></>}
           </span>
           {editingId === server.server_id && nameEditor(server.default_name, server)}

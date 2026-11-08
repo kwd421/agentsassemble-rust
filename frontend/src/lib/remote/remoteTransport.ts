@@ -12,6 +12,12 @@ const QUEUE_LIMIT = 512 * 1024;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 export const connectionEnded = () => new Error("연결이 끝났어요. 서버 목록에서 다시 연결해 주세요.");
+/** The host never answered: nothing was connected, so nothing "ended". */
+export const hostUnreachable = () => Object.assign(
+  new Error("서버 컴퓨터에 연결하지 못했어요. 그 컴퓨터가 꺼져 있거나 앱이 실행 중이 아닐 수 있어요."),
+  { code: "host_unreachable" as const });
+export const isHostUnreachable = (error: unknown) =>
+  error instanceof Error && (error as { code?: unknown }).code === "host_unreachable";
 const capacityError = () => new Error("전송할 내용이 많아요. 잠시 후 다시 시도해 주세요.");
 export type RoomSocketConnection = {
   readonly readyState: number;
@@ -103,14 +109,16 @@ export class RemoteTransport {
     const wire = new WebSocket(url); wire.binaryType = "arraybuffer";
     let transport: RemoteTransport | undefined;
     let rejectHandshake: (error: Error) => void = () => {};
-    const abort = () => { wire.close(); transport?.close(); rejectHandshake(connectionEnded()); };
+    let opened = false;
+    const lost = () => (opened ? connectionEnded() : hostUnreachable());
+    const abort = () => { wire.close(); transport?.close(); rejectHandshake(lost()); };
     signal?.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(abort, 10_000);
     try {
       const server = await new Promise<unknown>((resolve, reject) => {
         rejectHandshake = reject;
-        wire.onopen = () => wire.send(JSON.stringify(pending.hello));
-        wire.onerror = wire.onclose = () => reject(connectionEnded());
+        wire.onopen = () => { opened = true; wire.send(JSON.stringify(pending.hello)); };
+        wire.onerror = wire.onclose = () => reject(lost());
         wire.onmessage = event => {
           if (typeof event.data !== "string" || event.data.length > 4096) { reject(connectionEnded()); return; }
           wire.onmessage = () => reject(connectionEnded());
