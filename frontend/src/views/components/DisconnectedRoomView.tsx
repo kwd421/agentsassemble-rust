@@ -21,12 +21,14 @@ export default function DisconnectedRoomView({ room, reason, hostDisplayName, au
   }
   const connecting = room.connectionState === "connecting" && !autoReconnectAt;
   const title = connecting ? `‘${room.label}’에 연결하는 중이에요` : `‘${room.label}’에 연결할 수 없어요`;
+  const host = room.roomOrigin === "remote_server" ? hostDisplayName?.trim() || "" : "";
   const description = autoReconnectAt ? `오늘 연결 한도를 다 썼어요. ${autoReconnectAt}에 자동으로 다시 연결돼요.`
-    : reason ? reason
+    // A reason alone never says whose server failed: name it first.
+    : reason ? (host ? `‘${host}’ 서버의 방이에요. ${reason}` : reason)
     : room.connectionState === "connecting" ? "연결되면 방이 바로 열려요."
     : room.connectionState === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
     : room.roomOrigin !== "remote_server" ? "이 기기의 서버 연결이 끊겼어요. 서버가 실행 중인지 확인해 주세요."
-    : hostDisplayName ? `${hostDisplayName}님의 컴퓨터가 꺼져 있거나 인터넷이 끊겼을 수 있어요. 다시 켜지면 자동으로 연결돼요.`
+    : host ? `‘${host}’ 서버가 꺼져 있거나 인터넷이 끊겼을 수 있어요. 다시 켜지면 자동으로 연결돼요.`
     : "서버를 연 컴퓨터가 꺼져 있거나 인터넷이 끊겼을 수 있어요. 다시 켜지면 자동으로 연결돼요.";
   return (
     <section className="dc-disconnected-room" aria-labelledby="disconnected-room-title">

@@ -1,5 +1,6 @@
 import type { CentralDirectoryState } from "../../app/useCentralDirectory";
 import type { RoomDockItem } from "../roomDockModel";
+import { subjectParticle } from "../delegatedActionText";
 
 /**
  * This computer's server belongs to its registered owner (server_id bound
@@ -160,4 +161,14 @@ export function visibleAccountRemoteRooms(
     if (hasAnchor?.(serverId)) return true;
     return isJoinedMemberServer(serverId, directory);
   });
+}
+
+/// Names the account's own server, so the notice never reads as this computer.
+export function ownServerMismatchText(alias: string, runningElsewhere: boolean): string {
+  const name = alias.trim();
+  if (!name) return runningElsewhere ? "내 서버는 다른 컴퓨터에서 실행 중이에요." : "내 서버가 있는 컴퓨터가 꺼져 있어요.";
+  const subject = `내 서버 ‘${name}’${subjectParticle(name)}`;
+  return runningElsewhere
+    ? `${subject} 다른 컴퓨터에서 실행 중이에요. 이 컴퓨터의 서버는 내 서버가 아니에요.`
+    : `${subject} 꺼져 있어요. 이 컴퓨터의 서버는 내 서버가 아니에요.`;
 }

@@ -53,11 +53,17 @@ it("shows the connecting title while the host comes back", () => {
   render(<DisconnectedRoomView room={connecting} onRetry={async () => {}} />);
   expect(screen.getByRole("heading", { name: `‘${connecting.label}’에 연결하는 중이에요` })).toBeTruthy();
 });
-it("names the friend's computer when the host display name is known", () => {
+it("names the friend's server when the host display name is known", () => {
   const base = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const };
   const [offline] = projectRoomConnections([base], null, false, [{ serverId: "host", state: "disconnected" }]);
-  render(<DisconnectedRoomView room={offline} hostDisplayName="Hihi" onRetry={async () => {}} />);
-  expect(screen.getByText(/Hihi님의 컴퓨터가 꺼져 있거나/)).toBeTruthy();
+  render(<DisconnectedRoomView room={offline} hostDisplayName="응애의 MacBook Air" onRetry={async () => {}} />);
+  expect(screen.getByText(/^‘응애의 MacBook Air’ 서버가 꺼져 있거나/)).toBeTruthy();
+});
+it("names the friend's server in front of a failed open", () => {
+  const base = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const };
+  const [offline] = projectRoomConnections([base], null, false, [{ serverId: "host", state: "disconnected" }]);
+  render(<DisconnectedRoomView room={offline} hostDisplayName="Hihi" reason="방을 열지 못했어요. 다시 시도해 주세요." onRetry={async () => {}} />);
+  expect(screen.getByText("‘Hihi’ 서버의 방이에요. 방을 열지 못했어요. 다시 시도해 주세요.")).toBeTruthy();
 });
 it("explains an unnamed remote server without leaking the origin", () => {
   const base = { ...createFreshRoom(), serverId: "host", roomOrigin: "remote_server" as const, connectionState: "disconnected" as const, serverOrigin: "https://friend.test" };

@@ -2,7 +2,7 @@ import { OwnerRouteHost, RoomPeople, ownerRouteHostFor } from "./ownerRouteHost"
 import { RoomActivity } from "./roomActivity";
 import { userFacingError } from "../lib/apiErrors";
 import { isDesktopWebview } from "../lib/desktopBridge";
-import { centralAccountSelf, shouldShowOwnServerMismatch } from "../lib/central/localOwnership";
+import { centralAccountSelf, ownServerMismatchText, shouldShowOwnServerMismatch } from "../lib/central/localOwnership";
 import { openCentralOwnedServer } from "../lib/central/identity";
 import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
@@ -53,6 +53,14 @@ export function emptyRoomCopy(canCreateRoom: boolean): { title: string; descript
   return canCreateRoom
     ? { title: "열려 있는 방이 없어요", description: "새 방을 만들어 대화를 시작할 수 있어요." }
     : { title: "참가한 방이 없어요", description: "초대 링크로 참가할 수 있어요." };
+}
+
+/// The server a friend's room lives on, live or last known.
+function roomHostName(room: { serverId?: string | null }, directory: { live?: { servers?: { server_id: string; alias: string }[] } | null; servers?: { server_id: string; alias: string }[] } | null | undefined): string | null {
+  if (!room.serverId) return null;
+  const alias = directory?.live?.servers?.find((server) => server.server_id === room.serverId)?.alias
+    ?? directory?.servers?.find((server) => server.server_id === room.serverId)?.alias;
+  return alias?.trim() || null;
 }
 
 export default function AppView({ controller }: { controller: AppController }) {
@@ -238,7 +246,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           className="flex min-h-11 items-center justify-center gap-3 px-4 py-2 text-[12px] text-text-muted"
           data-testid="own-server-mismatch"
         >
-          <span>{ownedOnline && liveOwned ? "내 서버는 다른 컴퓨터에서 실행 중이에요." : "내 서버가 있는 컴퓨터가 꺼져 있어요."}</span>
+          <span>{ownServerMismatchText(ownedServer?.alias ?? "", Boolean(ownedOnline && liveOwned))}</span>
           {ownedOnline && liveOwned && <button
             type="button"
             className="dc-button dc-button--secondary dc-button--lg min-h-9 px-3"
@@ -513,7 +521,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : (activeRoomDisconnected && !activeRoomOnlyConnecting) || activeRoomSelectError ? (
             <DisconnectedRoomView key={activeRoom.id} room={activeRoom} reason={activeRoomSelectError?.message ?? controller.activeMemberHostDetail}
               autoReconnectAt={activeRoomWaitsForQuota && centralQuotaResetAt !== null ? formatCentralQuotaResetLocal(centralQuotaResetAt) : null}
-              hostDisplayName={activeRoom.serverId ? controller.centralDirectory?.live?.servers?.find((server) => server.server_id === activeRoom.serverId)?.alias ?? null : null}
+              hostDisplayName={roomHostName(activeRoom, controller.centralDirectory)}
               onRetry={activeRoomSelectError || activeRoomNeedsAdmission ? () => selectRoom(activeRoom.id) : () => controller.retryRoomConnection(activeRoom)} />
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
