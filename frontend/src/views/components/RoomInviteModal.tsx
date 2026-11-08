@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../lib/dialogBackdrop";
 import { PUBLIC_INGRESS_START_ERROR } from "../../lib/publicIngressStatus";
 import { hostPublishQuotaNotice } from "../../lib/central/centralRequestGovernor";
 import { QRCodeSVG } from "qrcode.react";
@@ -197,7 +198,7 @@ export default function RoomInviteModal({
         onCancel={(event) => { event.preventDefault(); onClose(); }}
         aria-modal="true"
         aria-labelledby="room-invite-title"
-        onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
+        {...backdropDismiss(onClose, { stopPropagation: true })}
       >
         <header className="dc-invite-header">
           <h2 id="room-invite-title" className="dc-dialog-title preserve-words">
@@ -542,5 +543,5 @@ function PublicAccessConfirmation({ onCancel, children }: { onCancel: () => void
   }, [opener]);
   return <dialog ref={ref} className="dc-dialog dc-invite-confirm" role="alertdialog" aria-labelledby="public-access-confirm-title"
     onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onCancel(); }}
-    onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onCancel(); }}>{children}</dialog>;
+    {...backdropDismiss(onCancel, { stopPropagation: true })}>{children}</dialog>;
 }

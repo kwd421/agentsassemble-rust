@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../lib/dialogBackdrop";
 import { useEffect, useId, useRef, useState } from "react";
 import { X } from "../../ui/icons";
 import { userFacingError } from "../../lib/apiErrors";
@@ -60,11 +61,7 @@ export default function CreateChannelModal({ onClose, onCreate, room = false, in
   return (
     <dialog ref={dialogRef} className="dc-dialog dc-create-channel-modal" aria-labelledby={titleId}
       onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
-      onClick={(event) => {
-        if (event.target !== event.currentTarget || busy) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
-      }}>
+      {...backdropDismiss(() => { if (!busy) onClose(); }, { outsideBox: true })}>
       <header className="dc-create-channel-head">
         <h2 id={titleId} className="dc-dialog-title">{room ? "새 방 만들기" : "텍스트 채널 만들기"}</h2>
         <button type="button" className="dc-dialog-close" disabled={busy} onClick={onClose}

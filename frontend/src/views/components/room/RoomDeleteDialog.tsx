@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../../lib/dialogBackdrop";
 import { X } from "../../../ui/icons";
 import { useEffect, useRef, useState } from "react";
 import type { useRoomLifecycle } from "../../../app/useRoomLifecycle";
@@ -50,7 +51,7 @@ export default function RoomDeleteDialog({
         role="alertdialog"
         aria-labelledby="room-delete-title"
         onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!controller.busy) onClose(); }}
-        onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && !controller.busy) onClose(); }}
+        {...backdropDismiss(() => { if (!controller.busy) onClose(); }, { stopPropagation: true })}
       >
         <header className="flex items-center justify-between gap-4">
           <h2 id="room-delete-title" className="dc-dialog-title preserve-words">{controller.pending ? "방 관리 결과" : `‘${target.label}’ 삭제`}</h2>

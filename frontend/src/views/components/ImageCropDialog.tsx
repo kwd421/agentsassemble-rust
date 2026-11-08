@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../lib/dialogBackdrop";
 import { useEffect, useRef } from "react";
 import { X } from "../../ui/icons";
 import ImageCropper, { type ImageCropShape } from "./ImageCropper";
@@ -37,7 +38,7 @@ export default function ImageCropDialog({
       aria-label={title}
       onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
       onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }}
-      onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && !busy) onCancel(); }}
+      {...backdropDismiss(() => { if (!busy) onCancel(); }, { stopPropagation: true })}
     >
       <header className="dc-image-crop-dialog-head">
         <h2 className="dc-dialog-title">{title}</h2>

@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../lib/dialogBackdrop";
 import { MoreVertical, UserRound, Bot, Wifi, Users, Search, RefreshCw, X } from "../ui/icons";
 import ParticipantAvatarContent from "./components/ParticipantAvatarContent";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -160,7 +161,7 @@ function FriendRow({ friend, busy, selected, onSelect, onEdit, onDelete }: { fri
       onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openMenu(rect.right - 208, rect.bottom + 8); }}><MoreVertical size={20} /></button>
     <dialog ref={menu} className="dc-member-context-menu" aria-label="친구 동작"
       style={{ position: "fixed", margin: 0, width: 208, maxWidth: "calc(100vw - 32px)", padding: 8, boxSizing: "border-box", color: "var(--color-text-primary)", border: "1px solid var(--color-panel-border)" }}
-      onClick={(event) => { if (event.target === event.currentTarget) menu.current?.close(); }}>
+      {...backdropDismiss(() => menu.current?.close())}>
       <div style={{ display: "grid", gap: 4 }}>
         <button type="button" className="dc-member-context-menu-item" disabled={busy} onClick={() => select(onEdit)}>편집</button>
         <button type="button" className="dc-member-context-menu-item" data-variant="danger" disabled={busy} onClick={() => select(onDelete)}>삭제</button>
@@ -214,7 +215,7 @@ function FriendDialog({ title, busy, onCancel, children }: { title: string; busy
     return () => { dialog?.close(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
   }, [opener]);
   return <div className="dc-modal-backdrop" role="presentation"><dialog ref={ref} className="dc-dialog dc-create-channel-modal" aria-label={title}
-    onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }} onClick={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }} {...backdropDismiss(() => { if (!busy) onCancel(); })}>
     <section style={{ display: "grid", gap: 16 }}>
       <header className="dc-create-channel-head"><h2 className="dc-dialog-title">{title}</h2>
         <button type="button" className="dc-dialog-close" aria-label="닫기" disabled={busy} onClick={onCancel}><X size={24} /></button>

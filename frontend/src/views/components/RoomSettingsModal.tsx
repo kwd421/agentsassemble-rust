@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../lib/dialogBackdrop";
 import { AGENT_CHAIN_LIMITS } from "../../lib/agentChainLimit";
 import { ROOM_FILE_LIMITS, ROOM_STORAGE_LIMITS } from "../../types/generated/ASSET_SAFETY_WIRE";
 import { ROOM_LABEL_LIMIT } from "../../types/generated/ROOM_SETTINGS_WIRE";
@@ -189,13 +190,7 @@ export default function RoomSettingsModal({
         onCancel={(event) => { event.preventDefault(); onClose(); }}
         aria-modal="true"
         aria-labelledby="room-settings-title"
-        onClick={(event) => {
-          event.stopPropagation();
-          if (event.target !== event.currentTarget) return;
-          const rect = event.currentTarget.getBoundingClientRect();
-          if (event.clientX < rect.left || event.clientX > rect.right ||
-              event.clientY < rect.top || event.clientY > rect.bottom) onClose();
-        }}
+        {...backdropDismiss(onClose, { outsideBox: true, stopPropagation: true })}
       >
         <aside className="dc-settings-nav" style={mobileViewport ? {
           display: "flex", justifyContent: "space-between", overflowX: "auto", padding: "12px 16px",

@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../lib/dialogBackdrop";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   connectGoogleAccount, disconnectGoogleAccount, fetchAccountStatus, startGoogleAccountLogin,
@@ -172,7 +173,7 @@ function AccountSwitchConfirmation({ busy, onCancel, onConnect }: { busy: boolea
   }, []);
   return <div className="dc-modal-backdrop" role="presentation"><dialog ref={dialogRef} className="dc-dialog" aria-labelledby="google-account-confirm-title"
     onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }}
-    onClick={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    {...backdropDismiss(() => { if (!busy) onCancel(); })}>
     <section style={{ display: "grid", gap: 20 }}>
       <h3 id="google-account-confirm-title" className="dc-dialog-title">Google 계정을 연결할까요?</h3>
       <p style={{ margin: 0, fontSize: 14, lineHeight: 1.7 }}>이미 이 서버에서 쓰던 계정이면 그 계정으로 전환돼요. 현재 게스트 프로필, 방 참여와 복구 코드는 폐기되며, 다시 참여하려면 새 초대가 필요해요. 이전 대화 기록은 남아요.</p>

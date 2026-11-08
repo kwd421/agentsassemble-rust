@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../../lib/dialogBackdrop";
 import AgentInstructionsSettings from "../AgentInstructionsSettings";
 import { useOwnerRouteHost } from "../../../app/ownerRouteHost";
 import { resolveProviderPresentation } from "../providerBranding";
@@ -77,15 +78,7 @@ export default function MemberDetailModal({
           }
           onClose();
         }}
-        onClick={(event) => {
-          // A modal dialog's own backdrop reports the dialog as the click target, so the
-          // pointer position decides whether the click landed outside the card.
-          if (event.target !== event.currentTarget) return;
-          const bounds = event.currentTarget.getBoundingClientRect();
-          const outside = event.clientX < bounds.left || event.clientX > bounds.right ||
-            event.clientY < bounds.top || event.clientY > bounds.bottom;
-          if (outside) onClose();
-        }}>
+        {...backdropDismiss(onClose, { outsideBox: true })}>
         {entry.agentSession ? <AgentProfileCard
           key={`${entry.agentSession.room_id}:${entry.agentSession.session_id}`}
           session={entry.agentSession}

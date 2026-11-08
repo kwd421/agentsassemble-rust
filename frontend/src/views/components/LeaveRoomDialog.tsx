@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../lib/dialogBackdrop";
 import { useEffect, useId, useRef, useState } from "react";
 import { LogOut, X } from "../../ui/icons";
 import { userFacingError } from "../../lib/apiErrors";
@@ -50,7 +51,7 @@ export default function LeaveRoomDialog({
       className="dc-dialog dc-create-channel-modal"
       aria-labelledby={titleId}
       onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
-      onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}
+      {...backdropDismiss(() => { if (!busy) onClose(); })}
     >
         <header className="dc-create-channel-head">
           <h2 id={titleId} className="dc-dialog-title preserve-words">‘{roomLabel}’{pairedDevice ? " 기기 연결을 해제할까요?" : "에서 나갈까요?"}</h2>

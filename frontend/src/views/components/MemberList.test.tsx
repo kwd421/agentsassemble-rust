@@ -147,8 +147,14 @@ describe("MemberList component wiring", () => {
     // pointer position separates them. jsdom gives the card a zero-sized rectangle.
     fireEvent.click(within(dialog).getByRole("region", { name: "Agent One 실행 및 설정" }), { clientX: 5, clientY: 5 });
     expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeTruthy();
+    fireEvent.pointerDown(dialog, { clientX: 0, clientY: 0 });
     fireEvent.click(dialog, { clientX: 0, clientY: 0 });
     expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeTruthy();
+    // A press inside the card (a text drag) released over the backdrop stays open.
+    fireEvent.pointerDown(within(dialog).getByRole("region", { name: "Agent One 실행 및 설정" }), { clientX: 5, clientY: 5 });
+    fireEvent.click(dialog, { clientX: 5, clientY: 5 });
+    expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeTruthy();
+    fireEvent.pointerDown(dialog, { clientX: 5, clientY: 5 });
     fireEvent.click(dialog, { clientX: 5, clientY: 5 });
     expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeNull();
   });

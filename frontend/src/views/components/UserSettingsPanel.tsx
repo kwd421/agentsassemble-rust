@@ -1,3 +1,4 @@
+import { backdropDismiss } from "../../lib/dialogBackdrop";
 import { useResourceImage } from "./ResourceImage";
 import { useEffect, useRef, type RefObject } from "react";
 import { X, Camera, UserRound, Palette, KeyRound, MonitorSmartphone, type AppIcon } from "../../ui/icons";
@@ -80,7 +81,7 @@ export default function UserSettingsPanel({
       style={{ position: "fixed", inset: 0, margin: "auto", width: "min(1200px, calc(100vw - 80px))", height: "min(900px, calc(100dvh - 80px))", maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100dvh - 32px)", padding: 0, color: "var(--color-text-primary)" }}
       onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
       onCancel={(event) => { event.preventDefault(); if (!saving) onClose(); }}
-      onClick={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+      {...backdropDismiss(() => { if (!saving) onClose(); })}>
     <div className="dc-user-settings-layout">
       <aside className="dc-user-settings-sidebar">
         <div className="dc-user-settings-me">
